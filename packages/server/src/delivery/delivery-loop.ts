@@ -1,8 +1,6 @@
 import type { Delivery, DeliveryEndpoint, DeliveryFailure, DeliveryRun } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
-const maxDeliveryLoopFailures = 1_000;
-
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
 export class DeliveryLoop {
   readonly #delivery: Delivery;
@@ -21,7 +19,7 @@ export class DeliveryLoop {
     this.#node = options.node;
     this.#limit =
       options.limit === undefined ? undefined : requirePositiveSafeInteger("limit", options.limit);
-    this.#maxFailures = requirePositiveSafeIntegerAtMost(
+    this.#maxFailures = requireBoundedInteger(
       "maxFailures",
       options.maxFailures ?? 1,
       maxDeliveryLoopFailures,
@@ -85,6 +83,8 @@ export class DeliveryLoop {
     });
   }
 }
+
+const maxDeliveryLoopFailures = 1_000;
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {
@@ -184,11 +184,7 @@ function requirePositiveSafeInteger(name: "limit" | "maxFailures", value: number
   return value;
 }
 
-function requirePositiveSafeIntegerAtMost(
-  name: "limit" | "maxFailures",
-  value: number,
-  max: number,
-): number {
+function requireBoundedInteger(name: "limit" | "maxFailures", value: number, max: number): number {
   requirePositiveSafeInteger(name, value);
   if (value > max) {
     throw new Error(`DeliveryLoop ${name} must be a positive safe integer at most ${String(max)}.`);

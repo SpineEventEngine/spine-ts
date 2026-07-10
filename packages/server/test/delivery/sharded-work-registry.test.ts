@@ -214,7 +214,7 @@ describe("ShardedWorkRegistry", () => {
           storageFactory: new InMemoryStorageFactory(),
           leaseMs: 0,
         }),
-    ).toThrow(/positive integer/);
+    ).toThrow(/positive safe integer/);
     expect(
       () =>
         new Delivery({
@@ -222,7 +222,7 @@ describe("ShardedWorkRegistry", () => {
           storageFactory: new InMemoryStorageFactory(),
           leaseMs: -1,
         }),
-    ).toThrow(/positive integer/);
+    ).toThrow(/positive safe integer/);
     expect(
       () =>
         new Delivery({
@@ -230,7 +230,7 @@ describe("ShardedWorkRegistry", () => {
           storageFactory: new InMemoryStorageFactory(),
           leaseMs: 1.5,
         }),
-    ).toThrow(/positive integer/);
+    ).toThrow(/positive safe integer/);
     expect(
       () =>
         new Delivery({
@@ -238,7 +238,15 @@ describe("ShardedWorkRegistry", () => {
           storageFactory: new InMemoryStorageFactory(),
           leaseMs: Number.POSITIVE_INFINITY,
         }),
-    ).toThrow(/positive integer/);
+    ).toThrow(/positive safe integer/);
+    expect(
+      () =>
+        new Delivery({
+          context: { name: "Tasks", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+          leaseMs: 2_147_483_648,
+        }),
+    ).toThrow(/at most 2147483647/);
   });
 
   it("returns false when releasing a missing or mismatched shard session", async () => {

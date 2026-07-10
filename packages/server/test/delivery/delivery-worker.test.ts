@@ -383,6 +383,52 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("scans past unavailable head rows to deliver a later row in the same drain", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const unavailable = await seed(delivery, "signal-unavailable-head", 1n);
+    await seed(delivery, "signal-available-tail", 2n);
+    const claimed = await inboxStorageAccess.claim(
+      delivery.inbox.storage,
+      unavailable,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-a",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(claimed?.signalId).toBe("signal-unavailable-head");
+    expect(seen).toEqual(["signal-available-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 2,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-unavailable-head", status: "TO_DELIVER" },
+    ]);
+  });
+
   it("leaves a row pending when the foreground lease check observes expiry", async () => {
     vi.useFakeTimers();
     try {

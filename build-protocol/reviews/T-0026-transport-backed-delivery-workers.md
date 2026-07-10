@@ -137,6 +137,61 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `format:check` caught `delivery-loop.ts` formatting before the final clean
   rerun.
 
+### Round 18 Follow-up - `2026-07-10T08:21:18Z`
+
+- Finding: [Docs/API/Style MEDIUM] `docs/architecture/README.md` still exposed
+  row-claim internals and described retry without qualifying successful
+  framework cleanup. The task brief scope had the same retry overpromise.
+- Finding: [Style LOW] `delivery-loop.ts` placed a supporting constant before
+  the primary `DeliveryLoop` declaration, and `requirePositiveSafeIntegerAtMost`
+  exceeded the naming component rule.
+- Finding: [Style LOW] `inbox-storage.ts` exported standalone
+  `requireInboxReadLimit`, violating the grouped-helper preference.
+- Finding: [Security MEDIUM] `leaseMs` was only a positive integer, but it is
+  used as a Node timer delay. Oversized values can overflow or clamp to `1ms`
+  and cause excessive renewal/storage traffic.
+- Finding: [Reliability P1] all-unavailable read pages were treated as idle.
+  Because `Delivery.drain()` reads a bounded first page, unavailable rows at
+  the head of a shard could permanently starve later available rows.
+- Action: dispatch one fix worker for claim-free docs, style cleanup, bounded
+  lease timing, and bounded scan-through of unavailable pages before the next
+  review round.
+- Fix: `Delivery.drain()` now uses a bounded growing read window and tracks
+  unique rows already observed in the run, so unavailable rows at the head are
+  skipped before endpoint invocation while later available rows can still be
+  reached without accepting more endpoint work than the configured limit.
+- Fix: `leaseMs` is validated as a positive safe integer at most `2147483647`
+  before it reaches shard expiry math or delivery renewal timer scheduling.
+  `delivery-loop.ts` now keeps supporting constants below the primary class and
+  uses the shorter `requireBoundedInteger` helper name. Inbox read-limit
+  validation is grouped under the internal `inboxStorageAccess` API instead of
+  exporting a standalone helper.
+- Fix: architecture and task-brief wording now avoids public row-claim
+  mechanics, states unavailable rows are skipped before endpoint invocation,
+  names public `InboxMessage` callbacks, qualifies endpoint retry on successful
+  framework-owned cleanup, and does not promise immediate recovery for cleanup,
+  validation, lease/fencing, or delivery-status failures.
+- Evidence: focused regressions failed before the fix because
+  `signal-available-tail` was never dispatched behind a claimed head row and
+  `leaseMs: 2147483648` was accepted. After the fix, the targeted red tests
+  passed, and the focused delivery Vitest batch passed with 4 files and
+  199 tests.
+- Verification: `typecheck:build:generated` passed (`tsc -b`). `docs:check`
+  passed and reported only the existing invalid-origin TypeDoc warning.
+  `format:check` initially flagged `delivery-loop.ts`; after formatting that
+  file, the final `format:check` passed. `git diff --check` passed.
+- Cleanup: removed the exported standalone `requireShardLeaseMs` helper from
+  `sharded-work-registry.ts`. Lease validation now stays class-owned inside
+  `ShardedWorkRegistry` and `Delivery`, preserving the timer-safe maximum
+  without exposing a helper only used by delivery construction.
+- Cleanup: split `Delivery.#drainAvailableMessages` by moving per-message
+  delivery/accounting into `#tryDrainMessage` and `drainProgress()`, keeping
+  the page-scanning method under the 35 LOC style target without changing
+  counters or skip behavior.
+- Cleanup verification: `typecheck:build:generated`, `format:check`,
+  `git diff --check`, and focused delivery Vitest passed on
+  `2026-07-10T08:35:29Z`.
+
 ### Round 14 Follow-up - `2026-07-10T07:30:12Z`
 
 - Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used

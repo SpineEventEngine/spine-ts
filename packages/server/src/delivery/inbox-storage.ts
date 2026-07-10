@@ -859,6 +859,8 @@ export class InboxStorage {
 
 /** @internal Internal claim-bearing access for delivery workers. */
 export interface InboxStorageAccess {
+  readonly maxReadLimit: number;
+  readonly readLimit: (value: unknown) => number;
   readonly claim: (
     storage: InboxStorage,
     message: InboxMessage,
@@ -881,6 +883,10 @@ export interface InboxStorageAccess {
 
 /** @internal Internal claim-bearing access for delivery workers. */
 export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
+  maxReadLimit,
+  readLimit(value: unknown = defaultReadLimit) {
+    return requireInboxReadLimit(value);
+  },
   claim(storage: InboxStorage, message: InboxMessage, session: ShardSession) {
     return requireInternals(storage).claim(message, session);
   },
@@ -1113,8 +1119,7 @@ function requireReadInteger(value: unknown, label: string): number {
   return value as number;
 }
 
-/** @internal Validate the bounded inbox page size shared by direct delivery drains. */
-export function requireInboxReadLimit(value: unknown): number {
+function requireInboxReadLimit(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxReadLimit) {
     throw new InboxMessageError(
       `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,

@@ -30,14 +30,21 @@ export class ShardedWorkRegistry {
 
   /** Open a shard registry over one storage context. */
   constructor(options: ShardedWorkRegistryOptions) {
-    if (!Number.isInteger(options.leaseMs ?? 30_000) || (options.leaseMs ?? 30_000) <= 0) {
-      throw new Error("ShardedWorkRegistry leaseMs must be a positive integer.");
-    }
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
-    this.#leaseMs = options.leaseMs ?? 30_000;
+    this.#leaseMs = ShardedWorkRegistry.#requireLeaseMs(options.leaseMs);
     this.#now = options.now ?? (() => new Date());
     Object.freeze(this);
+  }
+
+  static #requireLeaseMs(value: unknown = defaultShardLeaseMs): number {
+    if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxLeaseMs) {
+      throw new Error(
+        `ShardedWorkRegistry leaseMs must be a positive safe integer at most ${String(maxLeaseMs)}.`,
+      );
+    }
+
+    return value as number;
   }
 
   /**
@@ -211,6 +218,8 @@ interface SessionClaim {
 }
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+const defaultShardLeaseMs = 30_000;
+const maxLeaseMs = 2_147_483_647;
 
 const shardSessionRecordSpec = new RecordSpec<string, Any>({
   schema: AnySchema,

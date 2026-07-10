@@ -175,8 +175,10 @@ Design constraints from inspection:
   `DeliveryLoop`, `Inbox`, and `ShardedWorkRegistry` already cover the direct
   drain primitive; the worker should orchestrate them rather than clone Java
   stations.
-- Keep retry policy monitor-driven/future-scoped. A failed endpoint call leaves
-  the row `TO_DELIVER`; this task must not add implicit infinite retry loops.
+- Keep retry policy monitor-driven/future-scoped. A failed endpoint call remains
+  pending for later runs only when framework-owned cleanup succeeds; cleanup,
+  validation, lease/fencing, and delivery-status failures are reported without
+  immediate retry or recovery guarantee in this slice.
 - Keep local async behavior framework-owned, analogous to JVM local delivery
   observers, without exposing delivery envelopes to application code.
 
@@ -187,8 +189,13 @@ Design constraints from inspection:
 - Supported labels dispatch through existing framework-owned endpoints.
 - Invalid tenant, payload, schema, target type URL, routed target ID, and
   legacy `IMPORT_EVENT` rows fail closed before user handler code.
-- Successful rows become `DELIVERED`; failed endpoint calls remain
-  `TO_DELIVER`.
+- Rows unavailable to the active worker are skipped before endpoint invocation,
+  and bounded drains can scan past unavailable head rows to reach later
+  available rows.
+- Successful rows become `DELIVERED`; failed endpoint calls remain pending for
+  later runs only when framework-owned cleanup succeeds.
+- Cleanup, validation, lease/fencing, and delivery-status failures are reported
+  without immediate retry or recovery guarantee in this slice.
 - Shard lease behavior prevents competing workers from double-delivering.
 - Local immediate handoff behavior remains compatible.
 - No application code sees framework `Event` envelopes, manual transactions,
@@ -252,9 +259,11 @@ Ledger and the required JVM inspection evidence.
 
 ## Integration Result
 
-Round 17 review fixes are verified: claim-free cleanup wording,
-framework-cleanup failure reporting for unsuccessful cleanup, and a 1000
-`DeliveryLoop.maxFailures` construction bound are implemented. Focused delivery
-Vitest, generated build typecheck, docs check, format check, and
-`git diff --check` passed on `2026-07-10T08:13:51Z`; `docs:check` reported only
-the existing invalid-origin TypeDoc warning.
+Round 18 review fixes are verified: bounded scan-through of unavailable head
+rows, positive safe integer lease bounds for Node timer safety, delivery-loop
+style cleanup, grouped inbox read-limit validation, and public claim-free
+delivery wording are implemented. Focused delivery Vitest, generated build
+typecheck, and docs check passed on `2026-07-10T08:27:34Z`; `docs:check`
+reported only the existing invalid-origin TypeDoc warning. The final
+`format:check` and `git diff --check` passed after formatting
+`packages/server/src/delivery/delivery-loop.ts`.

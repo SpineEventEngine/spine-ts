@@ -1,7 +1,7 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
-import { inboxStorageAccess, InboxStorage, requireInboxReadLimit } from "./inbox-storage.js";
+import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
@@ -18,7 +18,7 @@ export class Delivery {
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
-    this.#leaseMs = options.leaseMs ?? 30_000;
+    this.#leaseMs = Delivery.#requireLeaseMs(options.leaseMs);
     this.#now = options.now ?? (() => new Date());
     this.inbox = new Inbox(
       new InboxStorage({
@@ -30,10 +30,20 @@ export class Delivery {
     this.shards = new ShardedWorkRegistry({
       context: options.context,
       storageFactory: options.storageFactory,
-      ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+      leaseMs: this.#leaseMs,
       now: this.#now,
     });
     Object.freeze(this);
+  }
+
+  static #requireLeaseMs(value: unknown = defaultShardLeaseMs): number {
+    if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxLeaseMs) {
+      throw new Error(
+        `ShardedWorkRegistry leaseMs must be a positive safe integer at most ${String(maxLeaseMs)}.`,
+      );
+    }
+
+    return value as number;
   }
 
   /**
@@ -52,7 +62,7 @@ export class Delivery {
    * schedule later runs, open transports, or retain endpoint attempt history.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
-    const limit = options.limit === undefined ? undefined : requireInboxReadLimit(options.limit);
+    const limit = inboxStorageAccess.readLimit(options.limit);
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
@@ -63,38 +73,46 @@ export class Delivery {
     });
 
     try {
-      const messages = await this.inbox.read(session.shard, {
-        statuses: ["TO_DELIVER"],
-        ...(limit === undefined ? {} : { limit }),
-      });
-      let accepted = 0;
-      let delivered = 0;
-      const failures: DeliveryFailure[] = [];
-
-      for (const message of messages) {
-        const attempt = await this.#deliverMessage(message, options.onMessage, lease, active);
-        if (attempt.kind === "SKIPPED") {
-          continue;
-        }
-        accepted += 1;
-        if (attempt.kind === "DELIVERED") {
-          delivered += 1;
-        } else {
-          failures.push(Object.freeze({ message, error: attempt.error }));
-        }
-      }
-
-      return deliveryRun(
-        "DRAINED",
-        messages.length,
-        accepted,
-        delivered,
-        failures.length,
-        failures,
+      return await this.#drainAvailableMessages(
+        session.shard,
+        limit,
+        options.onMessage,
+        lease,
+        active,
       );
     } finally {
       await lease.close();
       await this.shards.release(session);
+    }
+  }
+
+  async #drainAvailableMessages(
+    shard: ShardIndex,
+    limit: number,
+    onMessage: DeliveryEndpoint,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+  ): Promise<DeliveryRun> {
+    const progress = drainProgress();
+    let readLimit = limit;
+
+    for (;;) {
+      const messages = await this.inbox.read(shard, {
+        statuses: ["TO_DELIVER"],
+        limit: readLimit,
+      });
+
+      for (const message of messages) {
+        await this.#tryDrainMessage(progress, message, onMessage, lease, active);
+        if (progress.accepted >= limit) {
+          return progress.finish();
+        }
+      }
+
+      if (messages.length < readLimit || readLimit >= inboxStorageAccess.maxReadLimit) {
+        return progress.finish();
+      }
+      readLimit = Math.min(readLimit + limit, inboxStorageAccess.maxReadLimit);
     }
   }
 
@@ -205,6 +223,21 @@ export class Delivery {
       active.clear();
     }
   }
+
+  async #tryDrainMessage(
+    progress: DrainProgress,
+    message: InboxMessage,
+    onMessage: DeliveryEndpoint,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+  ): Promise<void> {
+    if (!progress.observe(message)) {
+      return;
+    }
+
+    const attempt = await this.#deliverMessage(message, onMessage, lease, active);
+    progress.record(message, attempt);
+  }
 }
 
 /** Delivery construction options. */
@@ -288,10 +321,20 @@ interface ShardLeaseRenewalOptions {
   readonly renewClaim: (session: ShardSession) => Promise<void>;
 }
 
+interface DrainProgress {
+  readonly accepted: number;
+  readonly finish: () => DeliveryRun;
+  readonly observe: (message: InboxMessage) => boolean;
+  readonly record: (message: InboxMessage, attempt: DeliveryMessageResult) => void;
+}
+
 type DeliveryMessageResult =
   | { readonly kind: "SKIPPED" }
   | { readonly kind: "DELIVERED" }
   | { readonly kind: "FAILED"; readonly error: unknown };
+
+const defaultShardLeaseMs = 30_000;
+const maxLeaseMs = 2_147_483_647;
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -308,6 +351,43 @@ function deliveryRun(
     delivered,
     failed,
     failures: Object.freeze([...failures]),
+  });
+}
+
+function drainProgress(): DrainProgress {
+  const seen = new Set<string>();
+  const failures: DeliveryFailure[] = [];
+  let processed = 0;
+  let accepted = 0;
+  let delivered = 0;
+
+  return Object.freeze({
+    get accepted() {
+      return accepted;
+    },
+    finish() {
+      return deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
+    },
+    observe(message: InboxMessage) {
+      if (seen.has(message.id.value)) {
+        return false;
+      }
+      seen.add(message.id.value);
+      processed += 1;
+
+      return true;
+    },
+    record(message: InboxMessage, attempt: DeliveryMessageResult) {
+      if (attempt.kind === "SKIPPED") {
+        return;
+      }
+      accepted += 1;
+      if (attempt.kind === "DELIVERED") {
+        delivered += 1;
+      } else {
+        failures.push(Object.freeze({ message, error: attempt.error }));
+      }
+    },
   });
 }
 
