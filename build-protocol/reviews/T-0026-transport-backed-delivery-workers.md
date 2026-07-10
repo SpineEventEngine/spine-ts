@@ -32,6 +32,46 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 6 Follow-up - `2026-07-10T05:32:00Z`
+
+- Finding: [P1] the Round 5 per-message claim used the current shard-session
+  expiry only when the row was first claimed. Shard keepalive renewed the shard
+  session while an endpoint callback was in flight, but did not renew the row
+  claim, so another worker could claim the row after the original claim expiry.
+- Fix: active delivery now tracks the claimed row snapshot and renews it with a
+  compare-and-set to each renewed `ShardSession` expiry. If claim renewal
+  returns `undefined` or throws, the lease keeper records lease loss and the
+  foreground delivery path fails closed before marking delivered.
+- Finding: [HIGH] `Inbox.claim()`, `Inbox.unclaim()`, `InboxMessage.claim`,
+  and exported `InboxClaim` exposed framework-owned internals through the
+  application-facing API.
+- Fix: public `InboxMessage` and `DeliveryEndpoint` are claim-free, and `Inbox`
+  no longer exposes claim/unclaim methods. Internal `InboxClaim`,
+  `InboxRecordMessage`, and `ClaimedInboxMessage` live in a non-barrel module,
+  while package-internal helper functions in `inbox-storage.ts` are not exported
+  from `packages/server/src/index.ts`.
+- Finding: [P3] `delivery.ts` duplicated claim/invoke/mark/clear logic between
+  shard drain and exact-message drain.
+- Fix: extracted one private `#deliverMessage()` helper and kept the public
+  drain methods focused on shard/page/exact-row flow.
+- Finding: [P3] `InboxStorage.#claimSnapshot()` validated claims by building a
+  fake full inbox message.
+- Fix: replaced that path with the direct internal `InboxClaimRecords`
+  snapshot codec.
+- Finding: [P2] docs did not describe durable row-claim fencing and claim-free
+  endpoint snapshots.
+- Fix: updated runtime architecture, developer API, API README source, package
+  README, and delivery source comments to document row claim renewal, skipped
+  live competing claims, marking from the claimed snapshot, clearing only the
+  unchanged claim after failed attempts, and unclaimed `InboxMessage` snapshots
+  passed to endpoints.
+- Evidence: the new focused regression failed before the fix because a
+  competing claim could take the row after the original claim expiry, then
+  passed after CAS claim renewal. Required verification passed:
+  requested delivery/context/index Vitest batch (7 files, 193 tests),
+  `typecheck:build:generated`, `docs:check` with only the existing invalid
+  origin TypeDoc warning, `format:check`, and `git diff --check`.
+
 ### Round 5 Follow-up - `2026-07-10T06:10:10Z`
 
 - Finding: [P1] `Delivery.drain()` invoked `onMessage` after only a shard

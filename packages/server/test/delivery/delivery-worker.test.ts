@@ -16,6 +16,7 @@ import {
   InboxRecords,
   inboxRecordSpec,
 } from "../../src/delivery/inbox-records.js";
+import { claimInboxMessage } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
   ShardIndex,
@@ -119,6 +120,70 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("renews the active row claim while an endpoint callback awaits", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const storageFactory = new InMemoryStorageFactory();
+      const first = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const second = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+      const stored = await seed(first, "signal-row-lease", 1n);
+      const started = deferred<undefined>();
+      const barrier = deferred<undefined>();
+      const seen: string[] = [];
+
+      const firstRun = first.drain(shard, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(`node-a:${message.signalId}`);
+          started.resolve(undefined);
+
+          return barrier.promise;
+        },
+      });
+
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(25);
+
+      const competingClaim = await claimInboxMessage(
+        second.inbox.storage,
+        stored,
+        new ShardSession(
+          "competing-message-owner",
+          shard,
+          "node-b",
+          new Date(Date.now()),
+          new Date(Date.now() + 20),
+        ),
+      );
+
+      barrier.resolve(undefined);
+      const run = await firstRun;
+
+      expect(competingClaim).toBeUndefined();
+      expect(seen).toEqual(["node-a:signal-row-lease"]);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        delivered: 1,
+        failed: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("skips a row already claimed by another drain before invoking the endpoint", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -129,7 +194,8 @@ describe("Delivery worker", () => {
     });
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-claimed", 1n);
-    const claimed = await delivery.inbox.claim(
+    const claimed = await claimInboxMessage(
+      delivery.inbox.storage,
       stored,
       new ShardSession(
         "message-owner",

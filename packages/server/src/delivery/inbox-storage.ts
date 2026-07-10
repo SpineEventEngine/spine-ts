@@ -5,7 +5,6 @@ import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
   InboxMessageError,
   type DeliveryStatus,
-  type InboxClaim,
   type InboxMessage,
   type InboxMessageId,
   type InboxReadOptions,
@@ -14,10 +13,13 @@ import {
 import {
   DedupRecords,
   dedupRecordSpec,
+  InboxClaimRecords,
   InboxRecords,
   inboxRecordSpec,
   type DedupGuardState,
 } from "./inbox-records.js";
+import type { ClaimedInboxMessage, InboxClaim, InboxRecordMessage } from "./inbox-claim.js";
+import type { ShardSession } from "./sharded-work-registry.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
@@ -34,6 +36,12 @@ export class InboxStorage {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date());
+    inboxStorageInternals.set(this, {
+      claim: (message, session) => this.#claimForDelivery(message, session),
+      renew: (message, session) => this.#renewForDelivery(message, session),
+      markDelivered: (message) => this.#markDelivered(message),
+      unclaim: (message) => this.#unclaim(message),
+    });
     Object.freeze(this);
   }
 
@@ -54,7 +62,9 @@ export class InboxStorage {
         }),
       );
 
-      return Object.freeze(records.map((entry) => InboxRecords.read(entry.record, entry.id)));
+      return Object.freeze(
+        records.map((entry) => publicMessage(InboxRecords.read(entry.record, entry.id))),
+      );
     } finally {
       storage.close();
     }
@@ -67,7 +77,7 @@ export class InboxStorage {
 
     try {
       const record = await this.#durableRead("Inbox record", () => storage.read(key));
-      return record === undefined ? undefined : InboxRecords.read(record, key);
+      return record === undefined ? undefined : publicMessage(InboxRecords.read(record, key));
     } finally {
       storage.close();
     }
@@ -100,44 +110,58 @@ export class InboxStorage {
    * status transition.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
+    return this.#markDelivered(message);
+  }
+
+  async #markDelivered(message: InboxRecordMessage): Promise<InboxMessage | undefined> {
     const snapshot = InboxRecords.read(InboxRecords.write(message));
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
 
     try {
-      return await this.#markDeliveredWithDedup(inboxStorage, dedupStorage, snapshot);
+      const delivered = await this.#markDeliveredWithDedup(inboxStorage, dedupStorage, snapshot);
+      return delivered === undefined ? undefined : publicMessage(delivered);
     } finally {
       inboxStorage.close();
       dedupStorage.close();
     }
   }
 
-  /** Claim one exact pending inbox message for endpoint invocation. */
-  async claim(message: InboxMessage, claim: InboxClaim): Promise<InboxMessage | undefined> {
+  async #claimForDelivery(
+    message: InboxMessage,
+    session: ShardSession,
+  ): Promise<ClaimedInboxMessage | undefined> {
     const snapshot = InboxRecords.read(InboxRecords.write(message));
-    const nextClaim = this.#claimSnapshot(claim);
-    const nextSnapshot = InboxRecords.read(
-      InboxRecords.write({
-        ...snapshot,
-        claim: nextClaim,
-      }),
-    );
     const inboxStorage = this.#inboxStorage();
 
     try {
-      return await this.#claimMessage(inboxStorage, snapshot, nextSnapshot);
+      return await this.#claimMessage(inboxStorage, snapshot, claimFromSession(session));
     } finally {
       inboxStorage.close();
     }
   }
 
-  /** Clear one exact pending inbox message claim. */
-  async unclaim(message: InboxMessage): Promise<InboxMessage | undefined> {
+  async #renewForDelivery(
+    message: ClaimedInboxMessage,
+    session: ShardSession,
+  ): Promise<ClaimedInboxMessage | undefined> {
+    const snapshot = requireClaimed(InboxRecords.read(InboxRecords.write(message)));
+    const inboxStorage = this.#inboxStorage();
+
+    try {
+      return await this.#renewClaim(inboxStorage, snapshot, claimFromSession(session));
+    } finally {
+      inboxStorage.close();
+    }
+  }
+
+  async #unclaim(message: ClaimedInboxMessage): Promise<InboxMessage | undefined> {
     const snapshot = InboxRecords.read(InboxRecords.write(message));
     const inboxStorage = this.#inboxStorage();
 
     try {
-      return await this.#unclaimMessage(inboxStorage, snapshot);
+      const unclaimed = await this.#unclaimMessage(inboxStorage, snapshot);
+      return unclaimed === undefined ? undefined : publicMessage(unclaimed);
     } finally {
       inboxStorage.close();
     }
@@ -145,10 +169,11 @@ export class InboxStorage {
 
   async #claimMessage(
     inboxStorage: RecordStorage<string, Any>,
-    message: InboxMessage,
-    claimedMessage: InboxMessage,
-  ): Promise<InboxMessage | undefined> {
+    message: InboxRecordMessage,
+    claim: InboxClaim,
+  ): Promise<ClaimedInboxMessage | undefined> {
     const key = this.#messageKey(message.id);
+    const nextClaim = InboxClaimRecords.snapshot(claim);
 
     for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
       const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
@@ -165,16 +190,12 @@ export class InboxStorage {
       }
       if (
         current.claim !== undefined &&
-        !this.#sameClaim(current.claim, claimedMessage.claim) &&
+        !this.#sameClaim(current.claim, nextClaim) &&
         this.#claimIsLive(current.claim)
       ) {
         return undefined;
       }
 
-      const nextClaim = claimedMessage.claim;
-      if (nextClaim === undefined) {
-        return undefined;
-      }
       const claimed = Object.freeze({
         ...current,
         claim: nextClaim,
@@ -188,17 +209,57 @@ export class InboxStorage {
         nextRecord,
       );
       if (updated) {
-        return InboxRecords.read(nextRecord, key);
+        return requireClaimed(InboxRecords.read(nextRecord, key));
       }
     }
 
     throw casRetriesExhausted("Inbox claim");
   }
 
+  async #renewClaim(
+    inboxStorage: RecordStorage<string, Any>,
+    message: ClaimedInboxMessage,
+    claim: InboxClaim,
+  ): Promise<ClaimedInboxMessage | undefined> {
+    const key = this.#messageKey(message.id);
+    const expectedRecord = InboxRecords.write(message);
+    const nextClaim = InboxClaimRecords.snapshot(claim);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
+      if (currentRecord === undefined) {
+        return undefined;
+      }
+
+      const current = InboxRecords.read(currentRecord, key);
+      if (current.status !== "TO_DELIVER" || !this.#sameRecord(currentRecord, expectedRecord)) {
+        return undefined;
+      }
+
+      const renewed = Object.freeze({
+        ...current,
+        claim: nextClaim,
+      });
+      const nextRecord = InboxRecords.write(renewed);
+      const updated = await this.#durableCompareAndSet(
+        "Inbox record",
+        inboxStorage,
+        key,
+        currentRecord,
+        nextRecord,
+      );
+      if (updated) {
+        return requireClaimed(InboxRecords.read(nextRecord, key));
+      }
+    }
+
+    throw casRetriesExhausted("Inbox claim renewal");
+  }
+
   async #unclaimMessage(
     inboxStorage: RecordStorage<string, Any>,
-    message: InboxMessage,
-  ): Promise<InboxMessage | undefined> {
+    message: InboxRecordMessage,
+  ): Promise<InboxRecordMessage | undefined> {
     const key = this.#messageKey(message.id);
     const expectedRecord = InboxRecords.write(message);
 
@@ -696,7 +757,7 @@ export class InboxStorage {
     return left.value === right.value && left.shard.key() === right.shard.key();
   }
 
-  #sameMessageExceptStatus(left: InboxMessage, right: InboxMessage): boolean {
+  #sameMessageExceptStatus(left: InboxRecordMessage, right: InboxRecordMessage): boolean {
     return this.#sameRecord(
       InboxRecords.write({
         ...left,
@@ -706,19 +767,19 @@ export class InboxStorage {
     );
   }
 
-  #sameMessageExceptClaim(left: InboxMessage, right: InboxMessage): boolean {
+  #sameMessageExceptClaim(left: InboxRecordMessage, right: InboxRecordMessage): boolean {
     return this.#sameRecord(
       InboxRecords.write(this.#withClaim(left, right.claim)),
       InboxRecords.write(right),
     );
   }
 
-  #withClaim(message: InboxMessage, claim: InboxClaim | undefined): InboxMessage {
+  #withClaim(message: InboxRecordMessage, claim: InboxClaim | undefined): InboxRecordMessage {
     const unclaimed = this.#withoutClaim(message);
     return claim === undefined ? unclaimed : Object.freeze({ ...unclaimed, claim });
   }
 
-  #withoutClaim(message: InboxMessage): InboxMessage {
+  #withoutClaim(message: InboxRecordMessage): InboxMessage {
     const { claim: _claim, ...unclaimed } = message;
     return Object.freeze(unclaimed);
   }
@@ -733,22 +794,6 @@ export class InboxStorage {
 
   #claimIsLive(claim: InboxClaim): boolean {
     return claim.expiresAt.getTime() > this.#dedupNow();
-  }
-
-  #claimSnapshot(claim: InboxClaim): InboxClaim {
-    const record = InboxRecords.write({
-      id: { value: "claim-snapshot", shard: ShardIndex.single() },
-      inboxId: { targetId: "claim-snapshot", targetTypeUrl: "type.spine-ts.dev/ClaimSnapshot" },
-      signalId: "claim-snapshot",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: ShardIndex.single(),
-      whenReceived: new Date(0),
-      version: 0n,
-      claim,
-    });
-
-    return InboxRecords.read(record).claim as InboxClaim;
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
@@ -792,7 +837,7 @@ export class InboxStorage {
       kind: "RETURN",
       result: Object.freeze({
         outcome: "WRITTEN" as const,
-        message,
+        message: publicMessage(message),
       }),
     };
   }
@@ -802,7 +847,7 @@ export class InboxStorage {
       kind: "RETURN",
       result: Object.freeze({
         outcome: "DUPLICATE" as const,
-        message,
+        message: publicMessage(message),
       }),
     };
   }
@@ -824,6 +869,36 @@ export class InboxStorage {
       dedupRecordSpec,
     );
   }
+}
+
+export function claimInboxMessage(
+  storage: InboxStorage,
+  message: InboxMessage,
+  session: ShardSession,
+): Promise<ClaimedInboxMessage | undefined> {
+  return requireInternals(storage).claim(message, session);
+}
+
+export function renewInboxClaim(
+  storage: InboxStorage,
+  message: ClaimedInboxMessage,
+  session: ShardSession,
+): Promise<ClaimedInboxMessage | undefined> {
+  return requireInternals(storage).renew(message, session);
+}
+
+export function markClaimedDelivered(
+  storage: InboxStorage,
+  message: ClaimedInboxMessage,
+): Promise<InboxMessage | undefined> {
+  return requireInternals(storage).markDelivered(message);
+}
+
+export function clearInboxClaim(
+  storage: InboxStorage,
+  message: ClaimedInboxMessage,
+): Promise<InboxMessage | undefined> {
+  return requireInternals(storage).unclaim(message);
 }
 
 /** Inbox storage construction options. */
@@ -861,6 +936,55 @@ interface GuardMessage {
 
 type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";
 type WriteStep = WriteClaim | WriteReturn | { readonly kind: "RETRY" };
+
+interface InboxStorageInternal {
+  readonly claim: (
+    message: InboxMessage,
+    session: ShardSession,
+  ) => Promise<ClaimedInboxMessage | undefined>;
+  readonly renew: (
+    message: ClaimedInboxMessage,
+    session: ShardSession,
+  ) => Promise<ClaimedInboxMessage | undefined>;
+  readonly markDelivered: (message: ClaimedInboxMessage) => Promise<InboxMessage | undefined>;
+  readonly unclaim: (message: ClaimedInboxMessage) => Promise<InboxMessage | undefined>;
+}
+
+const inboxStorageInternals = new WeakMap<InboxStorage, InboxStorageInternal>();
+
+function requireInternals(storage: InboxStorage): InboxStorageInternal {
+  const internals = inboxStorageInternals.get(storage);
+  if (internals === undefined) {
+    throw new Error("Inbox storage internals are unavailable.");
+  }
+
+  return internals;
+}
+
+function claimFromSession(session: ShardSession): InboxClaim {
+  return InboxClaimRecords.snapshot({
+    id: session.id,
+    node: session.node,
+    expiresAt: session.expiresAt,
+  });
+}
+
+function requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
+  if (message.claim === undefined) {
+    throw new DeliveryStorageCorruptionError("Inbox claim is missing from claimed row.");
+  }
+
+  return message as ClaimedInboxMessage;
+}
+
+function publicMessage(message: InboxRecordMessage): InboxMessage {
+  if (message.claim === undefined) {
+    return message;
+  }
+
+  const { claim: _claim, ...unclaimed } = message;
+  return Object.freeze(unclaimed);
+}
 
 function dedupStorageContext(context: StorageContext): StorageContext {
   return deliveryStorageContext(context, "inbox-dedup");

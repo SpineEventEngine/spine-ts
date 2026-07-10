@@ -44,8 +44,10 @@ import {
   type StandUpdate,
   Aggregate,
   Delivery,
+  type DeliveryEndpoint,
   type EntityVersionMetadata,
   Inbox,
+  type InboxMessage,
   InboxStorage,
   type PlainEntityVersionMetadata,
   type PrimitiveId,
@@ -304,6 +306,10 @@ describe("@spine-ts/server", () => {
     expectTypeOf<StandReadResult>().toExtend<{ readonly state: Message }>();
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
+    expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
+    expectTypeOf<Parameters<DeliveryEndpoint>[0]>().not.toHaveProperty("claim");
+    expectTypeOf<Inbox>().not.toHaveProperty("claim");
+    expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);

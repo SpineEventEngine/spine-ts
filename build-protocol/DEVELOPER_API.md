@@ -255,12 +255,17 @@ smaller than the later scheduler/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
 - `Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
-  `TO_DELIVER` rows in inbox order, invokes the supplied framework endpoint
-  callback once per row, marks successful rows `DELIVERED`, leaves callback
-  failures `TO_DELIVER` for retry, returns simple `DeliveryRun` statistics, and
-  releases the shard in a `finally` path. If the shard is already owned by
-  another live worker lease, the run returns `SKIPPED` with zero counts and does
-  not invoke the callback;
+  `TO_DELIVER` rows in inbox order, claims each row with a durable
+  per-message fence before invoking the supplied framework endpoint callback,
+  renews that row claim to each renewed shard-session expiry while the callback
+  is in flight, and passes an unclaimed `InboxMessage` snapshot to the
+  endpoint. Rows with live competing claims are skipped before callback
+  invocation. Successful rows are marked `DELIVERED` from the claimed snapshot;
+  callback or marker failures best-effort clear only the unchanged claim and
+  leave the row `TO_DELIVER` for retry. The run returns simple `DeliveryRun`
+  statistics and releases the shard in a `finally` path. If the shard is already
+  owned by another live worker lease, the run returns `SKIPPED` with zero counts
+  and does not invoke the callback;
 - `DeliveryLoop` repeats `Delivery.drain()` for one shard until idle, skipped,
   stopped, or the configured failure bound is reached. `DeliveryWorker` is the
   closeable owner for one node's configured shard loops; it starts those loops,
@@ -272,6 +277,7 @@ smaller than the later scheduler/retry stack:
   worker-owned exact-message status update used by `Delivery.drain()`: missing
   rows, non-pending rows, and mismatched caller snapshots return `undefined`;
   already-delivered matching rows are returned idempotently. Its public
+  `InboxMessage` snapshots do not expose framework-owned claim metadata. Its
   `storage` property is an
   intentional low-level escape hatch for storage-focused tests and
   integrations, not an application-facing query facade;

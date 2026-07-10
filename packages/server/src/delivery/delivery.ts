@@ -1,7 +1,14 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
-import { InboxStorage } from "./inbox-storage.js";
+import {
+  claimInboxMessage,
+  clearInboxClaim as clearStoredClaim,
+  InboxStorage,
+  markClaimedDelivered,
+  renewInboxClaim,
+} from "./inbox-storage.js";
+import type { ClaimedInboxMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
 
@@ -39,9 +46,12 @@ export class Delivery {
    * Drain one shard by claiming it, delivering pending rows, and releasing it.
    *
    * The `onMessage` endpoint is invoked once for each `TO_DELIVER` row read in
-   * inbox order. Callback failures leave the row pending for a later run.
-   * Successful callbacks are followed by an exact-message `Inbox.markDelivered()`
-   * update; marker failures are reported as per-message failures.
+   * inbox order after a durable per-message claim is acquired. The active row
+   * claim is renewed to each shard-session renewal while the callback is in
+   * flight; live competing row claims are skipped before endpoint invocation.
+   * Callback failures leave the row pending for a later run. Successful
+   * callbacks mark the claimed snapshot delivered; failed attempts best-effort
+   * clear only the unchanged claim.
    *
    * This is a framework-owned direct worker boundary. It does not schedule
    * later runs, open transports, or retain endpoint attempt history.
@@ -51,7 +61,10 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
-    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime());
+    const active = activeClaim();
+    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
+      renewClaim: (next) => active.renew(this.inbox.storage, next),
+    });
 
     try {
       const messages = await this.inbox.read(session.shard, {
@@ -62,23 +75,14 @@ export class Delivery {
       const failures: DeliveryFailure[] = [];
 
       for (const message of messages) {
-        let claimed: InboxMessage | undefined;
-        try {
-          lease.requireActive();
-          claimed = await this.inbox.claim(message, lease.session());
-          if (claimed === undefined) {
-            continue;
-          }
-          await options.onMessage(unclaimedMessage(claimed));
-          lease.requireActive();
-          const marked = await this.inbox.markDelivered(claimed);
-          if (marked === undefined) {
-            throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
-          }
+        const attempt = await this.#deliverMessage(message, options.onMessage, lease, active);
+        if (attempt.kind === "SKIPPED") {
+          continue;
+        }
+        if (attempt.kind === "DELIVERED") {
           delivered += 1;
-        } catch (error) {
-          await clearClaim(this.inbox, claimed);
-          failures.push(Object.freeze({ message, error }));
+        } else {
+          failures.push(Object.freeze({ message, error: attempt.error }));
         }
       }
 
@@ -108,7 +112,10 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
-    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime());
+    const active = activeClaim();
+    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
+      renewClaim: (next) => active.renew(this.inbox.storage, next),
+    });
 
     try {
       if (!sameShard(session.shard, shard)) {
@@ -124,30 +131,56 @@ export class Delivery {
         throw new InboxMessageError("Inbox message row shard does not match message shard.");
       }
 
-      let claimed: InboxMessage | undefined;
-      try {
-        lease.requireActive();
-        claimed = await this.inbox.claim(pending, lease.session());
-        if (claimed === undefined) {
-          return deliveryRun("DRAINED", 1, 0, 0, []);
-        }
-        await options.onMessage(unclaimedMessage(claimed));
-        lease.requireActive();
-        const marked = await this.inbox.markDelivered(claimed);
-        if (marked === undefined) {
-          throw new Error(`Inbox message "${pending.id.value}" was not marked delivered.`);
-        }
-
-        return deliveryRun("DRAINED", 1, 1, 0, []);
-      } catch (error) {
-        await clearClaim(this.inbox, claimed);
-        const failures = [Object.freeze({ message: pending, error })];
-
-        return deliveryRun("DRAINED", 1, 0, 1, failures);
+      const attempt = await this.#deliverMessage(pending, options.onMessage, lease, active);
+      if (attempt.kind === "SKIPPED") {
+        return deliveryRun("DRAINED", 1, 0, 0, []);
       }
+      if (attempt.kind === "DELIVERED") {
+        return deliveryRun("DRAINED", 1, 1, 0, []);
+      }
+
+      const failures = [Object.freeze({ message: pending, error: attempt.error })];
+
+      return deliveryRun("DRAINED", 1, 0, 1, failures);
     } finally {
       await lease.close();
       await this.shards.release(session);
+    }
+  }
+
+  async #deliverMessage(
+    message: InboxMessage,
+    onMessage: DeliveryEndpoint,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+  ): Promise<DeliveryMessageResult> {
+    try {
+      lease.requireActive();
+      const claimed = await claimInboxMessage(this.inbox.storage, message, lease.session());
+      if (claimed === undefined) {
+        return { kind: "SKIPPED" };
+      }
+
+      active.set(claimed);
+      await onMessage(endpointMessage(claimed));
+      lease.requireActive();
+      const current = active.current();
+      if (current === undefined) {
+        throw new Error(`Inbox message "${message.id.value}" claim was lost.`);
+      }
+
+      const marked = await markClaimedDelivered(this.inbox.storage, current);
+      if (marked === undefined) {
+        throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
+      }
+
+      return { kind: "DELIVERED" };
+    } catch (error) {
+      await clearActiveClaim(this.inbox.storage, active.current());
+
+      return Object.freeze({ kind: "FAILED" as const, error });
+    } finally {
+      active.clear();
     }
   }
 }
@@ -213,6 +246,22 @@ interface ShardLeaseKeeper {
   readonly session: () => ShardSession;
 }
 
+interface ActiveClaim {
+  readonly clear: () => void;
+  readonly current: () => ClaimedInboxMessage | undefined;
+  readonly renew: (storage: InboxStorage, session: ShardSession) => Promise<void>;
+  readonly set: (message: ClaimedInboxMessage) => void;
+}
+
+interface ShardLeaseRenewalOptions {
+  readonly renewClaim: (session: ShardSession) => Promise<void>;
+}
+
+type DeliveryMessageResult =
+  | { readonly kind: "SKIPPED" }
+  | { readonly kind: "DELIVERED" }
+  | { readonly kind: "FAILED"; readonly error: unknown };
+
 function deliveryRun(
   status: DeliveryRun["status"],
   processed: number,
@@ -234,6 +283,7 @@ function keepShardLease(
   session: ShardSession,
   leaseMs: number,
   nowMs: () => number,
+  options: ShardLeaseRenewalOptions,
 ): ShardLeaseKeeper {
   let current = session;
   let failed: unknown;
@@ -246,12 +296,13 @@ function keepShardLease(
 
       renewing = shards
         .renew(current)
-        .then((next) => {
+        .then(async (next) => {
           if (next === undefined) {
             failed = new Error("Shard lease was lost.");
 
             return;
           }
+          await options.renewClaim(next);
           current = next;
         })
         .catch((error: unknown) => {
@@ -288,25 +339,55 @@ function keepShardLease(
   });
 }
 
-function unclaimedMessage(message: InboxMessage): InboxMessage {
-  if (message.claim === undefined) {
-    return message;
-  }
+function activeClaim(): ActiveClaim {
+  let claimed: ClaimedInboxMessage | undefined;
 
+  return Object.freeze({
+    clear() {
+      claimed = undefined;
+    },
+    current() {
+      return claimed;
+    },
+    async renew(storage: InboxStorage, session: ShardSession) {
+      if (claimed === undefined) {
+        return;
+      }
+
+      const renewed = await renewInboxClaim(storage, claimed, session);
+      if (renewed === undefined) {
+        throw new Error("Inbox claim was lost.");
+      }
+      claimed = renewed;
+    },
+    set(message: ClaimedInboxMessage) {
+      claimed = message;
+    },
+  });
+}
+
+function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
   const { claim: _claim, ...unclaimed } = message;
   return Object.freeze(unclaimed);
 }
 
-async function clearClaim(inbox: Inbox, message: InboxMessage | undefined): Promise<void> {
+async function ignoreClearError(message: Promise<InboxMessage | undefined>): Promise<void> {
+  try {
+    await message;
+  } catch {
+    // Preserve the original endpoint or marker failure reported by the drain.
+  }
+}
+
+async function clearActiveClaim(
+  storage: InboxStorage,
+  message: ClaimedInboxMessage | undefined,
+): Promise<void> {
   if (message === undefined) {
     return;
   }
 
-  try {
-    await inbox.unclaim(message);
-  } catch {
-    // Preserve the original endpoint or marker failure reported by the drain.
-  }
+  await ignoreClearError(clearStoredClaim(storage, message));
 }
 
 function requireMessageShard(message: InboxMessage): ShardIndex {

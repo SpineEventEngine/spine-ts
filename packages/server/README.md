@@ -114,15 +114,19 @@ Current slice exposes:
   inbox-message UUID tie-breaker, bounded read paging via
   `InboxReadOptions.limit`, storage-backed shard pickup/renew/release over
   atomic `RecordStorage.compareAndSet()` handles for one backing store,
-  framework-owned renewal as lease fencing for active drains,
+  framework-owned shard and per-message claim renewal as lease fencing for
+  active drains,
   framework-owned `Delivery.drain()` runs that claim one shard,
   exact-message `Delivery.drainMessage()` runs that reject mismatched
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus
   `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
   stopped, skipped, or a configured failure bound, and a closeable
   `DeliveryWorker` that owns configured shard loops for one worker node.
-  Successful rows are marked `DELIVERED`; failed rows remain pending for later
-  retry through the same durable `TO_DELIVER` state. Supported public delivery labels are
+  Delivery invokes endpoints only after a durable row claim, skips rows with
+  live competing claims, passes unclaimed `InboxMessage` snapshots to
+  endpoints, marks successful rows from the claimed snapshot, and best-effort
+  clears the unchanged claim after failed attempts. Failed rows remain pending
+  for later retry through the same durable `TO_DELIVER` state. Supported public delivery labels are
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated

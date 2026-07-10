@@ -257,10 +257,14 @@ delivery worker boundary:
   an unexpired current session for the same session ID and node;
 - one direct drain run claims a shard through `ShardedWorkRegistry`, reads
   `TO_DELIVER` rows in inbox order, keeps the storage lease renewed while the
-  drain is active, invokes one supplied framework endpoint callback per row,
-  marks successful rows `DELIVERED`, leaves failed endpoint calls `TO_DELIVER`
-  for a later run, returns simple counts plus per-message failures, and releases
-  the shard in a `finally` path;
+  drain is active, and mirrors each renewed shard-session expiry into the active
+  row's durable per-message claim before invoking one supplied framework
+  endpoint callback per row. Rows with a live competing claim are skipped before
+  endpoint invocation. Endpoint callbacks receive unclaimed `InboxMessage`
+  snapshots; successful delivery marks `DELIVERED` from the claimed snapshot,
+  failed attempts best-effort clear the unchanged claim, and failed endpoint
+  calls otherwise remain `TO_DELIVER` for a later run. The run returns simple
+  counts plus per-message failures and releases the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
   is the closeable owner for one node's configured shard loops. Renewal is
   framework-owned lease fencing for active drains. These are lifecycle wrappers

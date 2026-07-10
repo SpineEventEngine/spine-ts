@@ -319,7 +319,8 @@ inbox messages and shard lease records through `StorageFactory` /
 `(signalId, inboxId)` through small internal guard records, keeps shard
 ordering metadata on each message with receive time (`whenReceived`),
 `version`, and inbox message UUID ordering. Direct inbox writes require
-`InboxMessage.id.shard` to match `InboxMessage.shard`. Supported public
+`InboxMessage.id.shard` to match `InboxMessage.shard`; public `InboxMessage`
+snapshots do not expose framework-owned claim metadata. Supported public
 `DeliveryLabel` values are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
 `REACT_UPON_EVENT`, and `CATCH_UP`; `IMPORT_EVENT` is recognized only as
 deprecated legacy stored/wire data and fails closed on read/drain. Delivery also
@@ -328,11 +329,15 @@ exposes a storage-backed shard pickup/renew/release seam backed by atomic
 worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
 fencing for active drains, not an application retry or supervision policy.
 `Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
-`TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint` once per row,
-marks exact-message successes `DELIVERED`, leaves endpoint or marker failures
-pending for retry, releases the shard in `finally`, and returns a `DeliveryRun`
-with counts and per-message `DeliveryFailure` values retained only in that
-result. `Delivery.drainMessage(message, { node, onMessage })`
+`TO_DELIVER` rows in inbox order, claims each row durably before invoking the
+`DeliveryEndpoint`, renews the active row claim to the latest shard-session
+expiry while the endpoint is in flight, and skips rows that already have a live
+competing claim. The endpoint receives an unclaimed `InboxMessage` snapshot.
+Successful delivery marks the claimed snapshot `DELIVERED`; endpoint or marker
+failures best-effort clear the unchanged claim, leave the row pending for retry,
+release the shard in `finally`, and return a `DeliveryRun` with counts and
+per-message `DeliveryFailure` values retained only in that result.
+`Delivery.drainMessage(message, { node, onMessage })`
 claims the message shard only when `message.id.shard` matches `message.shard`,
 then replays that exact pending row without accepting a page limit. `DeliveryLoop`
 repeats the shard-level `Delivery.drain()` boundary for one shard until a

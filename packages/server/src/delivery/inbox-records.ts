@@ -7,25 +7,35 @@ import {
   InboxMessageError,
   type DeliveryLabel,
   type DeliveryStatus,
-  type InboxClaim,
   type InboxMessage,
   type InboxMessageId,
 } from "./inbox.js";
+import type { InboxClaim, InboxRecordMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 
 /** Encodes and decodes durable inbox message records. */
 export const InboxRecords: Readonly<{
-  read(record: Any, expectedKey?: string): InboxMessage;
-  write(message: InboxMessage): Any;
+  read(record: Any, expectedKey?: string): InboxRecordMessage;
+  write(message: InboxRecordMessage): Any;
 }> = Object.freeze({
   /** Read a durable inbox message record. */
-  read(record: Any, expectedKey?: string): InboxMessage {
+  read(record: Any, expectedKey?: string): InboxRecordMessage {
     return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
   },
 
   /** Write a durable inbox message record. */
-  write(message: InboxMessage): Any {
+  write(message: InboxRecordMessage): Any {
     return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
+  },
+});
+
+/** Encodes and decodes internal durable inbox claims. */
+export const InboxClaimRecords: Readonly<{
+  snapshot(claim: InboxClaim): InboxClaim;
+}> = Object.freeze({
+  /** Validate and copy one caller-provided claim snapshot. */
+  snapshot(claim: InboxClaim): InboxClaim {
+    return snapshotClaim(claim);
   },
 });
 
@@ -137,10 +147,10 @@ export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
 export const DedupRecords: Readonly<{
   guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string;
   isPending(record: Any): boolean;
-  writeClaim(message: InboxMessage): Any;
-  writeFinal(message: InboxMessage): Any;
+  writeClaim(message: InboxRecordMessage): Any;
+  writeFinal(message: InboxRecordMessage): Any;
   readGuard(record: Any, expectedKey?: string): DedupGuardState;
-  readPendingMessage(record: Any): InboxMessage | undefined;
+  readPendingMessage(record: Any): InboxRecordMessage | undefined;
 }> = Object.freeze({
   /** Build the durable dedup guard key for one inbox signal target. */
   guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
@@ -156,7 +166,7 @@ export const DedupRecords: Readonly<{
   },
 
   /** Write a pending durable dedup claim. */
-  writeClaim(message: InboxMessage): Any {
+  writeClaim(message: InboxRecordMessage): Any {
     const storedMessage = storedInboxMessage(message);
     const stored: StoredPendingDedupRecord = {
       key: requireCompositeInputText(
@@ -172,7 +182,7 @@ export const DedupRecords: Readonly<{
   },
 
   /** Write a final durable dedup guard. */
-  writeFinal(message: InboxMessage): Any {
+  writeFinal(message: InboxRecordMessage): Any {
     const storedMessage = storedInboxMessage(message);
 
     const stored: StoredFinalDedupRecord = {
@@ -222,7 +232,7 @@ export const DedupRecords: Readonly<{
   },
 
   /** Read the pending message embedded in a durable dedup guard. */
-  readPendingMessage(record: Any): InboxMessage | undefined {
+  readPendingMessage(record: Any): InboxRecordMessage | undefined {
     const dedup = readStoredDedupRecord(record);
     return dedup.state === "PENDING" ? inboxMessageFromStored(dedup.message) : undefined;
   },
@@ -296,7 +306,7 @@ function packRecord(
   });
 }
 
-function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
+function storedInboxMessage(message: InboxRecordMessage): StoredInboxMessage {
   const snapshot = snapshotInboxMessage(message);
 
   return Object.freeze({
@@ -329,7 +339,7 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
   });
 }
 
-function snapshotInboxMessage(message: InboxMessage): InboxMessageSnapshot {
+function snapshotInboxMessage(message: InboxRecordMessage): InboxMessageSnapshot {
   const messageInput = requireInputObject(message, "Inbox message");
   const idInput = requireInputObject(
     readInputProperty(messageInput, "id", "Inbox message ID"),
@@ -410,7 +420,7 @@ function readInputProperty(
   }
 }
 
-function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
+function inboxMessageFromStored(stored: StoredInboxMessage): InboxRecordMessage {
   const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
   const label = requireSupportedLabel(stored.label);
 
