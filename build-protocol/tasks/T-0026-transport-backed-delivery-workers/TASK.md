@@ -392,7 +392,8 @@ accepted-work limit while enforcing remaining failure budget separately.
 Coordinator verification passed with focused delivery/API Vitest (5 files, 220
 tests), generated build typecheck, docs check, format check, and
 `git diff --check`; docs check reported only the existing invalid-origin
-TypeDoc source-link warning. A fresh five-lane re-review is still required.
+TypeDoc source-link warning. The fix commit is `47672dc8` (`Fix delivery drain
+internal controls`). A fresh five-lane re-review is still required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

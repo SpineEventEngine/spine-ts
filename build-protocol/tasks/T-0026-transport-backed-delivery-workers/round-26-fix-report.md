@@ -10,23 +10,23 @@ Checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
 Evidence gathered before this round's code or test changes:
 
-| Source | Scope | Evidence |
-| --- | --- | --- |
-| Session skill inventory | Task-relevant subset | Workflow, TypeScript, implementation, testing, verification, review, and server skills were exposed in the session inventory. |
-| Task-provided skills | Full list in the Round 26 assignment | The assignment explicitly required five skills listed below. |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file | Read; expected workflow and TypeScript skills are present locally. |
-| User-installed entrypoints | Full directory listing | Ran `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print | sort`; entrypoints were readable. |
-| Installed-skill lock | Manifest opened | Read `/Users/armiol/.agents/.skill-lock.json`; it identifies the expected source repositories and installed paths. |
+| Source                                     | Scope                                | Evidence                                                                                                                      |
+| ------------------------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset                 | Workflow, TypeScript, implementation, testing, verification, review, and server skills were exposed in the session inventory. |
+| Task-provided skills                       | Full list in the Round 26 assignment | The assignment explicitly required five skills listed below.                                                                  |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                            | Read; expected workflow and TypeScript skills are present locally.                                                            |
+| User-installed entrypoints                 | Full directory listing               | Ran `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print                                              | sort`; entrypoints were readable. |
+| Installed-skill lock                       | Manifest opened                      | Read `/Users/armiol/.agents/.skill-lock.json`; it identifies the expected source repositories and installed paths.            |
 
 Selected skills fully read before governed work:
 
-| Skill | Source | Round 26 application |
-| --- | --- | --- |
-| `test-driven-development` | `/Users/armiol/.agents/skills/test-driven-development/SKILL.md` | Add focused failing regressions before changing production behavior. |
-| `implement` | `/Users/armiol/.agents/skills/implement/SKILL.md` | Implement the assigned findings and run regular type/test checks; task instruction not to commit overrides the skill's commit instruction. |
-| `javascript-testing-patterns` | `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md` | Use isolated Vitest behavior tests and real delivery/inbox fixtures. |
-| `typescript-advanced-types` | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md` | Keep the public type small and verify excluded keys using compile-time coverage. |
-| `verification-before-completion` | `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | Run and inspect every prescribed verification command before reporting completion. |
+| Skill                            | Source                                                                 | Round 26 application                                                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test-driven-development`        | `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`        | Add focused failing regressions before changing production behavior.                                                                       |
+| `implement`                      | `/Users/armiol/.agents/skills/implement/SKILL.md`                      | Implement the assigned findings and run regular type/test checks; task instruction not to commit overrides the skill's commit instruction. |
+| `javascript-testing-patterns`    | `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md`    | Use isolated Vitest behavior tests and real delivery/inbox fixtures.                                                                       |
+| `typescript-advanced-types`      | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`      | Keep the public type small and verify excluded keys using compile-time coverage.                                                           |
+| `verification-before-completion` | `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | Run and inspect every prescribed verification command before reporting completion.                                                         |
 
 Relevant-looking but skipped skills: `nodejs-backend-patterns` (no new Node lifecycle or I/O behavior), `projection-patterns`, `cqrs-implementation`, `event-store-design`, and `saga-orchestration` (this fixes existing delivery controls only), and `security-best-practices` (no new trust boundary or input handling). Their applicability was assessed from the session inventory, expected-skill manifest, and installed entrypoint names; their bodies were not needed for this narrow fix.
 
