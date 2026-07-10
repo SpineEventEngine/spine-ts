@@ -14,8 +14,10 @@ Fixed the Round 24 review batch for T-0026:
 - Historical Round 24 behavior allowed claim compare-and-set to reclaim
   expired per-message claims using the storage clock. This was superseded by
   Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`);
-  the current contract blocks competing delivery for both expired and live row
-  claims until a future explicit recovery policy exists.
+  that Round 35 contract blocked competing delivery for both expired and live
+  row claims until a future explicit recovery policy existed. Round 43 /
+  `9477830c` later restored expired-claim reclaim during claim CAS while live
+  row claims block.
 - Keep pre-callback claim/lease failures visible without letting them consume
   the accepted endpoint-work limit.
 - Decouple direct-drain page size from accepted-work limit so limit `1` can
@@ -32,12 +34,14 @@ Fixed the Round 24 review batch for T-0026:
 - Changed `InboxStorage.#claimMessage()` in this round so a live claim still
   blocked claim CAS while an expired claim could be atomically replaced by the
   new shard-session claim. Historical correction: Round 35 / `5c3705e2`
-  removed that reclaim path, so any existing row claim now blocks competing
-  delivery.
+  removed that reclaim path in that slice. Round 43 / `9477830c` later restored
+  expired-claim reclaim during claim CAS while live row claims block.
 - Updated the `InboxClaim` comment in this round to clarify that local/direct
   workers did not proactively sweep expired claims. Historical correction:
   Round 35 / `5c3705e2` later changed the current comment/contract to no
-  expired-claim reclaim without explicit recovery policy.
+  expired-claim reclaim without explicit recovery policy. Round 43 /
+  `9477830c` later restored expired-claim reclaim during claim CAS while live
+  row claims block.
 - Changed direct-drain accounting so pre-callback failures stay in
   `DeliveryRun.failures` without incrementing `accepted`, while callback
   invocation and later failures still count as accepted endpoint work.
@@ -48,7 +52,9 @@ Fixed the Round 24 review batch for T-0026:
   pre-callback accepted-limit accounting, bounded query count under skipped
   rows, supported endpoint typing, and live-claim loop idling. Historical
   correction: the expired-claim reclaim regressions are retained as Round 24
-  history only; current behavior is the Round 35 no-reclaim contract.
+  history only; Round 35 later introduced a no-reclaim contract, and Round 43 /
+  `9477830c` later restored expired-claim reclaim during claim CAS while live
+  row claims block.
 
 ## Verification
 

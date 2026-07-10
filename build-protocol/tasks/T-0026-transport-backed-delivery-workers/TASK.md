@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 43 fixes committed; re-review pending
+Status: Round 44 fixes implemented; coordinator commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -373,9 +373,10 @@ bound for shard lease duration; prevent loop starvation when a scan budget is
 exhausted ahead of a supported row; refresh claim-expiry checks after claim-row
 reads; and enforce loop failure budget for pre-callback failures. Historical
 note: the Round 25 expired-ownership reclaim behavior was superseded by Round
-35 commit `5c3705e2`; the current contract is no competing delivery for expired
-or live row claims without a future explicit recovery policy. One fix worker
-will address this complete batch before re-review.
+35 commit `5c3705e2`, which blocked competing delivery for expired and live row
+claims until future recovery policy existed. Round 43 / `9477830c` later
+restored expired-claim reclaim during claim CAS while live row claims block. One
+fix worker will address this complete batch before re-review.
 
 Round 25 fix verification on `2026-07-10`: the fix worker updated runtime code,
 tests, docs, API docs, and durable logs for the full Round 25 findings batch.
@@ -646,9 +647,9 @@ Round 37 fix implementation on `2026-07-10`: the fix worker updated durable
 breadcrumbs for Round 35 commit `5c3705e2` and Round 36 commit `e4388fb5`, and
 marked Round 24/25 expired-claim reclaim records as historical because Round
 35 superseded them with no competing delivery for expired or live row claims
-until future explicit recovery policy existed. Round 43 later superseded that
-no-reclaim rule: live row claims block, while expired row claims may be
-replaced during claim CAS using the storage clock. Runtime reliability fix:
+until future explicit recovery policy existed. Round 43 / `9477830c` later
+superseded that no-reclaim rule: live row claims block, while expired row
+claims may be replaced during claim CAS using the storage clock. Runtime reliability fix:
 direct
 drains now revalidate the pending boundary when an offset-page read returns
 short with no accepted or failed work, then perform one bounded head rescan if
@@ -787,6 +788,38 @@ claim reclaim`) recorded the fix; five-lane re-review remains pending.
 Coordinator verification after the worker returned passed focused
 delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
 docs check with only the existing invalid-`origin` warning, lint, format check,
+working-tree diff check, and baseline range diff check.
+
+Round 44 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` produced a clean
+performance/reliability lane. Documentation and TypeScript/API docs found
+`build-protocol/DEVELOPER_API.md` still names internal `DeliveryOptions.leaseMs`
+in the public delivery API/error-contract sentence after raw callback delivery
+options were removed from the root public surface. Security found projection
+inbox replay validates the `UPDATE_SUBSCRIBER` label but does not require
+`TO_DELIVER` status before forwarding to repository/user projection code. Style
+found older durable records still say the current contract blocks expired and
+live row claims until future recovery policy exists, without noting Round 43 /
+`9477830c` later restored expired-claim reclaim. The next fix corrects the
+public API doc sentence, adds a projection replay status guard with focused
+coverage, updates stale durable records, verifies, and repeats five-lane
+re-review.
+
+Round 44 fix implementation on `2026-07-10`: projection replay now validates
+`message.status === "TO_DELIVER"` before target lookup and repository/user
+projection invocation. Focused red/green coverage proves `DELIVERED`,
+`SCHEDULED`, and `TO_CATCH_UP` projection replay snapshots fail closed without
+handler invocation. `DEVELOPER_API.md` now names only the root-public
+`ShardedWorkRegistryOptions.leaseMs` in the public delivery error contract, and
+stale Round 24/25/37 durable records now state that Round 35 / `5c3705e2`
+temporarily introduced the no-reclaim contract before Round 43 / `9477830c`
+restored expired-claim reclaim during claim CAS while live claims block.
+Verification passed with focused context handoff Vitest, generated typecheck,
+docs check, lint, format check, working-tree diff check, and baseline range diff
+check. No worker commit was created; coordinator commit remains pending.
+Coordinator verification after the worker returned passed focused context
+handoff Vitest with 2 files and 22 tests, generated build typecheck, docs check
+with only the existing invalid-`origin` warning, lint, format check,
 working-tree diff check, and baseline range diff check.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability

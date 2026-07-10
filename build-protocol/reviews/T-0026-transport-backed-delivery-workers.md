@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 43 fixes committed; re-review pending
+Status: Round 44 fixes implemented; coordinator commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status                       |
-| -------------------------- | ---------------- | ---------------------------- |
-| Code style/maintainability | Anscombe the 2nd | Addressed; re-review pending |
-| Documentation              | Dewey the 2nd    | Addressed; re-review pending |
-| TypeScript/API docs        | Socrates the 2nd | Addressed; re-review pending |
-| Security                   | Halley the 2nd   | Addressed; re-review pending |
-| Performance/reliability    | James the 2nd    | Addressed; re-review pending |
+| Lane                       | Reviewer          | Status                       |
+| -------------------------- | ----------------- | ---------------------------- |
+| Code style/maintainability | Curie the 2nd     | Addressed; re-review pending |
+| Documentation              | Hypatia the 2nd   | Addressed; re-review pending |
+| TypeScript/API docs        | Russell the 2nd   | Addressed; re-review pending |
+| Security                   | Aristotle the 2nd | Addressed; re-review pending |
+| Performance/reliability    | Galileo the 2nd   | Clean                        |
 
 ## Review Criteria
 
@@ -31,6 +31,57 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 44 Follow-up - `2026-07-10T18:45:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` from task baseline
+  `ca8fb2b3` to current HEAD `f7f56f54`.
+- Code style/maintainability (Curie the 2nd): [P2] older durable records still
+  contain authoritative-looking "current contract" wording from Round 35 that
+  says expired and live row claims both block competing delivery until future
+  explicit recovery policy exists. Update those historical notes to name Round
+  43 / `9477830c` as the later supersession.
+- Documentation (Hypatia the 2nd): [P2] `build-protocol/DEVELOPER_API.md` still
+  names internal `DeliveryOptions.leaseMs` in the public delivery error
+  contract even though raw callback delivery options are not root-public.
+- TypeScript/API docs (Russell the 2nd): [P2] same internal
+  `DeliveryOptions.leaseMs` public-doc leak.
+- Security (Aristotle the 2nd): [P2] projection inbox replay validates the
+  label but not `message.status` before invoking projection handlers. Unlike
+  process-manager replay, `ProjectionInbox.replay()` can forward non-pending
+  `DELIVERED`, `SCHEDULED`, or `TO_CATCH_UP` snapshots to repository/user
+  projection code if an internal caller misuses the replay endpoint.
+- Performance/reliability (Galileo the 2nd): clean.
+- Action: correct the public API doc sentence to mention only public lease
+  options, make projection replay fail closed for non-`TO_DELIVER` rows with
+  focused regression coverage, update stale durable records, verify, and repeat
+  five-lane re-review.
+
+### Round 44 Fix Implementation - `2026-07-10`
+
+- `LocalProjectionInbox.replay()` now asserts `UPDATE_SUBSCRIBER` and
+  `TO_DELIVER` before target lookup and repository/user projection invocation,
+  matching the process-manager replay fail-closed status boundary.
+- Focused regression coverage proves `DELIVERED`, `SCHEDULED`, and
+  `TO_CATCH_UP` projection replay snapshots reject before projection handlers
+  run.
+- `build-protocol/DEVELOPER_API.md` no longer names internal
+  `DeliveryOptions.leaseMs` in the public delivery error contract; the public
+  sentence now names only `ShardedWorkRegistryOptions.leaseMs`.
+- Round 24, Round 25, Round 37, task, work, and review records were updated so
+  Round 35 / `5c3705e2` is historical no-reclaim context and Round 43 /
+  `9477830c` is the later expired-claim reclaim restoration.
+- Verification passed: projection replay red/green, focused context handoff
+  Vitest (2 files, 22 tests), generated build typecheck, docs check with only
+  the existing invalid-`origin` warning, lint, format check, `git diff --check`,
+  and `git diff --check ca8fb2b3..HEAD`.
+- Coordinator verification after the worker returned passed focused context
+  handoff Vitest with 2 files and 22 tests, generated build typecheck, docs
+  check with only the existing invalid-`origin` warning, lint, format check,
+  working-tree diff check, and baseline range diff check.
+- No worker commit was created. Coordinator commit remains pending before the
+  next five-lane re-review.
 
 ### Round 43 Follow-up - `2026-07-10T17:45:00Z`
 

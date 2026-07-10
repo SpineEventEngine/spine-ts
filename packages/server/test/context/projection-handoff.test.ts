@@ -107,6 +107,45 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 
+  it("rejects non-pending replay snapshots before projection handlers run", async () => {
+    const inbox = new LocalProjectionInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const seen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    for (const status of ["DELIVERED", "SCHEDULED", "TO_CATCH_UP"] as const) {
+      await expect(
+        inbox.replay({
+          id: {
+            value: `message-${status}`,
+            shard: ShardIndex.single(),
+          },
+          inboxId: {
+            targetId: `projection-${status}`,
+            targetTypeUrl,
+          },
+          signalId: `event-${status}`,
+          label: "UPDATE_SUBSCRIBER",
+          status,
+          shard: ShardIndex.single(),
+          whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+          version: 1n,
+        }),
+      ).rejects.toThrow(
+        `BoundedContext delivery cannot replay projection inbox message with status "${status}".`,
+      );
+    }
+
+    expect(seen).toEqual([]);
+  });
+
   it("waits for a concurrent duplicate while the original projection replay is in flight", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

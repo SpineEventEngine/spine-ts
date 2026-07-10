@@ -96,9 +96,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    if (message.label !== "UPDATE_SUBSCRIBER") {
-      throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
-    }
+    assertProjectionMessage(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 
@@ -109,5 +107,18 @@ export class LocalProjectionInbox implements ProjectionInbox {
     }
 
     await target.replay(message, deliveryTenantId);
+  }
+}
+
+type ProjectionMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
+
+function assertProjectionMessage(message: InboxMessage): asserts message is ProjectionMessage {
+  if (message.label !== "UPDATE_SUBSCRIBER") {
+    throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
+  }
+  if (message.status !== "TO_DELIVER") {
+    throw new Error(
+      `BoundedContext delivery cannot replay projection inbox message with status "${message.status}".`,
+    );
   }
 }

@@ -29,7 +29,16 @@ Project protocol, task ledger, and the user prompt take precedence over skill ad
 
 ## Scope
 
-Round 25 addressed the mandatory review findings: public callback contract documentation, then-current expired ownership wording, callback naming, minimum lease validation, finite-scan loop progress, post-read claim-expiry decisions, and loop-only pre-callback failure budgeting. Historical correction: Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) superseded expired-claim reclaim; the current contract blocks competing delivery for both expired and live row claims until a future explicit recovery policy exists. Unsupported valid labels remain pending and do not reach callbacks, failures, acceptance, or failure budgets.
+Round 25 addressed the mandatory review findings: public callback contract
+documentation, then-current expired ownership wording, callback naming, minimum
+lease validation, finite-scan loop progress, post-read claim-expiry decisions,
+and loop-only pre-callback failure budgeting. Historical correction: Round 35
+commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) superseded
+expired-claim reclaim in that slice by blocking competing delivery for both
+expired and live row claims until future recovery policy existed. Round 43 /
+`9477830c` later restored expired-claim reclaim during claim CAS while live row
+claims block. Unsupported valid labels remain pending and do not reach
+callbacks, failures, acceptance, or failure budgets.
 
 ## TDD Evidence
 
@@ -54,16 +63,18 @@ expired-claim reclaim expectation is historical only after Round 35 /
 - Refreshed the storage clock after every claim-row read before evaluating claim
   expiry, so expired ownership was reclaimable by the later claim attempt under
   the then-current Round 25 contract. Historical correction: Round 35 /
-  `5c3705e2` superseded this with no competing delivery for any existing row
-  claim.
+  `5c3705e2` superseded this in that slice with no competing delivery for any
+  existing row claim. Round 43 / `9477830c` later restored expired-claim reclaim
+  during claim CAS while live row claims block.
 - Added loop-only drain controls for the remaining failure budget and a
   continuation offset after a saturated all-skipped scan. Direct `drain()` calls
   retain their original accounting when those controls are omitted.
 - Updated the public delivery, API, architecture, package, and user docs to
   distinguish then-current expired-claim reclaim from still-future proactive
-  recovery policy. Historical correction: Round 35 / `5c3705e2` now makes all
+  recovery policy. Historical correction: Round 35 / `5c3705e2` later made all
   expired and live row claims block competing delivery until explicit recovery
-  policy exists.
+  policy existed in that slice. Round 43 / `9477830c` later restored
+  expired-claim reclaim during claim CAS while live row claims block.
 
 ## Final Verification
 

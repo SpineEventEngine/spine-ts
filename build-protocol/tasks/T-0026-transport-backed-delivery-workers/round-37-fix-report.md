@@ -13,7 +13,8 @@ Round 37 addresses one durable-log cleanup batch and one reliability regression:
    (`Fix delivery claim blocking and offset rescan`) and Round 36 coordinator
    commit `e4388fb5` (`Fix delivery review gate cleanup`) already exist.
 2. Mark older Round 24/25 expired-claim reclaim records as historical and
-   superseded by Round 35 / `5c3705e2`.
+   superseded by Round 35 / `5c3705e2`, while recording that Round 43 /
+   `9477830c` later restored expired-claim reclaim during claim CAS.
 3. Fix the drain race where skipped rows can disappear after pending-boundary
    validation but before the offset-page read, letting a loop falsely idle past
    reachable supported work.
@@ -30,9 +31,10 @@ Round 37 addresses one durable-log cleanup batch and one reliability regression:
   no accepted or failed work revalidates the pending boundary and performs one
   bounded head rescan if the boundary moved.
 - Updated task, work, review, and Round 24/25/35/36 reports so they preserve
-  historical context while stating the current no-reclaim contract: expired and
-  live row claims both block competing delivery until a future explicit recovery
-  policy exists.
+  historical context while stating the then-current Round 35 no-reclaim
+  contract: expired and live row claims both blocked competing delivery until a
+  future explicit recovery policy existed. Round 43 / `9477830c` later restored
+  expired-claim reclaim during claim CAS while live row claims block.
 
 ## Verification
 
