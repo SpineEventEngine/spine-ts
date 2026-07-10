@@ -122,9 +122,13 @@ Current slice exposes:
   stopped, skipped, or a configured failure bound, and a closeable
   `DeliveryWorker` that owns configured shard loops for one worker node.
   Delivery skips rows unavailable to the active worker, passes public
-  `InboxMessage` snapshots to endpoints, marks successful rows delivered, and
-  leaves failed rows pending for later retry through the same durable
-  `TO_DELIVER` state. Endpoint callbacks run only for `HANDLE_COMMAND`,
+  `InboxMessage` snapshots to endpoints, and marks successful rows delivered.
+  Endpoint callback failures leave rows pending for a later run through the
+  same durable `TO_DELIVER` state only after framework-owned cleanup clears the
+  active row claim. Fail-closed validation, lease/fencing, status-update, and
+  claim-clear failures are reported through `DeliveryRun.failures` /
+  `DeliveryFailure` without an immediate retry or recovery guarantee in this
+  slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
   before callback invocation. Supported public delivery labels are
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;

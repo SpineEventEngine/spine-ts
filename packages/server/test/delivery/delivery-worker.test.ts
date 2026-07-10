@@ -575,6 +575,62 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
   });
 
+  it("reports claim-clear failures after endpoint failure instead of implying retryability", async () => {
+    const faultPlan: DeliveryFaultPlan = {
+      throwInboxClearOnce: true,
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-clear-fail", 1n);
+
+    const firstRun = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    expect(firstRun).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(firstRun.failures).toHaveLength(1);
+    expect(firstRun.failures[0]?.message.signalId).toBe("signal-clear-fail");
+    expect(firstRun.failures[0]?.error).toBeInstanceOf(AggregateError);
+    expect((firstRun.failures[0]?.error as AggregateError).errors).toMatchObject([
+      { message: "endpoint failed" },
+      { message: "Inbox claim clear failed." },
+    ]);
+    expect(faultPlan.thrownInboxClears).toBe(1);
+
+    const retried: string[] = [];
+    const retryRun = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(message) {
+        retried.push(message.signalId);
+      },
+    });
+
+    expect(retried).toEqual([]);
+    expect(retryRun).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-clear-fail", status: "TO_DELIVER" },
+    ]);
+  });
+
   it("rejects CATCH_UP rows before invoking the endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1613,9 +1669,26 @@ function isInboxClaimRenewal<I, R extends Message>(id: I, expected: R, next: R):
   );
 }
 
+function isInboxClaimClear<I, R extends Message>(id: I, expected: R, next: R): boolean {
+  if (typeof id !== "string") {
+    return false;
+  }
+
+  const current = InboxRecords.read(expected as Any, id);
+  const unclaimed = InboxRecords.read(next as Any, id);
+
+  return (
+    current.status === "TO_DELIVER" &&
+    unclaimed.status === "TO_DELIVER" &&
+    current.claim !== undefined &&
+    unclaimed.claim === undefined
+  );
+}
+
 interface DeliveryFaultPlan {
   blockInboxClaimOnce?: boolean;
   blockInboxRenewalOnce?: boolean;
+  throwInboxClearOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
@@ -1625,6 +1698,7 @@ interface DeliveryFaultPlan {
   resumeInboxRenewal?: ReturnType<typeof deferred<undefined>>;
   blockedInboxClaims?: number;
   blockedInboxRenewals?: number;
+  thrownInboxClears?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
   opens?: number;
@@ -1701,6 +1775,18 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
       this.#plan.blockedInboxRenewals = (this.#plan.blockedInboxRenewals ?? 0) + 1;
       this.#plan.inboxRenewalBlocked?.resolve(undefined);
       await this.#plan.resumeInboxRenewal?.promise;
+    }
+
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.throwInboxClearOnce === true &&
+      isInboxClaimClear(id, expected.record, next.record)
+    ) {
+      this.#plan.throwInboxClearOnce = false;
+      this.#plan.thrownInboxClears = (this.#plan.thrownInboxClears ?? 0) + 1;
+      return Promise.reject(new Error("Inbox claim clear failed."));
     }
 
     if (

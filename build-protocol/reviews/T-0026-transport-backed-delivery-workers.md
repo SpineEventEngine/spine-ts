@@ -65,6 +65,43 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `git diff --check` passed. `docs:check` reported only the existing TypeDoc
   invalid-origin warning.
 
+### Round 16 Follow-up - `2026-07-10T07:52:54Z`
+
+- Finding: [Docs/API MEDIUM] `packages/server/README.md` and
+  `build-protocol/DEVELOPER_API.md` still said failed rows remain
+  `TO_DELIVER` for later retry without narrowing that guarantee to endpoint
+  callback failures.
+- Finding: [Docs LOW] the T-0026 task brief status still said
+  `implemented; review pending` after review-fix rounds had verified the
+  implementation.
+- Finding: [Reliability HIGH] `clearActiveClaim()` suppressed
+  `inboxStorageAccess.clear()` failures after endpoint or validation failure.
+  A row could therefore stay `TO_DELIVER` but durably claimed, making it
+  unavailable to later drains while the result implied a retryable endpoint
+  failure.
+- Action: dispatch one fix worker with the complete docs/status/reliability
+  findings, require a focused regression, then rerun all required review lanes.
+- Fix: `Delivery.drain()` and `Delivery.drainMessage()` now report active
+  claim-clear failures after endpoint or validation failure through the
+  returned `DeliveryRun.failures` / `DeliveryFailure.error` path. The reported
+  error is an `AggregateError` containing both the original delivery failure and
+  the claim-clear failure, so the result no longer implies the row is simply
+  ready for immediate retry when cleanup failed.
+- Fix: narrowed `packages/server/README.md` and
+  `build-protocol/DEVELOPER_API.md` so later-run retry wording applies only to
+  endpoint callback failures after row-claim cleanup succeeds. The docs now
+  state fail-closed validation, lease/fencing, status-update, and claim-clear
+  failures are reported without an immediate retry or recovery guarantee in
+  this slice. Updated the T-0026 task status to the current review-fix state.
+- Evidence: the focused claim-clear regression failed before the fix because
+  the run reported only `Error: endpoint failed`, then passed after the
+  delivery catch path surfaced the claim-clear failure.
+- Verification: focused delivery Vitest passed with 1 file and 37 tests;
+  `typecheck:build:generated`, `docs:check`, rerun `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning. `format:check` caught review/work-log Markdown
+  wrapping before the final clean rerun.
+
 ### Round 14 Follow-up - `2026-07-10T07:30:12Z`
 
 - Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used

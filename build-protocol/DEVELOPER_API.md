@@ -260,12 +260,16 @@ smaller than the later scheduler/retry stack:
   public `InboxMessage` snapshot to the supplied framework endpoint callback.
   Callbacks run only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
   `REACT_UPON_EVENT`; unsupported labels fail closed before callback
-  invocation. Successful rows are marked `DELIVERED`; failures leave the row
-  `TO_DELIVER` for a later run. The run returns simple `DeliveryRun` statistics
-  (`status`, `processed`, `accepted`, `delivered`, `failed`, and `failures`) and
-  releases the shard in a `finally` path. If the shard is already owned by
-  another live worker lease, the run returns `SKIPPED` with zero counts and does
-  not invoke the callback;
+  invocation. Successful rows are marked `DELIVERED`; endpoint callback
+  failures leave the row `TO_DELIVER` for a later run only when
+  framework-owned cleanup clears the active row claim. Fail-closed validation,
+  lease/fencing, status-update, and claim-clear failures are returned through
+  `DeliveryRun.failures` / `DeliveryFailure` without an immediate retry or
+  recovery guarantee in this slice. The run returns simple `DeliveryRun`
+  statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and
+  `failures`) and releases the shard in a `finally` path. If the shard is
+  already owned by another live worker lease, the run returns `SKIPPED` with
+  zero counts and does not invoke the callback;
 - `Delivery.drainMessage(message, { node, onMessage })` picks up the message's
   shard and drains only that exact stored row. It has no `limit` option because
   it never scans unrelated rows from the shard;

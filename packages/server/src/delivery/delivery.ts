@@ -191,11 +191,16 @@ export class Delivery {
 
       return { kind: "DELIVERED" };
     } catch (error) {
+      let failure = error;
       if (!active.callbackSucceeded()) {
-        await active.clearStored(this.inbox.storage);
+        try {
+          await active.clearStored(this.inbox.storage);
+        } catch (clearError) {
+          failure = claimClearFailure(error, clearError);
+        }
       }
 
-      return Object.freeze({ kind: "FAILED" as const, error });
+      return Object.freeze({ kind: "FAILED" as const, error: failure });
     } finally {
       active.clear();
     }
@@ -452,14 +457,6 @@ function requireEndpointLabel(label: InboxMessage["label"]): void {
   throw new Error(`Delivery worker does not support "${label}" messages.`);
 }
 
-async function ignoreClearError(message: Promise<InboxMessage | undefined>): Promise<void> {
-  try {
-    await message;
-  } catch {
-    // Preserve the original endpoint or marker failure reported by the drain.
-  }
-}
-
 async function clearActiveClaim(
   storage: InboxStorage,
   message: ClaimedInboxMessage | undefined,
@@ -468,7 +465,14 @@ async function clearActiveClaim(
     return;
   }
 
-  await ignoreClearError(inboxStorageAccess.clear(storage, message));
+  await inboxStorageAccess.clear(storage, message);
+}
+
+function claimClearFailure(deliveryError: unknown, clearError: unknown): AggregateError {
+  return new AggregateError(
+    [deliveryError, clearError],
+    "Delivery failed and inbox claim clear failed.",
+  );
 }
 
 function requireMessageShard(message: InboxMessage): ShardIndex {
