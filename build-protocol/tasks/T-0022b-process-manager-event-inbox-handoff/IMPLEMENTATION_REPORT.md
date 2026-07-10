@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-eight documentation fix applied; re-review pending
+Status: implemented in code/docs; round-nine reliability/docs fixes verified; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -19,6 +19,10 @@ event reactions and event-commanding handlers.
 - Local replay drains only the exact row target and reuses the existing
   process-manager execution path for state, produced commands, produced events,
   tenant-scoped `Stand` updates, and failure propagation.
+- Batch process-manager inbox handoffs coordinate each row in the same
+  tenant-aware in-flight namespace as single-row handoffs, so mixed
+  single-vs-batch duplicates wait for the original exact-row drain instead of
+  racing the shard lease.
 - Round-one review fixes consolidated duplicated inbox-event reading, replaced
   the `fromBinary(...toBinary(...))` copy path with generated `Any` rebuilding,
   shortened the new helper/test names, and updated docs to describe the replay
@@ -127,12 +131,31 @@ Round-eight findings fixed in this pass:
      the recorded round-six verification entry;
    - updated the review log and this report to record round-eight lane status.
 
+Round-nine findings fixed in this pass:
+
+1. Performance/reliability
+   - added mixed duplicate regressions for batch-to-single and single-to-batch
+     process-manager event handoffs;
+   - changed `LocalProcessManagerInbox.receiveAll()` to reserve per-row
+     handoff promises in the same map used by `receive()` before writing batch
+     rows;
+   - kept exact duplicate batch promise reuse, write-all-before-drain behavior,
+     and the existing `#takeVersion()` allocator;
+   - ensured owned row promises resolve after exact-row drain and reject/clean
+     up on failure.
+2. Durable docs
+   - updated `docs/architecture/README.md` to cover command, projection, and
+     process-manager event handoffs, including `REACT_UPON_EVENT` row contents
+     and pre-handler validation;
+   - updated the work log, review log, and this report for round nine.
+
 ## Files Changed
 
 - `packages/server/src/context/process-manager-handoff.ts`
 - `packages/server/src/repository/repository.ts`
 - `packages/server/test/context/process-manager-handoff.test.ts`
 - `packages/server/test/repository/repository-routing.test.ts`
+- `docs/architecture/README.md`
 - `build-protocol/DEVELOPER_API.md`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `build-protocol/DECISION_LOG.md`
@@ -193,6 +216,37 @@ Passed:
   - note: TypeDoc reported the existing invalid-`origin` source-link warning
   - command: `git diff --check`
   - exit `0`
+- round-nine mixed duplicate regression red check
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `-t "duplicate single row|duplicate batch row"`
+  - expected pre-fix exit `1`
+  - result: both new tests failed with
+    `Process-manager inbox delivery was skipped before the target row was delivered.`
+- round-nine mixed duplicate regression green check
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `-t "duplicate single row|duplicate batch row"`
+  - exit `0`
+  - result: `1` file passed, `2` tests passed, `12` skipped
+- round-nine focused suite
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `packages/server/test/repository/repository-routing.test.ts`
+  - exit `0`
+  - result: `2` files passed, `139` tests passed
+- round-nine final generated/lint verification
+  - command: `pnpm --config.verify-deps-before-run=false lint:generated`
+  - exit `0`
+  - result: TypeScript build, ESLint, and cleanup enforcement passed
+- round-nine final documentation verification
+  - command: `pnpm --config.verify-deps-before-run=false docs:check`
+  - exit `0`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
+    and the API docs check confirmed the expected exported symbol counts
 - `git diff --check`
   - exit `0`
 

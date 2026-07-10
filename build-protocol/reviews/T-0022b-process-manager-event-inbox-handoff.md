@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 8 documentation fix applied; re-review pending
+Status: round 9 reliability/docs fixes verified; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: round 8 | clean | No new style findings reported. |
-| Documentation completeness | latest: round 8 | fix applied; re-review pending | Work-log chronology normalized after round-six completion. |
-| TypeScript/API docs        | latest: round 8 | clean | No public API or generated-doc findings reported. |
-| Security                   | latest: round 8 | clean | No new security findings reported. |
-| Performance/reliability    | latest: round 8 | clean | Duplicate multi-target handoff coordination verified. |
+| Code style/maintainability | latest: round 9 | clean | No new naming, layout, generated-output, or style findings reported. |
+| Documentation completeness | latest: round 9 | fix verified; re-review pending | Work-log status, architecture handoff wording, review log, and implementation report updated. |
+| TypeScript/API docs        | latest: round 9 | clean | No public API or generated-doc findings reported. |
+| Security                   | latest: round 9 | clean | No new security findings reported. |
+| Performance/reliability    | latest: round 9 | fix verified; re-review pending | Mixed single-vs-batch duplicate coordination now shares per-row handoff promises. |
 
 ## Planned Review Focus
 
@@ -310,3 +310,58 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 - Author follow-up moved the round-seven work-log review/fix entries after the
   round-six verification entry and recorded the round-eight lane results here.
+
+## Round 9 Findings
+
+### Code Style/Maintainability
+
+- Clean. The reviewer did not report new naming, layout, generated-output, or
+  style findings.
+
+### Documentation
+
+- Medium: `build-protocol/work-logs/T-0022b.md` still presented round-seven
+  fixes as the top-level current status after later review rounds. Bring the
+  durable work-log status forward to the round-nine findings and fix state.
+- Medium: `docs/architecture/README.md` still described the local delivery
+  handoff as replayed command payloads only. Expand the architecture wording to
+  cover command rows, projection subscriber rows, and process-manager event
+  rows, including `REACT_UPON_EVENT` event payload, `signalId`, target metadata,
+  exact-row replay, and pre-handler validation.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer did not report new internal contract or public API doc
+  findings.
+
+### Security
+
+- Clean. The reviewer did not report new security findings.
+
+### Performance/Reliability
+
+- High: `LocalProcessManagerInbox.receive()` and `receiveAll()` used separate
+  coordination maps. A single-row duplicate could race with a row currently
+  being drained by an in-flight batch, and a batch containing a single-row
+  duplicate could race with the in-flight single-row drain. Register batch
+  handoffs per row in the same coordination namespace used by `receive()`
+  before writing rows, while keeping exact duplicate batch coordination,
+  write-all-before-drain behavior, and `#takeVersion()` allocation.
+
+## Round-Nine Fix Follow-Up
+
+- Author follow-up added deterministic mixed duplicate regressions for
+  batch-to-single and single-to-batch process-manager event handoffs.
+- Author follow-up changed `LocalProcessManagerInbox.receiveAll()` to reserve
+  per-row handoff promises in `#inFlightHandoffs` before writing batch rows.
+  `receive()` now waits on matching in-flight batch rows, and `receiveAll()`
+  waits on matching in-flight single rows while still reusing exact duplicate
+  batch promises.
+- Author follow-up kept batch writes ahead of owned-row drains and kept all row
+  writes on the existing `#takeVersion()` allocator. Owned row promises resolve
+  after their exact-row drain and reject/clean up on failure.
+- Author follow-up updated the architecture README, work log, review log, and
+  implementation report for the round-nine reliability/docs state.
+- Author follow-up verification passed: the mixed duplicate red check failed
+  before the fix and passed after it; focused Vitest, `lint:generated`,
+  `docs:check`, and `git diff --check` all exited 0.

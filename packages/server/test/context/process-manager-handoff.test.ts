@@ -188,7 +188,6 @@ describe("LocalProcessManagerInbox", () => {
         shard,
       },
     ];
-
     inbox.register({
       targetTypeUrl: firstTypeUrl,
       async replay(message) {
@@ -229,6 +228,178 @@ describe("LocalProcessManagerInbox", () => {
       },
       {
         signalId: "event-duplicate-batch",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
+  it("waits for a duplicate single row while a batch row is in flight", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
+    const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const firstInput = {
+      inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+      signalId: "event-mixed-batch-to-single",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+    const secondInput = {
+      inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+      signalId: "event-mixed-batch-to-single",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+    const inputs = [firstInput, secondInput];
+
+    inbox.register({
+      targetTypeUrl: firstTypeUrl,
+      async replay(message) {
+        seen.push(message);
+        startReplay();
+        await replayReleased;
+      },
+    });
+    inbox.register({
+      targetTypeUrl: secondTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    const batch = inbox.receiveAll(delivery, inputs);
+    await replayStarted;
+    const duplicate = inbox.receive(delivery, secondInput);
+
+    try {
+      await expect(
+        Promise.race([
+          duplicate.then(
+            () => "resolved",
+            (error: unknown) => (error instanceof Error ? error.message : "rejected"),
+          ),
+          pause(150).then(() => "pending"),
+        ]),
+      ).resolves.toBe("pending");
+    } finally {
+      releaseReplay();
+    }
+
+    const [batchMessages, duplicateMessage] = await Promise.all([batch, duplicate]);
+
+    expect(duplicateMessage.id).toEqual(batchMessages[1]?.id);
+    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "event-mixed-batch-to-single",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+      {
+        signalId: "event-mixed-batch-to-single",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
+  it("waits for a duplicate batch row while a single row is in flight", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
+    const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const firstInput = {
+      inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+      signalId: "event-mixed-single-to-batch",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+    const secondInput = {
+      inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+      signalId: "event-mixed-single-to-batch",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+    const inputs = [firstInput, secondInput];
+
+    inbox.register({
+      targetTypeUrl: firstTypeUrl,
+      async replay(message) {
+        seen.push(message);
+        startReplay();
+        await replayReleased;
+      },
+    });
+    inbox.register({
+      targetTypeUrl: secondTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    const single = inbox.receive(delivery, firstInput);
+    await replayStarted;
+    const batch = inbox.receiveAll(delivery, inputs);
+
+    try {
+      await expect(
+        Promise.race([
+          batch.then(
+            () => "resolved",
+            (error: unknown) => (error instanceof Error ? error.message : "rejected"),
+          ),
+          pause(150).then(() => "pending"),
+        ]),
+      ).resolves.toBe("pending");
+    } finally {
+      releaseReplay();
+    }
+
+    const [singleMessage, batchMessages] = await Promise.all([single, batch]);
+
+    expect(batchMessages[0]?.id).toEqual(singleMessage.id);
+    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "event-mixed-single-to-batch",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+      {
+        signalId: "event-mixed-single-to-batch",
         label: "REACT_UPON_EVENT",
         status: "DELIVERED",
       },

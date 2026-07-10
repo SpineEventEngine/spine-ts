@@ -13,6 +13,19 @@ import {
 type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
 type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];
 type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
+interface InboxDeferred {
+  readonly promise: Promise<InboxMessage>;
+  readonly resolve: (message: InboxMessage) => void;
+  readonly reject: (reason: unknown) => void;
+  settled: boolean;
+  message?: InboxMessage;
+}
+interface BatchRow {
+  readonly key: string;
+  readonly input: ProcessManagerInput;
+  readonly promise: Promise<InboxMessage>;
+  readonly owner?: InboxDeferred;
+}
 
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
@@ -69,30 +82,10 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    const written = await delivery.inbox.receive({
-      inboxId: input.inboxId,
-      signalId: input.signalId,
-      label: input.label,
-      status: input.status,
-      shard: input.shard,
-      whenReceived: new Date(),
-      version: this.#takeVersion(),
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
-    });
+    const message = await this.#writeInboxRow(delivery, input, new Date());
 
-    await drainLocalInboxMessage({
-      delivery,
-      received: written.message,
-      node: this.#contextName,
-      replay: (message) => this.#replay(message, deliveryTenantId),
-      replayFailureMessage: "Process-manager inbox replay failed.",
-      skippedMessage:
-        "Process-manager inbox delivery was skipped before the target row was delivered.",
-      unfinishedMessage:
-        "Process-manager inbox delivery did not reach the target row before the local drain finished.",
-    });
-    return written.message;
+    await this.#drainInboxRow(delivery, message, deliveryTenantId);
+    return message;
   }
 
   async #receiveAndDrainAll(
@@ -100,39 +93,93 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     inputs: ProcessManagerInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
+    const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
-    const received: InboxMessage[] = [];
 
-    for (const input of inputs) {
-      const written = await delivery.inbox.receive({
-        inboxId: input.inboxId,
-        signalId: input.signalId,
-        label: input.label,
-        status: input.status,
-        shard: input.shard,
-        whenReceived,
-        version: this.#takeVersion(),
-        ...(input.signal === undefined ? {} : { signal: input.signal }),
-        ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
-      });
-      received.push(written.message);
+    try {
+      for (const row of rows) {
+        if (row.owner !== undefined) {
+          row.owner.message = await this.#writeInboxRow(delivery, row.input, whenReceived);
+        }
+      }
+      for (const row of rows) {
+        if (row.owner === undefined) {
+          await row.promise;
+          continue;
+        }
+        const message = requireOwnedMessage(row);
+
+        await this.#drainInboxRow(delivery, message, deliveryTenantId);
+        resolveRow(row, message);
+      }
+      return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
+    } catch (error) {
+      rejectRows(rows, error);
+      throw error;
+    } finally {
+      this.#cleanupRows(rows);
     }
+  }
 
-    for (const message of received) {
-      await drainLocalInboxMessage({
-        delivery,
-        received: message,
-        node: this.#contextName,
-        replay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
-        replayFailureMessage: "Process-manager inbox replay failed.",
-        skippedMessage:
-          "Process-manager inbox delivery was skipped before the target row was delivered.",
-        unfinishedMessage:
-          "Process-manager inbox delivery did not reach the target row before the local drain finished.",
-      });
+  async #writeInboxRow(
+    delivery: Delivery,
+    input: ProcessManagerInput,
+    whenReceived: Date,
+  ): Promise<InboxMessage> {
+    const written = await delivery.inbox.receive({
+      inboxId: input.inboxId,
+      signalId: input.signalId,
+      label: input.label,
+      status: input.status,
+      shard: input.shard,
+      whenReceived,
+      version: this.#takeVersion(),
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+      ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
+    });
+
+    return written.message;
+  }
+
+  async #drainInboxRow(
+    delivery: Delivery,
+    message: InboxMessage,
+    deliveryTenantId?: string,
+  ): Promise<void> {
+    await drainLocalInboxMessage({
+      delivery,
+      received: message,
+      node: this.#contextName,
+      replay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
+      replayFailureMessage: "Process-manager inbox replay failed.",
+      skippedMessage:
+        "Process-manager inbox delivery was skipped before the target row was delivered.",
+      unfinishedMessage:
+        "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+    });
+  }
+
+  #claimRows(inputs: ProcessManagerInputs, deliveryTenantId?: string): BatchRow[] {
+    return inputs.map((input) => {
+      const key = localInboxHandoffKey(input, deliveryTenantId);
+      const inFlight = this.#inFlightHandoffs.get(key);
+
+      if (inFlight !== undefined) {
+        return { key, input, promise: inFlight };
+      }
+
+      const owner = createInboxDeferred();
+      this.#inFlightHandoffs.set(key, owner.promise);
+      return { key, input, promise: owner.promise, owner };
+    });
+  }
+
+  #cleanupRows(rows: readonly BatchRow[]): void {
+    for (const row of rows) {
+      if (row.owner !== undefined && this.#inFlightHandoffs.get(row.key) === row.promise) {
+        this.#inFlightHandoffs.delete(row.key);
+      }
     }
-
-    return Object.freeze(received);
   }
 
   #takeVersion(): bigint {
@@ -156,6 +203,44 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     }
 
     await target.replay(message, deliveryTenantId);
+  }
+}
+
+function createInboxDeferred(): InboxDeferred {
+  let resolve!: (message: InboxMessage) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<InboxMessage>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  void promise.catch(() => undefined);
+
+  return { promise, resolve, reject, settled: false };
+}
+
+function requireOwnedMessage(row: BatchRow): InboxMessage {
+  if (row.owner?.message === undefined) {
+    throw new Error("Process-manager inbox batch row was not written before drain.");
+  }
+
+  return row.owner.message;
+}
+
+function resolveRow(row: BatchRow, message: InboxMessage): void {
+  if (row.owner === undefined || row.owner.settled) {
+    return;
+  }
+
+  row.owner.settled = true;
+  row.owner.resolve(message);
+}
+
+function rejectRows(rows: readonly BatchRow[], reason: unknown): void {
+  for (const row of rows) {
+    if (row.owner !== undefined && !row.owner.settled) {
+      row.owner.settled = true;
+      row.owner.reject(reason);
+    }
   }
 }
 
