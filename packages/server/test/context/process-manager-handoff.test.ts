@@ -154,6 +154,87 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
+  it("waits for a concurrent duplicate multi-target event batch", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
+    const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const inputs = [
+      {
+        inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+        signalId: "event-duplicate-batch",
+        label: "REACT_UPON_EVENT" as const,
+        status: "TO_DELIVER" as const,
+        shard,
+      },
+      {
+        inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+        signalId: "event-duplicate-batch",
+        label: "REACT_UPON_EVENT" as const,
+        status: "TO_DELIVER" as const,
+        shard,
+      },
+    ];
+
+    inbox.register({
+      targetTypeUrl: firstTypeUrl,
+      async replay(message) {
+        seen.push(message);
+        startReplay();
+        await replayReleased;
+      },
+    });
+    inbox.register({
+      targetTypeUrl: secondTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    const first = inbox.receiveAll(delivery, inputs);
+    await replayStarted;
+    const duplicate = inbox.receiveAll(delivery, inputs);
+
+    try {
+      await expect(
+        Promise.race([duplicate.then(() => "resolved"), pause(150).then(() => "pending")]),
+      ).resolves.toBe("pending");
+    } finally {
+      releaseReplay();
+    }
+
+    const [firstMessages, duplicateMessages] = await Promise.all([first, duplicate]);
+
+    expect(duplicateMessages.map(({ id }) => id)).toEqual(firstMessages.map(({ id }) => id));
+    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "event-duplicate-batch",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+      {
+        signalId: "event-duplicate-batch",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
   it("stores optional signal and keepUntil while scheduled rows do not replay", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

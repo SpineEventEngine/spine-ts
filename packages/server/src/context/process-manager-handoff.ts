@@ -18,6 +18,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
+  readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
 
   constructor(contextName: string) {
@@ -45,7 +46,22 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     inputs: ProcessManagerInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
-    return await this.#receiveAndDrainAll(delivery, inputs, deliveryTenantId);
+    const key = this.#batchKey(inputs, deliveryTenantId);
+    const inFlightHandoff = this.#inFlightBatchHandoffs.get(key);
+
+    if (inFlightHandoff !== undefined) {
+      return await inFlightHandoff;
+    }
+
+    const handoff = this.#receiveAndDrainAll(delivery, inputs, deliveryTenantId);
+    this.#inFlightBatchHandoffs.set(key, handoff);
+    try {
+      return await handoff;
+    } finally {
+      if (this.#inFlightBatchHandoffs.get(key) === handoff) {
+        this.#inFlightBatchHandoffs.delete(key);
+      }
+    }
   }
 
   async #receiveAndDrain(
@@ -122,6 +138,10 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   #takeVersion(): bigint {
     this.#nextVersion += 1n;
     return this.#nextVersion;
+  }
+
+  #batchKey(inputs: ProcessManagerInputs, deliveryTenantId?: string): string {
+    return JSON.stringify(inputs.map((input) => localInboxHandoffKey(input, deliveryTenantId)));
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {

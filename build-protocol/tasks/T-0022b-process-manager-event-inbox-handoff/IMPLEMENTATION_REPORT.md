@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-six fixes verified; re-review pending
+Status: implemented in code/docs; round-seven fixes verified; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -107,6 +107,19 @@ Round-six findings fixed in this pass:
 2. Durable docs
    - updated the review log through round six.
 
+Round-seven findings fixed in this pass:
+
+1. Performance/reliability
+   - coordinate concurrent duplicate multi-target process-manager event handoffs
+     through `LocalProcessManagerInbox.receiveAll()` using a tenant-aware batch
+     key derived from all input handoff keys;
+   - added a regression for concurrent duplicate multi-target PM event delivery
+     that failed pre-fix with skipped delivery while the original batch owned
+     the shard lease.
+2. Durable docs
+   - update the review log, work log, and implementation report so round-seven
+     status is current.
+
 ## Files Changed
 
 - `packages/server/src/context/process-manager-handoff.ts`
@@ -142,6 +155,33 @@ Passed:
   - note: TypeDoc reported the existing invalid-`origin` source-link warning
     and the API docs check confirmed `214` expected `@spine-ts/server` exports
     plus the expected counts for the other workspace packages
+- round-seven focused regression red check
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `-t "waits for a concurrent duplicate multi-target event batch"`
+  - expected pre-fix exit `1`
+  - result: failed with
+    `Process-manager inbox delivery was skipped before the target row was delivered.`
+- round-seven focused regression green check
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `-t "waits for a concurrent duplicate multi-target event batch"`
+  - exit `0`
+  - result: `1` test passed, `11` skipped
+- round-seven focused suite
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `packages/server/test/repository/repository-routing.test.ts`
+  - exit `0`
+  - result: `2` files passed, `137` tests passed
+- `pnpm --config.verify-deps-before-run=false lint:generated`
+  - exit `0`
+  - result: `tsc -b`, ESLint, and cleanup enforcement passed
+- `git diff --check`
+  - exit `0`
 
 ## Remaining Deferrals
 

@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 6 completed; fixes required
+Status: round 7 fixes verified; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: `019f497f-5891-71b0-bed6-d3069f9c26f8` | clean | Round-five lint/style fixes verified. |
-| Documentation completeness | latest: `019f497f-79e2-7bd1-bcbe-82b3d0c6b24f` | fixes required | Round-six review-log status still stale. |
-| TypeScript/API docs        | latest: `019f497f-a735-7962-b8bc-1b15deba8d74` | clean | Internal PM inbox contract verified. |
-| Security                   | latest: `019f497f-ca45-7cf0-859f-0f820eb29c80` | clean | Fail-closed replay still verified. |
-| Performance/reliability    | latest: `019f497f-e8e8-7f03-820d-32ca9930f55e` | fixes required | Multi-target prewrite version ordering issue. |
+| Code style/maintainability | latest: round 7 | clean | No new style findings reported. |
+| Documentation completeness | latest: round 7 | clean | Review log now records round-seven findings and fix status. |
+| TypeScript/API docs        | latest: round 7 | clean | No public API or generated-doc findings reported. |
+| Security                   | latest: round 7 | clean | No new security findings reported. |
+| Performance/reliability    | latest: round 7 | clean | `receiveAll()` now coordinates duplicate multi-target handoffs on a batch key. |
 
 ## Planned Review Focus
 
@@ -245,3 +245,34 @@ Scope: live process-manager event reactor durable inbox handoff.
   different dispatches could retry in UUID order instead of enqueue order.
   Multi-target prewrite must use the local process-manager inbox version
   allocator.
+
+## Round 7 Findings
+
+### Code Style/Maintainability
+
+- Clean. The reviewer did not report new naming, layout, or style findings.
+
+### Documentation
+
+- Medium: this review log still presented round-six status and findings as the
+  current state after the round-six fix. Record round-seven findings and the
+  current fix status accurately.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer did not report new internal contract or public API doc
+  findings.
+
+### Security
+
+- Clean. The reviewer did not report new security findings.
+
+### Performance/Reliability
+
+- High: `LocalProcessManagerInbox.receiveAll()` bypassed the in-flight handoff
+  coordinator used by `receive()`. Concurrent duplicate multi-target
+  process-manager event dispatches could deduplicate onto the same stored rows
+  and then immediately attempt to drain while the original caller still owned
+  the shard lease, causing a spurious skipped-delivery failure. Coordinate
+  duplicate multi-target handoffs on a tenant-aware batch key while preserving
+  write-all-before-drain behavior and the monotonic version allocator.
