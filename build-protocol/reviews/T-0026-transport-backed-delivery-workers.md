@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 72 records-only fix verified; five-lane re-review pending
+Status: Round 73 findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                             |
-| -------------------------- | -------- | ---------------------------------- |
-| Code style/maintainability | TBD      | Needs fresh current-HEAD re-review |
-| Documentation              | TBD      | Needs fresh current-HEAD re-review |
-| TypeScript/API docs        | TBD      | Needs fresh current-HEAD re-review |
-| Security                   | TBD      | Needs fresh current-HEAD re-review |
-| Performance/reliability    | TBD      | Needs fresh current-HEAD re-review |
+| Lane                       | Reviewer        | Status           |
+| -------------------------- | --------------- | ---------------- |
+| Code style/maintainability | Plato the 3rd   | Clean            |
+| Documentation              | Meitner the 3rd | Findings pending |
+| TypeScript/API docs        | Goodall the 3rd | Clean            |
+| Security                   | Mencius the 3rd | Clean            |
+| Performance/reliability    | Carson the 3rd  | Clean            |
 
 ## Review Criteria
 
@@ -2542,3 +2542,39 @@ ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
   `build-protocol/work-logs/T-0026.md`; the checked Round 52/53/54/55/56 work
   log snippet is monotonic from `19:03:44Z` through `19:42:56Z`.
 - Action: rerun all five reviewer lanes from the verified Round 72 HEAD.
+
+### Round 73 Re-review - `2026-07-10T21:46:24Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..a6a1e3bd.diff` from task baseline
+  `ca8fb2b3` to current HEAD `a6a1e3bd`.
+- Code style/maintainability (Plato the 3rd): clean. `lint`,
+  `format:check`, `git diff --check ca8fb2b3..HEAD`, stale-name/callback-name
+  searches, and status checks passed. `DeliveryScanState` remains private and
+  cohesive, callback options use `on*`, and the Round 72 dashboard reset is
+  coherent under the style/process lens.
+- Documentation (Meitner the 3rd): [P2] the work-log chronology still goes
+  backward immediately before the corrected Round 52-56 block. Round 51
+  verification is recorded as `2026-07-10T20:24:00Z`, then Round 52 is anchored
+  to `2026-07-10T19:03:44Z`. Anchor the Round 51 verification record to
+  commit-backed UTC so the surrounding durable ledger stays monotonic.
+- TypeScript/API docs (Goodall the 3rd): clean. Root exports do not expose raw
+  callback delivery APIs, `DeliveryEndpointMessage` remains internal-module
+  exported and narrowed to supported callback labels, replay target types
+  narrow label/status before handler replay, API docs distinguish durable row
+  labels from callback labels, generated/build output is absent from tracked
+  branch files, `typecheck:build:generated`, `docs:check`, focused API/context
+  tests, and `git diff --check ca8fb2b3..a6a1e3bd` passed.
+- Security (Mencius the 3rd): clean. Shard lease release, per-message claim
+  CAS fencing, fail-closed unsupported/deprecated labels, replay label/status
+  validation, tenant/payload/routing checks, and root public API exposure
+  remain acceptable. Focused security tests passed with 362 tests across the
+  reported command batches; generated typecheck and diff checks passed.
+- Performance/reliability (Carson the 3rd): clean. Scan/lease/claim behavior,
+  finite cursor scanning, callback/failure accounting, loop pause/resume
+  liveness, and offset-plus-boundary continuation remain acceptable for this
+  task. Focused delivery/storage reliability tests passed with 261 tests and
+  `git diff --check ca8fb2b3..a6a1e3bd` passed.
+- Action: record the complete findings batch, dispatch one records-only fix
+  worker, verify, commit, and rerun all five reviewer lanes from the fixed
+  HEAD.
