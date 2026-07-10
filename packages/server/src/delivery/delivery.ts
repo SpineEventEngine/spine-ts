@@ -1,7 +1,7 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
-import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
+import { inboxStorageAccess, InboxStorage, requireInboxReadLimit } from "./inbox-storage.js";
 import type { ClaimedInboxMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
@@ -52,6 +52,7 @@ export class Delivery {
    * schedule later runs, open transports, or retain endpoint attempt history.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+    const limit = options.limit === undefined ? undefined : requireInboxReadLimit(options.limit);
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
@@ -64,7 +65,7 @@ export class Delivery {
     try {
       const messages = await this.inbox.read(session.shard, {
         statuses: ["TO_DELIVER"],
-        ...(options.limit === undefined ? {} : { limit: options.limit }),
+        ...(limit === undefined ? {} : { limit }),
       });
       let accepted = 0;
       let delivered = 0;

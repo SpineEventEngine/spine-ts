@@ -447,6 +447,25 @@ describe("Delivery worker", () => {
     ).rejects.toThrow("Inbox read limit must be a positive safe integer at most 1000.");
   });
 
+  it("rejects invalid drain limits before shard storage access", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+    });
+
+    await expect(
+      delivery.drain(ShardIndex.single(), {
+        node: "node-a",
+        limit: 1_001,
+        onMessage: () => undefined,
+      }),
+    ).rejects.toThrow("Inbox read limit must be a positive safe integer at most 1000.");
+
+    expect(faultPlan.opens).toBeUndefined();
+    expect(faultPlan.compareAndSets).toBeUndefined();
+  });
+
   it("uses exact-message options without a drain limit for drainMessage", () => {
     type DrainMessageOptions = Parameters<Delivery["drainMessage"]>[1];
 
@@ -1536,6 +1555,8 @@ interface DeliveryFaultPlan {
   blockedInboxRenewals?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
+  opens?: number;
+  compareAndSets?: number;
 }
 
 class FaultyDeliveryStorageFactory extends StorageFactory {
@@ -1551,6 +1572,7 @@ class FaultyDeliveryStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
+    this.#plan.opens = (this.#plan.opens ?? 0) + 1;
     const storage = this.#delegate.createRecordStorage(context, recordSpec);
 
     return new FaultyDeliveryRecordStorage(context, recordSpec, storage, this.#plan);
@@ -1582,6 +1604,7 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    this.#plan.compareAndSets = (this.#plan.compareAndSets ?? 0) + 1;
     if (
       this.context.name.endsWith(".delivery.inbox") &&
       expected !== undefined &&

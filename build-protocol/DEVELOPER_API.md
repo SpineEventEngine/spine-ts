@@ -273,7 +273,10 @@ smaller than the later scheduler/retry stack:
   stopped, or the configured failure bound is reached. `DeliveryWorker` is the
   closeable owner for one node's configured shard loops; it starts those loops,
   aggregates their run results, and `close()` stops future drains while waiting
-  for active drains to finish;
+  for active drains to finish. `DeliveryLoopRun` aggregates `DeliveryRun` counts
+  across loop drains: `status` is the loop stop reason, `runs` is the number of
+  started drains, and `processed`, `accepted`, `delivered`, `failed`, and
+  `failures` are accumulated from the underlying drain results;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow

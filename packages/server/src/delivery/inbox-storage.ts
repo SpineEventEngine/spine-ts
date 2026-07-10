@@ -49,7 +49,7 @@ export class InboxStorage {
   /** Read ordered inbox messages for one shard. */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const nextShard = requireReadShard(shard);
-    const limit = requireReadLimit(options.limit ?? defaultReadLimit);
+    const limit = requireInboxReadLimit(options.limit ?? defaultReadLimit);
     const storage = this.#inboxStorage();
 
     try {
@@ -1113,7 +1113,8 @@ function requireReadInteger(value: unknown, label: string): number {
   return value as number;
 }
 
-function requireReadLimit(value: unknown): number {
+/** @internal Validate the bounded inbox page size shared by direct delivery drains. */
+export function requireInboxReadLimit(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxReadLimit) {
     throw new InboxMessageError(
       `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,

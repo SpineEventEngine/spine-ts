@@ -12,7 +12,7 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 | -------------------------- | --------------------------- | ------------ |
 | Code style/maintainability | Review round                | Fixed MEDIUM |
 | Documentation              | Documentation fix sub-agent | Fixed MEDIUM |
-| TypeScript/API docs        | Review round                | Complete     |
+| TypeScript/API docs        | Review round                | Fixed MEDIUM |
 | Security                   | Review round                | Fixed MEDIUM |
 | Performance/reliability    | Reliability fix sub-agent   | Fixed P1     |
 
@@ -31,6 +31,30 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 11 Follow-up - `2026-07-10T06:55:21Z`
+
+- Finding: [Security MEDIUM] `Delivery.drain()` picked up and released shard
+  storage before validating an invalid or oversized `options.limit`, so a bad
+  direct-drain request could mutate shard storage before failing at the inbox read
+  boundary.
+- Fix: `Delivery.drain()` now validates `options.limit` at method entry with the
+  same bounded inbox page-size helper used by inbox reads. The helper keeps the
+  positive safe integer and `1000` upper-bound contract in one place.
+- Evidence: added a focused regression proving an invalid direct-drain limit
+  rejects before any storage open or compare-and-set through the shard registry.
+  It failed before the fix with two storage opens, then passed after early
+  validation.
+- Finding: [API docs MEDIUM] public docs listed `DeliveryLoopRun` but did not
+  document its `status`, `runs`, `processed`, `accepted`, `delivered`, `failed`,
+  and `failures` fields.
+- Fix: updated `docs/api/README.md` and `build-protocol/DEVELOPER_API.md` with
+  claim-free prose stating that `DeliveryLoopRun` aggregates `DeliveryRun` counts
+  across loop drains and naming each public field.
+- Verification: requested Vitest passed with 4 files and 192 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
 
 ### Round 10 Follow-up - `2026-07-10T06:41:50Z`
 

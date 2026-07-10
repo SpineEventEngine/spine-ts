@@ -339,13 +339,17 @@ return a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`,
 result.
 `Delivery.drainMessage(message, { node, onMessage })`
 picks up the message shard only when `message.id.shard` matches
-`message.shard`, then replays that exact pending row without accepting a page limit. `DeliveryLoop`
-repeats the shard-level `Delivery.drain()` boundary for one shard until a
-drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
-later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents
-future drain starts and does not interrupt an in-flight `Delivery.drain()`; a
-run that observes the stop returns `STOPPED`. `close()` calls `stop()` and
-waits for the current drain, if any, to finish. `DeliveryWorker` owns a
+`message.shard`, then replays that exact pending row without accepting a page
+limit. `DeliveryLoop` repeats the shard-level `Delivery.drain()` boundary for
+one shard until a drain is idle, skipped, stopped, or reaches `maxFailures`;
+retry is simply a later loop/drain seeing rows that remained `TO_DELIVER`.
+`DeliveryLoopRun` aggregates `DeliveryRun` counts across loop drains: `status`
+is the loop stop reason, `runs` is the number of started drains, and
+`processed`, `accepted`, `delivered`, `failed`, and `failures` are accumulated
+from the underlying drain results. `stop()` prevents future drain starts and
+does not interrupt an in-flight `Delivery.drain()`; a run that observes the stop
+returns `STOPPED`. `close()` calls `stop()` and waits for the current drain, if
+any, to finish. `DeliveryWorker` owns a
 configured set of shard loops for one node, starts them together, aggregates
 per-loop results, and closes by stopping future drains while waiting for active
 drains to finish. `DeliveryDrainOptions.limit`, `DeliveryLoopOptions.limit`,
