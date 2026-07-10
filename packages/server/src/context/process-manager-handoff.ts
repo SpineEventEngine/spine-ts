@@ -11,6 +11,7 @@ import {
 } from "./local-inbox-handoff.js";
 
 type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
+type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];
 type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
 
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
@@ -37,6 +38,14 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       key: localInboxHandoffKey(input, deliveryTenantId),
       handoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
     });
+  }
+
+  async receiveAll(
+    delivery: Delivery,
+    inputs: ProcessManagerInputs,
+    deliveryTenantId?: string,
+  ): Promise<readonly InboxMessage[]> {
+    return await this.#receiveAndDrainAll(delivery, inputs, deliveryTenantId);
   }
 
   async #receiveAndDrain(
@@ -68,6 +77,46 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
         "Process-manager inbox delivery did not reach the target row before the local drain finished.",
     });
     return written.message;
+  }
+
+  async #receiveAndDrainAll(
+    delivery: Delivery,
+    inputs: ProcessManagerInputs,
+    deliveryTenantId?: string,
+  ): Promise<readonly InboxMessage[]> {
+    const whenReceived = new Date();
+    const received: InboxMessage[] = [];
+
+    for (const input of inputs) {
+      const written = await delivery.inbox.receive({
+        inboxId: input.inboxId,
+        signalId: input.signalId,
+        label: input.label,
+        status: input.status,
+        shard: input.shard,
+        whenReceived,
+        version: this.#takeVersion(),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
+      });
+      received.push(written.message);
+    }
+
+    for (const message of received) {
+      await drainLocalInboxMessage({
+        delivery,
+        received: message,
+        node: this.#contextName,
+        replay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
+        replayFailureMessage: "Process-manager inbox replay failed.",
+        skippedMessage:
+          "Process-manager inbox delivery was skipped before the target row was delivered.",
+        unfinishedMessage:
+          "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+      });
+    }
+
+    return Object.freeze(received);
   }
 
   #takeVersion(): bigint {

@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-five fixes verified; re-review pending
+Status: implemented in code/docs; round-six fixes verified; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -97,6 +97,15 @@ Round-five findings fixed in this pass:
 2. Durable docs
    - updated the review log through round five;
    - clarified the stalled-worker handoff wording in the work log.
+
+Round-six findings fixed in this pass:
+
+1. Performance/reliability
+   - moved multi-target prewrite into `LocalProcessManagerInbox.receiveAll()`
+     so every prewritten row uses the same monotonic local inbox version
+     allocator as the single-row handoff.
+2. Durable docs
+   - updated the review log through round six.
 
 ## Files Changed
 

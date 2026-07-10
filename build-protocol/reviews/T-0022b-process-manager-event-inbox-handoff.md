@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 5 completed; fixes required
+Status: round 6 completed; fixes required
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: `019f4976-eb21-71c0-97ff-e0ef1fb34029` | fixes required | Round-five lint/style cleanup required. |
-| Documentation completeness | latest: `019f4977-11e3-7831-839a-0d89709c5826` | fixes required | Round-five review-log status and handoff wording stale. |
-| TypeScript/API docs        | latest: `019f4977-3a04-7db0-afed-2b8dbdf2487e` | clean | PM inbox label/status narrowing verified. |
-| Security                   | latest: `019f4977-596f-7093-a008-a4b6fa61f3fa` | clean | Fail-closed replay still verified. |
-| Performance/reliability    | latest: `019f4977-7c38-7433-91e2-64351e4a0a74` | clean | Multi-target durability remains verified. |
+| Code style/maintainability | latest: `019f497f-5891-71b0-bed6-d3069f9c26f8` | clean | Round-five lint/style fixes verified. |
+| Documentation completeness | latest: `019f497f-79e2-7bd1-bcbe-82b3d0c6b24f` | fixes required | Round-six review-log status still stale. |
+| TypeScript/API docs        | latest: `019f497f-a735-7962-b8bc-1b15deba8d74` | clean | Internal PM inbox contract verified. |
+| Security                   | latest: `019f497f-ca45-7cf0-859f-0f820eb29c80` | clean | Fail-closed replay still verified. |
+| Performance/reliability    | latest: `019f497f-e8e8-7f03-820d-32ca9930f55e` | fixes required | Multi-target prewrite version ordering issue. |
 
 ## Planned Review Focus
 
@@ -215,3 +215,33 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 - Clean. The reviewer found multi-target PM event durability, exact-row replay,
   duplicate delivery, failure propagation, and retryability remain sound.
+
+## Round 6 Findings
+
+### Code Style/Maintainability
+
+- Clean. The reviewer verified the unused imports, unnecessary `async`, and
+  unsafe matcher findings were fixed.
+
+### Documentation
+
+- Medium: review-log status and required-lanes table still showed round-five
+  findings as active after the round-five fixes were verified.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer verified the internal process-manager inbox contract and
+  public API surface.
+
+### Security
+
+- Clean. The reviewer found fail-closed replay and pre-handler validation still
+  intact.
+
+### Performance/Reliability
+
+- High: `handoffPmEvents()` prewrote multi-target rows with a local version
+  sequence starting at `1n` for each dispatch. Same-millisecond pending rows from
+  different dispatches could retry in UUID order instead of enqueue order.
+  Multi-target prewrite must use the local process-manager inbox version
+  allocator.

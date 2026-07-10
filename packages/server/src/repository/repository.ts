@@ -469,6 +469,12 @@ export interface ProcessManagerInbox {
     input: ProcessManagerInboxInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage>;
+  /** Writes durable inbox rows and replays those exact rows in input order. */
+  receiveAll(
+    delivery: Delivery,
+    inputs: readonly ProcessManagerInboxInput[],
+    deliveryTenantId?: string,
+  ): Promise<readonly InboxMessage[]>;
 }
 
 /** @internal Narrow framework-only replay target for projection subscriber inbox handoff. */
@@ -855,19 +861,7 @@ async function handoffPmEvents(
     pmEventInboxInput(repository, eventId.value, event, entityId, keepUntil),
   );
 
-  let version = 0n;
-  for (const input of inputs) {
-    version += 1n;
-    await delivery.inbox.receive({
-      ...input,
-      whenReceived,
-      version,
-    });
-  }
-
-  for (const input of inputs) {
-    await runtime.processManagerInbox.receive(delivery, input, deliveryTenantId);
-  }
+  await runtime.processManagerInbox.receiveAll(delivery, inputs, deliveryTenantId);
 }
 
 function pmEventInboxInput(
