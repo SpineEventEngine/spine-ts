@@ -97,7 +97,6 @@ advice.
 
 ## Commit
 
-No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
-replay status guard`) recorded this fix. Records-only coordinator commit
+No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection replay status guard`) recorded this fix. Records-only coordinator commit
 `52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
 status package.

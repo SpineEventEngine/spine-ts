@@ -55,9 +55,9 @@ design is needed for removing exports).
 
 - RED: removed `Delivery` and `DeliveryLoop` from the root export expectation,
   moved the test's internal behavior imports to delivery source modules, and
-  ran `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/index.test.ts`. The test failed only because the barrel
-  still returned `Delivery` and `DeliveryLoop`.
+  ran `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/index.test.ts`.
+  The test failed only because the barrel still returned `Delivery` and
+  `DeliveryLoop`.
 - GREEN: removed the direct delivery exports from `packages/server/src/index.ts`.
   The same focused test then passed with `10` tests.
 

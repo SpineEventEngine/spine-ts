@@ -52,9 +52,8 @@ Skipped relevant-looking skills:
 ## Red/Green Evidence
 
 - RED: after importing the existing numbered inbox-query probe, ran
-  `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/delivery/delivery-worker.test.ts -t 'keeps a partial
-stale-head rescan paged'`. It failed only at the intended assertion:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts -t 'keeps a partial stale-head rescan paged'`.
+  It failed only at the intended assertion:
   `faults.inboxQueries` was `1004`, not `5`, while the supported row delivered.
 - GREEN: the same focused command passed after production changes: one test
   passed with 50 skipped. The partial stale-head scenario now delivers the

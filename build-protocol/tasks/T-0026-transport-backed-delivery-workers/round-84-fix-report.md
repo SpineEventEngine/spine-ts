@@ -15,6 +15,6 @@ Timestamp: `2026-07-10T23:09:55Z`
 
 - `2026-07-10T23:17:03Z`: the targeted flush-left continuation search returned
   no matches.
-- `2026-07-10T23:17:03Z`: `pnpm --config.verify-deps-before-run=false
-  format:check` passed.
+- `2026-07-10T23:17:03Z`: `pnpm --config.verify-deps-before-run=false format:check`
+  passed.
 - `2026-07-10T23:17:03Z`: `git diff --check` passed.

@@ -54,8 +54,9 @@ TypeScript worker's moving-offset rescan.
 Red, before production edits:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run -t
-"rescans after a full stale offset page" packages/server/test/delivery/delivery-loop.test.ts
+pnpm --config.verify-deps-before-run=false exec vitest run -t \
+  "rescans after a full stale offset page" \
+  packages/server/test/delivery/delivery-loop.test.ts
 
 1 failed: expected `IDLE` with one delivery; received `PAUSED` with zero deliveries.
 ```
@@ -67,8 +68,9 @@ supported delivery in that same loop invocation.
 Green, after production edits:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run -t
-"rescans after a full stale offset page" packages/server/test/delivery/delivery-loop.test.ts
+pnpm --config.verify-deps-before-run=false exec vitest run -t \
+  "rescans after a full stale offset page" \
+  packages/server/test/delivery/delivery-loop.test.ts
 
 1 passed | 26 skipped
 ```

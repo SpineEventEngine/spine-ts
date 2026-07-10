@@ -128,12 +128,15 @@ Current slice exposes:
   this slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
-  recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
+  recording, or failure-budget consumption. Pre-callback claim, lease,
   validation, and status-update failures do not increment accepted endpoint
   work, but they increment failed work and count toward the framework failure
-  bound. Live per-message ownership blocks competing delivery; expired
-  per-message ownership may be replaced during claim compare-and-set using the
-  storage clock. Broader production recovery policy remains future work.
+  bound. Once an endpoint callback has been invoked, endpoint failures and
+  framework cleanup or status-update failures after that callback are accepted
+  work and may appear in failed work. Live per-message ownership blocks
+  competing delivery; expired per-message ownership may be replaced during claim
+  compare-and-set using the storage clock. Broader production recovery policy
+  remains future work.
   Recognized valid `DeliveryLabel` values for durable rows are
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
   Framework replay callbacks support only `HANDLE_COMMAND`,

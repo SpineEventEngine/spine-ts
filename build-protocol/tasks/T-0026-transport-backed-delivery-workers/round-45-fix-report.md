@@ -66,12 +66,15 @@ advice.
   projection target type and replacing the public environment delivery type
   with `ServerEnvironmentCloseable`.
 - Focused runtime/API batch passed after local-listener approval:
-  `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/index.test.ts packages/server/test/server/server.test.ts
-packages/server/test/context/projection-handoff.test.ts
-packages/server/test/context/process-manager-handoff.test.ts
-packages/server/test/repository/repository-routing.test.ts`; 5 files,
-  179 tests. The sandboxed first attempt failed only on `listen EPERM`
+  ```text
+  pnpm --config.verify-deps-before-run=false exec vitest run \
+    packages/server/test/index.test.ts \
+    packages/server/test/server/server.test.ts \
+    packages/server/test/context/projection-handoff.test.ts \
+    packages/server/test/context/process-manager-handoff.test.ts \
+    packages/server/test/repository/repository-routing.test.ts
+  ```
+  Result: 5 files, 179 tests. The sandboxed first attempt failed only on `listen EPERM`
   for `127.0.0.1`.
 
 ## Files Changed
@@ -115,5 +118,4 @@ packages/server/test/repository/repository-routing.test.ts`; 5 files,
 
 ## Commit
 
-No worker commit was created. Coordinator commit `9546ed2a` (`Close server
-environment delivery type leak`) recorded this round.
+No worker commit was created. Coordinator commit `9546ed2a` (`Close server environment delivery type leak`) recorded this round.

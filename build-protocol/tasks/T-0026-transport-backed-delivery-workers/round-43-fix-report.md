@@ -45,19 +45,22 @@ lifecycle boundary changed).
 
 ## Red/Green Evidence
 
-- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/delivery/delivery-worker.test.ts -t "reclaims"` failed
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts -t "reclaims"` failed
   with the expected callback-not-invoked assertions for `signal-expired-claim`
   and `signal-expiry-during-read`.
 - GREEN: the same focused command passed after `InboxStorage` treated only live
   claims as unavailable and allowed expired claim replacement using the storage
   clock.
 - Focused delivery/index regression batch passed after the export-surface test
-  cleanup: `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/delivery/delivery-worker.test.ts
-packages/server/test/delivery/delivery-loop.test.ts
-packages/server/test/delivery/inbox.test.ts packages/server/test/index.test.ts`;
-  4 files, 189 tests.
+  cleanup:
+  ```text
+  pnpm --config.verify-deps-before-run=false exec vitest run \
+    packages/server/test/delivery/delivery-worker.test.ts \
+    packages/server/test/delivery/delivery-loop.test.ts \
+    packages/server/test/delivery/inbox.test.ts \
+    packages/server/test/index.test.ts
+  ```
+  Result: 4 files, 189 tests.
 
 ## Files Changed
 

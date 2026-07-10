@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 84 records-only fix verified; current-HEAD re-review pending
+Status: Round 86 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1369,3 +1369,26 @@ task/review dashboard remains reset for fresh current-HEAD re-review.
 Verification passed at
 `2026-07-10T23:17:03Z`: the targeted flush-left continuation search returned
 no matches, `format:check` passed, and `git diff --check` passed.
+
+Round 85 re-review on `2026-07-10T23:17:03Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..9448bb2e.diff` produced clean security and
+performance/reliability lanes; performance/reliability also passed the
+four-file delivery Vitest batch with 194 tests. Documentation found a
+`docs/USER_GUIDE.md` grammar slip. TypeScript/API docs found public docs
+overstate accepted-work accounting for post-callback cleanup/status failures.
+Style found remaining flush-left command continuations in older Round 40, 41,
+43, and 45 fix reports, and noted stale untracked `.codex-review-packages/`
+scratch. The scratch directory remains intentionally untouched per the handoff
+constraint. The next fix batch will address the docs and round-report
+formatting findings, verify, commit, and rerun all five lanes.
+
+Round 86 fix on `2026-07-10T23:33:21Z`: fixed the public docs grammar slip and
+narrowed accepted-work accounting wording so only pre-callback failures are
+described as not incrementing accepted work. Collapsed or fenced older command
+continuations in Round 40, 41, 42, 43, 44, 45, and 84 fix reports. The stale
+`.codex-review-packages/` scratch remains intentionally untouched per the
+handoff constraint. Verification passed: `docs:check` passed with only the
+existing invalid TypeDoc `origin` warning, the targeted command-continuation
+search returned no matches, `format:check` passed, `git diff --check` passed,
+and generated/API reference diff checks returned no changed files. A fresh
+five-lane current-HEAD re-review is required.

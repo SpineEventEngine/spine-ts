@@ -224,7 +224,7 @@ or multi-host transport example.
   application code. Durable inbox/shard delivery storage and bounded internal
   shard replay already exist for framework-owned delivery work. Lease-fenced
   replay skips rows
-  unavailable to the active worker and pass independent
+  unavailable to the active worker and passes independent
   message snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
   `Any.value` bytes are safe to mutate in endpoint code. Live per-message
@@ -1224,10 +1224,12 @@ For framework-owned replay, the callback limit caps endpoint callbacks that
 actually run, while the storage read cap plus that limit bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
-failure-budget consumption. Pre-callback claim, replay-validation, lease,
-cleanup, and delivery-status failures remain internal, do not increment
-accepted work, but they increment failed work and count toward the framework
-failure bound. The framework repeats one-shard replay until the shard is idle,
+failure-budget consumption. Pre-callback claim, replay-validation, lease, and
+delivery-status failures remain internal, do not increment accepted work, but
+they increment failed work and count toward the framework failure bound. Once an
+endpoint callback has been invoked, endpoint failures and framework cleanup or
+delivery-status failures after that callback are accepted work and may appear in
+failed work. The framework repeats one-shard replay until the shard is idle,
 skipped, stopped, paused after a bounded skipped-only scan streak, or reaches a
 configured failure bound. A later internal run resumes from a saved cursor and
 resets it safely if earlier pending rows disappeared. Failed rows stay pending

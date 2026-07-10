@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 84 records-only fix verified; current-HEAD re-review pending
+Status: Round 86 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2842,3 +2842,45 @@ red/green delivery regressions before the next review pass.
 - Verification: the targeted flush-left continuation search returned no
   matches, `format:check` passed, and `git diff --check` passed at
   `2026-07-10T23:17:03Z`.
+
+### Round 85 Re-review - `2026-07-10T23:17:03Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..9448bb2e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `9448bb2e`.
+- Code style/maintainability (Kepler the 3rd): [P3] older round fix reports
+  still contain flush-left command continuations in Round 40, Round 41, Round
+  43, and Round 45. [P3] `.codex-review-packages/` remains untracked stale
+  scratch; this is intentionally not removed because the handoff explicitly
+  says to leave that scratch directory untouched unless cleanup is explicitly
+  requested.
+- Documentation (Copernicus the 3rd): [P3] `docs/USER_GUIDE.md` has a grammar
+  slip in the production-gap summary: singular `replay` should use `passes`.
+- TypeScript/API docs (Gibbs the 3rd): [P2] `docs/api/README.md` and
+  `packages/server/README.md` overstate accepted-work accounting by saying
+  cleanup/status-update failures do not increment `accepted`; the docs must
+  narrow that statement to pre-callback failures because failures after a
+  callback invocation are accepted work.
+- Security (Volta the 3rd): clean. Tenant scoping, callback snapshot exposure,
+  fail-closed label/status behavior, lease/claim fencing, and raw worker API
+  boundaries remain sound.
+- Performance/reliability (Carver the 3rd): clean. The four-file delivery
+  Vitest batch passed with 194 tests.
+- Action: record this findings batch, spawn one fix worker for the docs and
+  round-report formatting fixes, keep `.codex-review-packages/` untouched per
+  handoff constraint, verify, commit, and rerun all five reviewer lanes.
+
+### Round 86 Fix - `2026-07-10T23:17:03Z`
+
+- Documentation/API docs: fixed the `docs/USER_GUIDE.md` grammar slip and
+  narrowed `docs/api/README.md` plus `packages/server/README.md` accepted-work
+  wording so only pre-callback failures are described as not incrementing
+  accepted work.
+- Records/style: collapsed the cited Round 40, Round 41, Round 43, and Round
+  45 command continuations, plus adjacent Round 42, Round 44, Round 45, and
+  Round 84 continuation issues found during coordinator verification.
+- Handoff constraint: `.codex-review-packages/` remains untouched.
+- Verification: `docs:check` passed with only the existing invalid TypeDoc
+  `origin` warning, the targeted command-continuation search returned no
+  matches, `format:check` passed, `git diff --check` passed, and generated/API
+  reference diff checks returned no changed files at `2026-07-10T23:33:21Z`.
