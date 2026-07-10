@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 62 fix verified; re-review pending
+Status: Round 64 documentation fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer           | Status           |
-| -------------------------- | ------------------ | ---------------- |
-| Code style/maintainability | Heisenberg the 2nd | Findings pending |
-| Documentation              | Boyle the 2nd      | Clean            |
-| TypeScript/API docs        | Planck the 2nd     | Clean            |
-| Security                   | McClintock the 2nd | Clean            |
-| Performance/reliability    | Poincare the 2nd   | Findings pending |
+| Lane                       | Reviewer              | Status                              |
+| -------------------------- | --------------------- | ----------------------------------- |
+| Code style/maintainability | Beauvoir the 2nd      | Clean (Round 63); re-review pending |
+| Documentation              | Franklin the 2nd      | Finding fixed; re-review pending    |
+| TypeScript/API docs        | Chandrasekhar the 2nd | Clean (Round 63); re-review pending |
+| Security                   | Kepler the 2nd        | Clean (Round 63); re-review pending |
+| Performance/reliability    | Confucius the 2nd     | Clean (Round 63); re-review pending |
 
 ## Review Criteria
 
@@ -2264,7 +2264,7 @@ red/green delivery regressions before the next review pass.
 - Action: record the complete findings batch, dispatch one fix worker, verify,
   commit, and rerun all five reviewer lanes.
 
-### Round 62 Fix Implementation - `2026-07-10T20:20:01Z`
+### Round 62 Fix Implementation - `2026-07-10T20:31:46Z`
 
 - Documentation: Round 56 remains recorded at `2026-07-10T19:42:56Z`, before the
   Round 57 fix at `19:55:11Z`. Round 61's `21:10:00Z` wording is retained only
@@ -2282,3 +2282,43 @@ red/green delivery regressions before the next review pass.
   passed 51 tests. Generated TypeScript build typecheck, `format:check`, and
   `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the verified Round 62 state.
+
+### Round 63 Re-review - `2026-07-10T20:40:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..110c94b0.diff` from task baseline
+  `ca8fb2b3` to current HEAD `110c94b0`.
+- Code style/maintainability (Beauvoir the 2nd): clean. Scan-state helper names
+  meet the four-component limit, `DeliveryScanState` remains module-private and
+  cohesive, and the durable record/query changes are structured and covered.
+- Documentation (Franklin the 2nd): [P2] before this Round 64 fix, the
+  dashboard still showed Round 61 clean/finding statuses even though Round 62
+  changed runtime code and tests. Reset every lane to fresh re-review pending
+  after records-only fixes.
+- Documentation (Franklin the 2nd): [P2] Round 62 completion was recorded at
+  `20:20:01Z`, before the Round 61 findings commit and before the Round 62 fix
+  commit. Anchor Round 62 completion/verification to commit `110c94b0` at
+  `2026-07-10T20:31:46Z`.
+- TypeScript/API docs (Chandrasekhar the 2nd): clean. No TypeScript
+  type-soundness, public export/API-doc, helper typing, or callback/failure
+  typing findings.
+- Security (Kepler the 2nd): clean. Structural-only cursor resolution preserves
+  pre-read and post-read boundary checks, and tenant snapshots, CAS/lease
+  fencing, fail-closed replay validation, callback copying, and root-export
+  restrictions remain intact.
+- Performance/reliability (Confucius the 2nd): clean. Structural-only cursor
+  resolution is covered by the three-query regression, and finite scan budgets,
+  bounded rescan behavior, claim/lease handling, pause/resume liveness, and
+  fake-timer cleanup remain intact.
+- Action: fix the records-only dashboard and Round 62 timestamp issues, verify,
+  commit, and rerun all five reviewer lanes.
+
+### Round 64 Fix Implementation - `2026-07-10T20:40:00Z`
+
+- Documentation: anchored Round 62 completion to fix commit `110c94b0` at
+  `2026-07-10T20:31:46Z`.
+- Documentation: refreshed the dashboard so every lane explicitly needs fresh
+  current-HEAD re-review after this records-only fix.
+- Verification: `format:check` and `git diff --check` passed.
+- Action: generate a fresh review package and rerun all five required reviewer
+  lanes.
