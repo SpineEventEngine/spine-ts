@@ -170,6 +170,33 @@ describe("Inbox", () => {
     await expect(receive).rejects.toThrow("Inbox message input is invalid.");
   });
 
+  it("rejects IMPORT_EVENT receives before opening durable inbox storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const receive = inbox.receive({
+      inboxId: {
+        targetId: "projection-1",
+        targetTypeUrl: "type.example.dev/tasks.Projection",
+      },
+      signalId: "signal-import",
+      label: "IMPORT_EVENT" as never,
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-02T08:10:00.000Z"),
+      version: 1n,
+    });
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow(/import_event/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
   it("keeps multitenant inbox storage isolated by tenant", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const tenantA = new InboxStorage({
@@ -190,6 +217,23 @@ describe("Inbox", () => {
     await expect(tenantB.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-2" }, signalId: "signal-2" },
     ]);
+  });
+
+  it("rejects IMPORT_EVENT storage writes before opening durable inbox storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    const write = storage.write({
+      ...createMessage("message-import", "signal-import", 1n),
+      label: "IMPORT_EVENT" as never,
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/import_event/i);
+    expect(storageFactory.opens).toBe(0);
   });
 
   it("orders equal receive time and version ties by inbox message UUID and supports paging limits", async () => {
@@ -873,6 +917,43 @@ describe("Inbox", () => {
     });
 
     await expect(storage.read(ShardIndex.single())).rejects.toThrow(/storage corruption/i);
+  });
+
+  it("fails closed when reading legacy stored IMPORT_EVENT inbox rows", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([legacyImportEventInboxRecord()]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/import_event.*deprecated/i);
+  });
+
+  it("does not deliver legacy stored IMPORT_EVENT inbox rows during shard drain", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const records = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+    await records.compareAndSet("0/1:message-1", undefined, legacyImportEventInboxRecord());
+    records.close();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    let delivered = false;
+
+    await expect(
+      delivery.drain(ShardIndex.single(), {
+        node: "node-1",
+        onMessage() {
+          delivered = true;
+        },
+      }),
+    ).rejects.toThrow(/import_event.*deprecated/i);
+    expect(delivered).toBe(false);
   });
 
   it("fails closed when stored inbox records contain invalid UTF-8", async () => {
@@ -2084,6 +2165,22 @@ const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
   "SCHEDULED",
   "TO_CATCH_UP",
 ]);
+
+function legacyImportEventInboxRecord(): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        ...storedInboxJson({
+          signalId: "signal-import",
+          valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+        }),
+        label: "IMPORT_EVENT",
+      }),
+      "utf8",
+    ),
+  });
+}
 
 class FakeStorageFactory extends StorageFactory {
   readonly #records: readonly Any[];

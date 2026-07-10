@@ -280,8 +280,10 @@ The generated Protobuf-ES output for each package belongs in that package's
 - Command worker: subscribes to command types and executes command assignees/receptors.
 - Event worker: subscribes to event types, executes supported subscribers and
   reactors, and delivers supported event inbox rows. Event import/importer work
-  is removed from the active plan under ADR 0001 D1; `IMPORT_EVENT` label cleanup
-  is a later compatibility contract task.
+  is removed from the active plan under ADR 0001 D1; `IMPORT_EVENT` is no longer
+  a supported public delivery label for new inbox writes. Legacy stored/wire
+  `IMPORT_EVENT` rows are recognized only as deprecated compatibility data and
+  fail closed before delivery.
 - Projection worker: maintains read-side projections from delivered events.
 - Query worker: serves read-side queries when query workload is moved out of the main process.
 - Subscription worker: maintains subscription streams and fan-out state.

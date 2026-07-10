@@ -110,7 +110,7 @@ export class InboxMessageError extends Error {
 
 /** Delivery destination label. */
 export type DeliveryLabel =
-  "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT" | "IMPORT_EVENT" | "CATCH_UP";
+  "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT" | "CATCH_UP";
 
 /** Durable delivery state. */
 export type DeliveryStatus = "TO_DELIVER" | "SCHEDULED" | "DELIVERED" | "TO_CATCH_UP";

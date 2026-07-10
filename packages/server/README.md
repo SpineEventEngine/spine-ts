@@ -118,7 +118,13 @@ Current slice exposes:
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus
   `onMessage`, and a small `DeliveryLoop` that repeats those drains until idle,
   stopped, skipped, or a configured failure bound. Successful rows are marked
-  `DELIVERED`; failed rows remain pending for later retry through the same durable `TO_DELIVER` state.
+  `DELIVERED`; failed rows remain pending for later retry through the same
+  durable `TO_DELIVER` state. Supported public delivery labels are
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
+  `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
+  Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
+  compatibility data and fail closed on read or drain rather than being
+  delivered.
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
   if any, to finish. Built bounded contexts use the storage layer internally

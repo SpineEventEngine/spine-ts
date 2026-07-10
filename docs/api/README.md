@@ -318,8 +318,11 @@ inbox messages and shard lease records through `StorageFactory` /
 `(signalId, inboxId)` through small internal guard records, keeps shard
 ordering metadata on each message with receive time (`whenReceived`),
 `version`, and inbox message UUID ordering. Direct inbox writes require
-`InboxMessage.id.shard` to match `InboxMessage.shard`. Delivery also exposes a
-storage-backed shard pickup/release seam backed by atomic
+`InboxMessage.id.shard` to match `InboxMessage.shard`. Supported public
+`DeliveryLabel` values are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
+`REACT_UPON_EVENT`, and `CATCH_UP`; `IMPORT_EVENT` is recognized only as
+deprecated legacy stored/wire data and fails closed on read/drain. Delivery also
+exposes a storage-backed shard pickup/release seam backed by atomic
 `RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
 worker boundary. `Delivery.drain(shard, { node, onMessage, limit })` claims one
 shard, reads `TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint`

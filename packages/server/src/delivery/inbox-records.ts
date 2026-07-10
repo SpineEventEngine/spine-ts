@@ -46,7 +46,7 @@ interface StoredInboxMessage {
   };
   readonly signalId: string;
   readonly signal?: StoredSignal;
-  readonly label: DeliveryLabel;
+  readonly label: StoredDeliveryLabel;
   readonly status: DeliveryStatus;
   readonly whenReceivedMs: number;
   readonly version: string;
@@ -96,6 +96,8 @@ interface InboxMessageSnapshot {
   readonly version: string;
   readonly keepUntilMs?: number;
 }
+
+type StoredDeliveryLabel = DeliveryLabel | "IMPORT_EVENT";
 
 const maxSignalPayloadBytes: number = 256 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
@@ -390,6 +392,7 @@ function readInputProperty(
 
 function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
   const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
+  const label = requireSupportedStoredDeliveryLabel(stored.label);
 
   return Object.freeze({
     id: Object.freeze({
@@ -401,7 +404,7 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
       targetTypeUrl: stored.inboxId.targetTypeUrl,
     }),
     signalId: stored.signalId,
-    label: stored.label,
+    label,
     status: stored.status,
     shard,
     whenReceived: storedDate(stored.whenReceivedMs, "Inbox receive time"),
@@ -545,7 +548,7 @@ function decodeStoredUtf8(value: Uint8Array, label: string): string {
   }
 }
 
-function requireDeliveryLabel(value: unknown): DeliveryLabel {
+function requireDeliveryLabel(value: unknown): StoredDeliveryLabel {
   if (
     value === "HANDLE_COMMAND" ||
     value === "UPDATE_SUBSCRIBER" ||
@@ -559,12 +562,21 @@ function requireDeliveryLabel(value: unknown): DeliveryLabel {
   throw new DeliveryStorageCorruptionError(`Inbox delivery label "${String(value)}" is invalid.`);
 }
 
+function requireSupportedStoredDeliveryLabel(value: StoredDeliveryLabel): DeliveryLabel {
+  if (value === "IMPORT_EVENT") {
+    throw new DeliveryStorageCorruptionError(
+      'Inbox delivery label "IMPORT_EVENT" is deprecated and unsupported.',
+    );
+  }
+
+  return value;
+}
+
 function requireInputDeliveryLabel(value: unknown): DeliveryLabel {
   if (
     value === "HANDLE_COMMAND" ||
     value === "UPDATE_SUBSCRIBER" ||
     value === "REACT_UPON_EVENT" ||
-    value === "IMPORT_EVENT" ||
     value === "CATCH_UP"
   ) {
     return value;

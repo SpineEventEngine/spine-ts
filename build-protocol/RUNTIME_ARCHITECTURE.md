@@ -270,5 +270,7 @@ loops, retry monitors, attempt counters, retained delivery error details, or
 transport-backed delivery. Event import and aggregate importers are removed
 from the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers, when
 present, use ordinary generated-reactor transaction semantics rather than
-event-sourcing applier/import delivery. `IMPORT_EVENT` label compatibility is
-a later delivery-label contract cleanup, not this runtime slice.
+event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer a supported
+public delivery label for new inbox writes; stored/wire legacy rows using it are
+recognized only as deprecated compatibility data and fail closed before
+delivery.
