@@ -82,5 +82,5 @@ Address every finding in the Round 29 batch:
 ## Concerns
 
 - `.codex-review-packages/` remains an existing untracked review scratch directory and was left untouched.
-- The fix worker created no commit; coordinator commit is pending after this
-  verification record.
+- The fix worker created no commit; coordinator commit `fd563047`
+  (`Fix delivery drain resume outcome`) later recorded this verified fix.

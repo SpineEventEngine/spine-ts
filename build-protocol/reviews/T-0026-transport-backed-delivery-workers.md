@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 37 fix verified; re-review pending
+Status: Round 38 findings pending fix
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer  | Status |
-| -------------------------- | --------- | ------ |
-| Code style/maintainability | Russell   | Fixed  |
-| Documentation              | Hume      | Fixed  |
-| TypeScript/API docs        | Locke     | Clean  |
-| Security                   | Nietzsche | Clean  |
-| Performance/reliability    | Kant      | Fixed  |
+| Lane                       | Reviewer   | Status   |
+| -------------------------- | ---------- | -------- |
+| Code style/maintainability | Planck     | Findings |
+| Documentation              | Ohm        | Findings |
+| TypeScript/API docs        | Copernicus | Clean    |
+| Security                   | Popper     | Clean    |
+| Performance/reliability    | Jason      | Clean    |
 
 ## Review Criteria
 
@@ -31,6 +31,30 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 38 Follow-up - `2026-07-10T16:31:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..1403505e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `1403505e`.
+- TypeScript/API docs (Copernicus): clean.
+- Security (Popper): clean.
+- Performance/reliability (Jason): clean.
+- Code style/maintainability (Planck): [P2] Round 37 report says no commit was
+  created even though coordinator commit `1403505e` records the fix.
+- Documentation (Ohm): [P2] same Round 37 commit-note issue; [P3] Round 29 and
+  Round 30 reports still say coordinator commits are pending even though their
+  durable breadcrumbs are known.
+- Action: update the commit notes and rerun format/diff checks before another
+  five-lane re-review.
+
+### Round 38 Fix Implementation - `2026-07-10`
+
+- Updated Round 37 report/task/work/review records so they say the fix worker
+  created no commit and coordinator commit `1403505e`
+  (`Fix delivery offset boundary race`) recorded the verified fix.
+- Updated Round 29 and Round 30 reports with their resolved coordinator commit
+  breadcrumbs: `fd563047` and `8a65e2b6`.
 
 ### Round 37 Follow-up - `2026-07-10T16:15:00Z`
 
@@ -75,6 +99,7 @@ rescan`), and Round 36 report/task/work/review records now name coordinator
   boundary/read race regression, the focused delivery batch with 5 files and
   224 tests, `typecheck:build:generated`, `docs:check`, `lint`,
   `format:check`, and `git diff --check`.
+- Fix commit: `1403505e` (`Fix delivery offset boundary race`).
 
 ### Round 36 Follow-up - `2026-07-10T16:05:00Z`
 

@@ -651,6 +651,17 @@ short with no accepted or failed work, then perform one bounded head rescan if
 the boundary moved after the earlier validation. The focused regression removes
 a full skipped head page after boundary validation and before the offset-page
 query, proving the supported tail is delivered in the same loop run.
+Coordinator commit `1403505e` (`Fix delivery offset boundary race`) recorded
+this fix. A fresh five-lane re-review is still required.
+
+Round 38 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..1403505e.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Style and
+documentation found the Round 37 report still said no commit was created even
+though coordinator commit `1403505e` now records that fix. Documentation also
+found older Round 29 and Round 30 reports still said coordinator commits were
+pending. The fix updates those records and keeps the current runtime contract
+unchanged.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

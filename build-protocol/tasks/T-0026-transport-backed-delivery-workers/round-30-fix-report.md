@@ -80,5 +80,6 @@ Address every finding in the Round 30 batch:
 - The first `format:check` run found stale formatting in the existing Round 29
   fix report table; Prettier was applied to that report and this new Round 30
   report before the final clean format run.
-- The fix worker created no commit; coordinator commit is pending after this
-  verification record.
+- The fix worker created no commit; coordinator commit `8a65e2b6`
+  (`Polish delivery worker docs and fault fixture`) later recorded this
+  verified fix.

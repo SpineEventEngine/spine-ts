@@ -67,9 +67,10 @@ Notes:
 - An initial `lint` run found test-local cleanup (`prefer-const` and an async
   no-op); the final lint rerun above passed after the test cleanup.
 
-## No-Commit Note
+## Commit Note
 
-No commit was created, per Round 37 instruction.
+No commit was created by the fix worker, per Round 37 instruction. The
+coordinator commit records this verified fix.
 
 ## Coordinator Verification
 
