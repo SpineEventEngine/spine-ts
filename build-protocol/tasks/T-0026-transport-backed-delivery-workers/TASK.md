@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 46 clean review; final verification pending
+Status: Round 47 coverage fix in progress
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -864,6 +864,15 @@ documentation (Raman the 2nd), TypeScript/API docs (Parfit the 2nd), security
 findings. The performance/reliability reviewer also ran focused reliability
 tests with localhost approval and `git diff --check ca8fb2b3..HEAD`; the full
 repository gate remains a coordinator responsibility before merge.
+
+Final verification on `2026-07-10`: the required focused T-0026 suite passed
+with 9 files and 275 tests, and generated build typecheck, docs check, format
+check, and `git diff --check` passed. The first full `verify` attempt failed in
+sandbox-only loopback/local-IPC cases (`listen EPERM 127.0.0.1` and ZeroMQ IPC
+`Operation not permitted`). The handoff-approved rerun passed all 59 test files
+and 1195 tests, then failed the global branch coverage threshold at 89.56%
+against the required 90%. Round 47 adds focused behavioral coverage instead of
+lowering thresholds, then repeats verification and review.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

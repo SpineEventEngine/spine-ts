@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 46 clean review; final verification pending
+Status: Round 47 coverage fix in progress
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -55,6 +55,19 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   repository `verify`.
 - Action: all mandatory T-0026 reviewer lanes are clean; run final T-0026
   verification before merge.
+
+### Final Verification Coverage Gate - `2026-07-10`
+
+- Required focused T-0026 verification passed: 9 Vitest files and 275 tests,
+  generated build typecheck, docs check with only the existing invalid-`origin`
+  TypeDoc warning, format check, and `git diff --check`.
+- Sandboxed full `pnpm --config.verify-deps-before-run=false verify` failed
+  only in local loopback/IPC tests (`listen EPERM 127.0.0.1` and ZeroMQ IPC
+  `Operation not permitted`).
+- Handoff-approved full `verify` rerun passed all 59 test files and 1195 tests,
+  then failed global branch coverage: 89.56% versus the required 90%.
+- Action: add focused behavioral coverage for uncovered T-0026 branches without
+  changing coverage thresholds, then rerun verification and five-lane review.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 
