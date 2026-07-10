@@ -1,7 +1,7 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; awaiting re-review
-Date: `2026-07-09`
+Status: implemented in code/docs; round-two fixes verified
+Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
 Branch: `task/T-0022b-process-manager-event-inbox-handoff`
@@ -52,15 +52,37 @@ Round-one findings fixed in this pass:
    - added this implementation report and recorded the fix actions plus
      verification trail.
 
+Round-two findings fixed in this pass:
+
+1. Code style/maintainability
+   - shortened `validateProcessManagerReplayTenant` to
+     `validatePmReplayTenant`;
+   - updated the process-manager replay caller to use the shorter helper name.
+2. Reliability
+   - added a regression covering a routed multi-target process-manager event
+     where the first replay fails and a later target row still lands in durable
+     inbox storage;
+   - changed process-manager multi-target event handoff to write every routed
+     inbox row before replaying them in order, so a failing earlier target
+     leaves later rows retryable without changing exact-row replay.
+3. Durable docs
+   - corrected the impossible round-one fix timestamps in the work log;
+   - updated this report's date and changed-file inventory to match the task's
+     actual chronology and file surface.
+
 ## Files Changed
 
+- `packages/server/src/context/process-manager-handoff.ts`
 - `packages/server/src/repository/repository.ts`
+- `packages/server/test/context/process-manager-handoff.test.ts`
 - `packages/server/test/repository/repository-routing.test.ts`
 - `build-protocol/DEVELOPER_API.md`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
+- `build-protocol/DECISION_LOG.md`
 - `packages/server/README.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
+- `build-protocol/reviews/T-0022b-process-manager-event-inbox-handoff.md`
 - `build-protocol/tasks/T-0022b-process-manager-event-inbox-handoff/TASK.md`
 - `build-protocol/tasks/T-0022b-process-manager-event-inbox-handoff/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0022b.md`
@@ -75,7 +97,7 @@ Passed:
     `packages/server/test/context/process-manager-handoff.test.ts`
     `packages/server/test/repository/repository-routing.test.ts`
   - exit `0`
-  - result: `2` files passed, `135` tests passed
+  - result: `2` files passed, `136` tests passed
 - `pnpm --config.verify-deps-before-run=false --filter @spine-ts/server test`
   - exit `0`
 - `pnpm --config.verify-deps-before-run=false docs:check`

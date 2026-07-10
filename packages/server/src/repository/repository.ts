@@ -822,20 +822,63 @@ async function handoffPmEvent(
 
   await runtime.processManagerInbox.receive(
     delivery,
-    {
-      inboxId: {
-        targetId: inboxTargetId(entityId),
-        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
-      },
-      signalId: eventId.value,
-      signal: packAny(EventSchema, event, { validate: false }),
-      label: "REACT_UPON_EVENT",
-      status: "TO_DELIVER",
-      shard: ShardIndex.single(),
-      keepUntil,
-    },
+    pmEventInboxInput(repository, eventId.value, event, entityId, keepUntil),
     deliveryTenantId,
   );
+}
+
+async function handoffPmEvents(
+  repository: RepositoryView,
+  runtime: RepositoryRuntime,
+  event: Event,
+  entityIds: readonly unknown[],
+): Promise<void> {
+  const eventId = requireEventId(event);
+  const whenReceived = new Date();
+  const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+  const deliveryTenantId = requirePmEventTenant(runtime.context, event);
+  const delivery = new Delivery({
+    context: processManagerDeliveryContext(runtime.context, deliveryTenantId),
+    storageFactory: runtime.storageFactory,
+  });
+  const inputs = entityIds.map((entityId) =>
+    pmEventInboxInput(repository, eventId.value, event, entityId, keepUntil),
+  );
+
+  let version = 0n;
+  for (const input of inputs) {
+    version += 1n;
+    await delivery.inbox.receive({
+      ...input,
+      whenReceived,
+      version,
+    });
+  }
+
+  for (const input of inputs) {
+    await runtime.processManagerInbox.receive(delivery, input, deliveryTenantId);
+  }
+}
+
+function pmEventInboxInput(
+  repository: RepositoryView,
+  signalId: string,
+  event: Event,
+  entityId: unknown,
+  keepUntil: Date,
+): Omit<InboxMessageInput, "whenReceived" | "version"> {
+  return {
+    inboxId: {
+      targetId: inboxTargetId(entityId),
+      targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    },
+    signalId,
+    signal: packAny(EventSchema, event, { validate: false }),
+    label: "REACT_UPON_EVENT",
+    status: "TO_DELIVER",
+    shard: ShardIndex.single(),
+    keepUntil,
+  };
 }
 
 async function replayPmInbox(
@@ -898,7 +941,7 @@ async function replayProcessManagerEvent(
 
   const event = readPmInboxEvent(message);
 
-  validateProcessManagerReplayTenant(runtime.context, deliveryTenantId, event);
+  validatePmReplayTenant(runtime.context, deliveryTenantId, event);
   validateReplayedEventPayload(
     routing,
     event,
@@ -1963,9 +2006,12 @@ class ProcessManagerEventExecution {
 
     this.#validateSourceEventIdForFollowUps(intake);
 
-    for (const entityId of intake.route.entityIds) {
-      await handoffPmEvent(this.#repository, this.#runtime, this.#event, entityId);
+    if (intake.route.entityIds.length === 1) {
+      await handoffPmEvent(this.#repository, this.#runtime, this.#event, intake.route.entityIds[0]);
+      return;
     }
+
+    await handoffPmEvents(this.#repository, this.#runtime, this.#event, intake.route.entityIds);
   }
 
   async runTarget(entityId: unknown): Promise<void> {
@@ -2544,7 +2590,7 @@ function validateProjectionReplayTenant(
   }
 }
 
-function validateProcessManagerReplayTenant(
+function validatePmReplayTenant(
   context: StorageContext,
   deliveryTenantId: string | undefined,
   event: Event,

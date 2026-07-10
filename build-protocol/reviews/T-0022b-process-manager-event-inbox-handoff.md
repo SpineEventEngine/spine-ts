@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 2 completed; fixes required
+Status: round-two fixes applied; verification complete; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -109,3 +109,18 @@ Scope: live process-manager event reactor durable inbox handoff.
   is sent to inbox storage first and leaves no retryable row for later targets.
 - Add a regression for multi-target process-manager event routing where one
   target fails and another target is still durably queued or delivered.
+
+## Round-Two Fix Follow-Up
+
+- Author follow-up updated the remaining style helper name from
+  `validateProcessManagerReplayTenant` to `validatePmReplayTenant`.
+- Author follow-up added a focused regression in
+  `packages/server/test/repository/repository-routing.test.ts` for a routed
+  multi-target process-manager event where the first replay fails and the later
+  target row remains durably queued.
+- Author follow-up changed the multi-target process-manager event path to write
+  all routed inbox rows before replaying them in order, keeping the current
+  failure propagation while preserving retryable later rows.
+- Author follow-up corrected the durable chronology in
+  `build-protocol/work-logs/T-0022b.md` and expanded
+  `IMPLEMENTATION_REPORT.md` to include the missing changed files.

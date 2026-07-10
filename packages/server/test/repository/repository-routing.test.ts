@@ -1211,6 +1211,36 @@ class BlockingProcessManager extends ProcessManager<
   }
 }
 
+class SplitRouteProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static startedIds: string[] = [];
+  static completedIds: string[] = [];
+
+  static reset(): void {
+    this.startedIds = [];
+    this.completedIds = [];
+  }
+
+  async reactTask(event: ProjectionState): Promise<void> {
+    SplitRouteProcessManager.startedIds.push(this.id);
+
+    if (this.id === "pm-fail") {
+      throw new Error("pm-fail replay failed");
+    }
+
+    SplitRouteProcessManager.completedIds.push(this.id);
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: this.id,
+        queue: `${event.name} split`,
+      }),
+    );
+  }
+}
+
 describe("repository signal routing", () => {
   it("executes aggregate commands through a built bounded-context command bus", async () => {
     ExecutingTaskAggregate.reset();
@@ -3333,6 +3363,55 @@ describe("repository signal routing", () => {
         status: "DELIVERED",
       },
     ]);
+  });
+
+  it("writes later process-manager event inbox rows when an earlier routed target fails", async () => {
+    SplitRouteProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createSplitRoutePmRepo();
+    const routeEvent = repository.routeEvent.bind(repository);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    Object.assign(repository, {
+      routeEvent(event: SpineEvent) {
+        const route = routeEvent(event);
+        return {
+          ...route,
+          entityIds: Object.freeze(["pm-fail", "pm-later"]),
+        };
+      },
+    });
+
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+
+    if (dispatcher === undefined) {
+      throw new Error("Expected a process-manager event dispatcher.");
+    }
+
+    const posted = dispatcher.dispatch(createProjectionEvent("event-pm-split", "pm-source"));
+
+    await expect(posted).rejects.toThrow("pm-fail replay failed");
+    expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail"]);
+
+    const pending = await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
+
+    expect(pending).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          signalId: "event-pm-split",
+          label: "REACT_UPON_EVENT",
+          status: "TO_DELIVER",
+          inboxId: expect.objectContaining({
+            targetId: "pm-later",
+            targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+          }),
+        }),
+      ]),
+    );
   });
 
   it("rejects invalid stored process-manager event rows before handler code", async () => {
@@ -5646,6 +5725,20 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
 
   return new Repository({
     entityType: BlockingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createSplitRoutePmRepo(): Repository<typeof SplitRouteProcessManager> {
+  const handlers = defineEntityHandlers(
+    SplitRouteProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: SplitRouteProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
   });
