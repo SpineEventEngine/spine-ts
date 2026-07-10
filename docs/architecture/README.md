@@ -594,8 +594,9 @@ drains until idle, skipped, stopped, or a configured failure bound; failed rows
 remain `TO_DELIVER` for later retry rather than being copied into a separate
 attempt log. `stop()` prevents future drain starts and does not interrupt an
 in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
-current drain, if any, to finish. Local posting handoffs now cover command
-rows, projection subscriber rows, and process-manager event rows. Command
+current drain, if any, to finish. `DeliveryWorker` owns configured shard loops
+for one node and closes through the same stop-and-wait behavior. Local posting
+handoffs now cover command rows, projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay
 and reach `DELIVERED` before their posting path resolves. Live
 process-manager event routing writes `REACT_UPON_EVENT` rows carrying the

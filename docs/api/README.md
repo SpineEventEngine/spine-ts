@@ -307,12 +307,13 @@ handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
-`DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
-`DeliveryLoopStatus`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
-`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
-`DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
-`ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
+`DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`, `DeliveryLoopOptions`,
+`DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryWorker`,
+`DeliveryWorkerOptions`, `DeliveryWorkerRun`, `DeliveryStorageCorruptionError`,
+`Inbox`, `InboxId`, `InboxMessage`, `InboxMessageError`, `InboxMessageId`,
+`InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
+`InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
+`ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
 inbox messages and shard lease records through `StorageFactory` /
 `RecordStorage`, deduplicates live inbox writes durably by
 `(signalId, inboxId)` through small internal guard records, keeps shard
@@ -337,10 +338,12 @@ drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
 later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents
 future drain starts and does not interrupt an in-flight `Delivery.drain()`; a
 run that observes the stop returns `STOPPED`. `close()` calls `stop()` and
-waits for the current drain, if any, to finish. `DeliveryDrainOptions.limit`,
-`DeliveryLoopOptions.limit`, and `InboxReadOptions.limit` are positive page-size
-controls with a bounded default when omitted. `Inbox.markDelivered()` and
-`InboxStorage.markDelivered()` return
+waits for the current drain, if any, to finish. `DeliveryWorker` owns a
+configured set of shard loops for one node, starts them together, aggregates
+per-loop results, and closes by stopping future drains while waiting for active
+drains to finish. `DeliveryDrainOptions.limit`, `DeliveryLoopOptions.limit`,
+and `InboxReadOptions.limit` are positive page-size controls with a bounded
+default when omitted. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. Built contexts use this storage boundary internally for

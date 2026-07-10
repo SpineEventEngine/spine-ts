@@ -1210,9 +1210,11 @@ stopped, or reaches a configured failure bound. Failed rows stay pending as
 `TO_DELIVER` and are retried by a later loop/drain run; no retained attempt
 history is written. `stop()` prevents future drain starts and does not
 interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
-for the current drain, if any, to finish. Projection catch-up remains the
-existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
-fake durable catch-up storage here; retry workers and generic repository
+for the current drain, if any, to finish. `DeliveryWorker` owns configured
+shard loops for one node and closes through the same stop-and-wait behavior.
+Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
+coordination path and does not gain fake durable catch-up storage here; retry
+workers and generic repository
 delivery remain deferred. Event import and aggregate importers are removed from
 the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers are
 ordinary generated reactor handlers with current transaction semantics, not

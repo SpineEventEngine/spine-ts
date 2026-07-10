@@ -3,10 +3,61 @@ import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { Delivery, ShardIndex, type InboxMessage } from "../../src/index.js";
+import { Delivery, DeliveryLoop, ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("replays existing durable subscriber rows through a delivery loop endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProjectionInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const seen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    await delivery.inbox.receive({
+      inboxId: { targetId: "projection-1", targetTypeUrl },
+      signalId: "event-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+    });
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "worker-a",
+      onMessage: (message) => inbox.replay(message),
+    }).run();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      signalId: "event-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    });
+    expect(run).toMatchObject({
+      status: "IDLE",
+      processed: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+  });
+
   it("delivers an UPDATE_SUBSCRIBER event row and marks it delivered", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

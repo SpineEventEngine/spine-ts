@@ -217,6 +217,7 @@ describe("@spine-ts/server", () => {
         "CommandRegistrationReadiness",
         "Delivery",
         "DeliveryStorageCorruptionError",
+        "DeliveryWorker",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",

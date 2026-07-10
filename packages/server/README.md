@@ -106,8 +106,9 @@ Current slice exposes:
   and
 - `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
   `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryLoop`, `DeliveryLoopOptions`,
-  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`,
-  `InboxStorage`, `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
+  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryWorker`,
+  `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `Inbox`, `InboxStorage`,
+  `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
@@ -116,10 +117,11 @@ Current slice exposes:
   framework-owned `Delivery.drain()` runs that claim one shard,
   exact-message `Delivery.drainMessage()` runs that reject mismatched
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus
-  `onMessage`, and a small `DeliveryLoop` that repeats those drains until idle,
-  stopped, skipped, or a configured failure bound. Successful rows are marked
-  `DELIVERED`; failed rows remain pending for later retry through the same
-  durable `TO_DELIVER` state. Supported public delivery labels are
+  `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
+  stopped, skipped, or a configured failure bound, and a closeable
+  `DeliveryWorker` that owns configured shard loops for one worker node.
+  Successful rows are marked `DELIVERED`; failed rows remain pending for later
+  retry through the same durable `TO_DELIVER` state. Supported public delivery labels are
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
@@ -129,11 +131,12 @@ Current slice exposes:
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
   if any, to finish. Built bounded contexts use the storage layer internally
   for process-manager command rows, process-manager event reaction rows, and
-  live projection subscriber rows, but this slice explicitly excludes
-  transport-backed worker supervision, retry monitors, conveyor/stations,
-  generic repository invocation, projection catch-up through inbox storage,
-  broad production lifecycle, retained attempt history, durable catch-up
-  storage, and example app work. Event import and aggregate importers are
+  live projection subscriber rows; their package-internal replay endpoints can
+  also serve rows drained later by a delivery loop. This slice explicitly
+  excludes transport topology, worker supervision, retry monitors,
+  conveyor/stations, generic repository invocation, projection catch-up through
+  inbox storage, broad production lifecycle, retained attempt history, durable
+  catch-up storage, and example app work. Event import and aggregate importers are
   removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
   handlers are ordinary generated reactor handlers with current transaction
   semantics, not event-sourcing import/applier work;
@@ -685,9 +688,10 @@ production lifecycle, or integrate transports. Process-manager command
 assignees, process-manager event reactors and event-commanding handlers, and
 live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
-received row is marked delivered. Scheduler/retry workers, cross-process
-recovery, production delivery policy, retained attempt history, and supported
-catch-up work remain open production gaps.
+received row is marked delivered. The package also exposes a small closeable
+`DeliveryWorker` wrapper for configured shard loops. Scheduler/retry workers,
+cross-process recovery, production delivery policy, retained attempt history,
+and supported catch-up work remain open production gaps.
 
 ## Direct Stand
 

@@ -22,6 +22,11 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     this.#targets.set(target.targetTypeUrl, target);
   }
 
+  /** Replay one already-durable inbox row through registered process-manager targets. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
+    return this.#replay(message, deliveryTenantId);
+  }
+
   async receive(
     delivery: Delivery,
     input: ProcessManagerInput,

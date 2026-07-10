@@ -69,40 +69,40 @@ Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling
 
 Skill sources checked:
 
-| Source | Scope Checked | Evidence |
-| --- | --- | --- |
-| Session skill inventory | Task-relevant subset | Workflow, TypeScript, backend, testing, design, security, and review skills were visible in-session. |
-| Task-provided skill names/paths | N/A | The user did not name additional task-specific skill paths in the T-0026 request. |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file | Expected workflow/backend skills are installed or have local fallbacks listed. |
-| `~/.agents/skills/*/SKILL.md` | Full directory listing | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded. |
-| `~/.agents/.skill-lock.json` | Manifest opened | Lock manifest was readable and confirmed installed source repositories. |
-| Security references | JavaScript/TypeScript references only | No exact non-Express Node framework reference exists; general security guidance applies. |
+| Source                                     | Scope Checked                         | Evidence                                                                                             |
+| ------------------------------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset                  | Workflow, TypeScript, backend, testing, design, security, and review skills were visible in-session. |
+| Task-provided skill names/paths            | N/A                                   | The user did not name additional task-specific skill paths in the T-0026 request.                    |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                             | Expected workflow/backend skills are installed or have local fallbacks listed.                       |
+| `~/.agents/skills/*/SKILL.md`              | Full directory listing                | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded.                         |
+| `~/.agents/.skill-lock.json`               | Manifest opened                       | Lock manifest was readable and confirmed installed source repositories.                              |
+| Security references                        | JavaScript/TypeScript references only | No exact non-Express Node framework reference exists; general security guidance applies.             |
 
 Selected skills read before task actions:
 
-| Skill | Source | Applicability | Instructions Applied |
-| --- | --- | --- | --- |
-| `subagent-driven-development` | Session/user skill | Required by protocol sub-agent workflow. | Fresh implementer per task, reviewer loop, close agents, no stopping between tasks. |
-| `using-git-worktrees` | Session/user skill | Required branch/worktree setup. | Checked current checkout, verified `.worktrees` ignored, created isolated worktree. |
-| `requesting-code-review` | Session/user skill | Required review gates. | Independent reviewers before merge and no ignored findings. |
-| `verification-before-completion` | Session/user skill | Required before completion claims. | Fresh command evidence before any passing/complete claim. |
-| `test-driven-development` | User skill | Required for behavior changes. | Write failing tests before production code. |
-| `implement` | User skill | Implementation workflow. | Implement from task requirements, typecheck/tests regularly, commit branch work. |
-| `architecture-decision-records` | User skill | Decision logging. | Added D-0077 for the worker-slice boundary. |
-| `nodejs-backend-patterns` | User skill | Background worker/lifecycle work in Node. | Keep resource lifecycle and error handling explicit and testable. |
-| `typescript-advanced-types` | User skill | Type-safe framework surface. | Prefer strict, simple generic types; avoid `any` and overly complex type machinery. |
-| `javascript-testing-patterns` | User skill | Vitest coverage. | Use behavior tests, real code, and isolated fixtures. |
-| `codebase-design` | User skill | Human requested simplification. | Keep a small deep interface and avoid shallow pass-through modules. |
-| `security-best-practices` | Session skill | Required security-review lane. | Use JS/TS secure defaults; focus on validation, tenant boundaries, and deserialization. |
+| Skill                            | Source             | Applicability                             | Instructions Applied                                                                    |
+| -------------------------------- | ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `subagent-driven-development`    | Session/user skill | Required by protocol sub-agent workflow.  | Fresh implementer per task, reviewer loop, close agents, no stopping between tasks.     |
+| `using-git-worktrees`            | Session/user skill | Required branch/worktree setup.           | Checked current checkout, verified `.worktrees` ignored, created isolated worktree.     |
+| `requesting-code-review`         | Session/user skill | Required review gates.                    | Independent reviewers before merge and no ignored findings.                             |
+| `verification-before-completion` | Session/user skill | Required before completion claims.        | Fresh command evidence before any passing/complete claim.                               |
+| `test-driven-development`        | User skill         | Required for behavior changes.            | Write failing tests before production code.                                             |
+| `implement`                      | User skill         | Implementation workflow.                  | Implement from task requirements, typecheck/tests regularly, commit branch work.        |
+| `architecture-decision-records`  | User skill         | Decision logging.                         | Added D-0077 for the worker-slice boundary.                                             |
+| `nodejs-backend-patterns`        | User skill         | Background worker/lifecycle work in Node. | Keep resource lifecycle and error handling explicit and testable.                       |
+| `typescript-advanced-types`      | User skill         | Type-safe framework surface.              | Prefer strict, simple generic types; avoid `any` and overly complex type machinery.     |
+| `javascript-testing-patterns`    | User skill         | Vitest coverage.                          | Use behavior tests, real code, and isolated fixtures.                                   |
+| `codebase-design`                | User skill         | Human requested simplification.           | Keep a small deep interface and avoid shallow pass-through modules.                     |
+| `security-best-practices`        | Session skill      | Required security-review lane.            | Use JS/TS secure defaults; focus on validation, tenant boundaries, and deserialization. |
 
 Skipped relevant-looking skills:
 
-| Skill | Source | Reason Skipped |
-| --- | --- | --- |
+| Skill                 | Source     | Reason Skipped                                                                                                                         |
+| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `projection-patterns` | User skill | T-0026 may touch projection handoff only through existing delivery endpoints; read when catch-up/projection semantics become in-scope. |
-| `cqrs-implementation` | User skill | The task preserves existing CQRS separation rather than redesigning CQRS. |
-| `event-store-design` | User skill | This slice drains existing inbox rows and does not change event-store design. |
-| `saga-orchestration` | User skill | Process-manager orchestration semantics are not redesigned in this worker slice. |
+| `cqrs-implementation` | User skill | The task preserves existing CQRS separation rather than redesigning CQRS.                                                              |
+| `event-store-design`  | User skill | This slice drains existing inbox rows and does not change event-store design.                                                          |
+| `saga-orchestration`  | User skill | Process-manager orchestration semantics are not redesigned in this worker slice.                                                       |
 
 Conflict resolution: project protocol, task scope, sandbox/approval rules, and
 explicit human requirements win over installed-skill advice.
@@ -215,27 +215,27 @@ Design constraints from inspection:
 
 ## Documentation And Public API Impact
 
-| Area | Impact |
-| --- | --- |
-| Package README impact | Update `packages/server/README.md` worker/gap wording. |
-| TypeDoc/API docs impact | Update exported API docs if the worker boundary is public. |
-| Public API additions/removals | Keep any new surface framework-owned and small; no end-user handler changes. |
-| Framework `USER_GUIDE.md` impact | Update only if operational guidance changes. |
-| Example `USER_GUIDE.md` impact | N/A unless the example runtime startup changes. |
-| API examples | Add only minimal worker usage if a public server API is introduced. |
-| Compatibility notes | Preserve `IMPORT_EVENT` fail-closed legacy behavior. |
+| Area                             | Impact                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| Package README impact            | Update `packages/server/README.md` worker/gap wording.                       |
+| TypeDoc/API docs impact          | Update exported API docs if the worker boundary is public.                   |
+| Public API additions/removals    | Keep any new surface framework-owned and small; no end-user handler changes. |
+| Framework `USER_GUIDE.md` impact | Update only if operational guidance changes.                                 |
+| Example `USER_GUIDE.md` impact   | N/A unless the example runtime startup changes.                              |
+| API examples                     | Add only minimal worker usage if a public server API is introduced.          |
+| Compatibility notes              | Preserve `IMPORT_EVENT` fail-closed legacy behavior.                         |
 
 ## Security Impact
 
-| Area | Impact |
-| --- | --- |
-| Dependencies | No new dependency intended. |
-| Secrets and credentials | N/A; no secrets should be read or logged. |
-| IPC | Only existing transport seams may be touched; ZeroMQ details must stay hidden. |
-| Validation | Preserve fail-closed validation before user handler invocation. |
-| Tenant boundaries | Must verify tenant isolation for drained rows. |
-| `Any`/deserialization | Must use existing generated registry/schema checks; no ad hoc unpacking. |
-| Logging | Do not log sensitive payloads or local absolute paths. |
+| Area                    | Impact                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| Dependencies            | No new dependency intended.                                                    |
+| Secrets and credentials | N/A; no secrets should be read or logged.                                      |
+| IPC                     | Only existing transport seams may be touched; ZeroMQ details must stay hidden. |
+| Validation              | Preserve fail-closed validation before user handler invocation.                |
+| Tenant boundaries       | Must verify tenant isolation for drained rows.                                 |
+| `Any`/deserialization   | Must use existing generated registry/schema checks; no ad hoc unpacking.       |
+| Logging                 | Do not log sensitive payloads or local absolute paths.                         |
 
 ## Review Plan
 

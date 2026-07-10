@@ -261,6 +261,11 @@ smaller than the later scheduler/retry stack:
   releases the shard in a `finally` path. If the shard is already owned by
   another live worker lease, the run returns `SKIPPED` with zero counts and does
   not invoke the callback;
+- `DeliveryLoop` repeats `Delivery.drain()` for one shard until idle, skipped,
+  stopped, or the configured failure bound is reached. `DeliveryWorker` is the
+  closeable owner for one node's configured shard loops; it starts those loops,
+  aggregates their run results, and `close()` stops future drains while waiting
+  for active drains to finish;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
@@ -278,12 +283,13 @@ smaller than the later scheduler/retry stack:
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
 - `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
-  `DeliveryFailure`, `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`,
-  `InboxId`, `InboxMessage`, `DeliveryStorageCorruptionError`,
-  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-  `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
-  `DeliveryOptions`, and `ShardedWorkRegistryOptions` describe the stable
-  inputs/outputs of this slice.
+  `DeliveryFailure`, `DeliveryLabel`, `DeliveryLoopOptions`,
+  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryStatus`,
+  `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `InboxId`, `InboxMessage`,
+  `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
+  `InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`,
+  `InboxStorageOptions`, `DeliveryOptions`, and `ShardedWorkRegistryOptions`
+  describe the stable inputs/outputs of this slice.
 
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and
@@ -329,6 +335,18 @@ const run = await delivery.drain(ShardIndex.single(), {
     await frameworkEndpoint(message);
   },
 });
+
+const worker = new DeliveryWorker({
+  delivery,
+  shards: [ShardIndex.single()],
+  node: "worker-a",
+  async onMessage(message) {
+    await frameworkEndpoint(message);
+  },
+});
+
+await worker.start();
+await worker.close();
 ```
 
 Keep the write/read split intact at the application/service/domain level. These
@@ -349,11 +367,11 @@ routed target ID.
 
 The current API does not schedule repeated runs, expose a generic repository
 delivery engine, run projection catch-up through inbox storage, run retry
-monitors, open transport workers, or retain attempt/error history beyond the
-returned `DeliveryRun`. Event import and aggregate importers are removed from
-the active plan by upstream ADR 0001 D1; ordinary aggregate `@React` handlers
-are generated reactor handlers with current transaction semantics, not
-event-sourcing import/applier work.
+monitors, open transport topology, supervise worker processes, or retain
+attempt/error history beyond the returned run object. Event import and
+aggregate importers are removed from the active plan by upstream ADR 0001 D1;
+ordinary aggregate `@React` handlers are generated reactor handlers with
+current transaction semantics, not event-sourcing import/applier work.
 
 ## Runtime Transport Binding
 

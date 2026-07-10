@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane | Reviewer | Status |
-| --- | --- | --- |
-| Code style/maintainability | Pending | Pending |
-| Documentation | Pending | Pending |
-| TypeScript/API docs | Pending | Pending |
-| Security | Pending | Pending |
-| Performance/reliability | Pending | Pending |
+| Lane                       | Reviewer | Status  |
+| -------------------------- | -------- | ------- |
+| Code style/maintainability | Pending  | Pending |
+| Documentation              | Pending  | Pending |
+| TypeScript/API docs        | Pending  | Pending |
+| Security                   | Pending  | Pending |
+| Performance/reliability    | Pending  | Pending |
 
 ## Review Criteria
 

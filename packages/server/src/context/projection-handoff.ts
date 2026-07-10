@@ -21,6 +21,11 @@ export class LocalProjectionInbox implements ProjectionInbox {
     this.#targets.set(target.targetTypeUrl, target);
   }
 
+  /** Replay one already-durable inbox row through registered projection targets. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
+    return this.#replay(message, deliveryTenantId);
+  }
+
   async receive(
     delivery: Delivery,
     input: {

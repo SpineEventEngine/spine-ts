@@ -258,19 +258,24 @@ delivery worker boundary:
   `TO_DELIVER` rows in inbox order, invokes one supplied framework endpoint
   callback per row, marks successful rows `DELIVERED`, leaves failed endpoint
   calls `TO_DELIVER` for a later run, returns simple counts plus per-message
-  failures, and releases the shard in a `finally` path; and
+  failures, and releases the shard in a `finally` path;
+- `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
+  is the closeable owner for one node's configured shard loops. These are
+  lifecycle wrappers over the direct primitive, not production supervision or
+  transport topology; and
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption.
 
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
-handoffs, and one direct drain call. It does not yet implement a generic
-repository delivery engine, projection catch-up through inbox storage, worker
-loops, retry monitors, attempt counters, retained delivery error details, or
-transport-backed delivery. Event import and aggregate importers are removed
-from the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers, when
-present, use ordinary generated-reactor transaction semantics rather than
-event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer a supported
-public delivery label for new inbox writes; stored/wire legacy rows using it are
+handoffs, one direct drain call, and a closeable loop owner. It does not yet
+implement a generic repository delivery engine, projection catch-up through
+inbox storage, retry monitors, attempt counters, retained delivery error
+details, production worker supervision, or transport-backed topology. Event
+import and aggregate importers are removed from the active plan by upstream ADR
+0001 D1. Aggregate `@React` handlers, when present, use ordinary
+generated-reactor transaction semantics rather than event-sourcing
+applier/import delivery. `IMPORT_EVENT` is no longer a supported public
+delivery label for new inbox writes; stored/wire legacy rows using it are
 recognized only as deprecated compatibility data and fail closed before
 delivery.

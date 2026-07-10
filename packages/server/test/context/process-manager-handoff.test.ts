@@ -3,12 +3,73 @@ import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { Delivery, ShardIndex, type InboxMessage } from "../../src/index.js";
+import { Delivery, DeliveryLoop, ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 
 describe("LocalProcessManagerInbox", () => {
+  it("replays existing durable command and event rows through a delivery loop endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const seen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    await delivery.inbox.receive({
+      inboxId: { targetId: "pm-command", targetTypeUrl },
+      signalId: "command-1",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+    });
+    await delivery.inbox.receive({
+      inboxId: { targetId: "pm-event", targetTypeUrl },
+      signalId: "event-1",
+      label: "REACT_UPON_EVENT",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      version: 2n,
+    });
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "worker-a",
+      onMessage: (message) => inbox.replay(message),
+    }).run();
+
+    expect(seen.map(({ label }) => label)).toEqual(["HANDLE_COMMAND", "REACT_UPON_EVENT"]);
+    expect(run).toMatchObject({
+      status: "IDLE",
+      processed: 2,
+      delivered: 2,
+      failed: 0,
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      { signalId: "command-1", label: "HANDLE_COMMAND", status: "DELIVERED" },
+      { signalId: "event-1", label: "REACT_UPON_EVENT", status: "DELIVERED" },
+    ]);
+  });
+
   it("delivers a handled command without optional signal and keepUntil fields", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
