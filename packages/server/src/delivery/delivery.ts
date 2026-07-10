@@ -55,7 +55,8 @@ export class Delivery {
    * before endpoint invocation. The `onMessage` endpoint receives a public
    * `InboxMessage` snapshot only for supported worker labels:
    * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`.
-   * Unsupported labels fail closed before the callback runs.
+   * Worker-unsupported labels remain pending and are skipped before callback
+   * invocation.
    *
    * The returned `DeliveryRun` reports whether the shard was drained or
    * skipped, how many rows were read, accepted for work, delivered, or failed,
@@ -142,9 +143,9 @@ export class Delivery {
    * Local framework handoffs use this when the caller has just written a
    * durable row and must not run unrelated pending rows from the same shard.
    * The message shard is picked up with lease fencing; if the row is already
-   * unavailable, no endpoint callback runs. Supported callbacks are limited to
-   * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported
-   * labels fail closed before the callback.
+   * unavailable or unsupported by this worker, no endpoint callback runs.
+   * Supported callbacks are limited to `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
+   * and `REACT_UPON_EVENT`.
    *
    * The returned `DeliveryRun` uses the same counters as `drain()`, scoped to
    * this single row.
@@ -206,6 +207,10 @@ export class Delivery {
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryRun> {
+    if (!isEndpointLabel(message.label)) {
+      return deliveryRun("DRAINED", 1, 0, 0, 0, []);
+    }
+
     const attempt = await this.#deliverMessage(message, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
@@ -306,6 +311,10 @@ export class Delivery {
     active: ActiveClaim,
   ): Promise<boolean> {
     if (!progress.observe(message)) {
+      return true;
+    }
+
+    if (!isEndpointLabel(message.label)) {
       return true;
     }
 
@@ -600,11 +609,17 @@ function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
 }
 
 function requireEndpointLabel(label: InboxMessage["label"]): void {
-  if (label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT") {
+  if (isEndpointLabel(label)) {
     return;
   }
 
   throw new Error(`Delivery worker does not support "${label}" messages.`);
+}
+
+function isEndpointLabel(label: InboxMessage["label"]): boolean {
+  return (
+    label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT"
+  );
 }
 
 async function clearActiveClaim(

@@ -255,19 +255,18 @@ delivery worker boundary:
 - shard pickup, renewal, and release persist lease-backed shard sessions through
   storage compare-and-set rather than process-local locks. Renewal extends only
   an unexpired current session for the same session ID and node;
-- one direct drain run claims a shard through `ShardedWorkRegistry`, reads
-  `TO_DELIVER` rows in inbox order, keeps the storage lease renewed while the
-  drain is active, and mirrors each renewed shard-session expiry into the active
-  row's durable per-message claim before invoking one supplied framework
-  endpoint callback per row. Rows with any existing durable claim are skipped
-  before endpoint invocation, including expired or abandoned claims. Endpoint
-  callbacks receive unclaimed `InboxMessage` snapshots; successful delivery
-  marks `DELIVERED` from the latest active claimed snapshot, failed endpoint
-  attempts best-effort clear the unchanged claim, and marker failures after a
-  successful callback preserve the durable claim rather than making the row
-  immediately retryable. Stale claim recovery is future production policy. The
-  run returns simple counts plus per-message failures and releases the shard in
-  a `finally` path;
+- one direct drain run holds a shard through `ShardedWorkRegistry`, reads
+  `TO_DELIVER` rows in inbox order, and keeps the storage lease renewed while
+  the drain is active. Rows unavailable to the active worker are skipped before
+  endpoint invocation, including rows owned by another active worker,
+  worker-unsupported labels such as `CATCH_UP`, and rows deferred for stale-row
+  recovery. Endpoint callbacks receive public `InboxMessage` snapshots;
+  successful delivery marks the row `DELIVERED`, endpoint callback failures
+  leave the row pending only after framework cleanup succeeds, and endpoint
+  callback cleanup failures, lease/fencing failures, and delivery-status update
+  failures are reported without an immediate retry guarantee. Stale-row
+  recovery is future production policy. The run returns simple counts plus
+  per-message failures and releases the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
   is the closeable owner for one node's configured shard loops. Renewal is
   framework-owned lease fencing for active drains. These are lifecycle wrappers

@@ -622,17 +622,7 @@ export class InboxStorage {
     try {
       storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
     } catch (error) {
-      try {
-        await this.#durableCompareAndSet(
-          "Inbox dedup guard",
-          dedupStorage,
-          dedupKey,
-          pending,
-          step.expected,
-        );
-      } catch {
-        // Preserve the original inbox-write failure even if rollback also fails.
-      }
+      await this.#rollbackPendingGuard(dedupStorage, dedupKey, pending, step.expected);
       throw error;
     }
 
@@ -644,6 +634,25 @@ export class InboxStorage {
       DedupRecords.writeFinal(storedMessage),
     );
     return finalized ? this.#written(storedMessage).result : undefined;
+  }
+
+  async #rollbackPendingGuard(
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    pending: Any,
+    expected: Any | undefined,
+  ): Promise<void> {
+    try {
+      await this.#durableCompareAndSet(
+        "Inbox dedup guard",
+        dedupStorage,
+        dedupKey,
+        pending,
+        expected,
+      );
+    } catch {
+      // Preserve the original inbox-write failure even if rollback also fails.
+    }
   }
 
   async #ensureInboxRow(

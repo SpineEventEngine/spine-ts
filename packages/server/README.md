@@ -129,9 +129,10 @@ Current slice exposes:
   are reported through `DeliveryRun.failures` /
   `DeliveryFailure` without an immediate retry or recovery guarantee in this
   slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
-  before callback invocation. Supported public delivery labels are
-  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
+  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
+  pending and are skipped before callback invocation. Supported public delivery
+  labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and
+  `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
   compatibility data and fail closed on read or drain rather than being
@@ -729,8 +730,9 @@ that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
 `{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
 tenant stands reject tenant options. `queryVersioned()` accepts the storage
-`RecordQuery` slice for IDs, exact filters, masks, ordering, and positive
-limits; `readAllVersioned()` is the no-filter convenience path. Both return
+`RecordQuery` slice for IDs, exact filters, masks, ordering, non-negative
+offsets applied after sorting and before limits, and positive limits;
+`readAllVersioned()` is the no-filter convenience path. Both return
 `StandReadResult` entries in deterministic storage query order and reuse the
 same caller-supplied version metadata as point reads. Stand version metadata is
 process-local and in-memory only; the current slice persists latest state

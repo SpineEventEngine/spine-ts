@@ -131,6 +131,42 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   existing invalid-origin TypeDoc warning; format check passed; diff whitespace
   check passed.
 
+### Round 22 Follow-up - `2026-07-10T09:39:00Z`
+
+- Finding: [Security MEDIUM] unsupported worker labels such as `CATCH_UP`
+  stayed public-writeable and were fail-closed as delivery failures, so a
+  single `CATCH_UP` row could consume the default loop failure budget and block
+  supported rows in the same shard.
+- Finding: [Style MEDIUM/LOW] `build-protocol/RUNTIME_ARCHITECTURE.md` still
+  exposed row-claim internals; several `InboxStorage` private methods remain
+  over the method-length target.
+- Finding: [API P3] `packages/server/README.md` omitted
+  `RecordQuery.offset` from `queryVersioned()` docs.
+- Action: dispatch one fix worker for non-starving unsupported-label handling,
+  public architecture wording, server README offset docs, and scoped
+  inbox-storage cleanup.
+- Fix: `Delivery.drain()` and `drainMessage()` now skip worker-unsupported
+  public labels before row acceptance, storage-claiming, or callback
+  invocation. Unsupported rows remain pending for future catch-up handling and
+  are paged past like unavailable rows, so they do not consume failure budget
+  or block supported rows behind them.
+- Fix: rewrote the runtime architecture delivery summary with public concepts:
+  shard lease fencing, rows unavailable to the active worker, public
+  `InboxMessage` snapshots, endpoint callback cleanup failures, and deferred
+  stale-row recovery. The server README now documents non-negative
+  `RecordQuery.offset` for `queryVersioned()`, applied after sorting and
+  before limits.
+- Fix: split `InboxStorage.#claimAndWrite()` rollback handling into
+  `#rollbackPendingGuard()`. Broader internal-access redesign remains out of
+  scope for this scoped method-length cleanup.
+- Evidence: the focused `CATCH_UP` regression failed before the fix with
+  `accepted: 2` and `failed: 1`, then passed after unsupported labels were
+  skipped before acceptance.
+- Verification: required delivery Vitest passed with 3 files and 159 tests;
+  generated build typecheck passed; docs check passed with only the existing
+  invalid-origin TypeDoc warning; format check passed; diff whitespace check
+  passed.
+
 ### Round 15 Follow-up - `2026-07-10T07:40:04Z`
 
 - Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`

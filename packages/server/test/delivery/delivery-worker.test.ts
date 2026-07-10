@@ -772,7 +772,7 @@ describe("Delivery worker", () => {
     ]);
   });
 
-  it("rejects CATCH_UP rows before invoking the endpoint", async () => {
+  it("skips CATCH_UP rows without starving supported rows", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -780,6 +780,7 @@ describe("Delivery worker", () => {
     const shard = ShardIndex.single();
 
     await seed(delivery, "signal-catch-up", 1n, "CATCH_UP");
+    await seed(delivery, "signal-supported", 2n);
 
     const seen: string[] = [];
     const run = await delivery.drain(shard, {
@@ -789,18 +790,15 @@ describe("Delivery worker", () => {
       },
     });
 
-    expect(seen).toEqual([]);
+    expect(seen).toEqual(["signal-supported"]);
     expect(run).toMatchObject({
       status: "DRAINED",
-      processed: 1,
+      processed: 2,
       accepted: 1,
-      delivered: 0,
-      failed: 1,
+      delivered: 1,
+      failed: 0,
     });
-    expect(run.failures[0]?.error).toBeInstanceOf(Error);
-    expect((run.failures[0]?.error as Error | undefined)?.message).toBe(
-      'Delivery worker does not support "CATCH_UP" messages.',
-    );
+    expect(run.failures).toEqual([]);
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-catch-up", status: "TO_DELIVER" },
     ]);
