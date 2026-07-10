@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 67 findings recorded; fix/adjudication pending
+Status: Round 68 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer       | Status           |
-| -------------------------- | -------------- | ---------------- |
-| Code style/maintainability | Bacon the 2nd  | Findings pending |
-| Documentation              | Cicero the 2nd | Findings pending |
-| TypeScript/API docs        | Kant the 2nd   | Clean            |
-| Security                   | Harvey the 2nd | Clean            |
-| Performance/reliability    | Jason the 2nd  | Adjudicated      |
+| Lane                       | Reviewer | Status                             |
+| -------------------------- | -------- | ---------------------------------- |
+| Code style/maintainability | TBD      | Needs fresh current-HEAD re-review |
+| Documentation              | TBD      | Needs fresh current-HEAD re-review |
+| TypeScript/API docs        | TBD      | Needs fresh current-HEAD re-review |
+| Security                   | TBD      | Needs fresh current-HEAD re-review |
+| Performance/reliability    | TBD      | Needs fresh current-HEAD re-review |
 
 ## Review Criteria
 
@@ -2404,3 +2404,24 @@ red/green delivery regressions before the next review pass.
 - Action: record the complete findings/adjudication batch, dispatch one fix
   worker for the naming/dashboard/docs record items, verify, commit, and rerun
   all five reviewer lanes from the fixed HEAD.
+
+### Round 68 Fix Implementation - `2026-07-10T21:01:36Z`
+
+- Code style: renamed `DeliveryScanState` resumed-state internals from
+  head-rescan wording to resumed-cursor wording. The drain loop now checks
+  accepted counts at the call site and calls `resetResumedCursorToHead()` only
+  when accepted work occurred during a scan that began from a resumed cursor.
+- Documentation: reset the required review-lane dashboard so every lane
+  explicitly needs fresh current-HEAD re-review after this code/records fix.
+  Round 67 historical outcomes remain preserved in the Round 67 section above.
+- Performance/reliability adjudication: keyset/indexed storage continuation
+  remains out of this T-0026 batch. The accepted T-0026 contract intentionally
+  uses `RecordQuery.offset` to bound logical delivery scan rows and storage
+  calls; replacing that with keyset/indexed continuation is future
+  storage-index design beyond the local transport-backed worker boundary.
+- Verification: focused `delivery-loop.test.ts` passed with 30 tests,
+  generated build typecheck passed, initial `format:check` found formatting in
+  the edited delivery and review-log files, formatter normalization completed,
+  the rerun `format:check` passed, `git diff --check` passed, and final
+  focused Vitest/typecheck reruns on the formatted code passed.
+- Action: rerun all five reviewer lanes from the verified current HEAD.

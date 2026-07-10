@@ -153,8 +153,8 @@ export class Delivery {
         continue;
       }
 
-      if (messages.length === 0 && progress.processed === 0 && scan.hasResumedHeadRescan()) {
-        scan.resetResumedHead();
+      if (messages.length === 0 && progress.processed === 0 && scan.hasResumedCursor()) {
+        scan.resetResumedCursorToHead();
         continue;
       }
 
@@ -179,7 +179,9 @@ export class Delivery {
         if (remainsPending) {
           scan.advancePastPending(message);
         }
-        scan.resetAfterResumedAcceptance(progress.accepted > accepted);
+        if (progress.accepted > accepted && scan.hasResumedCursor()) {
+          scan.resetResumedCursorToHead();
+        }
         if (progress.accepted >= limit) {
           return progress.finish(scan.cursor());
         }
@@ -190,7 +192,7 @@ export class Delivery {
 
       if (messages.length < readLimit) {
         if (scan.shouldRescanShortPage(progress.accepted, progress.failed)) {
-          scan.resetResumedHead();
+          scan.resetResumedCursorToHead();
           continue;
         }
 
@@ -629,14 +631,14 @@ interface DrainProgress {
 class DeliveryScanState {
   #offset: number;
   #pendingBoundaryId: string | undefined;
-  #resumedHeadRescan: boolean;
+  #resumedCursor: boolean;
   #offsetRescan = false;
   #rescanSeenAllowance = 0;
 
   constructor(cursor: DeliveryDrainCursor) {
     this.#offset = cursor.offset;
     this.#pendingBoundaryId = cursor.pendingBoundaryId;
-    this.#resumedHeadRescan = cursor.offset > 0;
+    this.#resumedCursor = cursor.offset > 0;
   }
 
   get offset(): number {
@@ -655,8 +657,8 @@ class DeliveryScanState {
     return this.#offset > 0 && this.#pendingBoundaryId !== undefined && !this.#offsetRescan;
   }
 
-  hasResumedHeadRescan(): boolean {
-    return this.#resumedHeadRescan;
+  hasResumedCursor(): boolean {
+    return this.#resumedCursor;
   }
 
   readLimit(scanBudget: number, processed: number): number {
@@ -670,20 +672,14 @@ class DeliveryScanState {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
     this.#offsetRescan = true;
-    this.#resumedHeadRescan = false;
+    this.#resumedCursor = false;
     this.#rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
   }
 
-  resetResumedHead(): void {
+  resetResumedCursorToHead(): void {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
-    this.#resumedHeadRescan = false;
-  }
-
-  resetAfterResumedAcceptance(accepted: boolean): void {
-    if (accepted && this.#resumedHeadRescan) {
-      this.resetResumedHead();
-    }
+    this.#resumedCursor = false;
   }
 
   consumeSeenRescanAllowance(): boolean {
@@ -701,7 +697,7 @@ class DeliveryScanState {
   }
 
   shouldRescanShortPage(accepted: number, failed: number): boolean {
-    return this.#resumedHeadRescan && accepted === 0 && failed === 0;
+    return this.#resumedCursor && accepted === 0 && failed === 0;
   }
 
   cursor(): DeliveryDrainCursor {
@@ -709,9 +705,7 @@ class DeliveryScanState {
   }
 
   finishSkippedScan(accepted: number, failed: number): DeliveryDrainCursor {
-    return this.#resumedHeadRescan && accepted === 0 && failed === 0
-      ? drainCursor(0)
-      : this.cursor();
+    return this.#resumedCursor && accepted === 0 && failed === 0 ? drainCursor(0) : this.cursor();
   }
 }
 

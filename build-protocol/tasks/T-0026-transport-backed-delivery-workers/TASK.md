@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 67 findings recorded; fix/adjudication pending
+Status: Round 68 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1165,3 +1165,16 @@ bound logical scan rows and storage calls; physical in-memory candidate
 filter/sort work is a broader storage-index design task, not a local delivery
 worker fix. The next fix will address the naming/dashboard findings, record
 this adjudication in the review log, verify, and rerun all five lanes.
+
+Round 68 fix implementation on `2026-07-10T21:01:36Z`: renamed the private
+delivery scan state from head-rescan wording to resumed-cursor wording and made
+the accepted-work reset explicit at the drain-loop call site. The behavior is
+unchanged: only a scan that actually began from a resumed cursor resets its next
+cursor to the head after accepted work. The review dashboard was reset so all
+five lanes explicitly require fresh current-HEAD re-review. The keyset/indexed
+storage continuation request remains adjudicated as future storage-index design
+outside T-0026 because this task intentionally uses `RecordQuery.offset` to
+bound logical delivery scan rows and storage calls. Verification passed:
+focused delivery-loop Vitest, generated build typecheck, formatter check after
+formatter normalization, final focused Vitest/typecheck reruns on the formatted
+code, and `git diff --check`.
