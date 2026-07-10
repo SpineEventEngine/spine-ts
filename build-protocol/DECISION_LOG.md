@@ -2542,3 +2542,44 @@ Consequences:
   `IMPORT_EVENT` without reopening aggregate import/importer implementation.
 - Normal delivery/runtime gaps remain explicit instead of being hidden by the
   import cleanup.
+
+## D-0076: Reject New IMPORT_EVENT Delivery Writes
+
+Status: Accepted
+
+Date: 2026-07-10
+
+Context: D-0075 removed aggregate import/importer work from the active roadmap
+but intentionally left `IMPORT_EVENT` runtime/proto compatibility untouched.
+The current delivery package still exposes `IMPORT_EVENT` through the public
+`DeliveryLabel` type and accepts it for new inbox writes, which can mislead
+callers into believing event import remains supported runtime work.
+
+Decision:
+
+- Run T-0025 as the delivery-label contract cleanup slice.
+- Define the public supported delivery labels as `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
+- Reject new `IMPORT_EVENT` writes through public inbox write paths before
+  durable rows are stored.
+- Keep a narrow legacy stored-row recognition path for deprecated
+  `IMPORT_EVENT` compatibility data, but fail closed instead of delivering it.
+- Leave `CATCH_UP` and `TO_CATCH_UP` unchanged; projection/read-side catch-up
+  is separate from ADR 0001 event import removal.
+
+Alternatives considered:
+
+- Remove every `IMPORT_EVENT` mention now. Rejected because upstream ADR 0001
+  keeps the label for wire compatibility, and existing stored data should not
+  be misclassified as an unknown corrupt label.
+- Keep `IMPORT_EVENT` in the public `DeliveryLabel` type. Rejected because it
+  advertises a removed feature as supported input.
+- Narrow `CATCH_UP` in the same slice. Rejected because catch-up is not event
+  import and needs its own delivery/runtime decision if changed.
+
+Consequences:
+
+- Ordinary TypeScript callers cannot write `IMPORT_EVENT` without an explicit
+  unsafe cast.
+- Deprecated import rows remain recognizable compatibility data.
+- T-0025 must update tests and docs/API wording without implementing import.
