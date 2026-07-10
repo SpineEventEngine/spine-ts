@@ -253,6 +253,23 @@ describe("Inbox", () => {
     ]);
   });
 
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 1_001, Number.MAX_SAFE_INTEGER])(
+    "rejects invalid read limits before querying storage: %s",
+    async (limit) => {
+      const storageFactory = new RecordingInboxQueryFactory();
+      const storage = new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      });
+
+      await expect(storage.read(ShardIndex.single(), { limit })).rejects.toThrow(
+        "Inbox read limit must be a positive safe integer at most 1000.",
+      );
+      expect(storageFactory.opens).toBe(0);
+      expect(storageFactory.queryCount).toBe(0);
+    },
+  );
+
   it("normalizes read shards before using them in storage filters", async () => {
     const storageFactory = new RecordingInboxQueryFactory();
     const storage = new InboxStorage({

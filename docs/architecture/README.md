@@ -589,14 +589,20 @@ loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Delivery now persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
 with durable shard leases, and exposes `Delivery.drain()` plus `DeliveryLoop`
-for local framework-owned shard draining. `DeliveryLoop` repeats one-shard
-drains until idle, skipped, stopped, or a configured failure bound; failed rows
-remain `TO_DELIVER` for later retry rather than being copied into a separate
-attempt log. `stop()` prevents future drain starts and does not interrupt an
-in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
-current drain, if any, to finish. `DeliveryWorker` owns configured shard loops
-for one node and closes through the same stop-and-wait behavior. Local posting
-handoffs now cover command rows, projection subscriber rows, and process-manager event rows. Command
+for local framework-owned shard draining. A drain picks up, renews, and
+releases its shard session with compare-and-set fencing. Before invoking an
+endpoint, it also acquires a durable row claim; rows that already have any row
+claim are skipped, including expired claims, because abandoned-claim recovery is
+future production policy. Endpoint callbacks receive claim-free `InboxMessage`
+snapshots, while success marks delivery from the claimed snapshot and failure
+releases only the unchanged claim. `DeliveryLoop` repeats one-shard drains
+until idle, skipped, stopped, or a configured failure bound; failed rows remain
+`TO_DELIVER` for later retry rather than being copied into a separate attempt
+log. `stop()` prevents future drain starts and does not interrupt an in-flight
+`Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
+if any, to finish. `DeliveryWorker` owns configured shard loops for one node
+and closes through the same stop-and-wait behavior. Local posting handoffs now
+cover command rows, projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay
 and reach `DELIVERED` before their posting path resolves. Live
 process-manager event routing writes `REACT_UPON_EVENT` rows carrying the

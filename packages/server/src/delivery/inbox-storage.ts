@@ -23,6 +23,7 @@ import type { ShardSession } from "./sharded-work-registry.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
+const maxReadLimit = 1_000;
 const casRetryLimit = 8;
 
 /** Durable inbox storage over record storage. */
@@ -48,6 +49,7 @@ export class InboxStorage {
   /** Read ordered inbox messages for one shard. */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const nextShard = requireReadShard(shard);
+    const limit = requireReadLimit(options.limit ?? defaultReadLimit);
     const storage = this.#inboxStorage();
 
     try {
@@ -58,7 +60,7 @@ export class InboxStorage {
             ...statusFilters(options.statuses),
           ],
           sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
-          limit: options.limit ?? defaultReadLimit,
+          limit,
         }),
       );
 
@@ -188,11 +190,7 @@ export class InboxStorage {
       if (!this.#sameMessageExceptClaim(current, message)) {
         return undefined;
       }
-      if (
-        current.claim !== undefined &&
-        !this.#sameClaim(current.claim, nextClaim) &&
-        this.#claimIsLive(current.claim)
-      ) {
+      if (current.claim !== undefined) {
         return undefined;
       }
 
@@ -784,18 +782,6 @@ export class InboxStorage {
     return Object.freeze(unclaimed);
   }
 
-  #sameClaim(left: InboxClaim | undefined, right: InboxClaim | undefined): boolean {
-    return (
-      left?.id === right?.id &&
-      left?.node === right?.node &&
-      left?.expiresAt.getTime() === right?.expiresAt.getTime()
-    );
-  }
-
-  #claimIsLive(claim: InboxClaim): boolean {
-    return claim.expiresAt.getTime() > this.#dedupNow();
-  }
-
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
     try {
       return await read();
@@ -1033,6 +1019,16 @@ function requireReadShard(value: unknown): ShardIndex {
 function requireReadInteger(value: unknown, label: string): number {
   if (!Number.isInteger(value) || !Number.isFinite(value)) {
     throw new InboxMessageError(`${label} must be a finite integer.`);
+  }
+
+  return value as number;
+}
+
+function requireReadLimit(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxReadLimit) {
+    throw new InboxMessageError(
+      `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
+    );
   }
 
   return value as number;

@@ -223,9 +223,12 @@ or multi-host transport example.
   framework-owned tenant index; those internals are not exposed to end-user
   application code. Durable inbox/shard delivery storage, the direct local shard
   drain, and the local one-shard `DeliveryLoop` already exist for
-  framework-owned delivery work; transport-backed/background scheduler workers,
-  production catch-up orchestration, and retained attempt history remain open
-  production gaps.
+  framework-owned delivery work. Active drains renew shard leases, fence each
+  message with a durable row claim, skip rows with competing claims, and pass
+  claim-free `InboxMessage` snapshots to endpoint code; abandoned-claim
+  recovery is future production policy rather than automatic local recovery.
+  Transport-backed/background scheduler workers, production catch-up
+  orchestration, and retained attempt history remain open production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than pending runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -1204,14 +1207,18 @@ loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Durable inbox records, dedup guards, shard leases, and the direct
 local shard drain are available through the delivery APIs. Built contexts use
 them internally for process-manager command rows, process-manager event reaction
-rows, and live projection subscriber rows. `DeliveryLoop`
-repeats that direct drain for one shard until the shard is idle, skipped,
-stopped, or reaches a configured failure bound. Failed rows stay pending as
-`TO_DELIVER` and are retried by a later loop/drain run; no retained attempt
-history is written. `stop()` prevents future drain starts and does not
-interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
-for the current drain, if any, to finish. `DeliveryWorker` owns configured
-shard loops for one node and closes through the same stop-and-wait behavior.
+rows, and live projection subscriber rows. Active drains renew shard leases,
+fence each message with a durable row claim, skip rows with competing claims,
+and pass claim-free `InboxMessage` snapshots to endpoint code. Claimed rows are
+not auto-reclaimed in this slice; abandoned-claim recovery is future production
+policy. `DeliveryLoop` repeats that direct drain for one shard until the shard
+is idle, skipped, stopped, or reaches a configured failure bound. Failed rows
+stay pending as `TO_DELIVER` and are retried by a later loop/drain run; no
+retained attempt history is written. `stop()` prevents future drain starts and
+does not interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()`
+and waits for the current drain, if any, to finish. `DeliveryWorker` owns
+configured shard loops for one node and closes through the same stop-and-wait
+behavior.
 Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
 coordination path and does not gain fake durable catch-up storage here; retry
 workers and generic repository

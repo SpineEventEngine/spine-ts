@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 import {
   Delivery,
   DeliveryLoop,
+  ShardSession,
   ShardIndex,
   type InboxId,
   type InboxMessage,
   type DeliveryRun,
 } from "../../src/index.js";
+import { claimInboxMessage } from "../../src/delivery/inbox-storage.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -113,6 +115,45 @@ describe("DeliveryLoop", () => {
       status: "SKIPPED",
       runs: 1,
       processed: 0,
+      delivered: 0,
+      failed: 0,
+    });
+  });
+
+  it("stops idle when pending rows are already claimed", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = createDelivery(storageFactory);
+    const shard = ShardIndex.single();
+    const stored = await seed(delivery, "signal-row-claimed", 1n);
+    const claimed = await claimInboxMessage(
+      delivery.inbox.storage,
+      stored,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-a",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+    const seen: string[] = [];
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-b",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    }).run();
+
+    expect(claimed?.signalId).toBe("signal-row-claimed");
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "IDLE",
+      runs: 1,
+      processed: 1,
+      claimed: 0,
       delivered: 0,
       failed: 0,
     });
@@ -282,6 +323,20 @@ describe("DeliveryLoop", () => {
       ).toThrow("DeliveryLoop limit must be a positive safe integer.");
     },
   );
+
+  it("rejects loop read limits above the storage bound", async () => {
+    const loop = new DeliveryLoop({
+      delivery: createDelivery(),
+      shard: ShardIndex.single(),
+      node: "node-a",
+      limit: 1_001,
+      onMessage: () => undefined,
+    });
+
+    await expect(loop.run()).rejects.toThrow(
+      "Inbox read limit must be a positive safe integer at most 1000.",
+    );
+  });
 });
 
 function createDelivery(storageFactory = new InMemoryStorageFactory()): Delivery {

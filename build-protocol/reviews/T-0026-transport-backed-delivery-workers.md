@@ -32,6 +32,48 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 7 Follow-up - `2026-07-10T05:48:00Z`
+
+- Finding: [HIGH] Expired row claims were treated as reclaimable, so a late or
+  missed renewal could let a second local/direct worker invoke the same endpoint
+  while the original callback was still in flight.
+- Fix: `InboxStorage.claim` now skips rows with any durable row claim, expired
+  or live. Successful owners still mark delivered from the claimed snapshot;
+  failed attempts clear only the unchanged claim. Abandoned/stale claim recovery
+  remains future production retry/supervision policy.
+- Evidence: added regression in `delivery-worker.test.ts` proving an
+  expired-claimed row is read but not claimed or dispatched by a competing
+  drain.
+- Finding: [MEDIUM] `DeliveryLoop` used `processed` rows as proof of progress,
+  so a page containing only already-claimed rows could be redrained tightly.
+- Fix: added `claimed` counts to `DeliveryRun` and `DeliveryLoopRun`, and made
+  the loop stop `IDLE` when a drain has no claimed, delivered, or failed rows.
+- Evidence: added regression in `delivery-loop.test.ts` proving already-claimed
+  pending rows stop after one idle drain with no endpoint invocation.
+- Finding: [MEDIUM] Public inbox/drain/loop limits were not bounded at the
+  storage query boundary.
+- Fix: `InboxStorage.read` validates limits as positive safe integers at or
+  below a fixed `1000` bound before opening/querying inbox storage; public
+  drain and loop limits flow through that same storage boundary.
+- Evidence: added regressions for zero, negative, fractional, non-finite, and
+  above-bound limits, plus public drain/loop above-bound cases.
+- Finding: [MEDIUM] Stored `CATCH_UP` labels were valid rows but direct delivery
+  could still invoke callbacks for them.
+- Fix: direct delivery now fail-closes after acquiring its row claim but before
+  endpoint invocation unless the label is `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`.
+- Evidence: added regression proving a `CATCH_UP` row records a failed run,
+  leaves the row pending, clears only its own claim, and never invokes the
+  callback.
+- Docs: updated architecture and user-guide delivery summaries plus the
+  `DeliveryLoop` class comment to describe shard pickup/renew/release CAS,
+  durable row-claim fencing, skipped competing/abandoned claims, claim-free
+  endpoint snapshots, and future abandoned-claim recovery policy.
+- Verification: requested focused Vitest passed with 8 files and 219 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 6 Follow-up - `2026-07-10T05:32:00Z`
 
 - Finding: [P1] the Round 5 per-message claim used the current shard-session

@@ -1,7 +1,7 @@
 import type { Delivery, DeliveryEndpoint, DeliveryFailure, DeliveryRun } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
-/** Small scheduler loop around the direct `Delivery.drain()` worker boundary. */
+/** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
 export class DeliveryLoop {
   readonly #delivery: Delivery;
   readonly #shard: ShardIndex;
@@ -65,7 +65,7 @@ export class DeliveryLoop {
       if (summary.failed >= this.#maxFailures && run.failed > 0) {
         return summary.result("FAILED");
       }
-      if (run.processed === 0) {
+      if (run.claimed === 0 && run.delivered === 0 && run.failed === 0) {
         return summary.result("IDLE");
       }
     }
@@ -107,6 +107,8 @@ export interface DeliveryLoopRun {
   readonly runs: number;
   /** Number of pending rows read across all drains. */
   readonly processed: number;
+  /** Number of rows claimed across all drains. */
+  readonly claimed: number;
   /** Number of rows delivered across all drains. */
   readonly delivered: number;
   /** Number of endpoint or delivery-marking failures across all drains. */
@@ -118,6 +120,7 @@ export interface DeliveryLoopRun {
 class DeliveryLoopSummary {
   #runs = 0;
   #processed = 0;
+  #claimed = 0;
   #delivered = 0;
   #failed = 0;
   readonly #failures: DeliveryFailure[] = [];
@@ -129,6 +132,7 @@ class DeliveryLoopSummary {
   add(run: DeliveryRun): void {
     this.#runs += 1;
     this.#processed += run.processed;
+    this.#claimed += run.claimed;
     this.#delivered += run.delivered;
     this.#failed += run.failed;
     this.#failures.push(...run.failures);
@@ -139,6 +143,7 @@ class DeliveryLoopSummary {
       status,
       this.#runs,
       this.#processed,
+      this.#claimed,
       this.#delivered,
       this.#failed,
       this.#failures,
@@ -150,6 +155,7 @@ function loopRun(
   status: DeliveryLoopStatus,
   runs = 0,
   processed = 0,
+  claimed = 0,
   delivered = 0,
   failed = 0,
   failures: readonly DeliveryFailure[] = [],
@@ -158,6 +164,7 @@ function loopRun(
     status,
     runs,
     processed,
+    claimed,
     delivered,
     failed,
     failures: Object.freeze([...failures]),

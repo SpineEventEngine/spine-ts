@@ -48,10 +48,11 @@ export class Delivery {
    * The `onMessage` endpoint is invoked once for each `TO_DELIVER` row read in
    * inbox order after a durable per-message claim is acquired. The active row
    * claim is renewed to each shard-session renewal while the callback is in
-   * flight; live competing row claims are skipped before endpoint invocation.
-   * Callback failures leave the row pending for a later run. Successful
-   * callbacks mark the claimed snapshot delivered; failed attempts best-effort
-   * clear only the unchanged claim.
+   * flight for diagnostics. Rows with any existing durable claim are skipped
+   * before endpoint invocation; this local/direct slice does not auto-reclaim
+   * expired or abandoned row claims. Callback failures leave the row pending
+   * for a later run. Successful callbacks mark the claimed snapshot delivered;
+   * failed attempts best-effort clear only the unchanged claim.
    *
    * This is a framework-owned direct worker boundary. It does not schedule
    * later runs, open transports, or retain endpoint attempt history.
@@ -59,7 +60,7 @@ export class Delivery {
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
-      return deliveryRun("SKIPPED", 0, 0, 0, []);
+      return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = activeClaim();
     const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
@@ -71,6 +72,7 @@ export class Delivery {
         statuses: ["TO_DELIVER"],
         ...(options.limit === undefined ? {} : { limit: options.limit }),
       });
+      let claimed = 0;
       let delivered = 0;
       const failures: DeliveryFailure[] = [];
 
@@ -79,6 +81,7 @@ export class Delivery {
         if (attempt.kind === "SKIPPED") {
           continue;
         }
+        claimed += 1;
         if (attempt.kind === "DELIVERED") {
           delivered += 1;
         } else {
@@ -86,7 +89,7 @@ export class Delivery {
         }
       }
 
-      return deliveryRun("DRAINED", messages.length, delivered, failures.length, failures);
+      return deliveryRun("DRAINED", messages.length, claimed, delivered, failures.length, failures);
     } finally {
       await lease.close();
       await this.shards.release(session);
@@ -110,7 +113,7 @@ export class Delivery {
     });
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
-      return deliveryRun("SKIPPED", 0, 0, 0, []);
+      return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = activeClaim();
     const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
@@ -124,7 +127,7 @@ export class Delivery {
 
       const pending = await this.inbox.readMessage(id);
       if (pending?.status !== "TO_DELIVER") {
-        return deliveryRun("DRAINED", 0, 0, 0, []);
+        return deliveryRun("DRAINED", 0, 0, 0, 0, []);
       }
       const pendingShard = requireMessageShard(pending);
       if (!sameShard(pendingShard, shard)) {
@@ -133,15 +136,15 @@ export class Delivery {
 
       const attempt = await this.#deliverMessage(pending, options.onMessage, lease, active);
       if (attempt.kind === "SKIPPED") {
-        return deliveryRun("DRAINED", 1, 0, 0, []);
+        return deliveryRun("DRAINED", 1, 0, 0, 0, []);
       }
       if (attempt.kind === "DELIVERED") {
-        return deliveryRun("DRAINED", 1, 1, 0, []);
+        return deliveryRun("DRAINED", 1, 1, 1, 0, []);
       }
 
       const failures = [Object.freeze({ message: pending, error: attempt.error })];
 
-      return deliveryRun("DRAINED", 1, 0, 1, failures);
+      return deliveryRun("DRAINED", 1, 1, 0, 1, failures);
     } finally {
       await lease.close();
       await this.shards.release(session);
@@ -162,6 +165,7 @@ export class Delivery {
       }
 
       active.set(claimed);
+      requireEndpointLabel(claimed.label);
       await onMessage(endpointMessage(claimed));
       lease.requireActive();
       const current = active.current();
@@ -224,6 +228,8 @@ export interface DeliveryRun {
   readonly status: "DRAINED" | "SKIPPED";
   /** Number of pending rows read for this run. */
   readonly processed: number;
+  /** Number of rows claimed for endpoint work or fail-closed validation. */
+  readonly claimed: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
   /** Number of endpoint or delivery-marking failures. */
@@ -265,6 +271,7 @@ type DeliveryMessageResult =
 function deliveryRun(
   status: DeliveryRun["status"],
   processed: number,
+  claimed: number,
   delivered: number,
   failed: number,
   failures: readonly DeliveryFailure[],
@@ -272,6 +279,7 @@ function deliveryRun(
   return Object.freeze({
     status,
     processed,
+    claimed,
     delivered,
     failed,
     failures: Object.freeze([...failures]),
@@ -369,6 +377,14 @@ function activeClaim(): ActiveClaim {
 function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
   const { claim: _claim, ...unclaimed } = message;
   return Object.freeze(unclaimed);
+}
+
+function requireEndpointLabel(label: InboxMessage["label"]): void {
+  if (label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT") {
+    return;
+  }
+
+  throw new Error(`Delivery worker does not support "${label}" messages.`);
 }
 
 async function ignoreClearError(message: Promise<InboxMessage | undefined>): Promise<void> {

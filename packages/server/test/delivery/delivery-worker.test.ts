@@ -219,9 +219,54 @@ describe("Delivery worker", () => {
     expect(secondRun).toMatchObject({
       status: "DRAINED",
       processed: 1,
+      claimed: 0,
       delivered: 0,
       failed: 0,
     });
+  });
+
+  it("skips a claimed row after the claim expiry instead of duplicate dispatching", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:05:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const stored = await seed(delivery, "signal-expired-claim", 1n);
+    const claimed = await claimInboxMessage(
+      delivery.inbox.storage,
+      stored,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-a",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(claimed?.signalId).toBe("signal-expired-claim");
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      claimed: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-expired-claim", status: "TO_DELIVER" },
+    ]);
   });
 
   it("leaves a row pending when the foreground lease check observes expiry", async () => {
@@ -325,6 +370,21 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("rejects drain read limits above the storage bound", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await expect(
+      delivery.drain(ShardIndex.single(), {
+        node: "node-a",
+        limit: 1_001,
+        onMessage: () => undefined,
+      }),
+    ).rejects.toThrow("Inbox read limit must be a positive safe integer at most 1000.");
+  });
+
   it("uses exact-message options without a drain limit for drainMessage", () => {
     type DrainMessageOptions = Parameters<Delivery["drainMessage"]>[1];
 
@@ -380,6 +440,40 @@ describe("Delivery worker", () => {
       failed: 0,
     });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+  });
+
+  it("rejects CATCH_UP rows before invoking the endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-catch-up", 1n, "CATCH_UP");
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      claimed: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.error).toBeInstanceOf(Error);
+    expect((run.failures[0]?.error as Error | undefined)?.message).toBe(
+      'Delivery worker does not support "CATCH_UP" messages.',
+    );
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-catch-up", status: "TO_DELIVER" },
+    ]);
   });
 
   it("releases the shard after endpoint failure", async () => {
@@ -1236,11 +1330,16 @@ describe("Delivery worker", () => {
   });
 });
 
-async function seed(delivery: Delivery, signalId: string, version: bigint): Promise<InboxMessage> {
+async function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
+): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
     inboxId: targetInbox(),
     signalId,
-    label: "UPDATE_SUBSCRIBER",
+    label,
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
