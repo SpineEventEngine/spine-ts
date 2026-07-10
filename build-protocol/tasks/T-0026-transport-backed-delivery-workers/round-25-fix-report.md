@@ -7,13 +7,13 @@ Date: `2026-07-10`
 
 Canonical checklist: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
-| Source | Scope and evidence |
-| --- | --- |
-| Session skill inventory | Task-relevant implementation, TypeScript, testing, verification, and security skills were available in-session. |
-| Task-provided skills | The prompt explicitly required five skill files, all selected below. |
-| Expected-skill manifest | Read `build-protocol/skills/EXPECTED_SKILLS.md`. |
-| Installed-skill scan | Ran `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`; the full readable installed directory listing succeeded. |
-| Installed-skill lock | Read `/Users/armiol/.agents/.skill-lock.json`; it was reachable. |
+| Source                  | Scope and evidence                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session skill inventory | Task-relevant implementation, TypeScript, testing, verification, and security skills were available in-session.                             |
+| Task-provided skills    | The prompt explicitly required five skill files, all selected below.                                                                        |
+| Expected-skill manifest | Read `build-protocol/skills/EXPECTED_SKILLS.md`.                                                                                            |
+| Installed-skill scan    | Ran `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`; the full readable installed directory listing succeeded. |
+| Installed-skill lock    | Read `/Users/armiol/.agents/.skill-lock.json`; it was reachable.                                                                            |
 
 Selected and fully read before implementation:
 

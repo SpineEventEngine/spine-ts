@@ -79,6 +79,7 @@ red/green delivery regressions before the next review pass.
   delivery Vitest passed with 4 files and 210 tests; generated build typecheck,
   docs check, format check, and `git diff --check` passed. `docs:check`
   reported only the existing invalid-origin TypeDoc source-link warning.
+- Fix commit: `e089963f` (`Fix delivery loop reliability and docs`).
 
 ### Round 19 Follow-up - `2026-07-10T08:57:33Z`
 

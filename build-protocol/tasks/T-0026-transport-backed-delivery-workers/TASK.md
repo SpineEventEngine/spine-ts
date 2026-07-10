@@ -374,7 +374,8 @@ tests, docs, API docs, and durable logs for the full Round 25 findings batch.
 Coordinator verification passed with focused delivery Vitest (4 files, 210
 tests), generated build typecheck, docs check, format check, and
 `git diff --check`; docs check reported only the existing invalid-origin
-TypeDoc source-link warning. A fresh five-lane re-review is still required.
+TypeDoc source-link warning. The fix commit is `e089963f` (`Fix delivery loop
+reliability and docs`). A fresh five-lane re-review is still required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

@@ -5,7 +5,10 @@ export const minDeliveryLeaseMs = 1_000;
 export const maxDeliveryLeaseMs = 2_147_483_647;
 
 /** Validate one delivery or shard lease duration. */
-export function requireDeliveryLeaseMs(owner: "Delivery" | "ShardedWorkRegistry", value: unknown): number {
+export function requireDeliveryLeaseMs(
+  owner: "Delivery" | "ShardedWorkRegistry",
+  value: unknown,
+): number {
   if (!Number.isSafeInteger(value) || (value as number) < minDeliveryLeaseMs) {
     throw new Error(
       `${owner} leaseMs must be a positive safe integer at least ${String(minDeliveryLeaseMs)}.`,
