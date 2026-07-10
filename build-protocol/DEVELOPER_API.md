@@ -258,9 +258,10 @@ smaller than the later scheduler/retry stack:
   framework-owned lease fencing, scans `TO_DELIVER` rows in inbox order, skips
   rows unavailable to this worker before callback invocation, and passes a
   public `InboxMessage` snapshot to the supplied framework endpoint callback.
-  `limit` caps accepted endpoint work for one drain and sets the initial scan
-  window; later scan pages advance past unavailable rows until the drain reaches
-  the accepted-work cap or exhausts the shard. Callbacks run only for
+  `limit` caps accepted delivery attempts, including endpoint work and
+  fail-closed validation, for one drain and sets the initial scan window; later
+  scan pages advance past unavailable rows until the drain reaches the
+  accepted-attempt cap or exhausts the shard. Callbacks run only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
   `REACT_UPON_EVENT`; unsupported labels fail closed before callback
   invocation. Successful rows are marked `DELIVERED`; endpoint callback

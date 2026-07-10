@@ -166,7 +166,7 @@ function resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: st
 
 const StoredValues = Object.freeze({
   key(value: unknown): string {
-    return JSON.stringify(normalizeValue(value));
+    return encodeNormalizedValue(normalizeValue(value));
   },
 
   compare(left: unknown, right: unknown): number {
@@ -208,13 +208,13 @@ function compareNormalized(left: NormalizedValue, right: NormalizedValue): numbe
       return compareText(left as string, right as string);
     case "bigint":
       return compareBigInts(
-        (left as { bigint: string }).bigint,
-        (right as { bigint: string }).bigint,
+        taggedPayload(left as NormalizedBigInt),
+        taggedPayload(right as NormalizedBigInt),
       );
     case "bytes":
       return compareLists(
-        (left as { bytes: readonly number[] }).bytes,
-        (right as { bytes: readonly number[] }).bytes,
+        taggedPayload(left as NormalizedBytes),
+        taggedPayload(right as NormalizedBytes),
       );
     case "array":
       return compareLists(left as readonly NormalizedValue[], right as readonly NormalizedValue[]);
@@ -291,11 +291,11 @@ function compareText(left: string, right: string): number {
 
 function normalizeValue(value: unknown): NormalizedValue {
   if (typeof value === "bigint") {
-    return { bigint: value.toString() };
+    return taggedNormalizedValue("bigint", value.toString());
   }
 
   if (value instanceof Uint8Array) {
-    return { bytes: [...value] };
+    return taggedNormalizedValue("bytes", [...value]);
   }
 
   if (Array.isArray(value)) {
@@ -321,10 +321,54 @@ function normalizeValue(value: unknown): NormalizedValue {
 
   return Object.keys(value)
     .sort()
-    .reduce<Record<string, NormalizedValue>>((result, key) => {
-      result[key] = normalizeValue(Reflect.get(value, key));
-      return result;
-    }, {});
+    .reduce<NormalizedObject>(
+      (result, key) => {
+        Object.defineProperty(result, key, {
+          value: normalizeValue(Reflect.get(value, key)),
+          enumerable: true,
+        });
+        return result;
+      },
+      Object.create(null) as NormalizedObject,
+    );
+}
+
+function encodeNormalizedValue(value: NormalizedValue): string {
+  return JSON.stringify(toEncodedValue(value));
+}
+
+function toEncodedValue(value: NormalizedValue): EncodedValue {
+  const kind = valueKind(value);
+
+  switch (kind) {
+    case "undefined":
+      return ["undefined"];
+    case "null":
+      return ["null"];
+    case "boolean":
+      return ["boolean", value as boolean];
+    case "number":
+      return ["number", String(value as number)];
+    case "string":
+      return ["string", value as string];
+    case "bigint":
+      return ["bigint", taggedPayload(value as NormalizedBigInt)];
+    case "bytes":
+      return ["bytes", taggedPayload(value as NormalizedBytes)];
+    case "array":
+      return [
+        "array",
+        ...(value as readonly NormalizedValue[]).map((entry) => toEncodedValue(entry)),
+      ];
+    case "object":
+      return [
+        "object",
+        ...Object.keys(value as NormalizedObject).map((key) => [
+          key,
+          toEncodedValue((value as NormalizedObject)[key]),
+        ]),
+      ];
+  }
 }
 
 function valueKind(value: NormalizedValue): ValueKind {
@@ -352,15 +396,35 @@ function valueKind(value: NormalizedValue): ValueKind {
     return "array";
   }
 
-  if ("bigint" in value) {
-    return "bigint";
-  }
-
-  if ("bytes" in value) {
-    return "bytes";
+  const taggedKind = normalizedTag(value);
+  if (taggedKind !== undefined) {
+    return taggedKind;
   }
 
   return "object";
+}
+
+function taggedNormalizedValue<K extends TaggedValueKind, P>(
+  kind: K,
+  payload: P,
+): NormalizedTaggedValue<K, P> {
+  const tagged = Object.create(null) as NormalizedTaggedValue<K, P>;
+  Object.defineProperties(tagged, {
+    [normalizedKind]: { value: kind },
+    [normalizedPayload]: { value: payload },
+  });
+
+  return Object.freeze(tagged);
+}
+
+function normalizedTag(value: object): TaggedValueKind | undefined {
+  const tag = Reflect.get(value, normalizedKind);
+
+  return tag === "bigint" || tag === "bytes" ? tag : undefined;
+}
+
+function taggedPayload<P>(value: NormalizedTaggedValue<TaggedValueKind, P>): P {
+  return Reflect.get(value, normalizedPayload) as P;
 }
 
 type NormalizedValue =
@@ -375,11 +439,13 @@ type NormalizedValue =
   | NormalizedObject;
 
 interface NormalizedBigInt {
-  readonly bigint: string;
+  readonly [normalizedKind]: "bigint";
+  readonly [normalizedPayload]: string;
 }
 
 interface NormalizedBytes {
-  readonly bytes: readonly number[];
+  readonly [normalizedKind]: "bytes";
+  readonly [normalizedPayload]: readonly number[];
 }
 
 interface NormalizedObject {
@@ -388,3 +454,15 @@ interface NormalizedObject {
 
 type ValueKind =
   "undefined" | "null" | "boolean" | "number" | "string" | "bigint" | "bytes" | "array" | "object";
+
+type EncodedValue = readonly unknown[];
+
+type TaggedValueKind = "bigint" | "bytes";
+
+interface NormalizedTaggedValue<K extends TaggedValueKind, P> {
+  readonly [normalizedKind]: K;
+  readonly [normalizedPayload]: P;
+}
+
+const normalizedKind = Symbol("spine.storage.normalizedKind");
+const normalizedPayload = Symbol("spine.storage.normalizedPayload");

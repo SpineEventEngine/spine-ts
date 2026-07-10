@@ -237,6 +237,24 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
+  it("treats collision-prone object keys as ordinary record values", async () => {
+    const storage = createLookupStorage({
+      "event-b": collisionProneObject("b"),
+      "event-a": collisionProneObject("a"),
+    });
+
+    await storage.writeAll(createLookupEvents(["event-b", "event-a"]));
+
+    await expect(
+      storage.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([{ value: "event-a" }, { value: "event-b" }]);
+    await expect(
+      storage.index({
+        filters: [{ column: "value", value: collisionProneObject("a") }],
+      }),
+    ).resolves.toMatchObject([{ value: "event-a" }]);
+  });
+
   it("keeps tied sort keys stable before applying the limit", async () => {
     const first = createStorage();
     const second = createStorage();
@@ -430,6 +448,20 @@ function createLookupStorage(values: Record<string, unknown>) {
       columns: [new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"])],
     }),
   );
+}
+
+function collisionProneObject(value: string) {
+  const record = Object.create(null) as Record<string, unknown>;
+  for (const key of ["__proto__", "constructor", "prototype", "bigint", "bytes"]) {
+    Object.defineProperty(record, key, {
+      value: `${key}:${value}`,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  return record;
 }
 
 class QueryEntriesStorage extends RecordStorage<EventId, Event> {

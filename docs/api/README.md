@@ -330,12 +330,13 @@ fencing for active drains, not an application retry or supervision policy.
 `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
 `TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
 invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
-the endpoint. `limit` caps accepted endpoint work for one drain and sets the
-initial scan window; additional scan pages advance past unavailable rows until
-the drain reaches the accepted-work cap or exhausts the shard. Endpoint
-callbacks run only for `HANDLE_COMMAND`,
-`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
-before the callback. Successful delivery marks the row `DELIVERED`; endpoint
+the endpoint. `limit` caps accepted delivery attempts, including endpoint work
+and fail-closed validation, for one drain and sets the initial scan window;
+additional scan pages advance past unavailable rows until the drain reaches
+the accepted-attempt cap or exhausts the shard. Endpoint callbacks run only for
+`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported
+labels fail closed before the callback. Successful delivery marks the row
+`DELIVERED`; endpoint
 callback failures leave the row pending for a later run only when
 framework-owned cleanup succeeds. Cleanup, fail-closed label validation,
 lease/fencing, and delivery-status update failures are reported in the returned

@@ -99,11 +99,7 @@ export class Delivery {
     let offset = 0;
 
     for (;;) {
-      const messages = await this.inbox.read(shard, {
-        statuses: ["TO_DELIVER"],
-        limit: readLimit,
-        offset,
-      });
+      const messages = await this.#readPendingDeliveryPage(shard, readLimit, offset);
 
       for (const message of messages) {
         const remainsPending = await this.#tryDrainMessage(
@@ -126,6 +122,18 @@ export class Delivery {
       }
       readLimit = Math.min(readLimit + limit, inboxStorageAccess.maxReadLimit);
     }
+  }
+
+  async #readPendingDeliveryPage(
+    shard: ShardIndex,
+    limit: number,
+    offset: number,
+  ): Promise<readonly InboxMessage[]> {
+    return this.inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit,
+      offset,
+    });
   }
 
   /**

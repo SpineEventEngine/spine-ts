@@ -66,6 +66,37 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `pnpm --config.verify-deps-before-run=false format:check` passed.
   `git diff --check` passed.
 
+### Round 20 Follow-up - `2026-07-10T09:09:57Z`
+
+- Finding: [Security MEDIUM] in-memory storage canonicalized user objects into
+  plain `{}` records and recognized internal `bigint`/`bytes` tags with
+  property-name checks, letting user keys collide with normalized internal
+  representation and affecting ID/filter/CAS matching.
+- Finding: [Style LOW] `Delivery.#drainAvailableMessages` remained over the
+  local method-length target, and the exported claim-bearing storage access
+  object still needs review as an internal-boundary concern.
+- Finding: [Docs LOW] delivery `limit` wording should say accepted delivery
+  attempts, including endpoint work and fail-closed validation, and the task
+  integration result still referenced Round 18.
+- Action: dispatch one fix worker for collision-free storage canonicalization
+  regressions, small delivery method/doc cleanup, and durable log updates.
+- Fix: in-memory storage normalized user objects into null-prototype records
+  with `Object.defineProperty`, moved internal bigint/bytes tags to private
+  symbols, and keyed normalized values through a custom kind-aware canonical
+  encoder so user keys cannot collide with internal representation.
+- Fix: extracted `Delivery.#readPendingDeliveryPage()` from the direct drain
+  loop, updated curated delivery `limit` docs to include fail-closed
+  validation in accepted delivery attempts, and refreshed the task integration
+  result to the Round 19 final state with Round 20 verification pending.
+- Evidence: the new storage regression for `__proto__`, `constructor`,
+  `prototype`, `bigint`, and `bytes` keys failed before the fix with
+  `SyntaxError: Cannot convert bigint:a to a BigInt`, then passed after the
+  canonicalizer change.
+- Verification: required focused storage/delivery Vitest passed with 2 files
+  and 56 tests; generated build typecheck passed; docs check passed with only
+  the existing invalid-origin TypeDoc warning; format check passed after
+  formatting `tenant-records.ts`; `git diff --check` passed.
+
 ### Round 15 Follow-up - `2026-07-10T07:40:04Z`
 
 - Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`

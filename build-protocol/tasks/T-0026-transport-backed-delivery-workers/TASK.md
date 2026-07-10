@@ -259,11 +259,16 @@ Ledger and the required JVM inspection evidence.
 
 ## Integration Result
 
-Round 18 review fixes are verified: bounded scan-through of unavailable head
-rows, positive safe integer lease bounds for Node timer safety, delivery-loop
-style cleanup, grouped inbox read-limit validation, and public claim-free
-delivery wording are implemented. Focused delivery Vitest, generated build
-typecheck, and docs check passed on `2026-07-10T08:27:34Z`; `docs:check`
-reported only the existing invalid-origin TypeDoc warning. The final
-`format:check` and `git diff --check` passed after formatting
-`packages/server/src/delivery/delivery-loop.ts`.
+Round 19 final verification passed on `2026-07-10T09:03:24Z`: storage offset
+support, scan-through exhaustion, accepted-work limit wording, and delivery
+style cleanup were independently verified with focused storage, delivery,
+context handoff, and server index Vitest plus generated build typecheck,
+docs check, format check, and `git diff --check`.
+
+Round 20 verification passed on `2026-07-10T09:16:08Z`: in-memory storage
+canonicalization now uses collision-free internal tags and null-prototype
+normalized user objects, delivery scanning has one additional semantic helper,
+and delivery `limit` docs now say accepted delivery attempts include endpoint
+work and fail-closed validation. Focused storage/delivery Vitest, generated
+build typecheck, docs check, format check, and `git diff --check` passed;
+`docs:check` reported only the existing invalid-origin TypeDoc warning.
