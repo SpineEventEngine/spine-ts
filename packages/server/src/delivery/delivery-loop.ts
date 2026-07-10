@@ -56,12 +56,13 @@ export class DeliveryLoop {
   }
 
   async #runLoop(): Promise<DeliveryLoopRun> {
+    this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
     for (;;) {
       if (this.#state.stopped) {
         return summary.result("STOPPED");
       }
-      const run = await this.#drain();
+      const run = await this.#drain(this.#maxFailures - summary.failed);
       summary.add(run);
       if (run.status === "SKIPPED") {
         return summary.result("SKIPPED");
@@ -75,15 +76,26 @@ export class DeliveryLoop {
     }
   }
 
-  #drain(): Promise<DeliveryRun> {
+  #drain(remainingFailures: number): Promise<DeliveryRun> {
+    const limit =
+      this.#limit === undefined ? remainingFailures : Math.min(this.#limit, remainingFailures);
     return this.#delivery.drain(this.#shard, {
       node: this.#node,
       onMessage: this.#onMessage,
-      ...(this.#limit === undefined ? {} : { limit: this.#limit }),
+      limit,
     });
+  }
+
+  #requireStorageBoundedLimit(): void {
+    if (this.#limit !== undefined && this.#limit > maxDeliveryLoopLimit) {
+      throw new Error(
+        `Inbox read limit must be a positive safe integer at most ${String(maxDeliveryLoopLimit)}.`,
+      );
+    }
   }
 }
 
+const maxDeliveryLoopLimit = 1_000;
 const maxDeliveryLoopFailures = 1_000;
 
 /** Delivery loop construction options. */

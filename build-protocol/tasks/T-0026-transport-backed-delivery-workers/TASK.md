@@ -131,7 +131,7 @@ In scope:
 - Preserve tenant, payload/schema, target type URL, and routed target ID
   validation before user handler invocation.
 - Keep successful rows `DELIVERED`; leave failed endpoint calls `TO_DELIVER`
-  for a later run.
+  for a later run only when framework-owned cleanup succeeds.
 - Preserve local immediate handoff compatibility.
 - Update runtime/API docs and package guides to describe the worker boundary
   and remaining production gaps.
@@ -272,3 +272,12 @@ and delivery `limit` docs now say accepted delivery attempts include endpoint
 work and fail-closed validation. Focused storage/delivery Vitest, generated
 build typecheck, docs check, format check, and `git diff --check` passed;
 `docs:check` reported only the existing invalid-origin TypeDoc warning.
+
+Round 21 verification passed on `2026-07-10T09:29:18Z`: `DeliveryLoop` caps
+each drain by the remaining failure budget, storage docs mention non-negative
+`RecordQuery.offset` application after sorting and before limits, the remaining
+retry sentence includes the framework-owned cleanup qualifier, and
+`InboxStorage` guard handling has smaller private helpers. Focused
+delivery-loop/inbox Vitest, generated build typecheck, docs check, format
+check, and `git diff --check` passed; `docs:check` reported only the existing
+invalid-origin TypeDoc warning.

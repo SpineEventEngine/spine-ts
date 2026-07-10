@@ -485,54 +485,83 @@ export class InboxStorage {
     message: InboxMessage,
   ): Promise<WriteStep> {
     const { guard, message: storedMessage } = storedGuard;
-    let expected = current;
-    if (DedupRecords.isPending(current)) {
-      expected = DedupRecords.writeFinal(storedMessage);
-      const finalized = await this.#durableCompareAndSet(
-        "Inbox dedup guard",
-        dedupStorage,
-        dedupKey,
-        current,
-        expected,
-      );
-      if (!finalized) {
-        return { kind: "RETRY" };
-      }
-    } else if (guard.status === "TO_DELIVER" && storedMessage.status === "DELIVERED") {
-      expected = DedupRecords.writeFinal(storedMessage);
-      const finalized = await this.#durableCompareAndSet(
-        "Inbox dedup guard",
-        dedupStorage,
-        dedupKey,
-        current,
-        expected,
-      );
-      if (!finalized) {
-        return { kind: "RETRY" };
-      }
-    } else if (guard.status === "DELIVERED" && storedMessage.status === "TO_DELIVER") {
-      const delivered = Object.freeze({
-        ...storedMessage,
-        status: "DELIVERED" as const,
-      });
-      const repaired = await this.#durableCompareAndSet(
-        "Inbox record",
-        inboxStorage,
-        this.#messageKey(storedMessage.id),
-        storedGuard.record,
-        InboxRecords.write(delivered),
-      );
-      if (!repaired) {
-        return { kind: "RETRY" };
-      }
 
-      return this.#messageBlocks(delivered)
-        ? this.#duplicate(delivered)
-        : { kind: "CLAIM", expected, message };
+    const expected = await this.#finalizeStoredGuard(dedupStorage, dedupKey, current, storedGuard);
+    if (expected === undefined) {
+      return { kind: "RETRY" };
+    }
+
+    const repaired = await this.#repairStoredGuardMessage(
+      inboxStorage,
+      guard,
+      storedGuard,
+      expected,
+      message,
+    );
+    if (repaired !== undefined) {
+      return repaired;
     }
 
     return this.#messageBlocks(storedMessage)
       ? this.#duplicate(storedMessage)
+      : { kind: "CLAIM", expected, message };
+  }
+
+  async #finalizeStoredGuard(
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    current: Any,
+    storedGuard: GuardMessage,
+  ): Promise<Any | undefined> {
+    const { guard, message } = storedGuard;
+    const shouldFinalize =
+      DedupRecords.isPending(current) ||
+      (guard.status === "TO_DELIVER" && message.status === "DELIVERED");
+    if (!shouldFinalize) {
+      return current;
+    }
+
+    const next = DedupRecords.writeFinal(message);
+    const finalized = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      current,
+      next,
+    );
+
+    return finalized ? next : undefined;
+  }
+
+  async #repairStoredGuardMessage(
+    inboxStorage: RecordStorage<string, Any>,
+    guard: DedupGuardState,
+    storedGuard: GuardMessage,
+    expected: Any,
+    message: InboxMessage,
+  ): Promise<WriteStep | undefined> {
+    const storedMessage = storedGuard.message;
+    if (guard.status !== "DELIVERED" || storedMessage.status !== "TO_DELIVER") {
+      return undefined;
+    }
+
+    const delivered = Object.freeze({
+      ...storedMessage,
+      status: "DELIVERED" as const,
+    });
+    const repaired = await this.#durableCompareAndSet(
+      "Inbox record",
+      inboxStorage,
+      this.#messageKey(storedMessage.id),
+      storedGuard.record,
+      InboxRecords.write(delivered),
+    );
+    if (!repaired) {
+      return { kind: "RETRY" };
+    }
+
+    return this.#messageBlocks(delivered)
+      ? this.#duplicate(delivered)
       : { kind: "CLAIM", expected, message };
   }
 

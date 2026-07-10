@@ -97,6 +97,40 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   the existing invalid-origin TypeDoc warning; format check passed after
   formatting `tenant-records.ts`; `git diff --check` passed.
 
+### Round 21 Follow-up - `2026-07-10T09:24:24Z`
+
+- Finding: [Reliability MEDIUM] `DeliveryLoop.maxFailures` was checked only
+  after an entire `Delivery.drain()`, so the default `maxFailures: 1` could
+  still run multiple failing endpoint attempts in one drain.
+- Finding: [Docs LOW] user and architecture storage summaries omitted
+  `RecordQuery.offset`, and the task brief still had one retry sentence without
+  the framework-cleanup success qualifier.
+- Finding: [Style MEDIUM/LOW] several `InboxStorage` private methods remain
+  over the local method-length target, and the internal claim-bearing storage
+  access object remains an exported module-level bridge.
+- Action: dispatch one fix worker for failure-budget enforcement, docs, and
+  scoped inbox-storage method cleanup without broad internal-access churn.
+- Fix: `DeliveryLoop` now validates the configured read limit before running
+  and passes each `Delivery.drain()` the smaller of the configured
+  accepted-work limit and the remaining failure budget, so the loop cannot
+  accept more failing attempts than the budget before returning `FAILED`.
+- Fix: user and architecture docs now describe non-negative
+  `RecordQuery.offset` support and state that offsets are applied after sorting
+  and before limits. The task brief retry sentence now includes the
+  framework-owned cleanup success qualifier.
+- Fix: split `InboxStorage.#handleStoredGuardMessage()` into private
+  guard-finalization and row-repair helpers. `inboxStorageAccess` remains
+  unchanged because reducing that exported bridge would require broader
+  delivery worker/test call-site churn rather than a scoped method-length
+  cleanup.
+- Evidence: the new two-row failure-budget regression failed before the fix
+  with attempts `["signal-fails-1", "signal-fails-2"]`, then passed after the
+  loop capped the drain to the remaining failure budget.
+- Verification: required delivery-loop/inbox Vitest passed with 2 files and
+  119 tests; generated build typecheck passed; docs check passed with only the
+  existing invalid-origin TypeDoc warning; format check passed; diff whitespace
+  check passed.
+
 ### Round 15 Follow-up - `2026-07-10T07:40:04Z`
 
 - Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`

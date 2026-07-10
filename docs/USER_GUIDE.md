@@ -642,7 +642,8 @@ subscription.unsubscribe();
 contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
 `queryVersioned()` accepts the storage `RecordQuery` slice for IDs, exact
-filters, masks, ordering, and positive limits. `readAllVersioned()` is the
+filters, masks, ordering, non-negative offsets, and positive limits. Offsets
+are applied after sorting and before limits. `readAllVersioned()` is the
 no-filter convenience path. Both return `StandReadResult` entries in
 deterministic `RecordStorage.queryEntries()` order and clone the stored state
 and caller-supplied version metadata the same way `readVersioned()` does.
@@ -1185,8 +1186,8 @@ handles.
 `RecordSpec` binds a generated record schema, optional generated ID schema, ID
 extraction, and query columns. `RecordStorage` then provides cloned writes,
 point reads, deletes, deterministic ID queries, exact column filters, sorting
-by `id`/columns/dotted paths, positive limits, and simple masks on read/query
-results.
+by `id`/columns/dotted paths, non-negative offsets applied after sorting and
+before positive limits, and simple masks on read/query results.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
 adapter. Storage objects opened by one factory share backing records by context

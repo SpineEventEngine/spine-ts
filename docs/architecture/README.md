@@ -377,7 +377,8 @@ ID-filter reads for any registered state route use the same path with a storage
 ID filter. Projection queries also support top-level `EQUAL` filters over
 declared projection `(column)` proto field names, field masks, repeated ordering
 directives over declared proto column names, and positive limits when ordering
-is present. Use proto column names such as `open_task_count`, not generated TS
+is present; non-negative storage offsets are applied after sorting and before
+limits. Use proto column names such as `open_task_count`, not generated TS
 local names such as `openTaskCount`. Undeclared columns, unsupported operators,
 nested or `EITHER` composites, limits without ordering, missing criteria, and
 `include_all = false` return `INVALID_QUERY` before Stand storage reads.
@@ -560,9 +561,10 @@ APIs, ZeroMQ transport, or production database adapters.
 schema, ID extraction, and deterministic query columns. `RecordStorage` stores
 identified Protobuf records, clones them on write/read, deletes by ID, and
 queries by exact IDs, exact column filters, deterministic sort order on `id`,
-stored columns, or dotted record paths, positive limits, and simple masks on
-cloned results. `StorageContext` carries the bounded-context storage namespace
-plus optional tenant scoping for multitenant storages.
+stored columns, or dotted record paths, non-negative offsets applied after
+sorting and before positive limits, and simple masks on cloned results.
+`StorageContext` carries the bounded-context storage namespace plus optional
+tenant scoping for multitenant storages.
 
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by

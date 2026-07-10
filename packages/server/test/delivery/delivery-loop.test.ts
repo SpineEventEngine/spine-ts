@@ -308,6 +308,41 @@ describe("DeliveryLoop", () => {
     expect(run.failures).toHaveLength(2);
   });
 
+  it("caps each drain by the remaining failure budget", async () => {
+    const delivery = createDelivery();
+    const attempts: string[] = [];
+
+    await seed(delivery, "signal-fails-1", 1n);
+    await seed(delivery, "signal-fails-2", 2n);
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage(message) {
+        attempts.push(message.signalId);
+        throw new Error("endpoint failed");
+      },
+    }).run();
+
+    expect(attempts).toEqual(["signal-fails-1"]);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 1,
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      { signalId: "signal-fails-1", status: "TO_DELIVER" },
+      { signalId: "signal-fails-2", status: "TO_DELIVER" },
+    ]);
+  });
+
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid loop limits before a run starts: %s",
     (limit) => {
