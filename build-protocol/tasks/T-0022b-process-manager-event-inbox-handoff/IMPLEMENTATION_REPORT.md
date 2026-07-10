@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-nine reliability/docs fixes verified; re-review pending
+Status: implemented in code/docs; round-ten style fix applied; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -149,6 +149,12 @@ Round-nine findings fixed in this pass:
      and pre-handler validation;
    - updated the work log, review log, and this report for round nine.
 
+Round-ten findings fixed in this pass:
+
+1. Code style/maintainability
+   - moved supporting process-manager inbox aliases and interfaces below the
+     primary `LocalProcessManagerInbox` class and before helper functions.
+
 ## Files Changed
 
 - `packages/server/src/context/process-manager-handoff.ts`
@@ -248,6 +254,21 @@ Passed:
   - note: TypeDoc reported the existing invalid-`origin` source-link warning
     and the API docs check confirmed the expected exported symbol counts
 - `git diff --check`
+  - exit `0`
+- round-ten style fix verification
+  - command: `pnpm --config.verify-deps-before-run=false lint:generated`
+  - exit `0`
+  - result: TypeScript build, ESLint, and cleanup enforcement passed
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `packages/server/test/repository/repository-routing.test.ts`
+  - exit `0`
+  - result: `2` files passed, `139` tests passed
+  - command: `pnpm --config.verify-deps-before-run=false docs:check`
+  - exit `0`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
+  - command: `git diff --check`
   - exit `0`
 
 ## Remaining Deferrals

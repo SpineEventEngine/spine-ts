@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 9 reliability/docs fixes verified; re-review pending
+Status: round 10 style fix applied; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: round 9 | clean | No new naming, layout, generated-output, or style findings reported. |
-| Documentation completeness | latest: round 9 | fix verified; re-review pending | Work-log status, architecture handoff wording, review log, and implementation report updated. |
-| TypeScript/API docs        | latest: round 9 | clean | No public API or generated-doc findings reported. |
-| Security                   | latest: round 9 | clean | No new security findings reported. |
-| Performance/reliability    | latest: round 9 | fix verified; re-review pending | Mixed single-vs-batch duplicate coordination now shares per-row handoff promises. |
+| Code style/maintainability | latest: round 10 | fix applied; re-review pending | Supporting types moved below the primary class. |
+| Documentation completeness | latest: round 10 | clean | Durable logs and architecture docs verified current. |
+| TypeScript/API docs        | latest: round 10 | clean | No public API or generated-doc findings reported. |
+| Security                   | latest: round 10 | clean | No new security findings reported. |
+| Performance/reliability    | latest: round 10 | clean | Mixed single-vs-batch duplicate coordination verified. |
 
 ## Planned Review Focus
 
@@ -365,3 +365,38 @@ Scope: live process-manager event reactor durable inbox handoff.
 - Author follow-up verification passed: the mixed duplicate red check failed
   before the fix and passed after it; focused Vitest, `lint:generated`,
   `docs:check`, and `git diff --check` all exited 0.
+
+## Round 10 Findings
+
+### Code Style/Maintainability
+
+- Medium: `packages/server/src/context/process-manager-handoff.ts` declared
+  supporting type aliases and interfaces before the primary
+  `LocalProcessManagerInbox` class. Move supporting types below the class and
+  keep them grouped before helper functions.
+
+### Documentation
+
+- Clean. The reviewer found durable logs current and chronological, source docs
+  aligned with the process-manager event durable handoff, and no generated
+  reference docs edited as source.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer found the internal process-manager inbox contracts and
+  public docs aligned with runtime behavior.
+
+### Security
+
+- Clean. The reviewer did not report new security findings.
+
+### Performance/Reliability
+
+- Clean. The reviewer found the process-manager inbox handoff reliable for
+  single, batch, and mixed single-vs-batch duplicate paths.
+
+## Round-Ten Fix Follow-Up
+
+- Author follow-up moved `ProcessManagerInput`, `ProcessManagerInputs`,
+  `ProcessManagerMessage`, `InboxDeferred`, and `BatchRow` below
+  `LocalProcessManagerInbox` and before the helper functions.

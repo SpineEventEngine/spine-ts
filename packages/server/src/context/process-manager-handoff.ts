@@ -10,23 +10,6 @@ import {
   localInboxHandoffKey,
 } from "./local-inbox-handoff.js";
 
-type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
-type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];
-type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
-interface InboxDeferred {
-  readonly promise: Promise<InboxMessage>;
-  readonly resolve: (message: InboxMessage) => void;
-  readonly reject: (reason: unknown) => void;
-  settled: boolean;
-  message?: InboxMessage;
-}
-interface BatchRow {
-  readonly key: string;
-  readonly input: ProcessManagerInput;
-  readonly promise: Promise<InboxMessage>;
-  readonly owner?: InboxDeferred;
-}
-
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
@@ -204,6 +187,25 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
     await target.replay(message, deliveryTenantId);
   }
+}
+
+type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
+type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];
+type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
+
+interface InboxDeferred {
+  readonly promise: Promise<InboxMessage>;
+  readonly resolve: (message: InboxMessage) => void;
+  readonly reject: (reason: unknown) => void;
+  settled: boolean;
+  message?: InboxMessage;
+}
+
+interface BatchRow {
+  readonly key: string;
+  readonly input: ProcessManagerInput;
+  readonly promise: Promise<InboxMessage>;
+  readonly owner?: InboxDeferred;
 }
 
 function createInboxDeferred(): InboxDeferred {
