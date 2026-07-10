@@ -169,7 +169,9 @@ record command assignment, command reaction, event subscription, event
 reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
 method name. Event application metadata also records `allowImport` only for
-legacy framework-owned `@Apply` compatibility metadata.
+legacy framework-owned `@Apply` compatibility metadata. It is retained only so
+unsupported legacy metadata can be detected; event import is removed from the
+active runtime plan by upstream ADR 0001 D1.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative

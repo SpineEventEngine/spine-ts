@@ -344,9 +344,12 @@ idempotently. Built contexts use this storage boundary internally for
 process-manager command rows, process-manager event reaction rows, and live
 projection subscriber rows. This slice does not run process-wide
 transport-backed scheduler workers, retry monitors, conveyor/stations, generic
-repository delivery, aggregate event reactors/importers, projection catch-up
-through inbox storage, broad production lifecycle, transport retries, retained
-attempt history, example app work, or production read-side catch-up workers.
+repository delivery, projection catch-up through inbox storage, broad
+production lifecycle, transport retries, retained attempt history, example app
+work, or production read-side catch-up workers. Event import and aggregate
+importers are removed from the active plan by upstream ADR 0001 D1. Aggregate
+`@React` handlers are ordinary generated reactor handlers with current
+transaction semantics, not event-sourcing import/applier work.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

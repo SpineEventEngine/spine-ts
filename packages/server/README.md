@@ -125,9 +125,12 @@ Current slice exposes:
   for process-manager command rows, process-manager event reaction rows, and
   live projection subscriber rows, but this slice explicitly excludes
   transport-backed worker supervision, retry monitors, conveyor/stations,
-  generic repository invocation, aggregate event reactors/importers,
-  projection catch-up through inbox storage, broad production lifecycle,
-  retained attempt history, durable catch-up storage, and example app work;
+  generic repository invocation, projection catch-up through inbox storage,
+  broad production lifecycle, retained attempt history, durable catch-up
+  storage, and example app work. Event import and aggregate importers are
+  removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
+  handlers are ordinary generated reactor handlers with current transaction
+  semantics, not event-sourcing import/applier work;
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;

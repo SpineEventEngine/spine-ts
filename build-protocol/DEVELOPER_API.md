@@ -343,9 +343,12 @@ routed target ID.
 `InboxStorage` remains the durable dedup authority.
 
 The current API does not schedule repeated runs, expose a generic repository
-delivery engine, run aggregate event reactors/importers, run projection catch-up
-through inbox storage, run retry monitors, open transport workers, or retain
-attempt/error history beyond the returned `DeliveryRun`.
+delivery engine, run projection catch-up through inbox storage, run retry
+monitors, open transport workers, or retain attempt/error history beyond the
+returned `DeliveryRun`. Event import and aggregate importers are removed from
+the active plan by upstream ADR 0001 D1; ordinary aggregate `@React` handlers
+are generated reactor handlers with current transaction semantics, not
+event-sourcing import/applier work.
 
 ## Runtime Transport Binding
 

@@ -1212,12 +1212,14 @@ history is written. `stop()` prevents future drain starts and does not
 interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
 for the current drain, if any, to finish. Projection catch-up remains the
 existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
-fake durable catch-up storage here; aggregate event reactors/importers, retry
-workers, and generic repository delivery remain deferred. Built contexts create
-a framework-owned tenant index now; production
-tenant-index policy, diagnostics, repository storage policy, transport-backed
-worker supervision, retained attempt history, and read-side projection stores
-remain open production gaps.
+fake durable catch-up storage here; retry workers and generic repository
+delivery remain deferred. Event import and aggregate importers are removed from
+the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers are
+ordinary generated reactor handlers with current transaction semantics, not
+event-sourcing import/applier work. Built contexts create a framework-owned
+tenant index now; production tenant-index policy, diagnostics, repository
+storage policy, transport-backed worker supervision, retained attempt history,
+and read-side projection stores remain open production gaps.
 
 ## Developer Path
 
