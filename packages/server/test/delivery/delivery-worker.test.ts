@@ -25,6 +25,7 @@ import {
   messageKey,
   onInboxReadOnce,
   onInboxQuery,
+  onInboxQueryNumber,
   packStoredRecord,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
@@ -1146,6 +1147,65 @@ describe("Delivery worker", () => {
       failed: 0,
     });
     expect(faults.inboxQueries).toBe(4);
+  });
+
+  it("keeps a partial stale-head rescan paged when a supported row moves before its offset", async () => {
+    let skippedHead: readonly InboxMessage[] = [];
+    const faults = deliveryStorageFaults(
+      onInboxQueryNumber(3, async () => {
+        await Promise.all(
+          skippedHead.slice(0, 1).map((message) => delivery.inbox.markDelivered(message)),
+        );
+      }),
+    );
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const head: InboxMessage[] = [];
+
+    for (let index = 0; index < 1_000; index += 1) {
+      head.push(
+        await seed(
+          delivery,
+          `signal-partial-stale-${String(index)}`,
+          BigInt(index + 1),
+          "CATCH_UP",
+        ),
+      );
+    }
+    skippedHead = head;
+    await seed(delivery, "signal-moved-supported", 1_001n);
+    for (let index = 0; index < 1_000; index += 1) {
+      await seed(
+        delivery,
+        `signal-stale-filler-${String(index)}`,
+        BigInt(index + 1_002),
+        "CATCH_UP",
+      );
+    }
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-moved-supported"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1_001,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(faults.inboxQueries).toBe(5);
   });
 
   it("does not skip a supported row when skipped head rows disappear between page reads", async () => {

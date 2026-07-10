@@ -2,8 +2,8 @@
 
 Status: fix verified; re-review pending
 
-Branch: `task/T-0026-transport-backed-delivery-workers`  
-Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`  
+Branch: `task/T-0026-transport-backed-delivery-workers`
+Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
 Worker commit: none; coordinator commit `9c51b77a`
 (`Fix delivery stale offset page rescan`) recorded the verified fix.
 

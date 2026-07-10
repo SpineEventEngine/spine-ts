@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 40 fix verified; re-review pending
+Status: Round 41 fixes verified; coordinator commit and re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer  | Status |
-| -------------------------- | --------- | ------ |
-| Code style/maintainability | Anscombe  | Fixed  |
-| Documentation              | Carver    | Fixed  |
-| TypeScript/API docs        | Hooke     | Clean  |
-| Security                   | Halley    | Clean  |
-| Performance/reliability    | Bernoulli | Fixed  |
+| Lane                       | Reviewer | Status |
+| -------------------------- | -------- | ------ |
+| Code style/maintainability | Raman    | Fixed  |
+| Documentation              | Socrates | Fixed  |
+| TypeScript/API docs        | James    | Fixed  |
+| Security                   | Averroes | Fixed  |
+| Performance/reliability    | Beauvoir | Fixed  |
 
 ## Review Criteria
 
@@ -31,6 +31,48 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 41 Follow-up - `2026-07-10T17:05:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..9e831767.diff` from task baseline
+  `ca8fb2b3` to current HEAD `9e831767`.
+- Code style/maintainability (Raman): [P1] `round-40-fix-report.md` lines 5-6
+  have Markdown hard-break trailing spaces, so
+  `git diff --check ca8fb2b3..HEAD` fails while the report says the diff check
+  passed.
+- Documentation (Socrates): [P1] same false verification breadcrumb.
+- TypeScript/API docs (James): [P1] same false verification breadcrumb;
+  TypeScript/API surface otherwise looks sound.
+- Security (Averroes): [P1] the root-exported `DeliveryWorker` accepts an
+  arbitrary `onMessage` callback, exposing a raw inbox dispatcher path that can
+  bypass the framework replay validation boundary.
+- Performance/reliability (Beauvoir): [P1] same range whitespace failure; [P2]
+  partial stale-head rescans can degrade to one inbox query per already-seen
+  skipped row because seen-row observation does not advance the scan budget.
+- Action: fix the range whitespace, repair the public worker callback boundary,
+  preserve bounded page behavior during partial stale-head rescans, add focused
+  regression coverage, verify, and repeat five-lane re-review.
+
+### Round 41 Fix Implementation - `2026-07-10`
+
+- Removed the `DeliveryWorker`, `DeliveryWorkerOptions`, and `DeliveryWorkerRun`
+  root exports. The raw callback boundary is now package-internal; public
+  context handoffs continue to replay through validated framework endpoints.
+- Removed all public docs/API export-check references to that worker surface.
+- Removed the two Markdown hard-break spaces from the Round 40 fix report.
+- Added a `limit: 1` partial stale-head regression. Before the production fix,
+  one skipped head row disappearing caused 1004 inbox queries. `Delivery` now
+  grants its single offset rescan one bounded page allowance for already-seen
+  rows while still refusing new rows past the finite scan budget; the regression
+  passes with five queries and the moved supported row delivered.
+- Verification passed: focused red/green regression; prescribed five-file
+  delivery Vitest command with 194 tests; generated typecheck; docs/API check;
+  lint; format; and working-tree `git diff --check`. `docs:check` retained only
+  the existing invalid-origin TypeDoc source-link warning.
+- `git diff --check ca8fb2b3..HEAD` remains red because the repaired whitespace
+  is in current committed HEAD. This worker made no commit; coordinator commit
+  and a fresh range check are required before re-review.
 
 ### Round 40 Follow-up - `2026-07-10T16:48:00Z`
 

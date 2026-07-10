@@ -289,10 +289,8 @@ smaller than the later scheduler/retry stack:
   shard and drains only that exact stored row. It has no `limit` option because
   it never scans unrelated rows from the shard;
 - `DeliveryLoop` repeats `Delivery.drain()` for one shard until idle, skipped,
-  stopped, or the configured failure bound is reached. `DeliveryWorker` is the
-  closeable owner for one node's configured shard loops; it starts those loops,
-  aggregates their run results, and `close()` stops future drains while waiting
-  for active drains to finish. `DeliveryLoopRun` aggregates `DeliveryRun` counts
+  stopped, or the configured failure bound is reached. `DeliveryLoopRun`
+  aggregates `DeliveryRun` counts
   across loop drains: `status` is the loop stop reason, `runs` is the number of
   started drains, and `processed`, `accepted`, `delivered`, `failed`, and
   `failures` are accumulated from the underlying drain results. A paused loop
@@ -322,8 +320,7 @@ smaller than the later scheduler/retry stack:
 - `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `OnDeliveryMessage`,
   `DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryLabel`,
   `DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
-  `DeliveryRun`, `DeliveryStatus`, `DeliveryWorkerOptions`,
-  `DeliveryWorkerRun`, `InboxId`, `InboxMessage`,
+  `DeliveryRun`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
   `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
   `InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`,
   `InboxStorageOptions`, `DeliveryOptions`, and `ShardedWorkRegistryOptions`
@@ -381,17 +378,6 @@ const run = await delivery.drain(ShardIndex.single(), {
   },
 });
 
-const worker = new DeliveryWorker({
-  delivery,
-  shards: [ShardIndex.single()],
-  node: "worker-a",
-  async onMessage(message) {
-    await frameworkEndpoint(message);
-  },
-});
-
-await worker.start();
-await worker.close();
 ```
 
 Keep the write/read split intact at the application/service/domain level. These
@@ -410,11 +396,12 @@ code runs, replay validates tenant, payload/schema, target type URL, and
 routed target ID.
 `InboxStorage` remains the durable dedup authority.
 
-Beyond caller-started `DeliveryLoop` and `DeliveryWorker` loops, the current API
-does not provide a process-wide or production scheduler/supervisor, expose a
-generic repository delivery engine, run projection catch-up through inbox
-storage, run retry monitors, open transport topology, supervise worker
-processes, or retain attempt/error history beyond the returned run object.
+The package does not expose a raw worker callback API. Built contexts replay
+through validated framework endpoints. The current API does not provide a
+process-wide or production scheduler/supervisor, expose a generic repository
+delivery engine, run projection catch-up through inbox storage, run retry
+monitors, open transport topology, supervise worker processes, or retain
+attempt/error history beyond the returned run object.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
 reactor handlers with current transaction semantics, not event-sourcing

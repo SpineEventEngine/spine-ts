@@ -60,11 +60,6 @@ export {
   type DeliveryLoopRun,
   type DeliveryLoopStatus,
 } from "./delivery/delivery-loop.js";
-export {
-  DeliveryWorker,
-  type DeliveryWorkerOptions,
-  type DeliveryWorkerRun,
-} from "./delivery/delivery-worker.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export {
   Inbox,

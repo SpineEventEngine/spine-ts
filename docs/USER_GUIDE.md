@@ -1245,8 +1245,8 @@ synchronous callbacks can still starve renewal; this slice treats that as an
 in-process trust-boundary limitation rather than timer-protected preemption.
 `stop()` prevents future drain starts and does not interrupt an in-flight
 `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain, if
-any, to finish. `DeliveryWorker` owns configured shard loops for one node and
-closes through the same stop-and-wait behavior.
+any, to finish. The package does not expose a raw worker callback API;
+framework-owned replay stays behind validated endpoints.
 Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
 coordination path and does not gain fake durable catch-up storage here; retry
 workers and generic repository

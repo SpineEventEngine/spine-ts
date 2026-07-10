@@ -309,7 +309,6 @@ Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `OnDeliveryMessage`,
 `DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`,
 `DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
-`DeliveryWorker`, `DeliveryWorkerOptions`, `DeliveryWorkerRun`,
 `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
 `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
@@ -374,10 +373,9 @@ is the loop stop reason, `runs` is the number of started drains, and
 from the underlying drain results. `stop()` prevents future drain starts and
 does not interrupt an in-flight `Delivery.drain()`; a run that observes the stop
 returns `STOPPED`. `close()` calls `stop()` and waits for the current drain, if
-any, to finish. `DeliveryWorker` owns a
-configured set of shard loops for one node, starts them together, aggregates
-per-loop results, and closes by stopping future drains while waiting for active
-drains to finish. `DeliveryDrainOptions.limit` and `DeliveryLoopOptions.limit`
+any, to finish. The package does not expose a raw worker callback API;
+framework-owned replay stays behind validated endpoints.
+`DeliveryDrainOptions.limit` and `DeliveryLoopOptions.limit`
 are positive accepted-work caps with a bounded default when omitted; the storage
 read cap plus the accepted-work cap bounds skipped-row scanning.
 `InboxReadOptions.limit` remains the positive page-size control for a single

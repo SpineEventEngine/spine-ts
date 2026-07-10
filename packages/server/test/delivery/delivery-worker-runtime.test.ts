@@ -2,10 +2,9 @@ import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
-import { deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
+import { DeliveryWorker, deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
 import {
   Delivery,
-  DeliveryWorker,
   type DeliveryLoopRun,
   ShardIndex,
   type DeliveryRun,

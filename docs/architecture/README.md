@@ -619,9 +619,9 @@ in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
 current drain, if any, to finish. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still
 starve renewal; this slice treats that as an in-process trust-boundary
-limitation rather than timer-protected preemption. `DeliveryWorker`
-owns configured shard loops for one node and closes through the same
-stop-and-wait behavior. Local posting handoffs now cover command rows,
+limitation rather than timer-protected preemption. The package does not expose
+a raw worker callback API; framework-owned replay stays behind validated
+endpoints. Local posting handoffs now cover command rows,
 projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay
 and reach `DELIVERED` before their posting path resolves. Live

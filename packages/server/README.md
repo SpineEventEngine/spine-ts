@@ -107,8 +107,7 @@ Current slice exposes:
 - `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
   `OnDeliveryMessage`, `DeliveryEndpointMessage`, `DeliveryFailure`,
   `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
-  `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryWorker`,
-  `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `Inbox`, `InboxStorage`,
+  `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`, `InboxStorage`,
   `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
@@ -121,8 +120,8 @@ Current slice exposes:
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus
   `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
   stopped, skipped, paused after a bounded skipped-only scan streak, or a
-  configured failure bound, and a closeable
-  `DeliveryWorker` that owns configured shard loops for one worker node.
+  configured failure bound. The package does not expose a raw worker callback
+  API; framework-owned replay stays behind validated endpoints.
   In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
   one drain; scanning stays finite at the storage read cap plus `limit` while
   the drain skips rows unavailable to the active worker first. Delivery passes
@@ -716,8 +715,7 @@ production lifecycle, or integrate transports. Process-manager command
 assignees, process-manager event reactors and event-commanding handlers, and
 live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
-received row is marked delivered. The package also exposes a small closeable
-`DeliveryWorker` wrapper for configured shard loops. Scheduler/retry workers,
+received row is marked delivered. Scheduler/retry workers,
 cross-process recovery, production delivery policy, retained attempt history,
 and supported catch-up work remain open production gaps.
 
@@ -1025,9 +1023,8 @@ handler execution. Before handler code runs, replay validates tenant,
 payload/schema, target type URL, and routed target ID.
 Transport topology, broker/process supervision, retained attempt history,
 production retry policy, and supported catch-up work remain open production
-gaps. `DeliveryWorker` is the supported local closeable wrapper over shard
-delivery loops, but full production supervision and retry policy remain outside
-this slice. This seam
+gaps. Full production supervision and retry policy remain outside this slice.
+This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;
 invoke handlers; write inboxes; manage caches; emit lifecycle events; or touch

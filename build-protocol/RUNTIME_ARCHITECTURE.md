@@ -275,11 +275,12 @@ delivery worker boundary:
   production recovery policy remain future work. The run returns
   simple counts plus
   per-message failures and releases the shard in a `finally` path;
-- `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
-  is the closeable owner for one node's configured shard loops. Renewal is
-  framework-owned lease fencing for active drains. These are lifecycle wrappers
-  over the direct primitive, not production retry policy, production
-  supervision, or transport topology. A paused loop resumes from a saved
+- `DeliveryLoop` repeats those direct drains for one shard. Renewal is
+  framework-owned lease fencing for active drains. The package does not expose
+  a raw worker callback API; normal replay stays behind validated framework
+  endpoints. This is a lifecycle wrapper over the direct primitive, not
+  production retry policy, production supervision, or transport topology. A
+  paused loop resumes from a saved
   internal cursor and safely resets that cursor if earlier pending rows
   disappeared. Renewal runs on the same JavaScript event loop as the endpoint
   callback, so a CPU-bound synchronous callback can still starve timer-driven

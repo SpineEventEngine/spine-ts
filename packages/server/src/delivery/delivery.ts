@@ -128,6 +128,7 @@ export class Delivery {
     let pendingBoundaryId = cursor.pendingBoundaryId;
     let resumedHeadRescan = offset > 0;
     let offsetRescan = false;
+    let rescanSeenAllowance = 0;
 
     while (progress.processed < scanBudget) {
       if (
@@ -143,10 +144,14 @@ export class Delivery {
         pendingBoundaryId = undefined;
         offsetRescan = true;
         resumedHeadRescan = false;
+        rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
         continue;
       }
 
-      const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
+      const readLimit = Math.min(
+        inboxStorageAccess.maxReadLimit,
+        scanBudget - progress.processed + rescanSeenAllowance,
+      );
       const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
 
       if (
@@ -161,6 +166,7 @@ export class Delivery {
         pendingBoundaryId = undefined;
         offsetRescan = true;
         resumedHeadRescan = false;
+        rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
         continue;
       }
 
@@ -172,6 +178,15 @@ export class Delivery {
       }
 
       for (const message of messages) {
+        if (progress.hasSeen(message)) {
+          if (rescanSeenAllowance === 0) {
+            return progress.finish(drainCursor(offset, pendingBoundaryId), true);
+          }
+          rescanSeenAllowance -= 1;
+        } else if (progress.processed >= scanBudget) {
+          return progress.finish(drainCursor(offset, pendingBoundaryId), true);
+        }
+
         const remainsPending = await this.#tryDrainMessage(
           inbox,
           progress,
@@ -637,6 +652,7 @@ interface DrainProgress {
     cursor: DeliveryDrainCursor,
     exhaustedSkippedScan?: boolean,
   ) => DeliveryDrainOutcome;
+  readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
@@ -705,6 +721,9 @@ function drainProgress(): DrainProgress {
         run.failed > 0 || cursor.offset === 0 ? undefined : cursor,
         resumableSkippedScan,
       );
+    },
+    hasSeen(message: InboxMessage) {
+      return seen.has(message.id.value);
     },
     observe(message: InboxMessage) {
       if (seen.has(message.id.value)) {

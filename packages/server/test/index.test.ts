@@ -45,8 +45,6 @@ import {
   Aggregate,
   Delivery,
   type DeliveryDrainOptions,
-  type DeliveryLoopStatus,
-  type DeliveryWorkerRun,
   type OnDeliveryMessage,
   type EntityVersionMetadata,
   Inbox,
@@ -222,7 +220,6 @@ describe("@spine-ts/server", () => {
         "CommandRegistrationReadiness",
         "Delivery",
         "DeliveryStorageCorruptionError",
-        "DeliveryWorker",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
@@ -314,7 +311,6 @@ describe("@spine-ts/server", () => {
     expectTypeOf<DeliveryDrainOptions>().toEqualTypeOf<Parameters<Delivery["drain"]>[1]>();
     expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("scanOffset");
     expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("maxFailures");
-    expectTypeOf<DeliveryWorkerRun["status"]>().toEqualTypeOf<DeliveryLoopStatus>();
     void ({
       node: "node-a",
       onMessage: () => undefined,

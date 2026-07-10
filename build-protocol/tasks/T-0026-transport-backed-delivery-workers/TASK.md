@@ -687,6 +687,43 @@ no worker commit was created. Coordinator commit `9c51b77a` (`Fix delivery
 stale offset page rescan`) recorded the verified fix. A fresh five-lane
 re-review remains pending.
 
+Round 41 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..9e831767.diff` found three issues. Style,
+documentation, TypeScript/API docs, and performance/reliability found
+`round-40-fix-report.md` contains Markdown hard-break trailing spaces, so
+`git diff --check ca8fb2b3..HEAD` fails while the report says the diff check
+passed. Security found the root-exported `DeliveryWorker` exposes an arbitrary
+raw inbox callback boundary that can bypass framework replay validation.
+Performance/reliability also found partial stale-head rescans can lose bounded
+page behavior by re-reading already-seen skipped rows one at a time. The next
+fix removes the range whitespace, repairs the public worker callback boundary,
+preserves bounded page reads for partial stale-head rescans, adds focused
+regression coverage, verifies, and repeats five-lane re-review.
+
+Round 41 fix implementation started on `2026-07-10` in the existing task
+worktree. The canonical skill applicability check is recorded in
+`round-41-fix-report.md`; the supplied TDD skill was read before the focused
+regression and production edits. Server guardrail inspection read
+`spine-jvm-docs/spine-routing-dispatch-and-delivery.md` sections on repository
+dispatch to inbox, labels, and delivery. A bounded `rg --files` search found no
+local `core-jvm/server` source checkout, so only the cited local research notes
+were available. They confirm that repositories route rows to inbox and normal
+delivery is framework-owned; Round 41 therefore removes the root-exported raw
+worker callback rather than adding a public replay path. The new partial
+stale-head regression was red before the production change: with `limit: 1`,
+one skipped head row removed, and a supported row moving before the stale
+offset, it delivered correctly but issued `1004` inbox queries instead of the
+bounded expected `5`.
+
+Round 41 fix verification passed the focused red/green regression, the
+prescribed five-file delivery Vitest command with 194 tests, generated
+typechecking, API/docs checks, lint, formatting, and working-tree
+`git diff --check`. `docs:check` retained only the existing invalid-origin
+TypeDoc source-link warning. The direct range command
+`git diff --check ca8fb2b3..HEAD` still reports the two spaces in committed
+Round 40 history: this no-commit worker cannot change `HEAD`; coordinator must
+commit the repair and rerun the range check before accepting Round 41.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct
