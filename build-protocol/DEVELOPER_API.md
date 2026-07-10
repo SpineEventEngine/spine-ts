@@ -291,6 +291,11 @@ expect `InboxMessageError` for invalid inbox message input and
 out of contract. `ShardedWorkRegistry.pickUp()` caller validation for blank or
 oversized `node` values, or invalid clock values supplied through `now`,
 currently throws plain `Error` before any storage read/write begins.
+Supported delivery labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
+`REACT_UPON_EVENT`, and `CATCH_UP`. New `IMPORT_EVENT` inbox writes are invalid
+and rejected before durable storage opens; legacy stored/wire `IMPORT_EVENT`
+rows remain recognizable only as deprecated compatibility data and fail closed
+as storage corruption if read or drained.
 
 Current usage is deliberately narrow:
 
