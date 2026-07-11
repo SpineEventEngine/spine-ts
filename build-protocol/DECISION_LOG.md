@@ -2996,8 +2996,8 @@ Decision:
   status transition to `DELIVERED`. These names are decision vocabulary, not
   TypeScript declarations, public exports, or a promise of a configurable
   action API.
-- For a supported row classified as retryable before its endpoint callback,
-  first persist the bounded sanitized failure attempt, then execute
+- When a supported row classified as retryable then fails in its endpoint
+  callback, first persist the bounded sanitized failure attempt, then execute
   `KEEP_PENDING`. That action still applies when the newly retained attempt
   fills slot 100; a later pre-callback pass observes exhaustion and selects the
   exhaustion action. The retained facts remain limited to the T-0029 fields

@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Decision authored and verified; independent review pending
+Status: Pre-review lint passed; independent review pending
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -56,3 +56,9 @@ protocol.
   check passed. Targeted status, duplicate-policy, public-leakage, and future-
   policy-overclaim searches were clean. Full `pnpm verify` was intentionally
   not run. Independent coordinator-managed review remains pending.
+- `2026-07-11T19:45:00Z`: Coordinator closed the decision author and completed
+  the required lightweight pre-review lint. Current statuses, commit ledger,
+  retry-capacity source, public API boundary, and non-executable policy wording
+  are aligned. Two pre-review documentation corrections repaired multiline
+  inline-code spans and limited retained-attempt wording to retryable rows whose
+  callback actually fails. A fresh review package and all four lanes are next.

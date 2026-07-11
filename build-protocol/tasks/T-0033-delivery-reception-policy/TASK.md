@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Decision authored and verified; independent review pending
+Status: Pre-review lint passed; independent review pending
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
@@ -121,9 +121,9 @@ unimplemented JVM parity.
 
 D-0084 accepts a fixed internal policy for a later implementation task:
 
-- a row classified retryable before callback retains one bounded sanitized
-  failure attempt, then keeps the claimed row pending `TO_DELIVER`, including
-  when that attempt fills slot 100;
+- a row classified retryable before callback whose callback then fails retains
+  one bounded sanitized failure attempt, then keeps the claimed row pending
+  `TO_DELIVER`, including when that attempt fills slot 100;
 - pre-callback exhaustion selects framework-owned `MARK_DELIVERED` after
   exact-message classification and while the row remains claim/fence owned;
 - immediate repeat remains deferred;
