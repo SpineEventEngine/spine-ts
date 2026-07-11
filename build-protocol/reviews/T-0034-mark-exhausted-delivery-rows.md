@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 4 status fix in progress
+Status: Round 4 task-header fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -148,6 +148,21 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:30:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 4 log-only fix
   worker. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:27:53Z`: Round 4 fix worker completed the bounded applicability
+  check, freshly read `receiving-code-review`, verified the stale task header,
+  and confirmed the package-ledger observation was already resolved by
+  `95aa21b4`. No duplicate ledger row was added. All four current records now
+  reflect the in-progress Round 4 status fix; verification remains pending and
+  no reviewer or subagent was spawned.
+- `2026-07-11T21:27:53Z`: Round 4 task-header fix and requested lightweight
+  verification completed. The package-ledger observation remains resolved
+  without duplicate entries, all four current headers are aligned, and the
+  participant ledger truthfully keeps the worker active for coordinator
+  closure. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:33:00Z`: Coordinator closed the fix worker and independently
+  passed docs/API, formatting, whitespace, four-header alignment, ledger,
+  changed-scope, and status checks. Fresh package generation and all four lanes
+  are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
