@@ -271,9 +271,9 @@ delivery worker boundary:
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update
   failures are reported without an immediate retry guarantee. Pre-callback
-  claim, validation, lease, and delivery-status failures do not increment
-  accepted work, but they do increment failed work and count toward a loop's
-  `maxFailures` bound. Once the endpoint callback or `onMessage` path has been
+  claim, validation, and lease/fencing failures do not increment accepted work,
+  but they do increment failed work and count toward a loop's `maxFailures`
+  bound. Once the endpoint callback or `onMessage` path has been
   invoked, endpoint failures and later framework cleanup/status-update failures
   are accepted work and may appear in failed work. Live per-message ownership
   blocks competing delivery; expired per-message ownership may be replaced

@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 98 docs/log fix verified
+Status: Round 100 docs fix verified; follow-up review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1539,3 +1539,23 @@ returned no matches; `git diff --check` passed; and the generated/API
 reference diff guard returned no changed files. No production source, tests,
 generated docs, API reference docs, or `.codex-review-packages/` scratch files
 were edited.
+
+Round 99 re-review on `2026-07-11T00:59:46Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..32548be1.diff` produced clean code
+style/maintainability and security lanes. Documentation, TypeScript/API docs,
+and performance/reliability found stale accepted-work wording still present in
+`build-protocol/RUNTIME_ARCHITECTURE.md`, `docs/architecture/README.md`, and
+`docs/USER_GUIDE.md`, where delivery-status/status-update failures are still
+listed in the pre-callback no-accepted-work bucket. Round 100 will fix those
+remaining docs, verify, commit, and rerun all five lanes.
+
+Round 100 docs fix on `2026-07-11T01:04:54Z`: corrected the remaining
+accepted-work wording in `build-protocol/RUNTIME_ARCHITECTURE.md`,
+`docs/architecture/README.md`, and `docs/USER_GUIDE.md`. The docs now limit
+pre-callback no-accepted-work failures to claim, validation/replay-validation,
+and lease/fencing failures. Delivery-status/status-update failures after an
+endpoint callback remain documented as accepted work that may appear in failed
+work, while the adjacent cleanup and future recovery policy wording remains in
+place. Verification passed: docs check, format check, stale-record guard,
+whitespace diff check, and generated/API-reference diff guard. This round did
+not commit per worker instruction.

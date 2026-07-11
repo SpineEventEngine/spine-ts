@@ -605,11 +605,11 @@ framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
 guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
-lease, and delivery-status failures do not increment accepted work, but they do
-increment failed work and count toward the framework failure bound. Once the
-endpoint callback or `onMessage` path has been invoked, endpoint failures and
-later framework cleanup/status-update failures are accepted work and may appear
-in failed work.
+and lease/fencing failures do not increment accepted work, but they do increment
+failed work and count toward the framework failure bound. Once the endpoint
+callback or `onMessage` path has been invoked, endpoint failures and later
+framework cleanup/status-update failures are accepted work and may appear in
+failed work.
 Live per-message ownership blocks competing delivery; expired per-message
 ownership may be replaced during claim compare-and-set using the storage clock.
 Broader production recovery policy remains future work. The framework repeats

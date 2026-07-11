@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 98 docs/log fix verified
+Status: Round 100 docs fix verified; follow-up review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3148,3 +3148,43 @@ red/green delivery regressions before the next review pass.
   `format:check` passed; the targeted stale-record/flush-left guard returned no
   matches; `git diff --check` passed; and the generated/API reference diff
   guard returned no changed files.
+
+### Round 99 Re-review - `2026-07-11T00:59:46Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..32548be1.diff` from task baseline
+  `ca8fb2b3` to current HEAD `32548be1`.
+- Code style/maintainability (Mendel the 3rd): clean. Round 96 helper remains
+  narrow and local; Round 98 process/docs updates are scoped.
+- Documentation (Aristotle the 3rd): [P2] `build-protocol/RUNTIME_ARCHITECTURE.md`,
+  `docs/architecture/README.md`, and `docs/USER_GUIDE.md` still list
+  delivery-status/status-update failures in the pre-callback no-accepted-work
+  bucket.
+- TypeScript/API docs (Ptolemy the 3rd): [P2] `docs/USER_GUIDE.md` still has
+  stale accepted-work wording that classifies delivery-status failures as
+  pre-callback behavior.
+- Security (Erdos the 3rd): clean. Docs/log guidance remains security-aligned,
+  and delivery validation/fencing/public boundaries remain sound.
+- Performance/reliability (Bohr the 3rd): [P2] `build-protocol/RUNTIME_ARCHITECTURE.md`
+  and `docs/architecture/README.md` still misclassify delivery-status failures
+  as pre-callback failures.
+- Action: record this findings batch, fix the remaining accepted-work wording
+  in architecture/user-guide docs, verify, commit, and rerun all five required
+  lanes.
+
+### Round 100 Docs Fix - `2026-07-11T01:04:54Z`
+
+- Fixed `build-protocol/RUNTIME_ARCHITECTURE.md`,
+  `docs/architecture/README.md`, and `docs/USER_GUIDE.md` so pre-callback
+  failures are limited to claim, validation/replay-validation, and
+  lease/fencing. Delivery-status/status-update failures after callback
+  invocation remain documented as accepted work that may appear in failed work.
+- Preserved the surrounding endpoint callback failure, cleanup, immediate retry,
+  and future recovery policy wording.
+- Verification passed: docs check exited 0 with the known TypeDoc invalid
+  `origin` warning; format check exited 0; stale-record guard returned no
+  matches; whitespace diff check exited 0; generated/API-reference diff guard
+  exited 0 with no changed files.
+- No production source, tests, generated docs, API reference docs, or
+  `.codex-review-packages/` files were edited. No commit was created per
+  worker instruction.

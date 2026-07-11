@@ -1224,9 +1224,9 @@ For framework-owned replay, the callback limit caps endpoint callbacks that
 actually run, while the storage read cap plus that limit bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
-failure-budget consumption. Pre-callback claim, replay-validation, lease, and
-delivery-status failures remain internal, do not increment accepted work, but
-they increment failed work and count toward the framework failure bound. Once an
+failure-budget consumption. Pre-callback claim, replay-validation, and
+lease/fencing failures remain internal, do not increment accepted work, but they
+increment failed work and count toward the framework failure bound. Once an
 endpoint callback has been invoked, endpoint failures and framework cleanup or
 delivery-status failures after that callback are accepted work and may appear in
 failed work. The framework repeats one-shard replay until the shard is idle,
