@@ -1313,6 +1313,27 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/attempt time/i);
   });
 
+  it("fails closed when stored delivery attempt scalar fields have invalid types", async () => {
+    for (const [overrides, message] of [
+      [{ attemptedAtMs: "not-a-number" }, /attempt time must be a safe integer/i],
+      [{ accepted: "yes" }, /accepted flag must be boolean/i],
+      [{ label: "IMPORT_EVENT" }, /label "IMPORT_EVENT" is invalid/i],
+      [{ node: "" }, /node must be a non-empty string/i],
+      [{ node: oversizedText(16 * 1024 + 1) }, /node exceeds/i],
+      [{ inboxId: null }, /inbox identity is invalid/i],
+      [{ stage: "UNKNOWN" }, /stage "UNKNOWN" is invalid/i],
+      [{ reason: "UNKNOWN" }, /reason "UNKNOWN" is invalid/i],
+    ] satisfies readonly [Record<string, unknown>, RegExp][]) {
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new FakeStorageFactory([storedAttemptRecord(overrides)]),
+      });
+
+      await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+      await expect(delivery.attempts.read()).rejects.toThrow(message);
+    }
+  });
+
   it("fails closed when stored delivery attempt identity fields disagree", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1372,6 +1393,38 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/sequence/i);
   });
 
+  it("fails closed when stored delivery attempt sequences are not positive", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: "0/1:message-1:attempt:000000000100",
+          sequence: 0,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/sequence must be positive/i);
+  });
+
+  it("rejects invalid retained delivery attempt read limits", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await expect(delivery.attempts.read({ limit: Number.NaN })).rejects.toThrow(
+      /read limit must be a positive safe integer at most 1000/i,
+    );
+    await expect(delivery.attempts.read({ limit: 0 })).rejects.toThrow(
+      /read limit must be a positive safe integer at most 1000/i,
+    );
+    await expect(delivery.attempts.read({ limit: 1_001 })).rejects.toThrow(
+      /read limit must be a positive safe integer at most 1000/i,
+    );
+  });
+
   it("fails closed before incrementing a max safe stored delivery attempt sequence", async () => {
     const existingKey = "0/1:message-1:attempt:000000000091";
     const message: DeliveryEndpointMessage = {
@@ -1400,6 +1453,29 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     await expect(write).rejects.toThrow(/cannot be incremented safely/i);
+  });
+
+  it("rejects invalid delivery attempt input dates before writing", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message: DeliveryEndpointMessage = {
+      ...createMessage("message-invalid-attempt-time", "signal-invalid-attempt-time", 1n),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    };
+
+    await expect(
+      delivery.attempts.recordFailure({
+        message,
+        node: "node-a",
+        attemptedAt: new Date(Number.NaN),
+        accepted: true,
+        stage: "ENDPOINT",
+        reason: "ENDPOINT_REJECTED",
+      }),
+    ).rejects.toThrow(/attempt time must be a valid date/i);
   });
 
   it("fails closed when stored delivery attempt inbox identity fields disagree", async () => {

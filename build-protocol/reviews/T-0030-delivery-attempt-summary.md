@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Five-lane review clean; final verification pending
+Status: Full-gate coverage fix verified; re-review pending
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -173,3 +173,14 @@ Branch: `task/T-0030-delivery-attempt-summary`
   and post-fault-probe verification/package generation. This log-only update
   records the package and lane outcomes, adds `b350ed42` to the work-log
   ledger, and marks final verification pending.
+- `2026-07-11T11:18:56Z`: Full verification with local loopback/IPC permissions
+  passed compile, lint, format, and test execution but failed the global branch
+  coverage threshold at 89.73% versus 90%. The coverage report points to
+  retained-attempt validation branches. This requires focused test coverage and
+  fresh review because tests/logs will change after clean review.
+- `2026-07-11T12:28:36Z`: Coverage fix verification passed. Focused retained
+  attempt validation tests pass, and native
+  `pnpm --config.verify-deps-before-run=false test:coverage:generated` passes
+  with all 59 files and 1266 tests passing and global branch coverage at
+  90.01%. A fresh baseline-to-HEAD package and all five reviewer lanes are
+  required before final acceptance.
