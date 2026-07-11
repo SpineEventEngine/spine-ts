@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 3 findings recorded; decision fix pending
+Status: Round 3 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -168,3 +168,7 @@ Security is deferred to final project readiness.
   registrations. Code style and documentation also found the P3 nonchronological
   work-log ordering. One decision fix worker and fresh four-lane review are
   required.
+- `2026-07-11T23:47:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 3 fix worker for
+  the complete lifecycle and log-order batch. Fresh four-lane review remains
+  pending after author and coordinator verification.
