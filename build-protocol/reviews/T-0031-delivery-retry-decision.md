@@ -152,3 +152,7 @@ Branch: `task/T-0031-delivery-retry-decision`
   recorded the completed lint-fix ledger commit `81faceb0`. This current
   log-maintenance commit is covered by the ledger convention; re-review remains
   pending.
+- `2026-07-11T14:01:14+0100`: Coordinator committed the work-log headline fix
+  as `1e63f9da Fix T-0031 work log status` and added it to the durable commit
+  ledger before re-review. The current log-maintenance commit is covered by the
+  ledger convention; re-review remains pending.
