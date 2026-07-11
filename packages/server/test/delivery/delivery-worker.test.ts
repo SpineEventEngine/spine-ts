@@ -17,6 +17,7 @@ import {
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { InboxMessageError, ShardIndex, ShardSession, type InboxMessage } from "../../src/index.js";
 import {
+  blockDedupFinalizeOnce,
   blockInboxClaimOnce,
   blockInboxRenewalOnce,
   deliveryDedupRecords,
@@ -1382,6 +1383,111 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-exhausted-mark-fails", status: "TO_DELIVER" },
       { signalId: "signal-after-exhausted-mark-failure", status: "TO_DELIVER" },
+    ]);
+
+    const retry = await delivery.drainMessage(exhausted, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(retry).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(retry.failures).toEqual([]);
+    expect(seen).toEqual([]);
+    await expect(requireAttempts(delivery).summarize(exhausted.id)).resolves.toMatchObject({
+      count: deliveryAttemptCapacity,
+      latestStage: "ENDPOINT",
+      latestReason: "ENDPOINT_REJECTED",
+      latestAccepted: true,
+    });
+  });
+
+  it("aggregates cleanup failure when an exhausted mark returns undefined", async () => {
+    const blockedMark = blockDedupFinalizeOnce({ armed: false });
+    const faults = deliveryStorageFaults(blockedMark);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+    const exhausted = await seed(delivery, "signal-exhausted-mark-race", 1n);
+    await recordFailures(delivery, exhausted, deliveryAttemptCapacity);
+    const inboxRecords = deliveryInboxRecords(faults.storageFactory);
+    const inboxKey = messageKey(exhausted);
+    const seen: string[] = [];
+    blockedMark.arm();
+
+    const runPromise = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      maxFailures: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    }).run();
+
+    await blockedMark.blocked;
+    const claimedRecord = await inboxRecords.read(inboxKey);
+    if (claimedRecord === undefined) {
+      throw new Error("Expected the exhaustion action to hold an inbox claim.");
+    }
+    const claimed = InboxRecords.read(claimedRecord, inboxKey);
+    expect(claimed.claim).toBeDefined();
+    await expect(
+      inboxRecords.compareAndSet(
+        inboxKey,
+        claimedRecord,
+        InboxRecords.write(
+          Object.freeze({
+            ...claimed,
+            signalId: "signal-exhausted-mark-race-tampered",
+          }),
+        ),
+      ),
+    ).resolves.toBe(true);
+    blockedMark.resume();
+    const run = await runPromise;
+
+    expect(blockedMark.count).toBe(1);
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 1,
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.error).toBeInstanceOf(AggregateError);
+    expect((run.failures[0]?.error as AggregateError).message).toBe(
+      "Delivery failed and framework cleanup failed.",
+    );
+    expect((run.failures[0]?.error as AggregateError).errors).toMatchObject([
+      {
+        kind: "EXHAUSTED",
+        action: "MARK_DELIVERED",
+        count: deliveryAttemptCapacity,
+        limit: deliveryAttemptCapacity,
+      },
+      { message: "Framework cleanup did not clear the pending row." },
+    ]);
+    await expect(requireAttempts(delivery).summarize(exhausted.id)).resolves.toMatchObject({
+      count: deliveryAttemptCapacity,
+      latestStage: "CLEANUP",
+      latestReason: "CLEANUP_FAILED",
+      latestAccepted: false,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-exhausted-mark-race-tampered", status: "TO_DELIVER" },
     ]);
   });
 

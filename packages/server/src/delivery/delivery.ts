@@ -714,10 +714,12 @@ export interface DeliveryMessageDrainOptions {
 }
 
 /**
- * Independent callback/failure snapshot for one supported durable inbox row.
+ * Independent callback or ordinary failure snapshot for one supported durable inbox row.
  *
- * `Date` values and `Any.value` payload bytes are copied, so callback mutation
- * cannot alter the claimed internal row.
+ * Ordinary callback/failure snapshots copy `Date` values and `Any.value`
+ * payload bytes, so mutation cannot alter the claimed internal row. Exhausted-
+ * row failure snapshots use this same shape but intentionally omit `signal` to
+ * avoid copying payload bytes that the exhaustion path does not consume.
  */
 export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label" | "status"> {
   /** Delivery label supported by the direct worker endpoint callback surface. */
@@ -740,7 +742,7 @@ export interface DeliveryRun {
   readonly processed: number;
   /** Number of rows whose endpoint callback was invoked during this run. */
   readonly accepted: number;
-  /** Number of rows whose endpoint callback succeeded and were marked delivered. */
+  /** Number of rows marked delivered after callback success or callback-free exhaustion. */
   readonly delivered: number;
   /**
    * Number of observed endpoint, lease/fencing, status-update, cleanup, or
@@ -1106,15 +1108,21 @@ class ActiveClaim {
     });
   }
 
-  async finalize<T>(callback: (message: ClaimedInboxMessage) => Promise<T>): Promise<T> {
+  async finalize<T>(
+    callback: (message: ClaimedInboxMessage) => Promise<T | undefined>,
+  ): Promise<T | undefined> {
     return this.#locked(async () => {
       const current = this.#claimed;
-      this.#claimed = undefined;
       if (current === undefined) {
         throw new Error("Inbox claim was lost.");
       }
 
-      return callback(current);
+      const result = await callback(current);
+      if (result !== undefined) {
+        this.#claimed = undefined;
+      }
+
+      return result;
     });
   }
 

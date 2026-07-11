@@ -263,9 +263,11 @@ delivery worker boundary:
   the drain is active. Rows unavailable to the active worker are skipped before
   endpoint invocation, including rows owned by another active worker and
   worker-unsupported labels such as `CATCH_UP`. Validated endpoints and
-  returned failures receive independent message snapshots only for
+  returned ordinary failures receive independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
-  values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
+  values and `Any.value` bytes are copied. Exhausted-row failure snapshots use
+  the same supported label/status shape but omit `signal`, avoiding payload
+  copies before callback-free finalization. `CATCH_UP` remains pending and never
   reaches those endpoints or failures. The callback limit caps endpoint
   callbacks that actually run. Newly observed rows stop at the storage read cap
   plus that limit while the scan advances by a stable inbox row continuation

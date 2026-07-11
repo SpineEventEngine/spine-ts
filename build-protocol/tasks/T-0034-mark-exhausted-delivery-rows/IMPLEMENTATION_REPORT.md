@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 1 fix in progress
+Status: Round 1 fixes complete; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -8,7 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 Baseline: assignment commit `6cd7e1d0`
 
-Implementation commit: pending this report's non-recursive authoring commit;
+Implementation commits:
+
+- `2ef02898 Implement exhausted delivery outcome`
+- `64091ec6 Avoid exhausted attempt payload copies`
+
+The Round 1 fix commit is pending this report's non-recursive authoring commit;
 the coordinator can identify it from branch `HEAD` and the final worker report.
 
 ## Result
@@ -31,12 +36,26 @@ the coordinator can identify it from branch `HEAD` and the final worker report.
 - Existing retryable callback cleanup/finalization, one-attempt/one-failure
   sequencing, attempt 100, callback-success `STATUS_UPDATE`, `CATCH_UP`, and
   legacy `IMPORT_EVENT` behavior remain unchanged.
+- Round 1 deepens `ActiveClaim.finalize()` so durable claim ownership remains
+  available for cleanup after thrown or undefined mark results and is cleared
+  only after defined success. A thrown exhaustion mark with successful cleanup
+  is immediately redrainable; undefined mark plus cleanup failure remains one
+  aggregated `CLEANUP` failure, one bounded retained attempt, and one failure-
+  budget charge.
 - The pre-review payload fix records exhausted claim/lease/cleanup attempts
   from `exhaustedFailureMessage()`, avoiding an otherwise discarded
   `Any.value` clone while preserving endpoint label/status validation and all
   retained attempt/failure semantics.
 
 ## TDD Evidence
+
+- Round 1 runtime fix root cause: `ActiveClaim.finalize()` removed its durable
+  claim handle before awaiting the mark callback, preventing cleanup after both
+  thrown storage failures and undefined CAS results.
+- Round 1 RED: thrown mark could not be immediately redrained, and undefined
+  mark returned only sanitized status failure instead of aggregated cleanup.
+- Round 1 GREEN: both focused tests passed after `ActiveClaim` retained
+  ownership until defined durable success.
 
 - Pre-review payload fix: verified that exhausted claim/lease attempt recording
   unnecessarily routed through the payload-copying endpoint snapshot even
@@ -75,7 +94,7 @@ the coordinator can identify it from branch `HEAD` and the final worker report.
 
 ## Verification
 
-- PASS: delivery worker/loop Vitest, 2 files and 110 tests.
+- PASS: delivery worker/loop Vitest, 2 files and 111 tests.
 - PASS: focused maximum-payload success/claim-failure regression, 1 test.
 - PASS: `typecheck:build:generated`.
 - PASS: `typecheck:tooling`.

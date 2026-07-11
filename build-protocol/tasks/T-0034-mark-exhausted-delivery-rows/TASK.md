@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Round 1 fix in progress
+Status: Round 1 fixes complete; re-review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -147,6 +147,15 @@ instead of cloning the endpoint `Any.value`. Label/status validation and all
 attempt/failure accounting remain unchanged. A maximum-payload regression keeps
 the successful exhaustion coverage and proves the claim-failure retention path
 also performs zero payload copies.
+
+Round 1 fixes deepen active-claim finalization so the in-memory cleanup handle
+is cleared only after a defined successful durable result. Thrown marks can be
+cleaned and immediately redrained; an undefined mark followed by failed cleanup
+retains one aggregated `CLEANUP` attempt/failure and consumes the loop budget
+once. Successful callback `STATUS_UPDATE`, renewal/fencing, and concurrency
+semantics remain unchanged. TypeDocs now cover callback-free delivered counts
+and successful-exhaustion failure-budget exclusion, and snapshot docs distinguish
+ordinary payload copies from payload-free exhaustion failures.
 
 Focused worker/loop tests, build/tooling typechecks, focused ESLint, docs/API,
 format, diff, and untracked-output checks are recorded in the implementation

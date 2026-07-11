@@ -70,8 +70,10 @@ export interface DeliveryWorkerOptions {
   /** Optional positive accepted-work cap for each drain. */
   readonly limit?: number;
   /**
-   * Maximum failed observations per loop before that loop stops, including
-   * bounded retry exhaustion before callback invocation. Defaults to one; capped at 1000.
+   * Maximum failed observations per loop before that loop stops. Successful
+   * exhaustion marking consumes no failure budget; a failed exhaustion mark
+   * and existing endpoint, claim, lease/fencing, cleanup, or status-update
+   * failures do. Defaults to one; capped at 1000.
    */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
