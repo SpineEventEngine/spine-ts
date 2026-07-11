@@ -1,6 +1,6 @@
 # T-0031: Internal Delivery Retry Decision Primitive
 
-Status: Work-log headline fix applied; re-review pending
+Status: Final re-review clean; final verification pending
 Started: `2026-07-11T13:05:00Z`
 Baseline commit: `9566466d`
 Branch: `task/T-0031-delivery-retry-decision`

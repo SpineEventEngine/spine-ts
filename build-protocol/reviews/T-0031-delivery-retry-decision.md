@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Work-log headline fix applied; re-review pending
+Status: Final re-review clean; final verification pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -156,3 +156,9 @@ Branch: `task/T-0031-delivery-retry-decision`
   as `1e63f9da Fix T-0031 work log status` and added it to the durable commit
   ledger before re-review. The current log-maintenance commit is covered by the
   ledger convention; re-review remains pending.
+- `2026-07-11T14:04:48+0100`: Status-fix re-review completed against
+  `.superpowers/sdd/review-9566466d..2995e9db.diff`. Code
+  style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability were all clean. The completed status-fix ledger commit
+  `2995e9db` is listed in the work log; this current clean-closure log commit is
+  covered by the ledger convention. Final verification is pending.
