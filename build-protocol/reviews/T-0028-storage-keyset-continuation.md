@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Round 4 log-only fix verified; five-lane re-review pending
+Status: Round 5 log-only fix verified; five-lane re-review pending
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0028-storage-keyset-continuation`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status                                           |
-| -------------------------- | ---------------- | ------------------------------------------------ |
-| Code style/maintainability | Hubble the 5th   | Round 4 log-only fix verified; re-review pending |
-| Documentation              | Boole the 5th    | Round 4 log-only fix verified; re-review pending |
-| TypeScript/API docs        | Epicurus the 5th | Round 4 clean; log-only fix re-review pending    |
-| Security                   | Zeno the 5th     | Round 4 clean; log-only fix re-review pending    |
-| Performance/reliability    | Goodall the 5th  | Round 4 clean; log-only fix re-review pending    |
+| Lane                       | Reviewer          | Status                                           |
+| -------------------------- | ----------------- | ------------------------------------------------ |
+| Code style/maintainability | Mendel the 5th    | Round 5 log-only fix verified; re-review pending |
+| Documentation              | Hilbert the 5th   | Round 5 log-only fix verified; re-review pending |
+| TypeScript/API docs        | Confucius the 5th | Round 5 clean; log-only fix re-review pending    |
+| Security                   | Rawls the 5th     | Round 5 clean; log-only fix re-review pending    |
+| Performance/reliability    | Fermat the 5th    | Round 5 clean; log-only fix re-review pending    |
 
 ## Review Criteria
 
@@ -274,3 +274,59 @@ docs:check` passed with the known TypeDoc invalid-origin source-link warning;
   `pnpm --config.verify-deps-before-run=false format:check` passed, and
   `git diff --check` passed. T-0028 remains open for a fresh five-lane
   re-review; no code was edited and no commit was made by this worker.
+
+### Round 5 Independent Review - `2026-07-11T07:50:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-652f75c7..6460e5aa.diff` from task baseline
+  `652f75c7` to current HEAD `6460e5aa`.
+- Code style/maintainability (Mendel the 5th): [P2] the durable logs did not
+  record the coordinator commit `6460e5aa Record T-0028 Round 4 log review
+fixes` or fresh Round 5 package generation after the Round 4 log-only worker.
+  Code spot checks were clean: `RecordQuery.ids` says storage slot identifier,
+  in-memory `ids` filtering compares `entry.slotId`, continuation tie-breaking
+  uses storage slot IDs, and copied-slot tests cover the risks.
+- Documentation (Hilbert the 5th): [P2] the durable logs did not record the
+  Round 4 coordinator commit and Round 5 package. Round 3 chronology now
+  records `008cdf29`, the lane table reflects Round 4 results, and no false
+  completion or public-doc overclaim was found.
+- TypeScript/API docs (Confucius the 5th): clean. `RecordQuery.ids`,
+  `RecordContinuation.id`, and `InboxReadContinuation` docs match the public
+  API; continuation exports and API checks are intact; no generated Protobuf
+  output is present; `docs:check` passed with only the known TypeDoc invalid
+  origin warning.
+- Security (Rawls the 5th): clean. Continuation bounds, tenant/shard/status
+  isolation, slot-ID query semantics, `CATCH_UP` skip behavior, legacy
+  `IMPORT_EVENT` fail-closed behavior, and DoS scan bounds remain intact.
+  Focused Vitest passed with 4 files and 211 tests.
+- Performance/reliability (Fermat the 5th): clean. Keyset continuation replaces
+  moving offset continuation in the delivery scan path; budgets, statuses,
+  leases, claims, and slot-ID ordering/index semantics remain correct. Focused
+  Vitest passed with 4 files and 211 tests.
+- Action: one log-only fix worker will correct the current coordinator
+  commit/package evidence and clarify log-only commit chronology, then run
+  required verification. This worker will not commit or regenerate the package;
+  after any future coordinator commit exists, that coordinator commit and fresh
+  package must be recorded in the following review/fix entry before the next
+  five-lane independent re-review is evaluated.
+
+### Round 5 Log-Only Fix Worker - `2026-07-11T07:55:00Z`
+
+- Status: verified. This worker is limited to durable-log files and is not
+  editing code or committing.
+- Chronology corrected: the Round 4 log-only fix worker did not commit. After
+  that worker's verification passed, the coordinator committed
+  `6460e5aa Record T-0028 Round 4 log review fixes`, generated fresh package
+  `.superpowers/sdd/review-652f75c7..6460e5aa.diff`, and ran the Round 5
+  five-lane independent review.
+- Round 5 results are now reflected in the required review-lane table: code
+  style/maintainability and documentation found the durable-log gap described
+  above; TypeScript/API docs, security, and performance/reliability were clean.
+- This entry deliberately does not name a future commit hash. Coordinator
+  commits are recorded in the following review/fix entry after the hash exists;
+  this Round 5 worker will leave the task open for coordinator action and fresh
+  five-lane independent re-review.
+- Verification passed after this log-only fix:
+  `pnpm --config.verify-deps-before-run=false format:check` passed, and
+  `git diff --check` passed. No code was edited and no commit was made by this
+  worker.
