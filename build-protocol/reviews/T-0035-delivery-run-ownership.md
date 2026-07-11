@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 3 decision fix in progress
+Status: Round 3 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -172,3 +172,24 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 3 fix worker for
   the complete lifecycle and log-order batch. Fresh four-lane review remains
   pending after author and coordinator verification.
+- `2026-07-11T23:48:00Z`: Fix worker re-read `receiving-code-review` and
+  verified the full Round 3 batch against D-0085 and irreversible current
+  worker/loop stop behavior. The revised decision now requires newly constructed
+  worker/loops for a later caller-owned generation and registration-scoped
+  failed-start rollback, dependency quiescence, and error ownership without
+  discarding sibling obligations. First/sole and owned-environment behavior is
+  explicit. Author verification is pending; fresh review remains coordinator-
+  owned.
+- `2026-07-11T23:50:00Z`: Round 3 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  fresh-generation/registration-rollback/dependency-quiescence/error-ownership/
+  sibling-preservation and preserved-policy assertions, chronological-history
+  lint, whitespace, exact four-file scope, status, zero-untracked, and no-
+  successor-task-file checks. `RUNTIME_ARCHITECTURE.md` required no edit. Full
+  `pnpm verify` was not run. The author remains active for coordinator closure;
+  fresh four-lane review remains pending coordinator dispatch.
+- `2026-07-11T23:54:00Z`: Coordinator closed the Round 3 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 41-event chronology, fresh-generation, registration rollback,
+  dependency quiescence, sibling preservation, retry deferral, compatibility,
+  and public-API leakage checks. Fresh four-lane review is next.

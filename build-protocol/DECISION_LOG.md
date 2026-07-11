@@ -3156,12 +3156,12 @@ Decision:
   one-shot and bounded. The epoch considers pre-existing supported `TO_DELIVER`
   rows. A bounded `FAILED`, `PAUSED`, or `SKIPPED` result is an observed
   recovery outcome, not a startup claim that every pending row was completed.
-  If a startup worker promise rejects, server start fails before network intake
-  opens. Startup cleanup still closes the assembled contexts and owned
-  environment facilities, propagating the worker rejection and aggregating
-  cleanup failures through the existing failed-start error model. The closing
-  environment retains no runnable request, while durable rows remain available
-  to the next environment's startup recovery.
+  If work attributable to the attaching registration rejects, that server start
+  fails before network intake opens. Startup cleanup follows the
+  registration-scoped rollback rules below rather than closing a shared
+  environment wholesale. Its attributed worker rejection and cleanup failures
+  propagate or aggregate through the existing failed-start error model, while
+  durable rows remain available to later startup recovery.
 - After a newly supported inbox row is durably persisted, the local write path
   notifies the same package-internal seam. Notification carries readiness only;
   it does not carry a timer, backoff value, monitor action, payload, or retry
@@ -3217,23 +3217,48 @@ Decision:
   public monitor, health, or error-reporting API is implied.
 - Servers attach to the one environment seam through package-internal
   registrations, reference counting, or equivalent generation tokens. Each
-  attachment registers its endpoint dependencies and submits startup recovery
-  through the shared seam before that server opens network intake. Additional
-  servers reuse the same generation and do not create another delivery owner.
-  Detaching one server stops readiness from that registration and serializes
-  against active work before its contexts close, but leaves other registrations
-  and their queued readiness usable.
+  attachment registers its endpoint dependencies and associated shard/work
+  obligations, then submits startup recovery through the shared seam before
+  that server opens network intake. Additional servers reuse the same
+  generation and do not create another delivery owner. Detaching one server
+  stops readiness from that registration and serializes against active work
+  before its contexts close, but leaves other registrations and their queued
+  readiness usable.
+- Failed startup atomically closes trigger/notification admission for only the
+  attaching registration and removes that registration from the generation.
+  The seam then prevents new work for its associated obligations and awaits
+  every active worker/loop operation that can still invoke that registration's
+  endpoint dependencies before those contexts close. Work unrelated to those
+  dependencies need not be stopped. Package-internal per-shard identity assigns
+  the failed registration's worker rejection and rollback cleanup failures to
+  that server's failed-start aggregate. Fulfilled progress, parked rejection,
+  coalesced readiness, and pending epoch obligations belonging to unaffected
+  registrations remain owned by the shared generation; rollback neither
+  discards them nor adds the failed registration's error to them. If removing
+  the failed registration leaves other registrations, their generation remains
+  open and continues from its retained progress/readiness. If it was the first
+  or sole registration, rollback becomes a last detach and quiesces that empty
+  generation. A caller-owned environment remains reusable through a later fresh
+  generation. A server-owned environment additionally closes permanently after
+  quiescence, aggregating its attributed startup rejection with registration,
+  context, generation, and environment cleanup failures consistently with the
+  existing failed-start close model.
 - The last server detach closes that generation's trigger admission and local
-  notification, awaits active work, and surfaces any parked rejection while
-  continuing remaining server closes. For a caller-owned environment, last
-  detach does not close the environment or its facilities permanently; a later
-  attachment opens a fresh internal generation, reinstalls notification, and
-  performs startup recovery. `ServerEnvironment.close()` is different: it
-  permanently rejects later attachments and triggers, quiesces and awaits all
-  remaining lifecycle work, includes any active or parked rejection in the
-  close aggregate, and then closes owned facilities. A server-owned environment
-  still closes with its owning server after the sole attachment quiesces. No
-  public attachment or lifecycle option is introduced.
+  notification, awaits active work, and surfaces any generation-owned parked
+  rejection while continuing remaining server closes. The generation's
+  `DeliveryWorker` and constituent `DeliveryLoop` instances are then stopped
+  permanently and are never restarted or reused. For a caller-owned
+  environment, last detach does not close the environment or its facilities
+  permanently; a later attachment allocates a fresh package-internal generation
+  with newly constructed worker/loop instances, reinstalls notification, and
+  performs startup recovery for durable pending work. `ServerEnvironment.close()`
+  is different: it permanently rejects later attachments and triggers,
+  quiesces and awaits all remaining lifecycle work, permanently stops the
+  current generation's worker/loops, includes any active or parked rejection in
+  the close aggregate, and then closes owned facilities. It cannot create a
+  later generation. A server-owned environment still closes with its owning
+  server after the sole attachment quiesces. No public attachment or lifecycle
+  option is introduced.
 - Generation stop, last detach, and environment close shut trigger admission
   and local notification first, call the worker stop path so no later drain
   starts in that generation, and await already-active work. The current drain
@@ -3314,7 +3339,12 @@ Consequences:
 - Mixed per-shard outcomes no longer make the aggregate priority accidentally
   rerun failed/skipped shards or abandon paused-shard progress.
 - Shared caller-owned environments can outlive one server attachment and later
-  start a fresh generation without creating a second delivery owner.
+  start newly constructed worker/loop instances in a fresh generation without
+  reviving stopped instances or creating a second delivery owner.
+- Failed shared-environment startup has registration-scoped rollback and error
+  ownership, so endpoint dependencies remain open until their active work
+  settles while sibling registrations retain their progress, readiness, and
+  lifecycle errors.
 - The implementation order keeps the internal bounded-progress contract small
   and independently reviewable before environment lifecycle wiring consumes it;
   neither successor absorbs retry timing or public policy.

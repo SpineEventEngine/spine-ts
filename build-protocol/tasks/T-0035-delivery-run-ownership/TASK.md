@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 3 decision fix in progress
+Status: Round 3 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -125,6 +125,15 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   supported writes cannot keep one epoch alive indefinitely.
 - Shared or reusable caller-owned environments have one seam with internal
   attachment/generation cardinality; one detach cannot disable other servers.
+- Last detach permanently stops only the old generation's worker/loops; later
+  attachment to a caller-owned environment constructs a fresh internal
+  worker/loop generation and performs startup recovery, while environment close
+  remains permanent.
+- Failed startup rolls back only its package-internal registration, awaits all
+  active work that can use its endpoint dependencies before closing them,
+  assigns its rejection/cleanup errors to that failed start, and preserves
+  sibling registrations, progress, readiness, and parked errors. First/sole and
+  server-owned cases remain explicit and coherent.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -196,11 +205,19 @@ remaining closes and propagates/aggregates active and parked errors through the
 existing close-error model.
 
 One environment seam accepts package-internal server attachment tokens. A
-non-last detach cannot disable the remaining servers. Last detach quiesces the
-generation but leaves a caller-owned environment reusable; later attachment
-starts fresh recovery. Environment close permanently refuses attachments and
-triggers and aggregates all remaining lifecycle work. Server-owned environments
-still close with their owner. No public lifecycle option is added.
+non-last detach cannot disable the remaining servers. Failed startup atomically
+removes only its registration, blocks and awaits work that can still use its
+endpoint dependencies before closing them, assigns attributed rejection and
+cleanup errors to that failed start, and preserves sibling progress, readiness,
+and parked errors. Removing the first/sole registration quiesces the now-empty
+generation; an owned environment then closes permanently.
+
+Last detach permanently stops that generation's worker and loops. A reusable
+caller-owned environment remains open, but later attachment constructs a fresh
+internal worker/loop generation and performs startup recovery rather than
+reviving stopped instances. Environment close permanently refuses attachments
+and triggers and aggregates all remaining lifecycle work. No public lifecycle
+option is added.
 
 The smallest first successor is
 `T-0036 Package-Internal Delivery Epoch Progress`. It implements only the
@@ -299,3 +316,19 @@ active delivery scheduler.
   and exact four-file scope checks. `RUNTIME_ARCHITECTURE.md` required no edit.
 - NOT RUN: full `pnpm verify` for the pre-review scope fix, per explicit task
   direction.
+- PASS: Round 3 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted fresh-generation construction, irreversible old-generation
+  stop, registration-scoped startup rollback, endpoint-dependency quiescence,
+  rejection/cleanup ownership, sibling-obligation preservation, first/sole and
+  owned-environment behavior, T-0036/T-0037 boundary, retry deferral, T-0034,
+  `CATCH_UP`, and `IMPORT_EVENT` assertions.
+- PASS: The complete work-log event history is chronological; `git diff --check`, status,
+  zero-untracked, exact four-file scope, and successor-task-file absence checks
+  passed. `RUNTIME_ARCHITECTURE.md` required no edit.
+- NOT RUN: full `pnpm verify` in Round 3, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 3 generated build,
+  docs/API, formatting, whitespace, exact four-file scope, zero-untracked,
+  no-successor-task-file, 41-event chronology, fresh-generation, rollback,
+  dependency-quiescence, sibling-preservation, retry-deferral, compatibility,
+  and public-API leakage checks.
