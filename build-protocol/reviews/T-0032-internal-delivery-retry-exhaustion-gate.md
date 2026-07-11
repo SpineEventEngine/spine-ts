@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Fresh four-lane re-review pending
+Status: Round 10 ledger finding pending fix
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f524c-5bf7-7670-94a2-bb13e0e0ee06` | Pending |
-| Documentation              | `019f524c-5c66-7581-8cb5-9dc7045e4884` | Pending |
-| TypeScript/API docs        | `019f524c-5ceb-77b3-a9ee-d8a0cc88d347` | Pending |
-| Performance/reliability    | `019f524c-5d82-72e3-acaa-76400be9dbea` | Pending |
+| Code style/maintainability | `019f5257-8804-74a0-ad29-815354aac6e7` | Pending |
+| Documentation              | `019f5257-8873-71d2-a2b2-586f2832dc75` | Pending |
+| TypeScript/API docs        | `019f5257-88f6-7263-baeb-a62c75ba737b` | Pending |
+| Performance/reliability    | `019f5257-897c-7843-b668-626cf8b1a7dd` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -407,3 +407,22 @@ is deferred to the final release-readiness gate.
   appended known commits `991594ea` and `91b01095` to the ledger;
   `f61a891c` remains the sole future hash under the non-recursive convention.
   Formatting and whitespace checks passed.
+- `2026-07-11T19:11:00Z`: Generated Round 10 package
+  `.superpowers/sdd/review-aa4d52d9..e9cf8146.diff` and assigned code style
+  `019f5257-8804-74a0-ad29-815354aac6e7`, documentation `019f5257-8873-71d2-a2b2-586f2832dc75`,
+  TypeScript/API docs `019f5257-88f6-7263-baeb-a62c75ba737b`, and performance/reliability
+  `019f5257-897c-7843-b668-626cf8b1a7dd`. The active table was updated in the same dispatch step.
+- `2026-07-11T19:16:00Z`: Round 10 completed and all reviewers were closed.
+  Code style `019f5257-8804-74a0-ad29-815354aac6e7`, TypeScript/API docs
+  `019f5257-88f6-7263-baeb-a62c75ba737b`, and performance/reliability
+  `019f5257-897c-7843-b668-626cf8b1a7dd` were clean. Documentation
+  `019f5257-8873-71d2-a2b2-586f2832dc75` found one P2: ledger must add
+  known commits `f61a891c` and `e9cf8146`. All other task state was clean.
+- `2026-07-11T19:17:00Z`: Assigned log-only ledger worker
+  `019f525b-9479-77b0-8bbd-daa2cb1ae30c` to the sole Round 10 P2. Fresh four-lane
+  re-review remains pending its verified commit.
+- `2026-07-11T19:18:00Z`: The log-only ledger correction recorded known commits
+  `f61a891c` and `e9cf8146`, advanced completeness through `e9cf8146`, and
+  stated that the new ledger-fix commit is the sole future hash under the
+  non-recursive convention. The active four-lane table and Round 10 history
+  remain unchanged; fresh re-review remains pending.
