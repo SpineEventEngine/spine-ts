@@ -24,11 +24,13 @@ import {
   onInboxReadOnce,
   onInboxQuery,
   packStoredRecord,
+  recordAttemptQueries,
   recordInboxQueries,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
   skipInboxRepairOnce,
   targetInbox,
+  throwAttemptWriteOnce,
   throwDedupFinalizeOnce,
   throwInboxClaimOnce,
   throwInboxClearOnce,
@@ -1001,6 +1003,135 @@ describe("Delivery worker", () => {
     expect(retainedJson).not.toContain("stack");
     expect(attempts[0]).not.toHaveProperty("signal");
     expect(attempts[0]).not.toHaveProperty("error");
+  });
+
+  it("reports delivery failures even when attempt retention cannot be written", async () => {
+    const attemptFault = throwAttemptWriteOnce();
+    const faults = deliveryStorageFaults(attemptFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-attempt-write-fails", 1n);
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    expect(attemptFault.count).toBe(1);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-attempt-write-fails");
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-attempt-write-fails", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("applies loop failure accounting when attempt retention cannot be written", async () => {
+    const attemptFault = throwAttemptWriteOnce();
+    const faults = deliveryStorageFaults(attemptFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-loop-attempt-write-fails", 1n);
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      maxFailures: 1,
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    }).run();
+
+    expect(attemptFault.count).toBe(1);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 1,
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-loop-attempt-write-fails");
+  });
+
+  it("retains only the newest 100 attempts for one repeatedly failing message", async () => {
+    let attempt = 0;
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date(Date.UTC(2026, 6, 8, 9, 0, attempt)),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-bounded-attempts", 1n);
+
+    for (let index = 0; index < 105; index += 1) {
+      attempt = index + 1;
+      const run = await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error(`endpoint failed ${String(index)}`);
+        },
+      });
+      expect(run.failed).toBe(1);
+    }
+
+    const attempts = await requireAttempts(delivery).read();
+
+    expect(attempts).toHaveLength(100);
+    expect(attempts[0]).toMatchObject({
+      signalId: "signal-bounded-attempts",
+      attemptedAt: new Date("2026-07-08T09:00:06.000Z"),
+    });
+    expect(attempts.at(-1)).toMatchObject({
+      signalId: "signal-bounded-attempts",
+      attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
+    });
+  });
+
+  it("uses bounded sequence lookups when recording repeated attempts", async () => {
+    const attemptQueries: { limit?: number; messageKey?: unknown }[] = [];
+    const faults = deliveryStorageFaults(recordAttemptQueries(attemptQueries));
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-bounded-lookup", 1n);
+
+    for (let index = 0; index < 2; index += 1) {
+      await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("endpoint failed");
+        },
+      });
+    }
+
+    expect(attemptQueries.length).toBeGreaterThanOrEqual(2);
+    expect(attemptQueries.every((query) => query.limit !== undefined && query.limit <= 101)).toBe(
+      true,
+    );
+    expect(attemptQueries.some((query) => query.limit === 1)).toBe(true);
   });
 
   it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {

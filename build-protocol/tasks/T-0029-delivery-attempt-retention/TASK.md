@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress
+Status: In progress; Round 1 fixes verified pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -193,3 +193,8 @@ observational attempt-recording failure behavior, fail-closed stored-attempt
 validation, stale `Delivery.drain()` TypeDoc cleanup, and durable-log review
 state corrections. One fix worker will address the complete findings list
 before a fresh five-lane re-review.
+
+Coordinator committed the complete Round 1 findings as
+`adf215f3 Record T-0029 Round 1 review findings`. The Round 1 fix worker is in
+progress from that commit and has locally verified the fixes. This task is not
+complete until the fix commit is re-reviewed.

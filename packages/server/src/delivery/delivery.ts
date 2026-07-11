@@ -78,8 +78,10 @@ export class Delivery {
    *
    * The returned `DeliveryRun` reports whether the shard was drained or
    * skipped, how many rows were read, accepted for work, delivered, or failed,
-   * and the per-message failures observed during this run. This method does not
-   * schedule later runs, open transports, or retain endpoint attempt history.
+   * and the per-message failures observed during this run. Supported endpoint
+   * failures also retain a bounded, sanitized internal attempt history for
+   * later framework policy work. This method does not schedule later runs, open
+   * transports, choose retry policy, or implement backoff.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const outcome = await this.#drain(shard, options, {});
@@ -485,14 +487,19 @@ export class Delivery {
     message: DeliveryEndpointMessage,
     attempt: Extract<DeliveryMessageResult, { readonly kind: "FAILED" }>,
   ): Promise<void> {
-    await attempts.recordFailure({
-      message,
-      node: attempt.node,
-      attemptedAt: this.#now(),
-      accepted: attempt.accepted,
-      stage: attempt.stage,
-      reason: attempt.reason,
-    });
+    try {
+      await attempts.recordFailure({
+        message,
+        node: attempt.node,
+        attemptedAt: this.#now(),
+        accepted: attempt.accepted,
+        stage: attempt.stage,
+        reason: attempt.reason,
+      });
+    } catch {
+      // Retained attempt history is observational; run/loop failure accounting
+      // must continue to report the original delivery failure.
+    }
   }
 
   #drainScope(): DeliveryScope {

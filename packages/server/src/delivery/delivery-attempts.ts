@@ -9,12 +9,15 @@ import {
 } from "@spine-ts/storage";
 
 import type { DeliveryEndpointMessage } from "./delivery.js";
+import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import type { InboxId, InboxMessageId } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
 const attemptTypeUrl = "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord";
 const casRetryLimit = 8;
 const defaultReadLimit = 1_000;
+const maxAttemptsPerMessage = 100;
+const maxStoredRecordBytes = 512 * 1024;
 const maxTextBytes = 16 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -69,7 +72,8 @@ export class DeliveryAttempts {
     for (let index = 0; index < casRetryLimit; index += 1) {
       const sequence = await nextSequence(storage, attempt.messageKey);
       const stored = storedAttempt(attempt, sequence);
-      const written = await storage.compareAndSet(stored.key, undefined, packAttempt(stored));
+      const previous = await storage.read(stored.key);
+      const written = await storage.compareAndSet(stored.key, previous, packAttempt(stored));
       if (written) {
         return;
       }
@@ -157,6 +161,7 @@ interface StoredAttempt {
   readonly shard: string;
   readonly shardIndex: number;
   readonly shardTotal: number;
+  readonly inbox: string;
   readonly inboxId: {
     readonly targetId: string;
     readonly targetTypeUrl: string;
@@ -190,9 +195,10 @@ async function nextSequence(
 ): Promise<number> {
   const records = await storage.queryEntries({
     filters: [{ column: "messageKey", value: messageKey }],
-    sort: [{ field: "sequence" }],
+    sort: [{ field: "sequence", direction: "desc" }],
+    limit: 1,
   });
-  const last = records.at(-1);
+  const last = records[0];
   if (last === undefined) {
     return 1;
   }
@@ -215,6 +221,7 @@ function attemptFromInput(input: DeliveryAttemptInput): AttemptInput {
     shard: shard.key(),
     shardIndex: shard.index,
     shardTotal: shard.ofTotal,
+    inbox: inboxKey(inboxId),
     inboxId,
     signalId,
     label: requireLabel(message.label),
@@ -230,7 +237,7 @@ function storedAttempt(input: AttemptInput, sequence: number): StoredAttempt {
   return Object.freeze({
     ...input,
     sequence,
-    key: `${input.messageKey}:attempt:${String(sequence).padStart(12, "0")}`,
+    key: `${input.messageKey}:attempt:${attemptSlot(sequence)}`,
   });
 }
 
@@ -256,6 +263,7 @@ function attemptFromStored(stored: StoredAttempt): DeliveryAttempt {
 
 function packAttempt(stored: StoredAttempt): Any {
   const encoded = Buffer.from(JSON.stringify(stored), "utf8");
+  assertStoredRecordSize(encoded);
 
   return create(AnySchema, {
     typeUrl: attemptTypeUrl,
@@ -264,43 +272,139 @@ function packAttempt(stored: StoredAttempt): Any {
 }
 
 function readStoredAttempt(record: Any, expectedKey?: string): StoredAttempt {
-  const typeUrl = requireText(Reflect.get(record, "typeUrl"), "Delivery attempt type URL");
-  if (typeUrl !== attemptTypeUrl) {
-    throw new Error(`Delivery attempt record type URL "${typeUrl}" is invalid.`);
-  }
-  const value = Reflect.get(record, "value");
-  if (!(value instanceof Uint8Array)) {
-    throw new Error("Delivery attempt record value must be bytes.");
-  }
-
-  const decoded = JSON.parse(utf8Decoder.decode(value)) as unknown;
-  if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-    throw new Error("Delivery attempt record is invalid.");
-  }
-  const input = decoded as Record<string, unknown>;
-  const shard = storedShard(input);
-  const key = requireText(Reflect.get(input, "key"), "Delivery attempt key");
+  const decoded = readStoredRecord(record);
+  const shard = storedShard(decoded);
+  const key = requireText(Reflect.get(decoded, "key"), "Delivery attempt key");
   if (expectedKey !== undefined && key !== expectedKey) {
-    throw new Error(`Delivery attempt "${expectedKey}" does not match its storage key.`);
+    throw new DeliveryStorageCorruptionError(
+      `Delivery attempt "${expectedKey}" does not match its storage key.`,
+    );
   }
 
-  return Object.freeze({
+  const messageKey = requireText(
+    Reflect.get(decoded, "messageKey"),
+    "Delivery attempt message key",
+  );
+  const messageId = requireText(Reflect.get(decoded, "messageId"), "Delivery attempt message ID");
+  const sequence = requireSequence(Reflect.get(decoded, "sequence"));
+  const inboxId = storedInboxId(Reflect.get(decoded, "inboxId"));
+  const stored = Object.freeze({
     key,
-    messageKey: requireText(Reflect.get(input, "messageKey"), "Delivery attempt message key"),
-    messageId: requireText(Reflect.get(input, "messageId"), "Delivery attempt message ID"),
+    messageKey,
+    messageId,
     shard: shard.key(),
     shardIndex: shard.index,
     shardTotal: shard.ofTotal,
-    inboxId: storedInboxId(Reflect.get(input, "inboxId")),
-    signalId: requireText(Reflect.get(input, "signalId"), "Delivery attempt signal ID"),
-    label: requireLabel(Reflect.get(input, "label")),
-    node: requireText(Reflect.get(input, "node"), "Delivery attempt node"),
-    attemptedAtMs: requireTimestamp(Reflect.get(input, "attemptedAtMs")),
-    accepted: requireBoolean(Reflect.get(input, "accepted")),
-    stage: requireStage(Reflect.get(input, "stage")),
-    reason: requireReason(Reflect.get(input, "reason")),
-    sequence: requireSequence(Reflect.get(input, "sequence")),
+    inbox: requireText(Reflect.get(decoded, "inbox"), "Delivery attempt inbox key"),
+    inboxId,
+    signalId: requireText(Reflect.get(decoded, "signalId"), "Delivery attempt signal ID"),
+    label: requireLabel(Reflect.get(decoded, "label")),
+    node: requireText(Reflect.get(decoded, "node"), "Delivery attempt node"),
+    attemptedAtMs: requireTimestamp(Reflect.get(decoded, "attemptedAtMs")),
+    accepted: requireBoolean(Reflect.get(decoded, "accepted")),
+    stage: requireStage(Reflect.get(decoded, "stage")),
+    reason: requireReason(Reflect.get(decoded, "reason")),
+    sequence,
   });
+
+  assertAttemptIdentity(stored);
+
+  return stored;
+}
+
+function readStoredRecord(record: Any): Record<string, unknown> {
+  const typeUrl = readStoredTypeUrl(record);
+  if (typeUrl !== attemptTypeUrl) {
+    throw new DeliveryStorageCorruptionError(
+      `Delivery attempt record type URL "${typeUrl}" is invalid.`,
+    );
+  }
+
+  const value = readStoredBytes(record);
+  if (value.byteLength > maxStoredRecordBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be read.`,
+    );
+  }
+
+  try {
+    const decoded = JSON.parse(decodeStoredUtf8(value)) as unknown;
+
+    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt record is not a JSON object.");
+    }
+
+    return decoded as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError("Delivery attempt record contains malformed JSON.", {
+      cause: error,
+    });
+  }
+}
+
+function readStoredTypeUrl(record: Any): string {
+  try {
+    return requireText(Reflect.get(record, "typeUrl"), "Delivery attempt type URL");
+  } catch (error) {
+    throw corruptionFrom(error, "Delivery attempt record type URL is invalid.");
+  }
+}
+
+function readStoredBytes(record: Any): Uint8Array {
+  let value: unknown;
+  try {
+    value = Reflect.get(record, "value");
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError("Delivery attempt record value is invalid.", {
+      cause: error,
+    });
+  }
+  if (!(value instanceof Uint8Array)) {
+    throw new DeliveryStorageCorruptionError("Delivery attempt record value must be bytes.");
+  }
+
+  return value;
+}
+
+function decodeStoredUtf8(value: Uint8Array): string {
+  try {
+    return utf8Decoder.decode(value);
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError("Delivery attempt record contains invalid UTF-8.", {
+      cause: error,
+    });
+  }
+}
+
+function assertAttemptIdentity(stored: StoredAttempt): void {
+  const messageKey = attemptMessageKey({
+    value: stored.messageId,
+    shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
+  });
+  if (stored.messageKey !== messageKey || stored.shard !== storedMessageShard(stored)) {
+    throw new DeliveryStorageCorruptionError(
+      "Delivery attempt message identity does not match shard identity.",
+    );
+  }
+  const expectedKey = `${stored.messageKey}:attempt:${attemptSlot(stored.sequence)}`;
+  if (stored.key !== expectedKey) {
+    throw new DeliveryStorageCorruptionError(
+      "Delivery attempt key does not match message identity and sequence.",
+    );
+  }
+  if (stored.inbox !== inboxKey(stored.inboxId)) {
+    throw new DeliveryStorageCorruptionError(
+      "Delivery attempt inbox identity does not match its composite key.",
+    );
+  }
+}
+
+function storedMessageShard(stored: Pick<StoredAttempt, "shardIndex" | "shardTotal">): string {
+  return new ShardIndex(stored.shardIndex, stored.shardTotal).key();
 }
 
 function inputInboxId(value: InboxId): StoredAttempt["inboxId"] {
@@ -312,7 +416,7 @@ function inputInboxId(value: InboxId): StoredAttempt["inboxId"] {
 
 function storedInboxId(value: unknown): StoredAttempt["inboxId"] {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Delivery attempt inbox identity is invalid.");
+    throw new DeliveryStorageCorruptionError("Delivery attempt inbox identity is invalid.");
   }
   const input = value as Record<string, unknown>;
 
@@ -338,6 +442,16 @@ function attemptMessageKey(id: InboxMessageId): string {
   return `${shard.key()}:${requireText(id.value, "Delivery attempt message ID")}`;
 }
 
+function inboxKey(inboxId: StoredAttempt["inboxId"]): string {
+  return requireText(
+    JSON.stringify({
+      targetId: inboxId.targetId,
+      targetTypeUrl: inboxId.targetTypeUrl,
+    }),
+    "Delivery attempt inbox key",
+  );
+}
+
 function requireShard(value: ShardIndex): ShardIndex {
   return new ShardIndex(value.index, value.ofTotal);
 }
@@ -347,7 +461,7 @@ function requireLabel(value: unknown): DeliveryEndpointMessage["label"] {
     return value;
   }
 
-  throw new Error(`Delivery attempt label "${String(value)}" is invalid.`);
+  throw new DeliveryStorageCorruptionError(`Delivery attempt label "${String(value)}" is invalid.`);
 }
 
 function requireStage(value: unknown): DeliveryFailureStage {
@@ -361,7 +475,7 @@ function requireStage(value: unknown): DeliveryFailureStage {
     return value;
   }
 
-  throw new Error(`Delivery attempt stage "${String(value)}" is invalid.`);
+  throw new DeliveryStorageCorruptionError(`Delivery attempt stage "${String(value)}" is invalid.`);
 }
 
 function requireReason(value: unknown): DeliveryFailureReason {
@@ -375,15 +489,19 @@ function requireReason(value: unknown): DeliveryFailureReason {
     return value;
   }
 
-  throw new Error(`Delivery attempt reason "${String(value)}" is invalid.`);
+  throw new DeliveryStorageCorruptionError(
+    `Delivery attempt reason "${String(value)}" is invalid.`,
+  );
 }
 
 function requireText(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} must be a non-empty string.`);
+    throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
   }
   if (Buffer.byteLength(value, "utf8") > maxTextBytes) {
-    throw new Error(`${label} exceeds ${String(maxTextBytes)} bytes and cannot be stored.`);
+    throw new DeliveryStorageCorruptionError(
+      `${label} exceeds ${String(maxTextBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return value;
@@ -391,7 +509,7 @@ function requireText(value: unknown, label: string): string {
 
 function requireDate(value: unknown, label: string): number {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-    throw new Error(`${label} must be a valid date.`);
+    throw new DeliveryStorageCorruptionError(`${label} must be a valid date.`);
   }
 
   return value.getTime();
@@ -399,15 +517,21 @@ function requireDate(value: unknown, label: string): number {
 
 function requireTimestamp(value: unknown): number {
   if (!Number.isSafeInteger(value)) {
-    throw new Error("Delivery attempt time must be a safe integer.");
+    throw new DeliveryStorageCorruptionError("Delivery attempt time must be a safe integer.");
   }
 
-  return value as number;
+  const timestamp = value as number;
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) {
+    throw new DeliveryStorageCorruptionError("Delivery attempt time is invalid.");
+  }
+
+  return timestamp;
 }
 
 function requireBoolean(value: unknown): boolean {
   if (typeof value !== "boolean") {
-    throw new Error("Delivery attempt accepted flag must be boolean.");
+    throw new DeliveryStorageCorruptionError("Delivery attempt accepted flag must be boolean.");
   }
 
   return value;
@@ -415,7 +539,7 @@ function requireBoolean(value: unknown): boolean {
 
 function requireInteger(value: unknown, label: string): number {
   if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite integer.`);
+    throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
   }
 
   return value as number;
@@ -424,7 +548,7 @@ function requireInteger(value: unknown, label: string): number {
 function requireSequence(value: unknown): number {
   const sequence = requireInteger(value, "Delivery attempt sequence");
   if (sequence <= 0) {
-    throw new Error("Delivery attempt sequence must be positive.");
+    throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be positive.");
   }
 
   return sequence;
@@ -438,6 +562,26 @@ function requireLimit(value: number): number {
   }
 
   return value;
+}
+
+function attemptSlot(sequence: number): string {
+  const slot = ((sequence - 1) % maxAttemptsPerMessage) + 1;
+
+  return String(slot).padStart(12, "0");
+}
+
+function assertStoredRecordSize(value: Buffer): void {
+  if (value.byteLength > maxStoredRecordBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be stored.`,
+    );
+  }
+}
+
+function corruptionFrom(error: unknown, message: string): DeliveryStorageCorruptionError {
+  return error instanceof DeliveryStorageCorruptionError
+    ? error
+    : new DeliveryStorageCorruptionError(message, { cause: error });
 }
 
 function attemptStorageContext(context: StorageContext): StorageContext {

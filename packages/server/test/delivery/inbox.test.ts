@@ -1250,6 +1250,82 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).resolves.toEqual([]);
   });
 
+  it("treats malformed stored delivery attempt records as storage corruption", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+          value: Buffer.from("{not-json", "utf8"),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt record/i);
+  });
+
+  it("rejects oversized stored delivery attempt records before parsing JSON", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+          value: oversizedStoredRecord(),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt record exceeds/i);
+  });
+
+  it("fails closed when stored delivery attempt timestamps are out of range", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          attemptedAtMs: Number.MAX_SAFE_INTEGER,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt time/i);
+  });
+
+  it("fails closed when stored delivery attempt identity fields disagree", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: "0/1:message-1:attempt:000000000001",
+          messageKey: "0/1:message-2",
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/message identity/i);
+  });
+
+  it("fails closed when stored delivery attempt inbox identity fields disagree", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          inbox: JSON.stringify({
+            targetId: "projection-2",
+            targetTypeUrl: "type.example.dev/tasks.Projection",
+          }),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/inbox identity/i);
+  });
+
   it("fails closed when stored inbox records contain invalid UTF-8", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -2550,6 +2626,40 @@ function legacyImportRecord(): Any {
           valueBase64: Buffer.from("payload", "utf8").toString("base64"),
         }),
         label: "IMPORT_EVENT",
+      }),
+      "utf8",
+    ),
+  });
+}
+
+function storedAttemptRecord(overrides: Record<string, unknown> = {}): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        key: "0/1:message-1:attempt:000000000001",
+        messageKey: "0/1:message-1",
+        messageId: "message-1",
+        shard: "0/1",
+        shardIndex: 0,
+        shardTotal: 1,
+        inbox: JSON.stringify({
+          targetId: "projection-1",
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        }),
+        inboxId: {
+          targetId: "projection-1",
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        },
+        signalId: "signal-1",
+        label: "UPDATE_SUBSCRIBER",
+        node: "node-a",
+        attemptedAtMs: new Date("2026-07-08T09:00:00.000Z").getTime(),
+        accepted: true,
+        stage: "ENDPOINT",
+        reason: "ENDPOINT_REJECTED",
+        sequence: 1,
+        ...overrides,
       }),
       "utf8",
     ),
