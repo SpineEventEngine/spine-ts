@@ -11,7 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
-import { Delivery } from "../../src/delivery/delivery.js";
+import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import {
   DedupRecords,
   dedupRecordSpec,
@@ -1374,6 +1374,11 @@ describe("Inbox", () => {
 
   it("fails closed before incrementing a max safe stored delivery attempt sequence", async () => {
     const existingKey = "0/1:message-1:attempt:000000000091";
+    const message: DeliveryEndpointMessage = {
+      ...createMessage("message-1", "signal-1", 1n),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    };
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new FakeStorageFactory([
@@ -1385,7 +1390,7 @@ describe("Inbox", () => {
     });
 
     const write = delivery.attempts.recordFailure({
-      message: createMessage("message-1", "signal-1", 1n),
+      message,
       node: "node-a",
       attemptedAt: new Date("2026-07-08T09:01:00.000Z"),
       accepted: true,

@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Five-lane review clean; final verification pending
+Status: Full-gate typecheck fixes verified; re-review pending
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -108,3 +108,15 @@ Branch: `task/T-0030-delivery-attempt-summary`
   expose only sanitized facts. Performance/reliability returned clean and
   confirmed bounded slot reads plus post-wrap summary ordering/latest coverage.
   All required reviewer lanes are clean.
+- `2026-07-11T10:48:13Z`: Final focused verification passed, but the optional
+  full project gate failed in `typecheck:tooling` on two test-only type issues:
+  missing `InboxId` import in `delivery-worker.test.ts`, and a broadly typed
+  `InboxMessage` fixture passed to the narrower supported endpoint-message
+  attempt API in `inbox.test.ts`. These are not reviewer findings, but they are
+  final-gate blockers and will require a small fix plus re-review because they
+  change files after clean review.
+- `2026-07-11T10:49:44Z`: Coordinator fixed and verified the full-gate
+  typecheck blockers. `typecheck:tooling` now passes, and the required focused
+  verification set also passes. Because this changed test files after clean
+  review, the branch requires a fresh baseline-to-HEAD review package and all
+  five reviewer lanes again before final acceptance.

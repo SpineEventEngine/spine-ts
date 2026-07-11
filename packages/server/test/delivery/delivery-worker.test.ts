@@ -14,7 +14,13 @@ import {
   type OnDeliveryMessage,
 } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
-import { InboxMessageError, ShardIndex, ShardSession, type InboxMessage } from "../../src/index.js";
+import {
+  InboxMessageError,
+  ShardIndex,
+  ShardSession,
+  type InboxId,
+  type InboxMessage,
+} from "../../src/index.js";
 import {
   blockInboxClaimOnce,
   blockInboxRenewalOnce,
