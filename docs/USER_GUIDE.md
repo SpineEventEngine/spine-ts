@@ -720,9 +720,9 @@ active stream state. Direct Stand subscriptions, active service delivery
 handles, queued subscription updates, Stand version metadata, and the in-memory
 storage adapter's backing data are process-local development/test state. Missed
 updates are not replayed on later activation or restart. Durable production
-storage adapters, transport-backed/background delivery worker orchestration,
-and recovery of subscription positions remain outside this slice. The
-implemented local catch-up boundary is limited to
+storage adapters, production transport-backed/background worker topology and
+supervision, and recovery of subscription positions remain outside this slice.
+The implemented local catch-up boundary is limited to
 `BoundedContext.catchUpReadSide(options?)` for registered projection replay from
 already-stored events. This direct API does not provide a client query DSL.
 

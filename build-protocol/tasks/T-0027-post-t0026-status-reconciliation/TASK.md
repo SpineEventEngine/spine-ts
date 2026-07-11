@@ -1,6 +1,6 @@
 # T-0027: Post-T-0026 Runtime Status Reconciliation
 
-Status: implemented; coordinator verified; review pending
+Status: Round 1 wording fix verified; re-review pending
 Started: `2026-07-11T04:42:44Z`
 Baseline commit: `efbf379a`
 Branch: `task/T-0027-post-t0026-status-reconciliation`
@@ -208,6 +208,24 @@ matches; repeated the `CATCH_UP`/`IMPORT_EVENT` confirmation `rg`, which exited
 `0` with expected matches; and reran `docs:check`, `format:check`, and
 `git diff --check`, all passing. `git status --short` showed no tracked
 generated-output or dependency churn.
+
+Round 1 review on `2026-07-11T05:06:12Z`: documentation, TypeScript/API docs,
+security, and performance/reliability were clean. Code style/maintainability
+found one P3 stale-status wording issue in `docs/USER_GUIDE.md`: the phrase
+"transport-backed/background delivery worker orchestration" lacked the
+"production" qualifier used elsewhere and could imply the T-0026 local
+worker/loop boundary is still absent. The fix will narrow that phrase to
+production topology/supervision wording, verify, commit, and rerun all five
+review lanes.
+
+Round 1 wording fix on `2026-07-11T05:10:22Z`: updated the reported
+`docs/USER_GUIDE.md` phrase to "production transport-backed/background worker
+topology and supervision." Verification passed `docs:check`, `format:check`,
+and `git diff --check`. Targeted stale wording checks found no unqualified
+worker-missing claims in the reported section; the remaining
+"production transport-backed/background delivery worker orchestration and
+supervision" wording in the earlier production-gap list is intentionally
+qualified as production work.
 
 ## Review Plan
 
