@@ -74,7 +74,7 @@ export function throwAttemptWriteOnce(): CountedDeliveryFaultProbe {
     get count() {
       return count;
     },
-    async compareAndSet<I, R extends Message>(
+    compareAndSet<I, R extends Message>(
       context: StorageContext,
       id: I,
       expected: MaterializedRecord<I, R> | undefined,

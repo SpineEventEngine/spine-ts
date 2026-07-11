@@ -1082,7 +1082,7 @@ describe("Delivery worker", () => {
     }
 
     expect(error).toBeInstanceOf(DeliveryStorageCorruptionError);
-    expect(error).toEqual(expect.objectContaining({ message: expect.stringMatching(/attempt/i) }));
+    expect(error).toHaveProperty("message", expect.stringMatching(/attempt/i));
     expect(readFault.count).toBe(1);
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-attempt-corruption", status: "TO_DELIVER" },

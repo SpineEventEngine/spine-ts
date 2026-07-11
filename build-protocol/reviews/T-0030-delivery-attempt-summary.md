@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Five-lane re-review clean; final verification pending
+Status: Full-gate lint fixes verified; re-review pending
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -145,3 +145,14 @@ Branch: `task/T-0030-delivery-attempt-summary`
   entry and matching work-log updates fix that stale status and ledger issue.
   The branch is ready for final verification after this log-only update is
   committed and checked.
+- `2026-07-11T11:02:20Z`: Final focused verification passed, but full
+  `verify` failed in ESLint on three T-0030-touched lint issues: an empty
+  interface alias in `delivery-attempts.ts`, an async test hook without `await`
+  in `delivery-storage-fault-fixture.ts`, and an unsafe `expect` assignment in
+  `delivery-worker.test.ts`. These are final-gate blockers and will require a
+  small fix plus fresh re-review because they change files after clean review.
+- `2026-07-11T11:03:40Z`: Coordinator fixed and verified the full-gate ESLint
+  blockers. `lint:generated` now passes, and the required focused verification
+  set also passes. Because this changed implementation/test files after clean
+  review, the branch requires a fresh baseline-to-HEAD review package and all
+  five reviewer lanes again before final acceptance.

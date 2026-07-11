@@ -205,7 +205,7 @@ interface StoredAttempt {
   readonly sequence: number;
 }
 
-interface AttemptInput extends Omit<StoredAttempt, "key" | "sequence"> {}
+type AttemptInput = Omit<StoredAttempt, "key" | "sequence">;
 
 const spec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
