@@ -330,12 +330,13 @@ export class Delivery {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
 
-    const endpoint = requireEndpointMessage(message);
-    const retry = await this.#decideRetry(attempts, endpoint);
+    requireEndpointStatus(message.status);
+    const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      return deliveryRun("DRAINED", 1, 0, 0, 1, [retryExhaustedFailure(endpoint, retry)]);
+      return deliveryRun("DRAINED", 1, 0, 0, 1, [retryExhaustedFailure(message, retry)]);
     }
 
+    const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
@@ -482,13 +483,14 @@ export class Delivery {
       return;
     }
 
-    const endpoint = requireEndpointMessage(message);
-    const retry = await this.#decideRetry(attempts, endpoint);
+    requireEndpointStatus(message.status);
+    const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      progress.recordExhausted(endpoint, retry);
+      progress.recordExhausted(message, retry);
       return;
     }
 
+    const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "FAILED") {
       await this.#recordFailedAttempt(attempts, endpoint, attempt);
@@ -498,9 +500,9 @@ export class Delivery {
 
   async #decideRetry(
     attempts: DeliveryAttempts,
-    message: DeliveryEndpointMessage,
+    messageId: InboxMessage["id"],
   ): Promise<DeliveryRetryDecision> {
-    const summary = await attempts.summarize(message.id);
+    const summary = await attempts.summarize(messageId);
 
     return retryDecisions.decide(summary);
   }
@@ -722,10 +724,7 @@ interface DrainProgress {
   ) => DeliveryDrainOutcome;
   readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
-  readonly recordExhausted: (
-    message: DeliveryEndpointMessage,
-    decision: DeliveryRetryDecision,
-  ) => void;
+  readonly recordExhausted: (message: InboxMessage, decision: DeliveryRetryDecision) => void;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
@@ -857,7 +856,7 @@ function deliveryDrainOutcome(
 }
 
 function retryExhaustedFailure(
-  message: DeliveryEndpointMessage,
+  message: InboxMessage,
   decision: DeliveryRetryDecision,
 ): DeliveryFailure {
   return Object.freeze({
@@ -918,7 +917,7 @@ function drainProgress(): DrainProgress {
 
       return true;
     },
-    recordExhausted(message: DeliveryEndpointMessage, decision: DeliveryRetryDecision) {
+    recordExhausted(message: InboxMessage, decision: DeliveryRetryDecision) {
       failures.push(retryExhaustedFailure(message, decision));
     },
     record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
@@ -1142,15 +1141,15 @@ function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
   });
 }
 
-function exhaustedFailureMessage(message: DeliveryEndpointMessage): DeliveryEndpointMessage {
+function exhaustedFailureMessage(message: InboxMessage): DeliveryEndpointMessage {
   return Object.freeze({
     id: Object.freeze({
       value: message.id.value,
       shard: message.id.shard,
     }),
     inboxId: Object.freeze({ ...message.inboxId }),
-    label: message.label,
-    status: message.status,
+    label: requireEndpointLabel(message.label),
+    status: requireEndpointStatus(message.status),
     signalId: message.signalId,
     shard: message.shard,
     whenReceived: new Date(message.whenReceived),

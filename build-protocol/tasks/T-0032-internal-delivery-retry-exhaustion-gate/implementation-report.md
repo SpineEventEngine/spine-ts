@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Round 5 documentation fix applied; fresh four-lane re-review pending
+Status: Round 6 fixes verified; fresh four-lane re-review pending
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -91,6 +91,7 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - `packages/server/src/delivery/delivery-attempts.ts`
 - `packages/server/src/delivery/delivery-retry-decision.ts`
 - `packages/server/src/delivery/delivery-loop.ts`
+- `packages/server/src/delivery/delivery-worker.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
 - `packages/server/test/delivery/delivery-loop.test.ts`
 
@@ -246,3 +247,41 @@ tail callbacks` in `delivery-loop.test.ts`. It proves an exhausted head
   `pnpm --config.verify-deps-before-run=false format:check`; PASS, exit 0,
   `git diff --check` with no output; and PASS, exit 0,
   `git ls-files --others --exclude-standard` with no output.
+
+## Round 6 Fix Report
+
+### Findings Resolved
+
+- The retry gate now validates the original supported inbox row and summarizes
+  retained attempts from its original message ID before calling
+  `requireEndpointMessage()`. Exhausted rows build only the existing
+  metadata-only failure snapshot from that original row; retryable rows retain
+  the full immutable endpoint snapshot before callback invocation.
+- The shard regression seeds four exhausted 256 KiB payload rows and observes
+  `Buffer.prototype.slice()` calls for those exact payload buffers. It failed
+  red with four copies on the prior code and passed green with zero copies.
+- Retry-policy literals in the worker exhaustion tests now use the internal
+  `deliveryAttemptCapacity` source, and `DeliveryWorkerOptions.maxFailures`
+  documents failed observations including pre-callback exhaustion.
+- The T-0032 work-log ledger now lists all completed branch-history commits
+  through `390dd6ed` and documents the current future-hash convention.
+
+### Commands And Results
+
+- RED, expected exit 1:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts -t "does not clone maximum payload bytes"`.
+  The pre-fix gate copied four 256 KiB payload buffers.
+- GREEN, exit 0: the same focused regression passed with no observed payload
+  copies.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/delivery/delivery-loop.test.ts packages/server/test/delivery/delivery-retry-decision.test.ts packages/server/test/delivery/inbox.test.ts`.
+  Four files and 236 tests passed.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false typecheck:build:generated`.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false docs:check`.
+  TypeDoc reported zero errors and only the known invalid-local-remote
+  source-link warning.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false format:check`.
+- PASS, exit 0: `git diff --check` with no output.
+- PASS, exit 0: `git ls-files --others --exclude-standard` with no output.
+- No full `pnpm verify` was run; fresh four-lane re-review remains pending
+  because this worker was explicitly directed not to spawn subagents.

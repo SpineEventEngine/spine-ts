@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: In progress; Round 5 documentation fix applied; fresh four-lane re-review pending
+Status: In progress; Round 6 fixes verified; fresh four-lane re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5214-ac52-73d2-b44d-b9cd8b7c985c` | Pending |
-| Documentation              | `019f5214-aada-7f61-841d-6c0b1ed870cc` | Pending |
-| TypeScript/API docs        | `019f5214-ab49-76f2-ac89-b6b2a1142efa` | Pending |
-| Performance/reliability    | `019f5214-ad13-7de0-8075-b6c7f7fea02a` | Pending |
+| Code style/maintainability | `019f5226-918f-7183-8f2e-8be8b2504e2c` | Pending |
+| Documentation              | `019f5226-91f3-7551-a8c1-1d58a2fd568a` | Pending |
+| TypeScript/API docs        | `019f5226-927c-7002-b0d6-34b054108a12` | Pending |
+| Performance/reliability    | `019f5226-930e-7232-8b44-05d40ec07360` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -288,3 +288,43 @@ is deferred to the final release-readiness gate.
   `pnpm --config.verify-deps-before-run=false format:check` reported all
   matched files use Prettier code style; `git diff --check` produced no output;
   and `git ls-files --others --exclude-standard` produced no output.
+- `2026-07-11T17:07:00Z`: Generated Round 6 package
+  `.superpowers/sdd/review-aa4d52d9..390dd6ed.diff` and assigned code style
+  `019f5226-918f-7183-8f2e-8be8b2504e2c`, documentation `019f5226-91f3-7551-a8c1-1d58a2fd568a`,
+  TypeScript/API docs `019f5226-927c-7002-b0d6-34b054108a12`, and performance/reliability
+  `019f5226-930e-7232-8b44-05d40ec07360`. The active table was updated in the same dispatch step.
+- `2026-07-11T17:12:00Z`: Round 6 completed and all reviewers were closed.
+  Documentation `019f5226-91f3-7551-a8c1-1d58a2fd568a` was clean.
+  Performance/reliability `019f5226-930e-7232-8b44-05d40ec07360` found the
+  P2 pre-gate payload cloning path and missing max-payload exhausted-page
+  regression. Code style `019f5226-918f-7183-8f2e-8be8b2504e2c` found the
+  P2 incomplete commit ledger and P3 duplicated capacity literals in worker
+  tests. TypeScript/API docs `019f5226-927c-7002-b0d6-34b054108a12` found
+  the P3 stale worker failure-budget JSDoc. Other behavior and active docs were
+  clean.
+- `2026-07-11T17:13:00Z`: Assigned Round 6 fix worker
+  `019f522b-5d3f-7230-9e78-31809cffbc5a` to the complete finding batch. Fresh four-lane
+  re-review remains pending its verified commit.
+- `2026-07-11T18:18:23Z`: The Round 6 fix worker verified and resolved the
+  complete finding batch without spawning subagents, as directed. The new
+  maximum-payload exhausted-backlog regression failed red with four observed
+  copies and passed green with zero after exhaustion moved ahead of full
+  endpoint snapshot construction. The updated gate preserves original-row
+  validation, exact-message/shard behavior, immutable retryable callback
+  snapshots, fail-closed boundaries, and payload-free exhaustion facts. Worker
+  tests share `deliveryAttemptCapacity`; worker failure-budget TypeDocs now use
+  failed-observation wording; and the commit ledger is complete through
+  `390dd6ed` with its future-hash convention recorded.
+- `2026-07-11T18:19:01Z`: Focused delivery worker, loop, retry-decision, and
+  inbox verification passed 4 files and 236 tests, and generated build
+  typecheck passed. Docs, formatting, whitespace, and untracked-output checks
+  remain pending before the one verified fix-batch commit. Fresh four-lane
+  re-review remains pending because this worker was explicitly directed not to
+  spawn subagents.
+- `2026-07-11T18:22:28Z`: Final Round 6 verification passed: affected delivery
+  suites passed 4 files and 236 tests, generated build typecheck, docs check,
+  format check, whitespace check, and untracked-output check each passed.
+  Docs reported zero TypeDoc errors with only the known invalid-local-remote
+  source-link warning. No full `pnpm verify` was run. The one verified fix-batch
+  commit is ready; fresh four-lane re-review remains pending because subagents
+  are prohibited.

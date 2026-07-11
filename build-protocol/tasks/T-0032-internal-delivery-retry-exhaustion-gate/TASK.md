@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: In progress; Round 5 documentation fix applied; fresh four-lane re-review pending
+Status: In progress; Round 6 fixes verified; fresh four-lane re-review pending
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
@@ -194,6 +194,7 @@ available.
 - `packages/server/src/delivery/delivery-attempts.ts`
 - `packages/server/src/delivery/delivery-retry-decision.ts`
 - `packages/server/src/delivery/delivery-loop.ts`
+- `packages/server/src/delivery/delivery-worker.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
 - `packages/server/test/delivery/delivery-loop.test.ts`
 - `packages/server/README.md`
@@ -273,3 +274,22 @@ available.
   `pnpm --config.verify-deps-before-run=false format:check` reported all
   matched files use Prettier code style; `git diff --check` produced no output;
   and `git ls-files --others --exclude-standard` produced no output.
+- `2026-07-11T18:18:23Z`: Round 6 resolved the pre-gate payload-copy finding.
+  Both drain paths now validate the original supported pending row, decide
+  exhaustion from its message ID, and build full endpoint snapshots only for
+  retryable rows. Exhausted failures use a metadata-only snapshot created from
+  the original row, retaining no `Any.value` payload. The red/green regression
+  uses four maximum 256 KiB payload rows and a byte-slice observer: it failed
+  with four payload copies before the change and passed with zero after it.
+- `2026-07-11T18:19:01Z`: The affected delivery worker, loop, retry-decision,
+  and inbox suites passed 236 tests, and generated build typecheck passed. The
+  worker test retry-policy literals now use package-internal
+  `deliveryAttemptCapacity` (and `deliveryAttemptCapacity - 1`), and
+  `DeliveryWorkerOptions.maxFailures` now matches the loop's failed-observation
+  wording, including pre-callback exhaustion. Final quality checks are pending.
+- `2026-07-11T18:22:28Z`: Final Round 6 verification passed: 4 affected
+  delivery suites and 236 tests, generated build typecheck, docs check, format
+  check, whitespace check, and untracked-output check. Docs reported zero
+  TypeDoc errors and only the known invalid-local-remote source-link warning.
+  No full `pnpm verify` was run. The verified fix batch is ready for one commit;
+  fresh four-lane re-review remains pending because subagents are prohibited.

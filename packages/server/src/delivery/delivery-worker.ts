@@ -69,7 +69,10 @@ export interface DeliveryWorkerOptions {
   readonly node: string;
   /** Optional positive accepted-work cap for each drain. */
   readonly limit?: number;
-  /** Maximum failed message attempts per loop before that loop stops. Defaults to one; capped at 1000. */
+  /**
+   * Maximum failed observations per loop before that loop stops, including
+   * bounded retry exhaustion before callback invocation. Defaults to one; capped at 1000.
+   */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: OnDeliveryMessage;
