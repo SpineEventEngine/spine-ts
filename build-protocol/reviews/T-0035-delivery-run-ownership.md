@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 3 four-lane review in progress
+Status: Round 3 findings recorded; decision fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f538d-53ef-7561-ae0a-a4677b5e8041` | Active |
-| Documentation              | `019f538d-5488-7832-a649-007ec106a6fd` | Active |
-| TypeScript/API docs        | `019f538d-550e-7781-af8f-1ec925ceec9d` | Active |
-| Performance/reliability    | `019f538d-55a7-7ec3-a3a5-6f55d5212bec` | Active |
+| Code style/maintainability | `019f538d-53ef-7561-ae0a-a4677b5e8041` | P3     |
+| Documentation              | `019f538d-5488-7832-a649-007ec106a6fd` | P1/P3  |
+| TypeScript/API docs        | `019f538d-550e-7781-af8f-1ec925ceec9d` | Clean  |
+| Performance/reliability    | `019f538d-55a7-7ec3-a3a5-6f55d5212bec` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -158,3 +158,13 @@ Security is deferred to final project readiness.
   `019f538d-550e-7781-af8f-1ec925ceec9d`, and performance/reliability
   `019f538d-55a7-7ec3-a3a5-6f55d5212bec`. Each prompt is package-only and
   ignores superseded historical text unless current records claim it active.
+- `2026-07-11T23:45:00Z`: Round 3 completed and all reviewers were closed.
+  TypeScript/API docs was clean. Documentation and performance/reliability
+  found P1 lifecycle gaps: reusable caller-owned environments need an explicit
+  fresh worker/loop generation (or generation-scoped reversible stop) after
+  last detach, and failed startup of one shared-environment attachment must
+  atomically remove only that attachment and its obligations without closing
+  dependencies beneath retained shared work or poisoning unaffected
+  registrations. Code style and documentation also found the P3 nonchronological
+  work-log ordering. One decision fix worker and fresh four-lane review are
+  required.
