@@ -2923,6 +2923,23 @@ describe("Delivery worker", () => {
   });
 });
 
+function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+): Promise<DeliveryEndpointMessage>;
+function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label: DeliveryEndpointMessage["label"],
+): Promise<DeliveryEndpointMessage>;
+function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label: InboxMessage["label"],
+): Promise<InboxMessage>;
 async function seed(
   delivery: Delivery,
   signalId: string,
@@ -2960,40 +2977,44 @@ interface DeliveryAttemptOwner {
 interface DeliveryAttemptReader {
   read(): Promise<readonly DeliveryAttemptSnapshot[]>;
   recordFailure(input: {
-    readonly message: InboxMessage;
+    readonly message: DeliveryEndpointMessage;
     readonly node: string;
     readonly attemptedAt: Date;
     readonly accepted: boolean;
-    readonly stage: "CLAIM" | "LEASE" | "ENDPOINT" | "CLEANUP" | "STATUS_UPDATE";
-    readonly reason:
-      | "CLAIM_FAILED"
-      | "LEASE_INACTIVE"
-      | "ENDPOINT_REJECTED"
-      | "CLEANUP_FAILED"
-      | "STATUS_UPDATE_FAILED";
+    readonly stage: DeliveryAttemptFailureStage;
+    readonly reason: DeliveryAttemptFailureReason;
   }): Promise<void>;
   summarize(messageId: InboxMessage["id"]): Promise<DeliveryAttemptSummarySnapshot>;
 }
+
+type DeliveryAttemptFailureStage = "CLAIM" | "LEASE" | "ENDPOINT" | "CLEANUP" | "STATUS_UPDATE";
+
+type DeliveryAttemptFailureReason =
+  | "CLAIM_FAILED"
+  | "LEASE_INACTIVE"
+  | "ENDPOINT_REJECTED"
+  | "CLEANUP_FAILED"
+  | "STATUS_UPDATE_FAILED";
 
 interface DeliveryAttemptSnapshot {
   readonly messageId: InboxMessage["id"];
   readonly inboxId: InboxId;
   readonly signalId: string;
-  readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
+  readonly label: DeliveryEndpointMessage["label"];
   readonly shard: ShardIndex;
   readonly node: string;
   readonly attemptedAt: Date;
   readonly accepted: boolean;
-  readonly stage: string;
-  readonly reason: string;
+  readonly stage: DeliveryAttemptFailureStage;
+  readonly reason: DeliveryAttemptFailureReason;
 }
 
 interface DeliveryAttemptSummarySnapshot {
   readonly attempts: readonly DeliveryAttemptSnapshot[];
   readonly count: number;
   readonly latestAttempt: DeliveryAttemptSnapshot | undefined;
-  readonly latestStage: string | undefined;
-  readonly latestReason: string | undefined;
+  readonly latestStage: DeliveryAttemptFailureStage | undefined;
+  readonly latestReason: DeliveryAttemptFailureReason | undefined;
   readonly latestAccepted: boolean | undefined;
 }
 

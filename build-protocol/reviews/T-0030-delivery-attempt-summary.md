@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Coverage re-review findings pending fix
+Status: Coverage re-review fix complete; fresh re-review required
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -199,3 +199,15 @@ Branch: `task/T-0030-delivery-attempt-summary`
   test type-quality issue: `delivery-worker.test.ts` uses a looser local
   retained-attempt reader type than the internal API under test. A single fix
   worker will receive the actionable findings.
+- `2026-07-11T12:38:47Z`: Coverage re-review fix worker resolved the
+  TypeScript/API docs P3 in `delivery-worker.test.ts` by tightening the local
+  retained-attempt helper types to the supported endpoint message shape and
+  exact retained-attempt failure stage/reason unions. The fix is test-only and
+  does not export new public API. Required verification passed: focused
+  delivery Vitest command with 13 tests run and 55 skipped;
+  `typecheck:build:generated`; `format:check`; and `git diff --check`.
+  Documentation P3 traceability/status findings from the coverage-fix
+  re-review are recorded in this review log and the work log. Because the test
+  file and durable logs changed after coverage-fix re-review, a fresh
+  baseline-to-HEAD review package and required re-review are still required
+  before final acceptance.

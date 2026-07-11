@@ -1,6 +1,6 @@
 # T-0030: Internal Delivery Attempt Summary For Retry Decisions
 
-Status: Coverage re-review findings pending fix
+Status: Coverage re-review fix complete; fresh re-review required
 Started: `2026-07-11T10:05:55Z`
 Baseline commit: `1573863f`
 Branch: `task/T-0030-delivery-attempt-summary`
