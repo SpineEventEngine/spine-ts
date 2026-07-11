@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 112 docs/API-doc fix verified; commit pending
+Status: Round 114 lint-shorthand fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                         |
-| -------------------------- | -------- | ------------------------------ |
-| Code style/maintainability | TBD      | Current-HEAD re-review pending |
-| Documentation              | TBD      | Current-HEAD re-review pending |
-| TypeScript/API docs        | TBD      | Current-HEAD re-review pending |
-| Security                   | TBD      | Current-HEAD re-review pending |
-| Performance/reliability    | TBD      | Current-HEAD re-review pending |
+| Lane                       | Reviewer    | Status                        |
+| -------------------------- | ----------- | ----------------------------- |
+| Code style/maintainability | Noether     | Round 113 finding pending fix |
+| Documentation              | Bernoulli   | Round 113 clean               |
+| TypeScript/API docs        | Herschel    | Round 113 clean               |
+| Security                   | Ohm         | Round 113 clean               |
+| Performance/reliability    | Schrodinger | Round 113 clean               |
 
 ## Review Criteria
 
@@ -3460,3 +3460,43 @@ red/green delivery regressions before the next review pass.
   evidence guard returned no matches; and positive cap-wording guards found the
   `InboxReadOptions.limit` and `ShardedWorkRegistryOptions.leaseMs` caps in
   source/API docs.
+- Coordinator commit `00276c2f` (`Document delivery option caps`) recorded this
+  docs/API-docs cleanup.
+
+### Round 113 Re-review - `2026-07-11T02:54:29Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..00276c2f.diff` from task baseline
+  `ca8fb2b3` to current HEAD `00276c2f`.
+- Code style/maintainability (Noether the 4th): [P2]
+  `packages/server/test/delivery/delivery-worker.test.ts` uses
+  `Array<{ readonly limit?: number; readonly offset?: number }>` in the
+  stale-head regression. The repo lint gate requires array shorthand.
+- Documentation (Bernoulli the 4th): clean. Human docs and durable logs are
+  aligned, and the cleanup-commit breadcrumb policy covers the current
+  non-self-referential commit.
+- TypeScript/API docs (Herschel the 4th): clean. Public delivery types, export
+  surface, TypeDoc, generated API docs, and numeric option cap docs are aligned.
+- Security (Ohm the 4th): clean. Label narrowing, fail-closed legacy data,
+  bounded reads, snapshot copying, row/shard fencing, and residual-risk docs
+  remain aligned.
+- Performance/reliability (Schrodinger the 4th): clean. Focused delivery,
+  loop, inbox, shard registry, and runtime tests passed with 5 files and 247
+  tests; the stale-owner at-least-once caveat remains the documented residual
+  risk.
+- Action: record this findings batch, run one lint-only fix worker, verify,
+  commit, and rerun all five required lanes.
+
+### Round 114 Lint-Shorthand Fix - `2026-07-11T02:56:46Z`
+
+- Scope: test lint cleanup only. No runtime delivery behavior changed.
+- Fix: changed the stale-head delivery-worker regression query list type from
+  `Array<{ readonly limit?: number; readonly offset?: number }>` to
+  `{ readonly limit?: number; readonly offset?: number }[]`.
+- Worker verification: `pnpm --config.verify-deps-before-run=false lint`
+  passed, the edited test file's Prettier check passed, and `git diff --check`
+  passed. Repo `format:check` flagged coordinator-owned markdown wrapping that
+  will be normalized before commit.
+- Coordinator verification: passed on `2026-07-11T02:57:39Z`. `lint` passed,
+  including proto generation, generated typecheck, ESLint, and cleanup-rule
+  checks; `format:check` passed; and `git diff --check` passed.

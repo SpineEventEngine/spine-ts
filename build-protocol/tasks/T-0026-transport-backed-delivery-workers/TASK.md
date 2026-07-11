@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 112 docs/API-doc fix verified; commit pending
+Status: Round 114 lint-shorthand fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1772,3 +1772,25 @@ the known TypeDoc invalid-origin source-link warning; `format:check` passed;
 evidence guard returned no matches; and positive cap-wording guards found the
 `InboxReadOptions.limit` and `ShardedWorkRegistryOptions.leaseMs` caps in
 source/API docs. No commit was created by request.
+
+Coordinator commit `00276c2f` (`Document delivery option caps`) recorded the
+Round 112 docs/API-docs cleanup.
+
+Round 113 re-review on `2026-07-11T02:54:29Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..00276c2f.diff` produced clean
+documentation, TypeScript/API docs, security, and performance/reliability
+lanes. Code style/maintainability found one merge-blocking lint issue in
+`packages/server/test/delivery/delivery-worker.test.ts`: the stale-head
+regression used `Array<{ ... }>` where the repo's ESLint rules require
+`{ ... }[]` shorthand. Runtime delivery semantics remained accepted by the
+reviewers. Round 114 will apply that lint-only test cleanup, verify, commit,
+and rerun all five required lanes.
+
+Round 114 lint-shorthand fix on `2026-07-11T02:56:46Z`: changed the stale-head
+delivery-worker regression query list type from `Array<{ ... }>` to `{ ... }[]`
+array shorthand. No runtime behavior changed. Coordinator verification is
+pending.
+
+Round 114 verification on `2026-07-11T02:57:39Z`: `lint` passed, including
+proto generation, generated typecheck, ESLint, and cleanup-rule checks;
+`format:check` passed; and `git diff --check` passed.

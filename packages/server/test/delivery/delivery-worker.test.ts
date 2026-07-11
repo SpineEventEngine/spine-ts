@@ -1277,7 +1277,7 @@ describe("Delivery worker", () => {
 
   it("keeps a partial stale-head rescan paged when a supported row moves before its offset", async () => {
     let skippedHead: readonly InboxMessage[] = [];
-    const inboxQueries: Array<{ readonly limit?: number; readonly offset?: number }> = [];
+    const inboxQueries: { readonly limit?: number; readonly offset?: number }[] = [];
     const faults = deliveryStorageFaults(
       recordInboxQueries(inboxQueries),
       onInboxQueryNumber(3, async () => {
