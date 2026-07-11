@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Implementation complete; review pending
+Status: Coordinator pre-review payload fix in progress; review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -46,3 +46,8 @@ Security is deferred to final project readiness.
   pass, active docs/TypeDocs and D-0084 current-state reconciliation, focused
   verification, and implementation report. Coordinator pre-review lint and all
   four independent reviewer lanes remain pending.
+- `2026-07-11T21:40:00Z`: Coordinator verification passed, then pre-review
+  inspection found unnecessary payload cloning while recording exhausted
+  claim/lease failures. The same implementation worker was resumed for a
+  payload-free metadata snapshot and focused regression. Review remains
+  pending.
