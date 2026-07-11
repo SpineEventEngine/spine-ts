@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Final verification passed; merge pending
+Status: Complete; merged to `main`
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -483,3 +483,9 @@ Branch: `task/T-0029-delivery-attempt-retention`
   passed: `typecheck:build:generated`, `docs:check`, `format:check`,
   `git diff --check`, and `git ls-files --others --exclude-standard`.
   `docs:check` emitted only the existing TypeDoc invalid-origin warning.
+- `2026-07-11T09:59:29Z`: Merged T-0029 into root `main` as
+  `5bd7e112 Merge branch 'task/T-0029-delivery-attempt-retention'`.
+  Post-merge verification passed from root `main`: targeted Vitest suite passed
+  with 7 files and 260 tests, `typecheck:build:generated` passed,
+  `docs:check` passed with only the existing TypeDoc invalid-origin warning,
+  `format:check` passed, and `git diff --check` passed.

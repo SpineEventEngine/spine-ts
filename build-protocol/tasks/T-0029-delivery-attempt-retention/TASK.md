@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: Final verification passed; merge pending
+Status: Complete; merged to `main`
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -345,3 +345,11 @@ passed, `docs:check` passed with only the existing TypeDoc invalid-origin
 warning, `format:check` passed, `git diff --check` passed, and
 `git ls-files --others --exclude-standard` reported no untracked generated
 output. The branch is ready to merge into root `main`.
+
+Merged into root `main` as `5bd7e112 Merge branch
+'task/T-0029-delivery-attempt-retention'`. Post-merge verification passed at
+`2026-07-11T09:59:29Z`: the final targeted Vitest suite passed with 7 files and
+260 tests, `typecheck:build:generated` passed, `docs:check` passed with only
+the existing TypeDoc invalid-origin warning, `format:check` passed, and
+`git diff --check` passed. Root `main` still has only the user-owned untracked
+`human-review-1-jul.md`.
