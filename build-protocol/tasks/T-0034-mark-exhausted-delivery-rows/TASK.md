@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Coordinator pre-review payload fix in progress
+Status: Implementation complete; review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -140,6 +140,13 @@ failure reports one frozen bounded stack-free exhaustion fact object, retains
 no attempt, consumes one failure, and leaves authoritative `TO_DELIVER`;
 claim/lease failures preserve existing bounded attempt accounting. Broader
 failure-policy facilities remain deferred.
+
+The coordinator-assigned pre-review payload fix now records exhausted
+claim/lease/cleanup attempts from the existing payload-free exhaustion snapshot
+instead of cloning the endpoint `Any.value`. Label/status validation and all
+attempt/failure accounting remain unchanged. A maximum-payload regression keeps
+the successful exhaustion coverage and proves the claim-failure retention path
+also performs zero payload copies.
 
 Focused worker/loop tests, build/tooling typechecks, focused ESLint, docs/API,
 format, diff, and untracked-output checks are recorded in the implementation

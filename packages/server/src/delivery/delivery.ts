@@ -458,7 +458,7 @@ export class Delivery {
     action: DeliveryMessageResult,
   ): Promise<void> {
     if (action.kind === "FAILED" && action.stage !== "STATUS_UPDATE") {
-      await this.#recordFailedAttempt(attempts, requireEndpointMessage(message), action);
+      await this.#recordFailedAttempt(attempts, exhaustedFailureMessage(message), action);
     }
   }
 

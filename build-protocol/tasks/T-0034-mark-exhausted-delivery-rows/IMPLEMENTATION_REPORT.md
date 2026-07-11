@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Coordinator pre-review payload fix in progress
+Status: Implementation complete; review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -31,8 +31,21 @@ the coordinator can identify it from branch `HEAD` and the final worker report.
 - Existing retryable callback cleanup/finalization, one-attempt/one-failure
   sequencing, attempt 100, callback-success `STATUS_UPDATE`, `CATCH_UP`, and
   legacy `IMPORT_EVENT` behavior remain unchanged.
+- The pre-review payload fix records exhausted claim/lease/cleanup attempts
+  from `exhaustedFailureMessage()`, avoiding an otherwise discarded
+  `Any.value` clone while preserving endpoint label/status validation and all
+  retained attempt/failure semantics.
 
 ## TDD Evidence
+
+- Pre-review payload fix: verified that exhausted claim/lease attempt recording
+  unnecessarily routed through the payload-copying endpoint snapshot even
+  though retained attempts persist metadata only. RED preserved the successful
+  exhausted backlog at zero copies, then observed exactly one maximum-payload
+  slice on exhausted claim failure.
+- Pre-review payload GREEN: the same extended test observed zero payload slices
+  for both successful exhaustion and exhausted claim-failure retention, while
+  preserving bounded `CLAIM_FAILED` attempt facts.
 
 - Success RED: four focused shard, exact-message, accepted-limit, and loop
   tests failed with the old delivered 0 / failed 1 behavior.
@@ -63,6 +76,7 @@ the coordinator can identify it from branch `HEAD` and the final worker report.
 ## Verification
 
 - PASS: delivery worker/loop Vitest, 2 files and 110 tests.
+- PASS: focused maximum-payload success/claim-failure regression, 1 test.
 - PASS: `typecheck:build:generated`.
 - PASS: `typecheck:tooling`.
 - PASS: focused ESLint over changed delivery runtime/tests.

@@ -1419,7 +1419,7 @@ describe("Delivery worker", () => {
     });
   });
 
-  it("does not clone maximum payload bytes for an exhausted supported backlog", async () => {
+  it("does not clone maximum payload bytes for exhausted success or claim failure", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1443,6 +1443,22 @@ describe("Delivery worker", () => {
     await Promise.all(
       messages.map((message) => recordFailures(delivery, message, deliveryAttemptCapacity)),
     );
+    const failedClaim = throwInboxClaimOnce();
+    const claimDelivery = new Delivery({
+      context: { name: "ClaimTasks", multitenant: false },
+      storageFactory: deliveryStorageFaults(failedClaim).storageFactory,
+    });
+    const claimMessage = await seed(
+      claimDelivery,
+      "signal-exhausted-payload-claim-failure",
+      1n,
+      "UPDATE_SUBSCRIBER",
+      create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.Signal",
+        value: payload,
+      }),
+    );
+    await recordFailures(claimDelivery, claimMessage, deliveryAttemptCapacity);
     let copiedPayloads = 0;
     const bufferPrototype = Reflect.getPrototypeOf(payload);
     if (!isBufferSlicePrototype(bufferPrototype)) {
@@ -1478,6 +1494,30 @@ describe("Delivery worker", () => {
         failed: 0,
       });
       expect(run.failures).toEqual([]);
+
+      const claimRun = await claimDelivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("exhausted callback must not run");
+        },
+      });
+
+      expect(copiedPayloads).toBe(0);
+      expect(claimRun).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        accepted: 0,
+        delivered: 0,
+        failed: 1,
+      });
+      await expect(
+        requireAttempts(claimDelivery).summarize(claimMessage.id),
+      ).resolves.toMatchObject({
+        count: deliveryAttemptCapacity,
+        latestStage: "CLAIM",
+        latestReason: "CLAIM_FAILED",
+        latestAccepted: false,
+      });
     } finally {
       payloadSlices.mockRestore();
     }

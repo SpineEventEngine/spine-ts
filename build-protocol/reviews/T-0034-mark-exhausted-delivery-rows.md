@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Coordinator pre-review payload fix in progress; review pending
+Status: Implementation complete; review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -51,3 +51,12 @@ Security is deferred to final project readiness.
   claim/lease failures. The same implementation worker was resumed for a
   payload-free metadata snapshot and focused regression. Review remains
   pending.
+- `2026-07-11T20:40:40Z`: Resumed implementation worker completed the bounded
+  applicability recheck and verified the pre-review finding against the actual
+  snapshot/copy path before test or runtime edits. TDD fix is in progress;
+  reviewer lanes remain pending and no reviewer was spawned.
+- `2026-07-11T20:42:01Z`: Pre-review payload fix completed with focused
+  RED/GREEN proving zero maximum-payload copies on both exhausted success and
+  claim-failure attempt retention. Fresh 110-test, typecheck, lint, docs, and
+  cleanliness evidence is recorded in the work log/report. Independent review
+  remains pending coordinator dispatch.
