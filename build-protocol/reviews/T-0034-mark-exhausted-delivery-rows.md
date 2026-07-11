@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 8 independent review in progress
+Status: Round 8 runtime findings pending fix
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f532f-ffef-7093-92de-f05ad342acc3` | Pending |
-| Documentation              | `019f5330-005e-74f2-abdb-3e96a6c3bb86` | Pending |
-| TypeScript/API docs        | `019f5330-0171-7533-bdc5-54f975bbf14a` | Pending |
-| Performance/reliability    | `019f5330-00e7-7233-b412-cd6e8fd4a157` | Pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f532f-ffef-7093-92de-f05ad342acc3` | P2     |
+| Documentation              | `019f5330-005e-74f2-abdb-3e96a6c3bb86` | Clean  |
+| TypeScript/API docs        | `019f5330-0171-7533-bdc5-54f975bbf14a` | P2     |
+| Performance/reliability    | `019f5330-00e7-7233-b412-cd6e8fd4a157` | P2     |
 
 Security is deferred to final project readiness.
 
@@ -239,6 +239,12 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:06:00Z`: Generated Round 8 package
   `.superpowers/sdd/review-da75f11e..68ca3ac7.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T22:11:00Z`: Round 8 completed and all four reviewers were
+  closed. Documentation was clean. The runtime P2 batch has two findings:
+  preserve `LEASE` staging through the final renewal/active guard so failures
+  retain lease attempts, and preserve the original mark error until cleanup
+  succeeds so failed cleanup aggregates both original errors. One fix worker
+  and fresh four-lane review are required.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
