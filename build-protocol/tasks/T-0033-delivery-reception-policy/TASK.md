@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Round 1 findings pending fix
+Status: Round 1 fix in progress
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`

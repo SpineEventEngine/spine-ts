@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Round 1 findings pending fix
+Status: Round 1 fix in progress
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -75,3 +75,6 @@ protocol.
   it must bound and sanitize only new action-failure facts, acknowledge the
   existing row snapshot, and defer any public failure-contract change. One fix
   worker must resolve the complete batch before all four lanes re-review.
+- `2026-07-11T19:55:00Z`: Resumed decision author
+  `019f5297-9471-7a01-a287-9b08ac23250a` as the single fix worker for the
+  complete Round 1 batch. Fresh four-lane re-review is pending.
