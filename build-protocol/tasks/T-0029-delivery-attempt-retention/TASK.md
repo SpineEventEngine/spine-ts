@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 6 findings pending fix
+Status: In progress; Round 6 fix verified locally and pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -276,3 +276,15 @@ implementation mostly clean, but `nextSequence()` can still perform unsafe
 arithmetic when corrupt stored state contains `Number.MAX_SAFE_INTEGER`, and
 durable logs must record current head `a7361306` while keeping re-review
 pending.
+
+Coordinator recorded the complete Round 6 findings as
+`eeb5d2bc Record T-0029 Round 6 review findings`. The Round 6 fix started from
+that commit and is limited to failing closed before incrementing a retained
+`Number.MAX_SAFE_INTEGER` attempt sequence plus durable-log freshness. Focused
+regression coverage now distinguishes the old late failure, where the unsafe
+incremented sequence reached record materialization, from the intended early
+`DeliveryStorageCorruptionError` before next-sequence arithmetic is used. The
+required focused Vitest slice, `typecheck:build:generated`, `docs:check`,
+`format:check`, and `git diff --check` passed locally; generated Protobuf
+output remains out of VCS. After the fix commit, T-0029 remains pending a
+fresh review package and re-review.

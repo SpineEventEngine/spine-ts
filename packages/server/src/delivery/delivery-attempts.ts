@@ -205,6 +205,12 @@ async function nextSequence(
     sequence = Math.max(sequence, readStoredAttempt(record, key).sequence);
   }
 
+  if (sequence >= Number.MAX_SAFE_INTEGER) {
+    throw new DeliveryStorageCorruptionError(
+      "Delivery attempt sequence cannot be incremented safely.",
+    );
+  }
+
   return sequence + 1;
 }
 

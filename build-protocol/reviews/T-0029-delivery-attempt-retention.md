@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 6 findings pending fix
+Status: Round 6 fix verified locally and pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -186,6 +186,30 @@ Branch: `task/T-0029-delivery-attempt-retention`
   protection before sequence increment overflow with focused regression
   coverage, run focused verification, commit, regenerate the review package,
   and rerun all five independent review lanes.
+
+### Round 6 Fix Status
+
+- Starting point: `eeb5d2bc Record T-0029 Round 6 review findings`.
+- Fix worker scope: update durable logs and make retained-attempt sequence
+  discovery reject a stored `Number.MAX_SAFE_INTEGER` sequence before
+  incrementing it or using the next sequence in ring-key arithmetic. No retry
+  monitor, scheduler, public API, production adapter, topology, durable
+  catch-up, generated Protobuf output, or `IMPORT_EVENT` support is part of
+  this fix.
+- Regression evidence so far: the focused test
+  `fails closed before incrementing a max safe stored delivery attempt sequence`
+  first failed because the unsafe incremented sequence reached stored-record
+  materialization and produced the later `sequence must be a safe integer`
+  corruption error. The same focused test passed after `nextSequence()` began
+  rejecting max-safe retained state with `DeliveryStorageCorruptionError`
+  before `sequence + 1`.
+- Verification: required Round 6 focused Vitest passed with 2 files, 57 tests
+  run, and 126 skipped. `typecheck:build:generated` passed. `docs:check`
+  passed with the existing TypeDoc invalid-origin warning only. `format:check`
+  passed after Markdown reflow. `git diff --check` passed. `git ls-files
+--others --exclude-standard` reported no untracked files.
+- Status: fix verified locally; fresh review package and re-review remain
+  pending after the fix commit.
 
 ### Round 3 Independent Review - `2026-07-11T08:35:00Z`
 

@@ -1353,6 +1353,31 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/sequence/i);
   });
 
+  it("fails closed before incrementing a max safe stored delivery attempt sequence", async () => {
+    const existingKey = "0/1:message-1:attempt:000000000091";
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: existingKey,
+          sequence: Number.MAX_SAFE_INTEGER,
+        }),
+      ]),
+    });
+
+    const write = delivery.attempts.recordFailure({
+      message: createMessage("message-1", "signal-1", 1n),
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:01:00.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/cannot be incremented safely/i);
+  });
+
   it("fails closed when stored delivery attempt inbox identity fields disagree", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -2826,8 +2851,10 @@ class FakeRecordStorage extends RecordStorage<string, Any> {
     );
   }
 
-  protected readRecord(): Promise<Any | undefined> {
-    return Promise.resolve(undefined);
+  protected readRecord(id: string): Promise<Any | undefined> {
+    return Promise.resolve(
+      this.#records.find((record) => this.recordSpec.idValueIn(record) === id),
+    );
   }
 
   protected writeAllRecords(): Promise<void> {
