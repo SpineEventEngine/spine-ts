@@ -62,3 +62,6 @@ Branch: `task/T-0031-delivery-retry-decision`
   T-0031 commits from branch history: `e5ba1c03`, `3e210abb`, `178e0eb2`,
   `33a60928`, and `6ef03298`. This is only the finding fix record; coordinator
   re-review has not run yet.
+- `2026-07-11T13:29:58+0100`: Coordinator inspection added the documentation
+  fix commit `c0b918fd` to the durable commit ledger before generating the next
+  review package. Re-review remains pending.
