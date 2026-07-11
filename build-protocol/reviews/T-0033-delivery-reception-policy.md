@@ -38,4 +38,3 @@ protocol.
 - `2026-07-11T19:08:00Z`: T-0033 scaffold created after requirements splitter
   `019f528e-7ee6-7063-bbd4-6add1fe5ae80` recommended a docs/decision-only
   reception-failure policy slice. Decision authoring and review are pending.
-
