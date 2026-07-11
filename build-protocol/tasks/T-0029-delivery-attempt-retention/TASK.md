@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 2 fixes verified pending re-review
+Status: In progress; Round 3 findings pending fix
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -216,3 +216,10 @@ Round 2 fix worker committed `0070e853 Fix T-0029 round 2 attempt retention`.
 The fix replaced global retained-attempt sequence queries with bounded direct
 reads of the 100 per-message retention slots, and the task remains pending a
 fresh review package plus all five review lanes.
+
+Coordinator recorded the Round 2 fix commit as
+`68e0d96c Record T-0029 Round 2 fix commit` and generated
+`.superpowers/sdd/review-3820e76d..68e0d96c.diff` for Round 3 review. Round 3
+found fixes still required: durable logs must record the current package/head
+and fix inconsistent timestamps, and stored delivery-attempt sequence
+validation must reject unsafe integers as storage corruption.
