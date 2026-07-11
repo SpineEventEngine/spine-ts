@@ -290,9 +290,12 @@ with storage-backed lease fencing, scans `TO_DELIVER` rows in inbox order,
 skips rows unavailable to the active worker before endpoint invocation, and
 passes independent message snapshots only to validated framework endpoints.
 Those snapshots copy `Date` values and `Any.value` bytes from the claimed row.
-Its callback limit caps endpoint callbacks that actually run; the storage read
-cap plus that limit bounds scanning while replay advances past unavailable or
-worker-unsupported rows first. Valid worker-unsupported labels such as
+Its callback limit caps endpoint callbacks that actually run. Newly observed
+rows stop at the storage read cap plus that limit while replay advances past
+unavailable or worker-unsupported rows first. If a stale pending-boundary
+mismatch resets an offset scan to the head, recovery may additionally read one
+cap-sized page of already-seen rows plus one-row boundary probes to reach work
+that moved before the saved offset. Valid worker-unsupported labels such as
 `CATCH_UP` remain pending and are skipped before callback invocation, row
 acceptance, failure recording, or failure-budget consumption. Successful rows
 are marked `DELIVERED`; endpoint callback failures leave the row `TO_DELIVER`

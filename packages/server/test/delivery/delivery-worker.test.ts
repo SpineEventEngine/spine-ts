@@ -25,6 +25,7 @@ import {
   onInboxQuery,
   onInboxQueryNumber,
   packStoredRecord,
+  recordInboxQueries,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
   skipInboxRepairOnce,
@@ -1276,7 +1277,9 @@ describe("Delivery worker", () => {
 
   it("keeps a partial stale-head rescan paged when a supported row moves before its offset", async () => {
     let skippedHead: readonly InboxMessage[] = [];
+    const inboxQueries: Array<{ readonly limit?: number; readonly offset?: number }> = [];
     const faults = deliveryStorageFaults(
+      recordInboxQueries(inboxQueries),
       onInboxQueryNumber(3, async () => {
         await Promise.all(
           skippedHead.slice(0, 1).map((message) => delivery.inbox.markDelivered(message)),
@@ -1331,6 +1334,13 @@ describe("Delivery worker", () => {
       failed: 0,
     });
     expect(faults.inboxQueries).toBe(5);
+    expect(inboxQueries).toEqual([
+      { limit: 1_000, offset: 0 },
+      { limit: 1, offset: 999 },
+      { limit: 1, offset: 1_000 },
+      { limit: 1, offset: 999 },
+      { limit: 1_000, offset: 0 },
+    ]);
   });
 
   it("does not skip a supported row when skipped head rows disappear between page reads", async () => {

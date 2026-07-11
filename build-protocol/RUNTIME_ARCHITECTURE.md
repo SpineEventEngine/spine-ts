@@ -266,7 +266,12 @@ delivery worker boundary:
   returned failures receive independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
   values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
-  reaches those endpoints or failures;
+  reaches those endpoints or failures. The callback limit caps endpoint
+  callbacks that actually run. Newly observed rows stop at the storage read cap
+  plus that limit. If a stale pending-boundary mismatch resets an offset scan
+  to the head, recovery may additionally read one cap-sized page of
+  already-seen rows plus one-row boundary probes to reach work that moved before
+  the saved offset;
   successful delivery marks the row `DELIVERED`, endpoint callback failures
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update

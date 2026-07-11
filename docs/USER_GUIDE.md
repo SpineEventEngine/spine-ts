@@ -1229,7 +1229,9 @@ effects to be at-least-once/replay-safe; final fencing can prevent stale
 finalization but cannot uninvoke an already-run callback. Broader production
 supervision, cancellation, and retry-monitor policy remains future work.
 For framework-owned replay, the callback limit caps endpoint callbacks that
-actually run, while the storage read cap plus that limit bounds total scanning.
+actually run. Newly observed rows stop at the storage read cap plus that limit;
+stale-offset recovery may additionally read one cap-sized page of already-seen
+rows plus one-row boundary probes when pending rows move before a saved offset.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
 failure-budget consumption. Pre-callback claim, replay-validation, and

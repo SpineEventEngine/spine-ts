@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 102 fix verified; re-review pending
+Status: Round 104 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -302,9 +302,9 @@ format, and diff whitespace checks. No commit will be created by this sub-agent.
 
 Round 23 fix summary/evidence on `2026-07-10`: `Delivery.drain()` now keeps the
 internal claimed row snapshot private and passes callbacks a cloned public
-snapshot with copied `Date` and `Any.value` data; drain scanning is bounded to
-the storage read cap plus accepted-work limit while the accepted-work limit
-remains endpoint-only; worker label docs and TypeDoc now reserve fail-closed
+snapshot with copied `Date` and `Any.value` data; newly observed drain rows are
+bounded to the delivery read cap and accepted-work limit while the
+accepted-work limit remains endpoint-only; worker label docs and TypeDoc now reserve fail-closed
 wording for malformed/deprecated legacy data.
 Focused delivery Vitest, generated build typecheck, docs check, format check,
 and `git diff --check` passed; `docs:check` reported only the existing invalid
@@ -424,10 +424,10 @@ callbacks cannot redirect shard renew/mark/cleanup/release or inbox/dedup work
 to another tenant. `DeliveryLoop.run()` now returns a resumable `PAUSED`
 status after a bounded skipped-only scan streak instead of letting one
 invocation continue scanning unsupported rows indefinitely. Broader guides now
-state that `limit` caps endpoint callbacks actually invoked, scanning is
-bounded by `maxReadLimit + limit`, and skipped/unsupported rows plus
-pre-callback failures do not consume accepted work; those failures still count
-toward `failed` / `DeliveryLoop.maxFailures`. The
+state that `limit` caps endpoint callbacks actually invoked, newly observed
+rows stop at the delivery read cap plus `limit`, and skipped/unsupported rows
+plus pre-callback failures do not consume accepted work; those failures still
+count toward `failed` / `DeliveryLoop.maxFailures`. The
 public `DeliveryEndpointMessage.label` property now inlines its supported-label
 union, and the historical Round 24 notes mention the later
 `OnDeliveryMessage` rename. Coordinator verification passed with focused
@@ -1599,3 +1599,37 @@ only the known TypeDoc invalid-origin source-link warning; `format:check`
 passed after the repo formatter rewrote the owned work log; `git diff --check`
 passed; and the targeted stale ownership guard found no remaining overbroad
 duplicate-dispatch wording in the touched docs.
+
+Coordinator commit `aa0e9387` (`Clarify delivery ownership recovery docs`)
+recorded the Round 102 docs/contract fix.
+
+Round 103 re-review on `2026-07-11T01:33:42Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..aa0e9387.diff` produced clean code
+style/maintainability, documentation, TypeScript/API docs, and security lanes.
+Performance/reliability found the stale-offset rescan path still exceeds the
+documented scan budget: after an initial page and stale boundary probe,
+`resetAfterBoundaryChange()` grants another full `maxReadLimit` allowance, so a
+`limit: 1` drain may read roughly `maxReadLimit + 1 + maxReadLimit` rows before
+one callback. This is finite but does not match the current “storage read cap
+plus limit” wording. Round 104 will align the implementation/docs/test contract
+so stale-boundary recovery has an explicit bounded-rescan allowance or a
+tighter budget, then verify and rerun all five lanes.
+
+Round 104 fix on `2026-07-11T01:37:36Z`: selected the explicit
+bounded-rescan allowance as the least risky contract because strict storage-row
+budgeting would make the existing stale-head liveness case unreachable with
+offset-only storage. `Delivery.drain()` still caps endpoint callbacks by
+`limit` and stops newly observed rows at `maxReadLimit + limit`; when stale
+pending-boundary validation resets an offset scan to the head, the contract now
+allows one additional cap-sized page of already-seen rows plus the one-row
+boundary probes needed to detect the mismatch. The partial stale-head
+regression now records inbox query limits and offsets to pin that exact
+sequence, and public/runtime/API docs name the allowance instead of promising a
+strict storage-read cap.
+
+Round 104 verification on `2026-07-11T01:42:21Z`: focused delivery-worker
+Vitest for stale-head/rescan/read-cap behavior passed with 3 tests selected and
+50 skipped; `docs:check` passed with only the known invalid TypeDoc `origin`
+source-link warning; `format:check` passed after the repo formatter normalized
+the owned work log and architecture doc; `git diff --check` passed; and the
+targeted stale strict-budget wording guard returned no matches.

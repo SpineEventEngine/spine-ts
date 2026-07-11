@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 102 fix verified; re-review pending
+Status: Round 104 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -754,8 +754,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   stay finite while still allowing one full storage page of skipped rows before
   accepted endpoint work.
 - Fix: `Delivery.drain()` now exposes a cloned public callback snapshot,
-  bounds skipped-row scanning to storage read cap plus accepted-work limit, and
-  keeps valid worker-unsupported labels pending and skipped rather than failed.
+  bounds newly observed skipped-row scanning to the delivery read cap and
+  accepted-work limit, and keeps valid worker-unsupported labels pending and
+  skipped rather than failed.
 - Evidence: focused delivery regressions covered callback mutation privacy,
   skipped-row scan progression, and finite scan budget; they failed before the
   final adjustments and passed after the fixes.
@@ -2441,8 +2442,9 @@ red/green delivery regressions before the next review pass.
 - Documentation (Arendt the 2nd): [P3] `docs/api/README.md` and
   `packages/server/README.md` say the endpoint callback limit and scan budget
   are finite but do not name the binding formula. Update those public summaries
-  to say the callback limit caps endpoint callbacks actually invoked and the
-  storage read cap plus `limit` bounds scanning.
+  to say the callback limit caps endpoint callbacks actually invoked and name
+  the delivery read cap plus `limit` base formula later refined by Round 104's
+  stale-boundary allowance.
 - TypeScript/API docs (Dewey the 3rd): clean. `DeliveryEndpointMessage`
   remains exported with supported callback labels only, raw delivery callbacks
   stay out of the root barrel, replay target types narrow labels/status, local
@@ -3236,3 +3238,53 @@ red/green delivery regressions before the next review pass.
   the owned work log; `git diff --check` exited 0; and the targeted stale
   ownership guard found no remaining overbroad duplicate-dispatch wording in
   the touched docs.
+- Coordinator commit `aa0e9387` (`Clarify delivery ownership recovery docs`)
+  recorded this docs/contract fix.
+
+### Round 103 Re-review - `2026-07-11T01:33:42Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..aa0e9387.diff` from task baseline
+  `ca8fb2b3` to current HEAD `aa0e9387`.
+- Code style/maintainability (Peirce the 3rd): clean. Naming, cohesion,
+  durable logs, and local delivery patterns remain aligned.
+- Documentation (Linnaeus the 3rd): clean. Round 102 and current HEAD
+  `aa0e9387` are accurately recorded; live ownership, expired-claim recovery,
+  stale-owner caveat, label handling, snapshot isolation, and accepted-work
+  semantics are consistent across task/user-facing docs.
+- TypeScript/API docs (Jason the 3rd): clean. Public types, exports, TypeDoc,
+  and API docs align with the supported delivery labels and recovery semantics.
+- Security (Lorentz the 4th): clean. Tenant isolation, fail-closed labels,
+  snapshot copying, row/shard fencing, expired-claim recovery, and documented
+  stale-owner residual risk are acceptable for this slice.
+- Performance/reliability (Feynman the 4th): [P2] stale-offset rescan can
+  exceed the documented scan budget. `DeliveryLimits` documents
+  `maxReadLimit + limit`, but after a boundary mismatch
+  `resetAfterBoundaryChange()` grants another full `maxReadLimit` allowance,
+  so the existing stale-offset regression demonstrates an initial page, a
+  boundary probe, and another rescan page before one callback. The behavior is
+  finite, but the implementation/test contract and docs must agree on either a
+  tighter cap or an explicit bounded-rescan allowance.
+- Action: record this findings batch, run one fix worker for the stale-boundary
+  scan-budget contract, verify, commit, and rerun all five required lanes.
+
+### Round 104 Contract Fix - `2026-07-11T01:37:36Z`
+
+- Decision: keep the stale-offset recovery behavior and document it explicitly.
+  A strict storage-row cap of `maxReadLimit + limit` would make the existing
+  moved-supported-row liveness case unreachable with offset-only storage after
+  the first cap-sized page has already been seen.
+- Fix: `Delivery.drain()` docs, public package/API/user/architecture docs, and
+  durable build-protocol docs now say newly observed rows stop at
+  `maxReadLimit + limit`, while stale pending-boundary recovery may read one
+  additional cap-sized page of already-seen rows plus one-row boundary probes.
+- Test: the partial stale-head regression now records inbox query limits and
+  offsets and pins the recovery sequence: first cap page, boundary probe, stale
+  offset probe, second boundary probe, and one cap-sized head rescan before the
+  moved supported row is delivered.
+- Verification: focused delivery-worker Vitest for stale-head/rescan/read-cap
+  behavior passed with 3 tests selected and 50 skipped; `docs:check` passed
+  with only the known invalid TypeDoc `origin` source-link warning;
+  `format:check` passed after the repo formatter normalized the owned work log
+  and architecture doc; `git diff --check` passed; and the targeted stale
+  strict-budget wording guard returned no matches.

@@ -49,8 +49,11 @@ export class Delivery {
    *
    * The drain first picks up the shard with lease fencing, then scans
    * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work;
-   * the storage read cap plus `limit` bounds scanning while the drain advances
-   * past unavailable rows before endpoint invocation. The `onMessage` endpoint
+   * newly observed rows stop at the storage read cap plus `limit` while the
+   * drain advances past unavailable rows before endpoint invocation. If a
+   * stale offset boundary moves, the drain may also read one cap-sized page of
+   * already-seen rows plus one-row boundary probes to reach moved work. The
+   * `onMessage` endpoint
    * receives a public `DeliveryEndpointMessage` snapshot only for supported
    * worker labels: `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
    * `REACT_UPON_EVENT`.

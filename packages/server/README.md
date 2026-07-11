@@ -116,8 +116,10 @@ Current slice exposes:
   framework-owned bounded runs that pick up one shard and replay only through
   validated endpoints. The package does not expose a raw worker callback API.
   A run skips rows unavailable to its worker first. Its callback limit caps
-  endpoint callbacks actually invoked, and the storage read cap plus `limit`
-  bounds scanning. It passes independent message snapshots only for
+  endpoint callbacks actually invoked. Newly observed rows stop at the storage
+  read cap plus `limit`; stale-offset recovery may additionally read one
+  cap-sized page of already-seen rows plus one-row boundary probes when pending
+  rows move before a saved offset. It passes independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, then marks
   successful rows delivered. Those snapshots copy `Date` values and
   `Any.value` bytes.

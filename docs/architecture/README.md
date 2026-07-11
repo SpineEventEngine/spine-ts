@@ -595,8 +595,10 @@ framework-owned shard draining. A replay run picks up, renews, and releases its
 shard session with compare-and-set fencing. Rows unavailable to the active
 worker are skipped before endpoint invocation, and bounded replay can scan past
 unavailable head rows to reach later available rows. Its callback limit caps
-endpoint callbacks that actually run, and the storage read cap plus that limit
-bounds total scanning. Endpoint callbacks receive independent message snapshots
+endpoint callbacks that actually run. Newly observed rows stop at the storage
+read cap plus that limit; stale-offset recovery may additionally read one
+cap-sized page of already-seen rows plus one-row boundary probes when pending
+rows move before a saved offset. Endpoint callbacks receive independent message snapshots
 only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their
 `Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
 never reaches callbacks or returned failures. Successful callbacks mark rows

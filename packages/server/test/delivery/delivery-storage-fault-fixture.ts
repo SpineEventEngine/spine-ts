@@ -121,6 +121,24 @@ export function onInboxQuery(onQuery: () => Promise<void> | void): DeliveryStora
   });
 }
 
+export interface DeliveryInboxQuery {
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export function recordInboxQueries(queries: DeliveryInboxQuery[]): DeliveryStorageFaultProbe {
+  return Object.freeze({
+    query(context: StorageContext, query: RecordQuery<unknown>) {
+      if (!context.name.endsWith(".delivery.inbox")) {
+        return undefined;
+      }
+
+      queries.push(Object.freeze({ limit: query.limit, offset: query.offset }));
+      return undefined;
+    },
+  });
+}
+
 export function onInboxQueryNumber(
   targetQuery: number,
   onQuery: () => Promise<void> | void,
@@ -226,7 +244,7 @@ interface DeliveryStorageFaultProbe {
     next: MaterializedRecord<I, R> | undefined,
     delegate: RecordStorage<I, R>,
   ): Promise<boolean | undefined>;
-  query?(context: StorageContext): Promise<void> | void;
+  query?<I>(context: StorageContext, query: RecordQuery<I>): Promise<void> | void;
   read?(context: StorageContext, id: unknown): void;
 }
 
@@ -317,7 +335,7 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
 
   async #queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
     for (const probe of this.#plan.probes) {
-      await probe.query?.(this.context);
+      await probe.query?.(this.context, query);
     }
 
     return this.#delegate.queryEntries(query);
