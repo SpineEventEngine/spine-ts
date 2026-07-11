@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 6 fix commit recorded and pending re-review
+Status: Round 7 findings recorded; fix pending
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer          | Status   |
-| -------------------------- | ----------------- | -------- |
-| Code style/maintainability | Lorentz the 5th   | Findings |
-| Documentation              | Nietzsche the 5th | Findings |
-| TypeScript/API docs        | Turing the 5th    | Clean    |
-| Security                   | Socrates the 5th  | Clean    |
-| Performance/reliability    | Mill the 5th      | Findings |
+| Lane                       | Reviewer           | Status   |
+| -------------------------- | ------------------ | -------- |
+| Code style/maintainability | Carver the 5th     | Findings |
+| Documentation              | Boyle the 5th      | Clean    |
+| TypeScript/API docs        | Copernicus the 5th | Clean    |
+| Security                   | Faraday the 5th    | Findings |
+| Performance/reliability    | Ptolemy the 5th    | Clean    |
 
 ## Review Criteria
 
@@ -155,71 +155,6 @@ Branch: `task/T-0029-delivery-attempt-retention`
   reads of the 100 known per-message retention slots and tightened regression
   coverage so repeated failed deliveries must not call attempt-storage
   `queryEntries` on the hot path.
-- Status: pending fresh review package and all five independent review lanes.
-
-### Round 6 Independent Review - `2026-07-11T09:14:06Z`
-
-- Review package:
-  `.superpowers/sdd/review-3820e76d..a7361306.diff` from task baseline
-  `3820e76d` to current HEAD `a7361306`.
-- Code style/maintainability (Lorentz the 5th): [P2] durable logs did not
-  record current coordinator head `a7361306`, and one participant note still
-  said the task was pending the fix commit. Implementation maintainability,
-  bounded slot reads, local validation helpers, safe-integer sequence/shard
-  validation, corruption wrapping, public API boundaries, and generated output
-  hygiene looked clean.
-- Documentation (Nietzsche the 5th): [P1] durable logs stopped before
-  `a7361306`. Public docs and `Delivery.drain()` TypeDoc looked accurate.
-- TypeScript/API docs (Turing the 5th): clean. Safe sequence/shard validation,
-  bounded slot reads, identity checks, `Any`/timestamp validation, supported
-  labels, public exports, TypeDoc boundaries, public docs, and generated output
-  hygiene looked sound.
-- Security (Socrates the 5th): clean. Shard and sequence corruption paths fail
-  closed, byte caps, identity validation, sanitization, tenant isolation,
-  supported labels, `CATCH_UP`, and legacy `IMPORT_EVENT` looked sound.
-- Performance/reliability (Mill the 5th): [P2] `nextSequence()` accepts a
-  corrupt stored `Number.MAX_SAFE_INTEGER` sequence, then adds one before ring
-  key arithmetic, violating the fail-before-unreliable-arithmetic invariant.
-  Shard validation, bounded slot reads, bounded writes/CAS retries, failure
-  accounting, skip paths, and scope boundaries otherwise looked clean.
-- Action: one Round 6 fix worker will update durable logs, add fail-closed
-  protection before sequence increment overflow with focused regression
-  coverage, run focused verification, commit, regenerate the review package,
-  and rerun all five independent review lanes.
-
-### Round 6 Fix Status
-
-- Starting point: `eeb5d2bc Record T-0029 Round 6 review findings`.
-- Fix worker scope: update durable logs and make retained-attempt sequence
-  discovery reject a stored `Number.MAX_SAFE_INTEGER` sequence before
-  incrementing it or using the next sequence in ring-key arithmetic. No retry
-  monitor, scheduler, public API, production adapter, topology, durable
-  catch-up, generated Protobuf output, or `IMPORT_EVENT` support is part of
-  this fix.
-- Regression evidence so far: the focused test
-  `fails closed before incrementing a max safe stored delivery attempt sequence`
-  first failed because the unsafe incremented sequence reached stored-record
-  materialization and produced the later `sequence must be a safe integer`
-  corruption error. The same focused test passed after `nextSequence()` began
-  rejecting max-safe retained state with `DeliveryStorageCorruptionError`
-  before `sequence + 1`.
-- Verification: required Round 6 focused Vitest passed with 2 files, 57 tests
-  run, and 126 skipped. `typecheck:build:generated` passed. `docs:check`
-  passed with the existing TypeDoc invalid-origin warning only. `format:check`
-  passed after Markdown reflow. `git diff --check` passed. `git ls-files
---others --exclude-standard` reported no untracked files.
-- Fix commit: `1a33330f Fix T-0029 round 6 sequence overflow`.
-- Status: fix commit recorded; fresh review package and all five independent
-  review lanes remain pending.
-
-### Round 6 Fix Commit Record
-
-- Round 6 fix worker committed
-  `1a33330f Fix T-0029 round 6 sequence overflow` and was closed after
-  reporting the verification results.
-- The fix rejects a retained `Number.MAX_SAFE_INTEGER` sequence before
-  `nextSequence()` can increment it or use an unsafe value for ring-key
-  arithmetic.
 - Status: pending fresh review package and all five independent review lanes.
 
 ### Round 3 Independent Review - `2026-07-11T08:35:00Z`
@@ -374,3 +309,105 @@ Branch: `task/T-0029-delivery-attempt-retention`
   retained-attempt shard coordinates, wraps invalid `ShardIndex` ranges as
   `DeliveryStorageCorruptionError`, and added focused regression coverage.
 - Status: pending fresh review package and all five independent review lanes.
+
+### Round 6 Independent Review - `2026-07-11T09:14:06Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..a7361306.diff` from task baseline
+  `3820e76d` to current HEAD `a7361306`.
+- Code style/maintainability (Lorentz the 5th): [P2] durable logs did not
+  record current coordinator head `a7361306`, and one participant note still
+  said the task was pending the fix commit. Implementation maintainability,
+  bounded slot reads, local validation helpers, safe-integer sequence/shard
+  validation, corruption wrapping, public API boundaries, and generated output
+  hygiene looked clean.
+- Documentation (Nietzsche the 5th): [P1] durable logs stopped before
+  `a7361306`. Public docs and `Delivery.drain()` TypeDoc looked accurate.
+- TypeScript/API docs (Turing the 5th): clean. Safe sequence/shard validation,
+  bounded slot reads, identity checks, `Any`/timestamp validation, supported
+  labels, public exports, TypeDoc boundaries, public docs, and generated output
+  hygiene looked sound.
+- Security (Socrates the 5th): clean. Shard and sequence corruption paths fail
+  closed, byte caps, identity validation, sanitization, tenant isolation,
+  supported labels, `CATCH_UP`, and legacy `IMPORT_EVENT` looked sound.
+- Performance/reliability (Mill the 5th): [P2] `nextSequence()` accepts a
+  corrupt stored `Number.MAX_SAFE_INTEGER` sequence, then adds one before ring
+  key arithmetic, violating the fail-before-unreliable-arithmetic invariant.
+  Shard validation, bounded slot reads, bounded writes/CAS retries, failure
+  accounting, skip paths, and scope boundaries otherwise looked clean.
+- Action: one Round 6 fix worker will update durable logs, add fail-closed
+  protection before sequence increment overflow with focused regression
+  coverage, run focused verification, commit, regenerate the review package,
+  and rerun all five independent review lanes.
+
+### Round 6 Fix Status
+
+- Starting point: `eeb5d2bc Record T-0029 Round 6 review findings`.
+- Fix worker scope: update durable logs and make retained-attempt sequence
+  discovery reject a stored `Number.MAX_SAFE_INTEGER` sequence before
+  incrementing it or using the next sequence in ring-key arithmetic. No retry
+  monitor, scheduler, public API, production adapter, topology, durable
+  catch-up, generated Protobuf output, or `IMPORT_EVENT` support is part of
+  this fix.
+- Regression evidence so far: the focused test
+  `fails closed before incrementing a max safe stored delivery attempt sequence`
+  first failed because the unsafe incremented sequence reached stored-record
+  materialization and produced the later `sequence must be a safe integer`
+  corruption error. The same focused test passed after `nextSequence()` began
+  rejecting max-safe retained state with `DeliveryStorageCorruptionError`
+  before `sequence + 1`.
+- Verification: required Round 6 focused Vitest passed with 2 files, 57 tests
+  run, and 126 skipped. `typecheck:build:generated` passed. `docs:check`
+  passed with the existing TypeDoc invalid-origin warning only. `format:check`
+  passed after Markdown reflow. `git diff --check` passed. `git ls-files
+--others --exclude-standard` reported no untracked files.
+- Fix commit: `1a33330f Fix T-0029 round 6 sequence overflow`.
+- Status: fix commit recorded; fresh review package and all five independent
+  review lanes remain pending.
+
+### Round 6 Fix Commit Record
+
+- Round 6 fix worker committed
+  `1a33330f Fix T-0029 round 6 sequence overflow` and was closed after
+  reporting the verification results.
+- The fix rejects a retained `Number.MAX_SAFE_INTEGER` sequence before
+  `nextSequence()` can increment it or use an unsafe value for ring-key
+  arithmetic.
+- Status: pending fresh review package and all five independent review lanes.
+
+### Round 7 Independent Review - `2026-07-11T09:37:11Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..e376ad71.diff` from task baseline
+  `3820e76d` to current HEAD `e376ad71`.
+- Code style/maintainability (Carver the 5th): [P3] the review-log `## Rounds`
+  chronology jumped from Round 2 to Round 6 and then resumed Round 3; [P3] the
+  final changed-files ledger omitted `build-protocol/DECISION_LOG.md`.
+  Implementation maintainability, bounded slot reads, helper cohesion, naming,
+  corruption wrapping, generated-output hygiene, and public API boundaries
+  looked clean.
+- Documentation (Boyle the 5th): clean. Public and protocol docs accurately
+  describe internal sanitized retained attempt history while keeping retry
+  monitors, scheduler/backoff policy, production supervision/topology, durable
+  catch-up, production storage adapters, import work, aggregate `@Apply`
+  delivery, and public end-user delivery APIs out of scope.
+- TypeScript/API docs (Copernicus the 5th): clean. No accidental public retry
+  API or public attempt API appears; callback-visible snapshots keep supported
+  labels narrowed and copy `Date`/`Any.value`; `CATCH_UP` and legacy
+  `IMPORT_EVENT` handling remain as required.
+- Security (Faraday the 5th): [Medium] `Delivery.#recordFailedAttempt()`
+  suppresses every `attempts.recordFailure()` error, including
+  `DeliveryStorageCorruptionError`, so corrupt retained-attempt state can fail
+  open during the production drain path instead of rethrowing storage
+  corruption while keeping ordinary retention write/CAS failures observational.
+- Performance/reliability (Ptolemy the 5th): clean. Bounded hot-path work,
+  ring cap, direct per-message slot reads, CAS retry cap, observational
+  attempt-write failures, `TO_DELIVER` preservation, unsupported label skips,
+  and fail-before-unreliable sequence/shard arithmetic looked sound. The
+  reviewer also ran a focused `attempt` Vitest slice with 16 tests passing.
+- Action: one Round 7 fix worker will update durable logs, keep the review-log
+  chronology fixed, add the missing changed-file ledger entry, rethrow
+  `DeliveryStorageCorruptionError` from attempt retention during delivery while
+  preserving observational behavior for ordinary retention write/CAS failures,
+  run focused verification, commit, regenerate the review package, and rerun
+  all five independent review lanes.

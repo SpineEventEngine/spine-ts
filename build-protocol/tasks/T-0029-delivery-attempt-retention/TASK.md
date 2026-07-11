@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 6 fix commit recorded and pending re-review
+Status: In progress; Round 7 findings recorded and fix pending
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -294,3 +294,14 @@ Round 6 fix worker committed
 the focused fix and verification results. The next step is a fresh review
 package from baseline `3820e76d` to the current head and all five independent
 review lanes.
+
+Coordinator recorded the Round 6 fix commit as
+`e376ad71 Record T-0029 Round 6 fix commit`, generated
+`.superpowers/sdd/review-3820e76d..e376ad71.diff`, and ran the Round 7
+five-lane review. Documentation, TypeScript/API docs, and
+performance/reliability were clean. Code style/maintainability found
+ledger-only cleanup for review-log chronology and the changed-files ledger.
+Security found retained-attempt storage corruption can fail open in the
+production drain path because `Delivery.#recordFailedAttempt()` suppresses
+`DeliveryStorageCorruptionError`. One fix worker will receive the complete
+Round 7 findings list.
