@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Round 4 clean; final verification pending
+Status: Final verification lint fix applied; re-review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -130,3 +130,11 @@ Branch: `task/T-0031-delivery-retry-decision`
   `.superpowers/sdd/review-9566466d..40085f30.diff`. Code
   style/maintainability, documentation, TypeScript/API docs, security, and
   performance/reliability were all clean. Final verification is pending.
+- `2026-07-11T13:52:32+0100`: Final verification found one lint failure in the
+  retry-decision test: the guarded summary used an unsafe `any`-typed argument
+  to `Object.create`. A test-only fix is pending; review closure remains clean
+  but final verification has not passed.
+- `2026-07-11T13:53:44+0100`: Applied the test-only lint fix and verified the
+  focused retry-decision test, generated lint, build typecheck, format check,
+  and whitespace check. Because a test file changed after round 4 clean review,
+  another five-lane re-review is pending.

@@ -85,15 +85,16 @@ describe("Delivery retry decisions", () => {
       latestReason: "CLEANUP_FAILED",
       latestAccepted: false,
     });
-    const guarded = Object.create(Object.getPrototypeOf(source), {
-      ...Object.getOwnPropertyDescriptors(source),
-      attempts: {
-        enumerable: true,
-        get() {
-          throw new Error("Retry decisions must not read retained attempt objects.");
-        },
+    const guarded: DeliveryAttemptSummary = {
+      count: source.count,
+      latestAttempt: source.latestAttempt,
+      latestStage: source.latestStage,
+      latestReason: source.latestReason,
+      latestAccepted: source.latestAccepted,
+      get attempts(): DeliveryAttemptSummary["attempts"] {
+        throw new Error("Retry decisions must not read retained attempt objects.");
       },
-    }) as DeliveryAttemptSummary;
+    };
 
     const decision = decisions.decide(guarded);
 
