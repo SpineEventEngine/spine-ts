@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 100 docs fix verified; follow-up review pending
+Status: Round 102 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3186,5 +3186,53 @@ red/green delivery regressions before the next review pass.
   matches; whitespace diff check exited 0; generated/API-reference diff guard
   exited 0 with no changed files.
 - No production source, tests, generated docs, API reference docs, or
-  `.codex-review-packages/` files were edited. No commit was created per
-  worker instruction.
+  `.codex-review-packages/` files were edited. The Round 100 worker did not
+  commit per instruction.
+- Coordinator commit `1bd31aef` (`Clarify delivery accepted-work docs`)
+  recorded this docs fix after the worker left edits uncommitted by
+  instruction.
+
+### Round 101 Re-review - `2026-07-11T01:14:49Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..1bd31aef.diff` from task baseline
+  `ca8fb2b3` to current HEAD `1bd31aef`.
+- Code style/maintainability (Schrodinger the 3rd): clean. The Round 100 docs
+  follow the existing durable-log and docs style.
+- Documentation (Ampere the 3rd): [P2] durable logs do not record the current
+  coordinator commit `1bd31aef` and still say Round 100 did not commit.
+- TypeScript/API docs (Einstein the 3rd): clean. Public callback/failure types
+  and API docs remain aligned with the supported delivery labels and accepted
+  work semantics.
+- Security (Dirac the 3rd): [HIGH] expired row claims are intentionally
+  reclaimable during claim CAS, so a stale worker that continues after losing
+  renewal may already have invoked the endpoint callback before a later final
+  fence fails. Live claims still block competing workers; the finding is that
+  the contract uses overbroad competing-delivery wording instead of scoped
+  live-ownership fencing plus abandoned-work recovery.
+- Performance/reliability (Euler the 3rd): clean. Bounded scan, failure-budget,
+  renewal, and accepted-work behavior remain covered.
+- Action: record this findings batch, update current commit breadcrumbs, clarify
+  the expired-claim recovery contract in task/user-facing docs, verify, commit,
+  and rerun all five required lanes.
+
+### Round 102 Docs/Contract Fix - `2026-07-11T01:17:50Z`
+
+- Updated the task acceptance contract and delivery docs to say live shard/row
+  ownership prevents competing callback dispatch while ownership is current,
+  while expired row claims may be reclaimed during claim CAS for
+  abandoned-work recovery.
+- Clarified that a stale owner that continues after losing renewal can already
+  have invoked an endpoint callback. Endpoint callback side effects are
+  at-least-once/replay-safe; later final fencing can prevent stale
+  finalization, but it cannot uninvoke a callback that already ran.
+- Left stronger production supervision, cancellation, and retry-monitor policy
+  as future work, and made no production behavior changes.
+- Corrected Round 100 durable wording to say the worker did not commit, then
+  coordinator commit `1bd31aef` (`Clarify delivery accepted-work docs`)
+  recorded the docs fix.
+- Verification passed: `docs:check` exited 0 with only the known TypeDoc
+  invalid-origin source-link warning; `format:check` exited 0 after formatting
+  the owned work log; `git diff --check` exited 0; and the targeted stale
+  ownership guard found no remaining overbroad duplicate-dispatch wording in
+  the touched docs.

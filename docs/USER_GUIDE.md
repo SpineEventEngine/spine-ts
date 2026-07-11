@@ -227,10 +227,14 @@ or multi-host transport example.
   unavailable to the active worker and passes independent
   message snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-  `Any.value` bytes are safe to mutate in endpoint code. Live per-message
-  ownership blocks competing delivery; expired per-message ownership may be
-  replaced during claim compare-and-set using the storage clock. Broader
-  production recovery policy remains future work.
+  `Any.value` bytes are safe to mutate in endpoint code. Live shard ownership
+  plus live per-message ownership block competing callback dispatch while
+  ownership is current; expired per-message ownership may be replaced during
+  claim compare-and-set using the storage clock as abandoned-work recovery. A
+  stale owner that continues after losing renewal requires endpoint callback
+  side effects to be at-least-once/replay-safe; final fencing can prevent stale
+  finalization but cannot uninvoke an already-run callback. Broader production
+  supervision, cancellation, and retry-monitor policy remains future work.
   Transport-backed/background scheduler workers, production catch-up
   orchestration, and retained attempt history remain open production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
@@ -1216,10 +1220,14 @@ process-manager command rows, process-manager event reaction rows, and live
 projection subscriber rows. Lease-fenced framework replay skips rows unavailable
 to the active worker and passes independent message snapshots only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-`Any.value` bytes are safe to mutate in endpoint code. Live per-message
-ownership blocks competing delivery; expired per-message ownership may be
-replaced during claim compare-and-set using the storage clock. Broader
-production recovery policy remains future work.
+`Any.value` bytes are safe to mutate in endpoint code. Live shard ownership
+plus live per-message ownership block competing callback dispatch while
+ownership is current; expired per-message ownership may be replaced during
+claim compare-and-set using the storage clock as abandoned-work recovery. A
+stale owner that continues after losing renewal requires endpoint callback side
+effects to be at-least-once/replay-safe; final fencing can prevent stale
+finalization but cannot uninvoke an already-run callback. Broader production
+supervision, cancellation, and retry-monitor policy remains future work.
 For framework-owned replay, the callback limit caps endpoint callbacks that
 actually run, while the storage read cap plus that limit bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
@@ -1229,10 +1237,18 @@ lease/fencing failures remain internal, do not increment accepted work, but they
 increment failed work and count toward the framework failure bound. Once an
 endpoint callback has been invoked, endpoint failures and framework cleanup or
 delivery-status failures after that callback are accepted work and may appear in
-failed work. The framework repeats one-shard replay until the shard is idle,
-skipped, stopped, paused after a bounded skipped-only scan streak, or reaches a
-configured failure bound. A later internal run resumes from a saved cursor and
-resets it safely if earlier pending rows disappeared. Failed rows stay pending
+failed work. Live shard ownership plus live per-message ownership block
+competing callback dispatch while ownership is current; expired per-message
+ownership may be replaced during claim compare-and-set using the storage clock
+as abandoned-work recovery. If a stale owner continues after losing renewal,
+endpoint callback side effects are at-least-once/replay-safe: later final
+fencing can prevent stale finalization, but it cannot uninvoke a callback that
+already ran. Broader production supervision, cancellation, and retry-monitor
+policy remains future work. The framework repeats one-shard replay until the
+shard is idle, skipped, stopped, paused after a bounded skipped-only scan
+streak, or reaches a configured failure bound. A later internal run resumes
+from a saved cursor and resets it safely if earlier pending rows disappeared.
+Failed rows stay pending
 as `TO_DELIVER` for later replay retry
 when the endpoint callback fails and framework-owned cleanup succeeds; no
 retained attempt history is written. Cleanup/replay validation, lease/fencing,

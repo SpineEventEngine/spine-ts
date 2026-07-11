@@ -305,10 +305,14 @@ validation, and lease-fencing failures do not increment accepted endpoint work,
 but they do increment failed work and count toward the internal failure bound.
 Once the endpoint callback or `onMessage` path has been invoked, endpoint
 failures and later framework cleanup/status-update failures are accepted
-endpoint work and may appear in failed work. Live per-message
-ownership blocks competing delivery; expired per-message ownership may be
-replaced during claim compare-and-set using the storage clock. Broader
-production recovery policy remains future work.
+endpoint work and may appear in failed work. Live shard ownership plus live
+per-message ownership block competing callback dispatch while ownership is
+current; expired per-message ownership may be replaced during claim
+compare-and-set using the storage clock as abandoned-work recovery. If a stale
+owner continues after losing renewal, endpoint callback side effects are
+at-least-once/replay-safe: later final fencing can prevent stale finalization,
+but it cannot uninvoke a callback that already ran. Broader production
+supervision, cancellation, and retry-monitor policy remains future work.
 
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and

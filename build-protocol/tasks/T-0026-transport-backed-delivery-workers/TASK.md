@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 100 docs fix verified; follow-up review pending
+Status: Round 102 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -196,7 +196,12 @@ Design constraints from inspection:
   later runs only when framework-owned cleanup succeeds.
 - Cleanup, validation, lease/fencing, and delivery-status failures are reported
   without immediate retry or recovery guarantee in this slice.
-- Shard lease behavior prevents competing workers from double-delivering.
+- Live shard and row ownership prevent competing callback dispatch while that
+  ownership is current; expired row claims remain reclaimable during claim CAS
+  for abandoned-work recovery.
+- If a stale owner continues after losing renewal, endpoint callback side
+  effects are at-least-once/replay-safe. Later final fencing can prevent stale
+  finalization, but it cannot uninvoke a callback that already ran.
 - Local immediate handoff behavior remains compatible.
 - No application code sees framework `Event` envelopes, manual transactions,
   `@Apply`, schema-bearing decorators, or materialization helpers.
@@ -1559,3 +1564,38 @@ work, while the adjacent cleanup and future recovery policy wording remains in
 place. Verification passed: docs check, format check, stale-record guard,
 whitespace diff check, and generated/API-reference diff guard. This round did
 not commit per worker instruction.
+
+Coordinator commit `1bd31aef` (`Clarify delivery accepted-work docs`) recorded
+the Round 100 docs fix after the worker left edits uncommitted by instruction.
+
+Round 101 re-review on `2026-07-11T01:14:49Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..1bd31aef.diff` produced clean code
+style/maintainability, TypeScript/API docs, and performance/reliability lanes.
+Documentation found the durable logs still omitted the current coordinator
+commit breadcrumb for `1bd31aef` and still said Round 100 created no commit.
+Security found the expired-row-claim recovery contract was underspecified: live
+claims block competing workers, but expired claims are intentionally
+reclaimable during claim CAS, so a stale worker that keeps running after losing
+renewal may already have invoked an endpoint callback before the later final
+fence fails. Round 102 will clarify the task and user-facing docs so the shard
+lease guarantee is explicitly scoped to live ownership, expired-claim reclaim
+is documented as abandoned-work recovery, and endpoint callbacks remain
+at-least-once/replay-safe under lost-renewal stale-owner failure modes until a
+future production supervision/cancellation policy task.
+
+Round 102 docs/contract fix on `2026-07-11T01:17:50Z`: updated the current
+task acceptance contract and user-facing delivery docs to scope competing
+dispatch prevention to live shard/row ownership, keep expired row claims
+reclaimable during claim CAS as abandoned-work recovery, and document the
+stale-owner failure mode as at-least-once/replay-safe endpoint callback side
+effects. Later final fencing can prevent stale finalization but cannot uninvoke
+callbacks, and stronger production supervision, cancellation, and retry-monitor
+policy remains future work. Also corrected Round 100 durable wording to say the
+worker did not commit, then coordinator commit `1bd31aef` recorded the docs
+fix.
+
+Round 102 verification on `2026-07-11T01:24:07Z`: `docs:check` passed with
+only the known TypeDoc invalid-origin source-link warning; `format:check`
+passed after the repo formatter rewrote the owned work log; `git diff --check`
+passed; and the targeted stale ownership guard found no remaining overbroad
+duplicate-dispatch wording in the touched docs.

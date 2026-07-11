@@ -340,10 +340,14 @@ cleanup succeeds. Pre-callback claim, validation, and lease-fencing failures do
 not increment accepted work, but they increment failed work and count toward
 the framework failure bound. Once an endpoint callback has been invoked,
 endpoint failures and framework cleanup or delivery-status failures after that
-callback are accepted work and may appear in failed work. Live
-per-message ownership blocks competing delivery; expired per-message ownership
-may be replaced during claim compare-and-set using the storage clock. Broader
-production recovery policy remains future work.
+callback are accepted work and may appear in failed work. Live shard ownership
+plus live per-message ownership block competing callback dispatch while
+ownership is current; expired per-message ownership may be replaced during
+claim compare-and-set using the storage clock as abandoned-work recovery. If a
+stale owner continues after losing renewal, endpoint callback side effects are
+at-least-once/replay-safe: later final fencing can prevent stale finalization,
+but it cannot uninvoke a callback that already ran. Broader production
+supervision, cancellation, and retry-monitor policy remains future work.
 The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve
