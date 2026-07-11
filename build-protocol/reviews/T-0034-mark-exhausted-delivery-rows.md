@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Scaffolded; implementation pending
+Status: Implementation in progress; review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -33,3 +33,6 @@ Security is deferred to final project readiness.
 
 - `2026-07-11T21:25:00Z`: T-0034 scaffolded from requirements splitter
   `019f52ce-3b86-7a73-a69e-30208f5078b1`; implementation and review pending.
+- `2026-07-11T21:28:00Z`: Assigned implementation worker
+  `019f52d4-d264-77e0-9469-48ff5950328a`. Independent review remains pending
+  its verified commit and coordinator pre-review lint.
