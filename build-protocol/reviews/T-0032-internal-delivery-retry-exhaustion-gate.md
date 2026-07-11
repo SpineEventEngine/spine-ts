@@ -381,3 +381,8 @@ is deferred to the final release-readiness gate.
   invalid-remote source-link warning; `format:check`, `git diff --check`, and
   the untracked-output check passed. No runtime or test changes were made, and
   fresh four-lane re-review remains pending.
+- `2026-07-11T18:53:00Z`: The lightweight pre-review lint appended
+  previously future commit `8ee4b647` to the ledger after substantive
+  TypeDoc commit `991594ea`. Current `991594ea` remains the sole future hash
+  under the non-recursive convention. Fresh docs, formatting, whitespace, and
+  untracked-output checks passed with only the known invalid-remote warning.
