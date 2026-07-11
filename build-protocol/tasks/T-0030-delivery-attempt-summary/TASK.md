@@ -1,6 +1,6 @@
 # T-0030: Internal Delivery Attempt Summary For Retry Decisions
 
-Status: Implemented; verification passed
+Status: Implementation coordinator-verified; reviewer lanes pending
 Started: `2026-07-11T10:05:55Z`
 Baseline commit: `1573863f`
 Branch: `task/T-0030-delivery-attempt-summary`
