@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 1 fixes verified; pending re-review
+Status: Round 2 findings pending fix
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status   |
-| -------------------------- | ---------------- | -------- |
-| Code style/maintainability | Cicero the 5th   | Findings |
-| Documentation              | Pascal the 5th   | Findings |
-| TypeScript/API docs        | Laplace the 5th  | Findings |
-| Security                   | Lovelace the 5th | Findings |
-| Performance/reliability    | Hegel the 5th    | Findings |
+| Lane                       | Reviewer          | Status   |
+| -------------------------- | ----------------- | -------- |
+| Code style/maintainability | Descartes the 5th | Findings |
+| Documentation              | Aristotle the 5th | Findings |
+| TypeScript/API docs        | Sartre the 5th    | Clean    |
+| Security                   | Security reviewer | Clean    |
+| Performance/reliability    | Dirac the 5th     | Findings |
 
 ## Review Criteria
 
@@ -88,3 +88,42 @@ Branch: `task/T-0029-delivery-attempt-retention`
 - Fix worker committed the verified fix batch as
   `ecb9f3d9 Fix T-0029 delivery attempt retention findings`. A fresh package
   and all five review lanes remain required.
+
+### Round 2 Independent Review - `2026-07-11T08:19:59Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..1faafdb0.diff` from task baseline
+  `3820e76d` to current HEAD `1faafdb0`.
+- Code style/maintainability (Descartes the 5th): [P2] the task brief still
+  said the Round 1 fix worker was in progress even though `ecb9f3d9` had been
+  committed and the worker had been closed. The malformed-attempt corruption
+  error pattern, `Delivery.drain()` TypeDoc, and scope boundaries otherwise
+  looked clean.
+- Documentation (Aristotle the 5th): [P1] durable logs omitted the current
+  `1faafdb0` coordinator commit and still described the next step as generating
+  a fresh review package even though
+  `.superpowers/sdd/review-3820e76d..1faafdb0.diff` had already been generated;
+  [P2] the task current-review state still described the Round 1 fix worker as
+  in progress. Public docs and `Delivery.drain()` TypeDoc otherwise looked
+  accurate.
+- TypeScript/API docs (Sartre the 5th): clean. Stored-attempt byte caps,
+  timestamp validation, TypeDoc, public exports, root TypeDoc entrypoints,
+  supported labels, `Date`/`Any` handling, bounded retention, and generated
+  Protobuf hygiene looked sound.
+- Security (`019f503c-f60c-7a32-9471-8eb77648a9ee`): clean. Bounded retention,
+  byte caps before decode/parse, identity validation, storage-corruption
+  errors, sanitization, tenant scoping, `CATCH_UP`, and legacy `IMPORT_EVENT`
+  handling looked sound. The reviewer also passed a focused sanity slice
+  covering attempts, unsupported labels, and live ownership.
+- Performance/reliability (Dirac the 5th): [P2] `DeliveryAttempts.nextSequence()`
+  still uses `queryEntries({ filters: messageKey, sort: sequence desc, limit:
+1 })`; the query result is bounded, but the current in-memory adapter
+  materializes, filters, and sorts records before applying `limit`, making each
+  failed-delivery hot path scan global retained-attempt storage. Attempt-write
+  failure accounting, `TO_DELIVER` semantics, unsupported label skips,
+  fail-closed `IMPORT_EVENT`, failure classifications, and scope boundaries
+  otherwise looked clean.
+- Action: one Round 2 fix worker will update durable logs, replace the
+  sequence lookup with bounded slot reads or equivalent bounded behavior, run
+  focused verification, commit, regenerate the review package, and rerun all
+  five independent review lanes.

@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 1 fixes verified pending re-review
+Status: In progress; Round 2 findings pending fix
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -196,6 +196,12 @@ state corrections. A fresh review package and all five independent review lanes
 remain required before T-0029 can close.
 
 Coordinator committed the complete Round 1 findings as
-`adf215f3 Record T-0029 Round 1 review findings`. The Round 1 fix worker is in
-progress from that commit and has locally verified the fixes. This task is not
-complete until the fix commit is re-reviewed.
+`adf215f3 Record T-0029 Round 1 review findings`. The Round 1 fix worker
+committed `ecb9f3d9` and was closed after reporting `DONE`; coordinator
+recorded that fix commit as `1faafdb0 Record T-0029 Round 1 fix commit`.
+
+Round 2 independent review against
+`.superpowers/sdd/review-3820e76d..1faafdb0.diff` found fixes still required:
+durable logs must record the current commit/review state, and retained-attempt
+sequence lookup must avoid the storage adapter's hot-path global query scan.
+This task is not complete until those findings are fixed and re-reviewed.
