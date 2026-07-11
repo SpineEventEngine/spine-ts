@@ -79,7 +79,7 @@ export function throwAttemptWriteOnce(): CountedDeliveryFaultProbe {
       id: I,
       expected: MaterializedRecord<I, R> | undefined,
       next: MaterializedRecord<I, R> | undefined,
-    ): Promise<boolean | undefined> {
+    ): boolean | undefined {
       if (!armed || !isAttemptWrite(context, id, expected, next)) {
         return undefined;
       }
@@ -345,7 +345,7 @@ interface DeliveryStorageFaultProbe {
     expected: MaterializedRecord<I, R> | undefined,
     next: MaterializedRecord<I, R> | undefined,
     delegate: RecordStorage<I, R>,
-  ): Promise<boolean | undefined>;
+  ): Promise<boolean | undefined> | boolean | undefined;
   query?<I>(context: StorageContext, query: RecordQuery<I>): Promise<void> | void;
   read?(context: StorageContext, id: unknown): void;
 }

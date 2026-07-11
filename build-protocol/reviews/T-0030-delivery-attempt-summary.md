@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Full-gate lint fixes verified; re-review pending
+Status: Lint-fix re-review findings pending fixes
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -156,3 +156,12 @@ Branch: `task/T-0030-delivery-attempt-summary`
   set also passes. Because this changed implementation/test files after clean
   review, the branch requires a fresh baseline-to-HEAD review package and all
   five reviewer lanes again before final acceptance.
+- `2026-07-11T11:08:54Z`: Lint-fix re-review used package
+  `.superpowers/sdd/review-1573863f..1a0ec206.diff`. TypeScript/API docs,
+  security, and performance/reliability returned clean. Documentation found two
+  P3 traceability issues: this package was not recorded yet, and the work-log
+  commit ledger omitted `1a0ec206`. Code style/maintainability found one P3:
+  `throwAttemptWriteOnce()` returned synchronously while its local method
+  signature still declared `Promise<boolean | undefined>`. This fix records
+  the package and ledger entry, and widens the test fault-probe hook contract to
+  support synchronous hook results that the caller already awaits.
