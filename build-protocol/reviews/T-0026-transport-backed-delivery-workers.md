@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 114 lint-shorthand fix verified; commit pending
+Status: Round 116 API export/docs fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer    | Status                        |
-| -------------------------- | ----------- | ----------------------------- |
-| Code style/maintainability | Noether     | Round 113 finding pending fix |
-| Documentation              | Bernoulli   | Round 113 clean               |
-| TypeScript/API docs        | Herschel    | Round 113 clean               |
-| Security                   | Ohm         | Round 113 clean               |
-| Performance/reliability    | Schrodinger | Round 113 clean               |
+| Lane                       | Reviewer   | Status                          |
+| -------------------------- | ---------- | ------------------------------- |
+| Code style/maintainability | Godel      | Round 115 clean                 |
+| Documentation              | Plato      | Round 116 fixed; pending review |
+| TypeScript/API docs        | Sartre     | Round 116 fixed; pending review |
+| Security                   | McClintock | Round 115 clean                 |
+| Performance/reliability    | Hooke      | Round 115 clean                 |
 
 ## Review Criteria
 
@@ -242,9 +242,12 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   above-bound limits, plus public drain/loop above-bound cases.
 - Finding: [MEDIUM] Stored `CATCH_UP` labels were valid rows but direct delivery
   could still invoke callbacks for them.
-- Fix: direct delivery now fail-closes after acquiring its row claim but before
-  endpoint invocation unless the label is `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`.
+- Fix: historical Round 7 behavior made direct delivery fail-close after
+  acquiring its row claim but before endpoint invocation unless the label was
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`. This fix
+  sentence is superseded by Round 22/current semantics: `CATCH_UP` remains
+  pending and is skipped before row acceptance, storage claiming, callback
+  invocation, failure recording, and failure-budget consumption.
 - Evidence: added regression proving the then-current `CATCH_UP` behavior. This
   Round 7 evidence is historical and superseded by Round 22/current semantics:
   `CATCH_UP` remains pending and is skipped before row acceptance, storage
@@ -3500,3 +3503,45 @@ red/green delivery regressions before the next review pass.
 - Coordinator verification: passed on `2026-07-11T02:57:39Z`. `lint` passed,
   including proto generation, generated typecheck, ESLint, and cleanup-rule
   checks; `format:check` passed; and `git diff --check` passed.
+- Coordinator commit `14e8d8cb` (`Fix delivery worker lint shorthand`) recorded
+  this lint-shorthand cleanup.
+
+### Round 115 Re-review - `2026-07-11T03:03:59Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..14e8d8cb.diff` from task baseline
+  `ca8fb2b3` to current HEAD `14e8d8cb`.
+- Code style/maintainability (Godel the 4th): clean. Lint, docs, format, diff,
+  and focused delivery/context tests passed.
+- Documentation (Plato the 4th): [P3] the old Round 7 fix sentence still says
+  `CATCH_UP` fail-closes after acquiring its row claim. The adjacent evidence
+  note marks the behavior historical, but the fix sentence itself must also be
+  marked historical/superseded by current pending-skip semantics.
+- TypeScript/API docs (Sartre the 4th): [P1] `DeliveryEndpointMessage` is
+  exported from `delivery.ts` but not re-exported from the `@spine-ts/server`
+  package root, not listed in the API export check, and still contradicted by
+  `DEVELOPER_API.md` wording that says it is not root-public.
+- Security (McClintock the 4th): clean. Focused delivery/context tests passed
+  with 6 files and 259 tests.
+- Performance/reliability (Hooke the 4th): clean. Focused delivery, loop,
+  inbox, shard registry, and runtime tests passed with 5 files and 247 tests.
+- Action: record this findings batch, run one API export/docs fix worker,
+  verify, commit, and rerun all five required lanes.
+
+### Round 116 Fix Implementation - `2026-07-11T03:08:39Z`
+
+- Fix: exported `DeliveryEndpointMessage` from the `@spine-ts/server` package
+  root and added it to `scripts/check-api-docs.mjs` expected server exports.
+- Fix: revised `build-protocol/DEVELOPER_API.md` so
+  `DeliveryEndpointMessage` is explicitly root-public as a callback-visible
+  snapshot type while raw direct delivery APIs remain outside stable app API:
+  `Delivery`, `DeliveryLoop`, `OnDeliveryMessage`, direct `onMessage`
+  examples, and direct-drain option/result types.
+- Fix: marked the old Round 7 `CATCH_UP` fix sentence as historical and
+  superseded by current pending-skip semantics before row acceptance, storage
+  claiming, callback invocation, failure recording, and failure-budget
+  consumption.
+- Verification: `docs:check` passed with the known TypeDoc invalid-origin
+  warning; generated build typecheck passed; `format:check` passed after
+  targeted markdown formatting; and `git diff --check` passed.
+- Commit: coordinator commit is pending.

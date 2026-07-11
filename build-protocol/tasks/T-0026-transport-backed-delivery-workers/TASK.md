@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 114 lint-shorthand fix verified; commit pending
+Status: Round 116 API export/docs fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1794,3 +1794,27 @@ pending.
 Round 114 verification on `2026-07-11T02:57:39Z`: `lint` passed, including
 proto generation, generated typecheck, ESLint, and cleanup-rule checks;
 `format:check` passed; and `git diff --check` passed.
+
+Coordinator commit `14e8d8cb` (`Fix delivery worker lint shorthand`) recorded
+the Round 114 lint-shorthand cleanup.
+
+Round 115 re-review on `2026-07-11T03:03:59Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..14e8d8cb.diff` produced clean code
+style/maintainability, security, and performance/reliability lanes.
+Documentation found the old Round 7 review-log fix sentence still says
+`CATCH_UP` fail-closes after acquiring its row claim; that sentence must be
+marked historical/superseded alongside the adjacent evidence note.
+TypeScript/API docs found `DeliveryEndpointMessage` is exported from
+`delivery.ts` but not from the package root, not listed in the API export
+check, and still contradicted by `DEVELOPER_API.md` wording that says it is not
+root-public. Round 116 will fix those public API/docs records, verify, commit,
+and rerun all five required lanes.
+
+Round 116 fix on `2026-07-11T03:08:39Z`: exported
+`DeliveryEndpointMessage` from the `@spine-ts/server` root, added it to the API
+docs expected server exports, and revised `DEVELOPER_API.md` so the
+callback-visible snapshot type is root-public while raw direct delivery APIs
+remain outside the stable app API. The old Round 7 `CATCH_UP` fix sentence is
+now marked historical and superseded by current pending-skip semantics.
+Verification passed `docs:check`, generated build typecheck, `format:check`,
+and `git diff --check`. Coordinator commit is pending.

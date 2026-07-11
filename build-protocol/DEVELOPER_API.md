@@ -250,11 +250,13 @@ storage. The storage delegate remains a storage-only seam.
 ## Delivery and Inbox API
 
 The current root-public delivery surface is the durable inbox handoff point and
-storage coordination primitives. Framework-owned replay uses package-internal
-direct drains behind validated bounded-context endpoints; the root package does
-not expose raw callback delivery APIs such as `Delivery`, `DeliveryLoop`,
-`OnDeliveryMessage`, `DeliveryEndpointMessage`, direct `onMessage` examples, or
-their direct-drain option/result types as stable application API.
+storage coordination primitives, including the callback-visible
+`DeliveryEndpointMessage` snapshot type used by framework replay results.
+Framework-owned replay uses package-internal direct drains behind validated
+bounded-context endpoints; the root package does not expose raw callback
+delivery APIs such as `Delivery`, `DeliveryLoop`, `OnDeliveryMessage`, direct
+`onMessage` examples, or their direct-drain option/result types as stable
+application API.
 
 The public slice is intentionally smaller than the later scheduler/retry stack:
 
@@ -277,10 +279,11 @@ The public slice is intentionally smaller than the later scheduler/retry stack:
   lease fencing for active drains, not an application retry or supervision
   policy; and
 - `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
-  `InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`,
-  `InboxStorageOptions`, and `ShardedWorkRegistryOptions` describe the stable
-  root-public inputs/outputs of this slice.
+  `DeliveryEndpointMessage`, `DeliveryStorageCorruptionError`,
+  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+  `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`, and
+  `ShardedWorkRegistryOptions` describe the stable root-public inputs/outputs
+  of this slice.
 
 Built bounded contexts use the same storage boundary internally for three
 narrow handoffs: process-manager command assignees with `HANDLE_COMMAND`,

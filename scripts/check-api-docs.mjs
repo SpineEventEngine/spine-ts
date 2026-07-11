@@ -212,6 +212,7 @@ const expectedServerExports = [
   "ContextSpecSnapshot",
   "ReadCatchUpOptions",
   "ReadCatchUpResult",
+  "DeliveryEndpointMessage",
   "DeliveryLabel",
   "DeliveryStorageCorruptionError",
   "DeliveryStatus",
