@@ -186,6 +186,10 @@ Run five independent review lanes:
 
 ## Current Review State
 
-Implementation has not started. Initial durable task, work, review, and
-decision-log records are being created before the implementation worker is
-spawned.
+Round 1 independent review against
+`.superpowers/sdd/review-3820e76d..d1d31e7c.diff` found fixes required.
+Required fixes include bounded attempt retention and sequence lookup,
+observational attempt-recording failure behavior, fail-closed stored-attempt
+validation, stale `Delivery.drain()` TypeDoc cleanup, and durable-log review
+state corrections. One fix worker will address the complete findings list
+before a fresh five-lane re-review.

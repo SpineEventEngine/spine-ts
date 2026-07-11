@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Awaiting implementation
+Status: Round 1 review found fixes required
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | Pending  | Pending |
-| Documentation              | Pending  | Pending |
-| TypeScript/API docs        | Pending  | Pending |
-| Security                   | Pending  | Pending |
-| Performance/reliability    | Pending  | Pending |
+| Lane                       | Reviewer         | Status   |
+| -------------------------- | ---------------- | -------- |
+| Code style/maintainability | Cicero the 5th   | Findings |
+| Documentation              | Pascal the 5th   | Findings |
+| TypeScript/API docs        | Laplace the 5th  | Findings |
+| Security                   | Lovelace the 5th | Findings |
+| Performance/reliability    | Hegel the 5th    | Findings |
 
 ## Review Criteria
 
@@ -38,5 +38,36 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Rounds
 
-No implementation review has run yet. Initial durable scaffolding is in
-progress.
+### Round 1 Independent Review - `2026-07-11T08:05:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..d1d31e7c.diff` from task baseline
+  `3820e76d` to current HEAD `d1d31e7c`.
+- Code style/maintainability (Cicero the 5th): [P2] durable logs did not
+  demonstrate ledger compliance because participants/review state were stale;
+  [P2] malformed durable attempt records used plain `Error` instead of the
+  delivery storage corruption pattern; [P3] `Delivery.drain()` TypeDoc still
+  said endpoint attempt history is not retained.
+- Documentation (Pascal the 5th): [P1] stale `Delivery.drain()` API docs still
+  said attempt history is not retained; [P1] task/review logs were stale and
+  the work log falsely claimed completion while required reviews were pending;
+  [P2] the work-log commit ledger did not name `7b07cacd` and `d1d31e7c`.
+- TypeScript/API docs (Laplace the 5th): [P2] stored attempt reads decode and
+  parse `Any.value` before a total byte-size cap; [P3] stored timestamps can
+  rehydrate to invalid `Date` values; [P3] `Delivery.drain()` TypeDoc
+  contradicts the new retention behavior. No accidental public
+  `DeliveryMonitor`, `FailedReception`, or retry API was found.
+- Security (Lovelace the 5th): [High] retained attempt history and sequence
+  lookup are unbounded for repeatedly failing rows; [Medium] corrupt attempt
+  records decode/parse unbounded `Any.value` before size rejection; [Medium]
+  stored attempt identity is not cross-checked for internal consistency.
+  Payload bytes, raw user errors, stacks, `CATCH_UP`, and legacy
+  `IMPORT_EVENT` paths otherwise looked clean.
+- Performance/reliability (Hegel the 5th): [P1] attempt-recording failure can
+  bypass delivery failure accounting because `#recordFailedAttempt()` is
+  awaited before building `DeliveryRun` failures or recording loop progress;
+  [P1] attempt writes are unbounded for repeatedly failing rows because
+  `nextSequence()` reads all prior attempts without a limit.
+- Action: one fix worker will address all Round 1 findings, update durable
+  logs, run focused verification, commit, regenerate the review package, and
+  rerun all five independent review lanes.
