@@ -105,8 +105,13 @@ store the original `Event` envelope, and both replay only the routed row target
 before the transaction and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
-Broader inbox lifecycle management,
-schedulers, retries, and transport topology remain open production gaps.
+For supported rows, an internal pre-callback gate reads the 100 retained
+attempt slots for the exact inbox message. At that bound it leaves the row
+`TO_DELIVER`, skips the callback and another attempt record, and returns only
+bounded stack-free exhaustion facts in the local run result. It is not a public
+monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
+or adapter policy. Broader inbox lifecycle management and transport topology
+remain open production gaps.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,

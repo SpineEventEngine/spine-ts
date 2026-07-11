@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: In progress; review findings pending fix
+Status: In progress; Round 1 fixes verified, re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -86,3 +86,23 @@ is deferred to the final release-readiness gate.
   intentionally staged the durable records afterward so the protocol merge and
   its task-state record are committed atomically as required by the Prime
   Directive. Closed the reviewer after processing its result.
+- `2026-07-11T15:56:00Z`: Assigned Round 1 fix worker
+  `019f51e4-47e9-7c00-a07f-9f90179e28fd` to all open findings. Re-review remains blocked until
+  the coordinator verifies the worker's focused test evidence and commit.
+- `2026-07-11T15:56:25Z`: The Round 1 fix worker completed the canonical skill
+  applicability check before changes. It read the prompt-required
+  receiving-review, TDD, and implementation skills; inspected the expected
+  manifest, full installed-skill entrypoint list, and installed-skill lock; and
+  selected those three skills. It verified the entire finding batch against the
+  current worktree before edits. The findings remain valid and bounded to the
+  no-stack data shape, internal capacity reuse, delivery-result union, and
+  narrow public/API architecture documentation. Re-review remains pending the
+  committed fix batch.
+- `2026-07-11T16:03:08Z`: The fix worker resolved the complete Round 1 batch
+  and verified it with focused red/green coverage, the delivery worker,
+  retry-decision, inbox, and loop suites, build typecheck, docs check,
+  formatter, whitespace, and untracked-output checks. The retry-decision
+  source-file scope expansion is necessary because its independent `100` cap
+  would otherwise preserve the duplicated policy value. The package entry
+  point and TypeDoc remain free of that internal capacity. Fresh independent
+  re-review remains pending because the worker must not spawn subagents.

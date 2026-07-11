@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Complete; review pending
+Status: Round 1 fixes verified; re-review pending
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -87,3 +87,62 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - No residual implementation concerns known. Formal multi-lane reviewer
   subagents are pending; the coordinator instructed this implementation worker
   not to spawn its own subagents.
+
+## Round 1 Fix Scope
+
+- `packages/server/src/delivery/delivery-retry-decision.ts` is included beyond
+  the initially assigned source-file list because its validation cap repeated
+  the retained-attempt `100` independently. It imports the package-internal
+  retained-attempt capacity so the retry gate and ring storage share one source
+  without a public entry-point export or TypeDoc surface.
+- After `docs:check`, the coordinator-named temporary generated directories
+  `examples/todo/.generated-hEUHML/` and
+  `packages/proto/.generated-BQMVG1/` were verified absent. No cleanup command
+  was needed and neither directory can enter VCS from this worktree.
+
+## Round 1 Fix Report
+
+### Findings Resolved
+
+- Replaced the exhausted-row `Error` subclass with a frozen plain object of
+  bounded facts. The focused regression proves it is not an `Error`, has no
+  `.stack`, has the ordinary object prototype, is frozen, and serializes the
+  complete bounded exhaustion facts.
+- Kept exhaustion at the pre-callback retry-decision boundary and narrowed
+  `DeliveryMessageResult` to only `SKIPPED`, `DELIVERED`, and `FAILED`.
+- Shared `deliveryAttemptCapacity` from retained attempt storage with retry
+  validation and the delivery gate. It is not exported through
+  `@spine-ts/server` and does not enter TypeDoc.
+- Updated the package README, runtime architecture, and API overview with only
+  the internal 100-attempt gate semantics and its explicit exclusions.
+
+### Commands And Results
+
+- RED, expected exit 1:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts -t "does not invoke exhausted supported rows or record another attempt"`.
+  The assertion failed because `DeliveryRetryExhaustedError` was an `Error`.
+- GREEN, exit 0:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts -t "does not invoke exhausted supported rows or record another attempt"`.
+  One focused test passed.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/delivery/delivery-retry-decision.test.ts packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/delivery-loop.test.ts`.
+  Four files and 234 tests passed.
+- Initial typecheck exit 2:
+  `pnpm --config.verify-deps-before-run=false typecheck:build:generated`.
+  It reported `TS2339` on the impossible post-narrowing exact-message guard;
+  removing that dead branch resolved the type error.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false typecheck:build:generated`.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false docs:check`.
+  TypeDoc reported zero errors; its invalid-local-remote source-link warning is
+  pre-existing environment noise.
+- Initial formatter exit 1:
+  `pnpm --config.verify-deps-before-run=false format:check`.
+  It requested reformatting `build-protocol/work-logs/T-0032.md` and
+  `packages/server/src/delivery/delivery.ts`.
+- PASS, exit 0 after
+  `pnpm exec prettier --write build-protocol/work-logs/T-0032.md packages/server/src/delivery/delivery.ts`:
+  `pnpm --config.verify-deps-before-run=false format:check`.
+- PASS, exit 0: `git diff --check`.
+- PASS, exit 0 with no output: `git ls-files --others --exclude-standard`.

@@ -279,12 +279,13 @@ delivery worker boundary:
   endpoint failures also write internal sanitized delivery-attempt records with
   message/inbox/shard identity, label, node, attempted time, accepted flag, and
   stable failure stage/reason; these records do not store raw `Any.value`
-  payload bytes, raw user errors, stack traces, or unbounded exception text.
-  Package-internal retry-policy preparation can summarize retained attempts for
-  one exact inbox message by reading only its 100 known per-message retained
-  slots; this does not expose public retry monitors, backoff, schedulers,
-  production supervision, topology, catch-up storage, or production adapters.
-  Pre-callback
+  payload bytes, raw user errors, stack traces, or unbounded exception text. A
+  package-internal pre-callback gate reads the 100 retained slots for one exact
+  inbox message. At that bound it leaves the row `TO_DELIVER`, skips the
+  callback and another attempt record, and returns only bounded stack-free
+  exhaustion facts in the run result. This does not expose public
+  monitor/action, scheduler/backoff, dead-letter, production-topology,
+  catch-up, or adapter policy. Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,
   but they do increment failed work and count toward a loop's `maxFailures`
   bound. Once the endpoint callback or `onMessage` path has been

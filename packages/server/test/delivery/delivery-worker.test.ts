@@ -1170,10 +1170,20 @@ describe("Delivery worker", () => {
     expect(run.failures[0]?.error).toMatchObject({
       message: "Delivery retry attempts exhausted.",
     });
+    expect(run.failures[0]?.error).not.toBeInstanceOf(Error);
+    expect(run.failures[0]?.error).not.toHaveProperty("stack");
+    expect(Object.isFrozen(run.failures[0]?.error)).toBe(true);
+    expect(Object.getPrototypeOf(run.failures[0]?.error)).toBe(Object.prototype);
     const failureJson = JSON.stringify(run.failures[0]?.error);
-    expect(failureJson).toContain('"kind":"EXHAUSTED"');
-    expect(failureJson).toContain('"count":100');
-    expect(failureJson).toContain('"limit":100');
+    expect(JSON.parse(failureJson)).toEqual({
+      kind: "EXHAUSTED",
+      message: "Delivery retry attempts exhausted.",
+      count: 100,
+      limit: 100,
+      latestStage: "ENDPOINT",
+      latestReason: "ENDPOINT_REJECTED",
+      latestAccepted: true,
+    });
     await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
       count: 100,
     });

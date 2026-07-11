@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: In progress; review findings pending fix
+Status: In progress; Round 1 fixes verified, re-review pending
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
@@ -205,3 +205,19 @@ available.
   uses the four current per-task reviewer lanes; the historical security
   review's no-stack finding remains in the consolidated fix batch because the
   TypeScript/API-docs reviewer independently reported the same defect.
+- Round 1 fixes started at `2026-07-11T15:56:25Z` after a fresh canonical skill
+  applicability check. The complete review batch is technically sound against
+  current code: exhausted reporting is an `Error` subclass with `.stack`, the
+  retry gate repeats the retained-slot capacity, `#deliverMessage()` declares
+  an unreachable `EXHAUSTED` result, and the public/API architecture docs omit
+  the active narrow gate. The stack-exposure regression will be red/green TDD;
+  all four findings will be verified with the scoped delivery test and quality
+  gates before one fix-batch commit.
+- Round 1 fixes were verified at `2026-07-11T16:03:08Z`. The stack regression
+  went red because the returned exhaustion value was an `Error`, then green
+  with a frozen plain object that has no `.stack` and exact bounded JSON facts.
+  The retry capacity is now shared by attempt retention, retry validation, and
+  the pre-callback gate without a public entry-point export or TypeDoc surface.
+  The requested public/API architecture docs describe only the narrow gate.
+  Fresh independent re-review remains pending because this worker was directed
+  not to spawn subagents.

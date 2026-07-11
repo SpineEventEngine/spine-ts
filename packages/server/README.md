@@ -133,11 +133,12 @@ Current slice exposes:
   attempt records with message/inbox/shard identity, label, node, attempted
   time, accepted flag, and stable failure stage/reason. Retained attempts never
   include raw `Any.value` payload bytes, raw user errors, stack traces, or
-  unbounded exception text. Package-internal retry-policy preparation can
-  summarize retained attempts for one exact inbox message by reading only its
-  100 known per-message retained slots; this summary is not a public monitor,
-  scheduler, backoff, production supervision, topology, catch-up storage, or
-  production adapter API. Endpoint callbacks run only for `HANDLE_COMMAND`,
+  unbounded exception text. A package-internal pre-callback gate reads the 100
+  retained slots for one exact inbox message. At that bound it leaves the row
+  `TO_DELIVER`, skips the callback and another attempt record, and returns only
+  bounded stack-free exhaustion facts in the run result. This is not a public
+  monitor/action, scheduler/backoff, dead-letter, production-topology,
+  catch-up, or adapter policy. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
   recording, or failure-budget consumption. Pre-callback claim, validation, and

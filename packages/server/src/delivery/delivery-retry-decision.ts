@@ -3,8 +3,7 @@ import type {
   DeliveryFailureReason,
   DeliveryFailureStage,
 } from "./delivery-attempts.js";
-
-const maxRetainedAttempts = 100;
+import { deliveryAttemptCapacity } from "./delivery-attempts.js";
 
 /** Internal bounded retry classifier over one exact-message attempt summary. */
 export class DeliveryRetryDecisions {
@@ -61,11 +60,11 @@ function requireMaxAttempts(value: number | undefined): number {
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
     value <= 0 ||
-    value > maxRetainedAttempts
+    value > deliveryAttemptCapacity
   ) {
     throw new Error(
       `Delivery retry max attempts must be a positive safe integer at most ${String(
-        maxRetainedAttempts,
+        deliveryAttemptCapacity,
       )}.`,
     );
   }
