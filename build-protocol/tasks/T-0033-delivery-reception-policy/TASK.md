@@ -1,6 +1,11 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Round 4 review clean; final verification pending
+Status: Complete; ready to merge
+
+Final verification passed `pnpm --config.verify-deps-before-run=false verify`:
+60 test files and 1,276 tests passed with `90.01%` branch coverage
+(`3488/3875`), together with all generated/tooling typechecks, lint, cleanup,
+formatting, docs/API, proto, and generated-output gates.
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
