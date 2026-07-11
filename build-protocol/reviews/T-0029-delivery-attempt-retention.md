@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 5 findings pending fix
+Status: Round 5 fix verified locally; pending commit and re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -276,3 +276,26 @@ Branch: `task/T-0029-delivery-attempt-retention`
   fail-closed stored shard-coordinate validation with focused regression
   coverage, run focused verification, commit, regenerate the review package,
   and rerun all five independent review lanes.
+
+### Round 5 Fix Status
+
+- Starting point: `a2dc9b47 Record T-0029 Round 5 review findings`.
+- Fix worker scope: update durable logs and make stored retained-attempt shard
+  coordinate validation reject unsafe integers and wrap invalid `ShardIndex`
+  ranges as `DeliveryStorageCorruptionError`. No retry monitor, scheduler,
+  public API, production adapter, topology, durable catch-up, generated
+  Protobuf output, or `IMPORT_EVENT` support is part of this fix.
+- Regression evidence so far: the focused tests
+  `wraps invalid stored delivery attempt shard coordinates as storage corruption`
+  and
+  `fails closed when stored delivery attempt shard coordinates are unsafe integers`
+  first failed because invalid shard totals escaped as a plain `Error` and
+  unsafe coordinates were reported as a generic message-identity mismatch. The
+  same focused slice passed after `storedShard()` started requiring safe
+  integers and wrapping `ShardIndex` range errors.
+- Verification: the required focused Vitest command passed with 2 files, 56
+  tests run, and 126 skipped. `typecheck:build:generated` passed.
+  `docs:check` passed with the existing TypeDoc invalid-origin warning only.
+  `format:check` passed. `git diff --check` passed. `git ls-files --others
+--exclude-standard` reported no untracked files.
+- Status: fix commit, fresh review package, and re-review remain pending.

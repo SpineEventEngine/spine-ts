@@ -432,10 +432,20 @@ function storedInboxId(value: unknown): StoredAttempt["inboxId"] {
 }
 
 function storedShard(input: Record<string, unknown>): ShardIndex {
-  return new ShardIndex(
-    requireInteger(Reflect.get(input, "shardIndex"), "Delivery attempt shard index"),
-    requireInteger(Reflect.get(input, "shardTotal"), "Delivery attempt shard total"),
+  const shardIndex = requireSafeInteger(
+    Reflect.get(input, "shardIndex"),
+    "Delivery attempt shard index",
   );
+  const shardTotal = requireSafeInteger(
+    Reflect.get(input, "shardTotal"),
+    "Delivery attempt shard total",
+  );
+
+  try {
+    return new ShardIndex(shardIndex, shardTotal);
+  } catch (error) {
+    throw corruptionFrom(error, "Delivery attempt shard identity is invalid.");
+  }
 }
 
 function attemptMessageKey(id: InboxMessageId): string {
@@ -539,9 +549,9 @@ function requireBoolean(value: unknown): boolean {
   return value;
 }
 
-function requireInteger(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
+function requireSafeInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new DeliveryStorageCorruptionError(`${label} must be a safe integer.`);
   }
 
   return value as number;

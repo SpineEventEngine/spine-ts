@@ -1309,6 +1309,35 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/message identity/i);
   });
 
+  it("wraps invalid stored delivery attempt shard coordinates as storage corruption", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          shardTotal: 0,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/shard/i);
+  });
+
+  it("fails closed when stored delivery attempt shard coordinates are unsafe integers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          shardIndex: Number.MAX_SAFE_INTEGER + 1,
+          shardTotal: Number.MAX_SAFE_INTEGER + 3,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/shard index.*safe integer/i);
+  });
+
   it("fails closed when stored delivery attempt sequences are unsafe integers", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

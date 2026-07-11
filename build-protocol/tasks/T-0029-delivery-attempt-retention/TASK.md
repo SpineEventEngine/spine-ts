@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 5 findings pending fix
+Status: In progress; Round 5 fix verified locally, pending commit and re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -254,3 +254,13 @@ documentation/protocol cleanup still required for the current summary/table and
 `f7e3dd37` ledger entry, and a low-severity security finding that corrupt
 stored attempt shard coordinates must fail closed as
 `DeliveryStorageCorruptionError` with safe-integer validation.
+
+Coordinator recorded the complete Round 5 findings as
+`a2dc9b47 Record T-0029 Round 5 review findings`. The Round 5 fix started from
+that commit and is limited to fail-closed safe-integer validation for stored
+attempt shard coordinates plus durable-log freshness. Focused red/green
+coverage now demonstrates that invalid stored shard totals previously escaped
+as a plain `ShardIndex` error and unsafe shard coordinates were previously
+reported only as a generic identity mismatch. Required local verification
+passed for the fix; the fix commit, fresh review package, and re-review remain
+pending.
