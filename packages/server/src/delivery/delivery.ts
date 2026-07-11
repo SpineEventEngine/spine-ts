@@ -128,72 +128,35 @@ export class Delivery {
     const progress = drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     const scan = new DeliveryScanState(cursor);
-    const finishExhaustedSkippedScan = () =>
-      progress.finish(scan.finishSkippedScan(progress.accepted, progress.failed), true);
 
     while (progress.processed < scanBudget) {
-      if (
-        scan.requiresBoundaryValidation() &&
-        !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
-      ) {
-        // Offset pages are relative to the current `TO_DELIVER` set. If
-        // skipped rows disappeared, reset once instead of paging past work
-        // that moved before the old absolute offset.
-        scan.resetAfterBoundaryChange();
+      const page = await this.#readStablePendingPage(inbox, shard, scan, scanBudget, progress);
+      if (page === undefined) {
         continue;
       }
 
-      const readLimit = scan.readLimit(scanBudget, progress.processed);
-      const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, scan.offset);
-
-      if (
-        scan.requiresBoundaryValidation() &&
-        !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
-      ) {
-        // The offset page may have been read from a changed `TO_DELIVER` set.
-        // Discard it before processing so work that moved to the head is not skipped.
-        scan.resetAfterBoundaryChange();
-        continue;
-      }
-
-      if (messages.length === 0 && progress.processed === 0 && scan.hasResumedCursor()) {
+      if (page.messages.length === 0 && progress.processed === 0 && scan.hasResumedCursor()) {
         scan.rewindToHead();
         continue;
       }
 
-      for (const message of messages) {
-        const accepted = progress.accepted;
-        if (progress.hasSeen(message)) {
-          if (!scan.consumeSeenRescanAllowance()) {
-            return finishExhaustedSkippedScan();
-          }
-        } else if (progress.processed >= scanBudget) {
-          return finishExhaustedSkippedScan();
-        }
-
-        const remainsPending = await this.#tryDrainMessage(
-          inbox,
-          progress,
-          message,
-          onMessage,
-          lease,
-          active,
-        );
-        if (remainsPending) {
-          scan.advancePastPending(message);
-        }
-        if (progress.accepted > accepted && scan.hasResumedCursor()) {
-          scan.rewindToHead();
-        }
-        if (progress.accepted >= limit) {
-          return progress.finish(scan.cursor());
-        }
-        if (maxFailures !== undefined && progress.failed >= maxFailures) {
-          return progress.finish(scan.cursor());
-        }
+      const pageOutcome = await this.#drainPendingPage(
+        inbox,
+        progress,
+        scan,
+        scanBudget,
+        page.messages,
+        onMessage,
+        lease,
+        active,
+        limit,
+        maxFailures,
+      );
+      if (pageOutcome !== undefined) {
+        return pageOutcome;
       }
 
-      if (messages.length < readLimit) {
+      if (page.messages.length < page.readLimit) {
         if (scan.shouldRescanShortPage(progress.accepted, progress.failed)) {
           scan.rewindToHead();
           continue;
@@ -203,7 +166,97 @@ export class Delivery {
       }
     }
 
-    return finishExhaustedSkippedScan();
+    return this.#finishExhaustedSkippedScan(progress, scan);
+  }
+
+  async #readStablePendingPage(
+    inbox: Inbox,
+    shard: ShardIndex,
+    scan: DeliveryScanState,
+    scanBudget: number,
+    progress: DrainProgress,
+  ): Promise<PendingDeliveryPage | undefined> {
+    // Offset pages are relative to the current `TO_DELIVER` set; validate the
+    // saved boundary before and after reads so moved work is not paged past.
+    if (await this.#staleBoundaryMoved(inbox, shard, scan)) {
+      scan.resetAfterBoundaryChange();
+      return undefined;
+    }
+
+    const readLimit = scan.readLimit(scanBudget, progress.processed);
+    const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, scan.offset);
+
+    if (await this.#staleBoundaryMoved(inbox, shard, scan)) {
+      scan.resetAfterBoundaryChange();
+      return undefined;
+    }
+
+    return { messages, readLimit };
+  }
+
+  async #staleBoundaryMoved(
+    inbox: Inbox,
+    shard: ShardIndex,
+    scan: DeliveryScanState,
+  ): Promise<boolean> {
+    return (
+      scan.requiresBoundaryValidation() &&
+      !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
+    );
+  }
+
+  async #drainPendingPage(
+    inbox: Inbox,
+    progress: DrainProgress,
+    scan: DeliveryScanState,
+    scanBudget: number,
+    messages: readonly InboxMessage[],
+    onMessage: OnDeliveryMessage,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+    limit: number,
+    maxFailures: number | undefined,
+  ): Promise<DeliveryDrainOutcome | undefined> {
+    for (const message of messages) {
+      const accepted = progress.accepted;
+      if (progress.hasSeen(message)) {
+        if (!scan.consumeSeenRescanAllowance()) {
+          return this.#finishExhaustedSkippedScan(progress, scan);
+        }
+      } else if (progress.processed >= scanBudget) {
+        return this.#finishExhaustedSkippedScan(progress, scan);
+      }
+
+      const remainsPending = await this.#tryDrainMessage(
+        inbox,
+        progress,
+        message,
+        onMessage,
+        lease,
+        active,
+      );
+      if (remainsPending) {
+        scan.advancePastPending(message);
+      }
+      if (progress.accepted > accepted && scan.hasResumedCursor()) {
+        scan.rewindToHead();
+      }
+      if (progress.accepted >= limit) {
+        return progress.finish(scan.cursor());
+      }
+      if (maxFailures !== undefined && progress.failed >= maxFailures) {
+        return progress.finish(scan.cursor());
+      }
+    }
+
+    return undefined;
+  }
+
+  #finishExhaustedSkippedScan(
+    progress: DrainProgress,
+    scan: DeliveryScanState,
+  ): DeliveryDrainOutcome {
+    return progress.finish(scan.finishSkippedScan(progress.accepted, progress.failed), true);
   }
 
   async #readPendingDeliveryPage(
@@ -641,6 +694,11 @@ interface DrainProgress {
   readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
+}
+
+interface PendingDeliveryPage {
+  readonly messages: readonly InboxMessage[];
+  readonly readLimit: number;
 }
 
 /** Mutable cursor state for one bounded pending-message scan. */

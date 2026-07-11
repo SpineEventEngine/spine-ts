@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 104 fix verified; current-HEAD re-review pending
+Status: Round 106 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3288,3 +3288,51 @@ red/green delivery regressions before the next review pass.
   `format:check` passed after the repo formatter normalized the owned work log
   and architecture doc; `git diff --check` passed; and the targeted stale
   strict-budget wording guard returned no matches.
+- Coordinator commit `18e45b04` (`Clarify delivery scan rescan budget`)
+  recorded this scan-budget contract fix.
+
+### Round 105 Re-review - `2026-07-11T01:51:28Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..18e45b04.diff` from task baseline
+  `ca8fb2b3` to current HEAD `18e45b04`.
+- Code style/maintainability (Maxwell the 4th): [P3] the main delivery scan
+  loop remains hard to maintain against the new delivery contract. Boundary
+  probing, stale-offset reset, read-cap accounting, duplicate/seen-row
+  allowance, endpoint dispatch, cursor mutation, and limit/failure exits are
+  still in one dense method; split stable-page acquisition/boundary validation
+  from per-row draining/cursor accounting.
+- Documentation (Copernicus the 4th): [P2] Round 104 records do not name the
+  current coordinator commit `18e45b04`; [P3] older Round 29 durable wording
+  still grouped post-callback cleanup/status-update failures into the
+  pre-callback no-accepted-work bucket, which is superseded by the current
+  contract that post-callback cleanup/status failures are accepted work.
+- TypeScript/API docs (Lagrange the 4th): clean. Public exports, callback
+  types, API docs, and fixture typings remain aligned.
+- Security (Mendel the 4th): clean. Focused delivery/context tests passed with
+  5 files and 229 tests.
+- Performance/reliability (Goodall the 4th): clean. Focused delivery-worker
+  and loop/runtime/registry slices passed; the documented same-event-loop
+  stale-owner limitation remains a known future-work caveat.
+- Action: record this findings batch, run one fix worker for durable records
+  and delivery scan-loop maintainability, verify, commit, and rerun all five
+  required lanes.
+
+### Round 106 Fix Implementation - `2026-07-11`
+
+- Fix: confirmed the Round 104 coordinator breadcrumb `18e45b04` (`Clarify
+delivery scan rescan budget`) is now recorded durably, and marked older Round
+  29 accepted-work wording as superseded where it grouped post-callback
+  cleanup/status-update failures with pre-callback claim/validation/lease
+  failures.
+- Fix: split `Delivery.#drainAvailableMessages()` into smaller local helpers.
+  Stable-page acquisition now owns boundary validation and stale-offset reset,
+  while per-row draining owns seen-row allowance, endpoint dispatch, cursor
+  mutation, and accepted/failure exits.
+- Verification: focused stale-head/read-cap/skipped-head delivery-worker Vitest
+  passed with 3 selected tests and 50 skipped; the broader delivery
+  worker/loop/runtime/registry Vitest slice passed with 4 files and 146 tests;
+  `docs:check` passed with only the known invalid TypeDoc `origin` source-link
+  warning; `format:check` passed after formatter wrapping; `git diff --check`
+  passed; and the targeted stale accepted-work wording guard returned no
+  matches. No commit was created.

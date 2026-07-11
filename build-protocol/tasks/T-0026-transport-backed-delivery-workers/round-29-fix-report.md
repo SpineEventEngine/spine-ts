@@ -52,7 +52,7 @@ Address every finding in the Round 29 batch:
 - `DeliveryLoop` now consumes the explicit internal outcome and uses `exhaustedSkippedScan` instead of reconstructing scan exhaustion from public counters. Failed drain outcomes omit `resumeCursor`, which prevents persisted cursor state from advancing past retryable failed rows.
 - Removed the `DeliveryRun` WeakMap metadata side channel used for loop resume state.
 - Refactored `delivery-storage-fault-fixture.ts` around named probes such as blocked inbox claim/renewal, throwing claim/clear/finalize, skipped clear/repair/finalize, and inbox-read hooks. Tests now compose probes through `deliveryStorageFaults(...)` instead of mutating a broad exported plan object.
-- Corrected stale Round 27 text in the historical fix report and work log: skipped unsupported rows avoid failure-budget consumption; pre-callback claim, validation, lease, cleanup, and status-update failures leave `accepted` unchanged but increment `failed` and count toward `DeliveryLoop.maxFailures`.
+- Corrected stale Round 27 text in the historical fix report and work log as understood in Round 29. Round 106 correction: skipped unsupported rows avoid failure-budget consumption; pre-callback claim, validation, and lease failures leave `accepted` unchanged but increment `failed` and count toward `DeliveryLoop.maxFailures`; post-callback cleanup/status-update failures are accepted work and may appear in failed work.
 
 ## Verification Commands and Results
 

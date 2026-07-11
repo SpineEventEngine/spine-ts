@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 104 fix verified; current-HEAD re-review pending
+Status: Round 106 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -457,14 +457,17 @@ rows are not skipped. `DeliveryWorker` status aggregation now preserves
 instances, the delivery-worker storage fault harness moved into a dedicated
 fixture module, and the loop read-cap check now reads through
 `inboxStorageAccess.maxReadLimit`. Documentation now states that only skipped
-worker-unsupported rows such as `CATCH_UP` avoid failure-budget consumption;
-pre-callback claim/validation/lease/cleanup/status-update failures do not
-increment accepted work, but they do increment failed work and count toward
-`DeliveryLoop.maxFailures`. Legacy stored `IMPORT_EVENT` rows are documented as
-fail-closed `DeliveryStorageCorruptionError` aborts before any `DeliveryRun` is
-returned. This round also records the same-event-loop limitation: renewal uses
-timers around in-process callbacks, so CPU-bound synchronous callbacks can
-still starve renewal because JavaScript cannot preempt them. The fix commit is
+worker-unsupported rows such as `CATCH_UP` avoid failure-budget consumption.
+Round 106 correction: the current accepted-work contract supersedes this
+paragraph's earlier broader wording; pre-callback claim/validation/lease
+failures do not increment accepted work, but do increment failed work and count
+toward `DeliveryLoop.maxFailures`, while post-callback cleanup/status-update
+failures are accepted work and may appear in failed work. Legacy stored
+`IMPORT_EVENT` rows are documented as fail-closed
+`DeliveryStorageCorruptionError` aborts before any `DeliveryRun` is returned.
+This round also records the same-event-loop limitation: renewal uses timers
+around in-process callbacks, so CPU-bound synchronous callbacks can still
+starve renewal because JavaScript cannot preempt them. The fix commit is
 `0c622787` (`Fix delivery loop resume and worker status`). A fresh five-lane
 re-review is still required.
 
@@ -1633,3 +1636,37 @@ Vitest for stale-head/rescan/read-cap behavior passed with 3 tests selected and
 source-link warning; `format:check` passed after the repo formatter normalized
 the owned work log and architecture doc; `git diff --check` passed; and the
 targeted stale strict-budget wording guard returned no matches.
+
+Coordinator commit `18e45b04` (`Clarify delivery scan rescan budget`) recorded
+the Round 104 scan-budget contract fix.
+
+Round 105 re-review on `2026-07-11T01:51:28Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..18e45b04.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes.
+Documentation found that Round 104 records omitted the current coordinator
+commit breadcrumb `18e45b04`, and that older Round 29 durable wording still
+grouped post-callback cleanup/status-update failures into the pre-callback
+no-accepted-work bucket even though current docs now correctly classify
+post-callback cleanup/status failures as accepted work. Code
+style/maintainability found the main delivery
+scan loop still too dense after Round 104: boundary validation, stale-offset
+reset, read-limit accounting, seen-row allowance, endpoint dispatch, cursor
+mutation, and exit handling all live in one method. Round 106 will fix those
+durable records and split stable-page acquisition/boundary validation from
+per-row draining/cursor accounting without changing delivery behavior.
+
+Round 106 fix implementation on `2026-07-11`: confirmed the Round 104
+coordinator breadcrumb `18e45b04` (`Clarify delivery scan rescan budget`) is now
+present in the task, work, and review logs; marked older Round 29
+cleanup/status-update accepted-work wording as superseded by the current
+contract; and split `Delivery.#drainAvailableMessages()` so stable-page
+acquisition/boundary validation is separate from per-row draining and cursor
+accounting. Public delivery types and behavior were not intentionally changed.
+
+Round 106 verification on `2026-07-11`: focused stale-head/rescan/read-cap
+delivery-worker Vitest passed with 3 selected tests and 50 skipped; the broader
+delivery worker/loop/runtime/registry Vitest slice passed with 4 files and 146
+tests; `docs:check` passed with only the known invalid TypeDoc `origin`
+source-link warning; `format:check` passed after the repo formatter wrapped the
+touched work/review logs; `git diff --check` passed; and the targeted stale
+accepted-work wording guard returned no matches. No commit was created.
