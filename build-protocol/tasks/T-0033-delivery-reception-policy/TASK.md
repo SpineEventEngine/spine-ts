@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Decision authoring in progress
+Status: Decision authored and verified; independent review pending
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
@@ -116,6 +116,40 @@ unimplemented JVM parity.
 - `CATCH_UP` remains pending/skipped and legacy `IMPORT_EVENT` remains
   fail-closed.
 - No public monitor/action or future production-policy API is promised.
+
+## Accepted Decision Summary
+
+D-0084 accepts a fixed internal policy for a later implementation task:
+
+- a row classified retryable before callback retains one bounded sanitized
+  failure attempt, then keeps the claimed row pending `TO_DELIVER`, including
+  when that attempt fills slot 100;
+- pre-callback exhaustion selects framework-owned `MARK_DELIVERED` after
+  exact-message classification and while the row remains claim/fence owned;
+- immediate repeat remains deferred;
+- failed action/status work is a bounded delivery failure and leaves the
+  authoritative durable row pending `TO_DELIVER`.
+
+The minimal prose-only action vocabulary is `KEEP_PENDING` and
+`MARK_DELIVERED`. It creates no TypeScript declaration, package export, public
+monitor API, custom action extension point, or scheduler promise. D-0084 is not
+executable until a later runtime implementation task lands; current D-0083
+pending/skip behavior remains active in the source.
+
+## Decision Report
+
+The supplied conservative candidate was validated against the current TS
+claim/status path and the JVM monitor/action path. It was accepted because it
+preserves the TS bounded retry investment for retryable failures, adopts the
+JVM's conservative default terminal outcome only at exhaustion, and keeps all
+status changes under the existing claimed-row/fence boundary. T-0017h was not
+edited: its complete historical task wording describes the behavior delivered
+by that earlier slice and does not claim to override later accepted decisions.
+
+No runtime source, tests, public docs, API declarations, Protobuf/generated
+files, examples, or `human-review-1-jul.md` changed in this decision-only task.
+Valid `CATCH_UP` remains pending/skipped and legacy stored `IMPORT_EVENT`
+remains fail-closed.
 
 ## Likely Changed Files
 
