@@ -138,3 +138,7 @@ Branch: `task/T-0031-delivery-retry-decision`
   focused retry-decision test, generated lint, build typecheck, format check,
   and whitespace check. Because a test file changed after round 4 clean review,
   another five-lane re-review is pending.
+- `2026-07-11T13:55:11+0100`: Coordinator committed the test-only lint fix as
+  `2bb7a3dd Fix T-0031 retry decision lint` and added it to the durable commit
+  ledger before re-review. The current log-maintenance commit is covered by the
+  ledger convention; re-review remains pending.
