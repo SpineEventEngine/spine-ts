@@ -1,4 +1,4 @@
-/** Deterministic record query by IDs, columns, sorting, offsets, limits, and masks. */
+/** Deterministic record query by IDs, columns, sorting, continuations, offsets, limits, and masks. */
 export interface RecordQuery<I> extends RecordReadOptions {
   /** Exact identifier filter. */
   readonly ids?: readonly I[];
@@ -6,6 +6,8 @@ export interface RecordQuery<I> extends RecordReadOptions {
   readonly filters?: readonly RecordFilter[];
   /** Deterministic sort order. */
   readonly sort?: readonly RecordOrder[];
+  /** Stable ordered row key after which the query should continue. */
+  readonly after?: RecordContinuation<I>;
   /** Positive limit applied after sorting. */
   readonly limit?: number;
   /** Non-negative row offset applied after sorting and before the limit. */
@@ -29,6 +31,17 @@ export const RecordQuery: Readonly<{
     ) {
       throw new Error("Record query offset must be non-negative.");
     }
+    if (query.after !== undefined) {
+      const sort = query.sort ?? [];
+      if (query.after.values.length !== sort.length) {
+        throw new Error("Record query continuation must match the sort order.");
+      }
+      for (let index = 0; index < sort.length; index += 1) {
+        if (query.after.values[index]?.field !== sort[index]?.field) {
+          throw new Error("Record query continuation must match the sort order.");
+        }
+      }
+    }
   },
 });
 
@@ -44,6 +57,28 @@ export interface RecordOrder {
   readonly field: string;
   /** Sort direction, ascending by default. */
   readonly direction?: "asc" | "desc";
+}
+
+/**
+ * Stable ordered row key used to continue a sorted query after one row.
+ *
+ * `values` must name the same fields, in the same order, as `RecordQuery.sort`.
+ * `id` is the actual storage slot identifier for the row and breaks any
+ * remaining ties.
+ */
+export interface RecordContinuation<I> {
+  /** Ordered field values captured from the last row of the previous page. */
+  readonly values: readonly RecordContinuationValue[];
+  /** Actual storage slot identifier captured from the last row of the previous page. */
+  readonly id: I;
+}
+
+/** One captured sort-field value in a record continuation. */
+export interface RecordContinuationValue {
+  /** Sort field this value was captured from. */
+  readonly field: string;
+  /** Captured value for the sort field. */
+  readonly value: unknown;
 }
 
 /** Equality filter against one stored column or the `id` field. */

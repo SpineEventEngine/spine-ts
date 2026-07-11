@@ -95,6 +95,67 @@ describe("InMemoryRecordStorage", () => {
     expect(page.map((record) => record.id?.value)).toEqual(["event-2", "event-3"]);
   });
 
+  it("continues after an ordered row key before offsets, limits, and masks", async () => {
+    const storage = createStorage();
+
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 2n),
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+      createEvent("event-4", "type.spine.io/tasks.TaskCreated", 3n),
+      createEvent("event-5", "type.spine.io/tasks.TaskClosed", 4n),
+    ]);
+
+    const page = await storage.query({
+      filters: [{ column: "typeUrl", value: "type.spine.io/tasks.TaskClosed" }],
+      sort: [{ field: "timestamp", direction: "asc" }],
+      after: {
+        values: [{ field: "timestamp", value: 2n }],
+        id: create(EventIdSchema, { value: "event-2" }),
+      },
+      offset: 1,
+      limit: 1,
+      mask: ["id"],
+    } as Parameters<typeof storage.query>[0]);
+
+    expect(page).toHaveLength(1);
+    expect(page[0]?.id?.value).toBe("event-5");
+    expect(page[0]?.message).toBeUndefined();
+  });
+
+  it("keeps keyset continuation scoped to the active tenant slice", async () => {
+    let currentTenantId = "tenant-a";
+    const storage = createStorage({
+      name: "Tasks",
+      multitenant: true,
+      get tenantId() {
+        return currentTenantId;
+      },
+    });
+
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-a", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+    currentTenantId = "tenant-b";
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-b", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+
+    const query = {
+      sort: [{ field: "timestamp", direction: "asc" as const }],
+      after: {
+        values: [{ field: "timestamp", value: 1n }],
+        id: create(EventIdSchema, { value: "event-1" }),
+      },
+    } as Parameters<typeof storage.query>[0];
+
+    await expect(storage.query(query)).resolves.toMatchObject([{ id: { value: "event-b" } }]);
+    currentTenantId = "tenant-a";
+    await expect(storage.query(query)).resolves.toMatchObject([{ id: { value: "event-a" } }]);
+  });
+
   it("sorts numeric and bigint values numerically for multi-digit values", async () => {
     const storage = createStorage();
 

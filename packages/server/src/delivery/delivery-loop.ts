@@ -94,6 +94,7 @@ export class DeliveryLoop {
         if (outcome.exhaustedSkippedScan) {
           resumableScanRuns += 1;
           if (resumableScanRuns >= maxResumableScanRuns) {
+            this.#resume = undefined;
             return summary.result("PAUSED");
           }
           continue;

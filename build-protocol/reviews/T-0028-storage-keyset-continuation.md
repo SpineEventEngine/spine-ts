@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Implementation pending
+Status: Reviewed
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0028-storage-keyset-continuation`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | Pending  | Pending |
-| Documentation              | Pending  | Pending |
-| TypeScript/API docs        | Pending  | Pending |
-| Security                   | Pending  | Pending |
-| Performance/reliability    | Pending  | Pending |
+| Lane                       | Reviewer                      | Status |
+| -------------------------- | ----------------------------- | ------ |
+| Code style/maintainability | Codex diff reviewer           | Fixed  |
+| Documentation              | Codex diff reviewer           | Clean  |
+| TypeScript/API docs        | Codex diff reviewer           | Fixed  |
+| Security                   | Implementation worker recheck | Clean  |
+| Performance/reliability    | Implementation worker recheck | Clean  |
 
 ## Review Criteria
 
@@ -41,4 +41,22 @@ Branch: `task/T-0028-storage-keyset-continuation`
 
 ## Rounds
 
-No implementation review has run yet.
+### Round 1
+
+- Code style/maintainability found a stale `Promise<boolean>` return from
+  `Delivery.#tryDrainMessage()` after the keyset scan stopped consuming that
+  result. Fixed by making the helper return `Promise<void>` and rely on
+  `DrainProgress` for scan state.
+- Documentation reviewed the changed build-protocol docs, API docs, package
+  READMEs, user guide, architecture docs, and work log. No findings.
+- TypeScript/API docs found the delivery storage fault fixture assigned an
+  `after` marker to a locally narrowed object type. Fixed the builder type and
+  reran `pnpm --config.verify-deps-before-run=false typecheck` successfully.
+- Security recheck found no new secret/logging paths, tenant-slice broadening,
+  shard broadening, or fail-open `IMPORT_EVENT` path. Inbox continuation input
+  remains validated before constructing the storage continuation.
+- Performance/reliability recheck found the delivery worker now pages pending
+  durable inbox scans by stable inbox row continuation instead of moving
+  absolute offsets, keeps the storage read cap plus callback limit scan budget,
+  preserves skipped-row bounds, and clears skipped-only stale loop resume state
+  before a later external run.

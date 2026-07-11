@@ -167,8 +167,20 @@ export interface InboxReadOptions {
   readonly statuses?: readonly DeliveryStatus[];
   /** Optional page limit for one ordered page; must be positive and at most 1000. */
   readonly limit?: number;
+  /** Optional stable inbox row key after which the ordered read should continue. */
+  readonly after?: InboxReadContinuation;
   /** Optional non-negative page offset in inbox order; defaults to the first row. */
   readonly offset?: number;
+}
+
+/** Stable ordered inbox row key used to continue an ordered read. */
+export interface InboxReadContinuation {
+  /** Inbox message UUID from the last row of the previous page. */
+  readonly messageId: string;
+  /** Receive time from the last row of the previous page. */
+  readonly whenReceived: Date;
+  /** Version from the last row of the previous page. */
+  readonly version: bigint;
 }
 
 /** Durable inbox write outcome. */

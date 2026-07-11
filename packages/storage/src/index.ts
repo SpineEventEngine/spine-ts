@@ -3,7 +3,13 @@ export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
 export { RecordColumn } from "./record/record-column.js";
 export { RecordMask } from "./record/record-mask.js";
-export type { RecordFilter, RecordOrder, RecordReadOptions } from "./record/record-query.js";
+export type {
+  RecordContinuation,
+  RecordContinuationValue,
+  RecordFilter,
+  RecordOrder,
+  RecordReadOptions,
+} from "./record/record-query.js";
 export { RecordQuery } from "./record/record-query.js";
 export { RecordSpec } from "./record/record-spec.js";
 export { RecordStorage } from "./record/record-storage.js";

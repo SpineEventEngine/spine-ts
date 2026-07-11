@@ -25,6 +25,7 @@ import {
   ShardIndex,
   type DeliveryStatus,
   type InboxId,
+  type InboxReadOptions,
 } from "../../src/index.js";
 import { createMessage, oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 import {
@@ -117,6 +118,61 @@ describe("Inbox", () => {
       version: 1n,
     });
     expect(messages).toHaveLength(3);
+  });
+
+  it("reads after a stable inbox continuation in inbox order", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+    const shard = ShardIndex.single();
+    const inboxId: InboxId = {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    };
+
+    const first = await inbox.receive({
+      inboxId,
+      signalId: "signal-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      version: 1n,
+    });
+    await inbox.receive({
+      inboxId,
+      signalId: "signal-2",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      version: 2n,
+    });
+    await inbox.receive({
+      inboxId,
+      signalId: "signal-3",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:01.000Z"),
+      version: 1n,
+    });
+
+    const page = await inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: 1,
+      after: {
+        messageId: first.message.id.value,
+        whenReceived: first.message.whenReceived,
+        version: first.message.version,
+      },
+    } as InboxReadOptions & { readonly after: unknown });
+
+    expect(page.map((message) => message.signalId)).toEqual(["signal-2"]);
   });
 
   it("reads through shared storage without keeping process-local inbox state", async () => {

@@ -1,5 +1,10 @@
 import type { Any } from "@bufbuild/protobuf/wkt";
-import type { RecordStorage, StorageContext, StorageFactory } from "@spine-ts/storage";
+import type {
+  RecordContinuation,
+  RecordStorage,
+  StorageContext,
+  StorageFactory,
+} from "@spine-ts/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
@@ -7,6 +12,7 @@ import {
   type DeliveryStatus,
   type InboxMessage,
   type InboxMessageId,
+  type InboxReadContinuation,
   type InboxReadOptions,
   type InboxWriteResult,
 } from "./inbox.js";
@@ -50,7 +56,10 @@ export class InboxStorage {
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const nextShard = requireReadShard(shard);
     const limit = requireInboxReadLimit(options.limit ?? defaultReadLimit);
-    const offset = requireInboxReadOffset(options.offset ?? 0);
+    const offset =
+      options.offset === undefined ? undefined : requireInboxReadOffset(options.offset);
+    const after =
+      options.after === undefined ? undefined : inboxContinuation(nextShard, options.after);
     const storage = this.#inboxStorage();
 
     try {
@@ -62,7 +71,8 @@ export class InboxStorage {
           ],
           sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
           limit,
-          offset,
+          ...(after === undefined ? {} : { after }),
+          ...(offset === undefined ? {} : { offset }),
         }),
       );
 
@@ -884,7 +894,7 @@ export class InboxStorage {
   }
 
   #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return `${id.shard.key()}:${id.value}`;
+    return inboxMessageKey(id);
   }
 
   #inboxStorage(): RecordStorage<string, Any> {
@@ -1190,4 +1200,65 @@ function requireInboxReadOffset(value: unknown): number {
   }
 
   return value as number;
+}
+
+function inboxContinuation(
+  shard: ShardIndex,
+  value: InboxReadContinuation,
+): RecordContinuation<string> {
+  const input = requireContinuationObject(value);
+  const messageId = requireContinuationText(
+    Reflect.get(input, "messageId"),
+    "Inbox read continuation message ID",
+  );
+  const whenReceived = requireContinuationDate(
+    Reflect.get(input, "whenReceived"),
+    "Inbox read continuation receive time",
+  );
+  const version = requireContinuationVersion(Reflect.get(input, "version"));
+
+  return Object.freeze({
+    id: inboxMessageKey({ value: messageId, shard }),
+    values: Object.freeze([
+      Object.freeze({ field: "receivedAt", value: whenReceived.getTime() }),
+      Object.freeze({ field: "version", value: version }),
+      Object.freeze({ field: "messageId", value: messageId }),
+    ]),
+  });
+}
+
+function requireContinuationObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new InboxMessageError("Inbox read continuation is invalid.");
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function requireContinuationText(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new InboxMessageError(`${label} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function requireContinuationDate(value: unknown, label: string): Date {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new InboxMessageError(`${label} must be a valid Date.`);
+  }
+
+  return new Date(value.getTime());
+}
+
+function requireContinuationVersion(value: unknown): bigint {
+  if (typeof value !== "bigint") {
+    throw new InboxMessageError("Inbox read continuation version must be a bigint.");
+  }
+
+  return value;
+}
+
+function inboxMessageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
+  return `${id.shard.key()}:${id.value}`;
 }

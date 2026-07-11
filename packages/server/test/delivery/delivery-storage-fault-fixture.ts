@@ -124,6 +124,7 @@ export function onInboxQuery(onQuery: () => Promise<void> | void): DeliveryStora
 export interface DeliveryInboxQuery {
   readonly limit?: number;
   readonly offset?: number;
+  readonly after?: boolean;
 }
 
 export function recordInboxQueries(queries: DeliveryInboxQuery[]): DeliveryStorageFaultProbe {
@@ -133,12 +134,15 @@ export function recordInboxQueries(queries: DeliveryInboxQuery[]): DeliveryStora
         return undefined;
       }
 
-      const recordedQuery: { limit?: number; offset?: number } = {};
+      const recordedQuery: { limit?: number; offset?: number; after?: boolean } = {};
       if (query.limit !== undefined) {
         recordedQuery.limit = query.limit;
       }
       if (query.offset !== undefined) {
         recordedQuery.offset = query.offset;
+      }
+      if ((query as RecordQuery<unknown> & { readonly after?: unknown }).after !== undefined) {
+        recordedQuery.after = true;
       }
 
       queries.push(Object.freeze(recordedQuery));

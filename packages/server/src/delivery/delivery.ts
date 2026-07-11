@@ -2,7 +2,12 @@ import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 import { clone } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 
-import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
+import {
+  Inbox,
+  InboxMessageError,
+  type InboxMessage,
+  type InboxReadContinuation,
+} from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage, InboxClaim } from "./inbox-claim.js";
 import { requireDeliveryLeaseMs } from "./delivery-lease.js";
@@ -50,10 +55,8 @@ export class Delivery {
    * The drain first picks up the shard with lease fencing, then scans
    * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work;
    * newly observed rows stop at the storage read cap plus `limit` while the
-   * drain advances past unavailable rows before endpoint invocation. If a
-   * stale offset boundary moves, the drain may also read one cap-sized page of
-   * already-seen rows plus one-row boundary probes to reach moved work. The
-   * `onMessage` endpoint
+   * drain advances past unavailable rows with keyset continuations before
+   * endpoint invocation. The `onMessage` endpoint
    * receives a public `DeliveryEndpointMessage` snapshot only for supported
    * worker labels: `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
    * `REACT_UPON_EVENT`.
@@ -130,22 +133,15 @@ export class Delivery {
     const scan = new DeliveryScanState(cursor);
 
     while (progress.processed < scanBudget) {
-      const page = await this.#readStablePendingPage(inbox, shard, scan, scanBudget, progress);
-      if (page === undefined) {
-        continue;
-      }
-
-      if (page.messages.length === 0 && progress.processed === 0 && scan.hasResumedCursor()) {
-        scan.rewindToHead();
-        continue;
-      }
+      const readLimit = scan.readLimit(scanBudget, progress.processed);
+      const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, scan.after);
 
       const pageOutcome = await this.#drainPendingPage(
         inbox,
         progress,
         scan,
         scanBudget,
-        page.messages,
+        messages,
         onMessage,
         lease,
         active,
@@ -156,53 +152,15 @@ export class Delivery {
         return pageOutcome;
       }
 
-      if (page.messages.length < page.readLimit) {
-        if (scan.shouldRescanShortPage(progress.accepted, progress.failed)) {
-          scan.rewindToHead();
-          continue;
-        }
-
-        return progress.finish(scan.cursor());
+      if (messages.length < readLimit) {
+        return progress.finish(
+          scan.finishShortPage(progress.accepted, progress.failed),
+          scan.shouldRescanHead(progress.accepted, progress.failed),
+        );
       }
     }
 
     return this.#finishExhaustedSkippedScan(progress, scan);
-  }
-
-  async #readStablePendingPage(
-    inbox: Inbox,
-    shard: ShardIndex,
-    scan: DeliveryScanState,
-    scanBudget: number,
-    progress: DrainProgress,
-  ): Promise<PendingDeliveryPage | undefined> {
-    // Offset pages are relative to the current `TO_DELIVER` set; validate the
-    // saved boundary before and after reads so moved work is not paged past.
-    if (await this.#staleBoundaryMoved(inbox, shard, scan)) {
-      scan.resetAfterBoundaryChange();
-      return undefined;
-    }
-
-    const readLimit = scan.readLimit(scanBudget, progress.processed);
-    const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, scan.offset);
-
-    if (await this.#staleBoundaryMoved(inbox, shard, scan)) {
-      scan.resetAfterBoundaryChange();
-      return undefined;
-    }
-
-    return { messages, readLimit };
-  }
-
-  async #staleBoundaryMoved(
-    inbox: Inbox,
-    shard: ShardIndex,
-    scan: DeliveryScanState,
-  ): Promise<boolean> {
-    return (
-      scan.requiresBoundaryValidation() &&
-      !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
-    );
   }
 
   async #drainPendingPage(
@@ -220,24 +178,13 @@ export class Delivery {
     for (const message of messages) {
       const accepted = progress.accepted;
       if (progress.hasSeen(message)) {
-        if (!scan.consumeSeenRescanAllowance()) {
-          return this.#finishExhaustedSkippedScan(progress, scan);
-        }
+        return this.#finishExhaustedSkippedScan(progress, scan);
       } else if (progress.processed >= scanBudget) {
         return this.#finishExhaustedSkippedScan(progress, scan);
       }
 
-      const remainsPending = await this.#tryDrainMessage(
-        inbox,
-        progress,
-        message,
-        onMessage,
-        lease,
-        active,
-      );
-      if (remainsPending) {
-        scan.advancePastPending(message);
-      }
+      await this.#tryDrainMessage(inbox, progress, message, onMessage, lease, active);
+      scan.advancePast(message);
       if (progress.accepted > accepted && scan.hasResumedCursor()) {
         scan.rewindToHead();
       }
@@ -256,35 +203,20 @@ export class Delivery {
     progress: DrainProgress,
     scan: DeliveryScanState,
   ): DeliveryDrainOutcome {
-    return progress.finish(scan.finishSkippedScan(progress.accepted, progress.failed), true);
+    return progress.finish(scan.cursor(), true);
   }
 
   async #readPendingDeliveryPage(
     inbox: Inbox,
     shard: ShardIndex,
     limit: number,
-    offset: number,
+    after: InboxReadContinuation | undefined,
   ): Promise<readonly InboxMessage[]> {
     return inbox.read(shard, {
       statuses: ["TO_DELIVER"],
       limit,
-      offset,
+      ...(after === undefined ? {} : { after }),
     });
-  }
-
-  async #pendingBoundaryMatches(
-    inbox: Inbox,
-    shard: ShardIndex,
-    offset: number,
-    pendingBoundaryId: string,
-  ): Promise<boolean> {
-    const [boundary] = await inbox.read(shard, {
-      statuses: ["TO_DELIVER"],
-      limit: 1,
-      offset: offset - 1,
-    });
-
-    return boundary?.id.value === pendingBoundaryId;
   }
 
   /**
@@ -486,20 +418,18 @@ export class Delivery {
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
-  ): Promise<boolean> {
+  ): Promise<void> {
     if (!progress.observe(message)) {
-      return true;
+      return;
     }
 
     if (!isEndpointLabel(message.label)) {
-      return true;
+      return;
     }
 
     const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     progress.record(endpoint, attempt);
-
-    return attempt.kind !== "DELIVERED";
   }
 
   #drainScope(): DeliveryScope {
@@ -522,12 +452,7 @@ export class Delivery {
   }
 
   #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
-    const cursor = requireDrainCursor(value);
-    if (cursor.offset === 0 || cursor.pendingBoundaryId === undefined) {
-      return drainCursor(0);
-    }
-
-    return cursor;
+    return requireDrainCursor(value);
   }
 }
 
@@ -672,8 +597,7 @@ interface DeliveryScope {
 
 /** @internal Cursor used only by the package-local delivery loop access path. */
 export interface DeliveryDrainCursor {
-  readonly offset: number;
-  readonly pendingBoundaryId?: string;
+  readonly after?: InboxReadContinuation;
 }
 
 /** @internal Result metadata used by `DeliveryLoop` without widening public `DeliveryRun`. */
@@ -696,39 +620,18 @@ interface DrainProgress {
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
-interface PendingDeliveryPage {
-  readonly messages: readonly InboxMessage[];
-  readonly readLimit: number;
-}
-
 /** Mutable cursor state for one bounded pending-message scan. */
 class DeliveryScanState {
-  #offset: number;
-  #pendingBoundaryId: string | undefined;
+  #after: InboxReadContinuation | undefined;
   #resumedCursor: boolean;
-  #offsetRescan = false;
-  #rescanSeenAllowance = 0;
 
   constructor(cursor: DeliveryDrainCursor) {
-    this.#offset = cursor.offset;
-    this.#pendingBoundaryId = cursor.pendingBoundaryId;
-    this.#resumedCursor = cursor.offset > 0;
+    this.#after = cursor.after;
+    this.#resumedCursor = cursor.after !== undefined;
   }
 
-  get offset(): number {
-    return this.#offset;
-  }
-
-  get pendingBoundaryId(): string {
-    if (this.#pendingBoundaryId === undefined) {
-      throw new Error("Pending boundary ID is required while validating a delivery scan cursor.");
-    }
-
-    return this.#pendingBoundaryId;
-  }
-
-  requiresBoundaryValidation(): boolean {
-    return this.#offset > 0 && this.#pendingBoundaryId !== undefined && !this.#offsetRescan;
+  get after(): InboxReadContinuation | undefined {
+    return this.#after;
   }
 
   hasResumedCursor(): boolean {
@@ -736,50 +639,28 @@ class DeliveryScanState {
   }
 
   readLimit(scanBudget: number, processed: number): number {
-    return Math.min(
-      inboxStorageAccess.maxReadLimit,
-      scanBudget - processed + this.#rescanSeenAllowance,
-    );
-  }
-
-  resetAfterBoundaryChange(): void {
-    this.#offset = 0;
-    this.#pendingBoundaryId = undefined;
-    this.#offsetRescan = true;
-    this.#resumedCursor = false;
-    this.#rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
+    return Math.min(inboxStorageAccess.maxReadLimit, scanBudget - processed);
   }
 
   rewindToHead(): void {
-    this.#offset = 0;
-    this.#pendingBoundaryId = undefined;
+    this.#after = undefined;
     this.#resumedCursor = false;
   }
 
-  consumeSeenRescanAllowance(): boolean {
-    if (this.#rescanSeenAllowance === 0) {
-      return false;
-    }
-
-    this.#rescanSeenAllowance -= 1;
-    return true;
-  }
-
-  advancePastPending(message: InboxMessage): void {
-    this.#offset += 1;
-    this.#pendingBoundaryId = message.id.value;
-  }
-
-  shouldRescanShortPage(accepted: number, failed: number): boolean {
-    return this.#resumedCursor && accepted === 0 && failed === 0;
+  advancePast(message: InboxMessage): void {
+    this.#after = inboxContinuation(message);
   }
 
   cursor(): DeliveryDrainCursor {
-    return drainCursor(this.#offset, this.#pendingBoundaryId);
+    return drainCursor(this.#after);
   }
 
-  finishSkippedScan(accepted: number, failed: number): DeliveryDrainCursor {
-    return this.#resumedCursor && accepted === 0 && failed === 0 ? drainCursor(0) : this.cursor();
+  finishShortPage(accepted: number, failed: number): DeliveryDrainCursor {
+    return this.#resumedCursor && accepted === 0 && failed === 0 ? drainCursor() : this.cursor();
+  }
+
+  shouldRescanHead(accepted: number, failed: number): boolean {
+    return this.#resumedCursor && accepted === 0 && failed === 0;
   }
 }
 
@@ -844,7 +725,7 @@ function drainProgress(): DrainProgress {
 
       return deliveryDrainOutcome(
         run,
-        run.failed > 0 || cursor.offset === 0 ? undefined : cursor,
+        run.failed > 0 || cursor.after === undefined ? undefined : cursor,
         resumableSkippedScan,
       );
     },
@@ -1102,47 +983,63 @@ function requireFailureLimit(value: unknown): number | undefined {
 
 function requireDrainCursor(value: unknown): DeliveryDrainCursor {
   if (value === undefined) {
-    return drainCursor(0);
+    return drainCursor();
   }
   if (typeof value !== "object" || value === null) {
     throw new Error("Delivery resume cursor must be an object.");
   }
 
-  const { offset, pendingBoundaryId } = value as {
-    readonly offset?: unknown;
-    readonly pendingBoundaryId?: unknown;
+  const { after } = value as {
+    readonly after?: unknown;
   };
-  const safeOffset = requireResumeCursorOffset(offset);
-  if (safeOffset === 0) {
-    return drainCursor(0);
+  if (after === undefined) {
+    return drainCursor();
   }
-  if (typeof pendingBoundaryId !== "string" || pendingBoundaryId.length === 0) {
-    throw new Error("Delivery resume cursor requires a pending boundary message ID.");
-  }
-
-  return drainCursor(safeOffset, pendingBoundaryId);
+  return drainCursor(requireResumeContinuation(after));
 }
 
-function requireResumeCursorOffset(value: unknown): number {
-  if (value === undefined) {
-    return 0;
-  }
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new Error("Delivery resume cursor offset must be a non-negative safe integer.");
+function requireResumeContinuation(value: unknown): InboxReadContinuation {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Delivery resume cursor continuation must be an object.");
   }
 
-  return value as number;
+  const input = value as {
+    readonly messageId?: unknown;
+    readonly whenReceived?: unknown;
+    readonly version?: unknown;
+  };
+
+  return continuationFromValues(input.messageId, input.whenReceived, input.version);
 }
 
-function drainCursor(offset: number, pendingBoundaryId?: string): DeliveryDrainCursor {
-  if (offset === 0) {
-    return Object.freeze({ offset: 0 });
+function drainCursor(after?: InboxReadContinuation): DeliveryDrainCursor {
+  return Object.freeze(after === undefined ? {} : { after });
+}
+
+function inboxContinuation(message: Pick<InboxMessage, "id" | "whenReceived" | "version">) {
+  return continuationFromValues(message.id.value, message.whenReceived, message.version);
+}
+
+function continuationFromValues(
+  messageId: unknown,
+  whenReceived: unknown,
+  version: unknown,
+): InboxReadContinuation {
+  if (typeof messageId !== "string" || messageId.length === 0) {
+    throw new Error("Delivery resume cursor requires a message ID.");
   }
-  if (pendingBoundaryId === undefined || pendingBoundaryId.length === 0) {
-    throw new Error("Delivery resume cursor requires a pending boundary message ID.");
+  if (!(whenReceived instanceof Date) || Number.isNaN(whenReceived.getTime())) {
+    throw new Error("Delivery resume cursor requires a valid receive time.");
+  }
+  if (typeof version !== "bigint") {
+    throw new Error("Delivery resume cursor requires a bigint version.");
   }
 
-  return Object.freeze({ offset, pendingBoundaryId });
+  return Object.freeze({
+    messageId,
+    whenReceived: new Date(whenReceived.getTime()),
+    version,
+  });
 }
 
 function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {

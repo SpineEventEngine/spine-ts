@@ -23,7 +23,6 @@ import {
   messageKey,
   onInboxReadOnce,
   onInboxQuery,
-  onInboxQueryNumber,
   packStoredRecord,
   recordInboxQueries,
   skipDedupFinalizeOnce,
@@ -1272,20 +1271,16 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faults.inboxQueries).toBe(4);
+    expect(faults.inboxQueries).toBe(2);
   });
 
-  it("keeps a partial stale-head rescan paged when a supported row moves before its offset", async () => {
-    let skippedHead: readonly InboxMessage[] = [];
-    const inboxQueries: { readonly limit?: number; readonly offset?: number }[] = [];
-    const faults = deliveryStorageFaults(
-      recordInboxQueries(inboxQueries),
-      onInboxQueryNumber(3, async () => {
-        await Promise.all(
-          skippedHead.slice(0, 1).map((message) => delivery.inbox.markDelivered(message)),
-        );
-      }),
-    );
+  it("continues skipped-head scans with a keyset cursor instead of offset probes", async () => {
+    const inboxQueries: {
+      readonly limit?: number;
+      readonly offset?: number;
+      readonly after?: boolean;
+    }[] = [];
+    const faults = deliveryStorageFaults(recordInboxQueries(inboxQueries));
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: faults.storageFactory,
@@ -1293,28 +1288,11 @@ describe("Delivery worker", () => {
       now: () => new Date("2026-07-08T09:00:00.000Z"),
     });
     const shard = ShardIndex.single();
-    const head: InboxMessage[] = [];
 
     for (let index = 0; index < 1_000; index += 1) {
-      head.push(
-        await seed(
-          delivery,
-          `signal-partial-stale-${String(index)}`,
-          BigInt(index + 1),
-          "CATCH_UP",
-        ),
-      );
+      await seed(delivery, `signal-keyset-skip-${String(index)}`, BigInt(index + 1), "CATCH_UP");
     }
-    skippedHead = head;
-    await seed(delivery, "signal-moved-supported", 1_001n);
-    for (let index = 0; index < 1_000; index += 1) {
-      await seed(
-        delivery,
-        `signal-stale-filler-${String(index)}`,
-        BigInt(index + 1_002),
-        "CATCH_UP",
-      );
-    }
+    await seed(delivery, "signal-keyset-supported", 1_001n);
 
     const seen: string[] = [];
     const run = await delivery.drain(shard, {
@@ -1325,7 +1303,7 @@ describe("Delivery worker", () => {
       },
     });
 
-    expect(seen).toEqual(["signal-moved-supported"]);
+    expect(seen).toEqual(["signal-keyset-supported"]);
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1_001,
@@ -1333,14 +1311,8 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faults.inboxQueries).toBe(5);
-    expect(inboxQueries).toEqual([
-      { limit: 1_000, offset: 0 },
-      { limit: 1, offset: 999 },
-      { limit: 1, offset: 1_000 },
-      { limit: 1, offset: 999 },
-      { limit: 1_000, offset: 0 },
-    ]);
+    expect(faults.inboxQueries).toBe(2);
+    expect(inboxQueries).toEqual([{ limit: 1_000 }, { limit: 1, after: true }]);
   });
 
   it("does not skip a supported row when skipped head rows disappear between page reads", async () => {
@@ -1405,7 +1377,7 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faults.inboxQueries).toBe(3);
+    expect(faults.inboxQueries).toBe(2);
   });
 
   it("stops unsupported-row scanning at the storage read cap", async () => {

@@ -311,7 +311,7 @@ function deliveryRun(): DeliveryRun {
 function deliveryOutcome(run = deliveryRun()): DeliveryDrainOutcome {
   return Object.freeze({
     run,
-    resumeCursor: Object.freeze({ offset: 0 }),
+    resumeCursor: Object.freeze({}),
     exhaustedSkippedScan: false,
   });
 }
