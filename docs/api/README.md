@@ -309,9 +309,10 @@ handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Durable-delivery exports include `DeliveryEndpointMessage`,
 `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
-`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`, `InboxReadOptions`,
-`InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`, `DeliveryLabel`,
-`DeliveryStatus`, `ShardIndex`, `ShardSession`, `ShardedWorkRegistry`, and
+`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`,
+`InboxStorage`, `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`,
+`ShardIndex`, `ShardSession`, `ShardedWorkRegistry`, and
 `ShardedWorkRegistryOptions`. This slice persists inbox messages and shard
 lease records through `StorageFactory` / `RecordStorage`, deduplicates live
 inbox writes durably by `(signalId, inboxId)` through small internal guard
@@ -331,9 +332,8 @@ invocation, and supplies independent message snapshots only for
 `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`. `Date` values
 and `Any.value` bytes are copied. Its callback limit caps endpoint callbacks
 actually invoked. Newly observed rows stop at the storage read cap plus
-`limit`; stale-offset recovery may additionally read one cap-sized page of
-already-seen rows plus one-row boundary probes when pending rows move before a
-saved offset.
+`limit` while pending scans continue after stable inbox row keys instead of
+moving absolute offsets.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, acceptance, failure recording, or
 failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data
@@ -359,6 +359,8 @@ renewal; this slice treats that as an in-process trust-boundary limitation rathe
 than timer-protected preemption.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read and must be positive and at most `1000`.
+`InboxReadContinuation` names the stable row key used to read the next ordered
+inbox page after a previous message: message ID, receive time, and version.
 `ShardedWorkRegistryOptions.leaseMs` must be between `1000` and `2147483647`
 milliseconds inclusive. `Inbox.markDelivered()` and
 `InboxStorage.markDelivered()` return `undefined` for missing rows, non-pending
@@ -609,13 +611,14 @@ validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
-`RecordFilter`, `RecordOrder`, `RecordReadOptions`, `RecordMask`,
-`InMemoryStorageFactory`, `InMemoryRecordStorage`, `EventStore`, and
-`OnEventAccepted`. `StorageFactory`
+`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
+`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
+`InMemoryRecordStorage`, `EventStore`, and `OnEventAccepted`. `StorageFactory`
 owns one mandatory adapter seam, `createRecordStorage(context, spec)`.
 `RecordStorage` persists identified Protobuf records with deterministic
-ID/column/path queries, non-negative offsets, positive limits, and simple field
-masks over cloned results. The in-memory adapter is process-local, tenant-aware through
+ID/column/path queries, stable continuations after sorted row keys,
+non-negative offsets, positive limits, and simple field masks over cloned
+results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, shared by factory, context name, tenant mode, tenant ID, and
 `RecordSpec` instance, and non-durable. Storage adapters must make repeated
 `createRecordStorage(context, spec)` calls observe the same logical records

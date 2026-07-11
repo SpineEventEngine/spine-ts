@@ -2685,3 +2685,56 @@ Consequences:
   replay exists, while production topology, supervision, retry policy, retained
   attempt history, durable catch-up storage, and storage-index continuation
   remain explicit future work.
+
+## D-0079: Add Storage Continuation Before Delivery Retry Policy
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0028`
+
+Context: T-0026 made durable inbox rows executable through a narrow local
+framework-owned delivery worker/loop. That implementation still used
+`RecordQuery.offset` for pending-row scans, with boundary validation and
+bounded rescans to avoid skipping work when earlier pending rows disappeared.
+T-0027 reconciled active docs and recorded storage-index/keyset continuation as
+the likely next implementation candidate. Spine JVM delivery reads inbox
+storage page-by-page in chronological order, and its storage design keeps
+`RecordStorage` as the single adapter seam for higher-level storage delegates.
+
+Decision:
+
+- Run T-0028 as a narrow storage continuation slice before retry monitors,
+  retained attempts, production worker supervision, or transport topology.
+- Add the smallest `RecordQuery`/`RecordStorage` continuation contract needed
+  to page after a stable ordered row key.
+- Preserve existing offset query support for current storage callers.
+- Implement the continuation contract in the in-memory storage adapter.
+- Use the continuation only for durable inbox pending-row scans in
+  `Delivery`/`DeliveryLoop`.
+- Keep production database adapters, broad query optimization, retry policy,
+  durable catch-up storage, import work, and aggregate `@Apply` delivery out of
+  scope.
+
+Alternatives considered:
+
+- Build production storage indexes/adapters now. Rejected because the immediate
+  runtime hazard is moving-offset delivery continuation, and production storage
+  adapters need their own capability and deployment design.
+- Keep offset paging plus boundary probes. Rejected because it is more complex
+  in delivery code and remains sensitive to filtered pending-set movement.
+- Add a delivery-specific cursor outside storage. Rejected because the paging
+  semantics belong at the record-storage seam already used by inbox storage.
+- Start retry monitors or retained attempt history first. Rejected because
+  reliable retry policy should build on stable bounded scan continuation.
+
+Consequences:
+
+- Delivery scanning can move toward stable keyset-style continuation while
+  preserving existing scan limits, shard leases, claims, and fail-closed
+  storage validation.
+- The storage adapter seam deepens slightly, but remains one method family
+  rather than a production index abstraction.
+- Public docs must keep production storage adapters and retry/supervision gaps
+  explicit after this task.

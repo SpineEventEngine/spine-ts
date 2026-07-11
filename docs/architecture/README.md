@@ -563,8 +563,9 @@ APIs, ZeroMQ transport, or production database adapters.
 schema, ID extraction, and deterministic query columns. `RecordStorage` stores
 identified Protobuf records, clones them on write/read, deletes by ID, and
 queries by exact IDs, exact column filters, deterministic sort order on `id`,
-stored columns, or dotted record paths, non-negative offsets applied after
-sorting and before positive limits, and simple masks on cloned results.
+stored columns, or dotted record paths, stable continuations after sorted row
+keys, non-negative offsets applied after sorting and before positive limits,
+and simple masks on cloned results.
 `StorageContext` carries the bounded-context storage namespace plus optional
 tenant scoping for multitenant storages.
 
@@ -598,10 +599,10 @@ shard session with compare-and-set fencing. Rows unavailable to the active
 worker are skipped before endpoint invocation, and bounded replay can scan past
 unavailable head rows to reach later available rows. Its callback limit caps
 endpoint callbacks that actually run. Newly observed rows stop at the storage
-read cap plus that limit; stale-offset recovery may additionally read one
-cap-sized page of already-seen rows plus one-row boundary probes when pending
-rows move before a saved offset. Endpoint callbacks receive independent message snapshots
-only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their
+read cap plus that limit while pending scans continue after stable inbox row
+keys instead of moving absolute offsets. Endpoint callbacks receive independent
+message snapshots only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+`REACT_UPON_EVENT`; their
 `Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
 never reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when

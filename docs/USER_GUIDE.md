@@ -655,9 +655,10 @@ subscription.unsubscribe();
 contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
 `queryVersioned()` accepts the storage `RecordQuery` slice for IDs, exact
-filters, masks, ordering, non-negative offsets, and positive limits. Offsets
-are applied after sorting and before limits. `readAllVersioned()` is the
-no-filter convenience path. Both return `StandReadResult` entries in
+filters, masks, ordering, stable continuations after sorted row keys,
+non-negative offsets, and positive limits. Continuations and offsets are
+applied after sorting and before limits. `readAllVersioned()` is the no-filter
+convenience path. Both return `StandReadResult` entries in
 deterministic `RecordStorage.queryEntries()` order and clone the stored state
 and caller-supplied version metadata the same way `readVersioned()` does.
 Version metadata is
@@ -1199,8 +1200,9 @@ handles.
 `RecordSpec` binds a generated record schema, optional generated ID schema, ID
 extraction, and query columns. `RecordStorage` then provides cloned writes,
 point reads, deletes, deterministic ID queries, exact column filters, sorting
-by `id`/columns/dotted paths, non-negative offsets applied after sorting and
-before positive limits, and simple masks on read/query results.
+by `id`/columns/dotted paths, stable continuations after sorted row keys,
+non-negative offsets applied after sorting and before positive limits, and
+simple masks on read/query results.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
 adapter. Storage objects opened by one factory share backing records by context
@@ -1234,8 +1236,8 @@ finalization but cannot uninvoke an already-run callback. Broader production
 supervision, cancellation, and retry-monitor policy remains future work.
 For framework-owned replay, the callback limit caps endpoint callbacks that
 actually run. Newly observed rows stop at the storage read cap plus that limit;
-stale-offset recovery may additionally read one cap-sized page of already-seen
-rows plus one-row boundary probes when pending rows move before a saved offset.
+pending scans continue after stable inbox row keys instead of moving absolute
+offsets.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
 failure-budget consumption. Pre-callback claim, replay-validation, and

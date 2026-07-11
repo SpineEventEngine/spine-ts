@@ -120,9 +120,8 @@ Current slice exposes:
   validated endpoints. The package does not expose a raw worker callback API.
   A run skips rows unavailable to its worker first. Its callback limit caps
   endpoint callbacks actually invoked. Newly observed rows stop at the storage
-  read cap plus `limit`; stale-offset recovery may additionally read one
-  cap-sized page of already-seen rows plus one-row boundary probes when pending
-  rows move before a saved offset. It passes independent message snapshots only for
+  read cap plus `limit` while pending scans continue after stable inbox row
+  keys instead of moving absolute offsets. It passes independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, then marks
   successful rows delivered. Those snapshots copy `Date` values and
   `Any.value` bytes.
@@ -751,7 +750,8 @@ state schemas with `StandStateTypeError`. Multitenant stands require
 `{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
 tenant stands reject tenant options. `queryVersioned()` accepts the storage
 `RecordQuery` slice for IDs, exact filters, masks, ordering, non-negative
-offsets applied after sorting and before limits, and positive limits;
+offsets applied after sorting and before limits, stable continuations after
+sorted row keys, and positive limits;
 `readAllVersioned()` is the no-filter convenience path. Both return
 `StandReadResult` entries in deterministic storage query order and reuse the
 same caller-supplied version metadata as point reads. Stand version metadata is

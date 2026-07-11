@@ -1,6 +1,11 @@
 import type { Message } from "@bufbuild/protobuf";
 
-import type { RecordFilter, RecordOrder, RecordQuery } from "../record/record-query.js";
+import type {
+  RecordContinuation,
+  RecordFilter,
+  RecordOrder,
+  RecordQuery,
+} from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 
@@ -37,14 +42,11 @@ export class TenantRecords<I, R extends Message> {
   }
 
   queryEntries(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly RecordEntry<I, R>[] {
-    const records = [...this.#records.values()].filter((entry) =>
-      matches(spec, entry.stored, query),
-    );
-    const sorted = records.sort((left, right) =>
-      compareEntries(left.stored, right.stored, query.sort ?? []),
-    );
+    const records = [...this.#records.values()].filter((entry) => matches(spec, entry, query));
+    const sorted = records.sort((left, right) => compareEntries(left, right, query.sort ?? []));
+    const continued = continueAfter(sorted, query.sort ?? [], query.after);
 
-    return applyWindow(sorted, query.offset, query.limit).map((entry) => ({
+    return applyWindow(continued, query.offset, query.limit).map((entry) => ({
       id: entry.slotId,
       record: entry.stored.record,
     }));
@@ -97,15 +99,27 @@ function applyWindow<T>(
   return records.slice(start, end);
 }
 
+function continueAfter<I, R extends Message>(
+  records: readonly StoredEntry<I, R>[],
+  orders: readonly RecordOrder[],
+  after: RecordContinuation<I> | undefined,
+): readonly StoredEntry<I, R>[] {
+  if (after === undefined) {
+    return records;
+  }
+
+  return records.filter((entry) => compareToContinuation(entry, orders, after) > 0);
+}
+
 function compareEntries<I, R extends Message>(
-  left: StoredRecord<I, R>,
-  right: StoredRecord<I, R>,
+  left: StoredEntry<I, R>,
+  right: StoredEntry<I, R>,
   orders: readonly RecordOrder[],
 ): number {
   for (const order of orders) {
     const comparison = StoredValues.compare(
-      resolveValue(left, order.field),
-      resolveValue(right, order.field),
+      resolveValue(left.stored, order.field),
+      resolveValue(right.stored, order.field),
     );
 
     if (comparison !== 0) {
@@ -113,15 +127,38 @@ function compareEntries<I, R extends Message>(
     }
   }
 
-  return StoredValues.compare(left.id, right.id);
+  return StoredValues.compare(left.slotId, right.slotId);
+}
+
+function compareToContinuation<I, R extends Message>(
+  entry: StoredEntry<I, R>,
+  orders: readonly RecordOrder[],
+  after: RecordContinuation<I>,
+): number {
+  for (let index = 0; index < orders.length; index += 1) {
+    const order = orders[index];
+    if (order === undefined) {
+      throw new Error("Record query continuation sort order is invalid.");
+    }
+    const comparison = StoredValues.compare(
+      resolveValue(entry.stored, order.field),
+      after.values[index]?.value,
+    );
+
+    if (comparison !== 0) {
+      return order.direction === "desc" ? comparison * -1 : comparison;
+    }
+  }
+
+  return StoredValues.compare(entry.slotId, after.id);
 }
 
 function matches<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: StoredEntry<I, R>,
   query: RecordQuery<I>,
 ): boolean {
-  return matchesIds(spec, entry, query.ids) && matchesFilters(entry, query.filters);
+  return matchesIds(spec, entry, query.ids) && matchesFilters(entry.stored, query.filters);
 }
 
 function matchesFilters<I, R extends Message>(
@@ -142,14 +179,14 @@ function matchesFilters<I, R extends Message>(
 
 function matchesIds<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: StoredEntry<I, R>,
   ids: readonly I[] | undefined,
 ): boolean {
   if (ids === undefined || ids.length === 0) {
     return true;
   }
 
-  return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.id));
+  return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.slotId));
 }
 
 function resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: string): unknown {

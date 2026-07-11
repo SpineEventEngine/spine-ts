@@ -16,6 +16,7 @@ import {
   messageKey,
   onInboxQueryNumber,
 } from "./delivery-storage-fault-fixture.js";
+import { oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -136,7 +137,7 @@ describe("DeliveryLoop", () => {
       second,
       shard,
       { node: "node-b", onMessage: () => undefined },
-      { resume: { offset: 1, pendingBoundaryId: "stale-boundary" } },
+      { resume: "stale-cursor" as never },
     );
 
     expect(session).toBeDefined();
@@ -149,7 +150,7 @@ describe("DeliveryLoop", () => {
     expect(faults.inboxQueries).toBe(0);
   });
 
-  it("validates a resumed boundary only around the first page read", async () => {
+  it("continues a resumed scan after the saved inbox row key", async () => {
     const faults = deliveryStorageFaults();
     const delivery = createDelivery(faults.storageFactory);
     const shard = ShardIndex.single();
@@ -167,7 +168,7 @@ describe("DeliveryLoop", () => {
           seen.push(message.signalId);
         },
       },
-      { resume: { offset: 1, pendingBoundaryId: boundary.id.value } },
+      { resume: { after: readContinuation(boundary) } },
     );
 
     expect(outcome.run).toMatchObject({
@@ -177,7 +178,55 @@ describe("DeliveryLoop", () => {
       failed: 0,
     });
     expect(seen).toEqual(["signal-resume-delivered"]);
-    expect(faults.inboxQueries).toBe(3);
+    expect(faults.inboxQueries).toBe(1);
+  });
+
+  it("rejects oversized resume cursor message IDs before querying inbox storage", async () => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        shard,
+        { node: "node-a", onMessage: () => undefined },
+        {
+          resume: {
+            after: {
+              messageId: oversizedText(16 * 1024 + 1),
+              whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+              version: 1n,
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow(/message id exceeds 16384 bytes/i);
+    expect(faults.inboxQueries).toBe(0);
+  });
+
+  it("rejects oversized resume cursor versions before querying inbox storage", async () => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        shard,
+        { node: "node-a", onMessage: () => undefined },
+        {
+          resume: {
+            after: {
+              messageId: "message-1",
+              whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+              version: oversizedVersion(),
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow(/version exceeds 16384 bytes/i);
+    expect(faults.inboxQueries).toBe(0);
   });
 
   it("stops idle when pending rows are already claimed", async () => {
@@ -252,7 +301,7 @@ describe("DeliveryLoop", () => {
     }).run();
 
     expect(seen).toEqual(["signal-supported-tail"]);
-    expect(run).toMatchObject({ status: "IDLE", runs: 2, accepted: 1, delivered: 1, failed: 0 });
+    expect(run).toMatchObject({ status: "IDLE", runs: 3, accepted: 1, delivered: 1, failed: 0 });
   });
 
   it("returns a resumable status instead of scanning skipped-only drains forever", async () => {
@@ -448,7 +497,7 @@ describe("DeliveryLoop", () => {
       delivered: 4,
       failed: 0,
     });
-    expect(seen.slice(0, 2)).toEqual(["signal-supported-tail-1002", "signal-cleared-head"]);
+    expect(seen.slice(0, 2)).toEqual(["signal-cleared-head", "signal-supported-tail-1002"]);
   });
 
   it("drops a stale skipped-only resume cursor so a cleared head claim is reconsidered", async () => {
@@ -561,7 +610,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-supported-tail"]);
   });
 
-  it("rescans after a full stale offset page when a skipped head page disappears", async () => {
+  it("continues after a skipped page when skipped head rows disappear", async () => {
     const race = {
       clearSkippedRows: () => undefined as Promise<void> | void,
     };
@@ -954,6 +1003,14 @@ function withoutClaim(message: InboxMessage): InboxMessage {
     whenReceived: message.whenReceived,
     version: message.version,
     ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+  });
+}
+
+function readContinuation(message: InboxMessage) {
+  return Object.freeze({
+    messageId: message.id.value,
+    whenReceived: message.whenReceived,
+    version: message.version,
   });
 }
 

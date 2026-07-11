@@ -68,8 +68,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   /**
-   * Query records by actual storage slot IDs, columns, sorting, limits, and
-   * optional masks.
+   * Query records by actual storage slot IDs, columns, sorting,
+   * continuations, limits, and optional masks.
    *
    * `RecordQuery.ids`, when present, filters storage slot IDs rather than
    * logical IDs derived from record bodies.
@@ -86,7 +86,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /**
    * Query stored records together with the actual storage slot IDs they
-   * currently occupy.
+   * currently occupy in the requested sorted and continued order.
    *
    * `RecordQuery.ids`, when present, filters those storage slot IDs rather
    * than logical IDs derived from record bodies.

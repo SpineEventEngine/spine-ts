@@ -25,6 +25,7 @@ import {
   ShardIndex,
   type DeliveryStatus,
   type InboxId,
+  type InboxReadContinuation,
 } from "../../src/index.js";
 import { createMessage, oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 import {
@@ -117,6 +118,189 @@ describe("Inbox", () => {
       version: 1n,
     });
     expect(messages).toHaveLength(3);
+  });
+
+  it("reads after a stable inbox continuation in inbox order", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+    const shard = ShardIndex.single();
+    const inboxId: InboxId = {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    };
+
+    const first = await inbox.receive({
+      inboxId,
+      signalId: "signal-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      version: 1n,
+    });
+    await inbox.receive({
+      inboxId,
+      signalId: "signal-2",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      version: 2n,
+    });
+    await inbox.receive({
+      inboxId,
+      signalId: "signal-3",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-02T08:00:01.000Z"),
+      version: 1n,
+    });
+
+    const page = await inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: 1,
+      after: {
+        messageId: first.message.id.value,
+        whenReceived: first.message.whenReceived,
+        version: first.message.version,
+      },
+    });
+
+    expect(page.map((message) => message.signalId)).toEqual(["signal-2"]);
+  });
+
+  it("rejects oversized read continuation message IDs before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: oversizedText(16 * 1024 + 1),
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: 1n,
+      },
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/message id exceeds 16384 bytes/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects invalid read continuation objects before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: [] as unknown as InboxReadContinuation,
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/continuation is invalid/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects blank read continuation message IDs before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: "   ",
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: 1n,
+      },
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/message id must be a non-empty string/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects invalid read continuation receive times before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: "message-1",
+        whenReceived: new Date(Number.NaN),
+        version: 1n,
+      },
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/receive time must be a valid date/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects non-bigint read continuation versions before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: "message-1",
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: 1 as unknown as bigint,
+      },
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/version must be a bigint/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects oversized read continuation versions before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: "message-1",
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: oversizedVersion(),
+      },
+    });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/version exceeds 16384 bytes/i);
+    expect(storageFactory.opens).toBe(0);
   });
 
   it("reads through shared storage without keeping process-local inbox state", async () => {
@@ -339,6 +523,23 @@ describe("Inbox", () => {
 
       await expect(storage.read(ShardIndex.single(), { limit })).rejects.toThrow(
         "Inbox read limit must be a positive safe integer at most 1000.",
+      );
+      expect(storageFactory.opens).toBe(0);
+      expect(storageFactory.queryCount).toBe(0);
+    },
+  );
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid read offsets before querying storage: %s",
+    async (offset) => {
+      const storageFactory = new RecordingInboxQueryFactory();
+      const storage = new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      });
+
+      await expect(storage.read(ShardIndex.single(), { offset })).rejects.toThrow(
+        "Inbox read offset must be a non-negative safe integer.",
       );
       expect(storageFactory.opens).toBe(0);
       expect(storageFactory.queryCount).toBe(0);

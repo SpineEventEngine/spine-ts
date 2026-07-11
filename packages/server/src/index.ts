@@ -55,6 +55,7 @@ export {
   type InboxMessage,
   type InboxMessageId,
   type InboxMessageInput,
+  type InboxReadContinuation,
   type InboxReadOptions,
   type InboxWriteResult,
 } from "./delivery/inbox.js";
