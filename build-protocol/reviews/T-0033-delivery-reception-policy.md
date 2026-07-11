@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Scaffolded; decision authoring pending
+Status: Decision authoring in progress; review pending
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -38,3 +38,6 @@ protocol.
 - `2026-07-11T19:08:00Z`: T-0033 scaffold created after requirements splitter
   `019f528e-7ee6-7063-bbd4-6add1fe5ae80` recommended a docs/decision-only
   reception-failure policy slice. Decision authoring and review are pending.
+- `2026-07-11T19:12:00Z`: Assigned decision author
+  `019f5297-9471-7a01-a287-9b08ac23250a`. Independent review remains pending
+  the author's verified commit and coordinator pre-review lint.
