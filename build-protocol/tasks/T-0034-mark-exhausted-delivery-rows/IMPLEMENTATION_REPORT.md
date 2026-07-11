@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Complete; clean review and final verification passed
+Status: Complete; merged to main and post-merge verified
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -116,6 +116,10 @@ Implementation commits:
 
 ## Verification
 
+- PASS: post-merge native `pnpm --config.verify-deps-before-run=false verify`
+  on `main`; 60 files and 1,282 tests passed in ordinary and coverage runs with
+  the same coverage, plus every typecheck, lint, format, docs/API, Protobuf, and
+  generated-output gate.
 - PASS: final native `pnpm --config.verify-deps-before-run=false verify`; 60
   test files and 1,282 tests passed in both ordinary and coverage runs, with
   95.01% statement and 90.03% branch coverage. Typechecks, lint, formatting,

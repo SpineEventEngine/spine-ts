@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Complete; all lanes clean and final verification passed
+Status: Complete; all lanes clean, merged, and post-merge verified
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -316,6 +316,9 @@ Security is deferred to final project readiness.
   1,282 tests in ordinary and coverage runs plus typecheck, lint, formatting,
   docs/API, Protobuf, and generated-output gates. The initial sandbox-only
   listener/IPC failures are not product failures. T-0034 is ready to merge.
+- `2026-07-11T22:52:00Z`: Merge `75fa1d92` integrated T-0034 to `main`, and
+  post-merge native `pnpm verify` repeated the full clean pass. Review and
+  integration are closed.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
