@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 2 decision fix in progress
+Status: Round 2 decision fix coordinator-verified; pre-review lint pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -98,8 +98,10 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
 ## Acceptance Criteria
 
 - One accepted decision names exactly one lifecycle owner for the next slice.
-- Current behavior is accurately described as explicitly started bounded runs
-  with no automatic restart guarantee.
+- Current behavior is accurately described as explicitly started runs whose
+  direct drains and skipped-scan pause streaks are bounded, while a whole loop
+  can remain active under continuous supported writes and has no automatic
+  restart guarantee after settlement.
 - `ServerEnvironment.delivery` is not called a scheduler merely because it is
   closeable.
 - Startup recovery and retryable pending-row wakeups have an owner without
@@ -112,6 +114,13 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   forever.
 - Worker-promise rejection has explicit startup, notification/retry-trigger,
   retained-progress, and shutdown behavior without a public observation API.
+- Mixed worker outcomes use package-internal per-shard eligibility: only paused
+  shards continue the current epoch; failed/skipped shards park; idle shards
+  complete.
+- The finite epoch bound caps supported as well as skipped work, so continuous
+  supported writes cannot keep one epoch alive indefinitely.
+- Shared or reusable caller-owned environments have one seam with internal
+  attachment/generation cardinality; one detach cannot disable other servers.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -126,9 +135,14 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
 The decision author inspected the complete current `DeliveryLoop`,
 `DeliveryWorker`, `ServerEnvironment`, and `Server` source plus focused loop,
 worker-runtime, exhaustion/retry, catch-up, and server/environment lifecycle
-tests. Current behavior is one explicitly started bounded worker run;
-concurrent starts reject, loop `close()` stops future drains and awaits the
-active drain, and environment delivery is only an optionally owned closeable.
+tests. Current direct drains and skipped-scan pause streaks are bounded, but a
+whole `DeliveryLoop.run()` can remain active under continuous supported writes.
+`DeliveryWorkerRun` retains ordered per-shard outcomes while its aggregate
+status applies priority, concurrent starts reject, loop `close()` stops future
+drains and awaits the active drain, and environment delivery is only an
+optionally owned closeable. Multiple servers can reference one caller-owned
+environment, but current source has no attachment registry or generation
+semantics.
 
 The author also inspected D-0082 through D-0084 and the current T-0032 through
 T-0034 task, result, work, and review records; both named local JVM research
@@ -150,32 +164,46 @@ serialized, coalesced requests for one-shot bounded `DeliveryWorker` runs.
 readiness event but continues its already-admitted finite scan epoch from
 opaque progress. `FAILED` leaves a retry-readiness obligation for a later
 package-internal delay-policy decision to submit to the same owner. Stop closes
-notification/trigger admission and awaits active work before contexts,
-transport, or storage close.
+generation notification/trigger admission only at last detach or environment
+close and awaits active work before dependent contexts, transport, or storage
+close; a non-last detach leaves other registrations usable.
 
 One admitted request now remains a finite scan epoch across one-shot runs.
 `PAUSED` creates no new readiness event, but retains opaque per-shard progress
 to an admission-time high-watermark and continues the same obligation until
-that bound is reached, honoring stop between runs. The successor must change
-the current package internals so `DeliveryLoop` no longer discards all paused
-progress and `DeliveryWorker` can preserve that opaque obligation across
-starts. No cursor or epoch becomes public.
+that bound is reached, honoring stop between runs. The bound applies to all
+skipped and supported work. Mixed results are selective: paused shards continue
+the current epoch, failed/skipped shards park until later external readiness,
+and idle shards complete. The successor must change the current package
+internals so `DeliveryLoop` preserves bounded progress and `DeliveryWorker`
+returns package-internal shard dispositions and starts only eligible shards. No
+cursor, epoch, or shard-control result becomes public.
 
 Startup worker rejection fails server start before network intake and joins
 failed-start cleanup. Notification/retry-triggered rejection is observed
 immediately, never becomes unhandled, parks the admitted/coalesced obligation,
-and resumes only after a later external readiness trigger. Shutdown awaits an
-active rejection, continues remaining closes, and propagates/aggregates it
-through the existing close-error model.
+and resumes only after a later external readiness trigger. The rejection stays
+package-internal until a later externally triggered fulfilled run supersedes it
+or shutdown surfaces it, even if no worker is then active. Shutdown continues
+remaining closes and propagates/aggregates active and parked errors through the
+existing close-error model.
+
+One environment seam accepts package-internal server attachment tokens. A
+non-last detach cannot disable the remaining servers. Last detach quiesces the
+generation but leaves a caller-owned environment reusable; later attachment
+starts fresh recovery. Environment close permanently refuses attachments and
+triggers and aggregates all remaining lifecycle work. Server-owned environments
+still close with their owner. No public lifecycle option is added.
 
 The smallest successor implements that environment-owned package-internal
 seam, startup trigger, local notification, coalescing, finite `PAUSED`
-continuation, rejection handling, and stop/await ordering only. It does not
+continuation, selective per-shard results/starts, full epoch bounding, retained
+rejection, attachment generations, and stop/await ordering only. It does not
 implement timer values, backoff, public monitor/action or scheduler APIs,
 supervision, topology, adapters, or catch-up.
-Current runtime remains explicit one-shot bounded runs until that successor
-lands. T-0034, pending/skipped `CATCH_UP`, and fail-closed legacy
-`IMPORT_EVENT` remain unchanged.
+Current runtime remains explicitly started and lacks the successor's full epoch
+bound and automatic lifecycle ownership. T-0034, pending/skipped `CATCH_UP`,
+and fail-closed legacy `IMPORT_EVENT` remain unchanged.
 
 ## Likely Changed Files
 
@@ -231,3 +259,13 @@ active delivery scheduler.
 - PASS: Round 1 `git diff --check`, status, zero-untracked, and exact five-file
   scope checks.
 - NOT RUN: full `pnpm verify` in Round 1, per explicit task direction.
+- PASS: Round 2 `typecheck:build:generated`, fresh `docs:check` with zero
+  errors and the known invalid-`origin` warning only, and `format:check`.
+- PASS: Round 2 targeted mixed per-shard outcome/eligibility, selective start,
+  full finite epoch, continuous-supported-write, coalescing/rejection exception,
+  retained parked error, shared/reusable environment generation,
+  startup/shutdown, single-owner, public-policy, T-0034, `CATCH_UP`, and
+  `IMPORT_EVENT` assertions.
+- PASS: Round 2 `git diff --check`, status, zero-untracked, and exact four-file
+  scope checks. `RUNTIME_ARCHITECTURE.md` remained unchanged in Round 2.
+- NOT RUN: full `pnpm verify` in Round 2, per explicit task direction.

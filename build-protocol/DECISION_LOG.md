@@ -3111,16 +3111,21 @@ Date: 2026-07-11
 Task: `T-0035`
 
 Context: T-0034 made the fixed internal exhausted-row `MARK_DELIVERED` outcome
-executable. The current `DeliveryLoop.run()` still performs one explicitly
-started bounded run for one shard, and `DeliveryWorker.start()` starts its
-configured loops once and resolves when they stop. Neither method starts at
-server startup, reacts to a later durable write, or guarantees a later run for
-a retryable row left `TO_DELIVER`. `stop()` prevents later drains and `close()`
-awaits an active run without interrupting its current drain. The optional
-`ServerEnvironment.delivery` property is only a closeable facility today; that
-does not make it a scheduler. A framework owner must connect these bounded
-primitives to server startup, local durable-write notification, observation,
-and orderly stop before delay policy or public monitoring is designed.
+executable. The current `DeliveryLoop.run()` is explicitly started for one
+shard. Each direct drain is bounded, failure count is bounded, and skipped-only
+scanning pauses after a bounded streak, but the whole loop run is not fully
+bounded: supported rows appended continuously while useful work is delivered
+can keep it draining without settling. `DeliveryWorker.start()` starts every
+configured loop once, returns an aggregate-priority status plus ordered
+per-shard loop results when all fulfill, and rejects if any loop rejects.
+Neither type starts at server startup, reacts to a later durable write, or
+guarantees a later run for a retryable row left `TO_DELIVER`. `stop()` prevents
+later drains and `close()` awaits an active run without interrupting its current
+drain. The optional `ServerEnvironment.delivery` property is only a closeable
+facility today; that does not make it a scheduler. A framework owner must
+connect these primitives to server startup, local durable-write notification,
+observation, and orderly stop before delay policy or public monitoring is
+designed.
 
 Decision:
 
@@ -3128,17 +3133,23 @@ Decision:
   stopping, and observing delivery runs. It uses a package-internal delivery-run
   lifecycle seam around `DeliveryWorker`; the seam is an implementation detail,
   not another owner, an environment configuration surface, or a public API.
-- Preserve each `DeliveryWorker.start()` call as a one-shot bounded run. The
-  lifecycle seam may serialize starts and coalesce trigger requests that arrive
-  while a run is active into at most one subsequent admitted request. One
+  Each environment instance has exactly one such seam across all attached
+  servers.
+- The successor makes each lifecycle-owned `DeliveryWorker.start()` call
+  one-shot and epoch-bounded. The lifecycle seam may serialize starts and
+  coalesce trigger requests that arrive while a run is active into at most one
+  subsequent admitted request. One
   admitted request is a finite scan epoch: it captures an opaque per-shard
   continuation and an admission-time high-watermark, or an equivalent
-  explicitly bounded fairness limit, so rows appended later cannot extend that
-  epoch forever. The epoch may require multiple one-shot worker runs, but each
-  run remains bounded and stop is checked between runs. Reaching the epoch
-  bound completes the request even when unsupported rows remain pending. The
-  seam must not turn one worker call into an unbounded background loop or
-  recursively repeat dispatch.
+  explicitly bounded fairness limit. That bound caps all reads, accepted
+  callbacks, and delivered work in the epoch, not only skipped-row continuation;
+  useful supported work cannot reset or extend it. Rows appended after
+  admission are outside the epoch and rely on their coalesced or later readiness
+  request. The epoch may require multiple one-shot worker runs, but each run
+  remains bounded and stop is checked between runs. Reaching the epoch bound
+  completes the request even when unsupported or newly appended rows remain
+  pending. The seam must not turn one worker call into an unbounded background
+  loop or recursively repeat dispatch.
 - After contexts and delivery endpoints are assembled, but before network
   intake opens, `ServerEnvironment` installs local notification and admits and
   awaits one finite recovery scan epoch. Each worker start within that epoch is
@@ -3163,23 +3174,33 @@ Decision:
   must submit a trigger to this seam; selecting delay, backoff, jitter, timer,
   or attempt timing is a separate decision. No other framework part may start
   a delivery worker directly to provide that wakeup.
-- Observe bounded outcomes as follows. `IDLE` completes the admitted scan epoch
-  and requests no run. `PAUSED` does not create a readiness event and does not
-  complete or discard the admitted epoch; the owner starts another one-shot
-  bounded worker run with the epoch's opaque continuation until its finite
-  high-watermark or fairness bound is reached. This continuation is progress
-  on one existing obligation, not retry timing or contention polling.
-  `FAILED` records retryable or infrastructure work for later policy and
-  requests no self-run. `SKIPPED` records unavailable shard ownership and
-  requests no self-run, avoiding contention spin. Any one already-coalesced
-  external startup/new-work/retry-ready request is still honored after the
-  active run settles. None of these outcomes changes T-0034's row policy.
+- Scheduling decisions use package-internal per-shard results, never only the
+  aggregate worker status. An `IDLE` shard completes its part of the admitted
+  epoch. Only a `PAUSED` shard remains eligible to continue that same epoch from
+  its opaque continuation to the finite bound; `PAUSED` creates no readiness
+  event. A `FAILED` shard and a `SKIPPED` shard are parked until a later external
+  startup/new-work/retry-ready trigger, avoiding failure and contention spin. A
+  `STOPPED` shard does not continue in the stopping generation. Therefore a
+  worker result containing both `FAILED` and `PAUSED` continues only the paused
+  shard, even though its aggregate status is `FAILED`.
+- After a normally fulfilled worker start, an already-coalesced external
+  readiness request remains eligible to be admitted according to those
+  per-shard dispositions. Rejection is the exception: a rejected start parks
+  the current epoch and all coalesced readiness, and none may restart until a
+  new external startup/new-work/retry-ready trigger arrives after the
+  rejection. None of these outcomes changes T-0034's row policy.
 - The successor must change the current loop/worker internals because
   `DeliveryLoop` presently clears its resume cursor when returning `PAUSED` and
-  `DeliveryWorkerRun` carries no package-internal progress obligation. The
-  successor preserves or returns opaque per-shard continuation plus the finite
-  epoch bound across worker starts; it must not expose that cursor or epoch in
-  public declarations, exports, monitor callbacks, or environment options.
+  does not cap useful work to an admitted epoch, while `DeliveryWorkerRun`
+  exposes ordered loop results but carries no package-internal shard identity,
+  continuation eligibility, or progress obligation. The successor adds a
+  package-internal worker/loop result and selective-start path that associates
+  each shard with its finite bound, opaque progress, and disposition, and starts
+  only eligible shards. When sibling loops reject, this internal result also
+  preserves fulfilled-shard dispositions and last safe progress instead of
+  discarding them behind one worker rejection. It must not expose the
+  shard-control result, cursor, or epoch in public declarations, exports,
+  monitor callbacks, or environment options.
 - `DeliveryWorker.start()` may reject instead of returning an outcome. Every
   lifecycle-owned start attaches observation immediately so notification- and
   retry-triggered runs cannot create unhandled promise rejections. Such a
@@ -3187,26 +3208,56 @@ Decision:
   preserves the admitted epoch, its last safe opaque progress, and any
   coalesced request. It does not immediately restart. A later external
   startup/new-work/retry-ready trigger resumes that retained obligation, so a
-  persistent fault cannot create an immediate rejection spin. No public
-  monitor, health, or error-reporting API is implied.
-- Stop closes trigger admission and local notification first, calls the worker
-  stop path so no later drain starts, and awaits the already-active bounded run.
-  The current drain is not forcibly interrupted. A durable write that races
-  after admission closes remains pending for startup recovery in a later
-  environment; it does not start a new run in the closing environment.
-- Server shutdown order is: stop external network intake and sessions; stop
-  delivery trigger admission and await active delivery work while contexts and
-  endpoint dependencies remain open; close contexts and other endpoint
-  resources; then close environment delivery facilities, transport, and
-  storage. If the awaited worker rejects, shutdown records that failure,
-  continues every remaining close, and propagates or aggregates all close
-  failures consistently with the existing `RetryableCloseGroup` behavior.
+  persistent fault cannot create an immediate rejection spin. The rejection
+  itself remains stored inside the current environment generation until a later
+  externally triggered worker start fulfills and its per-shard dispositions
+  supersede it, or until generation/environment shutdown surfaces it. A parked
+  rejection is not lost merely because no worker promise remains active. No
+  public monitor, health, or error-reporting API is implied.
+- Servers attach to the one environment seam through package-internal
+  registrations, reference counting, or equivalent generation tokens. Each
+  attachment registers its endpoint dependencies and submits startup recovery
+  through the shared seam before that server opens network intake. Additional
+  servers reuse the same generation and do not create another delivery owner.
+  Detaching one server stops readiness from that registration and serializes
+  against active work before its contexts close, but leaves other registrations
+  and their queued readiness usable.
+- The last server detach closes that generation's trigger admission and local
+  notification, awaits active work, and surfaces any parked rejection while
+  continuing remaining server closes. For a caller-owned environment, last
+  detach does not close the environment or its facilities permanently; a later
+  attachment opens a fresh internal generation, reinstalls notification, and
+  performs startup recovery. `ServerEnvironment.close()` is different: it
+  permanently rejects later attachments and triggers, quiesces and awaits all
+  remaining lifecycle work, includes any active or parked rejection in the
+  close aggregate, and then closes owned facilities. A server-owned environment
+  still closes with its owning server after the sole attachment quiesces. No
+  public attachment or lifecycle option is introduced.
+- Generation stop, last detach, and environment close shut trigger admission
+  and local notification first, call the worker stop path so no later drain
+  starts in that generation, and await already-active work. The current drain
+  is not forcibly interrupted. A durable write that races after generation
+  admission closes remains pending for a later generation's startup recovery.
+- Server shutdown order is: stop that server's external network intake and
+  sessions; detach its package-internal registration and serialize against
+  active delivery work while its contexts and endpoint dependencies remain
+  open; then close its contexts and other endpoint resources. A non-last detach
+  leaves the shared generation active for remaining registrations. A last
+  detach additionally quiesces the generation as above. If the server owns the
+  environment, environment delivery facilities, transport, and storage close
+  only after that quiescence and context/resource close. A shutdown that ends
+  the generation or environment includes an earlier parked rejection even when
+  no worker promise is active. If active work rejects while being awaited,
+  shutdown parks and includes that failure too. It continues every remaining
+  close and propagates or aggregates all close failures consistently with the
+  existing `RetryableCloseGroup` behavior.
   Transport or storage must never close beneath an active run.
 - The smallest successor is one package-internal environment-owned lifecycle
   implementation with startup recovery, post-persist local notification,
-  serialized/coalesced worker starts, finite cross-run `PAUSED` continuation,
-  rejection observation/parking, and stop/await ordering. It owns the necessary
-  package-internal loop/worker progress change but does not add retry timing.
+  serialized/coalesced selective shard starts, a full finite epoch bound,
+  cross-run `PAUSED` continuation, rejection observation/retention, attachment
+  generations, and stop/await ordering. It owns the necessary package-internal
+  loop/worker progress and selective-result change but does not add retry timing.
   Public `DeliveryMonitor`, failure actions, scheduler APIs, process
   supervision, topology, adapters, catch-up, or health surfaces remain
   deferred.
@@ -3242,8 +3293,13 @@ Consequences:
   while retry timing remains deliberately undecided.
 - Large finite unsupported prefixes cannot starve admitted supported tail work
   merely because one bounded loop run pauses, while admission-time epoch bounds
-  prevent concurrent writes from creating infinite unsupported-row churn.
+  prevent continuous unsupported or supported writes from creating an infinite
+  epoch.
 - Worker rejections have defined startup, notification, retained-progress, and
   shutdown behavior without creating a public observation surface.
+- Mixed per-shard outcomes no longer make the aggregate priority accidentally
+  rerun failed/skipped shards or abandon paused-shard progress.
+- Shared caller-owned environments can outlive one server attachment and later
+  start a fresh generation without creating a second delivery owner.
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.

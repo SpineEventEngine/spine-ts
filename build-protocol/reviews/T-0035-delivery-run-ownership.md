@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 2 decision fix in progress
+Status: Round 2 decision fix coordinator-verified; pre-review lint pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -101,3 +101,22 @@ Security is deferred to final project readiness.
 - `2026-07-11T23:15:00Z`: Resumed decision author
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 2 fix worker.
   Fresh four-lane re-review remains pending.
+- `2026-07-11T23:16:00Z`: Fix worker verified the complete Round 2 batch
+  against current per-shard worker results, loop progress, server/environment
+  ownership, close aggregation, and focused tests. D-0085 now defines selective
+  per-shard continuation, a full finite epoch bound, the rejection exception to
+  coalesced immediate admission, retained parked errors, and one shared seam
+  with package-internal attachment generations. Author verification is
+  pending; the worker remains active for coordinator closure and must not
+  dispatch reviewers.
+- `2026-07-11T23:19:43Z`: Round 2 author verification passed generated build,
+  docs/API, formatting, targeted mixed-outcome/per-shard/full-epoch/rejection/
+  coalescing/parked-error/shared-environment/startup/shutdown/single-owner/
+  public-policy/compatibility assertions, whitespace, exact four-file scope,
+  status, and zero-untracked checks. Full `pnpm verify` was not run. The worker
+  remains active for coordinator closure; all four fresh review lanes remain
+  pending coordinator dispatch.
+- `2026-07-11T23:23:00Z`: Coordinator closed the fix author and independently
+  passed generated build, docs/API, formatting, whitespace, changed-scope,
+  status, mixed-outcome, boundedness, rejection, shutdown, environment-
+  cardinality, and public-policy checks. Lightweight pre-review lint is next.
