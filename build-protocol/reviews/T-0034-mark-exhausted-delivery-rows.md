@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 8 runtime fix verified; re-review pending
+Status: Round 9 independent review in progress
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f532f-ffef-7093-92de-f05ad342acc3` | P2     |
-| Documentation              | `019f5330-005e-74f2-abdb-3e96a6c3bb86` | Clean  |
-| TypeScript/API docs        | `019f5330-0171-7533-bdc5-54f975bbf14a` | P2     |
-| Performance/reliability    | `019f5330-00e7-7233-b412-cd6e8fd4a157` | P2     |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f5340-4e7b-7763-93b2-635fd6d4aa0c` | Pending |
+| Documentation              | `019f5340-4eeb-7bd0-9ce4-8536ee2a287e` | Pending |
+| TypeScript/API docs        | `019f5340-4f6e-7ac0-b9fc-2e313f28416d` | Pending |
+| Performance/reliability    | `019f5340-4ffa-7460-92b8-4347a19508ae` | Pending |
 
 Security is deferred to final project readiness.
 
@@ -276,6 +276,9 @@ Security is deferred to final project readiness.
   passed 112 focused tests, both typechecks, docs/API, focused lint, formatting,
   whitespace, four-header alignment, changed-scope, and status checks. Fresh
   package generation and all four lanes are next.
+- `2026-07-11T22:22:00Z`: Generated Round 9 package
+  `.superpowers/sdd/review-da75f11e..76d8a1c5.diff` and assigned all four
+  current lanes. The live table was updated atomically; results are pending.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
