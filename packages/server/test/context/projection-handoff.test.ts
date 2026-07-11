@@ -5,7 +5,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
-import type { ProjectionInboxTarget } from "../../src/repository/repository.js";
+import type { ProjectionInbox, ProjectionInboxTarget } from "../../src/repository/repository.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
@@ -291,13 +291,16 @@ describe("LocalProjectionInbox", () => {
     });
 
     await expect(
-      inbox.receive(delivery, {
-        inboxId: { targetId: "projection-2", targetTypeUrl },
-        signalId: "event-2",
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
-        shard: ShardIndex.single(),
-      }),
+      inbox.receive(
+        delivery,
+        asRuntimeInvalidProjectionInput({
+          inboxId: { targetId: "projection-2", targetTypeUrl },
+          signalId: "event-2",
+          label: "HANDLE_COMMAND",
+          status: "TO_DELIVER",
+          shard: ShardIndex.single(),
+        }),
+      ),
     ).rejects.toThrow('BoundedContext delivery has no handler for inbox label "HANDLE_COMMAND".');
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
@@ -398,6 +401,18 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 });
+
+type ProjectionReceiveInput = Parameters<ProjectionInbox["receive"]>[1];
+type RuntimeInvalidProjectionInput = Omit<ProjectionReceiveInput, "label"> & {
+  readonly label: Exclude<InboxMessage["label"], "UPDATE_SUBSCRIBER">;
+};
+
+function asRuntimeInvalidProjectionInput(
+  input: RuntimeInvalidProjectionInput,
+): ProjectionReceiveInput {
+  // Intentionally bypasses the narrow projection input type for runtime fail-closed coverage.
+  return input as unknown as ProjectionReceiveInput;
+}
 
 function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {

@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Five-lane review clean; final verification pending
+Status: Round 96 final-verification fix verified
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1482,3 +1482,33 @@ Round 95 re-review on `2026-07-11T00:30:10Z`: the fresh review package
 all five required lanes: code style/maintainability, documentation,
 TypeScript/API docs, security, and performance/reliability. All reviewer
 agents were closed. T-0026 is ready for final verification before merge.
+
+Final verification attempt on `2026-07-11T00:31:18Z`: the focused final Vitest
+batch passed with 9 files and 296 tests; `typecheck:build:generated`,
+`docs:check`, `format:check`, `git diff --check`, and generated/API reference
+guards passed. The optional full `verify` gate failed in `typecheck:tooling`
+because `packages/server/test/context/projection-handoff.test.ts` passes the
+invalid label `"HANDLE_COMMAND"` directly to the now-narrow
+`ProjectionInbox.receive()` input type, which correctly accepts only
+`"UPDATE_SUBSCRIBER"`. Root cause: the negative runtime test bypasses the
+projection label contract intentionally but lacks an explicit test-only invalid
+input cast. Round 96 will fix that test typing, verify, commit, and rerun
+review/verification as required.
+
+Round 96 fix on `2026-07-11T00:34:13Z`: root cause confirmed in
+`packages/server/test/context/projection-handoff.test.ts` and
+`ProjectionInbox.receive()`. The projection receive contract correctly accepts
+only pending `UPDATE_SUBSCRIBER` rows, while the negative test intentionally
+passes `HANDLE_COMMAND` to exercise the runtime fail-closed guard in
+`LocalProjectionInbox.replay()`. The test now uses a narrow test-only helper
+to cast that intentionally invalid runtime input without widening production
+types. Verification is pending.
+
+Round 96 verification on `2026-07-11T00:36:18Z`: the final test-only fix was
+verified. `typecheck:tooling` passed; focused
+`projection-handoff.test.ts` Vitest passed with 1 file and 8 tests; the first
+`format:check` run found formatting in the touched test and review log, those
+files were formatted, and the final `format:check` passed; the targeted
+record guard returned no matches; `git diff --check` passed; and generated/API
+reference diff guard returned no changed files. No production source was
+changed.

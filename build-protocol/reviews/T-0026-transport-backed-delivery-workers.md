@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Five-lane review clean; final verification pending
+Status: Round 96 final-verification fix verified
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3066,3 +3066,35 @@ red/green delivery regressions before the next review pass.
   behavior, and future retry/supervision boundaries align.
 - Action: all five required review lanes are clean. Proceed to final T-0026
   verification before merge.
+
+### Final Verification Failure - `2026-07-11T00:31:18Z`
+
+- Passing evidence before failure: focused final Vitest batch passed with 9
+  files and 296 tests; `typecheck:build:generated`, `docs:check`,
+  `format:check`, `git diff --check`, and generated/API reference guards
+  passed. `docs:check` reported only the existing invalid TypeDoc `origin`
+  warning.
+- Failure: optional full `verify` failed in `typecheck:tooling`:
+  `packages/server/test/context/projection-handoff.test.ts(297,9): error TS2322: Type '"HANDLE_COMMAND"' is not assignable to type '"UPDATE_SUBSCRIBER"'`.
+- Root cause: `ProjectionInbox.receive()` correctly narrows projection handoff
+  input to pending `UPDATE_SUBSCRIBER` rows, while the negative runtime test
+  intentionally passes an invalid `HANDLE_COMMAND` label to verify fail-closed
+  behavior but lacks an explicit test-only invalid-input cast.
+- Action: record the failure, fix the test typing narrowly, verify, commit,
+  and rerun the required review/verification loop.
+
+### Round 96 Final-Verification Fix - `2026-07-11T00:34:13Z`
+
+- Root cause confirmed: `ProjectionInbox.receive()` now correctly narrows
+  projection handoff input to pending `UPDATE_SUBSCRIBER` rows, while the
+  negative runtime test intentionally passes a `HANDLE_COMMAND` row to verify
+  `LocalProjectionInbox` still fails closed for unsupported labels.
+- Test fix: added a narrow local helper in `projection-handoff.test.ts` that
+  casts only the intentional invalid runtime input for this test. No
+  production types were widened and no production source was changed.
+- Verification: `typecheck:tooling` passed; focused
+  `projection-handoff.test.ts` Vitest passed with 1 file and 8 tests; after
+  formatting the touched test and review log, `format:check` passed; the
+  targeted record guard returned no matches; `git diff --check` passed; and
+  generated/API reference diff guard returned no changed files at
+  `2026-07-11T00:36:18Z`.
