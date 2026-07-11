@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 3 record fix in progress
+Status: Round 3 record fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5307-94ff-7f00-8665-d65e075aa690` | P3      |
-| Documentation              | `019f5307-956d-7910-9144-39210f657889` | P3      |
-| TypeScript/API docs        | `019f5307-95f9-78b1-96df-616158f06edb` | P3      |
-| Performance/reliability    | `019f5307-968b-7062-8a72-dd4fffd913b9` | Clean   |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f5307-94ff-7f00-8665-d65e075aa690` | P3     |
+| Documentation              | `019f5307-956d-7910-9144-39210f657889` | P3     |
+| TypeScript/API docs        | `019f5307-95f9-78b1-96df-616158f06edb` | P3     |
+| Performance/reliability    | `019f5307-968b-7062-8a72-dd4fffd913b9` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -122,6 +122,19 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:17:35Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 3 log-only fix
   worker. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:19:19Z`: Round 3 fix worker completed the bounded applicability
+  check, freshly read `receiving-code-review`, and verified both findings
+  against Git/current report scope before edits. Corrected both `b7de499f`
+  labels and added the two omitted implementation files. Verification and
+  status closure remain pending; no reviewer or subagent was spawned.
+- `2026-07-11T21:19:19Z`: Round 3 record fix and requested lightweight
+  verification completed. Both P3s are resolved, all three active statuses are
+  aligned, and the participant ledger truthfully keeps the worker active for
+  coordinator closure. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:24:00Z`: Coordinator closed the fix worker and independently
+  passed docs/API, formatting, whitespace, status, exact-subject,
+  changed-scope, and report-inventory checks. Fresh package generation and all
+  four lanes are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as

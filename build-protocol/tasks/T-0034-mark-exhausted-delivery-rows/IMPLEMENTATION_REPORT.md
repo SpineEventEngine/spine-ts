@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 3 independent review in progress
+Status: Round 3 record fix verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -79,8 +79,10 @@ Implementation commits:
 
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/src/delivery/delivery-loop.ts`
+- `packages/server/src/delivery/delivery-worker.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
 - `packages/server/test/delivery/delivery-loop.test.ts`
+- `packages/server/test/delivery/delivery-storage-fault-fixture.ts`
 - `packages/server/README.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
@@ -92,6 +94,9 @@ Implementation commits:
 
 ## Verification
 
+- PASS: Round 3 log-only `docs:check`, `format:check`, `git diff --check`,
+  status/untracked, exact commit-subject reconciliation, report file inventory,
+  changed-scope, and active-ledger/status checks.
 - PASS: delivery worker/loop Vitest, 2 files and 111 tests.
 - PASS: focused maximum-payload success/claim-failure regression, 1 test.
 - PASS: `typecheck:build:generated`.
