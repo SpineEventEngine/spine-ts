@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Implementation worker verification passed; independent review deferred by no-subagent prompt
+Status: Implementation and coordinator verification passed; independent review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -45,3 +45,8 @@ Branch: `task/T-0031-delivery-retry-decision`
   independent reviewer subagents were spawned because the direct human prompt
   for this worker explicitly said not to spawn subagents; review lanes remain
   available for a later orchestrated review round.
+- `2026-07-11T13:21:31+0100`: Coordinator inspection and verification passed
+  before independent review package generation. Verification covered focused
+  retry-decision tests, existing attempt/summary tests, build typecheck, docs/API
+  checks, formatting, whitespace, and untracked generated-file checks. The five
+  required independent review lanes remain pending.
