@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Review round 1 findings pending fixes
+Status: Review round 1 fixes verified
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -65,3 +65,24 @@ Branch: `task/T-0030-delivery-attempt-summary`
   delivery-attempt context reference, risking tenant isolation if a
   caller-owned multitenant context mutates before the summary storage opens.
   A single fix worker will receive all findings.
+- `2026-07-11T10:33:30Z`: Fix worker accepted the performance/reliability and
+  security findings as actionable. The documentation P3 was rechecked against
+  current base `5ae23ed3`; `build-protocol/DECISION_LOG.md` is already present
+  in `build-protocol/work-logs/T-0030.md` changed-files inventory, so no extra
+  inventory edit is needed beyond this round's traceability entry. Planned fix
+  coverage: a post-wrap `DeliveryAttempts.summarize()` regression that proves
+  retained attempts are sequence ordered and latest fields come from the
+  highest retained sequence, plus a mutable/getter multitenant context
+  regression proving one `Delivery` instance keeps using its construction-time
+  tenant for attempt read, record, and summary operations.
+- `2026-07-11T10:36:45Z`: Fix worker completed review round 1 fixes. The
+  performance/reliability gap is covered by a post-wrap retained-attempt
+  summary test that expects retained attempts 6 through 105 in sequence order
+  and latest fields from attempt 105, which would fail if summary used raw slot
+  order or chose latest from slot order. The security issue is fixed by
+  snapshotting `DeliveryAttempts` storage context at construction and covered
+  by a mutable/getter multitenant context regression that exercises
+  `recordFailure()`, `summarize()`, and `read()` after context mutation while
+  confirming a separate tenant view stays empty. The required verification set
+  passed; `docs:check` emitted only the existing TypeDoc invalid-origin
+  source-link warning.

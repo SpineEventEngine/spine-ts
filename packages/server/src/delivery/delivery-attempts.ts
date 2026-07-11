@@ -28,7 +28,7 @@ export class DeliveryAttempts {
 
   /** Open attempt storage from one delivery storage context and factory. */
   constructor(options: DeliveryAttemptsOptions) {
-    this.#context = options.context;
+    this.#context = storageContextSnapshot(options.context);
     this.#storageFactory = options.storageFactory;
     Object.freeze(this);
   }
@@ -680,4 +680,21 @@ function attemptStorageContext(context: StorageContext): StorageContext {
         name: `${context.name}.delivery.attempts`,
         multitenant: false,
       };
+}
+
+function storageContextSnapshot(context: StorageContext): StorageContext {
+  if (context.multitenant) {
+    const tenantId = context.tenantId;
+
+    return Object.freeze({
+      name: context.name,
+      multitenant: true,
+      ...(tenantId === undefined ? {} : { tenantId }),
+    });
+  }
+
+  return Object.freeze({
+    name: context.name,
+    multitenant: false,
+  });
 }

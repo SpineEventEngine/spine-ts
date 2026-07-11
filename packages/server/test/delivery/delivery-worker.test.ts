@@ -1241,6 +1241,51 @@ describe("Delivery worker", () => {
     ).toBe(true);
   });
 
+  it("summarizes retained attempts in sequence order after the attempt ring wraps", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-wrap", 1n);
+
+    for (let sequence = 1; sequence <= 105; sequence += 1) {
+      await requireAttempts(delivery).recordFailure({
+        message,
+        node: `node-${String(sequence).padStart(3, "0")}`,
+        attemptedAt: new Date(Date.UTC(2026, 6, 8, 9, 0, sequence)),
+        accepted: sequence % 2 === 0,
+        stage: sequence === 105 ? "STATUS_UPDATE" : sequence === 100 ? "CLEANUP" : "ENDPOINT",
+        reason:
+          sequence === 105
+            ? "STATUS_UPDATE_FAILED"
+            : sequence === 100
+              ? "CLEANUP_FAILED"
+              : "ENDPOINT_REJECTED",
+      });
+    }
+
+    const summary = await requireAttempts(delivery).summarize(message.id);
+
+    expect(summary.count).toBe(100);
+    expect(summary.attempts.map((attempt) => attempt.node)).toEqual(
+      Array.from({ length: 100 }, (_, index) => `node-${String(index + 6).padStart(3, "0")}`),
+    );
+    expect(summary.attempts[0]).toMatchObject({
+      node: "node-006",
+      attemptedAt: new Date("2026-07-08T09:00:06.000Z"),
+    });
+    expect(summary.latestAttempt).toMatchObject({
+      node: "node-105",
+      attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
+      accepted: false,
+      stage: "STATUS_UPDATE",
+      reason: "STATUS_UPDATE_FAILED",
+    });
+    expect(summary.latestStage).toBe("STATUS_UPDATE");
+    expect(summary.latestReason).toBe("STATUS_UPDATE_FAILED");
+    expect(summary.latestAccepted).toBe(false);
+  });
+
   it("returns an explicit empty attempt summary for messages with no retained attempts", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1291,6 +1336,67 @@ describe("Delivery worker", () => {
     expect(second.attempts[0]?.attemptedAt).toEqual(new Date("2026-07-08T09:00:01.000Z"));
     expect(second.latestAttempt?.attemptedAt).not.toBe(first.latestAttempt?.attemptedAt);
     expect(second.attempts[0]?.attemptedAt).not.toBe(firstAttempt?.attemptedAt);
+  });
+
+  it("keeps delivery attempt summaries isolated from mutable multitenant contexts", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    let tenantId = "tenant-a";
+    const context = {
+      name: "Tasks",
+      multitenant: true,
+      get tenantId() {
+        return tenantId;
+      },
+    };
+    const delivery = new Delivery({
+      context,
+      storageFactory,
+    });
+    const message = await seed(delivery, "signal-summary-tenant", 1n);
+
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-before-mutation",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    tenantId = "tenant-b";
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-after-mutation",
+      attemptedAt: new Date("2026-07-08T09:00:02.000Z"),
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+
+    const summary = await requireAttempts(delivery).summarize(message.id);
+    const attempts = await requireAttempts(delivery).read();
+    const tenantB = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      storageFactory,
+    });
+
+    expect(summary.attempts.map((attempt) => attempt.node)).toEqual([
+      "node-before-mutation",
+      "node-after-mutation",
+    ]);
+    expect(summary.latestAttempt).toMatchObject({
+      node: "node-after-mutation",
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    expect(attempts.map((attempt) => attempt.node)).toEqual([
+      "node-before-mutation",
+      "node-after-mutation",
+    ]);
+    await expect(requireAttempts(tenantB).summarize(message.id)).resolves.toMatchObject({
+      attempts: [],
+      count: 0,
+    });
+    await expect(requireAttempts(tenantB).read()).resolves.toEqual([]);
   });
 
   it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {
