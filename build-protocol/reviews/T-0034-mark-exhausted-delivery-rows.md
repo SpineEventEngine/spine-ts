@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 3 record fix verified; re-review pending
+Status: Round 4 independent review in progress
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5307-94ff-7f00-8665-d65e075aa690` | P3     |
-| Documentation              | `019f5307-956d-7910-9144-39210f657889` | P3     |
-| TypeScript/API docs        | `019f5307-95f9-78b1-96df-616158f06edb` | P3     |
-| Performance/reliability    | `019f5307-968b-7062-8a72-dd4fffd913b9` | Clean  |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f5310-a963-7050-8af2-5ab2491e58d0` | Pending |
+| Documentation              | `019f5310-a9d4-7242-a405-5d8cf993b030` | Pending |
+| TypeScript/API docs        | `019f5310-aa62-73c3-85e2-94393bd261d2` | Pending |
+| Performance/reliability    | `019f5310-aaed-78d3-aa87-f696e251ec87` | Pending |
 
 Security is deferred to final project readiness.
 
@@ -135,6 +135,9 @@ Security is deferred to final project readiness.
   passed docs/API, formatting, whitespace, status, exact-subject,
   changed-scope, and report-inventory checks. Fresh package generation and all
   four lanes are next.
+- `2026-07-11T21:25:00Z`: Generated Round 4 package
+  `.superpowers/sdd/review-da75f11e..b980ede1.diff` and assigned all four
+  current lanes. The live table was updated atomically; results are pending.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
