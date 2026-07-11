@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 124 records fix ready for re-review
+Status: Round 125 records action fix ready for coordinator verification
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1918,3 +1918,19 @@ review log still said to commit the coverage fix after commit `38329f6d`, and
 the Round 123 coordinator entry appeared before the fix-worker entry. This
 records-only fix updates those statuses, records commit `38329f6d`, and restores
 worker-before-coordinator chronology. All five Round 124 reviewers were closed.
+
+Round 125 re-review on `2026-07-11T04:35:18Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..eb9f7d61.diff` produced clean documentation,
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found one P3 stale action in the latest review-log entry:
+it still says to verify and commit the records-only fix even though commit
+`eb9f7d61` already recorded that fix. One records-fix worker will replace that
+stale action with the correct next step, verify formatting and whitespace, and
+hand back without committing.
+
+Round 125 records action wording fix on `2026-07-11T04:48:00Z`: replaced the
+stale Round 124 review-log action with post-`eb9f7d61` wording: the records-only
+fix is already committed, and the next step is to generate/review the fresh
+package and address any findings. This records-only update is ready for
+coordinator verification and does not claim a clean re-review after the wording
+change.

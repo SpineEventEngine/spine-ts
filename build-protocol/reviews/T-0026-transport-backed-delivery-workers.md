@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 124 records fix ready for re-review
+Status: Round 125 records action fix ready for coordinator verification
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                          |
-| -------------------------- | -------- | ------------------------------- |
-| Code style/maintainability | Newton   | Round 124 records finding fixed |
-| Documentation              | Kant     | Round 124 records finding fixed |
-| TypeScript/API docs        | Russell  | Round 124 clean                 |
-| Security                   | Erdos    | Round 124 clean                 |
-| Performance/reliability    | Locke    | Round 124 clean                 |
+| Lane                       | Reviewer | Status                         |
+| -------------------------- | -------- | ------------------------------ |
+| Code style/maintainability | Huygens  | Round 125 P3 wording fix ready |
+| Documentation              | Raman    | Round 125 clean                |
+| TypeScript/API docs        | Parfit   | Round 125 clean                |
+| Security                   | Turing   | Round 125 clean                |
+| Performance/reliability    | Linnaeus | Round 125 clean                |
 
 ## Review Criteria
 
@@ -3737,5 +3737,29 @@ red/green delivery regressions before the next review pass.
 - Fix: updated top-level statuses and the review dashboard, recorded
   coordinator commit `38329f6d`, removed the stale "commit the coverage fix"
   action, and restored worker-before-coordinator chronology for Round 123.
-- Action: verify and commit this records-only fix, generate a fresh review
-  package, and rerun all five review lanes.
+- Action: records-only closure was committed as `eb9f7d61`; generate/review the
+  fresh package from `ca8fb2b3` through `eb9f7d61` and address any findings.
+
+### Round 125 Re-review - `2026-07-11T04:35:18Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..eb9f7d61.diff` from task baseline
+  `ca8fb2b3` to current HEAD `eb9f7d61`.
+- Code style/maintainability (Huygens the 4th): [P3] the latest review-log
+  action still says to verify and commit the records-only fix even though HEAD
+  `eb9f7d61` already recorded that fix.
+- Documentation (Raman the 4th): clean. Durable records and public docs align
+  with delivery semantics; the missing future clean-review breadcrumb for
+  `eb9f7d61` is covered by policy.
+- TypeScript/API docs (Parfit the 4th): clean. API docs/export checks and
+  tooling typecheck passed; public delivery exports remain aligned.
+- Security (Turing the 4th): clean. Focused delivery/context security tests
+  passed with 6 files and 261 tests.
+- Performance/reliability (Linnaeus the 4th): clean. Focused delivery tests
+  passed with 5 files and 249 tests; unsandboxed coverage passed with branch
+  coverage at `90.02%`.
+- Fix: replaced the stale Round 124 action with wording that reflects the
+  already-committed `eb9f7d61` records-only closure and points to generating and
+  reviewing the fresh package, then addressing any findings.
+- Action: coordinator verification of this records-only wording fix. This entry
+  does not claim a clean re-review after the wording change.
