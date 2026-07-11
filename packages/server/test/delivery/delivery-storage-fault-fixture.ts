@@ -91,6 +91,32 @@ export function throwAttemptWriteOnce(): CountedDeliveryFaultProbe {
   });
 }
 
+export function throwAttemptReadOnce(
+  error: Error,
+  options: { readonly armed?: boolean } = {},
+): ArmableDeliveryFaultProbe {
+  let count = 0;
+  let armed = options.armed ?? true;
+
+  return Object.freeze({
+    get count() {
+      return count;
+    },
+    arm() {
+      armed = true;
+    },
+    read(context: StorageContext): void {
+      if (!armed || !context.name.endsWith(".delivery.attempts")) {
+        return;
+      }
+
+      armed = false;
+      count += 1;
+      throw error;
+    },
+  });
+}
+
 export interface DeliveryAttemptQuery {
   readonly limit?: number;
   readonly messageKey?: unknown;

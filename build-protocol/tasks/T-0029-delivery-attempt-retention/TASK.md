@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 7 findings recorded and fix pending
+Status: In progress; Round 7 fix verified and commit pending
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -305,3 +305,20 @@ Security found retained-attempt storage corruption can fail open in the
 production drain path because `Delivery.#recordFailedAttempt()` suppresses
 `DeliveryStorageCorruptionError`. One fix worker will receive the complete
 Round 7 findings list.
+
+Round 7 fix work started at `2026-07-11T09:41:31Z` from
+`42fd0edc Record T-0029 Round 7 review findings`. The fix scope is limited to
+propagating `DeliveryStorageCorruptionError` from endpoint-failure attempt
+retention while preserving observational behavior for ordinary retention
+write/CAS/storage failures. The Round 6 review-log chronology fix and
+`build-protocol/DECISION_LOG.md` changed-files ledger entry must remain
+preserved.
+
+Round 7 fix verification completed at `2026-07-11T09:46:12Z`. The fix rethrows
+`DeliveryStorageCorruptionError` from retained-attempt recording during
+delivery, keeps ordinary attempt-retention write failures observational, and
+adds focused regression coverage for corruption encountered while recording a
+second endpoint failure after retained attempt state already exists. Required
+focused Vitest, `typecheck:build:generated`, `docs:check`, `format:check`,
+`git diff --check`, and `git ls-files --others --exclude-standard` passed
+locally. Generated Protobuf output remains out of VCS.

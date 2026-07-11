@@ -7,6 +7,7 @@ import {
   type DeliveryFailureReason,
   type DeliveryFailureStage,
 } from "./delivery-attempts.js";
+import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
   Inbox,
   InboxMessageError,
@@ -496,7 +497,10 @@ export class Delivery {
         stage: attempt.stage,
         reason: attempt.reason,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof DeliveryStorageCorruptionError) {
+        throw error;
+      }
       // Retained attempt history is observational; run/loop failure accounting
       // must continue to report the original delivery failure.
     }

@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 7 findings recorded; fix pending
+Status: Round 7 fix verified; commit pending
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -411,3 +411,26 @@ Branch: `task/T-0029-delivery-attempt-retention`
   preserving observational behavior for ordinary retention write/CAS failures,
   run focused verification, commit, regenerate the review package, and rerun
   all five independent review lanes.
+
+### Round 7 Fix Worker Start - `2026-07-11T09:41:31Z`
+
+- Fix worker started from
+  `42fd0edc Record T-0029 Round 7 review findings`.
+- Scope is limited to propagating `DeliveryStorageCorruptionError` from
+  retained-attempt reads during endpoint-failure retention while keeping
+  ordinary retention write/CAS/storage failures observational.
+- Status: regression test and production fix in progress; final verification
+  and commit remain pending.
+
+### Round 7 Fix Worker Local Verification - `2026-07-11T09:46:12Z`
+
+- Fix worker updated `Delivery.#recordFailedAttempt()` to rethrow
+  `DeliveryStorageCorruptionError` from retained-attempt recording while
+  preserving observational behavior for ordinary retention write/CAS/storage
+  failures.
+- Focused regression coverage first failed before the production change because
+  `delivery.drain()` swallowed the corruption, then passed after the rethrow.
+- Required local verification passed: focused delivery-worker/inbox Vitest
+  slice, `typecheck:build:generated`, `docs:check`, `format:check`,
+  `git diff --check`, and `git ls-files --others --exclude-standard`.
+- Status: fix verified locally; commit remains pending.

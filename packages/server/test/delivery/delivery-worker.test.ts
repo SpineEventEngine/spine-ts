@@ -5,6 +5,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/inbox-records.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
+import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
   Delivery,
   type DeliveryDrainOptions,
@@ -30,6 +31,7 @@ import {
   skipInboxClearOnce,
   skipInboxRepairOnce,
   targetInbox,
+  throwAttemptReadOnce,
   throwAttemptWriteOnce,
   throwDedupFinalizeOnce,
   throwInboxClaimOnce,
@@ -1035,6 +1037,48 @@ describe("Delivery worker", () => {
     expect(run.failures[0]?.message.signalId).toBe("signal-attempt-write-fails");
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-attempt-write-fails", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("propagates retained attempt storage corruption during endpoint-failure retention", async () => {
+    const readFault = throwAttemptReadOnce(
+      new DeliveryStorageCorruptionError("Delivery attempt record contains malformed JSON."),
+      { armed: false },
+    );
+    const faults = deliveryStorageFaults(readFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+    await seed(delivery, "signal-attempt-corruption", 1n);
+
+    const firstRun = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+    expect(firstRun.failed).toBe(1);
+
+    readFault.arm();
+    let error: unknown;
+    try {
+      await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("endpoint failed");
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(DeliveryStorageCorruptionError);
+    expect(error).toEqual(expect.objectContaining({ message: expect.stringMatching(/attempt/i) }));
+    expect(readFault.count).toBe(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-attempt-corruption", status: "TO_DELIVER" },
     ]);
   });
 
