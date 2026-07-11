@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 108 docs/log fix verified; re-review pending
+Status: Round 110 docs/log fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3378,3 +3378,42 @@ red/green delivery regressions before the next review pass.
   are accepted work and may appear in failed work.
 - Fix: added `round-108-fix-report.md` for this docs/log batch. No production
   code changed.
+- Coordinator commit `1067fa57` (`Record delivery review cleanup`) recorded
+  this docs/log cleanup.
+
+### Round 109 Re-review - `2026-07-11T02:23:18Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..1067fa57.diff` from task baseline
+  `ca8fb2b3` to current HEAD `1067fa57`.
+- Code style/maintainability (Fermat the 4th): [P3] durable records still break
+  the 120-column readability rule in old tables and inline command examples,
+  including `TASK.md`, the work log, and `round-108-fix-report.md`. Runtime code
+  had no style or maintainability findings.
+- Documentation (Poincare the 4th): [P2] current HEAD `1067fa57` is missing
+  from durable breadcrumbs and `round-108-fix-report.md` still describes
+  `308cefb7` as the current HEAD instead of the pre-fix HEAD for that batch.
+- TypeScript/API docs (Gauss the 4th): clean. Public types, exports,
+  TypeDoc/API docs, and scan-loop helper typings remain aligned.
+- Security (Beauvoir the 4th): clean. Replay validation, label handling,
+  snapshot copying, row/shard fencing, and documented residual risk remain
+  acceptable for this slice.
+- Performance/reliability (Hypatia the 4th): clean. Focused delivery worker,
+  loop, inbox, and shard registry tests passed with 4 files and 236 tests.
+- Action: record this findings batch, run one docs/log fix worker, verify,
+  commit, and rerun all five required lanes.
+
+### Round 110 Docs/Log Fix - `2026-07-11T02:25:12Z`
+
+- Scope: docs/log cleanup only. No production code changes.
+- Breadcrumb: task, work-log, and review-log records name coordinator commit
+  `1067fa57` (`Record delivery review cleanup`) as recording the Round 108
+  docs/log cleanup.
+- Policy: a docs/log cleanup commit cannot record its own final SHA before that
+  commit exists. The subsequent review or final closure records the newly-made
+  cleanup commit; reviewers should not ask for cleanup-commit
+  self-breadcrumbs.
+- Fix report: `round-108-fix-report.md` now describes `308cefb7` as the
+  then-current pre-fix HEAD for Round 108.
+- Style: concrete long durable-record lines were wrapped in the task file, work
+  log, and Round 108 fix report.

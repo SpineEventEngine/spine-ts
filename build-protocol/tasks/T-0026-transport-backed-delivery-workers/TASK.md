@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 108 docs/log fix verified; re-review pending
+Status: Round 110 docs/log fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -69,40 +69,63 @@ Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling
 
 Skill sources checked:
 
-| Source                                     | Scope Checked                         | Evidence                                                                                             |
-| ------------------------------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Session skill inventory                    | Task-relevant subset                  | Workflow, TypeScript, backend, testing, design, security, and review skills were visible in-session. |
-| Task-provided skill names/paths            | N/A                                   | The user did not name additional task-specific skill paths in the T-0026 request.                    |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                             | Expected workflow/backend skills are installed or have local fallbacks listed.                       |
-| `~/.agents/skills/*/SKILL.md`              | Full directory listing                | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded.                         |
-| `~/.agents/.skill-lock.json`               | Manifest opened                       | Lock manifest was readable and confirmed installed source repositories.                              |
-| Security references                        | JavaScript/TypeScript references only | No exact non-Express Node framework reference exists; general security guidance applies.             |
+- Session skill inventory, task-relevant subset: workflow, TypeScript, backend,
+  testing, design, security, and review skills were visible in-session.
+- Task-provided skill names/paths, N/A: the user did not name additional
+  task-specific skill paths in the T-0026 request.
+- `build-protocol/skills/EXPECTED_SKILLS.md`, full file: expected
+  workflow/backend skills are installed or have local fallbacks listed.
+- `~/.agents/skills/*/SKILL.md`, full directory listing:
+  `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded.
+- `~/.agents/.skill-lock.json`, manifest opened: lock manifest was readable
+  and confirmed installed source repositories.
+- Security references, JavaScript/TypeScript references only: no exact
+  non-Express Node framework reference exists; general security guidance
+  applies.
 
 Selected skills read before task actions:
 
-| Skill                            | Source             | Applicability                             | Instructions Applied                                                                    |
-| -------------------------------- | ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------- |
-| `subagent-driven-development`    | Session/user skill | Required by protocol sub-agent workflow.  | Fresh implementer per task, reviewer loop, close agents, no stopping between tasks.     |
-| `using-git-worktrees`            | Session/user skill | Required branch/worktree setup.           | Checked current checkout, verified `.worktrees` ignored, created isolated worktree.     |
-| `requesting-code-review`         | Session/user skill | Required review gates.                    | Independent reviewers before merge and no ignored findings.                             |
-| `verification-before-completion` | Session/user skill | Required before completion claims.        | Fresh command evidence before any passing/complete claim.                               |
-| `test-driven-development`        | User skill         | Required for behavior changes.            | Write failing tests before production code.                                             |
-| `implement`                      | User skill         | Implementation workflow.                  | Implement from task requirements, typecheck/tests regularly, commit branch work.        |
-| `architecture-decision-records`  | User skill         | Decision logging.                         | Added D-0077 for the worker-slice boundary.                                             |
-| `nodejs-backend-patterns`        | User skill         | Background worker/lifecycle work in Node. | Keep resource lifecycle and error handling explicit and testable.                       |
-| `typescript-advanced-types`      | User skill         | Type-safe framework surface.              | Prefer strict, simple generic types; avoid `any` and overly complex type machinery.     |
-| `javascript-testing-patterns`    | User skill         | Vitest coverage.                          | Use behavior tests, real code, and isolated fixtures.                                   |
-| `codebase-design`                | User skill         | Human requested simplification.           | Keep a small deep interface and avoid shallow pass-through modules.                     |
-| `security-best-practices`        | Session skill      | Required security-review lane.            | Use JS/TS secure defaults; focus on validation, tenant boundaries, and deserialization. |
+- `subagent-driven-development`, session/user skill: required by protocol
+  sub-agent workflow. Applied fresh implementer per task, reviewer loop,
+  closing agents, and no stopping between tasks.
+- `using-git-worktrees`, session/user skill: required branch/worktree setup.
+  Checked current checkout, verified `.worktrees` ignored, and created the
+  isolated worktree.
+- `requesting-code-review`, session/user skill: required review gates. Applied
+  independent reviewers before merge and no ignored findings.
+- `verification-before-completion`, session/user skill: required before
+  completion claims. Applied fresh command evidence before any passing/complete
+  claim.
+- `test-driven-development`, user skill: required for behavior changes. Applied
+  failing tests before production code.
+- `implement`, user skill: implementation workflow. Applied task requirements,
+  regular typecheck/tests, and branch commits.
+- `architecture-decision-records`, user skill: decision logging. Added D-0077
+  for the worker-slice boundary.
+- `nodejs-backend-patterns`, user skill: background worker/lifecycle work in
+  Node. Kept resource lifecycle and error handling explicit and testable.
+- `typescript-advanced-types`, user skill: type-safe framework surface.
+  Preferred strict, simple generic types and avoided `any` plus overly complex
+  type machinery.
+- `javascript-testing-patterns`, user skill: Vitest coverage. Used behavior
+  tests, real code, and isolated fixtures.
+- `codebase-design`, user skill: human requested simplification. Kept a small
+  deep interface and avoided shallow pass-through modules.
+- `security-best-practices`, session skill: required security-review lane. Used
+  JS/TS secure defaults, focusing on validation, tenant boundaries, and
+  deserialization.
 
 Skipped relevant-looking skills:
 
-| Skill                 | Source     | Reason Skipped                                                                                                                         |
-| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `projection-patterns` | User skill | T-0026 may touch projection handoff only through existing delivery endpoints; read when catch-up/projection semantics become in-scope. |
-| `cqrs-implementation` | User skill | The task preserves existing CQRS separation rather than redesigning CQRS.                                                              |
-| `event-store-design`  | User skill | This slice drains existing inbox rows and does not change event-store design.                                                          |
-| `saga-orchestration`  | User skill | Process-manager orchestration semantics are not redesigned in this worker slice.                                                       |
+- `projection-patterns`, user skill: T-0026 may touch projection handoff only
+  through existing delivery endpoints; read when catch-up/projection semantics
+  become in-scope.
+- `cqrs-implementation`, user skill: the task preserves existing CQRS
+  separation rather than redesigning CQRS.
+- `event-store-design`, user skill: this slice drains existing inbox rows and
+  does not change event-store design.
+- `saga-orchestration`, user skill: process-manager orchestration semantics are
+  not redesigned in this worker slice.
 
 Conflict resolution: project protocol, task scope, sandbox/approval rules, and
 explicit human requirements win over installed-skill advice.
@@ -1699,3 +1722,23 @@ durable entries to concrete UTC recording timestamps, indented wrapped
 breadcrumb, and marked the missed Round 27 accepted-work sentence as superseded
 by the current pre-callback/post-callback accounting contract. No production
 code changed.
+
+Coordinator commit `1067fa57` (`Record delivery review cleanup`) recorded the
+Round 108 docs/log cleanup.
+
+Round 109 re-review on `2026-07-11T02:23:18Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..1067fa57.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Documentation
+found current HEAD `1067fa57` was not durably breadcrumbed and that
+`round-108-fix-report.md` still described `308cefb7` as the current HEAD rather
+than the pre-fix HEAD for that batch. Code style/maintainability found durable
+records still had long lines in old tables and inline command examples,
+including the Round 108 report's inline `rg` guard. Runtime code had no style
+or maintainability findings. Round 110 will add the missing breadcrumb,
+clarify the non-self-referential breadcrumb policy for cleanup commits, and
+wrap the concrete long durable-record lines without production code changes.
+
+Round 110 breadcrumb policy clarification: a docs/log cleanup commit cannot
+embed its own final SHA before the commit exists. The subsequent review or
+final closure records that newly-created cleanup commit; reviewers should not
+ask for cleanup-commit self-breadcrumbs.

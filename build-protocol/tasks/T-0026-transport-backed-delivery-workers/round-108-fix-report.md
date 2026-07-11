@@ -2,9 +2,9 @@
 
 ## Scope
 
-Addressed the Round 107 docs/log findings against current HEAD `308cefb7`
-(`Refine delivery scan loop records`). This batch changed only durable
-task/work/review records and historical fix reports.
+Addressed the Round 107 docs/log findings against the then-current pre-fix HEAD
+`308cefb7` (`Refine delivery scan loop records`). This batch changed only
+durable task/work/review records and historical fix reports.
 
 ## Implementation Summary
 
@@ -32,6 +32,14 @@ task/work/review records and historical fix reports.
     `pnpm --config.verify-deps-before-run=false format`, the rerun passed.
 - PASS: `git diff --check`
 - PASS: targeted `rg` guard for stale accepted-work wording returned no matches:
-  `rg -n 'pre-callback claim/validation/lease/cleanup/status-update failures (leave|do not increment).*accepted|pre-callback cleanup/status-update failures leave \`accepted\` unchanged|cleanup/status-update failures leave \`accepted\` unchanged' ...`
+
+  ```sh
+  rg -n \
+    'pre-callback claim/validation/lease/cleanup/status-update failures (leave|do not increment).*accepted|\
+  pre-callback cleanup/status-update failures leave `accepted` unchanged|\
+  cleanup/status-update failures leave `accepted` unchanged' \
+    ...
+  ```
+
 - PASS: targeted `rg` guard for stale Round 106 no-worker-commit wording
   returned no matches.
