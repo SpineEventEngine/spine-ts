@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 116 API export/docs fix verified; commit pending
+Status: Round 118 docs/API inventory fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1818,3 +1818,23 @@ remain outside the stable app API. The old Round 7 `CATCH_UP` fix sentence is
 now marked historical and superseded by current pending-skip semantics.
 Verification passed `docs:check`, generated build typecheck, `format:check`,
 and `git diff --check`. Coordinator commit is pending.
+
+Coordinator commit `94753042` (`Export delivery endpoint message`) recorded
+the Round 116 API export/docs cleanup.
+
+Round 117 re-review on `2026-07-11T03:16:52Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..94753042.diff` produced clean code
+style/maintainability, security, and performance/reliability lanes. TypeScript
+API docs and documentation both found the curated API README's durable-delivery
+export inventory still omits now-root-public `DeliveryEndpointMessage`.
+Documentation also found `DEVELOPER_API.md` documents the
+`ShardedWorkRegistryOptions.leaseMs` cap but not the matching public
+`InboxReadOptions.limit` cap of `1000`. Round 118 will fix those docs/API-doc
+inventory gaps, verify, commit, and rerun all five required lanes.
+
+Round 118 docs/API inventory fix on `2026-07-11T03:18:54Z`: the curated API
+README durable-delivery export inventory now includes
+`DeliveryEndpointMessage`, and `DEVELOPER_API.md` now documents that public
+`InboxReadOptions.limit` values must be positive and at most `1000`.
+Verification passed `docs:check`, `format:check`, and `git diff --check`. No
+coordinator commit has been created yet.

@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 116 API export/docs fix verified; commit pending
+Status: Round 118 docs/API inventory fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer   | Status                          |
-| -------------------------- | ---------- | ------------------------------- |
-| Code style/maintainability | Godel      | Round 115 clean                 |
-| Documentation              | Plato      | Round 116 fixed; pending review |
-| TypeScript/API docs        | Sartre     | Round 116 fixed; pending review |
-| Security                   | McClintock | Round 115 clean                 |
-| Performance/reliability    | Hooke      | Round 115 clean                 |
+| Lane                       | Reviewer | Status                          |
+| -------------------------- | -------- | ------------------------------- |
+| Code style/maintainability | Zeno     | Round 117 clean                 |
+| Documentation              | Socrates | Round 118 fixed; pending review |
+| TypeScript/API docs        | Franklin | Round 118 fixed; pending review |
+| Security                   | Mill     | Round 117 clean                 |
+| Performance/reliability    | Aquinas  | Round 117 clean                 |
 
 ## Review Criteria
 
@@ -3544,4 +3544,38 @@ red/green delivery regressions before the next review pass.
 - Verification: `docs:check` passed with the known TypeDoc invalid-origin
   warning; generated build typecheck passed; `format:check` passed after
   targeted markdown formatting; and `git diff --check` passed.
+- Commit: coordinator commit is pending.
+- Coordinator commit `94753042` (`Export delivery endpoint message`) recorded
+  this API export/docs cleanup.
+
+### Round 117 Re-review - `2026-07-11T03:16:52Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..94753042.diff` from task baseline
+  `ca8fb2b3` to current HEAD `94753042`.
+- Code style/maintainability (Zeno the 4th): clean. Format, generated lint,
+  generated typecheck, docs, diff, and focused delivery/context tests passed.
+- Documentation (Socrates the 4th): [P2] `docs/api/README.md` still omits
+  `DeliveryEndpointMessage` from the durable-delivery export inventory. [P3]
+  `DEVELOPER_API.md` documents `ShardedWorkRegistryOptions.leaseMs` caps but
+  not the public `InboxReadOptions.limit` cap.
+- TypeScript/API docs (Franklin the 4th): [P3] `docs/api/README.md` still
+  omits `DeliveryEndpointMessage` from the durable-delivery export inventory
+  used by the TypeDoc landing README.
+- Security (Mill the 4th): clean. Focused delivery and package-root export
+  tests passed with 5 files and 246 tests.
+- Performance/reliability (Aquinas the 4th): clean. Focused delivery, loop,
+  inbox, shard registry, and runtime tests passed with 5 files and 247 tests.
+- Action: record this findings batch, run one docs/API inventory fix, verify,
+  commit, and rerun all five required lanes.
+
+### Round 118 Docs/API Inventory Fix - `2026-07-11T03:18:54Z`
+
+- Fix: added `DeliveryEndpointMessage` to the curated API README
+  durable-delivery export inventory while leaving raw `Delivery`,
+  `DeliveryLoop`, `OnDeliveryMessage`, and direct-drain APIs outside the stable
+  root-public application API.
+- Fix: documented that public `InboxReadOptions.limit` values must be positive
+  and at most `1000`.
+- Verification: `docs:check`, `format:check`, and `git diff --check` passed.
 - Commit: coordinator commit is pending.

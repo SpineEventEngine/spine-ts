@@ -307,16 +307,17 @@ finite primitive or single-field Protobuf message aggregate IDs, route
 consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
-Durable-delivery exports include `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
-`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
-`DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
-`ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
-inbox messages and shard lease records through `StorageFactory` /
-`RecordStorage`, deduplicates live inbox writes durably by `(signalId, inboxId)`
-through small internal guard records, and keeps shard ordering metadata on each
-message with receive time (`whenReceived`), `version`, and inbox-message UUID
-ordering. Direct inbox writes require `InboxMessage.id.shard` to match
+Durable-delivery exports include `DeliveryEndpointMessage`,
+`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
+`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`, `InboxReadOptions`,
+`InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`, `DeliveryLabel`,
+`DeliveryStatus`, `ShardIndex`, `ShardSession`, `ShardedWorkRegistry`, and
+`ShardedWorkRegistryOptions`. This slice persists inbox messages and shard
+lease records through `StorageFactory` / `RecordStorage`, deduplicates live
+inbox writes durably by `(signalId, inboxId)` through small internal guard
+records, and keeps shard ordering metadata on each message with receive time
+(`whenReceived`), `version`, and inbox-message UUID ordering. Direct inbox
+writes require `InboxMessage.id.shard` to match
 `InboxMessage.shard`. Recognized valid `DeliveryLabel` values for durable rows
 are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
 framework replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
