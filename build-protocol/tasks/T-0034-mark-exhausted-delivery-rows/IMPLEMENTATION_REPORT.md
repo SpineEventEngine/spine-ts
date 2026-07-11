@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 8 runtime findings pending fix
+Status: Round 8 runtime fix in progress
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 

@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 8 runtime findings pending fix
+Status: Round 8 runtime fix in progress
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -245,6 +245,9 @@ Security is deferred to final project readiness.
   retain lease attempts, and preserve the original mark error until cleanup
   succeeds so failed cleanup aggregates both original errors. One fix worker
   and fresh four-lane review are required.
+- `2026-07-11T22:12:00Z`: Resumed implementation worker
+  `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 8 runtime fix
+  worker for the complete P2 batch. Fresh four-lane re-review remains pending.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
