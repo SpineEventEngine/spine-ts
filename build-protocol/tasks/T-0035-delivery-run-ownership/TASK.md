@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Pre-review successor split in progress
+Status: Pre-review successor split coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -10,7 +10,8 @@ Worktree: `.worktrees/T-0035-delivery-run-ownership`
 
 Decide which framework-owned lifecycle component starts, retriggers, observes,
 and stops bounded `DeliveryWorker` runs after T-0034, without implementing a
-public monitor or scheduler API.
+public monitor or scheduler API, and sequence the accepted model into the
+smallest independently reviewable implementation successors.
 
 ## Human-Imposed Requirements Ledger
 
@@ -67,6 +68,9 @@ supervision first would choose lifecycle policy accidentally.
 - State whether the ownership seam is package-internal or environment
   configuration.
 - Identify one smallest successor implementation task.
+- Separate internal loop/worker epoch prerequisites from environment lifecycle
+  wiring when one implementation task would mix independently reviewable
+  contracts.
 - Reconcile only active architecture/status wording that would otherwise
   contradict the accepted decision.
 
@@ -127,8 +131,11 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
 - Public monitor/action and scheduler APIs remain deferred.
 - T-0034's fixed internal exhaustion outcome remains current and unchanged.
 - `CATCH_UP` stays pending/skipped and legacy `IMPORT_EVENT` stays fail-closed.
-- The decision identifies one compact implementation successor and does not
-  combine topology, supervision, catch-up, adapters, and public policy.
+- The decision identifies one compact first implementation successor and does
+  not combine topology, supervision, catch-up, adapters, and public policy.
+- The smallest first successor is T-0036 and changes only package-internal
+  delivery epoch progress; environment lifecycle wiring is a separate later
+  successor, expected as T-0037, and retry timing remains later still.
 
 ## Decision Evidence
 
@@ -195,12 +202,24 @@ starts fresh recovery. Environment close permanently refuses attachments and
 triggers and aggregates all remaining lifecycle work. Server-owned environments
 still close with their owner. No public lifecycle option is added.
 
-The smallest successor implements that environment-owned package-internal
-seam, startup trigger, local notification, coalescing, finite `PAUSED`
-continuation, selective per-shard results/starts, full epoch bounding, retained
-rejection, attachment generations, and stop/await ordering only. It does not
-implement timer values, backoff, public monitor/action or scheduler APIs,
-supervision, topology, adapters, or catch-up.
+The smallest first successor is
+`T-0036 Package-Internal Delivery Epoch Progress`. It implements only the
+package-internal finite epoch bound, per-shard identity and disposition, opaque
+continuation, selective paused-shard starts, and fulfilled sibling progress
+when another shard rejects. It remains explicitly invoked and adds no public
+cursor, epoch, result, or lifecycle API. T-0036 excludes
+`ServerEnvironment` attachment, startup recovery, post-persist notification,
+coalescing, parked lifecycle errors, and shutdown wiring.
+
+A separate later successor, expected as `T-0037` (Environment Delivery
+Lifecycle), consumes T-0036 and wires the single environment seam,
+attachments/generations, startup recovery, local notification, coalescing,
+parked rejection handling, and stop/shutdown. T-0037 still excludes retry
+timing, backoff, jitter, timer values, and public retry policy. No T-0036 or
+T-0037 task file is created by this decision-only task.
+
+Both successors exclude public monitor/action or scheduler APIs, supervision,
+topology, adapters, and catch-up.
 Current runtime remains explicitly started and lacks the successor's full epoch
 bound and automatic lifecycle ownership. T-0034, pending/skipped `CATCH_UP`,
 and fail-closed legacy `IMPORT_EVENT` remain unchanged.
@@ -269,3 +288,14 @@ active delivery scheduler.
 - PASS: Round 2 `git diff --check`, status, zero-untracked, and exact four-file
   scope checks. `RUNTIME_ARCHITECTURE.md` remained unchanged in Round 2.
 - NOT RUN: full `pnpm verify` in Round 2, per explicit task direction.
+- PASS: Pre-review successor-scope fix
+  `typecheck:build:generated`, `docs:check` with zero errors and only the known
+  invalid-`origin` warning, and `format:check`.
+- PASS: Targeted T-0036 internal-only/T-0037 environment-only sequencing,
+  finite epoch, mixed outcome, rejection, shared-environment,
+  startup/shutdown, public-policy, T-0034, `CATCH_UP`, and `IMPORT_EVENT`
+  assertions. No T-0036 or T-0037 task file exists.
+- PASS: Pre-review successor-scope `git diff --check`, status, zero-untracked,
+  and exact four-file scope checks. `RUNTIME_ARCHITECTURE.md` required no edit.
+- NOT RUN: full `pnpm verify` for the pre-review scope fix, per explicit task
+  direction.

@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Pre-review successor split in progress
+Status: Pre-review successor split coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -127,3 +127,26 @@ Security is deferred to final project readiness.
 - `2026-07-11T23:25:00Z`: Resumed decision author
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single pre-review scope-fix
   worker. Fresh four-lane review remains pending.
+- `2026-07-11T23:26:00Z`: Fix worker verified the coordinator P2 against the
+  build protocol's small-slice rule. D-0085 keeps its complete accepted model,
+  while implementation now starts with
+  `T-0036 Package-Internal Delivery Epoch Progress` for explicitly invoked
+  package-internal loop/worker prerequisites.
+  Environment attachment/startup/notification/coalescing/error/shutdown wiring
+  moves to separate expected `T-0037 Environment Delivery Lifecycle`; retry
+  timing remains later. No task files or runtime/API changes were added. Author
+  verification is pending, and the worker remains active for coordinator
+  closure.
+- `2026-07-11T23:32:46Z`: Scope-fix author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  T-0036 internal-only/T-0037 environment-only sequencing and preserved
+  lifecycle/compatibility assertions, whitespace, exact four-file scope,
+  status, and zero-untracked checks. No successor task files were created and
+  `RUNTIME_ARCHITECTURE.md` required no refinement. Full `pnpm verify` was not
+  run. The author remains active for coordinator closure; fresh four-lane
+  review remains pending coordinator dispatch.
+- `2026-07-11T23:35:00Z`: Coordinator closed the scope-fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  changed-scope, status, task-file absence, T-0036/T-0037 boundaries, retry
+  deferral, lifecycle, and compatibility checks. Fresh package generation and
+  all four lanes are next.

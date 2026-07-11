@@ -3135,7 +3135,7 @@ Decision:
   not another owner, an environment configuration surface, or a public API.
   Each environment instance has exactly one such seam across all attached
   servers.
-- The successor makes each lifecycle-owned `DeliveryWorker.start()` call
+- The accepted target makes each lifecycle-owned `DeliveryWorker.start()` call
   one-shot and epoch-bounded. The lifecycle seam may serialize starts and
   coalesce trigger requests that arrive while a run is active into at most one
   subsequent admitted request. One
@@ -3189,7 +3189,8 @@ Decision:
   the current epoch and all coalesced readiness, and none may restart until a
   new external startup/new-work/retry-ready trigger arrives after the
   rejection. None of these outcomes changes T-0034's row policy.
-- The successor must change the current loop/worker internals because
+- The first implementation successor must change the current loop/worker
+  internals because
   `DeliveryLoop` presently clears its resume cursor when returning `PAUSED` and
   does not cap useful work to an admitted epoch, while `DeliveryWorkerRun`
   exposes ordered loop results but carries no package-internal shard identity,
@@ -3252,15 +3253,28 @@ Decision:
   close and propagates or aggregates all close failures consistently with the
   existing `RetryableCloseGroup` behavior.
   Transport or storage must never close beneath an active run.
-- The smallest successor is one package-internal environment-owned lifecycle
-  implementation with startup recovery, post-persist local notification,
-  serialized/coalesced selective shard starts, a full finite epoch bound,
-  cross-run `PAUSED` continuation, rejection observation/retention, attachment
-  generations, and stop/await ordering. It owns the necessary package-internal
-  loop/worker progress and selective-result change but does not add retry timing.
-  Public `DeliveryMonitor`, failure actions, scheduler APIs, process
+- Implement D-0085 in small sequenced successors. The smallest first successor
+  is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
+  package-internal `DeliveryLoop`/`DeliveryWorker` prerequisites: cap the full
+  finite epoch across reads, callbacks, and deliveries; retain per-shard
+  identity, disposition, and opaque continuation; selectively start only
+  eligible shards so only `PAUSED` continues the current epoch; and preserve
+  fulfilled sibling progress when another shard rejects. T-0036 remains
+  explicitly invoked. It does not attach `ServerEnvironment`, start recovery,
+  subscribe to post-persist
+  notification, coalesce lifecycle readiness, retain parked lifecycle errors,
+  or wire stop/shutdown. It adds no public cursor, epoch, shard-result, or
+  lifecycle API.
+- A separate later successor, expected as `T-0037` (Environment Delivery
+  Lifecycle), uses T-0036 to wire the one `ServerEnvironment` seam:
+  attachment/generation cardinality, startup recovery, local post-persist
+  notification, coalescing, parked rejection observation/retention, and
+  stop/shutdown ordering. T-0037 does not select retry delay, backoff, jitter,
+  timer values, or public retry policy; retry timing remains a later decision
+  and task.
+- Public `DeliveryMonitor`, failure actions, scheduler APIs, process
   supervision, topology, adapters, catch-up, or health surfaces remain
-  deferred.
+  deferred throughout this sequencing.
 - Preserve valid `CATCH_UP` rows as pending/skipped without using them as a
   trigger source, and preserve fail-closed legacy stored `IMPORT_EVENT` rows.
   Preserve T-0034's claim-fenced exhausted-row completion and its mark-failure
@@ -3301,5 +3315,8 @@ Consequences:
   rerun failed/skipped shards or abandon paused-shard progress.
 - Shared caller-owned environments can outlive one server attachment and later
   start a fresh generation without creating a second delivery owner.
+- The implementation order keeps the internal bounded-progress contract small
+  and independently reviewable before environment lifecycle wiring consumes it;
+  neither successor absorbs retry timing or public policy.
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.
