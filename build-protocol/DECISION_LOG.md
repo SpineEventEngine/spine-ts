@@ -2797,3 +2797,56 @@ Consequences:
   and production adapters explicit future work.
 - Delivery remains at-least-once/replay-safe; retained attempts are observation
   state, not a new delivery outcome or retry guarantee.
+
+## D-0081: Summarize Retained Attempts Before Retry Policy
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0030`
+
+Context: T-0029 retained bounded, sanitized delivery-attempt facts for supported
+endpoint failures. The next retry-policy step needs to consume those facts for
+one exact inbox message without reintroducing broad retained-attempt scans on a
+hot path. Spine JVM exposes retry choices through `DeliveryMonitor` and
+`FailedReception`, but TypeScript still intentionally lacks public monitor
+policy, repeat callbacks, timers, scheduler ownership, production supervision,
+transport topology, and durable catch-up storage.
+
+Decision:
+
+- Run T-0030 as an internal delivery-attempt summary/read slice before public
+  retry monitors or scheduler workers.
+- Add a package-internal exact-message summary path over the bounded retained
+  attempt slots created by T-0029.
+- Return deterministic sanitized facts useful to later retry decisions:
+  retained attempts in order, count, latest attempt, latest stage/reason, and
+  latest accepted flag.
+- Read only the known per-message retention slots, not all retained attempts.
+- Preserve fail-closed `DeliveryStorageCorruptionError` behavior for corrupt
+  retained-attempt state.
+- Keep `Delivery.drain()`, `DeliveryLoop`, and `DeliveryWorker` retry behavior
+  unchanged; failed rows stay `TO_DELIVER`.
+- Do not export public `DeliveryMonitor`, `FailedReception`, retry/backoff,
+  scheduler, topology, durable catch-up, or production adapter APIs.
+
+Alternatives considered:
+
+- Add full retry monitors/workers now. Rejected because policy and scheduling
+  need their own public API and lifecycle decisions after the summary facts are
+  available.
+- Use existing broad `DeliveryAttempts.read()` for retry decisions. Rejected
+  because retry policy should not depend on global retained-attempt scans when
+  it needs facts for one message.
+- Store raw errors or payloads in the summary. Rejected because T-0029 made
+  retained attempts safe by excluding raw payload bytes, user error objects,
+  stack traces, and unbounded exception text.
+
+Consequences:
+
+- Later retry policy can make bounded per-message decisions from durable facts.
+- The delivery API remains internal and observation-only for this slice.
+- Reviewers must reject public retry APIs, scheduler behavior, catch-up
+  semantics changes, import revival, production topology, or broad storage
+  adapter work in T-0030.
