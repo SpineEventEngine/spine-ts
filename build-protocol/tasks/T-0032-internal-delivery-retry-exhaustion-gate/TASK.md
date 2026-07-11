@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: In progress; Round 6 fixes verified; fresh four-lane re-review pending
+Status: In progress; Round 7 ledger fix verified; fresh four-lane re-review pending
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
