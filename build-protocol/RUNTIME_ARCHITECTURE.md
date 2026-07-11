@@ -285,9 +285,13 @@ delivery worker boundary:
   package-internal pre-callback gate reads the 100 retained slots for one exact
   inbox message. At that bound it skips the callback and another attempt,
   claims the exact row, synchronizes the active claim to the live shard fence,
-  and marks it `DELIVERED` without accepted-work or failure-budget use. A failed
-  mark leaves the authoritative row `TO_DELIVER` and returns one bounded,
-  stack-free exhaustion failure. This does not expose public
+  and marks it `DELIVERED` without accepted-work or failure-budget use. If the
+  mark fails and cleanup succeeds, the authoritative row remains `TO_DELIVER`
+  and one frozen, bounded, stack-free exhaustion-facts object is returned. If
+  cleanup also fails, the row remains `TO_DELIVER` and the same one-failure
+  accounting returns a `CLEANUP` result whose `AggregateError` contains the
+  original mark error plus cleanup error; that error has no frozen, bounded, or
+  stack-free guarantee. This does not expose public
   monitor/action, scheduler/backoff, dead-letter, production-topology,
   catch-up, or adapter policy. Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,

@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 7 API documentation fix in progress
+Status: Round 7 API documentation fix verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -25,9 +25,13 @@ Implementation commits:
   reports accepted 0 / delivered 1 / failed 0, and consumes neither endpoint
   limit nor failure budget.
 - A competing live claim skips with no mutation, callback, attempt, or failure.
-- Exhaustion-time marker failure returns one frozen bounded stack-free fact
-  object with `MARK_DELIVERED` and retained exhaustion context, retains no
-  attempt, charges one failure, and leaves authoritative `TO_DELIVER`.
+- Exhaustion-time marker failure with successful cleanup returns one frozen,
+  bounded, stack-free fact object with `MARK_DELIVERED` and retained exhaustion
+  context and retains no attempt. If cleanup also fails, the existing one-
+  failure path instead returns a `CLEANUP` result whose `AggregateError`
+  contains the mark and cleanup errors and retains its bounded attempt metadata;
+  that error is not promised frozen, bounded, or stack-free. Both paths charge
+  one failure and leave authoritative `TO_DELIVER`.
 - Claim and lease/fence failures preserve the existing retained-attempt stage,
   reason, and failure accounting. Retained-state corruption remains fail
   closed.
@@ -70,7 +74,8 @@ Implementation commits:
   action.
 - Marker-failure RED: the forced dedup finalizer failure exposed the raw Error.
 - Marker-failure GREEN: 4 focused failure/concurrency/payload tests passed with
-  bounded sanitized marker failure.
+  bounded sanitized marker facts when cleanup succeeds and the existing
+  aggregate when cleanup also fails.
 - Claim/lease RED: both tests showed the previous endpoint attempt as latest.
 - Claim/lease GREEN: claim and lease failure tests retained `CLAIM_FAILED` and
   `LEASE_INACTIVE` respectively while remaining capped at 100 attempts.
@@ -94,6 +99,12 @@ Implementation commits:
 
 ## Verification
 
+- PASS: Round 7 docs/TypeDoc `docs:check`, both typechecks, focused delivery
+  source ESLint, `format:check`, `git diff --check`, status/untracked,
+  stale/current claim searches, four-header alignment, ledger/status,
+  active-worker, and exact 11-file changed-scope checks. No runtime tests or
+  full `pnpm verify` ran, as directed. Fresh four-lane re-review remains
+  pending.
 - PASS: Round 6 docs-only `docs:check`, `format:check`, `git diff --check`,
   status/untracked, four-header alignment, targeted D-0084 stale/current
   wording, commit-ledger/status, active-worker, and five-file changed-scope

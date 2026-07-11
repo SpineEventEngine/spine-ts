@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Round 7 API documentation fix in progress
+Status: Round 7 API documentation fix verified; re-review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -102,9 +102,13 @@ repeat-dispatch, or conveyor API.
 - Success consumes neither endpoint-work limit nor failure budget; later
   retryable work can run.
 - Exact-message and shard drains use the same action.
-- Failed exhaustion marking reports one bounded, frozen, stack-free sanitized
-  failure, counts failure budget once, reports accepted/delivered 0, leaves the
-  authoritative row `TO_DELIVER`, and writes no attempt.
+- Failed exhaustion marking with successful cleanup reports one frozen,
+  bounded, stack-free facts object and writes no attempt. If cleanup also
+  fails, it preserves one `CLEANUP` result whose `AggregateError` contains the
+  original mark error plus cleanup error, along with its existing retained-
+  attempt behavior; that error has no frozen, bounded, or stack-free guarantee.
+  Both paths count the failure budget once, report accepted/delivered 0, and
+  leave the authoritative row `TO_DELIVER`.
 - Claim/lease failures and retained-state corruption preserve current
   accounting/fail-closed behavior.
 - Regressions preserve callback cleanup/finalization/one-attempt sequencing,
@@ -135,11 +139,14 @@ action with one shared shard/exact-message path. Exhausted supported rows are
 claimed and synchronized to the live shard fence before the existing internal
 claimed-row finalizer marks them delivered. Success invokes no endpoint,
 retains no attempt, reports accepted 0 / delivered 1 / failed 0, and consumes
-neither limit nor failure budget. Competing claims skip unchanged. Marker
-failure reports one frozen bounded stack-free exhaustion fact object, retains
-no attempt, consumes one failure, and leaves authoritative `TO_DELIVER`;
-claim/lease failures preserve existing bounded attempt accounting. Broader
-failure-policy facilities remain deferred.
+neither limit nor failure budget. Competing claims skip unchanged. A marker
+failure followed by successful cleanup reports one frozen, bounded, stack-free
+exhaustion-facts object and retains no attempt. Failed cleanup instead preserves
+one `CLEANUP` result whose `AggregateError` contains the mark and cleanup errors,
+along with its existing retained attempt, without promising that error is
+frozen, bounded, or stack-free. Both paths consume one failure and leave
+authoritative `TO_DELIVER`; claim/lease failures preserve existing bounded
+attempt accounting. Broader failure-policy facilities remain deferred.
 
 The coordinator-assigned pre-review payload fix now records exhausted
 claim/lease/cleanup attempts from the existing payload-free exhaustion snapshot
@@ -166,3 +173,11 @@ T-0034: only the fixed internal pre-callback exhausted-row `MARK_DELIVERED`
 outcome is executable/current. Public monitor and custom actions, repeat
 dispatch, scheduler/backoff, dead-letter, supervision, topology, adapters, and
 broader policy remain deferred. Fresh four-lane re-review is pending.
+
+The Round 7 documentation fix qualifies the exhaustion mark-failure guarantee
+throughout active TypeDoc/API prose. Successful cleanup exposes the frozen,
+bounded, stack-free exhaustion facts. Failed cleanup instead preserves the
+existing single `CLEANUP` result whose `AggregateError` contains both errors
+without those guarantees. In both cases the authoritative row remains
+`TO_DELIVER` and failure accounting remains one. Fresh four-lane re-review is
+pending.

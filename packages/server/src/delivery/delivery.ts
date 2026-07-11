@@ -86,11 +86,14 @@ export class Delivery {
    * a supported endpoint callback, this method applies the fixed package-
    * internal 100-attempt exhaustion gate for that exact inbox message.
    * Exhausted rows skip the callback and another attempt, then use an exact-row
-   * claim synchronized to the live shard fence to mark the row delivered. A
-   * failed exhaustion-time mark remains pending and contributes one bounded,
-   * stack-free failure. The gate is not configurable or a public retry policy:
-   * this method does not schedule later runs, open transports, or implement
-   * backoff.
+   * claim synchronized to the live shard fence to mark the row delivered. If
+   * an exhaustion-time mark fails and claim cleanup succeeds, the row remains
+   * pending and contributes one frozen, bounded, stack-free facts object. If
+   * cleanup also fails, the run instead preserves one `CLEANUP` result whose
+   * `AggregateError` contains the mark and cleanup errors; that error is not
+   * promised to be frozen, bounded, or stack-free. Either path counts as one
+   * failure. The gate is not configurable or a public retry policy: this method
+   * does not schedule later runs, open transports, or implement backoff.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const outcome = await this.#drain(shard, options, {});
@@ -759,8 +762,10 @@ export interface DeliveryFailure {
   readonly message: DeliveryEndpointMessage;
   /**
    * Error observed during endpoint callback, lease/fencing, delivery-status
-   * update, or framework cleanup work; or frozen, stack-free bounded facts when
-   * an exhausted row cannot be marked delivered.
+   * update, or framework cleanup work. An exhaustion-time mark failure with
+   * successful cleanup uses frozen, bounded, stack-free facts. If cleanup also
+   * fails, the existing `CLEANUP` result carries an `AggregateError` containing
+   * the original mark error and cleanup error without that guarantee.
    */
   readonly error: unknown;
 }

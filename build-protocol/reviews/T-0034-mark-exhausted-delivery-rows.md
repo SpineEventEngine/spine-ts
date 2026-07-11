@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 7 API documentation fix in progress
+Status: Round 7 API documentation fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -216,6 +216,26 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:58:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 7 docs/TypeDoc fix
   worker. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:59:00Z`: Fix worker completed the bounded applicability check,
+  freshly read `receiving-code-review` and the applicable documentation
+  guidance, and verified the finding against the current failure and cleanup
+  paths. Successful mark-failure cleanup returns frozen, bounded, stack-free
+  exhaustion facts; failed cleanup preserves one `CLEANUP` result whose
+  `AggregateError` contains the original mark error plus cleanup error without
+  those guarantees. Both leave authoritative `TO_DELIVER` and count one
+  failure. Verification remains pending; no reviewer or subagent was spawned.
+- `2026-07-11T22:00:00Z`: Round 7 docs/TypeDoc fix and required verification
+  completed. The complete active wording batch now distinguishes the sanitized
+  successful-cleanup result from the existing failed-cleanup `AggregateError`
+  while preserving `TO_DELIVER`, one-failure accounting, and the unchanged
+  public `DeliveryFailure` contract. Docs/API, both typechecks, focused lint,
+  formatting, whitespace, status/untracked, stale/current claims, four-header,
+  ledger/status, active-worker, and exact-scope checks passed. The worker
+  remains active for coordinator closure; fresh four-lane re-review is pending.
+- `2026-07-11T22:04:00Z`: Coordinator closed the fix worker and independently
+  passed docs/API, both typechecks, focused lint, formatting, whitespace,
+  four-header alignment, changed-scope, and status checks. Fresh package
+  generation and all four lanes are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as

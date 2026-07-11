@@ -137,9 +137,12 @@ Current slice exposes:
   retained slots for one exact inbox message. At that bound it skips the
   callback and another attempt record, claims the exact row under the live
   shard fence, and marks it `DELIVERED` without consuming accepted work or the
-  failure bound. If that mark fails, the row remains authoritatively
-  `TO_DELIVER` and contributes one bounded, stack-free exhaustion failure. This
-  is not a public
+  failure bound. If that mark fails and cleanup succeeds, the row remains
+  authoritatively `TO_DELIVER` and contributes one frozen, bounded, stack-free
+  exhaustion-facts object. If cleanup also fails, accounting remains one
+  `CLEANUP` failure for the `TO_DELIVER` row; its `AggregateError` contains the
+  original mark error plus cleanup error and has no frozen, bounded, or
+  stack-free guarantee. This is not a public
   monitor/action, scheduler/backoff, dead-letter, production-topology,
   catch-up, or adapter policy. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain

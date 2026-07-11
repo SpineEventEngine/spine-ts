@@ -1263,9 +1263,13 @@ retained attempts for that exact inbox message by reading only its 100 known
 per-message retained slots. For an exhausted supported row, the gate skips the
 callback and another retained-attempt write, then claims and marks the exact row
 `DELIVERED` under the live shard fence. This consumes neither accepted work nor
-the framework failure bound. If the mark fails, the authoritative row remains
-`TO_DELIVER` and one bounded, stack-free exhaustion failure counts toward failed
-work and the framework failure bound. Retryable
+the framework failure bound. If the mark fails and cleanup succeeds, the
+authoritative row remains `TO_DELIVER` and one frozen, bounded, stack-free
+exhaustion-facts object counts toward failed work and the framework failure
+bound. If cleanup also fails, the row still remains `TO_DELIVER` and accounting
+still records one `CLEANUP` failure; its `AggregateError` contains the original
+mark error plus cleanup error and has no frozen, bounded, or stack-free
+guarantee. Retryable
 failures remain available for later replay through the existing path. The
 framework retains internal sanitized attempt records for supported endpoint
 failures: message/inbox/shard identity, label, node, attempted time, accepted

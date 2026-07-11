@@ -315,12 +315,16 @@ attempts for that exact inbox message by reading only its 100 known per-message
 retained slots. An exhausted row skips the callback and another retained-attempt
 write, then is claimed, synchronized to the live shard fence, and marked
 `DELIVERED` without incrementing accepted endpoint work or the internal failure
-bound. If the mark fails, the authoritative row remains `TO_DELIVER` and one
-bounded, stack-free exhaustion failure counts toward failed work and the
-internal failure bound. Retryable endpoint failures continue through
-the existing callback path and remain available for later replay when cleanup
-leaves the row pending. Pre-callback claim, validation, and lease-fencing
-failures do not increment accepted endpoint work, but they do increment failed
+bound. If the mark fails and cleanup succeeds, the authoritative row remains
+`TO_DELIVER` and one frozen, bounded, stack-free exhaustion-facts object counts
+toward failed work and the internal failure bound. If cleanup also fails, the
+row remains `TO_DELIVER` and the same one-failure accounting returns a `CLEANUP`
+result whose `AggregateError` contains the original mark error plus cleanup
+error; that error is not promised frozen, bounded, or stack-free. Retryable
+endpoint failures continue through the existing callback path and remain
+available for later replay when cleanup leaves the row pending. Pre-callback
+claim, validation, and lease-fencing failures do not increment accepted
+endpoint work, but they do increment failed
 work and count toward the internal failure bound. This gate is not a public
 monitor/action, scheduler, backoff, dead-letter, topology, catch-up, or
 production-adapter API.

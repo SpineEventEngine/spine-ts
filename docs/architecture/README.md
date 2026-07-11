@@ -617,9 +617,12 @@ summarizes retained attempts for that exact inbox message by reading only its
 100 known per-message retained slots. An exhausted supported row skips the
 endpoint callback and another retained-attempt write, then is claimed,
 synchronized to the live shard fence, and marked `DELIVERED` without consuming
-accepted work or the configured failure bound. A failed mark leaves the
-authoritative row `TO_DELIVER` and contributes one bounded, stack-free
-exhaustion failure. Retryable
+accepted work or the configured failure bound. A mark failure followed by
+successful cleanup leaves the authoritative row `TO_DELIVER` and contributes
+one frozen, bounded, stack-free exhaustion-facts object. If cleanup also fails,
+the row still remains `TO_DELIVER` and contributes one `CLEANUP` failure whose
+`AggregateError` contains the original mark error plus cleanup error and has no
+frozen, bounded, or stack-free guarantee. Retryable
 supported failures remain on the existing path and stay available for later
 replay when cleanup leaves the row pending. Retry monitors/workers, backoff,
 scheduling, production supervision, topology, catch-up storage, and production
