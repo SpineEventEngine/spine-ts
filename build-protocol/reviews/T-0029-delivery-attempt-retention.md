@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 7 fix verified; commit pending
+Status: Round 7 fix commit recorded and pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -433,4 +433,11 @@ Branch: `task/T-0029-delivery-attempt-retention`
 - Required local verification passed: focused delivery-worker/inbox Vitest
   slice, `typecheck:build:generated`, `docs:check`, `format:check`,
   `git diff --check`, and `git ls-files --others --exclude-standard`.
-- Status: fix verified locally; commit remains pending.
+- Fix commit: `c385d25c Fix T-0029 round 7 corruption propagation`.
+- Coordinator verification after the fix commit passed the required focused
+  delivery-worker/inbox Vitest slice, `typecheck:build:generated`,
+  `docs:check`, `format:check`, `git diff --check`, and
+  `git ls-files --others --exclude-standard`; `docs:check` emitted only the
+  existing TypeDoc invalid-origin warning.
+- Status: fix commit recorded; fresh review package and all five independent
+  review lanes remain pending.

@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 7 fix verified and commit pending
+Status: In progress; Round 7 fix commit recorded and pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -322,3 +322,12 @@ second endpoint failure after retained attempt state already exists. Required
 focused Vitest, `typecheck:build:generated`, `docs:check`, `format:check`,
 `git diff --check`, and `git ls-files --others --exclude-standard` passed
 locally. Generated Protobuf output remains out of VCS.
+
+Round 7 fix worker committed
+`c385d25c Fix T-0029 round 7 corruption propagation` and was closed after
+reporting `DONE`. Coordinator reran the required focused Vitest slice,
+`typecheck:build:generated`, `docs:check`, `format:check`, `git diff --check`,
+and `git ls-files --others --exclude-standard`; all passed, with only the
+existing TypeDoc invalid-origin warning. The next step is a fresh review
+package from baseline `3820e76d` to the current head and all five independent
+review lanes.
