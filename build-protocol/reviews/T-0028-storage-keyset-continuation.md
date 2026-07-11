@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Round 1 fix verified; five-lane re-review pending
+Status: Round 2 fix verified; five-lane re-review pending
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0028-storage-keyset-continuation`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer  | Status                           |
-| -------------------------- | --------- | -------------------------------- |
-| Code style/maintainability | Nietzsche | Round 1 fix; re-review pending   |
-| Documentation              | Rawls     | Round 1 fix; re-review pending   |
-| TypeScript/API docs        | Banach    | Round 1 clean; re-review pending |
-| Security                   | Singer    | Round 1 fix; re-review pending   |
-| Performance/reliability    | Leibniz   | Round 1 clean; re-review pending |
+| Lane                       | Reviewer      | Status                           |
+| -------------------------- | ------------- | -------------------------------- |
+| Code style/maintainability | Planck        | Round 2 fix; re-review pending   |
+| Documentation              | Chandrasekhar | Round 2 fix; re-review pending   |
+| TypeScript/API docs        | Hubble        | Round 2 clean; re-review pending |
+| Security                   | Maxwell       | Round 2 clean; re-review pending |
+| Performance/reliability    | Jason         | Round 2 clean; re-review pending |
 
 ## Review Criteria
 
@@ -84,8 +84,12 @@ Branch: `task/T-0028-storage-keyset-continuation`
   logs, run focused verification, commit, regenerate the review package, and
   rerun all five independent review lanes.
 
-### Round 1 Fix Worker - `2026-07-11T06:54:00Z`
+### Round 1 Fix Worker - `2026-07-11T06:56:00Z` (corrected approximate)
 
+- This corrected approximate timestamp replaces the earlier pre-review
+  timestamp and preserves the durable order: Round 1 independent review,
+  fix-worker red checks, fix implementation, required verification, commit,
+  coordinator verification, then fresh re-review.
 - Code style/maintainability fix: `TenantRecords` ordering now operates on
   `StoredEntry`, using `entry.stored` for configured sort fields and
   `entry.slotId` for the final tie-breaker and `RecordContinuation.id`
@@ -116,3 +120,62 @@ packages/server/test/delivery/delivery-loop.test.ts`,
   `git diff --check`.
 - Action: commit the verified fix, regenerate the review package, and rerun all
   five independent review lanes. No lane is marked clean by this fix worker.
+
+### Round 2 Independent Review - `2026-07-11T07:05:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-652f75c7..080aa1ab.diff` from task baseline
+  `652f75c7` to current HEAD `080aa1ab`.
+- Code style/maintainability (Planck the 4th): [P2] `RecordQuery.ids` still
+  filters against the logical record ID inside the slot-aware in-memory query
+  path. `queryEntries()` and continuation now expose/use `entry.slotId`, but
+  `matchesIds()` still compares `query.ids` to `StoredRecord.id`. Fix by
+  passing `StoredEntry` into matching and comparing `RecordQuery.ids` against
+  `entry.slotId`. Add a regression where a copied storage slot is selected
+  through `queryEntries({ ids: [copiedSlotId] })`.
+- Documentation (Chandrasekhar the 4th): [Major] durable review chronology is
+  still inconsistent. Round 1 independent review is recorded at
+  `2026-07-11T06:55:00Z`, but the Round 1 fix-worker red/green/final
+  verification entries are recorded at `06:53Z` and `06:54Z`. Fix by correcting
+  the fix-worker timestamps or explicitly marking them corrected/approximate
+  while preserving the ordering: independent review, fix worker, verification,
+  fresh re-review pending.
+- TypeScript/API docs (Hubble the 4th): clean. Continuation types are minimal,
+  documented, exported, API-check-listed, distinct from `offset`, and generated
+  outputs are not in the diff.
+- Security (Maxwell the 5th): clean. Public and internal continuation values
+  are bounded before storage access, tenant/shard/status isolation remains
+  intact, `CATCH_UP` still skips before endpoint accounting, and legacy
+  `IMPORT_EVENT` remains fail-closed.
+- Performance/reliability (Jason the 5th): clean. Delivery scans use keyset
+  continuation, scan bounds and loop statuses are preserved, and tests cover
+  copied slots, disappearing rows, claimed rows, unsupported rows, corruption,
+  tenant/filter ordering, continuation bounds, and skipped-scan pause/resume.
+- Action: one fix worker will address both Round 2 findings, update durable
+  logs, run focused verification, commit, regenerate the review package, and
+  rerun all five independent review lanes.
+
+### Round 2 Fix Worker - `2026-07-11T07:10:00Z`
+
+- Status: in progress. The fix worker started after the Round 2 independent
+  review and added the copied-slot `RecordQuery.ids` regression before
+  production edits.
+- Focused red verification failed for the expected reason:
+  `queryEntries({ ids: [copiedSlotId] })` returned `[]` for a copied storage
+  slot. The production fix now passes `StoredEntry` into query matching and
+  compares `RecordQuery.ids` against `entry.slotId`, while keeping
+  `resolveValue(..., "id")` behavior unchanged.
+- Focused green verification passed for the same copied-slot ids regression.
+- Required verification passed after the Round 2 fix batch:
+  `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/storage/test/memory/in-memory-record-storage.test.ts
+packages/server/test/delivery/inbox.test.ts
+packages/server/test/delivery/delivery-worker.test.ts
+packages/server/test/delivery/delivery-loop.test.ts` passed with 4 files and
+  211 tests; `pnpm --config.verify-deps-before-run=false
+typecheck:build:generated` passed; `pnpm --config.verify-deps-before-run=false
+docs:check` passed with the known TypeDoc invalid-origin source-link warning;
+  `pnpm --config.verify-deps-before-run=false format:check` passed after
+  formatting the work log; and `git diff --check` passed.
+- T-0028 remains open for fresh five-lane independent re-review; no lane is
+  marked clean by this fix worker.

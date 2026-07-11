@@ -460,6 +460,21 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
+  it("filters copied query entries by the actual storage slot id", async () => {
+    const storage = createStorage();
+    const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const copiedId = create(EventIdSchema, { value: "event-copy" });
+
+    await storage.compareAndSet(copiedId, undefined, stored);
+
+    await expect(storage.queryEntries({ ids: [copiedId] })).resolves.toMatchObject([
+      {
+        id: { value: "event-copy" },
+        record: { id: { value: "event-1" } },
+      },
+    ]);
+  });
+
   it("continues copied storage slots by query entry id when sort keys tie", async () => {
     const storage = createStorage();
     const copiedId = create(EventIdSchema, { value: "event-1-copy" });

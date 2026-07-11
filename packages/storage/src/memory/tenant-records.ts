@@ -42,9 +42,7 @@ export class TenantRecords<I, R extends Message> {
   }
 
   queryEntries(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly RecordEntry<I, R>[] {
-    const records = [...this.#records.values()].filter((entry) =>
-      matches(spec, entry.stored, query),
-    );
+    const records = [...this.#records.values()].filter((entry) => matches(spec, entry, query));
     const sorted = records.sort((left, right) => compareEntries(left, right, query.sort ?? []));
     const continued = continueAfter(sorted, query.sort ?? [], query.after);
 
@@ -157,10 +155,10 @@ function compareToContinuation<I, R extends Message>(
 
 function matches<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: StoredEntry<I, R>,
   query: RecordQuery<I>,
 ): boolean {
-  return matchesIds(spec, entry, query.ids) && matchesFilters(entry, query.filters);
+  return matchesIds(spec, entry, query.ids) && matchesFilters(entry.stored, query.filters);
 }
 
 function matchesFilters<I, R extends Message>(
@@ -181,14 +179,14 @@ function matchesFilters<I, R extends Message>(
 
 function matchesIds<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: StoredEntry<I, R>,
   ids: readonly I[] | undefined,
 ): boolean {
   if (ids === undefined || ids.length === 0) {
     return true;
   }
 
-  return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.id));
+  return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.slotId));
 }
 
 function resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: string): unknown {

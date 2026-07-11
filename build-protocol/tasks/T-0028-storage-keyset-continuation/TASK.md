@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Round 1 fix verified; five-lane re-review pending
+Status: Round 2 fix verified; five-lane re-review pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -195,6 +195,30 @@ Round 1 fix worker addressed the findings in one batch:
   bound continuation `messageId` and `version.toString()` to the same stored
   text budget used for inbox message IDs.
 
-Required verification passed after the fix batch. This task is not complete
-yet: all five independent review lanes must run again against a fresh review
-package after the fix commit.
+Required verification passed after the Round 1 fix batch.
+
+Round 2 independent review on `2026-07-11T07:05:00Z` found two remaining items
+to fix:
+
+- `RecordQuery.ids` must filter in-memory storage by actual storage slot ID,
+  matching `queryEntries()` and continuation semantics, rather than by logical
+  record ID;
+- Round 1 fix-worker timestamps must be corrected so the durable audit trail
+  preserves review, fix, verification, and re-review order.
+
+TypeScript/API docs, security, and performance/reliability lanes were clean in
+Round 2. After the next fix batch, all five independent review lanes must run
+again against a fresh review package.
+
+Round 2 fix worker started after the Round 2 independent review and added a
+focused copied-slot regression proving `queryEntries({ ids: [copiedSlotId] })`
+must select by actual storage slot ID. The focused red check failed with an
+empty result before production edits, then passed after `TenantRecords` query
+matching was changed to compare `RecordQuery.ids` with `entry.slotId` while
+leaving `resolveValue(..., "id")` unchanged. The Round 1 fix-worker timestamps
+were corrected as approximate post-review entries to preserve independent
+review -> fix worker -> verification -> re-review chronology. Required
+verification passed after the Round 2 fix batch, including the focused
+storage/delivery Vitest suite, `typecheck:build:generated`, `docs:check`,
+`format:check`, and `git diff --check`. T-0028 remains open for fresh
+five-lane independent re-review.
