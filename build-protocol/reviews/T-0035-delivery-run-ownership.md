@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 4 four-lane review in progress
+Status: Round 4 finding recorded; decision fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f539a-3d32-76e2-b598-8132403ec6bb` | Active |
-| Documentation              | `019f539a-3d9d-70d1-b9a5-c963a480e67f` | Active |
-| TypeScript/API docs        | `019f539a-3e32-76e3-8c2f-ac8da8e69891` | Active |
-| Performance/reliability    | `019f539a-3ec6-7590-83e8-f29642c7909b` | Active |
+| Code style/maintainability | `019f539a-3d32-76e2-b598-8132403ec6bb` | Clean  |
+| Documentation              | `019f539a-3d9d-70d1-b9a5-c963a480e67f` | Clean  |
+| TypeScript/API docs        | `019f539a-3e32-76e3-8c2f-ac8da8e69891` | Clean  |
+| Performance/reliability    | `019f539a-3ec6-7590-83e8-f29642c7909b` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -201,3 +201,10 @@ Security is deferred to final project readiness.
   `019f539a-3e32-76e3-8c2f-ac8da8e69891`, and performance/reliability
   `019f539a-3ec6-7590-83e8-f29642c7909b`. Prompts are package-only and ignore
   superseded historical text unless current records claim it active.
+- `2026-07-11T23:57:00Z`: Round 4 completed and all reviewers were closed.
+  Code style, documentation, and TypeScript/API docs were clean.
+  Performance/reliability found one P1: D-0085 must assign parked rejections
+  to registrations or the shared generation, scope later supersession to the
+  same obligations, and define ordinary non-last detach surfacing/removal for
+  registration-owned errors while preserving genuinely shared errors. One
+  decision fix worker and fresh four-lane review are required.
