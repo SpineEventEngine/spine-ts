@@ -2635,3 +2635,53 @@ Consequences:
   unsafe cast.
 - Deprecated import rows remain recognizable compatibility data.
 - T-0025 must update tests and docs/API wording without implementing import.
+
+## D-0078: Reconcile Post-T-0026 Runtime Status Before Next Implementation
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0027`
+
+Context: T-0026 landed the first narrow framework-owned delivery worker and
+loop boundary for supported durable inbox labels, and post-merge verification
+passed on `main` at `efbf379a`. Active docs still include broad remaining-gap
+phrases around transport-backed worker execution, production worker
+supervision, retry policy, and catch-up. Starting a new runtime feature from
+stale public status would risk either under-crediting T-0026 or smuggling
+production supervision/retry/catch-up behavior into the next slice.
+
+Decision:
+
+- Run T-0027 as a docs/status-only reconciliation before the next runtime
+  implementation task.
+- Update active roadmap, architecture, user, and package docs to distinguish
+  the worker boundary that now exists from production gaps that remain.
+- Preserve the T-0026 contract: supported worker replay labels are
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid
+  `CATCH_UP` rows remain pending and skipped; new `IMPORT_EVENT` writes remain
+  unsupported and legacy stored rows fail closed.
+- Keep runtime/source/test code, generated output, and `human-review-1-jul.md`
+  untouched.
+- Record storage-index/keyset continuation as a likely next implementation
+  candidate after reconciliation, not as part of T-0027.
+
+Alternatives considered:
+
+- Proceed directly to retry monitoring, retained attempts, worker topology, or
+  storage-index implementation. Rejected because active docs should first be
+  truthful about the newly merged T-0026 boundary and the remaining production
+  gaps.
+- Broaden T-0027 into runtime cleanup. Rejected because the immediate risk is
+  documentation/status drift, and behavior changes need their own task brief,
+  JVM inspection, tests, and review loop.
+
+Consequences:
+
+- Future implementers can choose the next production-parity slice from accurate
+  docs rather than stale "worker execution missing" language.
+- Public docs keep the delivery worker boundary honest: local/framework-owned
+  replay exists, while production topology, supervision, retry policy, retained
+  attempt history, durable catch-up storage, and storage-index continuation
+  remain explicit future work.

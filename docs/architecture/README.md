@@ -453,19 +453,21 @@ The following runtime pieces remain outside the verified local/example slice:
   live intake, does not re-append events, and excludes production delivery
   worker orchestration, inbox lifecycle, retries, and cross-process catch-up
   control;
-- process-wide transport-backed delivery workers, production catch-up
-  orchestration, durable production storage adapters, entity storage/cache
-  catch-up, and production tenant-index policy. Durable inbox records, dedup
-  guards, shard leases, bounded internal shard replay, and the internal tenant
-  index are present;
+- production transport-backed/background worker topology and supervision,
+  production catch-up orchestration, durable production storage adapters, entity
+  storage/cache catch-up, and production tenant-index policy. Durable inbox
+  records, dedup guards, shard leases, per-message claims, bounded internal
+  shard replay, the framework-owned local delivery worker/loop boundary for
+  supported labels, and the internal tenant index are present;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, deployment/authentication/tracing/health
   hardening, and broader production server verification; and
-- remote/multi-host transport topology, broker topology, process supervision,
-  retry monitors/workers, and production transport-backed worker execution
-  beyond the current local `RuntimeTransportBinding`.
+- remote/multi-host transport topology, broker topology/process supervision,
+  retry monitors/workers, retained attempt history, production delivery policy,
+  and transport-backed worker topology beyond the current framework-owned local
+  delivery loop.
 
 ## Server Runtime Closure
 
@@ -644,7 +646,8 @@ Bounded contexts now create internal system-pairing metadata and a
 tenant index. Single-tenant indexes are constant and reject tenant recording;
 multitenant indexes persist tenant IDs through the configured storage factory.
 Raw system contexts and tenant indexes remain internal framework details.
-Durable catch-up storage, transport-backed worker supervision, retry monitor
+Durable catch-up storage/projection catch-up through inbox storage,
+transport-backed worker supervision, production delivery policy, retry monitor
 hierarchies, retained delivery-attempt history, diagnostics, repository storage
 policy, read-side projection stores, and durable production storage adapters
 remain open production gaps.

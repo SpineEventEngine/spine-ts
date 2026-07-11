@@ -52,9 +52,10 @@ Current slice exposes:
   `Stand` update. Before handler code runs, replay validates the row label,
   pending `TO_DELIVER` status, the tenant, payload/schema, target type URL, and
   routed target ID.
-  Transport topology, broker/process supervision, retained attempt history,
-  production retry policy, and deployment hardening remain outside this local
-  slice;
+  Transport topology, broker/process supervision, production delivery policy,
+  retry monitors/workers, retained attempt history, durable catch-up
+  storage/projection catch-up through inbox storage, production storage
+  adapters, and deployment hardening remain outside this local slice;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
@@ -717,9 +718,10 @@ production lifecycle, or integrate transports. Process-manager command
 assignees, process-manager event reactors and event-commanding handlers, and
 live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
-received row is marked delivered. Scheduler/retry workers,
-cross-process recovery, production delivery policy, retained attempt history,
-and supported catch-up work remain open production gaps.
+received row is marked delivered. Scheduler/retry workers, cross-process
+recovery, production delivery policy, retained attempt history, durable
+catch-up storage/projection catch-up through inbox storage, and production
+storage adapters remain open production gaps.
 
 ## Direct Stand
 
@@ -876,7 +878,8 @@ facilities for server assembly. `Server` accepts built contexts and
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
 more specific local factory first. This object is not a Java-style process-wide
-singleton, and it does not introduce endpoint topology or worker execution.
+singleton, and it does not introduce endpoint topology or production worker
+topology.
 
 Shutdown is deterministic: the listener stops accepting new requests first,
 then active HTTP/2 sessions close, then owned contexts and explicit
@@ -1024,9 +1027,11 @@ original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates the row label,
 pending `TO_DELIVER` status, tenant, payload/schema, target type URL, and
 routed target ID.
-Transport topology, broker/process supervision, retained attempt history,
-production retry policy, and supported catch-up work remain open production
-gaps. Full production supervision and retry policy remain outside this slice.
+Transport topology, broker/process supervision, production delivery policy,
+retry monitors/workers, retained attempt history, durable catch-up
+storage/projection catch-up through inbox storage, and production storage
+adapters remain open production gaps. Full production supervision and retry
+policy remain outside this slice.
 This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;

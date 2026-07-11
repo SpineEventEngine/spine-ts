@@ -221,10 +221,11 @@ or multi-host transport example.
   production runtime verification.
   Built bounded contexts now create internal system-pairing metadata and a
   framework-owned tenant index; those internals are not exposed to end-user
-  application code. Durable inbox/shard delivery storage and bounded internal
-  shard replay already exist for framework-owned delivery work. Lease-fenced
-  replay skips rows
-  unavailable to the active worker and passes independent
+  application code. Durable inbox/shard delivery storage, shard leases,
+  per-message claims, bounded internal shard replay, and the framework-owned
+  local delivery worker/loop boundary for supported labels already exist for
+  framework-owned delivery work. Lease-fenced replay skips rows unavailable to
+  the active worker and passes independent
   message snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
   `Any.value` bytes are safe to mutate in endpoint code. Live shard ownership
@@ -235,8 +236,10 @@ or multi-host transport example.
   side effects to be at-least-once/replay-safe; final fencing can prevent stale
   finalization but cannot uninvoke an already-run callback. Broader production
   supervision, cancellation, and retry-monitor policy remains future work.
-  Transport-backed/background scheduler workers, production catch-up
-  orchestration, and retained attempt history remain open production gaps.
+  Transport-backed/background scheduler workers, broker/process supervision,
+  production delivery policy, durable catch-up storage/projection catch-up
+  through inbox storage, production catch-up orchestration, and retained attempt
+  history remain open production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than pending runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -260,8 +263,9 @@ or multi-host transport example.
   target ID.
   The remaining repository event paths still use the direct local runtime in this
   slice. Broader cross-process subscriber/reactor delivery semantics,
-  transport-backed/background delivery worker orchestration, retained update
-  replay, and cross-process read-side recovery remain open production gaps.
+  production transport-backed/background delivery worker orchestration and
+  supervision, retained update replay, and cross-process read-side recovery
+  remain open production gaps.
 
 ## Type Registry
 
@@ -1266,14 +1270,17 @@ The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints.
 Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
 coordination path and does not gain fake durable catch-up storage here; retry
-workers and generic repository
-delivery remain deferred. Event import and aggregate importers are removed from
-the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers are
+workers, production delivery policy, transport topology, broker/process
+supervision, and generic repository delivery remain deferred. Event import and
+aggregate importers are removed from the active plan by upstream ADR 0001 D1.
+Aggregate `@React` handlers are
 ordinary generated reactor handlers with current transaction semantics, not
 event-sourcing import/applier work. Built contexts create a framework-owned
 tenant index now; production tenant-index policy, diagnostics, repository
 storage policy, transport-backed worker supervision, retained attempt history,
-and read-side projection stores remain open production gaps.
+read-side projection stores, durable catch-up storage/projection catch-up
+through inbox storage, and durable production storage adapters remain open
+production gaps.
 
 ## Developer Path
 
