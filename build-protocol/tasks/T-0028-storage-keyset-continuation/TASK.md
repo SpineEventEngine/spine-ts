@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: In progress
+Status: Round 1 fix verified; five-lane re-review pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -170,3 +170,31 @@ Run five independent review lanes:
   fail-closed `IMPORT_EVENT` behavior remain intact;
 - performance/reliability: continuation removes offset-scan starvation hazards
   while preserving scan bounds, lease fencing, claim behavior, and retry gaps.
+
+## Current Review State
+
+Round 1 independent review on `2026-07-11T06:55:00Z` found three items to fix:
+
+- in-memory continuation must use the actual storage slot ID for the final
+  tie-breaker and continuation comparison, not the logical record ID;
+- inbox and delivery resume continuation values must bound `messageId` and
+  `version` inputs before constructing storage continuations;
+- durable review logs must distinguish implementation-worker self-review from
+  the required independent review lanes.
+
+TypeScript/API docs and performance/reliability lanes were clean.
+
+Round 1 fix worker addressed the findings in one batch:
+
+- in-memory ordering and continuation comparison now operate on `StoredEntry`,
+  using `entry.stored` for configured sort fields and `entry.slotId` for final
+  tie-breaks and continuation boundaries;
+- regression coverage proves a copied storage slot sharing a sort key can be
+  captured from `queryEntries()` page 1 and used to continue to the next row;
+- public inbox read continuations and internal delivery resume cursors now
+  bound continuation `messageId` and `version.toString()` to the same stored
+  text budget used for inbox message IDs.
+
+Required verification passed after the fix batch. This task is not complete
+yet: all five independent review lanes must run again against a fresh review
+package after the fix commit.

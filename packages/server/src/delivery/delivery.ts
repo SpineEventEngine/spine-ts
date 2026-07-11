@@ -670,6 +670,7 @@ type DeliveryMessageResult =
   | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
 
 const defaultShardLeaseMs = 30_000;
+const maxContinuationTextBytes = 16 * 1024;
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -1025,14 +1026,25 @@ function continuationFromValues(
   whenReceived: unknown,
   version: unknown,
 ): InboxReadContinuation {
-  if (typeof messageId !== "string" || messageId.length === 0) {
+  if (typeof messageId !== "string" || messageId.trim().length === 0) {
     throw new Error("Delivery resume cursor requires a message ID.");
+  }
+  if (Buffer.byteLength(messageId, "utf8") > maxContinuationTextBytes) {
+    throw new Error(
+      `Delivery resume cursor message ID exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    );
   }
   if (!(whenReceived instanceof Date) || Number.isNaN(whenReceived.getTime())) {
     throw new Error("Delivery resume cursor requires a valid receive time.");
   }
   if (typeof version !== "bigint") {
     throw new Error("Delivery resume cursor requires a bigint version.");
+  }
+  const encodedVersion = version.toString();
+  if (Buffer.byteLength(encodedVersion, "utf8") > maxContinuationTextBytes) {
+    throw new Error(
+      `Delivery resume cursor version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return Object.freeze({

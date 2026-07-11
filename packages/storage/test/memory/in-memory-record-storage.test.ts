@@ -460,6 +460,44 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
+  it("continues copied storage slots by query entry id when sort keys tie", async () => {
+    const storage = createStorage();
+    const copiedId = create(EventIdSchema, { value: "event-1-copy" });
+
+    await storage.compareAndSet(
+      copiedId,
+      undefined,
+      createEvent("event-z", "type.spine.io/tasks.TaskCreated", 1n),
+    );
+    await storage.write(createEvent("event-2", "type.spine.io/tasks.TaskClosed", 1n));
+
+    const page1 = await storage.queryEntries({
+      sort: [{ field: "timestamp", direction: "asc" }],
+      limit: 1,
+    });
+    const page2 = await storage.queryEntries({
+      sort: [{ field: "timestamp", direction: "asc" }],
+      after: {
+        values: [{ field: "timestamp", value: 1n }],
+        id: page1[0]?.id ?? copiedId,
+      },
+      limit: 1,
+    });
+
+    expect(page1).toMatchObject([
+      {
+        id: { value: "event-1-copy" },
+        record: { id: { value: "event-z" } },
+      },
+    ]);
+    expect(page2).toMatchObject([
+      {
+        id: { value: "event-2" },
+        record: { id: { value: "event-2" } },
+      },
+    ]);
+  });
+
   it("keeps record index ids aligned with logical record ids instead of storage slots", async () => {
     const storage = createStorage();
     const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);

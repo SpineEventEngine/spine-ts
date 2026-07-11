@@ -175,6 +175,50 @@ describe("Inbox", () => {
     expect(page.map((message) => message.signalId)).toEqual(["signal-2"]);
   });
 
+  it("rejects oversized read continuation message IDs before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: oversizedText(16 * 1024 + 1),
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: 1n,
+      },
+    } as InboxReadOptions & { readonly after: unknown });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/message id exceeds 16384 bytes/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
+  it("rejects oversized read continuation versions before querying storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+      }),
+    );
+
+    const read = inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: "message-1",
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        version: oversizedVersion(),
+      },
+    } as InboxReadOptions & { readonly after: unknown });
+
+    await expect(read).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(read).rejects.toThrow(/version exceeds 16384 bytes/i);
+    expect(storageFactory.opens).toBe(0);
+  });
+
   it("reads through shared storage without keeping process-local inbox state", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const storage = new InboxStorage({

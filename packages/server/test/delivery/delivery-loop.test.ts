@@ -16,6 +16,7 @@ import {
   messageKey,
   onInboxQueryNumber,
 } from "./delivery-storage-fault-fixture.js";
+import { oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -178,6 +179,54 @@ describe("DeliveryLoop", () => {
     });
     expect(seen).toEqual(["signal-resume-delivered"]);
     expect(faults.inboxQueries).toBe(1);
+  });
+
+  it("rejects oversized resume cursor message IDs before querying inbox storage", async () => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        shard,
+        { node: "node-a", onMessage: () => undefined },
+        {
+          resume: {
+            after: {
+              messageId: oversizedText(16 * 1024 + 1),
+              whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+              version: 1n,
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow(/message id exceeds 16384 bytes/i);
+    expect(faults.inboxQueries).toBe(0);
+  });
+
+  it("rejects oversized resume cursor versions before querying inbox storage", async () => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        shard,
+        { node: "node-a", onMessage: () => undefined },
+        {
+          resume: {
+            after: {
+              messageId: "message-1",
+              whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+              version: oversizedVersion(),
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow(/version exceeds 16384 bytes/i);
+    expect(faults.inboxQueries).toBe(0);
   });
 
   it("stops idle when pending rows are already claimed", async () => {

@@ -30,6 +30,7 @@ import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
+const maxContinuationTextBytes = 16 * 1024;
 const casRetryLimit = 8;
 
 /** Durable inbox storage over record storage. */
@@ -1236,8 +1237,13 @@ function requireContinuationObject(value: unknown): Record<string, unknown> {
 }
 
 function requireContinuationText(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw new InboxMessageError(`${label} must be a non-empty string.`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxContinuationTextBytes) {
+    throw new InboxMessageError(
+      `${label} exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return value;
@@ -1254,6 +1260,12 @@ function requireContinuationDate(value: unknown, label: string): Date {
 function requireContinuationVersion(value: unknown): bigint {
   if (typeof value !== "bigint") {
     throw new InboxMessageError("Inbox read continuation version must be a bigint.");
+  }
+  const encoded = value.toString();
+  if (Buffer.byteLength(encoded, "utf8") > maxContinuationTextBytes) {
+    throw new InboxMessageError(
+      `Inbox read continuation version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return value;

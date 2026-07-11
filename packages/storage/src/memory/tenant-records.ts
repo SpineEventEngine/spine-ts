@@ -45,9 +45,7 @@ export class TenantRecords<I, R extends Message> {
     const records = [...this.#records.values()].filter((entry) =>
       matches(spec, entry.stored, query),
     );
-    const sorted = records.sort((left, right) =>
-      compareEntries(left.stored, right.stored, query.sort ?? []),
-    );
+    const sorted = records.sort((left, right) => compareEntries(left, right, query.sort ?? []));
     const continued = continueAfter(sorted, query.sort ?? [], query.after);
 
     return applyWindow(continued, query.offset, query.limit).map((entry) => ({
@@ -112,18 +110,18 @@ function continueAfter<I, R extends Message>(
     return records;
   }
 
-  return records.filter((entry) => compareToContinuation(entry.stored, orders, after) > 0);
+  return records.filter((entry) => compareToContinuation(entry, orders, after) > 0);
 }
 
 function compareEntries<I, R extends Message>(
-  left: StoredRecord<I, R>,
-  right: StoredRecord<I, R>,
+  left: StoredEntry<I, R>,
+  right: StoredEntry<I, R>,
   orders: readonly RecordOrder[],
 ): number {
   for (const order of orders) {
     const comparison = StoredValues.compare(
-      resolveValue(left, order.field),
-      resolveValue(right, order.field),
+      resolveValue(left.stored, order.field),
+      resolveValue(right.stored, order.field),
     );
 
     if (comparison !== 0) {
@@ -131,11 +129,11 @@ function compareEntries<I, R extends Message>(
     }
   }
 
-  return StoredValues.compare(left.id, right.id);
+  return StoredValues.compare(left.slotId, right.slotId);
 }
 
 function compareToContinuation<I, R extends Message>(
-  entry: StoredRecord<I, R>,
+  entry: StoredEntry<I, R>,
   orders: readonly RecordOrder[],
   after: RecordContinuation<I>,
 ): number {
@@ -145,7 +143,7 @@ function compareToContinuation<I, R extends Message>(
       throw new Error("Record query continuation sort order is invalid.");
     }
     const comparison = StoredValues.compare(
-      resolveValue(entry, order.field),
+      resolveValue(entry.stored, order.field),
       after.values[index]?.value,
     );
 
@@ -154,7 +152,7 @@ function compareToContinuation<I, R extends Message>(
     }
   }
 
-  return StoredValues.compare(entry.id, after.id);
+  return StoredValues.compare(entry.slotId, after.id);
 }
 
 function matches<I, R extends Message>(
