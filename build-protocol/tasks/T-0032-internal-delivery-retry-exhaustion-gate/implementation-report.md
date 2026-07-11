@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Round 6 fixes verified; fresh four-lane re-review pending
+Status: Round 8 TypeDoc fix verified; fresh four-lane re-review pending
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -100,6 +100,20 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - No implementation concerns are currently known. The current formal review
   status and any future findings are maintained in the T-0032 review log; this
   report does not duplicate round-specific lane state.
+
+## Round 8 TypeDoc Fix
+
+- Updated `Delivery.drain()` TypeDoc to describe the fixed package-internal
+  100-attempt exhaustion gate, exhausted-row pending retention, callback and
+  retained-attempt suppression, and the absence of configurable/public retry
+  policy, scheduling, and backoff.
+- Confirmed the adjacent `drainMessage()` TypeDoc makes no contradictory retry
+  policy claim and left it unchanged.
+- No runtime behavior, tests, or public API changed.
+- Round 8 checks passed: `docs:check` with zero TypeDoc errors and the known
+  invalid-remote source-link warning, `format:check`, `git diff --check`, and
+  the untracked-output check. No full test suite or `pnpm verify` was run for
+  this documentation-only batch.
 
 ## Round 1 Fix Scope
 

@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: In progress; Round 7 ledger fix verified; fresh four-lane re-review pending
+Status: In progress; Round 8 TypeDoc fix verified; fresh four-lane re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5238-8a42-7ae2-a17d-6342f64f12e3` | Pending |
-| Documentation              | `019f5238-8ab1-7cf1-958c-925cb0ea1d91` | Pending |
-| TypeScript/API docs        | `019f5238-8b40-77a3-b0f4-27f85208a964` | Pending |
-| Performance/reliability    | `019f5238-8bcc-7101-bffd-004141e16ab3` | Pending |
+| Code style/maintainability | `019f5240-a914-7250-937d-59c0173278f0` | Pending |
+| Documentation              | `019f5240-a977-79e1-9363-46612d2fe65c` | Pending |
+| TypeScript/API docs        | `019f5240-aa12-7023-a9e8-6dd415bb6bac` | Pending |
+| Performance/reliability    | `019f5240-aac6-74e1-807f-d1a091085e37` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -355,3 +355,29 @@ is deferred to the final release-readiness gate.
   task, review, and work logs; no runtime, tests, public docs, architecture, or
   `human-review-1-jul.md` files were touched. The fresh four-lane re-review
   remains pending after this commit.
+- `2026-07-11T18:41:00Z`: Generated Round 8 package
+  `.superpowers/sdd/review-aa4d52d9..8ee4b647.diff` and assigned code style
+  `019f5240-a914-7250-937d-59c0173278f0`, documentation `019f5240-a977-79e1-9363-46612d2fe65c`,
+  TypeScript/API docs `019f5240-aa12-7023-a9e8-6dd415bb6bac`, and performance/reliability
+  `019f5240-aac6-74e1-807f-d1a091085e37`. The active table was updated in the same dispatch step.
+- `2026-07-11T18:46:00Z`: Round 8 completed and all reviewers were closed.
+  Code style `019f5240-a914-7250-937d-59c0173278f0`, documentation
+  `019f5240-a977-79e1-9363-46612d2fe65c`, and performance/reliability
+  `019f5240-aac6-74e1-807f-d1a091085e37` were clean. TypeScript/API docs
+  `019f5240-aa12-7023-a9e8-6dd415bb6bac` found one P2 contradictory
+  `Delivery.drain()` retry-policy sentence. Other runtime, docs, exports,
+  ledger, and status state were clean.
+- `2026-07-11T18:47:00Z`: Assigned Round 8 TypeDoc fix worker
+  `019f5244-c489-7b43-bdb1-296543faf4d3` to the sole P2. Fresh four-lane re-review
+  remains pending its verified commit.
+- `2026-07-11T17:42:31Z`: The Round 8 TypeDoc fix was applied to
+  `Delivery.drain()`. Its public comment now names the fixed package-internal
+  100-attempt gate, exhausted-row callback/attempt suppression, pending-row
+  retention, and the absence of configurable/public retry policy, scheduling,
+  and backoff. `drainMessage()` made no contradictory retry-policy claim and
+  was left unchanged. Fresh four-lane re-review remains pending.
+- `2026-07-11T17:45:00Z`: Coordinator verification passed for the bounded
+  Round 8 batch: `docs:check` reported zero TypeDoc errors with only the known
+  invalid-remote source-link warning; `format:check`, `git diff --check`, and
+  the untracked-output check passed. No runtime or test changes were made, and
+  fresh four-lane re-review remains pending.

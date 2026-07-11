@@ -82,9 +82,12 @@ export class Delivery {
    * The returned `DeliveryRun` reports whether the shard was drained or
    * skipped, how many rows were read, accepted for work, delivered, or failed,
    * and the per-message failures observed during this run. Supported endpoint
-   * failures also retain a bounded, sanitized internal attempt history for
-   * later framework policy work. This method does not schedule later runs, open
-   * transports, choose retry policy, or implement backoff.
+   * failures also retain a bounded, sanitized internal attempt history. Before
+   * a supported endpoint callback, this method applies the fixed package-
+   * internal 100-attempt exhaustion gate for that exact inbox message.
+   * Exhausted rows remain pending, skip the callback, and do not record another
+   * attempt. The gate is not configurable or a public retry policy: this method
+   * does not schedule later runs, open transports, or implement backoff.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const outcome = await this.#drain(shard, options, {});
