@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 2 decision fix coordinator-verified; pre-review lint pending
+Status: Pre-review successor-scope finding pending fix
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -120,3 +120,7 @@ Security is deferred to final project readiness.
   passed generated build, docs/API, formatting, whitespace, changed-scope,
   status, mixed-outcome, boundedness, rejection, shutdown, environment-
   cardinality, and public-policy checks. Lightweight pre-review lint is next.
+- `2026-07-11T23:24:00Z`: Pre-review lint found one P2 successor-scope issue:
+  the ownership decision is coherent, but its first implementation successor
+  combines internal epoch/progress contracts with environment lifecycle wiring.
+  The first successor must be split small before reviewer dispatch.
