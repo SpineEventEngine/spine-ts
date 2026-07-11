@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 1 fix verified; independent re-review pending
+Status: Round 2 independent review in progress
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f52ef-4605-72f1-8155-6854b96bffd2` | Finding |
-| Documentation              | `019f52ef-4676-7a33-bb30-5ce796bfd879` | Finding |
-| TypeScript/API docs        | `019f52ef-46fa-7bb0-bbc3-1f22cc8c7143` | Finding |
-| Performance/reliability    | `019f52ef-478d-7672-ad88-12a4390b3804` | Finding |
+| Code style/maintainability | `019f52fe-4851-7d92-b5b4-e3a5daba836b` | Pending |
+| Documentation              | `019f52fe-48c0-7bc2-9411-ada84a112bfd` | Pending |
+| TypeScript/API docs        | `019f52fe-4944-7632-9517-49ec14e397b3` | Pending |
+| Performance/reliability    | `019f52fe-49d6-77c2-9c9f-df2ce273a9e2` | Pending |
 
 Security is deferred to final project readiness.
 
@@ -83,6 +83,9 @@ Security is deferred to final project readiness.
   passed 111 focused tests, both typechecks, docs/API, formatting, whitespace,
   and untracked-output checks against `d8127cca`. Fresh package generation and
   all four lanes are next.
+- `2026-07-11T22:07:00Z`: Generated Round 2 package
+  `.superpowers/sdd/review-da75f11e..7b0ab7c2.diff` and assigned all four
+  current lanes. The live table was updated atomically; results are pending.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
