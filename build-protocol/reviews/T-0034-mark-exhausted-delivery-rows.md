@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 1 independent review in progress
+Status: Round 1 findings pending fix
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f52ef-4605-72f1-8155-6854b96bffd2` | Pending |
-| Documentation              | `019f52ef-4676-7a33-bb30-5ce796bfd879` | Pending |
-| TypeScript/API docs        | `019f52ef-46fa-7bb0-bbc3-1f22cc8c7143` | Pending |
-| Performance/reliability    | `019f52ef-478d-7672-ad88-12a4390b3804` | Pending |
+| Code style/maintainability | `019f52ef-4605-72f1-8155-6854b96bffd2` | Finding |
+| Documentation              | `019f52ef-4676-7a33-bb30-5ce796bfd879` | Finding |
+| TypeScript/API docs        | `019f52ef-46fa-7bb0-bbc3-1f22cc8c7143` | Finding |
+| Performance/reliability    | `019f52ef-478d-7672-ad88-12a4390b3804` | Finding |
 
 Security is deferred to final project readiness.
 
@@ -67,3 +67,12 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:50:00Z`: Generated
   `.superpowers/sdd/review-da75f11e..0803e4eb.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T21:56:00Z`: Round 1 completed and all reviewers were closed.
+  Runtime P2: failed exhaustion mark loses the active cleanup handle, stranding
+  the row claim until expiry; add immediate-redrain and cleanup-failure
+  coverage. TypeDoc P2s: delivered count must include internal exhaustion
+  finalization, and worker failure-budget docs must exclude successful
+  exhaustion. Documentation P3s: distinguish payload-free exhausted snapshots
+  from ordinary payload-copying snapshots and replace the stale implementation
+  commit locator. One fix worker must resolve the complete batch before fresh
+  four-lane re-review.
