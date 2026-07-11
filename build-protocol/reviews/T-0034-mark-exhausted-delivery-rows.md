@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Coordinator pre-review lint passed; independent review pending
+Status: Round 1 independent review in progress
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | pending  | Pending |
-| Documentation              | pending  | Pending |
-| TypeScript/API docs        | pending  | Pending |
-| Performance/reliability    | pending  | Pending |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f52ef-4605-72f1-8155-6854b96bffd2` | Pending |
+| Documentation              | `019f52ef-4676-7a33-bb30-5ce796bfd879` | Pending |
+| TypeScript/API docs        | `019f52ef-46fa-7bb0-bbc3-1f22cc8c7143` | Pending |
+| Performance/reliability    | `019f52ef-478d-7672-ad88-12a4390b3804` | Pending |
 
 Security is deferred to final project readiness.
 
@@ -64,3 +64,6 @@ Security is deferred to final project readiness.
   passed focused tests, both typechecks, docs/API, formatting, whitespace,
   untracked-output, status, public-leakage, policy-source, and changed-scope
   checks. Fresh package generation and all four lanes are next.
+- `2026-07-11T21:50:00Z`: Generated
+  `.superpowers/sdd/review-da75f11e..0803e4eb.diff` and assigned all four
+  current lanes. The live table was updated atomically; results are pending.
