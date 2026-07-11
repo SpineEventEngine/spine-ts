@@ -2968,3 +2968,126 @@ Consequences:
 - Reviewers must reject attempts to broaden T-0032 into public monitor actions,
   dead-letter policy, backoff/timers, production topology, catch-up execution,
   or production adapter work.
+
+## D-0084: Set The Internal Reception Failure Outcome Policy
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0033`
+
+Context: T-0029 through T-0032 added bounded sanitized attempt retention,
+exact-message summaries, retry classification, and a fixed 100-attempt
+pre-callback exhaustion gate. The current runtime keeps both endpoint callback
+failures after retryable classification and exhausted supported rows pending
+`TO_DELIVER`. Spine JVM instead
+asks `DeliveryMonitor.onReceptionFailure(FailedReception)` for an action after
+a failed dispatch outcome; its default action marks the message delivered, and
+it also offers immediate repeat dispatch. TypeScript does not yet have public
+monitor/action ownership, immediate repeat, scheduler/backoff, dead-letter
+storage, or production supervision. The next implementation slice needs a
+fixed internal outcome policy without promising those broader facilities.
+
+Decision:
+
+- Use only two internal action concepts in the later implementation slice.
+  `KEEP_PENDING` is the policy outcome that preserves `TO_DELIVER`; releasing
+  its active row claim uses the existing cleanup path, not a separate action
+  executor or failure category. `MARK_DELIVERED` means use the framework-owned
+  claimed-row status transition to `DELIVERED`. These names are decision
+  vocabulary, not TypeScript declarations, public exports, or a promise of a
+  configurable action API.
+- When a supported row classified as retryable then fails in its endpoint
+  callback, use this sequence: (1) observe the endpoint callback failure;
+  (2) execute existing claim cleanup, which realizes the `KEEP_PENDING`
+  outcome while the active claim exists; (3) finalize one failure result as
+  `ENDPOINT` if cleanup succeeds or `CLEANUP` with the aggregated callback and
+  cleanup error if cleanup fails; (4) persist exactly one bounded sanitized
+  retained attempt from that finalized result; and (5) return exactly one
+  public `DeliveryFailure` and consume the existing failure budget once. Do
+  not retain before cleanup, rewrite an earlier attempt, perform a second
+  retention write, or emit a second failure.
+- When the finalized retained attempt is attempt 100, retain it through the
+  same single write. Exhaustion is observed only after a later claim, before
+  that later pass invokes the callback. The retained facts remain limited to
+  the T-0029 fields and continue to exclude payload bytes, user error objects,
+  stack traces, and unbounded text. Ordinary attempt-retention write failure
+  occurs after cleanup and remains observational under D-0080; it does not
+  change the authoritative `TO_DELIVER` status or authorize a terminal status.
+  Retained-state corruption still fails closed.
+- This callback-failure policy does not select an action for claim,
+  lease/fencing, attempt-retention infrastructure, cleanup, or status-update
+  failures. Those stages preserve their existing outcomes and failure
+  accounting. In particular, a callback that succeeds before the delivery
+  status update fails is a `STATUS_UPDATE` failure, not an endpoint callback
+  failure, and D-0084 does not apply `KEEP_PENDING` to it.
+- If the existing cleanup path cannot release or clear the active claim after
+  an endpoint callback failure, preserve its current `CLEANUP` classification
+  and accounting in the one finalized result described above. Aggregate the
+  original callback error with the cleanup error; the subsequent single
+  retention write and single public failure use that finalized result. Do not
+  emit a second action failure or add separate action-failure facts for failed
+  `KEEP_PENDING` cleanup.
+- For a supported row already classified as exhausted before callback
+  invocation, select the fixed framework-owned `MARK_DELIVERED` action. Do not
+  invoke the endpoint and do not retain another attempt. This adopts the Spine
+  JVM default terminal outcome only after the TypeScript bounded retry budget,
+  without adding a public monitor or custom action selection.
+- Execute claim cleanup for the `KEEP_PENDING` outcome while the active
+  delivery claim exists, before finalizing and retaining the callback-failure
+  result. Execute the pre-callback exhaustion action after exact-message
+  exhaustion classification and after the row has been claimed and
+  synchronized with the active shard lease fence. No unfenced public
+  `Inbox.markDelivered()` snapshot is an action executor for this policy.
+- Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
+  framework drain to reconsider the row; it does not recurse, schedule a run,
+  promise backoff, or imply worker supervision.
+- If the exhaustion-time `MARK_DELIVERED` transition fails, report one
+  delivery failure for that row and keep the durable inbox row's authoritative
+  outcome pending `TO_DELIVER`. New action-failure facts or error details
+  introduced for that failure by the later implementation must be bounded and
+  sanitized. The row must not be reported as delivered, and the exhaustion
+  context must remain available. Existing failure-budget accounting remains
+  unchanged.
+- D-0084 does not change the enclosing public `DeliveryFailure` contract. Its
+  existing `message` remains a copied `DeliveryEndpointMessage` snapshot that
+  may contain copied `Any.value` payload bytes, and its existing `error`
+  remains `unknown`. T-0033 makes no claim that this enclosing failure is
+  payload-free; any change to that public contract requires a later explicit
+  task.
+- This decision is not executable policy. Until a later implementation task
+  changes and verifies the runtime, D-0083 remains the current behavior:
+  endpoint callback failures after retryable classification retain attempts and
+  remain pending, while exhausted rows are skipped and remain pending.
+- Preserve valid `CATCH_UP` rows as pending/skipped and preserve fail-closed
+  handling of legacy stored `IMPORT_EVENT` rows. Neither path enters this
+  supported-endpoint action policy.
+
+Alternatives considered:
+
+- Keep exhausted rows pending indefinitely. Rejected as the final policy
+  because the bounded gate would permanently resurface the same poison row as
+  failed work without a terminal framework outcome.
+- Mark every callback failure delivered immediately, matching the JVM default
+  at first failure. Rejected because T-0029 through T-0032 deliberately built a
+  bounded durable retry budget; discarding a retryable row would bypass it.
+- Repeat dispatch immediately. Rejected because recursive dispatch can consume
+  an unbounded run and requires policy/lifecycle ownership not present in the
+  TypeScript runtime.
+- Add a public monitor, custom actions, or dead-letter outcome now. Rejected
+  because each adds API, storage, and lifecycle commitments beyond this
+  decision-only slice.
+
+Consequences:
+
+- The later implementation slice has one deterministic outcome for an endpoint
+  callback failure after retryable classification and one for pre-callback
+  exhaustion, with a small claim-fenced execution boundary.
+- Exhaustion will intentionally trade further retries for a terminal delivered
+  status after 100 retained failures. No dead-letter record is implied, so the
+  bounded retained attempt history remains the available durable diagnostic
+  evidence.
+- Runtime source, tests, public docs, APIs, generated files, and examples remain
+  unchanged in T-0033. Reviewers must reject prose that presents D-0084 as
+  currently executable or as public monitor/scheduler behavior.
