@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 3 findings pending fix
+Status: In progress; Round 3 fix locally verified, pending fix commit and re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -223,3 +223,14 @@ Coordinator recorded the Round 2 fix commit as
 found fixes still required: durable logs must record the current package/head
 and fix inconsistent timestamps, and stored delivery-attempt sequence
 validation must reject unsafe integers as storage corruption.
+
+Coordinator recorded the complete Round 3 findings as
+`b286ba05 Record T-0029 Round 3 review findings`. The Round 3 fix started from
+that commit and is limited to fail-closed safe-integer validation for stored
+attempt sequences plus durable-log freshness. After local verification and the
+fix commit, T-0029 remains pending a fresh review package and re-review.
+
+Round 3 fix verification passed locally: focused unsafe-sequence red/green
+coverage, the required focused delivery-attempt Vitest slice,
+`typecheck:build:generated`, and `docs:check` all exited successfully. The task
+remains pending the Round 3 fix commit, fresh review package, and re-review.

@@ -1309,6 +1309,21 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/message identity/i);
   });
 
+  it("fails closed when stored delivery attempt sequences are unsafe integers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: "0/1:message-1:attempt:000000000092",
+          sequence: Number.MAX_SAFE_INTEGER + 1,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/sequence/i);
+  });
+
   it("fails closed when stored delivery attempt inbox identity fields disagree", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

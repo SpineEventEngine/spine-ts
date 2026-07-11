@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 3 findings pending fix
+Status: Round 3 fix locally verified, pending fix commit and re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -80,7 +80,7 @@ Branch: `task/T-0029-delivery-attempt-retention`
   five lanes. Current review state remains pending until a verified fix commit
   is produced and a fresh re-review is requested.
 
-### Round 1 Fix Worker Local Verification - `2026-07-11T09:08:00Z`
+### Round 1 Fix Worker Local Verification - `2026-07-11T08:08:00Z`
 
 - Fix worker addressed the full Round 1 findings list and ran focused red/green
   regressions plus the required verification commands. The task remains pending
@@ -188,3 +188,22 @@ Branch: `task/T-0029-delivery-attempt-retention`
   safe-integer sequence validation with focused regression coverage, run
   focused verification, commit, regenerate the review package, and rerun all
   five independent review lanes.
+
+### Round 3 Fix Status
+
+- Starting point: `b286ba05 Record T-0029 Round 3 review findings`.
+- Fix worker scope: update durable logs and make stored retained-attempt
+  sequence validation reject unsafe integers with
+  `DeliveryStorageCorruptionError`. No retry monitor, scheduler, public API,
+  production adapter, topology, durable catch-up, generated Protobuf output, or
+  `IMPORT_EVENT` support is part of this fix.
+- Regression evidence: the focused test
+  `fails closed when stored delivery attempt sequences are unsafe integers`
+  first failed because an unsafe sequence with a matching retention slot
+  resolved as a retained attempt, then passed after `requireSequence()` started
+  using `Number.isSafeInteger()` before the positive-sequence check.
+- Verification: required focused Vitest passed with 2 files, 19 tests run, and
+  161 skipped. `typecheck:build:generated` passed. `docs:check` passed with
+  the existing TypeDoc invalid-origin warning only. Generated Protobuf output
+  remains out of VCS.
+- Status: pending fix commit, fresh review package, and re-review.

@@ -548,7 +548,10 @@ function requireInteger(value: unknown, label: string): number {
 }
 
 function requireSequence(value: unknown): number {
-  const sequence = requireInteger(value, "Delivery attempt sequence");
+  if (!Number.isSafeInteger(value)) {
+    throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be a safe integer.");
+  }
+  const sequence = value as number;
   if (sequence <= 0) {
     throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be positive.");
   }
