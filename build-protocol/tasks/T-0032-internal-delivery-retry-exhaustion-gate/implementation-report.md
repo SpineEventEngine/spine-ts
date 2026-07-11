@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Round 8 TypeDoc fix verified; fresh four-lane re-review pending
+Status: Implementation verified; current review state is in the review log
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 

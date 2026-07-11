@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: In progress; Round 8 TypeDoc fix verified; fresh four-lane re-review pending
+Status: Round 9 status-record findings pending fix
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5240-a914-7250-937d-59c0173278f0` | Pending |
-| Documentation              | `019f5240-a977-79e1-9363-46612d2fe65c` | Pending |
-| TypeScript/API docs        | `019f5240-aa12-7023-a9e8-6dd415bb6bac` | Pending |
-| Performance/reliability    | `019f5240-aac6-74e1-807f-d1a091085e37` | Pending |
+| Code style/maintainability | `019f524c-5bf7-7670-94a2-bb13e0e0ee06` | Pending |
+| Documentation              | `019f524c-5c66-7581-8cb5-9dc7045e4884` | Pending |
+| TypeScript/API docs        | `019f524c-5ceb-77b3-a9ee-d8a0cc88d347` | Pending |
+| Performance/reliability    | `019f524c-5d82-72e3-acaa-76400be9dbea` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -386,3 +386,18 @@ is deferred to the final release-readiness gate.
   TypeDoc commit `991594ea`. Current `991594ea` remains the sole future hash
   under the non-recursive convention. Fresh docs, formatting, whitespace, and
   untracked-output checks passed with only the known invalid-remote warning.
+- `2026-07-11T18:56:00Z`: Generated Round 9 package
+  `.superpowers/sdd/review-aa4d52d9..91b01095.diff` and assigned code style
+  `019f524c-5bf7-7670-94a2-bb13e0e0ee06`, documentation `019f524c-5c66-7581-8cb5-9dc7045e4884`,
+  TypeScript/API docs `019f524c-5ceb-77b3-a9ee-d8a0cc88d347`, and performance/reliability
+  `019f524c-5d82-72e3-acaa-76400be9dbea`. The active table was updated in the same dispatch step.
+- `2026-07-11T19:01:00Z`: Round 9 completed and all reviewers were closed.
+  Code style `019f524c-5bf7-7670-94a2-bb13e0e0ee06`, TypeScript/API docs
+  `019f524c-5ceb-77b3-a9ee-d8a0cc88d347`, and performance/reliability
+  `019f524c-5d82-72e3-acaa-76400be9dbea` were clean. Documentation
+  `019f524c-5c66-7581-8cb5-9dc7045e4884` found stale active resume/header
+  state. Runtime, tests, API docs, public docs, exports, ledger, and current
+  table consistency were otherwise clean.
+- `2026-07-11T19:02:00Z`: Assigned Round 9 log-only status worker
+  `019f5251-9356-7181-88ab-3e3bf775b024` to the consolidated P2/P3. Fresh four-lane
+  re-review remains pending its verified commit.

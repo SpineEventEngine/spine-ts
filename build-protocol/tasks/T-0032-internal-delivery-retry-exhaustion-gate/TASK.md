@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: In progress; Round 8 TypeDoc fix verified; fresh four-lane re-review pending
+Status: Implementation verified; current review state is in the review log
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
@@ -200,96 +200,33 @@ available.
 - `packages/server/README.md`
 - `docs/api/README.md`
 
-## Resume State
+## Historical Stop And Current State
 
-- Stopped at `2026-07-11T13:54:58Z` by human request.
-- Implementation commit `bccfed75` is present and coordinator-verified, but
-  first five-lane review is not clean.
-- Historical Round 1 findings, resolved by `17f4abc6`:
-  - P2: Replace exhausted-row `Error`/stack exposure with a frozen plain
-    bounded data object and add coverage that `.stack` is not exposed.
-  - P2: Update public/API architecture docs to describe the narrow internal
-    100-attempt exhaustion gate without implying public monitor/scheduler or
-    dead-letter policy.
-  - P3: Narrow `DeliveryMessageResult` so `EXHAUSTED` is not an impossible
-    result from `#deliverMessage()`.
-  - P3: Share the retained-attempt ring size with the retry gate instead of
-    duplicating `100` in separate delivery modules.
-- Development resumed at `2026-07-11T15:50:42Z`. Root `main` protocol commit
-  `ddca89a5` was back-merged without conflicts before the fix round. T-0032 now
-  uses the four current per-task reviewer lanes; the historical security
-  review's no-stack finding remains in the consolidated fix batch because the
-  TypeScript/API-docs reviewer independently reported the same defect.
-- Round 1 fixes started at `2026-07-11T15:56:25Z` after a fresh canonical skill
-  applicability check. The complete review batch is technically sound against
-  current code: exhausted reporting is an `Error` subclass with `.stack`, the
-  retry gate repeats the retained-slot capacity, `#deliverMessage()` declares
-  an unreachable `EXHAUSTED` result, and the public/API architecture docs omit
-  the active narrow gate. The stack-exposure regression will be red/green TDD;
-  all four findings will be verified with the scoped delivery test and quality
-  gates before one fix-batch commit.
-- Round 1 fixes were verified at `2026-07-11T16:03:08Z`. The stack regression
-  went red because the returned exhaustion value was an `Error`, then green
-  with a frozen plain object that has no `.stack` and exact bounded JSON facts.
-  The retry capacity is now shared by attempt retention, retry validation, and
-  the pre-callback gate without a public entry-point export or TypeDoc surface.
-  The requested public/API architecture docs describe only the narrow gate.
-  Fresh independent re-review remains pending because this worker was directed
-  not to spawn subagents.
-- Round 2 review completed at `2026-07-11T16:12:00Z` and superseded the
-  resolved Round 1 batch as the current fix target: align public failure/count
-  TypeDocs with bounded retry exhaustion, qualify the architecture's missing
-  retry-policy wording, make current status and inventories accurate, add the
-  detailed API-gate wording, and prove loop failure-budget handling for an
-  exhausted head with a retryable tail. These fixes were verified and committed
-  as `85d2ce62`; fresh four-lane re-review is pending.
+### Historical Safe Stop
 
-- `2026-07-11T16:56:30Z`: The Round 5 documentation fix worker performed the
-  canonical skill applicability check before edits. Session inventory evidence
-  exposed the task-relevant installed skills `receiving-code-review`,
-  `doc-coauthoring`, `implement`, and `verification-before-completion`; the
-  task-provided skill paths named those same four skills. The worker checked
-  `build-protocol/skills/EXPECTED_SKILLS.md`, enumerated the full readable
-  `/Users/armiol/.agents/skills` entrypoint set with
-  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
-  and inspected `/Users/armiol/.agents/.skill-lock.json` for the selected
-  entries. The selected skills were fully read and apply to review reception,
-  documentation refinement, bounded implementation, and evidence-before-
-  completion verification. Other expected skills were skipped as irrelevant to
-  this documentation-only fix; no source was unreachable and no subagents were
-  spawned.
-- `2026-07-11T17:01:13Z`: Documentation-only verification passed for the Round
-  5 fix: `pnpm --config.verify-deps-before-run=false docs:check` exited 0 with
-  zero TypeDoc errors and the known invalid-local-remote source-link warning;
-  `pnpm --config.verify-deps-before-run=false format:check` exited 0 with all
-  matched files formatted; `git diff --check` exited 0 with no output; and
-  `git ls-files --others --exclude-standard` exited 0 with no output. No full
-  `pnpm verify` was run.
-- `2026-07-11T17:04:22Z`: Resumed verification completed successfully:
-  `pnpm --config.verify-deps-before-run=false format:check` exited 0 with all
-  matched files using Prettier code style. The final `git diff --check` exited 0
-  with no output, and the final `git ls-files --others --exclude-standard`
-  exited 0 with no output.
-- `2026-07-11T17:05:45Z`: Post-format verification passed again with exit 0:
-  `pnpm --config.verify-deps-before-run=false format:check` reported all
-  matched files use Prettier code style; `git diff --check` produced no output;
-  and `git ls-files --others --exclude-standard` produced no output.
-- `2026-07-11T18:18:23Z`: Round 6 resolved the pre-gate payload-copy finding.
-  Both drain paths now validate the original supported pending row, decide
-  exhaustion from its message ID, and build full endpoint snapshots only for
-  retryable rows. Exhausted failures use a metadata-only snapshot created from
-  the original row, retaining no `Any.value` payload. The red/green regression
-  uses four maximum 256 KiB payload rows and a byte-slice observer: it failed
-  with four payload copies before the change and passed with zero after it.
-- `2026-07-11T18:19:01Z`: The affected delivery worker, loop, retry-decision,
-  and inbox suites passed 236 tests, and generated build typecheck passed. The
-  worker test retry-policy literals now use package-internal
-  `deliveryAttemptCapacity` (and `deliveryAttemptCapacity - 1`), and
-  `DeliveryWorkerOptions.maxFailures` now matches the loop's failed-observation
-  wording, including pre-callback exhaustion. Final quality checks are pending.
-- `2026-07-11T18:22:28Z`: Final Round 6 verification passed: 4 affected
-  delivery suites and 236 tests, generated build typecheck, docs check, format
-  check, whitespace check, and untracked-output check. Docs reported zero
-  TypeDoc errors and only the known invalid-local-remote source-link warning.
-  No full `pnpm verify` was run. The verified fix batch is ready for one commit;
-  fresh four-lane re-review remains pending because subagents are prohibited.
+- The work was stopped at `2026-07-11T13:54:58Z` by human request. This is a
+  historical checkpoint, not the current implementation or review status.
+- At that checkpoint, implementation commit `bccfed75` was present and
+  coordinator-verified, while the initial review findings were unresolved.
+  Subsequent verified fix and documentation commits supersede that checkpoint.
+
+### Verified Implementation And Fixes
+
+- The implementation and subsequent fix batches are recorded by commit in the
+  work log. The verified implementation/fix sequence is
+  `bccfed75`, `17f4abc6`, `85d2ce62`, `390dd6ed`, `96e829e0`, and
+  `991594ea`.
+- The package-internal retry-exhaustion gate, focused tests, generated build
+  typecheck, public documentation wording, and TypeDoc wording are verified in
+  the corresponding work-log entries. Status-only commits `1a8ffcce`,
+  `8ee4b647`, and `91b01095` preserve the verification and non-recursive
+  ledger history.
+
+### Current State
+
+- The package implementation and prior fix batches are verified. The
+  implementation report records implementation concerns; live review-lane
+  state and any pending findings are maintained only in the T-0032 review log.
+- The current package/review state must be refreshed in the review log and
+  work log as review progresses; this task brief intentionally avoids
+  embedding a round number or duplicating the work log.
