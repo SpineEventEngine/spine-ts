@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Implementation in progress; review pending
+Status: Implementation complete; review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -36,3 +36,13 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:28:00Z`: Assigned implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a`. Independent review remains pending
   its verified commit and coordinator pre-review lint.
+- `2026-07-11T20:19:37Z`: Implementation worker completed and durably recorded
+  the canonical skill applicability check before test or production edits.
+  Selected skills cover TDD, Vitest, strict TypeScript, systematic diagnosis,
+  scoped implementation, review-feedback validation, and fresh completion
+  verification. No skill source was unreachable; this worker will not spawn
+  reviewers or subagents.
+- `2026-07-11T20:33:55Z`: Implementation worker completed the TDD authoring
+  pass, active docs/TypeDocs and D-0084 current-state reconciliation, focused
+  verification, and implementation report. Coordinator pre-review lint and all
+  four independent reviewer lanes remain pending.

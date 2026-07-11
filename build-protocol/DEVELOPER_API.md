@@ -312,10 +312,12 @@ stage/reason; retained attempts do not include raw `Any.value` payload bytes,
 raw user errors, stack traces, or unbounded exception text. Before a supported
 endpoint callback runs, the package-internal retry gate summarizes retained
 attempts for that exact inbox message by reading only its 100 known per-message
-retained slots. An exhausted row remains `TO_DELIVER`; the gate skips the
-callback and another retained-attempt write, returns bounded stack-free failure
-facts, does not increment accepted endpoint work, and counts toward failed work
-and the internal failure bound. Retryable endpoint failures continue through
+retained slots. An exhausted row skips the callback and another retained-attempt
+write, then is claimed, synchronized to the live shard fence, and marked
+`DELIVERED` without incrementing accepted endpoint work or the internal failure
+bound. If the mark fails, the authoritative row remains `TO_DELIVER` and one
+bounded, stack-free exhaustion failure counts toward failed work and the
+internal failure bound. Retryable endpoint failures continue through
 the existing callback path and remain available for later replay when cleanup
 leaves the row pending. Pre-callback claim, validation, and lease-fencing
 failures do not increment accepted endpoint work, but they do increment failed

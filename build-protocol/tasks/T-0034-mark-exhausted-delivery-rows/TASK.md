@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Implementation in progress
+Status: Implementation complete; review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -38,6 +38,30 @@ blocker and recommended this as the smallest complete implementation after
 T-0033. Existing delivery code already provides retry classification, active
 claims, shard-fence synchronization, and internal claimed-row finalization.
 
+## Implementation Skill Check
+
+Implementation worker `019f52d4-d264-77e0-9469-48ff5950328a` completed the
+canonical applicability check before test or production edits. Evidence came
+from the session inventory, this task and prompt, `EXPECTED_SKILLS.md`, the full
+readable `~/.agents/skills` entrypoint listing, and relevant entries in
+`~/.agents/.skill-lock.json`; no source was unreachable.
+
+Fully read and selected: `test-driven-development` for mandatory red-green
+cycles; `implement` for scoped implementation, focused typechecks, verification,
+and commit; `systematic-debugging` for root-cause investigation of unexpected
+failures; `typescript-advanced-types` for strict type-safe narrowing without
+assertion-heavy design; `javascript-testing-patterns` for focused Vitest
+coverage; `receiving-code-review` for technically validating any later
+findings; and `verification-before-completion` for fresh evidence before the
+implementation commit. The duplicate `tdd` entrypoint was skipped in favor of
+the explicitly required `test-driven-development`; `requesting-code-review` and
+`subagent-driven-development` were skipped because this worker is explicitly
+forbidden to spawn reviewers or subagents; `using-git-worktrees` was skipped
+because the coordinator supplied and gated the existing worktree; and
+`planning-with-files` and `architecture-decision-records` were skipped because
+the task already has durable protocol records and requires a current-state
+decision-log reconciliation, not a new decision or ADR.
+
 ## Scope
 
 - Apply only to supported `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
@@ -47,6 +71,19 @@ claims, shard-fence synchronization, and internal claimed-row finalization.
 - Share the same exhaustion action between shard and exact-message drains.
 - Reconcile active public/protocol docs that currently say exhausted rows stay
   pending.
+
+## Implementation Evidence
+
+Before runtime edits, the implementation worker read the task-relevant delivery
+notes in `spine-jvm-docs/spine-routing-dispatch-and-delivery.md` and the actual
+Spine JVM `DeliveryMonitor`, `FailedReception`, and `TargetDelivery` sources.
+JVM `DeliveryMonitor.onReceptionFailure()` defaults to
+`FailedReception.markDelivered()`, whose action marks the conveyor-owned row;
+`TargetDelivery.MonitoringDispatcher` executes the selected action after a
+failed dispatch outcome. The TypeScript implementation therefore uses only the
+existing package-internal claimed-row finalizer after exact-row claim and live
+shard-fence synchronization. It does not add the JVM public monitor, action,
+repeat-dispatch, or conveyor API.
 
 ## Out Of Scope
 
@@ -90,3 +127,20 @@ claims, shard-fence synchronization, and internal claimed-row finalization.
 - `typecheck:build:generated`, `typecheck:tooling`, `docs:check`,
   `format:check`, `git diff --check`, and untracked-output check.
 - Full `pnpm verify` only after clean four-lane review.
+
+## Implementation Result
+
+Worker `019f52d4-d264-77e0-9469-48ff5950328a` implemented the fixed internal
+action with one shared shard/exact-message path. Exhausted supported rows are
+claimed and synchronized to the live shard fence before the existing internal
+claimed-row finalizer marks them delivered. Success invokes no endpoint,
+retains no attempt, reports accepted 0 / delivered 1 / failed 0, and consumes
+neither limit nor failure budget. Competing claims skip unchanged. Marker
+failure reports one frozen bounded stack-free exhaustion fact object, retains
+no attempt, consumes one failure, and leaves authoritative `TO_DELIVER`;
+claim/lease failures preserve existing bounded attempt accounting. Broader
+failure-policy facilities remain deferred.
+
+Focused worker/loop tests, build/tooling typechecks, focused ESLint, docs/API,
+format, diff, and untracked-output checks are recorded in the implementation
+report and work log. Full `pnpm verify` was not run, as directed.

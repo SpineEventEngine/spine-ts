@@ -134,9 +134,12 @@ Current slice exposes:
   time, accepted flag, and stable failure stage/reason. Retained attempts never
   include raw `Any.value` payload bytes, raw user errors, stack traces, or
   unbounded exception text. A package-internal pre-callback gate reads the 100
-  retained slots for one exact inbox message. At that bound it leaves the row
-  `TO_DELIVER`, skips the callback and another attempt record, and returns only
-  bounded stack-free exhaustion facts in the run result. This is not a public
+  retained slots for one exact inbox message. At that bound it skips the
+  callback and another attempt record, claims the exact row under the live
+  shard fence, and marks it `DELIVERED` without consuming accepted work or the
+  failure bound. If that mark fails, the row remains authoritatively
+  `TO_DELIVER` and contributes one bounded, stack-free exhaustion failure. This
+  is not a public
   monitor/action, scheduler/backoff, dead-letter, production-topology,
   catch-up, or adapter policy. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain

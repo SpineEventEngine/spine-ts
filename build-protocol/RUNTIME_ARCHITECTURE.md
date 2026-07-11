@@ -281,9 +281,11 @@ delivery worker boundary:
   stable failure stage/reason; these records do not store raw `Any.value`
   payload bytes, raw user errors, stack traces, or unbounded exception text. A
   package-internal pre-callback gate reads the 100 retained slots for one exact
-  inbox message. At that bound it leaves the row `TO_DELIVER`, skips the
-  callback and another attempt record, and returns only bounded stack-free
-  exhaustion facts in the run result. This does not expose public
+  inbox message. At that bound it skips the callback and another attempt,
+  claims the exact row, synchronizes the active claim to the live shard fence,
+  and marks it `DELIVERED` without accepted-work or failure-budget use. A failed
+  mark leaves the authoritative row `TO_DELIVER` and returns one bounded,
+  stack-free exhaustion failure. This does not expose public
   monitor/action, scheduler/backoff, dead-letter, production-topology,
   catch-up, or adapter policy. Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,

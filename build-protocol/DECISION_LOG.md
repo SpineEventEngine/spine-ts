@@ -2991,7 +2991,7 @@ fixed internal outcome policy without promising those broader facilities.
 
 Decision:
 
-- Use only two internal action concepts in the later implementation slice.
+- Use only two internal action concepts in the internal implementation.
   `KEEP_PENDING` is the policy outcome that preserves `TO_DELIVER`; releasing
   its active row claim uses the existing cleanup path, not a separate action
   executor or failure category. `MARK_DELIVERED` means use the framework-owned
@@ -3046,7 +3046,7 @@ Decision:
 - If the exhaustion-time `MARK_DELIVERED` transition fails, report one
   delivery failure for that row and keep the durable inbox row's authoritative
   outcome pending `TO_DELIVER`. New action-failure facts or error details
-  introduced for that failure by the later implementation must be bounded and
+  introduced for that failure by the implementation must be bounded and
   sanitized. The row must not be reported as delivered, and the exhaustion
   context must remain available. Existing failure-budget accounting remains
   unchanged.
@@ -3056,10 +3056,12 @@ Decision:
   remains `unknown`. T-0033 makes no claim that this enclosing failure is
   payload-free; any change to that public contract requires a later explicit
   task.
-- This decision is not executable policy. Until a later implementation task
-  changes and verifies the runtime, D-0083 remains the current behavior:
-  endpoint callback failures after retryable classification retain attempts and
-  remain pending, while exhausted rows are skipped and remain pending.
+- T-0034 makes only the fixed pre-callback `MARK_DELIVERED` action executable:
+  it claims and fence-synchronizes the exact exhausted row before internal
+  finalization. The retryable callback `KEEP_PENDING` sequence remains the
+  existing cleanup/finalize/one-attempt/one-failure path. Public monitor/action
+  selection, immediate repeat, scheduler/backoff, dead-letter, supervision,
+  topology, and adapters remain deferred.
 - Preserve valid `CATCH_UP` rows as pending/skipped and preserve fail-closed
   handling of legacy stored `IMPORT_EVENT` rows. Neither path enters this
   supported-endpoint action policy.
@@ -3081,7 +3083,7 @@ Alternatives considered:
 
 Consequences:
 
-- The later implementation slice has one deterministic outcome for an endpoint
+- The internal implementation has one deterministic outcome for an endpoint
   callback failure after retryable classification and one for pre-callback
   exhaustion, with a small claim-fenced execution boundary.
 - Exhaustion will intentionally trade further retries for a terminal delivered
