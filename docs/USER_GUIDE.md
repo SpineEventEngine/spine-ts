@@ -238,8 +238,8 @@ or multi-host transport example.
   supervision, cancellation, and retry-monitor policy remains future work.
   Transport-backed/background scheduler workers, broker/process supervision,
   production delivery policy, durable catch-up storage/projection catch-up
-  through inbox storage, production catch-up orchestration, and retained attempt
-  history remain open production gaps.
+  through inbox storage, and production catch-up orchestration remain open
+  production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than pending runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -1258,11 +1258,15 @@ streak, or reaches a configured failure bound. A later internal run resumes
 from a saved cursor and resets it safely if earlier pending rows disappeared.
 Failed rows stay pending
 as `TO_DELIVER` for later replay retry
-when the endpoint callback fails and framework-owned cleanup succeeds; no
-retained attempt history is written. Cleanup/replay validation, lease/fencing,
-and delivery-status update failures are reported internally without promising
-immediate retry, and future recovery policy may be needed for abandoned or
-unavailable rows. Malformed or deprecated legacy label data such as stored
+when the endpoint callback fails and framework-owned cleanup succeeds. The
+framework also retains internal sanitized attempt records for supported
+endpoint failures: message/inbox/shard identity, label, node, attempted time,
+accepted flag, and stable failure stage/reason. Retained attempts never store
+raw `Any.value` payload bytes, raw user errors, stack traces, or unbounded
+exception text. Cleanup/replay validation, lease/fencing, and delivery-status
+update failures are reported internally without promising immediate retry, and
+future recovery policy may be needed for abandoned or unavailable rows.
+Malformed or deprecated legacy label data such as stored
 `IMPORT_EVENT` still fails closed as `DeliveryStorageCorruptionError` before
 replay begins. Lease
 renewal uses same-event-loop timers around in-process callbacks, so CPU-bound
@@ -1279,7 +1283,7 @@ Aggregate `@React` handlers are
 ordinary generated reactor handlers with current transaction semantics, not
 event-sourcing import/applier work. Built contexts create a framework-owned
 tenant index now; production tenant-index policy, diagnostics, repository
-storage policy, transport-backed worker supervision, retained attempt history,
+storage policy, transport-backed worker supervision, retry monitors/workers,
 read-side projection stores, durable catch-up storage/projection catch-up
 through inbox storage, and durable production storage adapters remain open
 production gaps.

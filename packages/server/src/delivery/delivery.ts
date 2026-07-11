@@ -3,6 +3,11 @@ import { clone } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 
 import {
+  DeliveryAttempts,
+  type DeliveryFailureReason,
+  type DeliveryFailureStage,
+} from "./delivery-attempts.js";
+import {
   Inbox,
   InboxMessageError,
   type InboxMessage,
@@ -23,6 +28,8 @@ export class Delivery {
 
   /** Durable inbox facade. */
   readonly inbox: Inbox;
+  /** Internal retained delivery attempt history. */
+  readonly attempts: DeliveryAttempts;
   /** Storage-backed shard registry. */
   readonly shards: ShardedWorkRegistry;
 
@@ -39,6 +46,10 @@ export class Delivery {
         now: this.#now,
       }),
     );
+    this.attempts = new DeliveryAttempts({
+      context: options.context,
+      storageFactory: options.storageFactory,
+    });
     this.shards = new ShardedWorkRegistry({
       context: options.context,
       storageFactory: options.storageFactory,
@@ -104,6 +115,7 @@ export class Delivery {
 
       return await this.#drainAvailableMessages(
         scope.inbox,
+        scope.attempts,
         session.shard,
         limit,
         options.onMessage,
@@ -120,6 +132,7 @@ export class Delivery {
 
   async #drainAvailableMessages(
     inbox: Inbox,
+    attempts: DeliveryAttempts,
     shard: ShardIndex,
     limit: number,
     onMessage: OnDeliveryMessage,
@@ -138,6 +151,7 @@ export class Delivery {
 
       const pageOutcome = await this.#drainPendingPage(
         inbox,
+        attempts,
         progress,
         scan,
         scanBudget,
@@ -165,6 +179,7 @@ export class Delivery {
 
   async #drainPendingPage(
     inbox: Inbox,
+    attempts: DeliveryAttempts,
     progress: DrainProgress,
     scan: DeliveryScanState,
     scanBudget: number,
@@ -183,7 +198,7 @@ export class Delivery {
         return this.#finishExhaustedSkippedScan(progress, scan);
       }
 
-      await this.#tryDrainMessage(inbox, progress, message, onMessage, lease, active);
+      await this.#tryDrainMessage(inbox, attempts, progress, message, onMessage, lease, active);
       scan.advancePast(message);
       if (progress.accepted > accepted && scan.hasResumedCursor()) {
         scan.rewindToHead();
@@ -267,7 +282,14 @@ export class Delivery {
         return deliveryRun("DRAINED", 0, 0, 0, 0, []);
       }
 
-      return await this.#drainExactMessage(scope.inbox, pending, options.onMessage, lease, active);
+      return await this.#drainExactMessage(
+        scope.inbox,
+        scope.attempts,
+        pending,
+        options.onMessage,
+        lease,
+        active,
+      );
     } finally {
       await lease.close();
       await scope.shards.release(session);
@@ -293,6 +315,7 @@ export class Delivery {
 
   async #drainExactMessage(
     inbox: Inbox,
+    attempts: DeliveryAttempts,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
@@ -311,6 +334,7 @@ export class Delivery {
       return deliveryRun("DRAINED", 1, 1, 1, 0, []);
     }
 
+    await this.#recordFailedAttempt(attempts, endpoint, attempt);
     const failures = [Object.freeze({ message: endpoint, error: attempt.error })];
 
     return deliveryRun("DRAINED", 1, attempt.accepted ? 1 : 0, 0, 1, failures);
@@ -323,6 +347,8 @@ export class Delivery {
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryMessageResult> {
+    let stage: DeliveryFailureStage = "CLAIM";
+
     try {
       const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
       if (claimed === undefined) {
@@ -330,16 +356,27 @@ export class Delivery {
       }
 
       active.set(claimed);
+      stage = "LEASE";
       await this.#synchronizeActiveClaim(inbox, lease, active);
+      stage = "ENDPOINT";
       await this.#invokeEndpoint(claimed, onMessage, lease, active);
+      stage = "STATUS_UPDATE";
       await this.#markActiveDelivered(inbox, message, lease, active);
 
       return { kind: "DELIVERED" };
     } catch (error) {
+      const cleanup = await this.#clearFailedClaim(inbox, error, active);
+      const failedStage = cleanup.cleanupFailed
+        ? "CLEANUP"
+        : deliveryFailureStage(stage, active.callbackAccepted());
+
       return Object.freeze({
         kind: "FAILED" as const,
         accepted: active.callbackAccepted(),
-        error: await this.#clearFailedClaim(inbox, error, active),
+        error: cleanup.error,
+        node: lease.session().node,
+        stage: failedStage,
+        reason: deliveryFailureReason(failedStage),
       });
     } finally {
       active.clear();
@@ -397,22 +434,30 @@ export class Delivery {
     }
   }
 
-  async #clearFailedClaim(inbox: Inbox, error: unknown, active: ActiveClaim): Promise<unknown> {
+  async #clearFailedClaim(
+    inbox: Inbox,
+    error: unknown,
+    active: ActiveClaim,
+  ): Promise<DeliveryErrorState> {
     if (active.callbackSucceeded()) {
-      return error;
+      return Object.freeze({ error, cleanupFailed: false });
     }
 
     try {
       await active.clearStored(inbox.storage);
 
-      return error;
+      return Object.freeze({ error, cleanupFailed: false });
     } catch (clearError) {
-      return claimClearFailure(error, clearError);
+      return Object.freeze({
+        error: claimClearFailure(error, clearError),
+        cleanupFailed: true,
+      });
     }
   }
 
   async #tryDrainMessage(
     inbox: Inbox,
+    attempts: DeliveryAttempts,
     progress: DrainProgress,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
@@ -429,7 +474,25 @@ export class Delivery {
 
     const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
+    if (attempt.kind === "FAILED") {
+      await this.#recordFailedAttempt(attempts, endpoint, attempt);
+    }
     progress.record(endpoint, attempt);
+  }
+
+  async #recordFailedAttempt(
+    attempts: DeliveryAttempts,
+    message: DeliveryEndpointMessage,
+    attempt: Extract<DeliveryMessageResult, { readonly kind: "FAILED" }>,
+  ): Promise<void> {
+    await attempts.recordFailure({
+      message,
+      node: attempt.node,
+      attemptedAt: this.#now(),
+      accepted: attempt.accepted,
+      stage: attempt.stage,
+      reason: attempt.reason,
+    });
   }
 
   #drainScope(): DeliveryScope {
@@ -447,8 +510,12 @@ export class Delivery {
       leaseMs: this.#leaseMs,
       now: this.#now,
     });
+    const attempts = new DeliveryAttempts({
+      context,
+      storageFactory: this.#storageFactory,
+    });
 
-    return Object.freeze({ inbox, shards });
+    return Object.freeze({ inbox, attempts, shards });
   }
 
   #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
@@ -592,6 +659,7 @@ interface ShardLeaseRenewalOptions {
 
 interface DeliveryScope {
   readonly inbox: Inbox;
+  readonly attempts: DeliveryAttempts;
   readonly shards: ShardedWorkRegistry;
 }
 
@@ -667,7 +735,19 @@ class DeliveryScanState {
 type DeliveryMessageResult =
   | { readonly kind: "SKIPPED" }
   | { readonly kind: "DELIVERED" }
-  | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
+  | {
+      readonly kind: "FAILED";
+      readonly accepted: boolean;
+      readonly error: unknown;
+      readonly node: string;
+      readonly stage: DeliveryFailureStage;
+      readonly reason: DeliveryFailureReason;
+    };
+
+interface DeliveryErrorState {
+  readonly error: unknown;
+  readonly cleanupFailed: boolean;
+}
 
 const defaultShardLeaseMs = 30_000;
 const maxContinuationTextBytes = 16 * 1024;
@@ -688,6 +768,28 @@ function deliveryRun(
     failed,
     failures: Object.freeze([...failures]),
   });
+}
+
+function deliveryFailureStage(
+  stage: DeliveryFailureStage,
+  accepted: boolean,
+): DeliveryFailureStage {
+  return stage === "ENDPOINT" && !accepted ? "LEASE" : stage;
+}
+
+function deliveryFailureReason(stage: DeliveryFailureStage): DeliveryFailureReason {
+  switch (stage) {
+    case "CLAIM":
+      return "CLAIM_FAILED";
+    case "LEASE":
+      return "LEASE_INACTIVE";
+    case "ENDPOINT":
+      return "ENDPOINT_REJECTED";
+    case "CLEANUP":
+      return "CLEANUP_FAILED";
+    case "STATUS_UPDATE":
+      return "STATUS_UPDATE_FAILED";
+  }
 }
 
 function deliveryDrainOutcome(

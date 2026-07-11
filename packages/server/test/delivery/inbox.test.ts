@@ -1247,6 +1247,7 @@ describe("Inbox", () => {
       }),
     ).rejects.toThrow(/import_event.*deprecated/i);
     expect(delivered).toBe(false);
+    await expect(delivery.attempts.read()).resolves.toEqual([]);
   });
 
   it("fails closed when stored inbox records contain invalid UTF-8", async () => {
