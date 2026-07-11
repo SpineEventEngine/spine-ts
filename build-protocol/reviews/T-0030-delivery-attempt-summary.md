@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Final verification passed; ready to merge
+Status: Merged and post-merge verified
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -255,3 +255,8 @@ Branch: `task/T-0030-delivery-attempt-summary`
   tests, typecheck, docs check, format check, diff hygiene, ignored-file check,
   and full native `pnpm --config.verify-deps-before-run=false verify` passed.
   Coverage branch threshold passed at 90.01%. The branch is ready to merge.
+- `2026-07-11T13:03:00Z`: T-0030 was merged into root `main` as
+  `baf54749 Merge T-0030 delivery attempt summary` and post-merge verification
+  passed. Focused delivery tests, typecheck, docs check, format check, diff
+  hygiene, and full native `pnpm --config.verify-deps-before-run=false verify`
+  passed. Coverage branch threshold remained at 90.01%.
