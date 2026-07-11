@@ -133,7 +133,15 @@ export function recordInboxQueries(queries: DeliveryInboxQuery[]): DeliveryStora
         return undefined;
       }
 
-      queries.push(Object.freeze({ limit: query.limit, offset: query.offset }));
+      const recordedQuery: { limit?: number; offset?: number } = {};
+      if (query.limit !== undefined) {
+        recordedQuery.limit = query.limit;
+      }
+      if (query.offset !== undefined) {
+        recordedQuery.offset = query.offset;
+      }
+
+      queries.push(Object.freeze(recordedQuery));
       return undefined;
     },
   });

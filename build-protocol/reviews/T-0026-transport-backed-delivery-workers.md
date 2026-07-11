@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 119 clean re-review recorded; final verification pending
+Status: Round 120 tooling typecheck fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3604,3 +3604,30 @@ red/green delivery regressions before the next review pass.
 - Action: run final T-0026 verification, merge the task branch into root
   `main`, run post-merge verification, and then continue the autonomous
   roadmap.
+
+### Round 120 Verification Failure - `2026-07-11T03:31:55Z`
+
+- Final verification progress: required focused Vitest passed with 9 files and
+  296 tests; generated build typecheck passed; `docs:check` passed with only
+  the known TypeDoc invalid-origin warning; `format:check` passed; and
+  `git diff --check` passed.
+- Failure: optional full `pnpm verify` failed in `typecheck:tooling`.
+  `packages/server/test/delivery/delivery-storage-fault-fixture.ts` pushes
+  explicit `undefined` values into optional `DeliveryInboxQuery.limit` and
+  `offset` fields under `exactOptionalPropertyTypes`.
+- Action: run one fix worker for the fixture typing issue, verify, commit, and
+  rerun all five review lanes.
+
+### Round 120 Tooling Typecheck Fix - `2026-07-11T03:33:57Z`
+
+- Fix: `recordInboxQueries()` now records `limit` and `offset` only when the
+  storage query provides those values, preserving observed query pagination
+  while avoiding explicit `undefined` optional fields under
+  `exactOptionalPropertyTypes`.
+- Verification: `typecheck:tooling` passed after the fix; focused
+  `delivery-worker.test.ts` passed with 53 tests; `format:check` passed; and
+  `git diff --check` passed.
+- Action: hand back to the coordinator without committing.
+- Coordinator verification: repeated on `2026-07-11T03:37:19Z`.
+  `typecheck:tooling`, focused `delivery-worker.test.ts` with 53 tests,
+  `format:check`, and `git diff --check` all passed.

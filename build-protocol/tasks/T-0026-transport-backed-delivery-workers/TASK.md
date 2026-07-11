@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 119 clean re-review recorded; final verification pending
+Status: Round 120 tooling typecheck fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1850,3 +1850,18 @@ surfaces, supported callback labels, pending/skipped `CATCH_UP`, fail-closed
 legacy `IMPORT_EVENT`, bounded callback/scan behavior, snapshot copying,
 live/expired claim behavior, accepted-work accounting, and public numeric caps.
 All five reviewer agents were closed. T-0026 is ready for final verification.
+
+Final verification on `2026-07-11T03:31:55Z`: the required focused Vitest
+batch passed with 9 files and 296 tests; generated build typecheck passed;
+`docs:check` passed with only the known TypeDoc invalid-origin warning;
+`format:check` passed; and `git diff --check` passed. The optional full
+`pnpm verify` gate failed in `typecheck:tooling` because
+`packages/server/test/delivery/delivery-storage-fault-fixture.ts` records
+explicit `undefined` values for optional `DeliveryInboxQuery.limit` and
+`offset` under `exactOptionalPropertyTypes`. Round 120 fixed that fixture
+typing by omitting absent optional query fields. `typecheck:tooling`, focused
+`delivery-worker.test.ts`, `format:check`, and `git diff --check` passed. The
+fix worker did not commit. Coordinator verification repeated those green checks
+on `2026-07-11T03:37:19Z`: `typecheck:tooling`, focused
+`delivery-worker.test.ts` with 53 tests, `format:check`, and
+`git diff --check` all passed.
