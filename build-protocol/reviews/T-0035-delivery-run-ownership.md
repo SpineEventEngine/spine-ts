@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Pre-review successor-scope finding pending fix
+Status: Pre-review successor split in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -124,3 +124,6 @@ Security is deferred to final project readiness.
   the ownership decision is coherent, but its first implementation successor
   combines internal epoch/progress contracts with environment lifecycle wiring.
   The first successor must be split small before reviewer dispatch.
+- `2026-07-11T23:25:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single pre-review scope-fix
+  worker. Fresh four-lane review remains pending.
