@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Round 9 documentation fix in progress
+Status: Round 9 documentation fix verified; re-review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -194,3 +194,8 @@ existing single `CLEANUP` result whose `AggregateError` contains both errors
 without those guarantees. In both cases the authoritative row remains
 `TO_DELIVER` and failure accounting remains one. Fresh four-lane re-review is
 pending.
+
+The Round 9 documentation fix aligns D-0084's original action-failure clause
+with that verified cleanup exception while preserving the decision's historical
+scope. The implementation report now names runtime fix `e1cadf05 Preserve
+exhausted lease and cleanup failures`. Fresh four-lane re-review is pending.

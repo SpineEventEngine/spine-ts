@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 9 documentation fix in progress
+Status: Round 9 documentation fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -289,6 +289,23 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:28:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 9 docs-only fix
   worker. Fresh four-lane re-review remains pending.
+- `2026-07-11T22:29:00Z`: Fix worker completed the bounded applicability check,
+  freshly read `receiving-code-review` and applicable documentation guidance,
+  and verified both P3s against current D-0084/report text. The ledger remains
+  unchanged because its package/current-head distinction is already correct.
+  Completion verification remains pending; no reviewer or subagent was
+  spawned.
+- `2026-07-11T22:30:00Z`: Round 9 docs-only fix and lightweight verification
+  completed. D-0084 now distinguishes sanitized successful cleanup from the
+  existing failed-cleanup aggregate, and the report names exact runtime commit
+  `e1cadf05`. Docs/API, formatting, whitespace, status/untracked, targeted
+  wording, commit locator, four-header, ledger/status, active-worker, and exact
+  five-file scope checks passed. The worker remains active for coordinator
+  closure; fresh four-lane re-review is pending.
+- `2026-07-11T22:33:00Z`: Coordinator closed the fix worker and independently
+  passed docs/API, formatting, whitespace, targeted wording, exact commit
+  locator, four-header alignment, changed-scope, ledger, and status checks.
+  Fresh package generation and all four lanes are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as

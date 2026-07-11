@@ -3043,13 +3043,18 @@ Decision:
 - Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
   framework drain to reconsider the row; it does not recurse, schedule a run,
   promise backoff, or imply worker supervision.
-- If the exhaustion-time `MARK_DELIVERED` transition fails, report one
-  delivery failure for that row and keep the durable inbox row's authoritative
-  outcome pending `TO_DELIVER`. New action-failure facts or error details
-  introduced for that failure by the implementation must be bounded and
-  sanitized. The row must not be reported as delivered, and the exhaustion
-  context must remain available. Existing failure-budget accounting remains
-  unchanged.
+- If the exhaustion-time `MARK_DELIVERED` transition fails and claim cleanup
+  succeeds, report one delivery failure for that row and keep the durable inbox
+  row's authoritative outcome pending `TO_DELIVER`. New action-failure facts or
+  error details introduced for that successful-cleanup branch must be bounded
+  and sanitized. The row must not be reported as delivered, the exhaustion
+  context must remain available, and existing failure-budget accounting remains
+  one failure. If claim cleanup also fails, preserve the existing cleanup
+  exception: report one `CLEANUP` failure whose `AggregateError` contains the
+  original mark error plus cleanup error, without promising that aggregate is
+  frozen, bounded, or stack-free. The authoritative row remains `TO_DELIVER`
+  and failure accounting remains one. This exception preserves existing cleanup
+  aggregation and does not add a public action or error contract.
 - D-0084 does not change the enclosing public `DeliveryFailure` contract. Its
   existing `message` remains a copied `DeliveryEndpointMessage` snapshot that
   may contain copied `Any.value` payload bytes, and its existing `error`

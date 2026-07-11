@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 9 documentation fix in progress
+Status: Round 9 documentation fix verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -13,6 +13,7 @@ Implementation commits:
 - `2ef02898 Implement exhausted delivery outcome`
 - `64091ec6 Avoid exhausted attempt payload copies`
 - `d8127cca Preserve failed exhaustion claims for cleanup`
+- `e1cadf05 Preserve exhausted lease and cleanup failures`
 
 ## Result
 
@@ -115,6 +116,12 @@ Implementation commits:
 
 ## Verification
 
+- PASS: Round 9 docs-only `docs:check`, `format:check`, `git diff --check`,
+  status/untracked, targeted D-0084 successful/failed-cleanup wording, exact
+  `e1cadf05` commit locator, four-header alignment, ledger
+  uniqueness/currentness, active-worker, and exact five-file changed-scope
+  checks. No tests, standalone typechecks, or full `pnpm verify` ran, as
+  directed. Fresh four-lane re-review remains pending.
 - PASS: Round 8 focused RED reproduced both P2s; focused GREEN passed 4
   regressions/controls, and full delivery worker/loop Vitest passed 2 files and
   112 tests.
