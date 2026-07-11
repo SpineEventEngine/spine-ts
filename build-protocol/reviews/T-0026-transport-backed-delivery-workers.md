@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 123 coverage fix verified; commit pending
+Status: Round 124 records fix ready for re-review
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status          |
-| -------------------------- | -------- | --------------- |
-| Code style/maintainability | Anscombe | Round 122 clean |
-| Documentation              | Meitner  | Round 122 clean |
-| TypeScript/API docs        | Galileo  | Round 122 clean |
-| Security                   | Boole    | Round 122 clean |
-| Performance/reliability    | Bacon    | Round 122 clean |
+| Lane                       | Reviewer | Status                          |
+| -------------------------- | -------- | ------------------------------- |
+| Code style/maintainability | Newton   | Round 124 records finding fixed |
+| Documentation              | Kant     | Round 124 records finding fixed |
+| TypeScript/API docs        | Russell  | Round 124 clean                 |
+| Security                   | Erdos    | Round 124 clean                 |
+| Performance/reliability    | Locke    | Round 124 clean                 |
 
 ## Review Criteria
 
@@ -3693,18 +3693,6 @@ red/green delivery regressions before the next review pass.
 - Action: run one fix worker for the smallest meaningful runtime branch
   coverage addition, verify, commit, and rerun all five review lanes.
 
-### Round 123 Coverage Fix - `2026-07-11T04:05:55Z`
-
-- Fix: added focused runtime branch coverage for exact-message delivery drains
-  that skip already-delivered rows and worker-unsupported `CATCH_UP` rows.
-- Fix: added runtime transport coverage for command/event intake after the bound
-  runtime closes outside the binding gate.
-- Verification: focused unsandboxed Vitest passed with 2 files and 68 tests;
-  `format:check` passed; `git diff --check` passed; and unsandboxed
-  `test:coverage:generated` passed with 59 files and 1219 tests. Global branch
-  coverage is now `90.02%` (`3348/3719`), clearing the `90%` threshold.
-- Action: commit the coverage fix, then rerun all five review lanes.
-
 ### Round 123 Coverage Fix - `2026-07-11T04:02:54Z`
 
 - Fix: added delivery-worker branch coverage for exact-message drains that skip
@@ -3715,3 +3703,39 @@ red/green delivery regressions before the next review pass.
   The generated coverage gate passed unsandboxed with 59 files and 1219 tests;
   global branch coverage is now `90.02%` (`3348/3719`).
 - Action: hand back to the coordinator without committing.
+
+### Round 123 Coverage Fix Coordinator Verification - `2026-07-11T04:05:55Z`
+
+- Verification: focused unsandboxed Vitest passed with 2 files and 68 tests;
+  `format:check` passed; `git diff --check` passed; and unsandboxed
+  `test:coverage:generated` passed with 59 files and 1219 tests. Global branch
+  coverage is now `90.02%` (`3348/3719`), clearing the `90%` threshold.
+- Coordinator commit `38329f6d` (`Cover delivery and runtime branches`) recorded
+  this coverage fix.
+- Action: generate a fresh review package and rerun all five review lanes.
+
+### Round 124 Re-review - `2026-07-11T04:18:26Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..38329f6d.diff` from task baseline
+  `ca8fb2b3` to current HEAD `38329f6d`.
+- Code style/maintainability (Newton the 4th): [P2] stale durable records still
+  said the Round 123 coverage fix was commit-pending, the review dashboard still
+  showed Round 122 clean state, the review log still said to commit the coverage
+  fix after commit `38329f6d`, and the Round 123 coordinator verification entry
+  appeared before the worker entry.
+- Documentation (Kant the 4th): [P2] same stale status/dashboard/action issue;
+  [P3] same Round 123 chronology issue.
+- TypeScript/API docs (Russell the 4th): clean. Generated typecheck, tooling
+  typecheck, docs check, API-doc export check, baseline-range whitespace, and
+  focused delivery/runtime tests passed.
+- Security (Erdos the 4th): clean. The new tests are security-aligned and do
+  not widen the delivery/runtime attack surface.
+- Performance/reliability (Locke the 4th): clean. The new coverage is
+  meaningful and stable; residual risk is the intentionally thin global branch
+  coverage margin of `90.02%`.
+- Fix: updated top-level statuses and the review dashboard, recorded
+  coordinator commit `38329f6d`, removed the stale "commit the coverage fix"
+  action, and restored worker-before-coordinator chronology for Round 123.
+- Action: verify and commit this records-only fix, generate a fresh review
+  package, and rerun all five review lanes.

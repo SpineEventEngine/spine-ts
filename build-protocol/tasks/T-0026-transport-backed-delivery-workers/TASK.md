@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 123 coverage fix verified; commit pending
+Status: Round 124 records fix ready for re-review
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1895,15 +1895,6 @@ coverage because global branch coverage was `89.94%`, below the configured
 `90%` threshold. Round 123 will add the smallest meaningful coverage for a
 runtime branch, rerun the coverage gate, commit, and repeat the review loop.
 
-Round 123 coverage fix on `2026-07-11T04:05:55Z`: added focused runtime branch
-coverage for exact-message delivery drains that skip already-delivered rows and
-worker-unsupported `CATCH_UP` rows, plus runtime transport command/event intake
-after the bound runtime closes outside the binding gate. Coordinator
-verification passed focused unsandboxed Vitest with 2 files and 68 tests,
-`format:check`, `git diff --check`, and unsandboxed
-`test:coverage:generated` with 59 files and 1219 tests. Global branch coverage
-is now `90.02%` (`3348/3719`), clearing the `90%` threshold.
-
 Round 123 coverage fix on `2026-07-11T04:02:54Z`: added focused runtime branch
 coverage for exact-message delivery drains that skip already-delivered rows and
 worker-unsupported `CATCH_UP` rows, plus runtime transport command/event intake
@@ -1911,3 +1902,19 @@ after the runtime closes outside the binding gate. Focused unsandboxed Vitest
 passed with 2 files and 68 tests. The generated coverage gate passed
 unsandboxed with 59 files and 1219 tests, raising global branch coverage to
 `90.02%` (`3348/3719`). The fix worker did not commit.
+
+Round 123 coverage fix coordinator verification on `2026-07-11T04:05:55Z`:
+verified the focused delivery-worker/runtime-transport coverage fix with
+focused unsandboxed Vitest, `format:check`, `git diff --check`, and
+unsandboxed `test:coverage:generated`. Coordinator commit `38329f6d` (`Cover
+delivery and runtime branches`) recorded the Round 123 coverage fix.
+
+Round 124 re-review on `2026-07-11T04:18:26Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..38329f6d.diff` produced clean TypeScript/API
+docs, security, and performance/reliability lanes. Code style/maintainability
+and documentation found only stale durable records: top-level statuses and the
+review dashboard still pointed at Round 122/Round 123 commit-pending state, the
+review log still said to commit the coverage fix after commit `38329f6d`, and
+the Round 123 coordinator entry appeared before the fix-worker entry. This
+records-only fix updates those statuses, records commit `38329f6d`, and restores
+worker-before-coordinator chronology. All five Round 124 reviewers were closed.
