@@ -1,6 +1,6 @@
 # T-0027: Post-T-0026 Runtime Status Reconciliation
 
-Status: Final verification passed; merge pending
+Status: Merged and post-merge verified
 Started: `2026-07-11T04:42:44Z`
 Baseline commit: `efbf379a`
 Branch: `task/T-0027-post-t0026-status-reconciliation`
@@ -241,6 +241,12 @@ only the known TypeDoc invalid-origin source-link warning; the API-doc export
 check passed; `format:check` passed; `git diff --check` passed; and the targeted
 stale-worker/import-roadmap regression guard exited `1` with no matches. The
 worktree is clean at commit `ead3ab7c`.
+
+Post-merge verification on `2026-07-11T05:23:30Z`: root `main` fast-forwarded
+to `eedb9102` and passed `docs:check`, the API-doc export check,
+`format:check`, `git diff --check`, and the targeted stale-worker/import-roadmap
+regression guard. The only root untracked file remained the user-owned
+`human-review-1-jul.md`.
 
 ## Review Plan
 
