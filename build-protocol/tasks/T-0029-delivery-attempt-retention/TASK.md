@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 8 clean review, final verification pending
+Status: Final verification passed; merge pending
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -338,3 +338,10 @@ Coordinator recorded the Round 7 fix commit as
 five-lane review. Code style/maintainability, documentation, TypeScript/API
 docs, security, and performance/reliability were all clean. Final T-0029
 verification remains pending before merge.
+
+Final T-0029 verification passed at `2026-07-11T09:57:30Z`: the final targeted
+Vitest suite passed with 7 files and 260 tests, `typecheck:build:generated`
+passed, `docs:check` passed with only the existing TypeDoc invalid-origin
+warning, `format:check` passed, `git diff --check` passed, and
+`git ls-files --others --exclude-standard` reported no untracked generated
+output. The branch is ready to merge into root `main`.

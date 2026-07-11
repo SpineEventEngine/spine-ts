@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 8 clean review, final verification pending
+Status: Final verification passed; merge pending
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -475,3 +475,11 @@ Branch: `task/T-0029-delivery-attempt-retention`
   and inbox Vitest slice with 66 tests passing and 118 skipped.
 - Status: all five Round 8 review lanes are clean. Final T-0029 verification
   remains pending before merge.
+
+## Final Verification
+
+- `2026-07-11T09:57:30Z`: Final T-0029 verification passed before merge.
+  Targeted Vitest suite passed with 7 files and 260 tests. The following also
+  passed: `typecheck:build:generated`, `docs:check`, `format:check`,
+  `git diff --check`, and `git ls-files --others --exclude-standard`.
+  `docs:check` emitted only the existing TypeDoc invalid-origin warning.
