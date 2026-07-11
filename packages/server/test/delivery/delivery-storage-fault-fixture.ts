@@ -66,6 +66,87 @@ export function throwDedupFinalizeOnce(
   );
 }
 
+export function throwAttemptWriteOnce(): CountedDeliveryFaultProbe {
+  let count = 0;
+  let armed = true;
+
+  return Object.freeze({
+    get count() {
+      return count;
+    },
+    async compareAndSet<I, R extends Message>(
+      context: StorageContext,
+      id: I,
+      expected: MaterializedRecord<I, R> | undefined,
+      next: MaterializedRecord<I, R> | undefined,
+    ): Promise<boolean | undefined> {
+      if (!armed || !isAttemptWrite(context, id, expected, next)) {
+        return undefined;
+      }
+
+      armed = false;
+      count += 1;
+      throw new Error("Delivery attempt write failed.");
+    },
+  });
+}
+
+export function throwAttemptReadOnce(
+  error: Error,
+  options: { readonly armed?: boolean } = {},
+): ArmableDeliveryFaultProbe {
+  let count = 0;
+  let armed = options.armed ?? true;
+
+  return Object.freeze({
+    get count() {
+      return count;
+    },
+    arm() {
+      armed = true;
+    },
+    read(context: StorageContext): void {
+      if (!armed || !context.name.endsWith(".delivery.attempts")) {
+        return;
+      }
+
+      armed = false;
+      count += 1;
+      throw error;
+    },
+  });
+}
+
+export interface DeliveryAttemptQuery {
+  readonly limit?: number;
+  readonly messageKey?: unknown;
+}
+
+export function recordAttemptQueries(queries: DeliveryAttemptQuery[]): DeliveryStorageFaultProbe {
+  return Object.freeze({
+    query(context: StorageContext, query: RecordQuery<unknown>) {
+      if (!context.name.endsWith(".delivery.attempts")) {
+        return undefined;
+      }
+
+      const messageKey = (query.filters ?? []).find(
+        (filter) => filter.column === "messageKey",
+      )?.value;
+      if (messageKey === undefined) {
+        return undefined;
+      }
+
+      queries.push(
+        Object.freeze({
+          ...(query.limit === undefined ? {} : { limit: query.limit }),
+          messageKey,
+        }),
+      );
+      return undefined;
+    },
+  });
+}
+
 export function skipInboxClearOnce(): CountedDeliveryFaultProbe {
   return compareAndSetProbe(isInboxClaimClear, async (id, expected, _next, delegate) => {
     const current = readInboxRecord(expected.record, id as string);
@@ -545,6 +626,17 @@ function isDedupFinalize(
 ): boolean {
   return (
     context.name.endsWith(".delivery.inbox-dedup") && expected !== undefined && next !== undefined
+  );
+}
+
+function isAttemptWrite(
+  context: StorageContext,
+  _id: unknown,
+  expected: MaterializedRecord<unknown, Message> | undefined,
+  next: MaterializedRecord<unknown, Message> | undefined,
+): boolean {
+  return (
+    context.name.endsWith(".delivery.attempts") && expected === undefined && next !== undefined
   );
 }
 

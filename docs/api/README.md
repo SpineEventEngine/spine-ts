@@ -344,7 +344,11 @@ cleanup succeeds. Pre-callback claim, validation, and lease-fencing failures do
 not increment accepted work, but they increment failed work and count toward
 the framework failure bound. Once an endpoint callback has been invoked,
 endpoint failures and framework cleanup or delivery-status failures after that
-callback are accepted work and may appear in failed work. Live shard ownership
+callback are accepted work and may appear in failed work. Supported endpoint
+failures are also retained internally as sanitized attempt records with
+message/inbox/shard identity, label, node, attempted time, accepted flag, and
+stable failure stage/reason. Retained records do not include raw `Any.value`
+payload bytes, raw user errors, stack traces, or unbounded exception text. Live shard ownership
 plus live per-message ownership block competing callback dispatch while
 ownership is current; expired per-message ownership may be replaced during
 claim compare-and-set using the storage clock as abandoned-work recovery. If a
@@ -370,8 +374,8 @@ this storage boundary internally for process-manager command rows,
 process-manager event reaction rows, and live projection subscriber rows. This
 slice does not run process-wide transport-backed scheduler workers, retry
 monitors, conveyor/stations, generic repository delivery, projection catch-up
-through inbox storage, broad production lifecycle, transport retries, retained
-attempt history, example app work, or production read-side catch-up workers.
+through inbox storage, broad production lifecycle, transport retries, example
+app work, or production read-side catch-up workers.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1. Aggregate
 `@React` handlers are ordinary generated reactor handlers with current

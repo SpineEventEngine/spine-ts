@@ -275,7 +275,12 @@ delivery worker boundary:
   successful delivery marks the row `DELIVERED`, endpoint callback failures
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update
-  failures are reported without an immediate retry guarantee. Pre-callback
+  failures are reported without an immediate retry guarantee. Supported
+  endpoint failures also write internal sanitized delivery-attempt records with
+  message/inbox/shard identity, label, node, attempted time, accepted flag, and
+  stable failure stage/reason; these records do not store raw `Any.value`
+  payload bytes, raw user errors, stack traces, or unbounded exception text.
+  Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,
   but they do increment failed work and count toward a loop's `maxFailures`
   bound. Once the endpoint callback or `onMessage` path has been
@@ -311,7 +316,7 @@ This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
 handoffs, one direct drain call, and a closeable loop owner. It does not yet
 implement a generic repository delivery engine, projection catch-up through
-inbox storage, retry monitors, attempt counters, retained delivery error
+inbox storage, retry monitors, attempt counters, retained raw delivery error
 details, production worker supervision, or transport-backed topology. Event
 import and aggregate importers are removed from the active plan by upstream ADR
 0001 D1. Aggregate `@React` handlers, when present, use ordinary

@@ -5,6 +5,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/inbox-records.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
+import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
   Delivery,
   type DeliveryDrainOptions,
@@ -24,11 +25,14 @@ import {
   onInboxReadOnce,
   onInboxQuery,
   packStoredRecord,
+  recordAttemptQueries,
   recordInboxQueries,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
   skipInboxRepairOnce,
   targetInbox,
+  throwAttemptReadOnce,
+  throwAttemptWriteOnce,
   throwDedupFinalizeOnce,
   throwInboxClaimOnce,
   throwInboxClearOnce,
@@ -411,6 +415,14 @@ describe("Delivery worker", () => {
         failed: 1,
       });
       expect(run.failures).toHaveLength(1);
+      await expect(requireAttempts(delivery).read()).resolves.toMatchObject([
+        {
+          signalId: "signal-claim-expired",
+          accepted: false,
+          stage: "LEASE",
+          reason: "LEASE_INACTIVE",
+        },
+      ]);
       await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
         [{ signalId: "signal-claim-expired", status: "TO_DELIVER" }],
       );
@@ -928,6 +940,332 @@ describe("Delivery worker", () => {
       failed: 0,
     });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+  });
+
+  it("retains sanitized attempt records for supported endpoint failures", async () => {
+    const attemptedAt = new Date("2026-07-08T09:00:30.000Z");
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => attemptedAt,
+    });
+    const shard = ShardIndex.single();
+    const payloadText = "raw-payload-secret";
+    const failure = new Error(`endpoint failed with ${payloadText}`);
+    failure.stack = `stack with ${payloadText}`;
+    const stored = await delivery.inbox.receive({
+      inboxId: targetInbox(),
+      signalId: "signal-retained",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      signal: create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.Signal",
+        value: Buffer.from(payloadText, "utf8"),
+      }),
+    });
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw failure;
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-retained", status: "TO_DELIVER" },
+    ]);
+
+    const attempts = await requireAttempts(delivery).read();
+
+    expect(attempts).toEqual([
+      {
+        messageId: stored.message.id,
+        inboxId: stored.message.inboxId,
+        signalId: "signal-retained",
+        label: "UPDATE_SUBSCRIBER",
+        shard,
+        node: "node-a",
+        attemptedAt,
+        accepted: true,
+        stage: "ENDPOINT",
+        reason: "ENDPOINT_REJECTED",
+      },
+    ]);
+    const retainedJson = JSON.stringify(attempts);
+    expect(retainedJson).not.toContain(payloadText);
+    expect(retainedJson).not.toContain("stack");
+    expect(attempts[0]).not.toHaveProperty("signal");
+    expect(attempts[0]).not.toHaveProperty("error");
+  });
+
+  it("reports delivery failures even when attempt retention cannot be written", async () => {
+    const attemptFault = throwAttemptWriteOnce();
+    const faults = deliveryStorageFaults(attemptFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-attempt-write-fails", 1n);
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    expect(attemptFault.count).toBe(1);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-attempt-write-fails");
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-attempt-write-fails", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("propagates retained attempt storage corruption during endpoint-failure retention", async () => {
+    const readFault = throwAttemptReadOnce(
+      new DeliveryStorageCorruptionError("Delivery attempt record contains malformed JSON."),
+      { armed: false },
+    );
+    const faults = deliveryStorageFaults(readFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+    await seed(delivery, "signal-attempt-corruption", 1n);
+
+    const firstRun = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+    expect(firstRun.failed).toBe(1);
+
+    readFault.arm();
+    let error: unknown;
+    try {
+      await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("endpoint failed");
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(DeliveryStorageCorruptionError);
+    expect(error).toEqual(expect.objectContaining({ message: expect.stringMatching(/attempt/i) }));
+    expect(readFault.count).toBe(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-attempt-corruption", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("applies loop failure accounting when attempt retention cannot be written", async () => {
+    const attemptFault = throwAttemptWriteOnce();
+    const faults = deliveryStorageFaults(attemptFault);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-loop-attempt-write-fails", 1n);
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      maxFailures: 1,
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    }).run();
+
+    expect(attemptFault.count).toBe(1);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 1,
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-loop-attempt-write-fails");
+  });
+
+  it("retains only the newest 100 attempts for one repeatedly failing message", async () => {
+    let attempt = 0;
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date(Date.UTC(2026, 6, 8, 9, 0, attempt)),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-bounded-attempts", 1n);
+
+    for (let index = 0; index < 105; index += 1) {
+      attempt = index + 1;
+      const run = await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error(`endpoint failed ${String(index)}`);
+        },
+      });
+      expect(run.failed).toBe(1);
+    }
+
+    const attempts = await requireAttempts(delivery).read();
+
+    expect(attempts).toHaveLength(100);
+    expect(attempts[0]).toMatchObject({
+      signalId: "signal-bounded-attempts",
+      attemptedAt: new Date("2026-07-08T09:00:06.000Z"),
+    });
+    expect(attempts.at(-1)).toMatchObject({
+      signalId: "signal-bounded-attempts",
+      attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
+    });
+  });
+
+  it("uses bounded slot reads when recording repeated attempts", async () => {
+    const attemptQueries: { limit?: number; messageKey?: unknown }[] = [];
+    const faults = deliveryStorageFaults(recordAttemptQueries(attemptQueries));
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-bounded-lookup", 1n);
+
+    for (let index = 0; index < 2; index += 1) {
+      await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("endpoint failed");
+        },
+      });
+    }
+
+    expect(attemptQueries).toEqual([]);
+  });
+
+  it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const unavailable = await seed(delivery, "signal-live-owned", 1n);
+
+    await seed(delivery, "signal-catch-up-skip", 2n, "CATCH_UP");
+    await seed(delivery, "signal-success", 3n);
+    await inboxStorageAccess.claim(
+      delivery.inbox.storage,
+      unavailable,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-b",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-success"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 3,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(requireAttempts(delivery).read()).resolves.toEqual([]);
+  });
+
+  it("classifies framework cleanup and status-update failures in retained attempts", async () => {
+    const cleanupFault = throwInboxClearOnce();
+    const cleanupDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: deliveryStorageFaults(cleanupFault).storageFactory,
+    });
+    await seed(cleanupDelivery, "signal-cleanup-attempt", 1n);
+
+    await cleanupDelivery.drain(ShardIndex.single(), {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    await expect(requireAttempts(cleanupDelivery).read()).resolves.toMatchObject([
+      {
+        signalId: "signal-cleanup-attempt",
+        accepted: true,
+        stage: "CLEANUP",
+        reason: "CLEANUP_FAILED",
+      },
+    ]);
+
+    const statusFault = throwDedupFinalizeOnce({ armed: false });
+    const statusFaults = deliveryStorageFaults(statusFault);
+    const statusDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: statusFaults.storageFactory,
+    });
+    await seed(statusDelivery, "signal-status-attempt", 1n);
+    statusFault.arm();
+
+    await statusDelivery.drain(ShardIndex.single(), {
+      node: "node-a",
+      onMessage() {
+        return undefined;
+      },
+    });
+
+    await expect(requireAttempts(statusDelivery).read()).resolves.toMatchObject([
+      {
+        signalId: "signal-status-attempt",
+        accepted: true,
+        stage: "STATUS_UPDATE",
+        reason: "STATUS_UPDATE_FAILED",
+      },
+    ]);
   });
 
   it("reports framework cleanup failures after endpoint failure instead of implying retryability", async () => {
@@ -2371,6 +2709,38 @@ async function seed(
   });
 
   return result.message;
+}
+
+function requireAttempts(delivery: Delivery): DeliveryAttemptReader {
+  const attempts = (delivery as DeliveryAttemptOwner).attempts;
+
+  expect(attempts).toBeDefined();
+  if (attempts === undefined) {
+    throw new Error("Expected Delivery to expose retained attempts.");
+  }
+
+  return attempts;
+}
+
+interface DeliveryAttemptOwner {
+  readonly attempts?: DeliveryAttemptReader;
+}
+
+interface DeliveryAttemptReader {
+  read(): Promise<readonly DeliveryAttemptSnapshot[]>;
+}
+
+interface DeliveryAttemptSnapshot {
+  readonly messageId: InboxMessage["id"];
+  readonly inboxId: InboxId;
+  readonly signalId: string;
+  readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
+  readonly shard: ShardIndex;
+  readonly node: string;
+  readonly attemptedAt: Date;
+  readonly accepted: boolean;
+  readonly stage: string;
+  readonly reason: string;
 }
 
 function deferred<T>(): {

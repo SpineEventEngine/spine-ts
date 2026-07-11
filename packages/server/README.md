@@ -53,9 +53,9 @@ Current slice exposes:
   pending `TO_DELIVER` status, the tenant, payload/schema, target type URL, and
   routed target ID.
   Transport topology, broker/process supervision, production delivery policy,
-  retry monitors/workers, retained attempt history, durable catch-up
-  storage/projection catch-up through inbox storage, production storage
-  adapters, and deployment hardening remain outside this local slice;
+  retry monitors/workers, durable catch-up storage/projection catch-up through
+  inbox storage, production storage adapters, and deployment hardening remain
+  outside this local slice;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
@@ -129,7 +129,11 @@ Current slice exposes:
   same durable `TO_DELIVER` state only after framework-owned cleanup succeeds.
   Cleanup, fail-closed validation, lease/fencing, and status-update failures
   are reported internally without an immediate retry or recovery guarantee in
-  this slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
+  this slice. Supported endpoint failures are retained internally as sanitized
+  attempt records with message/inbox/shard identity, label, node, attempted
+  time, accepted flag, and stable failure stage/reason. Retained attempts never
+  include raw `Any.value` payload bytes, raw user errors, stack traces, or
+  unbounded exception text. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
   recording, or failure-budget consumption. Pre-callback claim, validation, and
@@ -164,8 +168,8 @@ Current slice exposes:
   also serve rows drained later by a delivery loop. This slice explicitly
   excludes transport topology, worker supervision, retry monitors,
   conveyor/stations, generic repository invocation, projection catch-up through
-  inbox storage, broad production lifecycle, retained attempt history, durable
-  catch-up storage, and example app work. Event import and aggregate importers are
+  inbox storage, broad production lifecycle, durable catch-up storage, and
+  example app work. Event import and aggregate importers are
   removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
   handlers are ordinary generated reactor handlers with current transaction
   semantics, not event-sourcing import/applier work;
@@ -718,9 +722,9 @@ assignees, process-manager event reactors and event-commanding handlers, and
 live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
 received row is marked delivered. Scheduler/retry workers, cross-process
-recovery, production delivery policy, retained attempt history, durable
-catch-up storage/projection catch-up through inbox storage, and production
-storage adapters remain open production gaps.
+recovery, production delivery policy, durable catch-up storage/projection
+catch-up through inbox storage, and production storage adapters remain open
+production gaps.
 
 ## Direct Stand
 
@@ -1028,10 +1032,9 @@ handler execution. Before handler code runs, replay validates the row label,
 pending `TO_DELIVER` status, tenant, payload/schema, target type URL, and
 routed target ID.
 Transport topology, broker/process supervision, production delivery policy,
-retry monitors/workers, retained attempt history, durable catch-up
-storage/projection catch-up through inbox storage, and production storage
-adapters remain open production gaps. Full production supervision and retry
-policy remain outside this slice.
+retry monitors/workers, durable catch-up storage/projection catch-up through
+inbox storage, and production storage adapters remain open production gaps.
+Full production supervision and retry policy remain outside this slice.
 This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;

@@ -1247,6 +1247,152 @@ describe("Inbox", () => {
       }),
     ).rejects.toThrow(/import_event.*deprecated/i);
     expect(delivered).toBe(false);
+    await expect(delivery.attempts.read()).resolves.toEqual([]);
+  });
+
+  it("treats malformed stored delivery attempt records as storage corruption", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+          value: Buffer.from("{not-json", "utf8"),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt record/i);
+  });
+
+  it("rejects oversized stored delivery attempt records before parsing JSON", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+          value: oversizedStoredRecord(),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt record exceeds/i);
+  });
+
+  it("fails closed when stored delivery attempt timestamps are out of range", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          attemptedAtMs: Number.MAX_SAFE_INTEGER,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/attempt time/i);
+  });
+
+  it("fails closed when stored delivery attempt identity fields disagree", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: "0/1:message-1:attempt:000000000001",
+          messageKey: "0/1:message-2",
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/message identity/i);
+  });
+
+  it("wraps invalid stored delivery attempt shard coordinates as storage corruption", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          shardTotal: 0,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/shard/i);
+  });
+
+  it("fails closed when stored delivery attempt shard coordinates are unsafe integers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          shardIndex: Number.MAX_SAFE_INTEGER + 1,
+          shardTotal: Number.MAX_SAFE_INTEGER + 3,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/shard index.*safe integer/i);
+  });
+
+  it("fails closed when stored delivery attempt sequences are unsafe integers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: "0/1:message-1:attempt:000000000092",
+          sequence: Number.MAX_SAFE_INTEGER + 1,
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/sequence/i);
+  });
+
+  it("fails closed before incrementing a max safe stored delivery attempt sequence", async () => {
+    const existingKey = "0/1:message-1:attempt:000000000091";
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          key: existingKey,
+          sequence: Number.MAX_SAFE_INTEGER,
+        }),
+      ]),
+    });
+
+    const write = delivery.attempts.recordFailure({
+      message: createMessage("message-1", "signal-1", 1n),
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:01:00.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/cannot be incremented safely/i);
+  });
+
+  it("fails closed when stored delivery attempt inbox identity fields disagree", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedAttemptRecord({
+          inbox: JSON.stringify({
+            targetId: "projection-2",
+            targetTypeUrl: "type.example.dev/tasks.Projection",
+          }),
+        }),
+      ]),
+    });
+
+    await expect(delivery.attempts.read()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(delivery.attempts.read()).rejects.toThrow(/inbox identity/i);
   });
 
   it("fails closed when stored inbox records contain invalid UTF-8", async () => {
@@ -2555,6 +2701,40 @@ function legacyImportRecord(): Any {
   });
 }
 
+function storedAttemptRecord(overrides: Record<string, unknown> = {}): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        key: "0/1:message-1:attempt:000000000001",
+        messageKey: "0/1:message-1",
+        messageId: "message-1",
+        shard: "0/1",
+        shardIndex: 0,
+        shardTotal: 1,
+        inbox: JSON.stringify({
+          targetId: "projection-1",
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        }),
+        inboxId: {
+          targetId: "projection-1",
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        },
+        signalId: "signal-1",
+        label: "UPDATE_SUBSCRIBER",
+        node: "node-a",
+        attemptedAtMs: new Date("2026-07-08T09:00:00.000Z").getTime(),
+        accepted: true,
+        stage: "ENDPOINT",
+        reason: "ENDPOINT_REJECTED",
+        sequence: 1,
+        ...overrides,
+      }),
+      "utf8",
+    ),
+  });
+}
+
 class FakeStorageFactory extends StorageFactory {
   readonly #records: readonly Any[];
 
@@ -2671,8 +2851,10 @@ class FakeRecordStorage extends RecordStorage<string, Any> {
     );
   }
 
-  protected readRecord(): Promise<Any | undefined> {
-    return Promise.resolve(undefined);
+  protected readRecord(id: string): Promise<Any | undefined> {
+    return Promise.resolve(
+      this.#records.find((record) => this.recordSpec.idValueIn(record) === id),
+    );
   }
 
   protected writeAllRecords(): Promise<void> {

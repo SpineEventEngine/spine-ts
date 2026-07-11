@@ -465,9 +465,8 @@ The following runtime pieces remain outside the verified local/example slice:
   tracing/monitors/debug UI, deployment/authentication/tracing/health
   hardening, and broader production server verification; and
 - remote/multi-host transport topology, broker topology/process supervision,
-  retry monitors/workers, retained attempt history, production delivery policy,
-  and transport-backed worker topology beyond the current framework-owned local
-  delivery loop.
+  retry monitors/workers, production delivery policy, and transport-backed
+  worker topology beyond the current framework-owned local delivery loop.
 
 ## Server Runtime Closure
 
@@ -608,7 +607,12 @@ never reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
 framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
-guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
+guarantee in this slice. The delivery subsystem also retains internal
+sanitized attempt records for supported endpoint failures, storing only
+message/inbox/shard identity, label, node, attempted time, accepted flag, and a
+stable failure stage/reason. Retained attempts do not store raw `Any.value`
+payload bytes, raw user errors, stack traces, or unbounded exception text.
+Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
 and lease/fencing failures do not increment accepted work, but they do increment
 failed work and count toward the framework failure bound. Once the endpoint
@@ -649,9 +653,8 @@ multitenant indexes persist tenant IDs through the configured storage factory.
 Raw system contexts and tenant indexes remain internal framework details.
 Durable catch-up storage/projection catch-up through inbox storage,
 transport-backed worker supervision, production delivery policy, retry monitor
-hierarchies, retained delivery-attempt history, diagnostics, repository storage
-policy, read-side projection stores, and durable production storage adapters
-remain open production gaps.
+hierarchies, diagnostics, repository storage policy, read-side projection
+stores, and durable production storage adapters remain open production gaps.
 
 ## Transport Boundary
 
