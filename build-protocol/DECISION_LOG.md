@@ -3130,15 +3130,27 @@ Decision:
   not another owner, an environment configuration surface, or a public API.
 - Preserve each `DeliveryWorker.start()` call as a one-shot bounded run. The
   lifecycle seam may serialize starts and coalesce trigger requests that arrive
-  while a run is active into at most one subsequent run request. It must not
-  turn one worker call into an unbounded background loop or recursively repeat
-  dispatch.
+  while a run is active into at most one subsequent admitted request. One
+  admitted request is a finite scan epoch: it captures an opaque per-shard
+  continuation and an admission-time high-watermark, or an equivalent
+  explicitly bounded fairness limit, so rows appended later cannot extend that
+  epoch forever. The epoch may require multiple one-shot worker runs, but each
+  run remains bounded and stop is checked between runs. Reaching the epoch
+  bound completes the request even when unsupported rows remain pending. The
+  seam must not turn one worker call into an unbounded background loop or
+  recursively repeat dispatch.
 - After contexts and delivery endpoints are assembled, but before network
-  intake opens, `ServerEnvironment` installs local notification and starts and
-  awaits one bounded recovery run. That run considers pre-existing supported
-  `TO_DELIVER` rows. A bounded `FAILED`, `PAUSED`, or `SKIPPED` result is an
-  observed recovery outcome, not a startup claim that every pending row was
-  completed.
+  intake opens, `ServerEnvironment` installs local notification and admits and
+  awaits one finite recovery scan epoch. Each worker start within that epoch is
+  one-shot and bounded. The epoch considers pre-existing supported `TO_DELIVER`
+  rows. A bounded `FAILED`, `PAUSED`, or `SKIPPED` result is an observed
+  recovery outcome, not a startup claim that every pending row was completed.
+  If a startup worker promise rejects, server start fails before network intake
+  opens. Startup cleanup still closes the assembled contexts and owned
+  environment facilities, propagating the worker rejection and aggregating
+  cleanup failures through the existing failed-start error model. The closing
+  environment retains no runnable request, while durable rows remain available
+  to the next environment's startup recovery.
 - After a newly supported inbox row is durably persisted, the local write path
   notifies the same package-internal seam. Notification carries readiness only;
   it does not carry a timer, backoff value, monitor action, payload, or retry
@@ -3151,14 +3163,32 @@ Decision:
   must submit a trigger to this seam; selecting delay, backoff, jitter, timer,
   or attempt timing is a separate decision. No other framework part may start
   a delivery worker directly to provide that wakeup.
-- Observe bounded outcomes as follows. `IDLE` requests no run. `PAUSED` records
-  an incomplete bounded scan and requests no self-run, avoiding a spin over
-  skipped-only pending rows. `FAILED` records retryable or infrastructure work
-  for later policy and requests no self-run. `SKIPPED` records unavailable
-  shard ownership and requests no self-run, avoiding contention spin. Any one
-  already-coalesced external startup/new-work/retry-ready request is still
-  honored after the active run settles. None of these outcomes changes T-0034's
-  row policy.
+- Observe bounded outcomes as follows. `IDLE` completes the admitted scan epoch
+  and requests no run. `PAUSED` does not create a readiness event and does not
+  complete or discard the admitted epoch; the owner starts another one-shot
+  bounded worker run with the epoch's opaque continuation until its finite
+  high-watermark or fairness bound is reached. This continuation is progress
+  on one existing obligation, not retry timing or contention polling.
+  `FAILED` records retryable or infrastructure work for later policy and
+  requests no self-run. `SKIPPED` records unavailable shard ownership and
+  requests no self-run, avoiding contention spin. Any one already-coalesced
+  external startup/new-work/retry-ready request is still honored after the
+  active run settles. None of these outcomes changes T-0034's row policy.
+- The successor must change the current loop/worker internals because
+  `DeliveryLoop` presently clears its resume cursor when returning `PAUSED` and
+  `DeliveryWorkerRun` carries no package-internal progress obligation. The
+  successor preserves or returns opaque per-shard continuation plus the finite
+  epoch bound across worker starts; it must not expose that cursor or epoch in
+  public declarations, exports, monitor callbacks, or environment options.
+- `DeliveryWorker.start()` may reject instead of returning an outcome. Every
+  lifecycle-owned start attaches observation immediately so notification- and
+  retry-triggered runs cannot create unhandled promise rejections. Such a
+  rejection is recorded package-internally, clears the active-run slot, and
+  preserves the admitted epoch, its last safe opaque progress, and any
+  coalesced request. It does not immediately restart. A later external
+  startup/new-work/retry-ready trigger resumes that retained obligation, so a
+  persistent fault cannot create an immediate rejection spin. No public
+  monitor, health, or error-reporting API is implied.
 - Stop closes trigger admission and local notification first, calls the worker
   stop path so no later drain starts, and awaits the already-active bounded run.
   The current drain is not forcibly interrupted. A durable write that races
@@ -3168,13 +3198,18 @@ Decision:
   delivery trigger admission and await active delivery work while contexts and
   endpoint dependencies remain open; close contexts and other endpoint
   resources; then close environment delivery facilities, transport, and
-  storage. Transport or storage must never close beneath an active run.
+  storage. If the awaited worker rejects, shutdown records that failure,
+  continues every remaining close, and propagates or aggregates all close
+  failures consistently with the existing `RetryableCloseGroup` behavior.
+  Transport or storage must never close beneath an active run.
 - The smallest successor is one package-internal environment-owned lifecycle
   implementation with startup recovery, post-persist local notification,
-  serialized/coalesced worker starts, outcome observation, and stop/await
-  ordering. It does not add retry timing. Public `DeliveryMonitor`, failure
-  actions, scheduler APIs, process supervision, topology, adapters, catch-up,
-  or health surfaces remain deferred.
+  serialized/coalesced worker starts, finite cross-run `PAUSED` continuation,
+  rejection observation/parking, and stop/await ordering. It owns the necessary
+  package-internal loop/worker progress change but does not add retry timing.
+  Public `DeliveryMonitor`, failure actions, scheduler APIs, process
+  supervision, topology, adapters, catch-up, or health surfaces remain
+  deferred.
 - Preserve valid `CATCH_UP` rows as pending/skipped without using them as a
   trigger source, and preserve fail-closed legacy stored `IMPORT_EVENT` rows.
   Preserve T-0034's claim-fenced exhausted-row completion and its mark-failure
@@ -3188,9 +3223,11 @@ Alternatives considered:
 - Treat `ServerEnvironment.delivery` as an existing scheduler. Rejected because
   its current contract and tests establish only optional closeable facility
   ownership.
-- Immediately rerun on `FAILED`, `PAUSED`, or `SKIPPED`. Rejected because that
-  can spin on retryable failures, unsupported rows, or another shard owner and
-  would choose repeat and delay policy accidentally.
+- Treat `FAILED`, `SKIPPED`, or each `PAUSED` result as a fresh readiness event.
+  Rejected because that can spin on retryable failures, another shard owner, or
+  head rescans of unsupported rows and would choose repeat and delay policy
+  accidentally. Continuing the already-admitted finite `PAUSED` epoch from its
+  opaque progress is not a fresh event.
 - Copy Spine JVM's singleton environment, per-message thread creation, public
   monitor actions, or immediate repeat callbacks. Rejected because the useful
   JVM evidence is environment-level delivery ownership and local write
@@ -3203,5 +3240,10 @@ Consequences:
 - Startup and newly persisted supported work gain a compact local trigger path.
   Retryable pending rows have an explicit owner and future trigger destination,
   while retry timing remains deliberately undecided.
+- Large finite unsupported prefixes cannot starve admitted supported tail work
+  merely because one bounded loop run pauses, while admission-time epoch bounds
+  prevent concurrent writes from creating infinite unsupported-row churn.
+- Worker rejections have defined startup, notification, retained-progress, and
+  shutdown behavior without creating a public observation surface.
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.

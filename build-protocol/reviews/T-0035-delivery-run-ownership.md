@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 1 decision fix in progress
+Status: Round 1 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -69,3 +69,22 @@ Security is deferred to final project readiness.
 - `2026-07-11T23:01:00Z`: Resumed decision author
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 1 fix worker.
   Fresh four-lane re-review remains pending.
+- `2026-07-11T23:02:00Z`: Fix worker verified all three findings against
+  current loop, worker, close-group, server/environment, focused tests, and the
+  active architecture guide. D-0085 now defines finite opaque cross-run
+  progress for one admitted `PAUSED` scan epoch, handled/parked worker
+  rejection for startup and later readiness, and continued shutdown cleanup
+  with existing error aggregation. `RUNTIME_ARCHITECTURE.md` now distinguishes
+  the historical first server slice from current `ServerEnvironment` source.
+  Author verification is pending; the worker remains active for coordinator
+  closure and must not dispatch reviewers.
+- `2026-07-11T23:04:05Z`: Round 1 author verification passed generated build,
+  docs/API, formatting, targeted fairness/continuation/rejection/startup/
+  shutdown/single-owner/public-policy/compatibility/architecture assertions,
+  whitespace, exact five-file scope, status, and zero-untracked checks. Full
+  `pnpm verify` was not run. The worker remains active for coordinator closure;
+  all four fresh review lanes remain pending coordinator dispatch.
+- `2026-07-11T23:07:00Z`: Coordinator closed the fix author and independently
+  passed generated build, docs/API, formatting, whitespace, changed-scope,
+  status, fairness, rejection, startup/shutdown, ownership, compatibility, and
+  architecture checks. Fresh package generation and all four lanes are next.

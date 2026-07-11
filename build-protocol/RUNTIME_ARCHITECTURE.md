@@ -25,13 +25,16 @@ types unless the current implementation needs that precision. Prefer `Inbox`,
 long names. Public standalone helper functions are disallowed unless a task log
 records why a class/object/prototype method would be worse.
 
-The first TS `Server` slice is intentionally narrower than Spine JVM's complete
-server/runtime environment. It owns a Node HTTP/2 listener over `SpineServices`,
-defaults to `127.0.0.1`, returns a `RunningServer` with `host`, `port`,
-`baseUrl`, and idempotent `close()`, and shuts down in this order: stop network
-intake, close active HTTP/2 sessions, then close owned contexts/resources. It
-does not introduce `ServerEnvironment`, process supervision, worker management,
-durable scheduling, or ZeroMQ-specific public API.
+The first TS `Server` slice was intentionally narrower than Spine JVM's
+complete server/runtime environment. It introduced a Node HTTP/2 listener over
+`SpineServices`, defaulted to `127.0.0.1`, returned a `RunningServer` with
+`host`, `port`, `baseUrl`, and idempotent `close()`, and did not introduce
+`ServerEnvironment`, process supervision, worker management, durable
+scheduling, or ZeroMQ-specific public API. Current source now also has a small
+explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
+facilities, and close ownership. Its optional closeable delivery facility is
+not an active delivery scheduler. D-0085 assigns a package-internal
+environment-owned bounded-run lifecycle to a successor implementation.
 
 ## Read-Side and Write-Side Segregation
 

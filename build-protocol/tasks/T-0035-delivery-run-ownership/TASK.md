@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 1 decision fix in progress
+Status: Round 1 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -106,6 +106,12 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   inventing delay/backoff values.
 - `IDLE`, `PAUSED`, `FAILED`, and `SKIPPED` outcomes have explicit ownership
   implications.
+- One admitted request makes bounded cross-run progress through a finite scan
+  epoch when `PAUSED`; unsupported prefixes cannot force every later run to
+  restart from the same head, and concurrent writes cannot extend the epoch
+  forever.
+- Worker-promise rejection has explicit startup, notification/retry-trigger,
+  retained-progress, and shutdown behavior without a public observation API.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -140,15 +146,33 @@ D-0085 names `ServerEnvironment` as the sole framework owner for starting,
 retriggering, stopping, and observing delivery runs through a package-internal
 lifecycle seam. Startup recovery and post-persist local notification submit
 serialized, coalesced requests for one-shot bounded `DeliveryWorker` runs.
-`IDLE`, `PAUSED`, `FAILED`, and `SKIPPED` do not self-trigger; `FAILED` leaves a
-retry-readiness obligation for a later package-internal delay-policy decision
-to submit to the same owner. Stop closes notification/trigger admission and
-awaits active work before contexts, transport, or storage close.
+`IDLE`, `FAILED`, and `SKIPPED` do not self-trigger. `PAUSED` creates no new
+readiness event but continues its already-admitted finite scan epoch from
+opaque progress. `FAILED` leaves a retry-readiness obligation for a later
+package-internal delay-policy decision to submit to the same owner. Stop closes
+notification/trigger admission and awaits active work before contexts,
+transport, or storage close.
+
+One admitted request now remains a finite scan epoch across one-shot runs.
+`PAUSED` creates no new readiness event, but retains opaque per-shard progress
+to an admission-time high-watermark and continues the same obligation until
+that bound is reached, honoring stop between runs. The successor must change
+the current package internals so `DeliveryLoop` no longer discards all paused
+progress and `DeliveryWorker` can preserve that opaque obligation across
+starts. No cursor or epoch becomes public.
+
+Startup worker rejection fails server start before network intake and joins
+failed-start cleanup. Notification/retry-triggered rejection is observed
+immediately, never becomes unhandled, parks the admitted/coalesced obligation,
+and resumes only after a later external readiness trigger. Shutdown awaits an
+active rejection, continues remaining closes, and propagates/aggregates it
+through the existing close-error model.
 
 The smallest successor implements that environment-owned package-internal
-seam, startup trigger, local notification, coalescing, observation, and
-stop/await ordering only. It does not implement timer values, backoff, public
-monitor/action or scheduler APIs, supervision, topology, adapters, or catch-up.
+seam, startup trigger, local notification, coalescing, finite `PAUSED`
+continuation, rejection handling, and stop/await ordering only. It does not
+implement timer values, backoff, public monitor/action or scheduler APIs,
+supervision, topology, adapters, or catch-up.
 Current runtime remains explicit one-shot bounded runs until that successor
 lands. T-0034, pending/skipped `CATCH_UP`, and fail-closed legacy
 `IMPORT_EVENT` remain unchanged.
@@ -177,10 +201,12 @@ lands. T-0034, pending/skipped `CATCH_UP`, and fail-closed legacy
 - `build-protocol/tasks/T-0035-delivery-run-ownership/TASK.md`
 - `build-protocol/work-logs/T-0035.md`
 - `build-protocol/reviews/T-0035-delivery-run-ownership.md`
+- `build-protocol/RUNTIME_ARCHITECTURE.md`
 
-No active architecture/status document required reconciliation: current guides
-describe the implemented one-shot behavior and continue to defer the runtime
-lifecycle mechanism that D-0085 assigns to the successor.
+`RUNTIME_ARCHITECTURE.md` now preserves the historical scope of the first
+`Server` slice while acknowledging the current explicit `ServerEnvironment`.
+It also states that the current optional closeable delivery facility is not an
+active delivery scheduler.
 
 ## Verification Results
 
@@ -196,3 +222,12 @@ lifecycle mechanism that D-0085 assigns to the successor.
 - PASS: `git diff --check`, exact four-file changed scope, clean untracked-file
   check, and status inspection.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
+- PASS: Round 1 `typecheck:build:generated`, fresh `docs:check` with zero
+  errors and the known invalid-`origin` warning only, and `format:check`.
+- PASS: Round 1 targeted finite-epoch fairness, opaque continuation,
+  current-loop/worker successor obligation, rejection/startup/shutdown,
+  single-owner, public-policy, T-0034, `CATCH_UP`, `IMPORT_EVENT`, and active
+  architecture reconciliation assertions.
+- PASS: Round 1 `git diff --check`, status, zero-untracked, and exact five-file
+  scope checks.
+- NOT RUN: full `pnpm verify` in Round 1, per explicit task direction.
