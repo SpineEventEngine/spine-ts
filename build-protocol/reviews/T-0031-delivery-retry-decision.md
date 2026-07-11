@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Final re-review clean; final verification pending
+Status: Final verification passed; merge pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -162,3 +162,7 @@ Branch: `task/T-0031-delivery-retry-decision`
   performance/reliability were all clean. The completed status-fix ledger commit
   `2995e9db` is listed in the work log; this current clean-closure log commit is
   covered by the ledger convention. Final verification is pending.
+- `2026-07-11T14:10:06+0100`: Final T-0031 verification passed. The native full
+  `pnpm --config.verify-deps-before-run=false verify` rerun passed after the
+  sandboxed run failed loopback and ZeroMQ IPC tests with `EPERM`. Merge to root
+  `main` is pending.
