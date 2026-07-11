@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 92 fix verified; current-HEAD re-review pending
+Status: Round 94 records fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2994,7 +2994,7 @@ red/green delivery regressions before the next review pass.
   invocation, align Round 90 timestamps, verify, commit, and rerun all five
   reviewer lanes.
 
-### Round 92 Fix - `2026-07-10T23:55:22Z`
+### Round 92 Fix - `2026-07-11T00:11:56Z`
 
 - Regression: added a blocked row-claim acquisition case proving the row claim
   is renewed to the latest shard-session expiry before callback dispatch when
@@ -3010,3 +3010,37 @@ red/green delivery regressions before the next review pass.
   targeted stale-record search returned no matches, `git diff --check` passed,
   and generated/API reference diff checks returned no changed files at
   `2026-07-11T00:11:56Z`.
+
+### Round 93 Re-review - `2026-07-11T00:19:38Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..386f5ed0.diff` from task baseline
+  `ca8fb2b3` to current HEAD `386f5ed0`.
+- Code style/maintainability (Raman the 3rd): clean. Naming, cohesion,
+  callback naming, public/internal boundaries, and the Round 92 race coverage
+  align.
+- Documentation (Maxwell the 3rd): [P3] Round 92 records use the planning
+  timestamp instead of the verification timestamp. The Round 92 fix report
+  timestamp and review-log Round 92 header say `2026-07-10T23:55:22Z`, while
+  Round 92 verification evidence says `2026-07-11T00:11:56Z`.
+- TypeScript/API docs (Godel the 3rd): clean. Public exports, TypeDoc
+  reference hygiene, generated-output hygiene, callback message shape, and
+  internal claim boundaries align.
+- Security (Singer the 3rd): clean. Tenant isolation, label handling, fail-
+  closed legacy rows, mutable snapshot safety, row claim fencing, and public
+  boundary checks align.
+- Performance/reliability (Boyle the 3rd): clean. Bounded scans, callback
+  limits, lease/claim renewal, CAS retry bounds, lifecycle cleanup, and the
+  Round 92 race fix align.
+- Action: record this findings batch, align the Round 92 fix report timestamp
+  and review-log Round 92 header with the Round 92 verification timestamp,
+  verify, commit, and rerun all five reviewer lanes.
+
+### Round 94 Records Fix - `2026-07-11T00:21:34Z`
+
+- Documentation records: aligned the Round 92 fix report timestamp and
+  review-log Round 92 header with the Round 92 verification timestamp
+  `2026-07-11T00:11:56Z`.
+- Verification: `format:check` passed; targeted stale-record `rg` check
+  returned no matches; `git diff --check` passed; generated/API reference
+  diff check returned no changed files at `2026-07-11T00:22:39Z`.

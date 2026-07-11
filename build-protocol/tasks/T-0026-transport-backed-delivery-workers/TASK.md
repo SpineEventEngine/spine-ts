@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 92 fix verified; current-HEAD re-review pending
+Status: Round 94 records fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1458,3 +1458,21 @@ Vitest passed with 3 files and 91 tests; `typecheck:build:generated` passed;
 `format:check` passed; the targeted stale-record search returned no matches;
 `git diff --check` passed; and generated/API reference diff checks returned no
 changed files. A fresh five-lane current-HEAD re-review is required.
+
+Round 93 re-review on `2026-07-11T00:19:38Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..386f5ed0.diff` produced clean code
+style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes. Documentation found one P3 durable-record
+consistency issue: the Round 92 fix report timestamp and review-log Round 92
+header still use the planning timestamp `2026-07-10T23:55:22Z`, while the
+Round 92 verification evidence is `2026-07-11T00:11:56Z`. The next fix batch
+will align those Round 92 timestamps, verify the records-only change, commit,
+and rerun all five lanes.
+
+Round 94 records fix on `2026-07-11T00:21:34Z`: aligned the Round 92 fix
+report timestamp and review-log Round 92 header with the Round 92 verification
+timestamp `2026-07-11T00:11:56Z`. Verification passed at
+`2026-07-11T00:22:39Z`: `format:check` passed; targeted stale-record `rg`
+check returned no matches; `git diff --check` passed; generated/API reference
+diff check returned no changed files. A fresh current-HEAD re-review is
+required.
