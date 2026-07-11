@@ -85,5 +85,5 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 ## Concerns
 
 - No residual implementation concerns known. Formal multi-lane reviewer
-  subagents were not spawned because the human explicitly prohibited subagents
-  for this implementation pass.
+  subagents are pending; the coordinator instructed this implementation worker
+  not to spawn its own subagents.
