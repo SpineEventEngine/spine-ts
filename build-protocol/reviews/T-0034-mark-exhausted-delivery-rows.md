@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 6 independent review in progress
+Status: Round 6 documentation finding pending fix
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f531b-ad49-70d0-b739-c7291ff1bb5b` | Pending |
-| Documentation              | `019f531b-adbc-7201-af96-ca3b45d97835` | Pending |
-| TypeScript/API docs        | `019f531b-ae4c-7c21-b262-206781544a38` | Pending |
-| Performance/reliability    | `019f531b-aeea-7ef2-ae21-b17b83d40bb0` | Pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f531b-ad49-70d0-b739-c7291ff1bb5b` | Clean  |
+| Documentation              | `019f531b-adbc-7201-af96-ca3b45d97835` | P3     |
+| TypeScript/API docs        | `019f531b-ae4c-7c21-b262-206781544a38` | Clean  |
+| Performance/reliability    | `019f531b-aeea-7ef2-ae21-b17b83d40bb0` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -176,6 +176,12 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:40:00Z`: Generated Round 6 package
   `.superpowers/sdd/review-da75f11e..5d270c61.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T21:44:00Z`: Round 6 completed and all four reviewers were
+  closed. Three lanes were clean. Documentation found one P3: D-0084's final
+  consequence still tells reviewers to reject prose presenting the decision as
+  executable, despite T-0034's now-active fixed internal outcome. One docs-only
+  worker must distinguish current internal execution from deferred public
+  monitor/scheduler behavior before fresh four-lane review.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
