@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Round 3 found one documentation timestamp finding; fix pending
+Status: Round 3 timestamp fix applied; coordinator re-review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -94,7 +94,7 @@ Branch: `task/T-0031-delivery-retry-decision`
   branch history. The fix should add `44d5d116` and state the ledger convention
   for the current log-maintenance commit so the branch does not enter an
   impossible self-referential ledger loop. Fix is pending.
-- `2026-07-11T13:48:00+0100`: Round 2 ledger/process fix worker updated the
+- `2026-07-11T13:37:23+0100`: Round 2 ledger/process fix worker updated the
   work log commit ledger to include `44d5d116` and the newer completed round 2
   finding record commit `27c17705`, and added the explicit current
   log-maintenance commit convention. Coordinator re-review remains pending, and
@@ -109,5 +109,10 @@ Branch: `task/T-0031-delivery-retry-decision`
   style/maintainability, TypeScript/API docs, security, and
   performance/reliability were clean. Documentation accepted the ledger
   convention and found one P3 issue: the round 2 ledger/process fix entries use
-  timestamp `2026-07-11T13:48:00+0100`, which reads out of order with Git and
-  adjacent entries. Fix is pending.
+  an out-of-order timestamp compared with Git and adjacent entries. Fix was
+  pending at review close.
+- `2026-07-11T13:44:34+0100`: Round 3 documentation timestamp fix worker
+  corrected the round 2 ledger/process fix entries to
+  `2026-07-11T13:37:23+0100` and updated the work-log commit ledger with
+  completed prior coordinator commits `c2ff429f` and `c70a32a6`. Coordinator
+  re-review remains pending, and T-0031 is not final.
