@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 122 clean re-review recorded; final verification pending
+Status: Round 123 coverage fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1885,3 +1885,29 @@ performance/reliability lanes. The final reviewers accepted the records-only
 Round 121 status closure, the Round 120 exact-optional fixture typing fix, and
 the existing breadcrumb policy. All five reviewer agents were closed. T-0026 is
 again ready for final verification and merge.
+
+Final verification on `2026-07-11T03:55:25Z`: required focused Vitest passed
+with 9 files and 296 tests; generated build typecheck passed; `docs:check`
+passed with only the known TypeDoc invalid-origin warning; `format:check`
+passed; `git diff --check` passed; and unsandboxed full `pnpm verify` passed
+the regular test phase with 59 files and 1216 tests. The full gate then failed
+coverage because global branch coverage was `89.94%`, below the configured
+`90%` threshold. Round 123 will add the smallest meaningful coverage for a
+runtime branch, rerun the coverage gate, commit, and repeat the review loop.
+
+Round 123 coverage fix on `2026-07-11T04:05:55Z`: added focused runtime branch
+coverage for exact-message delivery drains that skip already-delivered rows and
+worker-unsupported `CATCH_UP` rows, plus runtime transport command/event intake
+after the bound runtime closes outside the binding gate. Coordinator
+verification passed focused unsandboxed Vitest with 2 files and 68 tests,
+`format:check`, `git diff --check`, and unsandboxed
+`test:coverage:generated` with 59 files and 1219 tests. Global branch coverage
+is now `90.02%` (`3348/3719`), clearing the `90%` threshold.
+
+Round 123 coverage fix on `2026-07-11T04:02:54Z`: added focused runtime branch
+coverage for exact-message delivery drains that skip already-delivered rows and
+worker-unsupported `CATCH_UP` rows, plus runtime transport command/event intake
+after the runtime closes outside the binding gate. Focused unsandboxed Vitest
+passed with 2 files and 68 tests. The generated coverage gate passed
+unsandboxed with 59 files and 1219 tests, raising global branch coverage to
+`90.02%` (`3348/3719`). The fix worker did not commit.

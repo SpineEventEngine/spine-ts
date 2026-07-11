@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 122 clean re-review recorded; final verification pending
+Status: Round 123 coverage fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3678,3 +3678,40 @@ red/green delivery regressions before the next review pass.
   tests.
 - Action: run final T-0026 verification, merge into root `main`, and run
   post-merge verification.
+
+### Round 123 Coverage Gate Failure - `2026-07-11T03:55:25Z`
+
+- Final verification progress: required focused Vitest passed with 9 files and
+  296 tests; generated build typecheck passed; `docs:check` passed with only
+  the known TypeDoc invalid-origin warning; `format:check` passed; and
+  `git diff --check` passed.
+- The sandboxed full `pnpm verify` failed in local HTTP/2 and ZeroMQ IPC tests
+  with `EPERM`, so the same command was rerun unsandboxed. The unsandboxed run
+  passed the regular test phase with 59 files and 1216 tests, then failed
+  coverage because global branch coverage was `89.94%`, below the configured
+  `90%` threshold.
+- Action: run one fix worker for the smallest meaningful runtime branch
+  coverage addition, verify, commit, and rerun all five review lanes.
+
+### Round 123 Coverage Fix - `2026-07-11T04:05:55Z`
+
+- Fix: added focused runtime branch coverage for exact-message delivery drains
+  that skip already-delivered rows and worker-unsupported `CATCH_UP` rows.
+- Fix: added runtime transport coverage for command/event intake after the bound
+  runtime closes outside the binding gate.
+- Verification: focused unsandboxed Vitest passed with 2 files and 68 tests;
+  `format:check` passed; `git diff --check` passed; and unsandboxed
+  `test:coverage:generated` passed with 59 files and 1219 tests. Global branch
+  coverage is now `90.02%` (`3348/3719`), clearing the `90%` threshold.
+- Action: commit the coverage fix, then rerun all five review lanes.
+
+### Round 123 Coverage Fix - `2026-07-11T04:02:54Z`
+
+- Fix: added delivery-worker branch coverage for exact-message drains that skip
+  already-delivered rows and worker-unsupported `CATCH_UP` rows, and runtime
+  transport branch coverage for command/event intake after the runtime closes
+  outside the binding gate.
+- Verification: focused unsandboxed Vitest passed with 2 files and 68 tests.
+  The generated coverage gate passed unsandboxed with 59 files and 1219 tests;
+  global branch coverage is now `90.02%` (`3348/3719`).
+- Action: hand back to the coordinator without committing.

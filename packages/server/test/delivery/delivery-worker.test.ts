@@ -2002,6 +2002,72 @@ describe("Delivery worker", () => {
     await expect(delivery.shards.pickUp(stored.shard, "node-b")).resolves.toBeDefined();
   });
 
+  it("skips exact-message drains when the row is no longer pending", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const stored = await seed(delivery, "signal-exact-already-delivered", 1n);
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const inboxKey = messageKey(stored);
+    const originalRecord = await inboxRecords.read(inboxKey);
+    const delivered = Object.freeze({
+      ...stored,
+      status: "DELIVERED" as const,
+    });
+    const seen: string[] = [];
+    expect(originalRecord).toBeDefined();
+    await expect(
+      inboxRecords.compareAndSet(inboxKey, originalRecord, InboxRecords.write(delivered)),
+    ).resolves.toBe(true);
+
+    const run = await delivery.drainMessage(stored, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 0,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual([]);
+  });
+
+  it("skips exact-message drains for worker-unsupported labels", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-exact-catch-up", 1n, "CATCH_UP");
+    const seen: string[] = [];
+
+    const run = await delivery.drainMessage(stored, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(run.failures).toEqual([]);
+    expect(seen).toEqual([]);
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      stored,
+    ]);
+  });
+
   it("records an exact-message marker failure when the stored row changes after replay", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({

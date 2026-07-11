@@ -330,6 +330,65 @@ describe("RuntimeTransportBinding", () => {
     });
   });
 
+  it("reports runtime-not-accepting when the runtime closes outside the binding gate", async () => {
+    const transport = new InMemorySignalTransport();
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const calls: string[] = [];
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => {
+        calls.push("command");
+      },
+      onEvent: () => {
+        calls.push("event");
+      },
+    });
+
+    await runtime.close();
+
+    await expect(
+      transport.request({
+        topic: requireFirst(plan.commands.topics),
+        envelope: createCommandEnvelope(),
+      }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      signalKind: "command",
+      failure: {
+        code: "RUNTIME_NOT_ACCEPTING",
+        diagnostics: {
+          runtimeState: "closed",
+          reason: "runtime is not accepting work",
+        },
+      },
+    });
+    await expect(
+      transport.publish({
+        topic: requireFirst(plan.events.topics),
+        envelope: createEventEnvelope(),
+      }),
+    ).rejects.toMatchObject({
+      result: {
+        status: "failed",
+        signalKind: "event",
+        failure: {
+          code: "RUNTIME_NOT_ACCEPTING",
+          diagnostics: {
+            runtimeState: "closed",
+            reason: "runtime is not accepting work",
+          },
+        },
+      },
+    });
+    expect(calls).toEqual([]);
+
+    await handle.close();
+  });
+
   it("refuses callbacks while transport handles are closing", async () => {
     const log: string[] = [];
     const closeBlock = deferred();
