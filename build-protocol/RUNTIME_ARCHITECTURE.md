@@ -280,6 +280,10 @@ delivery worker boundary:
   message/inbox/shard identity, label, node, attempted time, accepted flag, and
   stable failure stage/reason; these records do not store raw `Any.value`
   payload bytes, raw user errors, stack traces, or unbounded exception text.
+  Package-internal retry-policy preparation can summarize retained attempts for
+  one exact inbox message by reading only its 100 known per-message retained
+  slots; this does not expose public retry monitors, backoff, schedulers,
+  production supervision, topology, catch-up storage, or production adapters.
   Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,
   but they do increment failed work and count toward a loop's `maxFailures`

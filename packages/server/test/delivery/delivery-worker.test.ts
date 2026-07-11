@@ -26,6 +26,7 @@ import {
   onInboxQuery,
   packStoredRecord,
   recordAttemptQueries,
+  recordAttemptReads,
   recordInboxQueries,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
@@ -1075,7 +1076,7 @@ describe("Delivery worker", () => {
     }
 
     expect(error).toBeInstanceOf(DeliveryStorageCorruptionError);
-    expect(error).toEqual(expect.objectContaining({ message: expect.stringMatching(/attempt/i) }));
+    expect(error).toHaveProperty("message", expect.stringMatching(/attempt/i));
     expect(readFault.count).toBe(1);
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-attempt-corruption", status: "TO_DELIVER" },
@@ -1172,6 +1173,230 @@ describe("Delivery worker", () => {
     }
 
     expect(attemptQueries).toEqual([]);
+  });
+
+  it("summarizes one exact message from bounded retained attempt slots without querying attempts", async () => {
+    const attemptQueries: { broad?: boolean; limit?: number; messageKey?: unknown }[] = [];
+    const attemptReads: unknown[] = [];
+    const faults = deliveryStorageFaults(
+      recordAttemptQueries(attemptQueries),
+      recordAttemptReads(attemptReads),
+    );
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const target = await seed(delivery, "signal-summary-target", 1n);
+    const other = await seed(delivery, "signal-summary-other", 2n);
+
+    await requireAttempts(delivery).recordFailure({
+      message: other,
+      node: "node-b",
+      attemptedAt: new Date("2026-07-08T09:00:05.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    await requireAttempts(delivery).recordFailure({
+      message: target,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    await requireAttempts(delivery).recordFailure({
+      message: target,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:02.000Z"),
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    attemptQueries.length = 0;
+    attemptReads.length = 0;
+
+    const summary = await requireAttempts(delivery).summarize(target.id);
+
+    expect(summary.count).toBe(2);
+    expect(summary.attempts.map((attempt) => attempt.signalId)).toEqual([
+      "signal-summary-target",
+      "signal-summary-target",
+    ]);
+    expect(summary.latestAttempt).toMatchObject({
+      signalId: "signal-summary-target",
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    expect(summary.latestStage).toBe("LEASE");
+    expect(summary.latestReason).toBe("LEASE_INACTIVE");
+    expect(summary.latestAccepted).toBe(false);
+    expect(attemptQueries).toEqual([]);
+    expect(attemptReads).toHaveLength(100);
+    expect(attemptReads[0]).toBe(`${messageKey(target)}:attempt:000000000001`);
+    expect(attemptReads.at(-1)).toBe(`${messageKey(target)}:attempt:000000000100`);
+    expect(
+      attemptReads.every((key) => typeof key === "string" && key.startsWith(messageKey(target))),
+    ).toBe(true);
+  });
+
+  it("summarizes retained attempts in sequence order after the attempt ring wraps", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-wrap", 1n);
+
+    for (let sequence = 1; sequence <= 105; sequence += 1) {
+      await requireAttempts(delivery).recordFailure({
+        message,
+        node: `node-${String(sequence).padStart(3, "0")}`,
+        attemptedAt: new Date(Date.UTC(2026, 6, 8, 9, 0, sequence)),
+        accepted: sequence % 2 === 0,
+        stage: sequence === 105 ? "STATUS_UPDATE" : sequence === 100 ? "CLEANUP" : "ENDPOINT",
+        reason:
+          sequence === 105
+            ? "STATUS_UPDATE_FAILED"
+            : sequence === 100
+              ? "CLEANUP_FAILED"
+              : "ENDPOINT_REJECTED",
+      });
+    }
+
+    const summary = await requireAttempts(delivery).summarize(message.id);
+
+    expect(summary.count).toBe(100);
+    expect(summary.attempts.map((attempt) => attempt.node)).toEqual(
+      Array.from({ length: 100 }, (_, index) => `node-${String(index + 6).padStart(3, "0")}`),
+    );
+    expect(summary.attempts[0]).toMatchObject({
+      node: "node-006",
+      attemptedAt: new Date("2026-07-08T09:00:06.000Z"),
+    });
+    expect(summary.latestAttempt).toMatchObject({
+      node: "node-105",
+      attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
+      accepted: false,
+      stage: "STATUS_UPDATE",
+      reason: "STATUS_UPDATE_FAILED",
+    });
+    expect(summary.latestStage).toBe("STATUS_UPDATE");
+    expect(summary.latestReason).toBe("STATUS_UPDATE_FAILED");
+    expect(summary.latestAccepted).toBe(false);
+  });
+
+  it("returns an explicit empty attempt summary for messages with no retained attempts", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-empty", 1n);
+
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toStrictEqual({
+      attempts: [],
+      count: 0,
+      latestAttempt: undefined,
+      latestStage: undefined,
+      latestReason: undefined,
+      latestAccepted: undefined,
+    });
+  });
+
+  it("returns attempt summary snapshots that do not share mutable objects", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-copies", 1n);
+
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+
+    const first = await requireAttempts(delivery).summarize(message.id);
+    const firstAttempt = first.attempts[0];
+
+    expect(first.latestAttempt).not.toBe(firstAttempt);
+    expect(first.latestAttempt?.attemptedAt).not.toBe(firstAttempt?.attemptedAt);
+    expect(first.latestAttempt?.messageId).not.toBe(firstAttempt?.messageId);
+    expect(first.latestAttempt?.inboxId).not.toBe(firstAttempt?.inboxId);
+
+    first.latestAttempt?.attemptedAt.setFullYear(1999);
+    firstAttempt?.attemptedAt.setFullYear(1998);
+
+    const second = await requireAttempts(delivery).summarize(message.id);
+
+    expect(second.latestAttempt?.attemptedAt).toEqual(new Date("2026-07-08T09:00:01.000Z"));
+    expect(second.attempts[0]?.attemptedAt).toEqual(new Date("2026-07-08T09:00:01.000Z"));
+    expect(second.latestAttempt?.attemptedAt).not.toBe(first.latestAttempt?.attemptedAt);
+    expect(second.attempts[0]?.attemptedAt).not.toBe(firstAttempt?.attemptedAt);
+  });
+
+  it("keeps delivery attempt summaries isolated from mutable multitenant contexts", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    let tenantId = "tenant-a";
+    const context = {
+      name: "Tasks",
+      multitenant: true,
+      get tenantId() {
+        return tenantId;
+      },
+    };
+    const delivery = new Delivery({
+      context,
+      storageFactory,
+    });
+    const message = await seed(delivery, "signal-summary-tenant", 1n);
+
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-before-mutation",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    tenantId = "tenant-b";
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-after-mutation",
+      attemptedAt: new Date("2026-07-08T09:00:02.000Z"),
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+
+    const summary = await requireAttempts(delivery).summarize(message.id);
+    const attempts = await requireAttempts(delivery).read();
+    const tenantB = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      storageFactory,
+    });
+
+    expect(summary.attempts.map((attempt) => attempt.node)).toEqual([
+      "node-before-mutation",
+      "node-after-mutation",
+    ]);
+    expect(summary.latestAttempt).toMatchObject({
+      node: "node-after-mutation",
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    expect(attempts.map((attempt) => attempt.node)).toEqual([
+      "node-before-mutation",
+      "node-after-mutation",
+    ]);
+    await expect(requireAttempts(tenantB).summarize(message.id)).resolves.toMatchObject({
+      attempts: [],
+      count: 0,
+    });
+    await expect(requireAttempts(tenantB).read()).resolves.toEqual([]);
   });
 
   it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {
@@ -2692,6 +2917,18 @@ describe("Delivery worker", () => {
   });
 });
 
+function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label?: DeliveryEndpointMessage["label"],
+): Promise<DeliveryEndpointMessage>;
+function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label: InboxMessage["label"],
+): Promise<InboxMessage>;
 async function seed(
   delivery: Delivery,
   signalId: string,
@@ -2726,22 +2963,7 @@ interface DeliveryAttemptOwner {
   readonly attempts?: DeliveryAttemptReader;
 }
 
-interface DeliveryAttemptReader {
-  read(): Promise<readonly DeliveryAttemptSnapshot[]>;
-}
-
-interface DeliveryAttemptSnapshot {
-  readonly messageId: InboxMessage["id"];
-  readonly inboxId: InboxId;
-  readonly signalId: string;
-  readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
-  readonly shard: ShardIndex;
-  readonly node: string;
-  readonly attemptedAt: Date;
-  readonly accepted: boolean;
-  readonly stage: string;
-  readonly reason: string;
-}
+type DeliveryAttemptReader = Delivery["attempts"];
 
 function deferred<T>(): {
   readonly promise: Promise<T>;
