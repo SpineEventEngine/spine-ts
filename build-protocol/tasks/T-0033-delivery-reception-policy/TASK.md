@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Round 2 fix in progress
+Status: Round 2 fix verified; fresh re-review pending
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
@@ -69,8 +69,9 @@ monitor, supervision, topology, and catch-up work as broader follow-up slices.
   implementation slice without adding TypeScript declarations.
 - Define action ownership and execution order relative to claim/fencing,
   retained-attempt persistence, and delivery status changes.
-- Define how an action execution failure is reported and which durable row
-  state remains authoritative.
+- Preserve existing cleanup reporting when `KEEP_PENDING` claim release fails,
+  and define how exhaustion-time `MARK_DELIVERED` failure is reported and
+  which durable row state remains authoritative.
 - Preserve existing outcomes for claim, lease/fencing, attempt-retention
   infrastructure, cleanup, and status-update failures; those stages are not
   action-selection inputs for D-0084.
@@ -115,6 +116,13 @@ unimplemented JVM parity.
 - Claim, lease/fencing, attempt-retention infrastructure, cleanup, and
   status-update failures preserve their existing outcomes. Callback success
   followed by status-update failure is explicitly outside D-0084.
+- Failed `KEEP_PENDING` claim release uses existing `CLEANUP` classification:
+  aggregate callback and cleanup errors, return one public `DeliveryFailure`,
+  consume the existing failure budget once, and preserve existing retained-
+  attempt facts/accounting without a second action failure or separate action-
+  failure facts.
+- The same cleanup rule applies when the callback failure retains attempt 100;
+  exhaustion is observed only on a later claimed pass.
 - Retained attempts remain bounded, sanitized, and free of payload bytes, user
   error objects, stack traces, and unbounded text.
 - Immediate repeat is explicitly supported or deferred; if deferred, no prose
@@ -124,9 +132,10 @@ unimplemented JVM parity.
 - `CATCH_UP` remains pending/skipped and legacy `IMPORT_EVENT` remains
   fail-closed.
 - No public monitor/action or future production-policy API is promised.
-- New action-failure facts or error details are bounded and sanitized without
-  claiming the enclosing existing `DeliveryFailure` is payload-free or
-  changing its public row-snapshot/`unknown` error contract.
+- New exhaustion-time `MARK_DELIVERED` action-failure facts or error details
+  are bounded and sanitized without claiming the enclosing existing
+  `DeliveryFailure` is payload-free or changing its public row-snapshot/
+  `unknown` error contract.
 
 ## Accepted Decision Summary
 
@@ -134,13 +143,15 @@ D-0084 accepts a fixed internal policy for a later implementation task:
 
 - a row classified retryable before callback whose callback then fails retains
   one bounded sanitized failure attempt, then keeps the claimed row pending
-  `TO_DELIVER`, including when that attempt fills slot 100;
+  `TO_DELIVER`, including when that attempt fills slot 100; claim release uses
+  existing cleanup, whose failure remains one aggregated `CLEANUP` failure
+  with existing attempt and failure-budget accounting;
 - pre-callback exhaustion selects framework-owned `MARK_DELIVERED` after
   exact-message classification and while the row remains claim/fence owned;
 - immediate repeat remains deferred;
-- failed action execution leaves the authoritative durable row pending
-  `TO_DELIVER`, and only its newly introduced action-failure facts or error
-  details must be bounded and sanitized.
+- failed exhaustion-time `MARK_DELIVERED` leaves the authoritative durable row
+  pending `TO_DELIVER`, and only its newly introduced action-failure facts or
+  error details must be bounded and sanitized.
 
 The minimal prose-only action vocabulary is `KEEP_PENDING` and
 `MARK_DELIVERED`. It creates no TypeScript declaration, package export, public

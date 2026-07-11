@@ -2992,26 +2992,35 @@ fixed internal outcome policy without promising those broader facilities.
 Decision:
 
 - Use only two internal action concepts in the later implementation slice.
-  `KEEP_PENDING` means release the active row claim while preserving
-  `TO_DELIVER`. `MARK_DELIVERED` means use the framework-owned claimed-row
-  status transition to `DELIVERED`. These names are decision vocabulary, not
-  TypeScript declarations, public exports, or a promise of a configurable
-  action API.
+  `KEEP_PENDING` is the policy outcome that preserves `TO_DELIVER`; releasing
+  its active row claim uses the existing cleanup path, not a separate action
+  executor or failure category. `MARK_DELIVERED` means use the framework-owned
+  claimed-row status transition to `DELIVERED`. These names are decision
+  vocabulary, not TypeScript declarations, public exports, or a promise of a
+  configurable action API.
 - When a supported row classified as retryable then fails in its endpoint
   callback, first persist the bounded sanitized failure attempt, then execute
   `KEEP_PENDING`. That action still applies when the newly retained attempt
   fills slot 100; a later pre-callback pass observes exhaustion and selects the
-  exhaustion action. The retained facts remain limited to the T-0029 fields
-  and continue to exclude payload bytes, user error objects, stack traces, and
-  unbounded text. Ordinary attempt retention write failure remains
-  observational under D-0080 and does not authorize a terminal status;
-  retained-state corruption still fails closed.
+  exhaustion action after a later claim. The slot-100 callback-failure pass
+  still releases its claim through existing cleanup. The retained facts remain
+  limited to the T-0029 fields and continue to exclude payload bytes, user
+  error objects, stack traces, and unbounded text. Ordinary attempt retention
+  write failure remains observational under D-0080 and does not authorize a
+  terminal status; retained-state corruption still fails closed.
 - This callback-failure policy does not select an action for claim,
   lease/fencing, attempt-retention infrastructure, cleanup, or status-update
   failures. Those stages preserve their existing outcomes and failure
   accounting. In particular, a callback that succeeds before the delivery
   status update fails is a `STATUS_UPDATE` failure, not an endpoint callback
   failure, and D-0084 does not apply `KEEP_PENDING` to it.
+- If the existing cleanup path cannot release or clear the active claim after
+  an endpoint callback failure, preserve its current `CLEANUP` classification
+  and accounting. Aggregate the original callback error with the cleanup
+  error, return one public `DeliveryFailure`, consume the existing delivery
+  failure budget once, and retain the existing attempt facts and accounting.
+  Do not emit a second action failure or add separate action-failure facts for
+  failed `KEEP_PENDING` cleanup.
 - For a supported row already classified as exhausted before callback
   invocation, select the fixed framework-owned `MARK_DELIVERED` action. Do not
   invoke the endpoint and do not retain another attempt. This adopts the Spine
@@ -3026,13 +3035,13 @@ Decision:
 - Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
   framework drain to reconsider the row; it does not recurse, schedule a run,
   promise backoff, or imply worker supervision.
-- If `KEEP_PENDING`, `MARK_DELIVERED`, or its underlying action-specific
-  durable transition fails, report one delivery failure for that row and keep
-  the durable inbox row's authoritative outcome pending `TO_DELIVER`. The new
-  action-failure facts or error details introduced by the later implementation
-  must be bounded and sanitized. A failed action must not be reported as
-  delivered and must not erase the original callback or exhaustion context.
-  Existing failure-budget accounting remains unchanged.
+- If the exhaustion-time `MARK_DELIVERED` transition fails, report one
+  delivery failure for that row and keep the durable inbox row's authoritative
+  outcome pending `TO_DELIVER`. New action-failure facts or error details
+  introduced for that failure by the later implementation must be bounded and
+  sanitized. The row must not be reported as delivered, and the exhaustion
+  context must remain available. Existing failure-budget accounting remains
+  unchanged.
 - D-0084 does not change the enclosing public `DeliveryFailure` contract. Its
   existing `message` remains a copied `DeliveryEndpointMessage` snapshot that
   may contain copied `Any.value` payload bytes, and its existing `error`

@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Round 2 fix in progress
+Status: Round 2 fix verified; fresh re-review pending
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -23,8 +23,8 @@ protocol.
 - Check the Human-Imposed Requirements Ledger in the task brief.
 - Verify D-0084 covers supported endpoint callback failure after retryable
   classification and pre-callback exhaustion separately.
-- Verify durable row outcomes, action ownership, execution order, action
-  failure accounting, and fallback row state are explicit.
+- Verify durable row outcomes, action ownership, execution order, cleanup/
+  action failure accounting, and fallback row state are explicit.
 - Verify `KEEP_PENDING` and `MARK_DELIVERED` are prose-only internal decision
   vocabulary, not TypeScript declarations, exports, or public API promises.
 - Verify the decision remains docs-only and does not claim runtime execution,
@@ -34,9 +34,15 @@ protocol.
 - Verify claim, lease/fencing, attempt-retention infrastructure, cleanup, and
   status-update failures preserve existing outcomes, including callback
   success followed by status-update failure.
-- Verify only new action-failure facts/error details are required to be bounded
-  and sanitized; the existing enclosing `DeliveryFailure` row snapshot and
-  `unknown` error contract remain unchanged and are not called payload-free.
+- Verify failed `KEEP_PENDING` claim release remains one existing `CLEANUP`
+  failure: callback and cleanup errors are aggregated, the public failure and
+  failure budget are each counted once, and retained attempt facts/accounting
+  remain unchanged without separate action-failure facts. This includes the
+  pass that retains attempt 100; exhaustion is observed only on a later claim.
+- Verify only new exhaustion-time `MARK_DELIVERED` action-failure facts/error
+  details are required to be bounded and sanitized; the existing enclosing
+  `DeliveryFailure` row snapshot and `unknown` error contract remain unchanged
+  and are not called payload-free.
 - Verify `CATCH_UP` remains pending/skipped and legacy `IMPORT_EVENT` remains
   fail-closed.
 - Ignore historical superseded text unless current task logs, the task brief,
@@ -119,3 +125,17 @@ protocol.
 - `2026-07-11T20:22:00Z`: Resumed decision author
   `019f5297-9471-7a01-a287-9b08ac23250a` as the single Round 2 fix worker.
   Fresh four-lane re-review remains pending its verified commit.
+- `2026-07-11T20:30:00Z`: Round 2 fix worker aligned D-0084 and current T-0033
+  records with the existing cleanup path. `KEEP_PENDING` claim release is not
+  a separate action-failure category: failed clearing remains one aggregated
+  `CLEANUP` failure with existing retained-attempt and failure-budget
+  accounting, including on the pass that writes attempt 100. The bounded and
+  sanitized new action-failure detail rule now applies only to failed
+  exhaustion-time `MARK_DELIVERED`. Focused verification and commit are
+  pending before fresh four-lane re-review.
+- `2026-07-11T20:35:00Z`: Round 2 fix verification passed: `docs:check`,
+  `format:check`, whitespace, untracked-file, changed-scope, status, public-
+  leakage, duplicate-capacity, and future-policy checks were clean. TypeDoc
+  reported zero errors and only the known invalid-`origin` warning. Full
+  `pnpm verify` was intentionally not run. Fresh four-lane re-review remains
+  pending the committed fix.
