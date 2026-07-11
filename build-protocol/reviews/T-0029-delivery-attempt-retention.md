@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 3 fix locally verified, pending fix commit and re-review
+Status: Round 3 fixes verified; pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -206,4 +206,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
   161 skipped. `typecheck:build:generated` passed. `docs:check` passed with
   the existing TypeDoc invalid-origin warning only. Generated Protobuf output
   remains out of VCS.
-- Status: pending fix commit, fresh review package, and re-review.
+- Status: fix commit recorded; pending fresh review package and re-review.
+
+### Round 3 Fix Commit Record
+
+- Round 3 fix worker committed `2d3ca14d Fix T-0029 round 3 attempt retention`
+  and was closed after reporting `DONE`.
+- The fix added fail-closed `Number.isSafeInteger()` validation for stored
+  retained-attempt sequences and focused regression coverage for unsafe
+  sequence corruption.
+- Status: pending fresh review package and all five independent review lanes.

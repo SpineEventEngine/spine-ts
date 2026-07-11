@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 3 fix locally verified, pending fix commit and re-review
+Status: In progress; Round 3 fixes verified pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -233,4 +233,10 @@ fix commit, T-0029 remains pending a fresh review package and re-review.
 Round 3 fix verification passed locally: focused unsafe-sequence red/green
 coverage, the required focused delivery-attempt Vitest slice,
 `typecheck:build:generated`, and `docs:check` all exited successfully. The task
-remains pending the Round 3 fix commit, fresh review package, and re-review.
+remains pending fresh review package and re-review after the Round 3 fix
+commit.
+
+Round 3 fix worker committed `2d3ca14d Fix T-0029 round 3 attempt retention`
+and was closed after reporting `DONE`. Coordinator recorded that fix commit in
+the durable logs; the next step is a fresh review package and all five
+independent review lanes.
