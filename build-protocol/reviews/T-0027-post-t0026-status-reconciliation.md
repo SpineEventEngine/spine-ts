@@ -1,6 +1,6 @@
 # T-0027 Review Log
 
-Status: Round 2 clean re-review; final verification pending
+Status: Final verification passed; merge pending
 
 Task: `T-0027 Post-T-0026 Runtime Status Reconciliation`
 
@@ -85,3 +85,16 @@ Branch: `task/T-0027-post-t0026-status-reconciliation`
   retained-attempt, durable catch-up, and storage-adapter gaps.
 - Action: run final T-0027 verification, merge into root `main`, and run
   post-merge verification.
+
+### Final Verification - `2026-07-11T05:22:44Z`
+
+- `pnpm --config.verify-deps-before-run=false docs:check` passed with only the
+  known TypeDoc invalid-origin source-link warning.
+- `pnpm --config.verify-deps-before-run=false exec node scripts/check-api-docs.mjs`
+  passed.
+- `pnpm --config.verify-deps-before-run=false format:check` passed.
+- `git diff --check` passed.
+- Targeted stale-worker/import-roadmap regression guard exited `1` with no
+  matches.
+- The worktree is clean at commit `ead3ab7c`.
+- Action: merge T-0027 into root `main` and run post-merge verification.

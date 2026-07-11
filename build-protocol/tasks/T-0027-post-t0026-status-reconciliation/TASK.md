@@ -1,6 +1,6 @@
 # T-0027: Post-T-0026 Runtime Status Reconciliation
 
-Status: Round 2 clean re-review; final verification pending
+Status: Final verification passed; merge pending
 Started: `2026-07-11T04:42:44Z`
 Baseline commit: `efbf379a`
 Branch: `task/T-0027-post-t0026-status-reconciliation`
@@ -235,6 +235,12 @@ docs/status-only scope, local worker/loop boundary, production gap wording,
 `CATCH_UP` pending/skipped contract, `IMPORT_EVENT` rejected/fail-closed
 contract, and no active import/`@Apply` roadmap regression. All five Round 2
 reviewers were closed.
+
+Final T-0027 verification on `2026-07-11T05:22:44Z`: `docs:check` passed with
+only the known TypeDoc invalid-origin source-link warning; the API-doc export
+check passed; `format:check` passed; `git diff --check` passed; and the targeted
+stale-worker/import-roadmap regression guard exited `1` with no matches. The
+worktree is clean at commit `ead3ab7c`.
 
 ## Review Plan
 
