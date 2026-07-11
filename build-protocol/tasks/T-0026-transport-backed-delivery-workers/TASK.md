@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 120 tooling typecheck fix verified; commit pending
+Status: Round 121 status-record fix ready for verification
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1865,3 +1865,15 @@ fix worker did not commit. Coordinator verification repeated those green checks
 on `2026-07-11T03:37:19Z`: `typecheck:tooling`, focused
 `delivery-worker.test.ts` with 53 tests, `format:check`, and
 `git diff --check` all passed.
+
+Coordinator commit `0f8172f6` (`Fix delivery query fixture typing`) recorded
+the Round 120 tooling typecheck fix.
+
+Round 121 re-review on `2026-07-11T03:44:16Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..0f8172f6.diff` produced clean code
+style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes. Documentation found only stale top-level task,
+work-log, and review-log statuses that still said Round 120 was commit pending
+after coordinator commit `0f8172f6`. This records-only fix updates those
+statuses and the review dashboard to the committed Round 120 state and marks
+T-0026 ready for final verification again.
