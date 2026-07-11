@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 96 final-verification fix verified
+Status: Round 98 docs/log fix verified
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3098,3 +3098,53 @@ red/green delivery regressions before the next review pass.
   targeted record guard returned no matches; `git diff --check` passed; and
   generated/API reference diff guard returned no changed files at
   `2026-07-11T00:36:18Z`.
+
+### Round 97 Re-review - `2026-07-11T00:44:20Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..af21b760.diff` from task baseline
+  `ca8fb2b3` to current HEAD `af21b760`.
+- Code style/maintainability (Dalton the 3rd): clean. The Round 96 invalid
+  projection input helper is narrow, local to the test, and does not weaken
+  production types.
+- Documentation (Lovelace the 3rd): [P2] the work-log `Files Changed`
+  inventory is stale/incomplete relative to the tracked diff file list for
+  `ca8fb2b3..af21b760`. [P2] early work-log `Entries` are not chronological,
+  including `08:34:24Z`, `07:40:04Z`, then `03:44:01Z`, and a later jump from
+  `05:04:38Z` back to `04:27:00Z`.
+- TypeScript/API docs (Hume the 3rd): [P3] `build-protocol/DEVELOPER_API.md`,
+  `docs/api/README.md`, and `packages/server/README.md` still blur accepted
+  endpoint work by listing delivery-status/status-update failures in the
+  pre-callback failure list. Delivery marks callback acceptance before
+  invoking the endpoint and performs delivery marking afterward; docs should
+  keep the post-callback status-update rule and remove status-update from the
+  pre-callback list.
+- Security (Harvey the 3rd): clean. The Round 96 helper remains test-only and
+  production validation, tenant isolation, claim/lease fencing, labels,
+  fail-closed legacy rows, and snapshot copying remain sound.
+- Performance/reliability (Faraday the 3rd): clean. Round 96 is test-only and
+  does not hide a reliability gap; delivery scan, accounting, claim, lease,
+  lifecycle, and future-scope boundaries align.
+- Action: record this findings batch, fix work-log chronology and file
+  inventory plus accepted-work docs wording, verify, commit, and rerun all five
+  required lanes.
+
+### Round 98 Docs/Log Fix - `2026-07-11T00:46:29Z`
+
+- Accepted documentation and TypeScript/API docs findings.
+- Fixed `build-protocol/work-logs/T-0026.md` by replacing the stale
+  `Files Changed` inventory with the tracked
+  `git diff --name-only ca8fb2b3..HEAD` file list and by restoring
+  chronological order for top-level `## Entries` bullets.
+- Fixed accepted-work wording in `build-protocol/DEVELOPER_API.md`,
+  `docs/api/README.md`, and `packages/server/README.md`: pre-callback
+  failures are claim, validation, and lease-fencing only; post-callback
+  cleanup/status-update failures remain accepted work and may be failed work.
+- No production source, tests, generated docs, API reference docs, or
+  `.codex-review-packages/` scratch files were edited.
+- Verification passed at `2026-07-11T00:51:59Z`: `docs:check` passed with only
+  the existing invalid TypeDoc `origin` warning; the initial `format:check`
+  flagged this owned review log, Prettier rewrote it, and the final
+  `format:check` passed; the targeted stale-record/flush-left guard returned no
+  matches; `git diff --check` passed; and the generated/API reference diff
+  guard returned no changed files.

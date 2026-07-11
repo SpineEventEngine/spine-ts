@@ -301,11 +301,11 @@ deprecated legacy label data such as stored `IMPORT_EVENT` remains a
 fail-closed `DeliveryStorageCorruptionError` path before replay. Cleanup,
 lease/fencing, and status-update failures are reported internally without an
 immediate retry or recovery guarantee in this slice. Pre-callback claim,
-validation, lease, and status-update failures do not increment accepted
-endpoint work, but they do increment failed work and count toward the internal
-failure bound. Once the endpoint callback or `onMessage` path has been invoked,
-endpoint failures and later framework cleanup/status-update failures are
-accepted endpoint work and may appear in failed work. Live per-message
+validation, and lease-fencing failures do not increment accepted endpoint work,
+but they do increment failed work and count toward the internal failure bound.
+Once the endpoint callback or `onMessage` path has been invoked, endpoint
+failures and later framework cleanup/status-update failures are accepted
+endpoint work and may appear in failed work. Live per-message
 ownership blocks competing delivery; expired per-message ownership may be
 replaced during claim compare-and-set using the storage clock. Broader
 production recovery policy remains future work.

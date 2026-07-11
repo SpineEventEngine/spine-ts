@@ -336,11 +336,11 @@ failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data
 fails closed as `DeliveryStorageCorruptionError` before replay begins.
 
 Endpoint failures leave rows pending for a later framework run only when
-cleanup succeeds. Pre-callback claim, validation, lease, and delivery-status
-failures do not increment accepted work, but they increment failed work and
-count toward the framework failure bound. Once an endpoint callback has been
-invoked, endpoint failures and framework cleanup or delivery-status failures
-after that callback are accepted work and may appear in failed work. Live
+cleanup succeeds. Pre-callback claim, validation, and lease-fencing failures do
+not increment accepted work, but they increment failed work and count toward
+the framework failure bound. Once an endpoint callback has been invoked,
+endpoint failures and framework cleanup or delivery-status failures after that
+callback are accepted work and may appear in failed work. Live
 per-message ownership blocks competing delivery; expired per-message ownership
 may be replaced during claim compare-and-set using the storage clock. Broader
 production recovery policy remains future work.

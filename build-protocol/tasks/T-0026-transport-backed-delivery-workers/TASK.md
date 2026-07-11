@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 96 final-verification fix verified
+Status: Round 98 docs/log fix verified
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1512,3 +1512,30 @@ files were formatted, and the final `format:check` passed; the targeted
 record guard returned no matches; `git diff --check` passed; and generated/API
 reference diff guard returned no changed files. No production source was
 changed.
+
+Round 97 re-review on `2026-07-11T00:44:20Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..af21b760.diff` produced clean code
+style/maintainability, security, and performance/reliability lanes.
+Documentation found that the work-log file inventory is stale/incomplete and
+that early work-log entries are not chronological. TypeScript/API docs found
+that accepted-work docs still blur pre-callback failures with post-callback
+delivery-status/status-update failures in `build-protocol/DEVELOPER_API.md`,
+`docs/api/README.md`, and `packages/server/README.md`. Round 98 will repair
+the work-log inventory/chronology, clarify accepted-work wording, verify,
+commit, and rerun the five required lanes.
+
+Round 98 docs/log fix on `2026-07-11T00:46:29Z`: accepted the documentation
+and TypeScript/API docs findings without production source or test edits.
+Updated the work-log `Files Changed` inventory from
+`git diff --name-only ca8fb2b3..HEAD`, reordered the top-level work-log
+`Entries` bullets into chronological order, and clarified accepted-work docs so
+pre-callback failures are claim, validation, and lease-fencing only while
+post-callback cleanup/status-update failures remain accepted work and may be
+failed work. Verification passed at `2026-07-11T00:51:59Z`: `docs:check`
+passed with only the existing invalid TypeDoc `origin` warning; the initial
+`format:check` flagged the owned review log, Prettier rewrote that file, and
+the final `format:check` passed; the targeted stale-record/flush-left guard
+returned no matches; `git diff --check` passed; and the generated/API
+reference diff guard returned no changed files. No production source, tests,
+generated docs, API reference docs, or `.codex-review-packages/` scratch files
+were edited.
