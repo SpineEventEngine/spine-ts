@@ -106,9 +106,18 @@ before the transaction and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 For supported rows, an internal pre-callback gate reads the 100 retained
-attempt slots for the exact inbox message. At that bound it leaves the row
-`TO_DELIVER`, skips the callback and another attempt record, and returns only
-bounded stack-free exhaustion facts in the local run result. It is not a public
+attempt slots for the exact inbox message. At that bound it skips the callback
+and another attempt, claims the exact row under the live shard fence, and marks
+it `DELIVERED` without accepted-work or failure-budget use. A lease/fencing
+failure through the final guard before durable marking remains
+`LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
+reports one failure with no accepted work, and leaves the row `TO_DELIVER`. If
+the mark fails and cleanup succeeds, the authoritative row remains `TO_DELIVER`
+and the local run returns one frozen, bounded, stack-free exhaustion-facts
+object. If cleanup also fails, the same one-failure accounting instead returns
+a `CLEANUP` result whose `AggregateError` contains the original mark error plus
+the cleanup error; that error is not promised frozen, bounded, or stack-free. It
+is not a public
 monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
 or adapter policy. Broader inbox lifecycle management and transport topology
 remain open production gaps.
@@ -356,11 +365,18 @@ stable failure stage/reason. Retained records do not include raw `Any.value`
 payload bytes, raw user errors, stack traces, or unbounded exception text.
 Before a supported callback runs, the internal retained-attempt count for that
 exact inbox message is checked against the same 100-slot bound. An exhausted
-row remains `TO_DELIVER`, skips the callback and another retained attempt
-record, and contributes one stack-free bounded exhaustion observation to direct
-run and loop failure accounting. This narrow gate is internal; it does not add
-public retry-policy configuration or public monitor/action behavior. Live shard ownership
-plus live per-message ownership block competing callback dispatch while
+row skips the callback and another retained attempt, then is claim-fenced and
+marked `DELIVERED` without accepted-work or failure-budget use. Lease/fencing
+through the final pre-mark guard retains `LEASE` / `LEASE_INACTIVE` attempt
+facts and one-failure accounting without accepted work. A mark failure
+with successful cleanup leaves the authoritative row `TO_DELIVER` and
+contributes one frozen, bounded, stack-free exhaustion-facts observation. If
+cleanup also fails, direct run and loop accounting still record one `CLEANUP`
+failure whose `AggregateError` contains the original mark error plus cleanup
+error and has no frozen, bounded, or stack-free guarantee. This narrow gate is
+internal; it does not add public retry-policy configuration or public
+monitor/action behavior. Live shard ownership plus live per-message ownership
+block competing callback dispatch while
 ownership is current; expired per-message ownership may be replaced during
 claim compare-and-set using the storage clock as abandoned-work recovery. If a
 stale owner continues after losing renewal, endpoint callback side effects are

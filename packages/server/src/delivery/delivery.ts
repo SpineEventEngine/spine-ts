@@ -85,8 +85,17 @@ export class Delivery {
    * failures also retain a bounded, sanitized internal attempt history. Before
    * a supported endpoint callback, this method applies the fixed package-
    * internal 100-attempt exhaustion gate for that exact inbox message.
-   * Exhausted rows remain pending, skip the callback, and do not record another
-   * attempt. The gate is not configurable or a public retry policy: this method
+   * Exhausted rows skip the callback and another attempt, then use an exact-row
+   * claim synchronized to the live shard fence to mark the row delivered. If
+   * lease/fencing fails through the final guard before durable marking begins,
+   * the run retains one bounded `LEASE` / `LEASE_INACTIVE` attempt, reports one
+   * failure with no accepted work, and leaves the row pending. If
+   * an exhaustion-time mark fails and claim cleanup succeeds, the row remains
+   * pending and contributes one frozen, bounded, stack-free facts object. If
+   * cleanup also fails, the run instead preserves one `CLEANUP` result whose
+   * `AggregateError` contains the mark and cleanup errors; that error is not
+   * promised to be frozen, bounded, or stack-free. Either path counts as one
+   * failure. The gate is not configurable or a public retry policy: this method
    * does not schedule later runs, open transports, or implement backoff.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
@@ -336,7 +345,18 @@ export class Delivery {
     requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      return deliveryRun("DRAINED", 1, 0, 0, 1, [retryExhaustedFailure(message, retry)]);
+      const action = await this.#markExhaustedDelivered(inbox, message, retry, lease, active);
+      await this.#recordExhaustedActionFailure(attempts, message, action);
+      if (action.kind === "SKIPPED") {
+        return deliveryRun("DRAINED", 1, 0, 0, 0, []);
+      }
+      if (action.kind === "DELIVERED") {
+        return deliveryRun("DRAINED", 1, 0, 1, 0, []);
+      }
+
+      return deliveryRun("DRAINED", 1, 0, 0, 1, [
+        Object.freeze({ message: exhaustedFailureMessage(message), error: action.error }),
+      ]);
     }
 
     const endpoint = requireEndpointMessage(message);
@@ -397,6 +417,58 @@ export class Delivery {
     }
   }
 
+  async #markExhaustedDelivered(
+    inbox: Inbox,
+    message: InboxMessage,
+    retry: DeliveryRetryDecision,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+  ): Promise<DeliveryMessageResult> {
+    const failure: { stage: DeliveryFailureStage } = { stage: "CLAIM" };
+
+    try {
+      const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
+      if (claimed === undefined) {
+        return { kind: "SKIPPED" };
+      }
+
+      active.set(claimed);
+      failure.stage = "LEASE";
+      await this.#synchronizeActiveClaim(inbox, lease, active);
+      await this.#markActiveDelivered(inbox, message, lease, active, () => {
+        failure.stage = "STATUS_UPDATE";
+      });
+
+      return { kind: "DELIVERED" };
+    } catch (error) {
+      const cleanup = await this.#clearFailedClaim(inbox, error, active);
+      const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : failure.stage;
+      const failureError =
+        failedStage === "STATUS_UPDATE" ? retryExhaustedMarkFailure(retry) : cleanup.error;
+
+      return Object.freeze({
+        kind: "FAILED" as const,
+        accepted: false,
+        error: failureError,
+        node: lease.session().node,
+        stage: failedStage,
+        reason: deliveryFailureReason(failedStage),
+      });
+    } finally {
+      active.clear();
+    }
+  }
+
+  async #recordExhaustedActionFailure(
+    attempts: DeliveryAttempts,
+    message: InboxMessage,
+    action: DeliveryMessageResult,
+  ): Promise<void> {
+    if (action.kind === "FAILED" && action.stage !== "STATUS_UPDATE") {
+      await this.#recordFailedAttempt(attempts, exhaustedFailureMessage(message), action);
+    }
+  }
+
   async #claimMessageForDelivery(
     inbox: Inbox,
     message: InboxMessage,
@@ -436,9 +508,11 @@ export class Delivery {
     message: InboxMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
+    onFinalize?: () => void,
   ): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
+    onFinalize?.();
 
     const marked = await active.finalize((current) =>
       inboxStorageAccess.markDelivered(inbox.storage, current),
@@ -489,7 +563,9 @@ export class Delivery {
     requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      progress.recordExhausted(message, retry);
+      const action = await this.#markExhaustedDelivered(inbox, message, retry, lease, active);
+      await this.#recordExhaustedActionFailure(attempts, message, action);
+      progress.recordExhausted(message, action);
       return;
     }
 
@@ -639,10 +715,12 @@ export interface DeliveryMessageDrainOptions {
 }
 
 /**
- * Independent callback/failure snapshot for one supported durable inbox row.
+ * Independent callback or ordinary failure snapshot for one supported durable inbox row.
  *
- * `Date` values and `Any.value` payload bytes are copied, so callback mutation
- * cannot alter the claimed internal row.
+ * Ordinary callback/failure snapshots copy `Date` values and `Any.value`
+ * payload bytes, so mutation cannot alter the claimed internal row. Exhausted-
+ * row failure snapshots use this same shape but intentionally omit `signal` to
+ * avoid copying payload bytes that the exhaustion path does not consume.
  */
 export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label" | "status"> {
   /** Delivery label supported by the direct worker endpoint callback surface. */
@@ -665,11 +743,11 @@ export interface DeliveryRun {
   readonly processed: number;
   /** Number of rows whose endpoint callback was invoked during this run. */
   readonly accepted: number;
-  /** Number of rows whose endpoint callback succeeded and were marked delivered. */
+  /** Number of rows marked delivered after callback success or callback-free exhaustion. */
   readonly delivered: number;
   /**
-   * Number of observed failures, including bounded retry exhaustion before a
-   * callback and endpoint, lease/fencing, status-update, or cleanup failures.
+   * Number of observed endpoint, lease/fencing, status-update, cleanup, or
+   * failed exhaustion-time mark observations.
    */
   readonly failed: number;
   /** Per-message failure observations kept only in the returned run result. */
@@ -682,8 +760,11 @@ export interface DeliveryFailure {
   readonly message: DeliveryEndpointMessage;
   /**
    * Error observed during endpoint callback, lease/fencing, delivery-status
-   * update, or framework cleanup work; or frozen, stack-free bounded facts
-   * when the internal retained-attempt gate is exhausted before a callback.
+   * update, or framework cleanup work. An exhaustion-time mark failure with
+   * successful cleanup uses frozen, bounded, stack-free facts. If cleanup also
+   * fails, the existing `CLEANUP` result carries an `AggregateError` containing
+   * the original mark error and cleanup error without that guarantee. The
+   * durable mark phase starts only after the final lease/fencing guard.
    */
   readonly error: unknown;
 }
@@ -727,7 +808,7 @@ interface DrainProgress {
   ) => DeliveryDrainOutcome;
   readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
-  readonly recordExhausted: (message: InboxMessage, decision: DeliveryRetryDecision) => void;
+  readonly recordExhausted: (message: InboxMessage, action: DeliveryMessageResult) => void;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
@@ -794,7 +875,8 @@ interface DeliveryErrorState {
 
 interface DeliveryRetryExhaustedFailure {
   readonly kind: "EXHAUSTED";
-  readonly message: "Delivery retry attempts exhausted.";
+  readonly action: "MARK_DELIVERED";
+  readonly message: "Delivery retry attempts exhausted; the row could not be marked delivered.";
   readonly count: number;
   readonly limit: number;
   readonly latestStage: DeliveryFailureStage | undefined;
@@ -858,20 +940,11 @@ function deliveryDrainOutcome(
   });
 }
 
-function retryExhaustedFailure(
-  message: InboxMessage,
-  decision: DeliveryRetryDecision,
-): DeliveryFailure {
-  return Object.freeze({
-    message: exhaustedFailureMessage(message),
-    error: retryExhaustedFacts(decision),
-  });
-}
-
-function retryExhaustedFacts(decision: DeliveryRetryDecision): DeliveryRetryExhaustedFailure {
+function retryExhaustedMarkFailure(decision: DeliveryRetryDecision): DeliveryRetryExhaustedFailure {
   return Object.freeze({
     kind: "EXHAUSTED",
-    message: "Delivery retry attempts exhausted.",
+    action: "MARK_DELIVERED",
+    message: "Delivery retry attempts exhausted; the row could not be marked delivered.",
     count: decision.count,
     limit: decision.limit,
     latestStage: decision.latestStage,
@@ -920,8 +993,14 @@ function drainProgress(): DrainProgress {
 
       return true;
     },
-    recordExhausted(message: InboxMessage, decision: DeliveryRetryDecision) {
-      failures.push(retryExhaustedFailure(message, decision));
+    recordExhausted(message: InboxMessage, action: DeliveryMessageResult) {
+      if (action.kind === "DELIVERED") {
+        delivered += 1;
+      } else if (action.kind === "FAILED") {
+        failures.push(
+          Object.freeze({ message: exhaustedFailureMessage(message), error: action.error }),
+        );
+      }
     },
     record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
       if (attempt.kind === "SKIPPED") {
@@ -1033,15 +1112,21 @@ class ActiveClaim {
     });
   }
 
-  async finalize<T>(callback: (message: ClaimedInboxMessage) => Promise<T>): Promise<T> {
+  async finalize<T>(
+    callback: (message: ClaimedInboxMessage) => Promise<T | undefined>,
+  ): Promise<T | undefined> {
     return this.#locked(async () => {
       const current = this.#claimed;
-      this.#claimed = undefined;
       if (current === undefined) {
         throw new Error("Inbox claim was lost.");
       }
 
-      return callback(current);
+      const result = await callback(current);
+      if (result !== undefined) {
+        this.#claimed = undefined;
+      }
+
+      return result;
     });
   }
 

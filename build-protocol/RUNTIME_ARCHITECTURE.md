@@ -263,9 +263,11 @@ delivery worker boundary:
   the drain is active. Rows unavailable to the active worker are skipped before
   endpoint invocation, including rows owned by another active worker and
   worker-unsupported labels such as `CATCH_UP`. Validated endpoints and
-  returned failures receive independent message snapshots only for
+  returned ordinary failures receive independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
-  values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
+  values and `Any.value` bytes are copied. Exhausted-row failure snapshots use
+  the same supported label/status shape but omit `signal`, avoiding payload
+  copies before callback-free finalization. `CATCH_UP` remains pending and never
   reaches those endpoints or failures. The callback limit caps endpoint
   callbacks that actually run. Newly observed rows stop at the storage read cap
   plus that limit while the scan advances by a stable inbox row continuation
@@ -281,9 +283,18 @@ delivery worker boundary:
   stable failure stage/reason; these records do not store raw `Any.value`
   payload bytes, raw user errors, stack traces, or unbounded exception text. A
   package-internal pre-callback gate reads the 100 retained slots for one exact
-  inbox message. At that bound it leaves the row `TO_DELIVER`, skips the
-  callback and another attempt record, and returns only bounded stack-free
-  exhaustion facts in the run result. This does not expose public
+  inbox message. At that bound it skips the callback and another attempt,
+  claims the exact row, synchronizes the active claim to the live shard fence,
+  and marks it `DELIVERED` without accepted-work or failure-budget use.
+  Lease/fencing failure through the final guard before durable marking remains
+  `LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
+  records one failure without accepted work, and leaves the row `TO_DELIVER`.
+  If the mark fails and cleanup succeeds, the authoritative row remains
+  `TO_DELIVER` and one frozen, bounded, stack-free exhaustion-facts object is
+  returned. If cleanup also fails, the row remains `TO_DELIVER` and the same
+  one-failure accounting returns a `CLEANUP` result whose `AggregateError`
+  contains the original mark error plus cleanup error; that error has no frozen,
+  bounded, or stack-free guarantee. This does not expose public
   monitor/action, scheduler/backoff, dead-letter, production-topology,
   catch-up, or adapter policy. Pre-callback
   claim, validation, and lease/fencing failures do not increment accepted work,

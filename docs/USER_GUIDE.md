@@ -1260,10 +1260,19 @@ When an endpoint callback fails and framework-owned cleanup succeeds, the
 retryable row stays pending as `TO_DELIVER` for later replay. Before another
 supported endpoint callback runs, the package-internal retry gate summarizes
 retained attempts for that exact inbox message by reading only its 100 known
-per-message retained slots. An exhausted supported row also stays pending as
-`TO_DELIVER`, but the gate skips the callback and another retained-attempt
-write, returns bounded stack-free failure facts, does not consume accepted
-work, and counts toward failed work and the framework failure bound. Retryable
+per-message retained slots. For an exhausted supported row, the gate skips the
+callback and another retained-attempt write, then claims and marks the exact row
+`DELIVERED` under the live shard fence. This consumes neither accepted work nor
+the framework failure bound. Lease/fencing failure through the final guard
+before durable marking remains `LEASE` / `LEASE_INACTIVE`, retains one bounded
+attempt at the 100-slot cap, counts one failure without accepted work, and
+leaves the row `TO_DELIVER`. If the mark fails and cleanup succeeds, the
+authoritative row remains `TO_DELIVER` and one frozen, bounded, stack-free
+exhaustion-facts object counts toward failed work and the framework failure
+bound. If cleanup also fails, the row still remains `TO_DELIVER` and accounting
+still records one `CLEANUP` failure; its `AggregateError` contains the original
+mark error plus cleanup error and has no frozen, bounded, or stack-free
+guarantee. Retryable
 failures remain available for later replay through the existing path. The
 framework retains internal sanitized attempt records for supported endpoint
 failures: message/inbox/shard identity, label, node, attempted time, accepted

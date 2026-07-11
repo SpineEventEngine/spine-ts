@@ -48,6 +48,12 @@ export function blockInboxRenewalOnce(): BlockedDeliveryFaultProbe {
   return blockingCompareAndSetProbe(isInboxClaimRenewal);
 }
 
+export function blockDedupFinalizeOnce(
+  options: { readonly armed?: boolean } = {},
+): BlockedDeliveryFaultProbe {
+  return blockingCompareAndSetProbe(isDedupFinalize, options.armed ?? true);
+}
+
 export function throwInboxClaimOnce(): CountedDeliveryFaultProbe {
   return throwingCompareAndSetProbe(isInboxClaimCreation, new Error("Inbox claim failed."));
 }
@@ -319,7 +325,7 @@ export interface ArmableDeliveryFaultProbe extends CountedDeliveryFaultProbe {
   arm(): void;
 }
 
-export interface BlockedDeliveryFaultProbe extends CountedDeliveryFaultProbe {
+export interface BlockedDeliveryFaultProbe extends ArmableDeliveryFaultProbe {
   readonly blocked: Promise<undefined>;
   resume(): void;
 }
@@ -501,9 +507,10 @@ function compareAndSetProbe(
 
 function blockingCompareAndSetProbe(
   matches: CompareAndSetMatcher,
+  initiallyArmed = true,
 ): BlockedDeliveryFaultProbe & DeliveryStorageFaultProbe {
   let count = 0;
-  let armed = true;
+  let armed = initiallyArmed;
   let gate = deferred<undefined>();
   let resume = deferred<undefined>();
 
@@ -513,6 +520,9 @@ function blockingCompareAndSetProbe(
     },
     get blocked() {
       return gate.promise;
+    },
+    arm() {
+      armed = true;
     },
     resume() {
       resume.resolve(undefined);

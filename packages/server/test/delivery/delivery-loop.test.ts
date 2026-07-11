@@ -830,7 +830,7 @@ describe("DeliveryLoop", () => {
     expect(run.failures).toHaveLength(2);
   });
 
-  it("counts an exhausted head against the failure bound before retryable tail callbacks", async () => {
+  it("marks an exhausted head without consuming the failure bound before retryable tail callbacks", async () => {
     const delivery = createDelivery();
     const exhausted = await seed(delivery, "signal-exhausted-head", 1n);
     await recordFailures(delivery, exhausted, deliveryAttemptCapacity);
@@ -847,22 +847,19 @@ describe("DeliveryLoop", () => {
       },
     }).run();
 
-    expect(seen).toEqual([]);
+    expect(seen).toEqual(["signal-retryable-tail"]);
     expect(run).toMatchObject({
-      status: "FAILED",
-      runs: 1,
-      processed: 1,
-      accepted: 0,
-      delivered: 0,
-      failed: 1,
+      status: "IDLE",
+      runs: 3,
+      processed: 2,
+      accepted: 1,
+      delivered: 2,
+      failed: 0,
     });
-    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted-head");
+    expect(run.failures).toEqual([]);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([
-      { signalId: "signal-exhausted-head", status: "TO_DELIVER" },
-      { signalId: "signal-retryable-tail", status: "TO_DELIVER" },
-    ]);
+    ).resolves.toEqual([]);
   });
 
   it("keeps successful callbacks in one drain while stopping at the failure bound", async () => {

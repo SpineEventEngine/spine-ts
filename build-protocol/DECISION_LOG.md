@@ -2991,7 +2991,7 @@ fixed internal outcome policy without promising those broader facilities.
 
 Decision:
 
-- Use only two internal action concepts in the later implementation slice.
+- Use only two internal action concepts in the internal implementation.
   `KEEP_PENDING` is the policy outcome that preserves `TO_DELIVER`; releasing
   its active row claim uses the existing cleanup path, not a separate action
   executor or failure category. `MARK_DELIVERED` means use the framework-owned
@@ -3043,23 +3043,30 @@ Decision:
 - Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
   framework drain to reconsider the row; it does not recurse, schedule a run,
   promise backoff, or imply worker supervision.
-- If the exhaustion-time `MARK_DELIVERED` transition fails, report one
-  delivery failure for that row and keep the durable inbox row's authoritative
-  outcome pending `TO_DELIVER`. New action-failure facts or error details
-  introduced for that failure by the later implementation must be bounded and
-  sanitized. The row must not be reported as delivered, and the exhaustion
-  context must remain available. Existing failure-budget accounting remains
-  unchanged.
+- If the exhaustion-time `MARK_DELIVERED` transition fails and claim cleanup
+  succeeds, report one delivery failure for that row and keep the durable inbox
+  row's authoritative outcome pending `TO_DELIVER`. New action-failure facts or
+  error details introduced for that successful-cleanup branch must be bounded
+  and sanitized. The row must not be reported as delivered, the exhaustion
+  context must remain available, and existing failure-budget accounting remains
+  one failure. If claim cleanup also fails, preserve the existing cleanup
+  exception: report one `CLEANUP` failure whose `AggregateError` contains the
+  original mark error plus cleanup error, without promising that aggregate is
+  frozen, bounded, or stack-free. The authoritative row remains `TO_DELIVER`
+  and failure accounting remains one. This exception preserves existing cleanup
+  aggregation and does not add a public action or error contract.
 - D-0084 does not change the enclosing public `DeliveryFailure` contract. Its
   existing `message` remains a copied `DeliveryEndpointMessage` snapshot that
   may contain copied `Any.value` payload bytes, and its existing `error`
   remains `unknown`. T-0033 makes no claim that this enclosing failure is
   payload-free; any change to that public contract requires a later explicit
   task.
-- This decision is not executable policy. Until a later implementation task
-  changes and verifies the runtime, D-0083 remains the current behavior:
-  endpoint callback failures after retryable classification retain attempts and
-  remain pending, while exhausted rows are skipped and remain pending.
+- T-0034 makes only the fixed pre-callback `MARK_DELIVERED` action executable:
+  it claims and fence-synchronizes the exact exhausted row before internal
+  finalization. The retryable callback `KEEP_PENDING` sequence remains the
+  existing cleanup/finalize/one-attempt/one-failure path. Public monitor/action
+  selection, immediate repeat, scheduler/backoff, dead-letter, supervision,
+  topology, and adapters remain deferred.
 - Preserve valid `CATCH_UP` rows as pending/skipped and preserve fail-closed
   handling of legacy stored `IMPORT_EVENT` rows. Neither path enters this
   supported-endpoint action policy.
@@ -3081,13 +3088,16 @@ Alternatives considered:
 
 Consequences:
 
-- The later implementation slice has one deterministic outcome for an endpoint
+- The internal implementation has one deterministic outcome for an endpoint
   callback failure after retryable classification and one for pre-callback
   exhaustion, with a small claim-fenced execution boundary.
 - Exhaustion will intentionally trade further retries for a terminal delivered
   status after 100 retained failures. No dead-letter record is implied, so the
   bounded retained attempt history remains the available durable diagnostic
   evidence.
-- Runtime source, tests, public docs, APIs, generated files, and examples remain
-  unchanged in T-0033. Reviewers must reject prose that presents D-0084 as
-  currently executable or as public monitor/scheduler behavior.
+- Runtime source, tests, public docs, APIs, generated files, and examples
+  remained unchanged in T-0033. T-0034 now makes the fixed internal
+  pre-callback exhausted-row `MARK_DELIVERED` outcome executable and current.
+  Reviewers must reject prose that overclaims public `DeliveryMonitor`, custom
+  actions, repeat dispatch, scheduler/backoff, dead-letter, supervision,
+  topology, adapter, or other broader policy behavior.
