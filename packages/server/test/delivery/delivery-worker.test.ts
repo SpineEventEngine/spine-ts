@@ -14,13 +14,7 @@ import {
   type OnDeliveryMessage,
 } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
-import {
-  InboxMessageError,
-  ShardIndex,
-  ShardSession,
-  type InboxId,
-  type InboxMessage,
-} from "../../src/index.js";
+import { InboxMessageError, ShardIndex, ShardSession, type InboxMessage } from "../../src/index.js";
 import {
   blockInboxClaimOnce,
   blockInboxRenewalOnce,
@@ -2927,12 +2921,7 @@ function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
-): Promise<DeliveryEndpointMessage>;
-function seed(
-  delivery: Delivery,
-  signalId: string,
-  version: bigint,
-  label: DeliveryEndpointMessage["label"],
+  label?: DeliveryEndpointMessage["label"],
 ): Promise<DeliveryEndpointMessage>;
 function seed(
   delivery: Delivery,
@@ -2974,49 +2963,7 @@ interface DeliveryAttemptOwner {
   readonly attempts?: DeliveryAttemptReader;
 }
 
-interface DeliveryAttemptReader {
-  read(): Promise<readonly DeliveryAttemptSnapshot[]>;
-  recordFailure(input: {
-    readonly message: DeliveryEndpointMessage;
-    readonly node: string;
-    readonly attemptedAt: Date;
-    readonly accepted: boolean;
-    readonly stage: DeliveryAttemptFailureStage;
-    readonly reason: DeliveryAttemptFailureReason;
-  }): Promise<void>;
-  summarize(messageId: InboxMessage["id"]): Promise<DeliveryAttemptSummarySnapshot>;
-}
-
-type DeliveryAttemptFailureStage = "CLAIM" | "LEASE" | "ENDPOINT" | "CLEANUP" | "STATUS_UPDATE";
-
-type DeliveryAttemptFailureReason =
-  | "CLAIM_FAILED"
-  | "LEASE_INACTIVE"
-  | "ENDPOINT_REJECTED"
-  | "CLEANUP_FAILED"
-  | "STATUS_UPDATE_FAILED";
-
-interface DeliveryAttemptSnapshot {
-  readonly messageId: InboxMessage["id"];
-  readonly inboxId: InboxId;
-  readonly signalId: string;
-  readonly label: DeliveryEndpointMessage["label"];
-  readonly shard: ShardIndex;
-  readonly node: string;
-  readonly attemptedAt: Date;
-  readonly accepted: boolean;
-  readonly stage: DeliveryAttemptFailureStage;
-  readonly reason: DeliveryAttemptFailureReason;
-}
-
-interface DeliveryAttemptSummarySnapshot {
-  readonly attempts: readonly DeliveryAttemptSnapshot[];
-  readonly count: number;
-  readonly latestAttempt: DeliveryAttemptSnapshot | undefined;
-  readonly latestStage: DeliveryAttemptFailureStage | undefined;
-  readonly latestReason: DeliveryAttemptFailureReason | undefined;
-  readonly latestAccepted: boolean | undefined;
-}
+type DeliveryAttemptReader = Delivery["attempts"];
 
 function deferred<T>(): {
   readonly promise: Promise<T>;
