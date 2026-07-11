@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 90 fix verified; current-HEAD re-review pending
+Status: Round 92 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2953,7 +2953,7 @@ red/green delivery regressions before the next review pass.
   and the Round 88 timestamp consistency, verify, commit, and rerun all five
   reviewer lanes.
 
-### Round 90 Fix - `2026-07-10T23:51:43Z`
+### Round 90 Fix - `2026-07-10T23:55:22Z`
 
 - Runtime style: derived `ProjectionInput` from `ProjectionInbox.receive()`
   input parameters and reused it for both projection handoff receive paths.
@@ -2967,3 +2967,46 @@ red/green delivery regressions before the next review pass.
   targeted command-continuation search returned no matches, `git diff --check`
   passed, and generated/API reference diff checks returned no changed files at
   `2026-07-10T23:55:22Z`.
+
+### Round 91 Re-review - `2026-07-10T23:55:22Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..fe22d03c.diff` from task baseline
+  `ca8fb2b3` to current HEAD `fe22d03c`.
+- Code style/maintainability (Aquinas the 3rd): [P3] Round 90 fix report and
+  review-log header still use the Round 89 planning timestamp instead of the
+  Round 90 verification timestamp. No source-code style findings.
+- Documentation (Newton the 3rd): [P3] same Round 90 timestamp inconsistency.
+- TypeScript/API docs (Locke the 3rd): clean. Exports, generated-output
+  hygiene, `DeliveryEndpointMessage`, `ProjectionInput`, and accepted-work docs
+  align.
+- Security (Poincare the 3rd): [High] row-claim renewal can be missed when the
+  shard lease renewal completes while the row claim is still being acquired.
+  `keepShardLease()` calls `onRenewClaim(next)` before updating the current
+  shard session, but `ActiveClaim.renew()` returns when no row claim has been
+  installed yet. The callback can then proceed with the stale row claim expiry,
+  allowing another worker to reclaim the expired row during a long callback.
+- Performance/reliability (Turing the 3rd): clean. Static review found no
+  performance/reliability issues in delivery loop, claim, lease, or replay
+  paths.
+- Action: record this findings batch, add a regression for the missed row-claim
+  renewal race, repair claim/session synchronization before endpoint callback
+  invocation, align Round 90 timestamps, verify, commit, and rerun all five
+  reviewer lanes.
+
+### Round 92 Fix - `2026-07-10T23:55:22Z`
+
+- Regression: added a blocked row-claim acquisition case proving the row claim
+  is renewed to the latest shard-session expiry before callback dispatch when
+  shard renewal completes during claim acquisition.
+- Runtime: after installing an active row claim, delivery waits for any
+  in-flight shard renewal, rechecks the shard lease, and synchronizes the row
+  claim to the latest shard session before invoking the endpoint callback.
+- Records: aligned the Round 90 fix report timestamp and review-log Round 90
+  header with `2026-07-10T23:55:22Z`.
+- Verification: focused delivery/projection Vitest passed with 3 files and 91
+  tests, `typecheck:build:generated` passed, `docs:check` passed with only the
+  existing invalid TypeDoc `origin` warning, `format:check` passed, the
+  targeted stale-record search returned no matches, `git diff --check` passed,
+  and generated/API reference diff checks returned no changed files at
+  `2026-07-11T00:11:56Z`.

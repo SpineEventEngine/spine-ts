@@ -4,7 +4,7 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
-import type { ClaimedInboxMessage } from "./inbox-claim.js";
+import type { ClaimedInboxMessage, InboxClaim } from "./inbox-claim.js";
 import { requireDeliveryLeaseMs } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
@@ -342,6 +342,7 @@ export class Delivery {
       }
 
       active.set(claimed);
+      await this.#synchronizeActiveClaim(inbox, lease, active);
       await this.#invokeEndpoint(claimed, onMessage, lease, active);
       await this.#markActiveDelivered(inbox, message, lease, active);
 
@@ -365,6 +366,16 @@ export class Delivery {
     lease.requireActive();
 
     return inboxStorageAccess.claim(inbox.storage, message, lease.session());
+  }
+
+  async #synchronizeActiveClaim(
+    inbox: Inbox,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+  ): Promise<void> {
+    await lease.awaitRenewal();
+    lease.requireActive();
+    await active.synchronize(inbox.storage, lease.session());
   }
 
   async #invokeEndpoint(
@@ -920,11 +931,15 @@ class ActiveClaim {
 
   async renew(storage: InboxStorage, session: ShardSession): Promise<void> {
     await this.#locked(async () => {
-      if (this.#claimed === undefined) {
+      const current = this.#claimed;
+      if (current === undefined) {
+        return;
+      }
+      if (claimMatchesSession(current.claim, session)) {
         return;
       }
 
-      const renewed = await inboxStorageAccess.renew(storage, this.#claimed, session);
+      const renewed = await inboxStorageAccess.renew(storage, current, session);
       if (renewed === undefined) {
         throw new Error("Inbox claim was lost.");
       }
@@ -936,6 +951,24 @@ class ActiveClaim {
     this.#claimed = message;
     this.#callbackAccepted = false;
     this.#callbackSucceeded = false;
+  }
+
+  async synchronize(storage: InboxStorage, session: ShardSession): Promise<void> {
+    await this.#locked(async () => {
+      const current = this.#claimed;
+      if (current === undefined) {
+        throw new Error("Inbox claim was lost.");
+      }
+      if (claimMatchesSession(current.claim, session)) {
+        return;
+      }
+
+      const renewed = await inboxStorageAccess.renew(storage, current, session);
+      if (renewed === undefined) {
+        throw new Error("Inbox claim was lost.");
+      }
+      this.#claimed = renewed;
+    });
   }
 
   async #locked<T>(callback: () => Promise<T>): Promise<T> {
@@ -952,6 +985,14 @@ class ActiveClaim {
       release();
     }
   }
+}
+
+function claimMatchesSession(claim: InboxClaim, session: ShardSession): boolean {
+  return (
+    claim.id === session.id &&
+    claim.node === session.node &&
+    claim.expiresAt.getTime() === session.expiresAt.getTime()
+  );
 }
 
 function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {

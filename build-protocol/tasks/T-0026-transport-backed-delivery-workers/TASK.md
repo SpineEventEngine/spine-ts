@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 90 fix verified; current-HEAD re-review pending
+Status: Round 92 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1436,3 +1436,25 @@ passed with 3 files and 90 tests; `typecheck:build:generated` passed;
 matches; `git diff --check` passed; and generated/API reference diff checks
 returned no changed files. A fresh five-lane current-HEAD re-review is
 required.
+
+Round 91 re-review on `2026-07-10T23:55:22Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..fe22d03c.diff` produced clean
+TypeScript/API docs and performance/reliability lanes. Style and documentation
+found the Round 90 report/header still use the planning timestamp instead of
+the verification timestamp. Security found a high-risk row-claim renewal race:
+if shard renewal completes while the row claim is still being acquired,
+`ActiveClaim.renew()` sees no active row and the callback can run with a stale
+row-claim expiry, allowing another worker to reclaim the row during a long
+callback. The next fix batch will add the regression, fix claim/session
+synchronization, align the timestamps, verify, commit, and rerun all five
+lanes.
+
+Round 92 fix on `2026-07-11T00:11:56Z`: added a regression for row-claim
+acquisition blocked across concurrent shard renewal, synchronized installed
+row claims to the latest shard session before endpoint callback dispatch, and
+aligned Round 90 timestamps. Verification passed: focused delivery/projection
+Vitest passed with 3 files and 91 tests; `typecheck:build:generated` passed;
+`docs:check` passed with only the existing invalid TypeDoc `origin` warning;
+`format:check` passed; the targeted stale-record search returned no matches;
+`git diff --check` passed; and generated/API reference diff checks returned no
+changed files. A fresh five-lane current-HEAD re-review is required.

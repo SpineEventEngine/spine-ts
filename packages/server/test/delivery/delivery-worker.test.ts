@@ -193,6 +193,56 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("renews a row claim acquired after a concurrent shard renewal before dispatch", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const blockedClaim = blockInboxClaimOnce();
+      const faults = deliveryStorageFaults(blockedClaim);
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: faults.storageFactory,
+        leaseMs: 1_000,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+      const stored = await seed(delivery, "signal-claim-renew-race", 1n);
+      const inboxRecords = deliveryInboxRecords(faults.storageFactory);
+      const inboxKey = messageKey(stored);
+      const seen: string[] = [];
+      let observedClaimExpiresAt: Date | undefined;
+
+      const runPromise = delivery.drain(shard, {
+        node: "node-a",
+        async onMessage(message) {
+          seen.push(message.signalId);
+          const record = await inboxRecords.read(inboxKey);
+          observedClaimExpiresAt =
+            record === undefined ? undefined : InboxRecords.read(record, inboxKey).claim?.expiresAt;
+        },
+      });
+
+      await blockedClaim.blocked;
+      await vi.advanceTimersByTimeAsync(500);
+      blockedClaim.resume();
+
+      const run = await runPromise;
+
+      expect(blockedClaim.count).toBe(1);
+      expect(seen).toEqual(["signal-claim-renew-race"]);
+      expect(observedClaimExpiresAt).toEqual(new Date("2026-07-08T09:00:01.500Z"));
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        accepted: 1,
+        delivered: 1,
+        failed: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps one drain on its original tenant when the caller-owned context mutates mid-callback", async () => {
     vi.useFakeTimers();
     try {
