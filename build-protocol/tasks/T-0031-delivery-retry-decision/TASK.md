@@ -1,6 +1,6 @@
 # T-0031: Internal Delivery Retry Decision Primitive
 
-Status: Final verification passed; merge pending
+Status: Complete; merged and post-merge verified
 Started: `2026-07-11T13:05:00Z`
 Baseline commit: `9566466d`
 Branch: `task/T-0031-delivery-retry-decision`
@@ -173,3 +173,13 @@ Impact of JVM evidence:
 - `build-protocol/work-logs/T-0031.md`
 - `packages/server/src/delivery/delivery-retry-decision.ts`
 - `packages/server/test/delivery/delivery-retry-decision.test.ts`
+
+## Completion
+
+- Merged to root `main` as `1e2546a2 Merge T-0031 delivery retry decision`.
+- Post-merge focused verification passed 6 files and 251 tests.
+- Post-merge native full `pnpm --config.verify-deps-before-run=false verify`
+  passed after one diagnosed coverage-run close-order flake was not
+  reproducible in focused normal or focused coverage runs.
+- Root `main` was clean except for the user-owned untracked
+  `human-review-1-jul.md`.

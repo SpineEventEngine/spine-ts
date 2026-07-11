@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Final verification passed; merge pending
+Status: Complete; merged and post-merge verified
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -166,3 +166,9 @@ Branch: `task/T-0031-delivery-retry-decision`
   `pnpm --config.verify-deps-before-run=false verify` rerun passed after the
   sandboxed run failed loopback and ZeroMQ IPC tests with `EPERM`. Merge to root
   `main` is pending.
+- `2026-07-11T13:21:44Z`: T-0031 was merged to root `main` as `1e2546a2 Merge
+T-0031 delivery retry decision` after all five required review lanes were
+  clean. Post-merge focused verification passed. A native full verify was rerun
+  after one non-reproducible coverage-run close-order flake; the rerun passed
+  normal tests, coverage tests, docs/API checks, proto lint, and
+  generated-output cleanliness. Review is closed.
