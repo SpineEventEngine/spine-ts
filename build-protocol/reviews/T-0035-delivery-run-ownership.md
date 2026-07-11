@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Decision coordinator-verified; independent review pending
+Status: Round 1 independent review in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | Pending  | Pending |
-| Documentation              | Pending  | Pending |
-| TypeScript/API docs        | Pending  | Pending |
-| Performance/reliability    | Pending  | Pending |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f5363-3600-7d33-b46e-9752b23ebe11` | Pending |
+| Documentation              | `019f5363-36a9-76d3-bd4d-d2add1b7f3b9` | Pending |
+| TypeScript/API docs        | `019f5363-373f-7983-a5d9-216fc031cfbc` | Pending |
+| Performance/reliability    | `019f5363-37df-70b3-a993-de513806b357` | Pending |
 
 Security is deferred to final project readiness.
 
@@ -56,3 +56,6 @@ Security is deferred to final project readiness.
   passed docs/API, formatting, whitespace, changed-scope, status, single-owner,
   outcome, startup/shutdown, public-leakage, and future-policy checks. Fresh
   package generation and all four lanes are next.
+- `2026-07-11T22:55:00Z`: Generated Round 1 package
+  `.superpowers/sdd/review-9200dcce..12c49c97.diff` and assigned all four
+  current lanes. The live table was updated atomically; results are pending.
