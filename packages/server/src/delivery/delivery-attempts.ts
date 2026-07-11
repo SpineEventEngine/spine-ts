@@ -193,17 +193,19 @@ async function nextSequence(
   storage: RecordStorage<string, Any>,
   messageKey: string,
 ): Promise<number> {
-  const records = await storage.queryEntries({
-    filters: [{ column: "messageKey", value: messageKey }],
-    sort: [{ field: "sequence", direction: "desc" }],
-    limit: 1,
-  });
-  const last = records[0];
-  if (last === undefined) {
-    return 1;
+  let sequence = 0;
+
+  for (let slot = 1; slot <= maxAttemptsPerMessage; slot += 1) {
+    const key = attemptKey(messageKey, slot);
+    const record = await storage.read(key);
+    if (record === undefined) {
+      continue;
+    }
+
+    sequence = Math.max(sequence, readStoredAttempt(record, key).sequence);
   }
 
-  return readStoredAttempt(last.record, last.id).sequence + 1;
+  return sequence + 1;
 }
 
 function attemptFromInput(input: DeliveryAttemptInput): AttemptInput {
@@ -237,7 +239,7 @@ function storedAttempt(input: AttemptInput, sequence: number): StoredAttempt {
   return Object.freeze({
     ...input,
     sequence,
-    key: `${input.messageKey}:attempt:${attemptSlot(sequence)}`,
+    key: attemptKey(input.messageKey, sequence),
   });
 }
 
@@ -390,7 +392,7 @@ function assertAttemptIdentity(stored: StoredAttempt): void {
       "Delivery attempt message identity does not match shard identity.",
     );
   }
-  const expectedKey = `${stored.messageKey}:attempt:${attemptSlot(stored.sequence)}`;
+  const expectedKey = attemptKey(stored.messageKey, stored.sequence);
   if (stored.key !== expectedKey) {
     throw new DeliveryStorageCorruptionError(
       "Delivery attempt key does not match message identity and sequence.",
@@ -568,6 +570,10 @@ function attemptSlot(sequence: number): string {
   const slot = ((sequence - 1) % maxAttemptsPerMessage) + 1;
 
   return String(slot).padStart(12, "0");
+}
+
+function attemptKey(messageKey: string, sequence: number): string {
+  return `${messageKey}:attempt:${attemptSlot(sequence)}`;
 }
 
 function assertStoredRecordSize(value: Buffer): void {

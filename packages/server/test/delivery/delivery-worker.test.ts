@@ -1107,7 +1107,7 @@ describe("Delivery worker", () => {
     });
   });
 
-  it("uses bounded sequence lookups when recording repeated attempts", async () => {
+  it("uses bounded slot reads when recording repeated attempts", async () => {
     const attemptQueries: { limit?: number; messageKey?: unknown }[] = [];
     const faults = deliveryStorageFaults(recordAttemptQueries(attemptQueries));
     const delivery = new Delivery({
@@ -1127,11 +1127,7 @@ describe("Delivery worker", () => {
       });
     }
 
-    expect(attemptQueries.length).toBeGreaterThanOrEqual(2);
-    expect(attemptQueries.every((query) => query.limit !== undefined && query.limit <= 101)).toBe(
-      true,
-    );
-    expect(attemptQueries.some((query) => query.limit === 1)).toBe(true);
+    expect(attemptQueries).toEqual([]);
   });
 
   it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {

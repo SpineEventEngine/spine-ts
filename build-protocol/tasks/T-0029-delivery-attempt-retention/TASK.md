@@ -205,3 +205,9 @@ Round 2 independent review against
 durable logs must record the current commit/review state, and retained-attempt
 sequence lookup must avoid the storage adapter's hot-path global query scan.
 This task is not complete until those findings are fixed and re-reviewed.
+
+Round 2 fix work started from `02917d0d Record T-0029 Round 2 review
+findings`. The fix scope is intentionally limited to durable-log freshness and
+bounded per-message delivery-attempt sequence discovery; generated Protobuf
+output remains out of VCS. After the fix commit, T-0029 remains pending a fresh
+review package and re-review.

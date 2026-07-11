@@ -127,3 +127,22 @@ Branch: `task/T-0029-delivery-attempt-retention`
   sequence lookup with bounded slot reads or equivalent bounded behavior, run
   focused verification, commit, regenerate the review package, and rerun all
   five independent review lanes.
+
+### Round 2 Fix Status
+
+- Starting point: `02917d0d Record T-0029 Round 2 review findings`.
+- Fix worker scope: update durable logs and replace
+  `DeliveryAttempts.nextSequence()` hot-path attempt-storage query with bounded
+  per-message slot reads. No storage adapter query-planner work, retry monitor,
+  scheduler, production adapter, durable catch-up, public API, or
+  `IMPORT_EVENT` support is part of this fix.
+- Regression evidence so far: the focused test
+  `uses bounded slot reads when recording repeated attempts` failed before
+  production edits because two `limit: 1` attempt-storage `queryEntries` calls
+  were observed, then passed after sequence discovery switched to direct reads
+  of the 100 known per-message retention slots.
+- Verification: required focused Vitest, `typecheck:build:generated`,
+  `docs:check`, `format:check`, and `git diff --check` passed after the Round
+  2 fix; `docs:check` emitted only the existing TypeDoc invalid-origin warning.
+- Status: after the Round 2 fix commit, T-0029 remains pending a fresh review
+  package and re-review.
