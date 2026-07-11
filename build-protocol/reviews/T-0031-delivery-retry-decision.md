@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Round 2 found one ledger/process finding; fix pending
+Status: Round 2 ledger/process fix applied; coordinator re-review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -84,3 +84,8 @@ Branch: `task/T-0031-delivery-retry-decision`
   branch history. The fix should add `44d5d116` and state the ledger convention
   for the current log-maintenance commit so the branch does not enter an
   impossible self-referential ledger loop. Fix is pending.
+- `2026-07-11T13:48:00+0100`: Round 2 ledger/process fix worker updated the
+  work log commit ledger to include `44d5d116` and the newer completed round 2
+  finding record commit `27c17705`, and added the explicit current
+  log-maintenance commit convention. Coordinator re-review remains pending, and
+  T-0031 is not final.
