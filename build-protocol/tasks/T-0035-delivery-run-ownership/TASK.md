@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 1 independent review in progress
+Status: Round 1 findings pending fix
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`

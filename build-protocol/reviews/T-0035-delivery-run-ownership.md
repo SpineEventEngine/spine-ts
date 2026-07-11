@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 1 independent review in progress
+Status: Round 1 findings pending fix
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5363-3600-7d33-b46e-9752b23ebe11` | Pending |
-| Documentation              | `019f5363-36a9-76d3-bd4d-d2add1b7f3b9` | Pending |
-| TypeScript/API docs        | `019f5363-373f-7983-a5d9-216fc031cfbc` | Pending |
-| Performance/reliability    | `019f5363-37df-70b3-a993-de513806b357` | Pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f5363-3600-7d33-b46e-9752b23ebe11` | P2     |
+| Documentation              | `019f5363-36a9-76d3-bd4d-d2add1b7f3b9` | Clean  |
+| TypeScript/API docs        | `019f5363-373f-7983-a5d9-216fc031cfbc` | Clean  |
+| Performance/reliability    | `019f5363-37df-70b3-a993-de513806b357` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -59,3 +59,10 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:55:00Z`: Generated Round 1 package
   `.superpowers/sdd/review-9200dcce..12c49c97.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T23:00:00Z`: Round 1 completed and all four reviewers were
+  closed. Documentation and TypeScript/API docs were clean. The complete
+  finding batch is: preserve bounded cross-run progress for `PAUSED` without
+  contention spin, define rejected-run handling for startup, notification,
+  coalesced requests, observation, and shutdown, and reconcile the active
+  architecture guide's obsolete `ServerEnvironment` claim. One fix worker and
+  fresh four-lane review are required.
