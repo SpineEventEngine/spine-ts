@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 7 independent review in progress
+Status: Round 7 API documentation finding pending fix
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0034-mark-exhausted-delivery-rows`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5324-a926-7210-ac3d-6cd5be8ba0a7` | Pending |
-| Documentation              | `019f5324-a8b8-7ac3-92bd-27c17f83c6d4` | Pending |
-| TypeScript/API docs        | `019f5324-a9b0-7f43-8e3a-f78960c0c3b9` | Pending |
-| Performance/reliability    | `019f5324-aa42-7202-80ef-1283720465a0` | Pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f5324-a926-7210-ac3d-6cd5be8ba0a7` | Clean  |
+| Documentation              | `019f5324-a8b8-7ac3-92bd-27c17f83c6d4` | Clean  |
+| TypeScript/API docs        | `019f5324-a9b0-7f43-8e3a-f78960c0c3b9` | P3     |
+| Performance/reliability    | `019f5324-aa42-7202-80ef-1283720465a0` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -207,6 +207,12 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:52:00Z`: Generated Round 7 package
   `.superpowers/sdd/review-da75f11e..a1d5b216.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T21:57:00Z`: Round 7 completed and all four reviewers were
+  closed. Three lanes were clean. TypeScript/API docs found one P3: the current
+  failure TypeDoc and active API prose promise bounded frozen stack-free facts
+  for every failed exhaustion mark, but mark failure plus cleanup failure
+  preserves the existing aggregated `CLEANUP` error. One docs/TypeDoc worker
+  must qualify the complete active wording batch before fresh four-lane review.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
