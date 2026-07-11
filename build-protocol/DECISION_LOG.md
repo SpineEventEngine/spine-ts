@@ -3101,3 +3101,107 @@ Consequences:
   Reviewers must reject prose that overclaims public `DeliveryMonitor`, custom
   actions, repeat dispatch, scheduler/backoff, dead-letter, supervision,
   topology, adapter, or other broader policy behavior.
+
+## D-0085: Let ServerEnvironment Own Bounded Delivery Runs
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0035`
+
+Context: T-0034 made the fixed internal exhausted-row `MARK_DELIVERED` outcome
+executable. The current `DeliveryLoop.run()` still performs one explicitly
+started bounded run for one shard, and `DeliveryWorker.start()` starts its
+configured loops once and resolves when they stop. Neither method starts at
+server startup, reacts to a later durable write, or guarantees a later run for
+a retryable row left `TO_DELIVER`. `stop()` prevents later drains and `close()`
+awaits an active run without interrupting its current drain. The optional
+`ServerEnvironment.delivery` property is only a closeable facility today; that
+does not make it a scheduler. A framework owner must connect these bounded
+primitives to server startup, local durable-write notification, observation,
+and orderly stop before delay policy or public monitoring is designed.
+
+Decision:
+
+- `ServerEnvironment` is the sole framework owner for starting, retriggering,
+  stopping, and observing delivery runs. It uses a package-internal delivery-run
+  lifecycle seam around `DeliveryWorker`; the seam is an implementation detail,
+  not another owner, an environment configuration surface, or a public API.
+- Preserve each `DeliveryWorker.start()` call as a one-shot bounded run. The
+  lifecycle seam may serialize starts and coalesce trigger requests that arrive
+  while a run is active into at most one subsequent run request. It must not
+  turn one worker call into an unbounded background loop or recursively repeat
+  dispatch.
+- After contexts and delivery endpoints are assembled, but before network
+  intake opens, `ServerEnvironment` installs local notification and starts and
+  awaits one bounded recovery run. That run considers pre-existing supported
+  `TO_DELIVER` rows. A bounded `FAILED`, `PAUSED`, or `SKIPPED` result is an
+  observed recovery outcome, not a startup claim that every pending row was
+  completed.
+- After a newly supported inbox row is durably persisted, the local write path
+  notifies the same package-internal seam. Notification carries readiness only;
+  it does not carry a timer, backoff value, monitor action, payload, or retry
+  policy. A notification during an active run is coalesced, so work committed
+  after that run's last relevant read receives one later bounded run without a
+  concurrent `DeliveryWorker.start()` call.
+- Retryable failures left `TO_DELIVER` remain the responsibility of this same
+  owner. `FAILED` records that later reconsideration is needed but does not
+  immediately retrigger itself. A later package-internal retry-readiness policy
+  must submit a trigger to this seam; selecting delay, backoff, jitter, timer,
+  or attempt timing is a separate decision. No other framework part may start
+  a delivery worker directly to provide that wakeup.
+- Observe bounded outcomes as follows. `IDLE` requests no run. `PAUSED` records
+  an incomplete bounded scan and requests no self-run, avoiding a spin over
+  skipped-only pending rows. `FAILED` records retryable or infrastructure work
+  for later policy and requests no self-run. `SKIPPED` records unavailable
+  shard ownership and requests no self-run, avoiding contention spin. Any one
+  already-coalesced external startup/new-work/retry-ready request is still
+  honored after the active run settles. None of these outcomes changes T-0034's
+  row policy.
+- Stop closes trigger admission and local notification first, calls the worker
+  stop path so no later drain starts, and awaits the already-active bounded run.
+  The current drain is not forcibly interrupted. A durable write that races
+  after admission closes remains pending for startup recovery in a later
+  environment; it does not start a new run in the closing environment.
+- Server shutdown order is: stop external network intake and sessions; stop
+  delivery trigger admission and await active delivery work while contexts and
+  endpoint dependencies remain open; close contexts and other endpoint
+  resources; then close environment delivery facilities, transport, and
+  storage. Transport or storage must never close beneath an active run.
+- The smallest successor is one package-internal environment-owned lifecycle
+  implementation with startup recovery, post-persist local notification,
+  serialized/coalesced worker starts, outcome observation, and stop/await
+  ordering. It does not add retry timing. Public `DeliveryMonitor`, failure
+  actions, scheduler APIs, process supervision, topology, adapters, catch-up,
+  or health surfaces remain deferred.
+- Preserve valid `CATCH_UP` rows as pending/skipped without using them as a
+  trigger source, and preserve fail-closed legacy stored `IMPORT_EVENT` rows.
+  Preserve T-0034's claim-fenced exhausted-row completion and its mark-failure
+  outcomes unchanged.
+
+Alternatives considered:
+
+- Let `Server`, each bounded context, or write-side handoff code own worker
+  starts. Rejected because ownership and shutdown would split across assembly,
+  endpoint, and persistence paths.
+- Treat `ServerEnvironment.delivery` as an existing scheduler. Rejected because
+  its current contract and tests establish only optional closeable facility
+  ownership.
+- Immediately rerun on `FAILED`, `PAUSED`, or `SKIPPED`. Rejected because that
+  can spin on retryable failures, unsupported rows, or another shard owner and
+  would choose repeat and delay policy accidentally.
+- Copy Spine JVM's singleton environment, per-message thread creation, public
+  monitor actions, or immediate repeat callbacks. Rejected because the useful
+  JVM evidence is environment-level delivery ownership and local write
+  notification, not those Java-specific lifecycle and API choices.
+
+Consequences:
+
+- There is one place to serialize bounded runs, observe their outcomes, and
+  quiesce delivery before endpoint, transport, and storage teardown.
+- Startup and newly persisted supported work gain a compact local trigger path.
+  Retryable pending rows have an explicit owner and future trigger destination,
+  while retry timing remains deliberately undecided.
+- T-0035 changes no runtime behavior. Until the successor lands, runs remain
+  explicitly started one-shot operations with no automatic restart guarantee.

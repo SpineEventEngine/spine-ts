@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Decision author assigned
+Status: Decision coordinator-verified; independent review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -37,3 +37,22 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:43:00Z`: Assigned decision author
   `019f5358-deb4-7d02-87b3-06b4c88eafc7`. Independent review remains pending
   its verified decision commit and coordinator pre-review lint.
+- `2026-07-11T22:46:57Z`: Decision author completed the canonical skill and
+  required source checks and authored D-0085 plus aligned T-0035 records. The
+  candidate names only `ServerEnvironment` as lifecycle owner, keeps worker
+  calls one-shot and bounded, distinguishes the optional closeable delivery
+  facility from a scheduler, defines startup/new-work/retry-ready triggers and
+  every bounded outcome, and orders stop/await before endpoint, transport, and
+  storage close. Author verification is pending; independent review lanes have
+  not started.
+- `2026-07-11T22:49:51Z`: Author verification passed after rebuilding missing
+  workspace declarations with `typecheck:build:generated`. Fresh `docs:check`,
+  `format:check`, targeted status/ownership/scope/policy assertions,
+  `git diff --check`, exact four-file scope, status, and untracked checks are
+  clean. The first docs attempt failed only on absent workspace declarations;
+  the rerun passed with the known invalid-`origin` warning. Full `pnpm verify`
+  was not run. All four independent lanes remain pending coordinator dispatch.
+- `2026-07-11T22:53:00Z`: Coordinator closed the author and independently
+  passed docs/API, formatting, whitespace, changed-scope, status, single-owner,
+  outcome, startup/shutdown, public-leakage, and future-policy checks. Fresh
+  package generation and all four lanes are next.

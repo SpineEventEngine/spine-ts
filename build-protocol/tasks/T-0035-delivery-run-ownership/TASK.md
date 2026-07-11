@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Decision author assigned
+Status: Decision coordinator-verified; independent review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -115,6 +115,44 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
 - The decision identifies one compact implementation successor and does not
   combine topology, supervision, catch-up, adapters, and public policy.
 
+## Decision Evidence
+
+The decision author inspected the complete current `DeliveryLoop`,
+`DeliveryWorker`, `ServerEnvironment`, and `Server` source plus focused loop,
+worker-runtime, exhaustion/retry, catch-up, and server/environment lifecycle
+tests. Current behavior is one explicitly started bounded worker run;
+concurrent starts reject, loop `close()` stops future drains and awaits the
+active drain, and environment delivery is only an optionally owned closeable.
+
+The author also inspected D-0082 through D-0084 and the current T-0032 through
+T-0034 task, result, work, and review records; both named local JVM research
+notes; and actual Spine JVM `Delivery`, `LocalDispatchingObserver`,
+`DeliveryMonitor`, `TargetDelivery`, `RepeatDispatching`, and
+`ServerEnvironment` source. JVM evidence places delivery selection in the
+environment and notifies delivery after local inbox writes. It also confirms
+that public monitor actions and immediate repeat are broader policy, while the
+JVM singleton and per-message thread creation are not suitable TS mechanisms.
+All required repository, local-doc, and JVM source paths were reachable.
+
+## Accepted Decision Summary
+
+D-0085 names `ServerEnvironment` as the sole framework owner for starting,
+retriggering, stopping, and observing delivery runs through a package-internal
+lifecycle seam. Startup recovery and post-persist local notification submit
+serialized, coalesced requests for one-shot bounded `DeliveryWorker` runs.
+`IDLE`, `PAUSED`, `FAILED`, and `SKIPPED` do not self-trigger; `FAILED` leaves a
+retry-readiness obligation for a later package-internal delay-policy decision
+to submit to the same owner. Stop closes notification/trigger admission and
+awaits active work before contexts, transport, or storage close.
+
+The smallest successor implements that environment-owned package-internal
+seam, startup trigger, local notification, coalescing, observation, and
+stop/await ordering only. It does not implement timer values, backoff, public
+monitor/action or scheduler APIs, supervision, topology, adapters, or catch-up.
+Current runtime remains explicit one-shot bounded runs until that successor
+lands. T-0034, pending/skipped `CATCH_UP`, and fail-closed legacy
+`IMPORT_EVENT` remain unchanged.
+
 ## Likely Changed Files
 
 - `build-protocol/DECISION_LOG.md`
@@ -132,3 +170,29 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
 - `pnpm --config.verify-deps-before-run=false format:check`.
 - `git diff --check` and untracked-output checks.
 - Four independent reviewer lanes after coordinator verification.
+
+## Changed Files
+
+- `build-protocol/DECISION_LOG.md`
+- `build-protocol/tasks/T-0035-delivery-run-ownership/TASK.md`
+- `build-protocol/work-logs/T-0035.md`
+- `build-protocol/reviews/T-0035-delivery-run-ownership.md`
+
+No active architecture/status document required reconciliation: current guides
+describe the implemented one-shot behavior and continue to defer the runtime
+lifecycle mechanism that D-0085 assigns to the successor.
+
+## Verification Results
+
+- PASS: `pnpm --config.verify-deps-before-run=false typecheck:build:generated`
+  rebuilt the workspace declarations required by TypeDoc.
+- PASS: `pnpm --config.verify-deps-before-run=false docs:check`; TypeDoc and
+  export checks completed with zero errors and the known invalid-`origin`
+  source-link warning only. The first attempt failed before that prerequisite
+  build because workspace package declarations were absent.
+- PASS: `pnpm --config.verify-deps-before-run=false format:check`.
+- PASS: targeted status/owner/public-leakage/future-policy/outcome/startup/
+  shutdown/`CATCH_UP`/`IMPORT_EVENT` assertions.
+- PASS: `git diff --check`, exact four-file changed scope, clean untracked-file
+  check, and status inspection.
+- NOT RUN: full `pnpm verify`, per explicit task direction.
