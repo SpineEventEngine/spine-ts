@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 6 documentation fix in progress
+Status: Round 6 documentation fix verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -94,6 +94,10 @@ Implementation commits:
 
 ## Verification
 
+- PASS: Round 6 docs-only `docs:check`, `format:check`, `git diff --check`,
+  status/untracked, four-header alignment, targeted D-0084 stale/current
+  wording, commit-ledger/status, active-worker, and five-file changed-scope
+  checks. Fresh four-lane re-review remains pending.
 - PASS: Round 4 log-only `docs:check`, `format:check`, `git diff --check`,
   status/untracked, four-header alignment, commit-ledger uniqueness/currentness,
   active-worker, and four-file changed-scope checks.

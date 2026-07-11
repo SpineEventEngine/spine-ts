@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Round 6 documentation fix in progress
+Status: Round 6 documentation fix verified; re-review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -160,3 +160,9 @@ ordinary payload copies from payload-free exhaustion failures.
 Focused worker/loop tests, build/tooling typechecks, focused ESLint, docs/API,
 format, diff, and untracked-output checks are recorded in the implementation
 report and work log. Full `pnpm verify` was not run, as directed.
+
+The Round 6 documentation fix reconciles D-0084's final reviewer guidance with
+T-0034: only the fixed internal pre-callback exhausted-row `MARK_DELIVERED`
+outcome is executable/current. Public monitor and custom actions, repeat
+dispatch, scheduler/backoff, dead-letter, supervision, topology, adapters, and
+broader policy remain deferred. Fresh four-lane re-review is pending.

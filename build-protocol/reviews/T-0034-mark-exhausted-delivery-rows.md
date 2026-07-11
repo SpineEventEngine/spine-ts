@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 6 documentation fix in progress
+Status: Round 6 documentation fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -185,6 +185,25 @@ Security is deferred to final project readiness.
 - `2026-07-11T21:45:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 6 docs-only fix
   worker. Fresh four-lane re-review remains pending.
+- `2026-07-11T21:46:00Z`: Fix worker completed the bounded applicability check,
+  freshly read `receiving-code-review` and `doc-coauthoring`, and verified the
+  P3 against current D-0084 text. The correction preserves T-0033 history,
+  recognizes only T-0034's fixed internal pre-callback `MARK_DELIVERED`
+  outcome as executable/current, and continues to reject overclaims of public
+  monitor, custom-action, repeat-dispatch, scheduler/backoff, dead-letter, or
+  topology policy. Completion verification remains pending; no reviewer or
+  subagent was spawned.
+- `2026-07-11T21:47:00Z`: Round 6 documentation fix and lightweight
+  verification completed. The stale consequence now preserves historical
+  T-0033 scope, recognizes only T-0034's fixed internal pre-callback outcome as
+  current, and retains the deferred public-policy boundary. Docs, format,
+  diff/status, wording, ledger/status, active-worker, and five-file scope
+  checks passed. The implementation worker remains active for coordinator
+  closure; fresh four-lane re-review is pending.
+- `2026-07-11T21:50:00Z`: Coordinator closed the fix worker and independently
+  passed docs/API, formatting, whitespace, targeted wording, four-header,
+  changed-scope, and status checks. Fresh package generation and all four lanes
+  are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as

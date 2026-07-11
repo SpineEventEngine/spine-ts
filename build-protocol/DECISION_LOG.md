@@ -3090,6 +3090,9 @@ Consequences:
   status after 100 retained failures. No dead-letter record is implied, so the
   bounded retained attempt history remains the available durable diagnostic
   evidence.
-- Runtime source, tests, public docs, APIs, generated files, and examples remain
-  unchanged in T-0033. Reviewers must reject prose that presents D-0084 as
-  currently executable or as public monitor/scheduler behavior.
+- Runtime source, tests, public docs, APIs, generated files, and examples
+  remained unchanged in T-0033. T-0034 now makes the fixed internal
+  pre-callback exhausted-row `MARK_DELIVERED` outcome executable and current.
+  Reviewers must reject prose that overclaims public `DeliveryMonitor`, custom
+  actions, repeat dispatch, scheduler/backoff, dead-letter, supervision,
+  topology, adapter, or other broader policy behavior.
