@@ -240,3 +240,10 @@ Round 3 fix worker committed `2d3ca14d Fix T-0029 round 3 attempt retention`
 and was closed after reporting `DONE`. Coordinator recorded that fix commit in
 the durable logs; the next step is a fresh review package and all five
 independent review lanes.
+
+Coordinator recorded the Round 3 fix commit as
+`4e05438e Record T-0029 Round 3 fix commit`. Round 4 review against that head
+found implementation, API, security, and performance/reliability clean; the
+only finding was that the work-log commit ledger also needs to name
+`4e05438e`. T-0029 remains pending a fresh review package and all five review
+lanes after this ledger-only fix.
