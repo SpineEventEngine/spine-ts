@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Round 1 review found one documentation finding; fix pending
+Status: Round 1 documentation finding fixed; coordinator re-review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -55,4 +55,10 @@ Branch: `task/T-0031-delivery-retry-decision`
   style/maintainability, TypeScript/API docs, security, and
   performance/reliability were clean. Documentation found one P2 issue: the
   work-log commit ledger lists only `e5ba1c03`, while the review package covers
-  `e5ba1c03`, `3e210abb`, `178e0eb2`, and `33a60928`. Fix is pending.
+  `e5ba1c03`, `3e210abb`, `178e0eb2`, and `33a60928`. Fix was pending at
+  review close.
+- `2026-07-11T12:28:00Z`: Documentation fix worker addressed the round 1 P2
+  finding by updating `build-protocol/work-logs/T-0031.md` to list all relevant
+  T-0031 commits from branch history: `e5ba1c03`, `3e210abb`, `178e0eb2`,
+  `33a60928`, and `6ef03298`. This is only the finding fix record; coordinator
+  re-review has not run yet.
