@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Post-final review log-only fix verified; final verification pending
+Status: Merged to main; post-merge verification passed
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -316,3 +316,11 @@ work-log header still reflected Round 5, and the review-lane table still showed
 Round 6 clean lanes even though final verification changed tests afterward.
 Those log-only fields are now corrected; final coordinator verification remains
 pending before merge.
+
+T-0028 was merged into root `main` at `dd2b9424`. Post-merge verification
+passed after rebuilding root package `dist` artifacts with
+`typecheck:build:generated`: focused final Vitest passed with 9 files and 318
+tests; `docs:check`, `format:check`, and `git diff --check` passed; escalated
+full `verify` passed with 59 test files, 1239 tests, 90.02% branch coverage,
+docs/API checks, proto lint, and generated-clean. The only remaining root
+status entry is the user-owned untracked `human-review-1-jul.md`.

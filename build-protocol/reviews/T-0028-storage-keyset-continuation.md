@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Post-final review log-only fix verified; final verification pending
+Status: Merged to main; post-merge verification passed
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
