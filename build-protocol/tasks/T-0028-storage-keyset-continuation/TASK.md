@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Final verification fixes verified; post-fix re-review pending
+Status: Post-final review log-only fix verified; final verification pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -309,3 +309,10 @@ read offsets. The escalated full `verify` gate passed with 59 test files, 1239
 tests, and 90.02% branch coverage. Because tests changed after Round 6 clean
 review, T-0028 remains open for a final post-fix five-lane re-review before
 merge.
+
+Post-final-fix review found no code, TypeScript/API, security, or
+performance/reliability issues. Documentation found two stale audit fields: the
+work-log header still reflected Round 5, and the review-lane table still showed
+Round 6 clean lanes even though final verification changed tests afterward.
+Those log-only fields are now corrected; final coordinator verification remains
+pending before merge.
