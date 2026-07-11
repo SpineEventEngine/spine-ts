@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Final verification lint fix applied; re-review pending
+Status: Work-log headline fix applied; re-review pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -142,3 +142,13 @@ Branch: `task/T-0031-delivery-retry-decision`
   `2bb7a3dd Fix T-0031 retry decision lint` and added it to the durable commit
   ledger before re-review. The current log-maintenance commit is covered by the
   ledger convention; re-review remains pending.
+- `2026-07-11T14:00:02+0100`: Post-lint-fix independent review completed
+  against `.superpowers/sdd/review-9566466d..81faceb0.diff`. TypeScript/API
+  docs, security, and performance/reliability were clean. Code
+  style/maintainability and documentation found the same P3 issue: the
+  work-log status headline still described the earlier round 3 timestamp fix.
+  Fix is pending.
+- `2026-07-11T14:00:02+0100`: Fixed the stale work-log status headline and
+  recorded the completed lint-fix ledger commit `81faceb0`. This current
+  log-maintenance commit is covered by the ledger convention; re-review remains
+  pending.
