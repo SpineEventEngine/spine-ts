@@ -617,7 +617,10 @@ summarizes retained attempts for that exact inbox message by reading only its
 100 known per-message retained slots. An exhausted supported row skips the
 endpoint callback and another retained-attempt write, then is claimed,
 synchronized to the live shard fence, and marked `DELIVERED` without consuming
-accepted work or the configured failure bound. A mark failure followed by
+accepted work or the configured failure bound. Lease/fencing failure through
+the final guard before durable marking remains `LEASE` / `LEASE_INACTIVE`,
+retains one bounded attempt at the 100-slot cap, contributes one failure without
+accepted work, and leaves the row `TO_DELIVER`. A mark failure followed by
 successful cleanup leaves the authoritative row `TO_DELIVER` and contributes
 one frozen, bounded, stack-free exhaustion-facts object. If cleanup also fails,
 the row still remains `TO_DELIVER` and contributes one `CLEANUP` failure whose

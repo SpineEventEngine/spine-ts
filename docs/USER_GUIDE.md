@@ -1263,7 +1263,10 @@ retained attempts for that exact inbox message by reading only its 100 known
 per-message retained slots. For an exhausted supported row, the gate skips the
 callback and another retained-attempt write, then claims and marks the exact row
 `DELIVERED` under the live shard fence. This consumes neither accepted work nor
-the framework failure bound. If the mark fails and cleanup succeeds, the
+the framework failure bound. Lease/fencing failure through the final guard
+before durable marking remains `LEASE` / `LEASE_INACTIVE`, retains one bounded
+attempt at the 100-slot cap, counts one failure without accepted work, and
+leaves the row `TO_DELIVER`. If the mark fails and cleanup succeeds, the
 authoritative row remains `TO_DELIVER` and one frozen, bounded, stack-free
 exhaustion-facts object counts toward failed work and the framework failure
 bound. If cleanup also fails, the row still remains `TO_DELIVER` and accounting

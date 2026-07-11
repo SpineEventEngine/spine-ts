@@ -315,7 +315,10 @@ attempts for that exact inbox message by reading only its 100 known per-message
 retained slots. An exhausted row skips the callback and another retained-attempt
 write, then is claimed, synchronized to the live shard fence, and marked
 `DELIVERED` without incrementing accepted endpoint work or the internal failure
-bound. If the mark fails and cleanup succeeds, the authoritative row remains
+bound. Lease/fencing failure through the final guard before durable marking
+remains `LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot
+cap, counts one failure without accepted work, and leaves the row `TO_DELIVER`.
+If the mark fails and cleanup succeeds, the authoritative row remains
 `TO_DELIVER` and one frozen, bounded, stack-free exhaustion-facts object counts
 toward failed work and the internal failure bound. If cleanup also fails, the
 row remains `TO_DELIVER` and the same one-failure accounting returns a `CLEANUP`

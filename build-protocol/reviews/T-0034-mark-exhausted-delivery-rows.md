@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 8 runtime fix in progress
+Status: Round 8 runtime fix verified; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -248,6 +248,34 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:12:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single Round 8 runtime fix
   worker for the complete P2 batch. Fresh four-lane re-review remains pending.
+- `2026-07-11T22:13:00Z`: Fix worker completed the bounded applicability check,
+  freshly read all required review, TDD, debugging, TypeScript/testing, and
+  completion-verification guidance, and verified both findings against current
+  source. Premature stage assignment misclassifies the helper's final lease
+  guards and suppresses attempt retention; premature sanitization replaces the
+  original mark error before cleanup outcome is known. Focused RED/GREEN is in
+  progress; no reviewer or subagent was spawned.
+- `2026-07-11T22:14:00Z`: Focused RED reproduced both P2s: the final lease-
+  guard window left the capped summary at its prior `ENDPOINT` attempt, and
+  failed cleanup aggregated sanitized facts rather than the original mark
+  `Error`. The regressions failed only at their intended assertions.
+- `2026-07-11T22:15:00Z`: Focused GREEN passed both regressions and two existing
+  controls. Stage ownership now changes immediately before durable mark work,
+  and error sanitization now waits for successful cleanup. Failed cleanup keeps
+  the original mark and cleanup errors in one `CLEANUP` aggregate; ordinary
+  callback/status-update behavior remains on the unchanged helper path.
+- `2026-07-11T22:16:00Z`: Round 8 runtime/docs fix and required verification
+  completed. The final pre-mark lease window now retains `LEASE` facts, and
+  failed cleanup now aggregates the true mark and cleanup errors while retained
+  metadata remains payload/stack-free. Focused and full delivery tests, both
+  typechecks, focused lint, docs/API, formatting, whitespace, status/untracked,
+  wording, four-header, ledger/status, active-worker, and exact-scope checks
+  passed. The worker remains active for coordinator closure; fresh four-lane
+  re-review is pending.
+- `2026-07-11T22:20:00Z`: Coordinator closed the fix worker and independently
+  passed 112 focused tests, both typechecks, docs/API, focused lint, formatting,
+  whitespace, four-header alignment, changed-scope, and status checks. Fresh
+  package generation and all four lanes are next.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as

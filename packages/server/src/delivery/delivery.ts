@@ -87,6 +87,9 @@ export class Delivery {
    * internal 100-attempt exhaustion gate for that exact inbox message.
    * Exhausted rows skip the callback and another attempt, then use an exact-row
    * claim synchronized to the live shard fence to mark the row delivered. If
+   * lease/fencing fails through the final guard before durable marking begins,
+   * the run retains one bounded `LEASE` / `LEASE_INACTIVE` attempt, reports one
+   * failure with no accepted work, and leaves the row pending. If
    * an exhaustion-time mark fails and claim cleanup succeeds, the row remains
    * pending and contributes one frozen, bounded, stack-free facts object. If
    * cleanup also fails, the run instead preserves one `CLEANUP` result whose
@@ -421,7 +424,7 @@ export class Delivery {
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryMessageResult> {
-    let stage: DeliveryFailureStage = "CLAIM";
+    const failure: { stage: DeliveryFailureStage } = { stage: "CLAIM" };
 
     try {
       const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
@@ -430,22 +433,23 @@ export class Delivery {
       }
 
       active.set(claimed);
-      stage = "LEASE";
+      failure.stage = "LEASE";
       await this.#synchronizeActiveClaim(inbox, lease, active);
-      stage = "STATUS_UPDATE";
-      await this.#markActiveDelivered(inbox, message, lease, active, () =>
-        retryExhaustedMarkFailure(retry),
-      );
+      await this.#markActiveDelivered(inbox, message, lease, active, () => {
+        failure.stage = "STATUS_UPDATE";
+      });
 
       return { kind: "DELIVERED" };
     } catch (error) {
       const cleanup = await this.#clearFailedClaim(inbox, error, active);
-      const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : stage;
+      const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : failure.stage;
+      const failureError =
+        failedStage === "STATUS_UPDATE" ? retryExhaustedMarkFailure(retry) : cleanup.error;
 
       return Object.freeze({
         kind: "FAILED" as const,
         accepted: false,
-        error: cleanup.error,
+        error: failureError,
         node: lease.session().node,
         stage: failedStage,
         reason: deliveryFailureReason(failedStage),
@@ -504,23 +508,17 @@ export class Delivery {
     message: InboxMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
-    onFailure?: () => unknown,
+    onFinalize?: () => void,
   ): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
+    onFinalize?.();
 
-    try {
-      const marked = await active.finalize((current) =>
-        inboxStorageAccess.markDelivered(inbox.storage, current),
-      );
-      if (marked === undefined) {
-        throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
-      }
-    } catch (error) {
-      if (onFailure !== undefined) {
-        throw onFailure();
-      }
-      throw error;
+    const marked = await active.finalize((current) =>
+      inboxStorageAccess.markDelivered(inbox.storage, current),
+    );
+    if (marked === undefined) {
+      throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
     }
   }
 
@@ -765,7 +763,8 @@ export interface DeliveryFailure {
    * update, or framework cleanup work. An exhaustion-time mark failure with
    * successful cleanup uses frozen, bounded, stack-free facts. If cleanup also
    * fails, the existing `CLEANUP` result carries an `AggregateError` containing
-   * the original mark error and cleanup error without that guarantee.
+   * the original mark error and cleanup error without that guarantee. The
+   * durable mark phase starts only after the final lease/fencing guard.
    */
   readonly error: unknown;
 }

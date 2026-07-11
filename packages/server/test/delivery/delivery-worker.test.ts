@@ -1329,6 +1329,66 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("preserves lease failure after an exhausted claim is synchronized", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const blockedClaim = blockInboxClaimOnce();
+      const blockedRenewal = blockInboxRenewalOnce();
+      const faults = deliveryStorageFaults(blockedClaim, blockedRenewal);
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: faults.storageFactory,
+        leaseMs: 1_000,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+      const message = await seed(delivery, "signal-exhausted-final-lease-fails", 1n);
+      await recordFailures(delivery, message, deliveryAttemptCapacity);
+      const seen: string[] = [];
+
+      const runPromise = delivery.drain(shard, {
+        node: "node-a",
+        onMessage(callbackMessage) {
+          seen.push(callbackMessage.signalId);
+        },
+      });
+
+      await blockedClaim.blocked;
+      await vi.advanceTimersByTimeAsync(500);
+      blockedClaim.resume();
+      await blockedRenewal.blocked;
+      vi.setSystemTime(new Date("2026-07-08T09:00:01.501Z"));
+      blockedRenewal.resume();
+      const run = await runPromise;
+
+      expect(blockedClaim.count).toBe(1);
+      expect(blockedRenewal.count).toBe(1);
+      expect(seen).toEqual([]);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        accepted: 0,
+        delivered: 0,
+        failed: 1,
+      });
+      expect(run.failures).toHaveLength(1);
+      expect(run.failures[0]?.error).toHaveProperty("message", "Shard lease expired.");
+      await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
+        count: deliveryAttemptCapacity,
+        latestStage: "LEASE",
+        latestReason: "LEASE_INACTIVE",
+        latestAccepted: false,
+      });
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
+        [{ signalId: "signal-exhausted-final-lease-fails", status: "TO_DELIVER" }],
+      );
+      await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports one sanitized failure when an exhausted row cannot be marked delivered", async () => {
     const failedMark = throwDedupFinalizeOnce({ armed: false });
     const delivery = new Delivery({
@@ -1471,21 +1531,39 @@ describe("Delivery worker", () => {
     expect((run.failures[0]?.error as AggregateError).message).toBe(
       "Delivery failed and framework cleanup failed.",
     );
-    expect((run.failures[0]?.error as AggregateError).errors).toMatchObject([
-      {
-        kind: "EXHAUSTED",
-        action: "MARK_DELIVERED",
-        count: deliveryAttemptCapacity,
-        limit: deliveryAttemptCapacity,
-      },
-      { message: "Framework cleanup did not clear the pending row." },
-    ]);
+    const cleanupError = run.failures[0]?.error as AggregateError;
+    expect(cleanupError.errors).toHaveLength(2);
+    expect(cleanupError.errors[0]).toBeInstanceOf(Error);
+    expect(cleanupError.errors[0]).toHaveProperty(
+      "message",
+      `Inbox message "${exhausted.id.value}" was not marked delivered.`,
+    );
+    expect(cleanupError.errors[0]).not.toHaveProperty("kind", "EXHAUSTED");
+    expect(cleanupError.errors[1]).toBeInstanceOf(Error);
+    expect(cleanupError.errors[1]).toHaveProperty(
+      "message",
+      "Framework cleanup did not clear the pending row.",
+    );
     await expect(requireAttempts(delivery).summarize(exhausted.id)).resolves.toMatchObject({
       count: deliveryAttemptCapacity,
       latestStage: "CLEANUP",
       latestReason: "CLEANUP_FAILED",
       latestAccepted: false,
     });
+    const retainedAttempts = await requireAttempts(delivery).read();
+    const retainedCleanup = retainedAttempts.at(-1);
+    expect(retainedAttempts).toHaveLength(deliveryAttemptCapacity);
+    expect(retainedCleanup).toMatchObject({
+      signalId: "signal-exhausted-mark-race",
+      accepted: false,
+      stage: "CLEANUP",
+      reason: "CLEANUP_FAILED",
+    });
+    expect(retainedCleanup).not.toHaveProperty("signal");
+    expect(retainedCleanup).not.toHaveProperty("error");
+    expect(retainedCleanup).not.toHaveProperty("stack");
+    expect(JSON.stringify(retainedCleanup)).not.toContain("was not marked delivered");
+    expect(JSON.stringify(retainedCleanup)).not.toContain("Framework cleanup did not clear");
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-exhausted-mark-race-tampered", status: "TO_DELIVER" },
     ]);

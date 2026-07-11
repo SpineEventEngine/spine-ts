@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 8 runtime fix in progress
+Status: Round 8 runtime fix verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -35,6 +35,15 @@ Implementation commits:
 - Claim and lease/fence failures preserve the existing retained-attempt stage,
   reason, and failure accounting. Retained-state corruption remains fail
   closed.
+- Round 8 preserves `LEASE` staging through the final pre-mark renewal/active
+  guards and changes to `STATUS_UPDATE` only immediately before durable
+  `ActiveClaim.finalize()` work. A lease expiry after claim synchronization
+  retains one capped `LEASE` / `LEASE_INACTIVE` attempt, reports one failure
+  without callback or accepted work, and leaves authoritative `TO_DELIVER`.
+- Round 8 also preserves the original mark error until cleanup outcome is
+  known. Successful cleanup returns the sanitized exhaustion facts; failed
+  cleanup returns one `CLEANUP` `AggregateError` containing the original mark
+  and cleanup errors while retained attempt storage remains metadata-only.
 - Existing retryable callback cleanup/finalization, one-attempt/one-failure
   sequencing, attempt 100, callback-success `STATUS_UPDATE`, `CATCH_UP`, and
   legacy `IMPORT_EVENT` behavior remain unchanged.
@@ -50,6 +59,13 @@ Implementation commits:
   retained attempt/failure semantics.
 
 ## TDD Evidence
+
+- Round 8 RED: the deterministic final-lease-window regression left the capped
+  summary at the prior `ENDPOINT` attempt, and failed mark cleanup aggregated
+  sanitized exhaustion facts instead of the original mark `Error`.
+- Round 8 GREEN: both regressions plus existing sanitized mark-failure and
+  callback renewal/finalization controls passed after moving the stage signal
+  into the mark helper and sanitizing only after successful cleanup.
 
 - Round 1 runtime fix root cause: `ActiveClaim.finalize()` removed its durable
   claim handle before awaiting the mark callback, preventing cleanup after both
@@ -99,6 +115,15 @@ Implementation commits:
 
 ## Verification
 
+- PASS: Round 8 focused RED reproduced both P2s; focused GREEN passed 4
+  regressions/controls, and full delivery worker/loop Vitest passed 2 files and
+  112 tests.
+- PASS: Round 8 `typecheck:build:generated`, `typecheck:tooling`, focused ESLint
+  over changed runtime/tests, `docs:check`, `format:check`, `git diff --check`,
+  status/untracked, stale/current stage/error wording, four-header alignment,
+  ledger/status, active-worker, and exact 12-file changed-scope checks. Full
+  `pnpm verify` was not run, as directed. Fresh four-lane re-review remains
+  pending.
 - PASS: Round 7 docs/TypeDoc `docs:check`, both typechecks, focused delivery
   source ESLint, `format:check`, `git diff --check`, status/untracked,
   stale/current claim searches, four-header alignment, ledger/status,

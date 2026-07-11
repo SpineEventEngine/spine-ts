@@ -108,12 +108,16 @@ target type URL, and routed target ID.
 For supported rows, an internal pre-callback gate reads the 100 retained
 attempt slots for the exact inbox message. At that bound it skips the callback
 and another attempt, claims the exact row under the live shard fence, and marks
-it `DELIVERED` without accepted-work or failure-budget use. If the mark fails
-and cleanup succeeds, the authoritative row remains `TO_DELIVER` and the local
-run returns one frozen, bounded, stack-free exhaustion-facts object. If cleanup
-also fails, the same one-failure accounting instead returns a `CLEANUP` result
-whose `AggregateError` contains the original mark error plus the cleanup error;
-that error is not promised frozen, bounded, or stack-free. It is not a public
+it `DELIVERED` without accepted-work or failure-budget use. A lease/fencing
+failure through the final guard before durable marking remains
+`LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
+reports one failure with no accepted work, and leaves the row `TO_DELIVER`. If
+the mark fails and cleanup succeeds, the authoritative row remains `TO_DELIVER`
+and the local run returns one frozen, bounded, stack-free exhaustion-facts
+object. If cleanup also fails, the same one-failure accounting instead returns
+a `CLEANUP` result whose `AggregateError` contains the original mark error plus
+the cleanup error; that error is not promised frozen, bounded, or stack-free. It
+is not a public
 monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
 or adapter policy. Broader inbox lifecycle management and transport topology
 remain open production gaps.
@@ -362,7 +366,9 @@ payload bytes, raw user errors, stack traces, or unbounded exception text.
 Before a supported callback runs, the internal retained-attempt count for that
 exact inbox message is checked against the same 100-slot bound. An exhausted
 row skips the callback and another retained attempt, then is claim-fenced and
-marked `DELIVERED` without accepted-work or failure-budget use. A mark failure
+marked `DELIVERED` without accepted-work or failure-budget use. Lease/fencing
+through the final pre-mark guard retains `LEASE` / `LEASE_INACTIVE` attempt
+facts and one-failure accounting without accepted work. A mark failure
 with successful cleanup leaves the authoritative row `TO_DELIVER` and
 contributes one frozen, bounded, stack-free exhaustion-facts observation. If
 cleanup also fails, direct run and loop accounting still record one `CLEANUP`

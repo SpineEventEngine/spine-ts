@@ -1,6 +1,6 @@
 # T-0034: Mark Exhausted Delivery Rows
 
-Status: Round 8 runtime fix in progress
+Status: Round 8 runtime fix verified; re-review pending
 Started: `2026-07-11T21:25:00Z`
 Baseline commit: `da75f11e`
 Branch: `task/T-0034-mark-exhausted-delivery-rows`
@@ -111,6 +111,10 @@ repeat-dispatch, or conveyor API.
   leave the authoritative row `TO_DELIVER`.
 - Claim/lease failures and retained-state corruption preserve current
   accounting/fail-closed behavior.
+- Lease/fencing failure through the final guard after claim synchronization and
+  before durable mark work remains `LEASE` / `LEASE_INACTIVE`, retains one
+  bounded attempt at the 100-slot cap, reports accepted/delivered 0 and failed
+  1, and leaves the authoritative row `TO_DELIVER`.
 - Regressions preserve callback cleanup/finalization/one-attempt sequencing,
   attempt 100, and callback-success `STATUS_UPDATE` behavior.
 - `CATCH_UP` and legacy `IMPORT_EVENT` behavior remain unchanged.
@@ -147,6 +151,15 @@ along with its existing retained attempt, without promising that error is
 frozen, bounded, or stack-free. Both paths consume one failure and leave
 authoritative `TO_DELIVER`; claim/lease failures preserve existing bounded
 attempt accounting. Broader failure-policy facilities remain deferred.
+
+Round 8 moves exhausted-row `STATUS_UPDATE` staging to the exact start of
+durable mark work, after the final lease guards. A deterministic expiry between
+claim synchronization and marking now retains one capped
+`LEASE` / `LEASE_INACTIVE` attempt with no callback or accepted work. The mark
+helper also preserves the original mark error through cleanup: successful
+cleanup converts it to frozen, bounded, stack-free exhaustion facts, while
+failed cleanup aggregates the original mark error and cleanup error in one
+`CLEANUP` result. Ordinary callback/status-update behavior is unchanged.
 
 The coordinator-assigned pre-review payload fix now records exhausted
 claim/lease/cleanup attempts from the existing payload-free exhaustion snapshot
