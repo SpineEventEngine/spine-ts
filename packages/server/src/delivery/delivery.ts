@@ -17,6 +17,7 @@ import {
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage, InboxClaim } from "./inbox-claim.js";
 import { requireDeliveryLeaseMs } from "./delivery-lease.js";
+import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
 
@@ -329,12 +330,20 @@ export class Delivery {
     }
 
     const endpoint = requireEndpointMessage(message);
+    const retry = await this.#decideRetry(attempts, endpoint);
+    if (retry.kind === "EXHAUSTED") {
+      return deliveryRun("DRAINED", 1, 0, 0, 1, [retryExhaustedFailure(endpoint, retry)]);
+    }
+
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
     if (attempt.kind === "DELIVERED") {
       return deliveryRun("DRAINED", 1, 1, 1, 0, []);
+    }
+    if (attempt.kind !== "FAILED") {
+      throw new Error(`Unexpected delivery result "${attempt.kind}".`);
     }
 
     await this.#recordFailedAttempt(attempts, endpoint, attempt);
@@ -476,11 +485,26 @@ export class Delivery {
     }
 
     const endpoint = requireEndpointMessage(message);
+    const retry = await this.#decideRetry(attempts, endpoint);
+    if (retry.kind === "EXHAUSTED") {
+      progress.record(endpoint, exhaustedDeliveryResult(retry));
+      return;
+    }
+
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "FAILED") {
       await this.#recordFailedAttempt(attempts, endpoint, attempt);
     }
     progress.record(endpoint, attempt);
+  }
+
+  async #decideRetry(
+    attempts: DeliveryAttempts,
+    message: DeliveryEndpointMessage,
+  ): Promise<DeliveryRetryDecision> {
+    const summary = await attempts.summarize(message.id);
+
+    return retryDecisions.decide(summary);
   }
 
   async #recordFailedAttempt(
@@ -747,6 +771,10 @@ type DeliveryMessageResult =
   | { readonly kind: "SKIPPED" }
   | { readonly kind: "DELIVERED" }
   | {
+      readonly kind: "EXHAUSTED";
+      readonly error: DeliveryRetryExhaustedError;
+    }
+  | {
       readonly kind: "FAILED";
       readonly accepted: boolean;
       readonly error: unknown;
@@ -761,7 +789,9 @@ interface DeliveryErrorState {
 }
 
 const defaultShardLeaseMs = 30_000;
+const retryMaxAttempts = 100;
 const maxContinuationTextBytes = 16 * 1024;
+const retryDecisions = new DeliveryRetryDecisions({ maxAttempts: retryMaxAttempts });
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -815,6 +845,46 @@ function deliveryDrainOutcome(
   });
 }
 
+function retryExhaustedFailure(
+  message: DeliveryEndpointMessage,
+  decision: DeliveryRetryDecision,
+): DeliveryFailure {
+  return Object.freeze({
+    message: exhaustedFailureMessage(message),
+    error: retryExhaustedError(decision),
+  });
+}
+
+function exhaustedDeliveryResult(decision: DeliveryRetryDecision): DeliveryMessageResult {
+  return Object.freeze({
+    kind: "EXHAUSTED",
+    error: retryExhaustedError(decision),
+  });
+}
+
+function retryExhaustedError(decision: DeliveryRetryDecision): DeliveryRetryExhaustedError {
+  return new DeliveryRetryExhaustedError(decision);
+}
+
+class DeliveryRetryExhaustedError extends Error {
+  readonly kind = "EXHAUSTED";
+  readonly count: number;
+  readonly limit: number;
+  readonly latestStage: DeliveryFailureStage | undefined;
+  readonly latestReason: DeliveryFailureReason | undefined;
+  readonly latestAccepted: boolean | undefined;
+
+  constructor(decision: DeliveryRetryDecision) {
+    super("Delivery retry attempts exhausted.");
+    this.count = decision.count;
+    this.limit = decision.limit;
+    this.latestStage = decision.latestStage;
+    this.latestReason = decision.latestReason;
+    this.latestAccepted = decision.latestAccepted;
+    Object.freeze(this);
+  }
+}
+
 function drainProgress(): DrainProgress {
   const seen = new Set<string>();
   const failures: DeliveryFailure[] = [];
@@ -857,6 +927,15 @@ function drainProgress(): DrainProgress {
     },
     record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
       if (attempt.kind === "SKIPPED") {
+        return;
+      }
+      if (attempt.kind === "EXHAUSTED") {
+        failures.push(
+          Object.freeze({
+            message: exhaustedFailureMessage(message),
+            error: attempt.error,
+          }),
+        );
         return;
       }
       if (attempt.kind === "FAILED" && !attempt.accepted) {
@@ -1072,6 +1151,23 @@ function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
     whenReceived: new Date(message.whenReceived),
     version: message.version,
     ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
+  });
+}
+
+function exhaustedFailureMessage(message: DeliveryEndpointMessage): DeliveryEndpointMessage {
+  return Object.freeze({
+    id: Object.freeze({
+      value: message.id.value,
+      shard: message.id.shard,
+    }),
+    inboxId: Object.freeze({ ...message.inboxId }),
+    label: message.label,
+    status: message.status,
+    signalId: message.signalId,
+    shard: message.shard,
+    whenReceived: new Date(message.whenReceived),
+    version: message.version,
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }

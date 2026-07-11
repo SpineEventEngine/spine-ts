@@ -1118,26 +1118,13 @@ describe("Delivery worker", () => {
   });
 
   it("retains only the newest 100 attempts for one repeatedly failing message", async () => {
-    let attempt = 0;
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
-      now: () => new Date(Date.UTC(2026, 6, 8, 9, 0, attempt)),
     });
-    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-bounded-attempts", 1n);
 
-    await seed(delivery, "signal-bounded-attempts", 1n);
-
-    for (let index = 0; index < 105; index += 1) {
-      attempt = index + 1;
-      const run = await delivery.drain(shard, {
-        node: "node-a",
-        onMessage() {
-          throw new Error(`endpoint failed ${String(index)}`);
-        },
-      });
-      expect(run.failed).toBe(1);
-    }
+    await recordFailures(delivery, message, 105);
 
     const attempts = await requireAttempts(delivery).read();
 
@@ -1149,6 +1136,116 @@ describe("Delivery worker", () => {
     expect(attempts.at(-1)).toMatchObject({
       signalId: "signal-bounded-attempts",
       attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
+    });
+  });
+
+  it("does not invoke exhausted supported rows or record another attempt", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-exhausted", 1n);
+    await recordFailures(delivery, message, 100);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(callbackMessage) {
+        seen.push(callbackMessage.signalId);
+        throw new Error("exhausted callback must not run");
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted");
+    expect(run.failures[0]?.error).toMatchObject({
+      message: "Delivery retry attempts exhausted.",
+    });
+    const failureJson = JSON.stringify(run.failures[0]?.error);
+    expect(failureJson).toContain('"kind":"EXHAUSTED"');
+    expect(failureJson).toContain('"count":100');
+    expect(failureJson).toContain('"limit":100');
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
+      count: 100,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-exhausted", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("does not let exhausted rows consume the accepted-work limit", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const exhausted = await seed(delivery, "signal-exhausted-head", 1n);
+    await recordFailures(delivery, exhausted, 100);
+    await seed(delivery, "signal-limit-tail", 2n);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-limit-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 2,
+      accepted: 1,
+      delivered: 1,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted-head");
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-exhausted-head", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("keeps retryable supported rows invoking endpoints and retaining failures", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-still-retryable", 1n);
+    await recordFailures(delivery, message, 99);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(callbackMessage) {
+        seen.push(callbackMessage.signalId);
+        throw new Error("endpoint failed below retry budget");
+      },
+    });
+
+    expect(seen).toEqual(["signal-still-retryable"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-still-retryable");
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
+      count: 100,
+      latestReason: "ENDPOINT_REJECTED",
+      latestAccepted: true,
     });
   });
 
@@ -2603,6 +2700,43 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("applies retry exhaustion before exact-message endpoint callbacks", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-exact-exhausted", 1n);
+    await recordFailures(delivery, stored, 100);
+    const seen: string[] = [];
+
+    const run = await delivery.drainMessage(stored, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+        throw new Error("exact exhausted callback must not run");
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exact-exhausted");
+    expect(run.failures[0]?.error).toMatchObject({
+      message: "Delivery retry attempts exhausted.",
+    });
+    await expect(requireAttempts(delivery).summarize(stored.id)).resolves.toMatchObject({
+      count: 100,
+    });
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      stored,
+    ]);
+  });
+
   it("records an exact-message marker failure when the stored row changes after replay", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -2946,6 +3080,23 @@ async function seed(
   });
 
   return result.message;
+}
+
+async function recordFailures(
+  delivery: Delivery,
+  message: DeliveryEndpointMessage,
+  count: number,
+): Promise<void> {
+  for (let sequence = 1; sequence <= count; sequence += 1) {
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: `node-${String(sequence).padStart(3, "0")}`,
+      attemptedAt: new Date(Date.UTC(2026, 6, 8, 9, 0, sequence)),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+  }
 }
 
 function requireAttempts(delivery: Delivery): DeliveryAttemptReader {

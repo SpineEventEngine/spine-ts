@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Scaffolded; implementation pending
+Status: Implementation complete; review pending
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
@@ -177,5 +177,8 @@ available.
 
 - `build-protocol/DECISION_LOG.md`
 - `build-protocol/reviews/T-0032-internal-delivery-retry-exhaustion-gate.md`
+- `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/implementation-report.md`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/TASK.md`
 - `build-protocol/work-logs/T-0032.md`
+- `packages/server/src/delivery/delivery.ts`
+- `packages/server/test/delivery/delivery-worker.test.ts`
