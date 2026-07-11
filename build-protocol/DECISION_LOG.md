@@ -2907,3 +2907,64 @@ Consequences:
 - Reviewers must reject attempts to add public retry APIs, timers, topology,
   catch-up semantics, production adapters, or delivery-loop behavior changes in
   T-0031.
+
+## D-0083: Gate Exhausted Delivery Rows Internally Before Public Monitor Policy
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0032`
+
+Context: T-0029 retained bounded, sanitized delivery-attempt facts; T-0030
+added exact-message summaries; and T-0031 added an internal retry-decision
+primitive that classifies one summary as retryable or exhausted. The next
+smallest retry-policy step is to consume that primitive at the internal
+delivery boundary. Spine JVM failure handling is public and action-oriented:
+`DeliveryMonitor.onReceptionFailure(FailedReception)` returns actions such as
+`markDelivered()` or `repeatDispatching()`, and `TargetDelivery` executes the
+selected action. TypeScript still intentionally lacks public monitor/action
+ownership, scheduler/backoff policy, production supervision/topology,
+dead-letter semantics, and catch-up execution.
+
+Decision:
+
+- Run T-0032 as a package-internal delivery retry-exhaustion gate.
+- Before invoking a supported endpoint callback, summarize retained attempts
+  for that exact inbox message and apply `DeliveryRetryDecisions`.
+- Use the retained-attempt ring size, 100, as the initial internal maximum
+  attempt budget because it is the only durable retained history currently
+  available and no public retry configuration exists yet.
+- Treat exhausted supported rows as internal policy skips: do not invoke the
+  endpoint callback and do not record another retained attempt.
+- Leave exhausted rows pending `TO_DELIVER` for later public monitor,
+  dead-letter, or mark-delivered policy.
+- Keep retryable supported rows on the current delivery path.
+- Preserve `CATCH_UP` pending/skip behavior and legacy `IMPORT_EVENT`
+  fail-closed behavior.
+- Do not export public `DeliveryMonitor`, `FailedReception`, repeat-dispatch,
+  mark-delivered, backoff/scheduler, topology, catch-up, or production adapter
+  APIs.
+
+Alternatives considered:
+
+- Add full JVM-style `DeliveryMonitor` and `FailedReception` APIs now. Rejected
+  because public action execution needs lifecycle ownership and policy decisions
+  beyond the internal exhaustion boundary.
+- Integrate scheduler/backoff workers now. Rejected because production retry
+  scheduling should build on a working internal exhaustion gate first.
+- Mark exhausted rows delivered or dead-letter them now. Rejected because those
+  are public policy outcomes, while this slice only suppresses further endpoint
+  attempts after the bounded retained history is exhausted.
+- Execute `CATCH_UP` rows here. Rejected because catch-up has its own storage
+  and lifecycle task; current valid `CATCH_UP` rows remain pending and skipped.
+
+Consequences:
+
+- The delivery path stops repeatedly invoking known-exhausted supported rows
+  while preserving durable state for later policy.
+- Retry policy remains internal and conservative; no public monitor/action API
+  or scheduler behavior is introduced.
+- Reviewers must reject attempts to broaden T-0032 into public monitor actions,
+  dead-letter policy, backoff/timers, production topology, catch-up execution,
+  or production adapter work.
