@@ -188,11 +188,12 @@ Run five independent review lanes:
 
 Round 1 independent review against
 `.superpowers/sdd/review-3820e76d..d1d31e7c.diff` found fixes required.
-Required fixes include bounded attempt retention and sequence lookup,
+Round 1 fix worker committed `ecb9f3d9 Fix T-0029 delivery attempt retention
+findings` to address bounded attempt retention and sequence lookup,
 observational attempt-recording failure behavior, fail-closed stored-attempt
 validation, stale `Delivery.drain()` TypeDoc cleanup, and durable-log review
-state corrections. One fix worker will address the complete findings list
-before a fresh five-lane re-review.
+state corrections. A fresh review package and all five independent review lanes
+remain required before T-0029 can close.
 
 Coordinator committed the complete Round 1 findings as
 `adf215f3 Record T-0029 Round 1 review findings`. The Round 1 fix worker is in

@@ -85,3 +85,6 @@ Branch: `task/T-0029-delivery-attempt-retention`
 - Fix worker addressed the full Round 1 findings list and ran focused red/green
   regressions plus the required verification commands. The task remains pending
   re-review; no review lane is marked clean by this log entry.
+- Fix worker committed the verified fix batch as
+  `ecb9f3d9 Fix T-0029 delivery attempt retention findings`. A fresh package
+  and all five review lanes remain required.
