@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 2 findings pending fix
+Status: Round 2 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -98,3 +98,6 @@ Security is deferred to final project readiness.
   rejection for close aggregation, and define shared/reusable caller-owned
   environment registration cardinality. One author and fresh four-lane review
   are required.
+- `2026-07-11T23:15:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 2 fix worker.
+  Fresh four-lane re-review remains pending.
