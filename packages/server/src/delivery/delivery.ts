@@ -4,6 +4,7 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 
 import {
   DeliveryAttempts,
+  deliveryAttemptCapacity,
   type DeliveryFailureReason,
   type DeliveryFailureStage,
 } from "./delivery-attempts.js";
@@ -17,6 +18,7 @@ import {
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage, InboxClaim } from "./inbox-claim.js";
 import { requireDeliveryLeaseMs } from "./delivery-lease.js";
+import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
 
@@ -80,9 +82,12 @@ export class Delivery {
    * The returned `DeliveryRun` reports whether the shard was drained or
    * skipped, how many rows were read, accepted for work, delivered, or failed,
    * and the per-message failures observed during this run. Supported endpoint
-   * failures also retain a bounded, sanitized internal attempt history for
-   * later framework policy work. This method does not schedule later runs, open
-   * transports, choose retry policy, or implement backoff.
+   * failures also retain a bounded, sanitized internal attempt history. Before
+   * a supported endpoint callback, this method applies the fixed package-
+   * internal 100-attempt exhaustion gate for that exact inbox message.
+   * Exhausted rows remain pending, skip the callback, and do not record another
+   * attempt. The gate is not configurable or a public retry policy: this method
+   * does not schedule later runs, open transports, or implement backoff.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const outcome = await this.#drain(shard, options, {});
@@ -328,6 +333,12 @@ export class Delivery {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
 
+    requireEndpointStatus(message.status);
+    const retry = await this.#decideRetry(attempts, message.id);
+    if (retry.kind === "EXHAUSTED") {
+      return deliveryRun("DRAINED", 1, 0, 0, 1, [retryExhaustedFailure(message, retry)]);
+    }
+
     const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
@@ -475,12 +486,28 @@ export class Delivery {
       return;
     }
 
+    requireEndpointStatus(message.status);
+    const retry = await this.#decideRetry(attempts, message.id);
+    if (retry.kind === "EXHAUSTED") {
+      progress.recordExhausted(message, retry);
+      return;
+    }
+
     const endpoint = requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "FAILED") {
       await this.#recordFailedAttempt(attempts, endpoint, attempt);
     }
     progress.record(endpoint, attempt);
+  }
+
+  async #decideRetry(
+    attempts: DeliveryAttempts,
+    messageId: InboxMessage["id"],
+  ): Promise<DeliveryRetryDecision> {
+    const summary = await attempts.summarize(messageId);
+
+    return retryDecisions.decide(summary);
   }
 
   async #recordFailedAttempt(
@@ -640,19 +667,23 @@ export interface DeliveryRun {
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
-  /** Number of endpoint callback, lease/fencing, status update, or cleanup failures. */
+  /**
+   * Number of observed failures, including bounded retry exhaustion before a
+   * callback and endpoint, lease/fencing, status-update, or cleanup failures.
+   */
   readonly failed: number;
-  /** Per-message failures kept only in the returned run result. */
+  /** Per-message failure observations kept only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
 }
 
 /** Failure from one message in a direct delivery run. */
 export interface DeliveryFailure {
-  /** Independent supported-row snapshot that failed during this run. */
+  /** Independent supported-row snapshot associated with this failure observation. */
   readonly message: DeliveryEndpointMessage;
   /**
-   * Error observed during endpoint callback, lease/fencing,
-   * delivery-status update, or framework cleanup work.
+   * Error observed during endpoint callback, lease/fencing, delivery-status
+   * update, or framework cleanup work; or frozen, stack-free bounded facts
+   * when the internal retained-attempt gate is exhausted before a callback.
    */
   readonly error: unknown;
 }
@@ -696,6 +727,7 @@ interface DrainProgress {
   ) => DeliveryDrainOutcome;
   readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
+  readonly recordExhausted: (message: InboxMessage, decision: DeliveryRetryDecision) => void;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
@@ -760,8 +792,19 @@ interface DeliveryErrorState {
   readonly cleanupFailed: boolean;
 }
 
+interface DeliveryRetryExhaustedFailure {
+  readonly kind: "EXHAUSTED";
+  readonly message: "Delivery retry attempts exhausted.";
+  readonly count: number;
+  readonly limit: number;
+  readonly latestStage: DeliveryFailureStage | undefined;
+  readonly latestReason: DeliveryFailureReason | undefined;
+  readonly latestAccepted: boolean | undefined;
+}
+
 const defaultShardLeaseMs = 30_000;
 const maxContinuationTextBytes = 16 * 1024;
+const retryDecisions = new DeliveryRetryDecisions({ maxAttempts: deliveryAttemptCapacity });
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -815,6 +858,28 @@ function deliveryDrainOutcome(
   });
 }
 
+function retryExhaustedFailure(
+  message: InboxMessage,
+  decision: DeliveryRetryDecision,
+): DeliveryFailure {
+  return Object.freeze({
+    message: exhaustedFailureMessage(message),
+    error: retryExhaustedFacts(decision),
+  });
+}
+
+function retryExhaustedFacts(decision: DeliveryRetryDecision): DeliveryRetryExhaustedFailure {
+  return Object.freeze({
+    kind: "EXHAUSTED",
+    message: "Delivery retry attempts exhausted.",
+    count: decision.count,
+    limit: decision.limit,
+    latestStage: decision.latestStage,
+    latestReason: decision.latestReason,
+    latestAccepted: decision.latestAccepted,
+  });
+}
+
 function drainProgress(): DrainProgress {
   const seen = new Set<string>();
   const failures: DeliveryFailure[] = [];
@@ -854,6 +919,9 @@ function drainProgress(): DrainProgress {
       processed += 1;
 
       return true;
+    },
+    recordExhausted(message: InboxMessage, decision: DeliveryRetryDecision) {
+      failures.push(retryExhaustedFailure(message, decision));
     },
     record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
       if (attempt.kind === "SKIPPED") {
@@ -1072,6 +1140,23 @@ function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
     whenReceived: new Date(message.whenReceived),
     version: message.version,
     ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
+  });
+}
+
+function exhaustedFailureMessage(message: InboxMessage): DeliveryEndpointMessage {
+  return Object.freeze({
+    id: Object.freeze({
+      value: message.id.value,
+      shard: message.id.shard,
+    }),
+    inboxId: Object.freeze({ ...message.inboxId }),
+    label: requireEndpointLabel(message.label),
+    status: requireEndpointStatus(message.status),
+    signalId: message.signalId,
+    shard: message.shard,
+    whenReceived: new Date(message.whenReceived),
+    version: message.version,
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }

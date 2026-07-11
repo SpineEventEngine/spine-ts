@@ -1256,20 +1256,24 @@ policy remains future work. The framework repeats one-shard replay until the
 shard is idle, skipped, stopped, paused after a bounded skipped-only scan
 streak, or reaches a configured failure bound. A later internal run resumes
 from a saved cursor and resets it safely if earlier pending rows disappeared.
-Failed rows stay pending
-as `TO_DELIVER` for later replay retry
-when the endpoint callback fails and framework-owned cleanup succeeds. The
-framework also retains internal sanitized attempt records for supported
-endpoint failures: message/inbox/shard identity, label, node, attempted time,
-accepted flag, and stable failure stage/reason. Retained attempts never store
-raw `Any.value` payload bytes, raw user errors, stack traces, or unbounded
-exception text. Cleanup/replay validation, lease/fencing, and delivery-status
-update failures are reported internally without promising immediate retry, and
-future recovery policy may be needed for abandoned or unavailable rows.
-Package-internal retry-policy preparation can summarize retained attempts for
-one exact inbox message by reading only its 100 known per-message retained
-slots; retry monitors/workers, backoff, scheduling, production supervision,
-topology, catch-up storage, and production adapters remain deferred.
+When an endpoint callback fails and framework-owned cleanup succeeds, the
+retryable row stays pending as `TO_DELIVER` for later replay. Before another
+supported endpoint callback runs, the package-internal retry gate summarizes
+retained attempts for that exact inbox message by reading only its 100 known
+per-message retained slots. An exhausted supported row also stays pending as
+`TO_DELIVER`, but the gate skips the callback and another retained-attempt
+write, returns bounded stack-free failure facts, does not consume accepted
+work, and counts toward failed work and the framework failure bound. Retryable
+failures remain available for later replay through the existing path. The
+framework retains internal sanitized attempt records for supported endpoint
+failures: message/inbox/shard identity, label, node, attempted time, accepted
+flag, and stable failure stage/reason. Retained attempts never store raw
+`Any.value` payload bytes, raw user errors, stack traces, or unbounded exception
+text. Cleanup/replay validation, lease/fencing, and delivery-status update
+failures are reported internally without promising immediate retry, and future
+recovery policy may be needed for abandoned or unavailable rows. Retry
+monitors/workers, backoff, scheduling, production supervision, topology,
+catch-up storage, and production adapters remain deferred.
 Malformed or deprecated legacy label data such as stored
 `IMPORT_EVENT` still fails closed as `DeliveryStorageCorruptionError` before
 replay begins. Lease

@@ -612,10 +612,16 @@ sanitized attempt records for supported endpoint failures, storing only
 message/inbox/shard identity, label, node, attempted time, accepted flag, and a
 stable failure stage/reason. Retained attempts do not store raw `Any.value`
 payload bytes, raw user errors, stack traces, or unbounded exception text.
-Package-internal retry-policy preparation can summarize retained attempts for
-one exact inbox message by reading only its 100 known per-message retained
-slots; retry monitors/workers, backoff, scheduling, production supervision,
-topology, catch-up storage, and production adapters remain deferred.
+Before a supported endpoint callback runs, the package-internal retry gate
+summarizes retained attempts for that exact inbox message by reading only its
+100 known per-message retained slots. An exhausted supported row remains
+`TO_DELIVER`: the gate skips the endpoint callback and another retained-attempt
+write, returns bounded stack-free failure facts, does not consume accepted work,
+and counts toward failed work and the configured failure bound. Retryable
+supported failures remain on the existing path and stay available for later
+replay when cleanup leaves the row pending. Retry monitors/workers, backoff,
+scheduling, production supervision, topology, catch-up storage, and production
+adapters remain deferred.
 Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
 and lease/fencing failures do not increment accepted work, but they do increment

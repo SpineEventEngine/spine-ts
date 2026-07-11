@@ -16,7 +16,7 @@ import { ShardIndex } from "./shard-index.js";
 const attemptTypeUrl = "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord";
 const casRetryLimit = 8;
 const defaultReadLimit = 1_000;
-const maxAttemptsPerMessage = 100;
+export const deliveryAttemptCapacity = 100;
 const maxStoredRecordBytes = 512 * 1024;
 const maxTextBytes = 16 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
@@ -224,7 +224,7 @@ async function nextSequence(
 ): Promise<number> {
   let sequence = 0;
 
-  for (let slot = 1; slot <= maxAttemptsPerMessage; slot += 1) {
+  for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
     const key = attemptKey(messageKey, slot);
     const record = await storage.read(key);
     if (record === undefined) {
@@ -250,7 +250,7 @@ async function readMessageAttempts(
   const messageKey = attemptMessageKey(messageId);
   const attempts: StoredAttempt[] = [];
 
-  for (let slot = 1; slot <= maxAttemptsPerMessage; slot += 1) {
+  for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
     const key = attemptKey(messageKey, slot);
     const record = await storage.read(key);
     if (record !== undefined) {
@@ -646,7 +646,7 @@ function requireLimit(value: number): number {
 }
 
 function attemptSlot(sequence: number): string {
-  const slot = ((sequence - 1) % maxAttemptsPerMessage) + 1;
+  const slot = ((sequence - 1) % deliveryAttemptCapacity) + 1;
 
   return String(slot).padStart(12, "0");
 }

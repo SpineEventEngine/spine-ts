@@ -309,13 +309,19 @@ immediate retry or recovery guarantee in this slice. Supported endpoint
 failures also write internal sanitized attempt records with message/inbox/shard
 identity, label, node, attempted time, accepted flag, and stable failure
 stage/reason; retained attempts do not include raw `Any.value` payload bytes,
-raw user errors, stack traces, or unbounded exception text. Pre-callback claim,
-validation, and lease-fencing failures do not increment accepted endpoint work,
-but they do increment failed work and count toward the internal failure bound.
-Package-internal retry-policy preparation can summarize retained attempts for
-one exact inbox message by reading only its 100 known per-message retained
-slots; this summary is not a public monitor, scheduler, backoff, or production
-worker API.
+raw user errors, stack traces, or unbounded exception text. Before a supported
+endpoint callback runs, the package-internal retry gate summarizes retained
+attempts for that exact inbox message by reading only its 100 known per-message
+retained slots. An exhausted row remains `TO_DELIVER`; the gate skips the
+callback and another retained-attempt write, returns bounded stack-free failure
+facts, does not increment accepted endpoint work, and counts toward failed work
+and the internal failure bound. Retryable endpoint failures continue through
+the existing callback path and remain available for later replay when cleanup
+leaves the row pending. Pre-callback claim, validation, and lease-fencing
+failures do not increment accepted endpoint work, but they do increment failed
+work and count toward the internal failure bound. This gate is not a public
+monitor/action, scheduler, backoff, dead-letter, topology, catch-up, or
+production-adapter API.
 Once the endpoint callback or `onMessage` path has been invoked, endpoint
 failures and later framework cleanup/status-update failures are accepted
 endpoint work and may appear in failed work. Live shard ownership plus live

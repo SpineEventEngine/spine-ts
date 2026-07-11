@@ -6,6 +6,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/inbox-records.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
+import { deliveryAttemptCapacity } from "../../src/delivery/delivery-attempts.js";
 import {
   Delivery,
   type DeliveryDrainOptions,
@@ -1118,26 +1119,13 @@ describe("Delivery worker", () => {
   });
 
   it("retains only the newest 100 attempts for one repeatedly failing message", async () => {
-    let attempt = 0;
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
-      now: () => new Date(Date.UTC(2026, 6, 8, 9, 0, attempt)),
     });
-    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-bounded-attempts", 1n);
 
-    await seed(delivery, "signal-bounded-attempts", 1n);
-
-    for (let index = 0; index < 105; index += 1) {
-      attempt = index + 1;
-      const run = await delivery.drain(shard, {
-        node: "node-a",
-        onMessage() {
-          throw new Error(`endpoint failed ${String(index)}`);
-        },
-      });
-      expect(run.failed).toBe(1);
-    }
+    await recordFailures(delivery, message, 105);
 
     const attempts = await requireAttempts(delivery).read();
 
@@ -1150,6 +1138,192 @@ describe("Delivery worker", () => {
       signalId: "signal-bounded-attempts",
       attemptedAt: new Date("2026-07-08T09:01:45.000Z"),
     });
+  });
+
+  it("does not invoke exhausted supported rows or record another attempt", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const message = await seed(delivery, "signal-exhausted", 1n, undefined, undefined, keepUntil);
+    await recordFailures(delivery, message, deliveryAttemptCapacity);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(callbackMessage) {
+        seen.push(callbackMessage.signalId);
+        throw new Error("exhausted callback must not run");
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted");
+    expect(run.failures[0]?.message.keepUntil).toEqual(keepUntil);
+    expect(run.failures[0]?.error).toMatchObject({
+      message: "Delivery retry attempts exhausted.",
+    });
+    expect(run.failures[0]?.error).not.toBeInstanceOf(Error);
+    expect(run.failures[0]?.error).not.toHaveProperty("stack");
+    expect(Object.isFrozen(run.failures[0]?.error)).toBe(true);
+    expect(Object.getPrototypeOf(run.failures[0]?.error)).toBe(Object.prototype);
+    const failureJson = JSON.stringify(run.failures[0]?.error);
+    expect(JSON.parse(failureJson)).toEqual({
+      kind: "EXHAUSTED",
+      message: "Delivery retry attempts exhausted.",
+      count: deliveryAttemptCapacity,
+      limit: deliveryAttemptCapacity,
+      latestStage: "ENDPOINT",
+      latestReason: "ENDPOINT_REJECTED",
+      latestAccepted: true,
+    });
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
+      count: deliveryAttemptCapacity,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-exhausted", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("does not let exhausted rows consume the accepted-work limit", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const exhausted = await seed(delivery, "signal-exhausted-head", 1n);
+    await recordFailures(delivery, exhausted, deliveryAttemptCapacity);
+    await seed(delivery, "signal-limit-tail", 2n);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-limit-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 2,
+      accepted: 1,
+      delivered: 1,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted-head");
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-exhausted-head", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("keeps retryable supported rows invoking endpoints and retaining failures", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-still-retryable", 1n);
+    await recordFailures(delivery, message, deliveryAttemptCapacity - 1);
+    const seen: string[] = [];
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(callbackMessage) {
+        seen.push(callbackMessage.signalId);
+        throw new Error("endpoint failed below retry budget");
+      },
+    });
+
+    expect(seen).toEqual(["signal-still-retryable"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-still-retryable");
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toMatchObject({
+      count: deliveryAttemptCapacity,
+      latestReason: "ENDPOINT_REJECTED",
+      latestAccepted: true,
+    });
+  });
+
+  it("does not clone maximum payload bytes for an exhausted supported backlog", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const payload = Buffer.alloc(256 * 1024, 7);
+    const messages = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        seed(
+          delivery,
+          `signal-exhausted-payload-${String(index)}`,
+          BigInt(index + 1),
+          "UPDATE_SUBSCRIBER",
+          create(AnySchema, {
+            typeUrl: "type.example.dev/tasks.Signal",
+            value: payload,
+          }),
+        ),
+      ),
+    );
+    await Promise.all(
+      messages.map((message) => recordFailures(delivery, message, deliveryAttemptCapacity)),
+    );
+    let copiedPayloads = 0;
+    const bufferPrototype = Reflect.getPrototypeOf(payload);
+    if (!isBufferSlicePrototype(bufferPrototype)) {
+      throw new Error("Expected the payload buffer prototype to expose slice().");
+    }
+
+    const originalSlice = bufferPrototype.slice;
+    const payloadSlices = vi.spyOn(bufferPrototype, "slice").mockImplementation(function slice(
+      this: Buffer,
+      ...arguments_: [start?: number, end?: number]
+    ) {
+      if (this.byteLength === payload.byteLength) {
+        copiedPayloads += 1;
+      }
+
+      return originalSlice.call(this, ...arguments_);
+    });
+
+    try {
+      const run = await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("exhausted callback must not run");
+        },
+      });
+
+      expect(copiedPayloads).toBe(0);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: messages.length,
+        accepted: 0,
+        delivered: 0,
+        failed: messages.length,
+      });
+      expect(run.failures.every((failure) => failure.message.signal === undefined)).toBe(true);
+    } finally {
+      payloadSlices.mockRestore();
+    }
   });
 
   it("uses bounded slot reads when recording repeated attempts", async () => {
@@ -2603,6 +2777,43 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("applies retry exhaustion before exact-message endpoint callbacks", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-exact-exhausted", 1n);
+    await recordFailures(delivery, stored, deliveryAttemptCapacity);
+    const seen: string[] = [];
+
+    const run = await delivery.drainMessage(stored, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+        throw new Error("exact exhausted callback must not run");
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exact-exhausted");
+    expect(run.failures[0]?.error).toMatchObject({
+      message: "Delivery retry attempts exhausted.",
+    });
+    await expect(requireAttempts(delivery).summarize(stored.id)).resolves.toMatchObject({
+      count: deliveryAttemptCapacity,
+    });
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      stored,
+    ]);
+  });
+
   it("records an exact-message marker failure when the stored row changes after replay", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -2922,18 +3133,24 @@ function seed(
   signalId: string,
   version: bigint,
   label?: DeliveryEndpointMessage["label"],
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<DeliveryEndpointMessage>;
 function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
   label: InboxMessage["label"],
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<InboxMessage>;
 async function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
   label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
     inboxId: targetInbox(),
@@ -2943,10 +3160,39 @@ async function seed(
     shard: ShardIndex.single(),
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version,
+    ...(signal === undefined ? {} : { signal }),
+    ...(keepUntil === undefined ? {} : { keepUntil }),
   });
 
   return result.message;
 }
+
+async function recordFailures(
+  delivery: Delivery,
+  message: DeliveryEndpointMessage,
+  count: number,
+): Promise<void> {
+  for (let sequence = 1; sequence <= count; sequence += 1) {
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: `node-${String(sequence).padStart(3, "0")}`,
+      attemptedAt: new Date(Date.UTC(2026, 6, 8, 9, 0, sequence)),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+  }
+}
+
+function isBufferSlicePrototype(value: object | null): value is BufferSlicePrototype {
+  return value !== null && "slice" in value && typeof value.slice === "function";
+}
+
+interface BufferSlicePrototype {
+  slice: BufferSlice;
+}
+
+type BufferSlice = (this: Buffer, start?: number, end?: number) => Buffer;
 
 function requireAttempts(delivery: Delivery): DeliveryAttemptReader {
   const attempts = (delivery as DeliveryAttemptOwner).attempts;
