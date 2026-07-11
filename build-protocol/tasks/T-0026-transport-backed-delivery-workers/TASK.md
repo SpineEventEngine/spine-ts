@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Final verification passed; merge pending
+Status: Completed and post-merge verified on main
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1953,3 +1953,14 @@ local HTTP/2 loopback and ZeroMQ IPC `EPERM` restrictions. The same full verify
 gate passed unsandboxed with 59 regular test files and 1219 tests, 59 coverage
 test files and 1219 tests, branch coverage `90.02%`, docs check, proto lint,
 and generated-clean checks. T-0026 is ready to merge into root `main`.
+
+Post-merge verification on `2026-07-11T05:40:12Z`: root `main` fast-forwarded
+from `ca8fb2b3` to `536afa44` without touching the user-owned untracked
+`human-review-1-jul.md`. The post-merge focused Vitest batch passed with 9 files
+and 298 tests; generated build typecheck passed; `docs:check` passed with only
+the known TypeDoc invalid-origin warnings; `format:check` passed; and
+`git diff --check` passed. Unsandboxed full
+`pnpm --config.verify-deps-before-run=false verify` passed with 59 regular test
+files and 1219 tests, 59 coverage test files and 1219 tests, branch coverage
+`90.02%`, docs check, proto lint, and generated-clean checks. T-0026 is complete
+on `main`.

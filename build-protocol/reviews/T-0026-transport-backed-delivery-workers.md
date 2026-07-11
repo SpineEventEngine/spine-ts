@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Final verification passed; merge pending
+Status: Completed and post-merge verified on main
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3798,3 +3798,18 @@ red/green delivery regressions before the next review pass.
   tests, branch coverage `90.02%`, docs check, proto lint, and generated-clean
   checks.
 - Action: merge T-0026 into root `main` and run post-merge verification.
+
+### Post-merge Verification - `2026-07-11T05:40:12Z`
+
+- Root `main` fast-forwarded from `ca8fb2b3` to `536afa44` without touching the
+  user-owned untracked `human-review-1-jul.md`.
+- Focused Vitest batch passed with 9 files and 298 tests.
+- Generated build typecheck passed.
+- `docs:check` passed with only the known TypeDoc invalid-origin warnings.
+- `format:check` passed.
+- `git diff --check` passed.
+- Unsandboxed full `pnpm --config.verify-deps-before-run=false verify` passed
+  with 59 regular test files and 1219 tests, 59 coverage test files and 1219
+  tests, branch coverage `90.02%`, docs check, proto lint, and generated-clean
+  checks.
+- T-0026 is complete on `main`.
