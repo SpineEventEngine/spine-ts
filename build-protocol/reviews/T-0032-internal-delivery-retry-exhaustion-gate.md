@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Clean; final verification pending
+Status: Final verification passed; fresh final-gate re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -439,3 +439,42 @@ is deferred to the final release-readiness gate.
   reported no P0-P3 findings and were closed. Runtime behavior, focused tests,
   public/API docs, exports, active status, inventories, and the non-recursive
   ledger convention are accepted. Final full-project verification is pending.
+- `2026-07-11T19:34:00Z`: Final full-project verify failed in tooling
+  typecheck before lint/tests. Root cause is limited to test helper overloads,
+  supported-message narrowing in the max-payload regression, and Vitest mock
+  typing; runtime and prior review findings remain clean. One test-only fix
+  worker must resolve the complete compiler-error batch, rerun final gates, and
+  receive fresh four-lane review.
+- `2026-07-11T19:36:00Z`: Assigned final-gate fix worker
+  `019f5267-4576-7771-9bd2-bd75fdaa0104` to all test-tooling compiler errors. Fresh
+  four-lane review remains pending its verified commit.
+- `2026-07-11T20:00:00Z`: The final-gate fix worker completed the canonical
+  skill applicability check before changes. It selected and fully read
+  `systematic-debugging`, `receiving-code-review`, `typescript-advanced-types`,
+  `implement`, `test-driven-development`, and
+  `verification-before-completion`; checked the expected-skill manifest,
+  enumerated the readable installed entrypoints, and inspected the installed
+  lock entries. The skills govern the compiler-batch investigation and
+  verification. No source was unreachable; no subagents were spawned.
+- `2026-07-11T20:10:00Z`: The first full verification rerun reached lint after
+  passing generated and tooling typechecks, then found strict unsafe-`any`
+  diagnostics in the first Buffer spy repair. The fix remains test-only; the
+  worker is replacing the untyped global-prototype/`Reflect.apply` path with a
+  runtime-guarded typed prototype seam before restarting the required gates.
+- `2026-07-11T20:20:00Z`: The second rerun passed typechecks and isolated one
+  lint-only deprecation on `Buffer["slice"]`. The worker replaced that type
+  reference with an equivalent explicit local callable signature; no runtime
+  or public-surface change is involved.
+- `2026-07-11T20:40:00Z`: Full elevated test execution passed all 60 files and
+  1,276 tests, but coverage reproducibly missed its global branch threshold by
+  one branch. The repair adds a narrow exhaustion-failure `keepUntil` snapshot
+  assertion to cover the existing source branch; thresholds and runtime code
+  remain unchanged.
+- `2026-07-11T20:55:00Z`: The final elevated full verifier passed with exit 0:
+  generated and tooling typechecks, strict lint, cleanup enforcement,
+  formatting, 60 test files and 1,276 tests, `90.01%` branch coverage
+  (`3488/3875`), docs/API checks with zero TypeDoc errors and only the known
+  invalid-local-remote warning, proto lint, and generated-output cleanliness.
+  The final-gate worker made only the two delivery test files and durable
+  records, and it did not spawn subagents as directed. Fresh four-lane
+  re-review is pending the verified commit.

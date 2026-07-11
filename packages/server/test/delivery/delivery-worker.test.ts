@@ -1146,7 +1146,8 @@ describe("Delivery worker", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const shard = ShardIndex.single();
-    const message = await seed(delivery, "signal-exhausted", 1n);
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const message = await seed(delivery, "signal-exhausted", 1n, undefined, undefined, keepUntil);
     await recordFailures(delivery, message, deliveryAttemptCapacity);
     const seen: string[] = [];
 
@@ -1168,6 +1169,7 @@ describe("Delivery worker", () => {
     });
     expect(run.failures).toHaveLength(1);
     expect(run.failures[0]?.message.signalId).toBe("signal-exhausted");
+    expect(run.failures[0]?.message.keepUntil).toEqual(keepUntil);
     expect(run.failures[0]?.error).toMatchObject({
       message: "Delivery retry attempts exhausted.",
     });
@@ -1269,29 +1271,31 @@ describe("Delivery worker", () => {
     const payload = Buffer.alloc(256 * 1024, 7);
     const messages = await Promise.all(
       Array.from({ length: 4 }, (_, index) =>
-        delivery.inbox.receive({
-          inboxId: targetInbox(),
-          signalId: `signal-exhausted-payload-${String(index)}`,
-          label: "UPDATE_SUBSCRIBER",
-          status: "TO_DELIVER",
-          shard,
-          whenReceived: new Date("2026-07-08T09:00:00.000Z"),
-          version: BigInt(index + 1),
-          signal: create(AnySchema, {
+        seed(
+          delivery,
+          `signal-exhausted-payload-${String(index)}`,
+          BigInt(index + 1),
+          "UPDATE_SUBSCRIBER",
+          create(AnySchema, {
             typeUrl: "type.example.dev/tasks.Signal",
             value: payload,
           }),
-        }),
+        ),
       ),
     );
     await Promise.all(
-      messages.map(({ message }) => recordFailures(delivery, message, deliveryAttemptCapacity)),
+      messages.map((message) => recordFailures(delivery, message, deliveryAttemptCapacity)),
     );
     let copiedPayloads = 0;
-    const originalSlice = Buffer.prototype.slice;
-    const payloadSlices = vi.spyOn(Buffer.prototype, "slice").mockImplementation(function slice(
+    const bufferPrototype = Reflect.getPrototypeOf(payload);
+    if (!isBufferSlicePrototype(bufferPrototype)) {
+      throw new Error("Expected the payload buffer prototype to expose slice().");
+    }
+
+    const originalSlice = bufferPrototype.slice;
+    const payloadSlices = vi.spyOn(bufferPrototype, "slice").mockImplementation(function slice(
       this: Buffer,
-      ...arguments_: Parameters<Buffer["slice"]>
+      ...arguments_: [start?: number, end?: number]
     ) {
       if (this.byteLength === payload.byteLength) {
         copiedPayloads += 1;
@@ -3129,18 +3133,24 @@ function seed(
   signalId: string,
   version: bigint,
   label?: DeliveryEndpointMessage["label"],
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<DeliveryEndpointMessage>;
 function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
   label: InboxMessage["label"],
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<InboxMessage>;
 async function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
   label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
+  signal?: Any,
+  keepUntil?: Date,
 ): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
     inboxId: targetInbox(),
@@ -3150,6 +3160,8 @@ async function seed(
     shard: ShardIndex.single(),
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version,
+    ...(signal === undefined ? {} : { signal }),
+    ...(keepUntil === undefined ? {} : { keepUntil }),
   });
 
   return result.message;
@@ -3171,6 +3183,16 @@ async function recordFailures(
     });
   }
 }
+
+function isBufferSlicePrototype(value: object | null): value is BufferSlicePrototype {
+  return value !== null && "slice" in value && typeof value.slice === "function";
+}
+
+interface BufferSlicePrototype {
+  slice: BufferSlice;
+}
+
+type BufferSlice = (this: Buffer, start?: number, end?: number) => Buffer;
 
 function requireAttempts(delivery: Delivery): DeliveryAttemptReader {
   const attempts = (delivery as DeliveryAttemptOwner).attempts;

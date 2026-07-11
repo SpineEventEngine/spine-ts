@@ -999,6 +999,12 @@ async function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
+  label: InboxMessage["label"],
+): Promise<InboxMessage>;
+async function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
   label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
 ): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({

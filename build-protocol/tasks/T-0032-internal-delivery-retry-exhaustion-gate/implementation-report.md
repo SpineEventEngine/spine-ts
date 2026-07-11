@@ -1,6 +1,9 @@
 # T-0032 Implementation Report
 
-Status: Implementation and review clean; final task verification pending
+Status: Final verification passed; fresh final-gate re-review pending
+
+The final-gate fix worker completed and recorded the canonical skill
+applicability check in the T-0032 work and review logs before editing tests.
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -100,6 +103,8 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - No implementation concerns are currently known. The current formal review
   status and any future findings are maintained in the T-0032 review log; this
   report does not duplicate round-specific lane state.
+- The final docs checks report only the known invalid-local-`origin` source-link
+  warning; TypeDoc reports zero errors.
 
 ## Round 8 TypeDoc Fix
 
@@ -299,3 +304,51 @@ tail callbacks` in `delivery-loop.test.ts`. It proves an exhausted head
 - PASS, exit 0: `git ls-files --others --exclude-standard` with no output.
 - No full `pnpm verify` was run; fresh four-lane re-review remains pending
   because this worker was explicitly directed not to spawn subagents.
+
+## Final-Gate Test Tooling Repair
+
+### Findings Resolved
+
+- Added the worker helper's broad `InboxMessage`-label overload to the loop
+  helper, preserving narrow default supported-message returns and broad
+  unsupported fixture returns for deliberate `CATCH_UP` rows.
+- Routed the max-payload fixture through the existing supported-label seed
+  helper, including its payload field, so retained-attempt setup accepts only
+  a compile-time-proven `DeliveryEndpointMessage` rather than a broad inbox
+  row.
+- Replaced the direct global `Buffer.prototype` spy with a guarded actual
+  payload-prototype seam and explicit non-deprecated callable signature. The
+  test still delegates to the original method and observes real payload-copy
+  calls deterministically.
+- Extended the exhausted-row regression to retain and assert `keepUntil` in
+  the bounded failure snapshot. This executes the existing source branch that
+  kept global branch coverage one count below the required threshold.
+- No runtime, public API, public documentation, generated output, heap
+  threshold, or lint suppression changed.
+
+### Final Verification
+
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false typecheck:tooling`.
+- PASS, exit 0: focused max-payload and exhausted-row Vitest, 2 tests.
+- PASS, exit 0: delivery worker and loop Vitest, 2 files and 106 tests.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false typecheck:build:generated`.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false docs:check` with
+  zero TypeDoc errors and the known invalid-local-`origin` warning.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false format:check`,
+  `git diff --check`, and `git ls-files --others --exclude-standard`.
+- Initial sandbox full verify could not open local HTTP/2 or ZeroMQ IPC
+  listeners (`EPERM`); it was rerun with the required local-transport
+  permission. PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false verify`. It passed typechecks,
+  lint, cleanup enforcement, formatting, 60 test files and 1,276 tests,
+  coverage at `90.01%` branches (`3488/3875`), docs, proto lint, and generated
+  output cleanliness.
+
+### Final-Gate Batch Files
+
+- `build-protocol/reviews/T-0032-internal-delivery-retry-exhaustion-gate.md`
+- `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/TASK.md`
+- `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/implementation-report.md`
+- `build-protocol/work-logs/T-0032.md`
+- `packages/server/test/delivery/delivery-loop.test.ts`
+- `packages/server/test/delivery/delivery-worker.test.ts`
