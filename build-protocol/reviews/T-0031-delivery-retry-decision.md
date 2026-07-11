@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Round 1 documentation finding fixed; coordinator re-review pending
+Status: Round 2 found one ledger/process finding; fix pending
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -15,6 +15,16 @@ Branch: `task/T-0031-delivery-retry-decision`
 | TypeScript/API docs        | Aristotle | Clean   |
 | Security                   | Aquinas   | Clean   |
 | Performance/reliability    | Dewey     | Clean   |
+
+## Round 2 Review Lanes
+
+| Lane                       | Reviewer    | Status  |
+| -------------------------- | ----------- | ------- |
+| Code style/maintainability | Kierkegaard | Finding |
+| Documentation              | McClintock  | Finding |
+| TypeScript/API docs        | Pasteur     | Clean   |
+| Security                   | Laplace     | Clean   |
+| Performance/reliability    | Fermat      | Clean   |
 
 ## Review Criteria
 
@@ -65,3 +75,12 @@ Branch: `task/T-0031-delivery-retry-decision`
 - `2026-07-11T13:29:58+0100`: Coordinator inspection added the documentation
   fix commit `c0b918fd` to the durable commit ledger before generating the next
   review package. Re-review remains pending.
+- `2026-07-11T13:34:49+0100`: Round 2 independent review completed against
+  `.superpowers/sdd/review-9566466d..44d5d116.diff`. TypeScript/API docs,
+  security, and performance/reliability were clean. Code style/maintainability
+  and documentation found the same P2 process issue: the work-log commit ledger
+  includes branch history through `c0b918fd`, but omits the later ledger-fix
+  verification commit `44d5d116`, while also claiming to cover complete current
+  branch history. The fix should add `44d5d116` and state the ledger convention
+  for the current log-maintenance commit so the branch does not enter an
+  impossible self-referential ledger loop. Fix is pending.
