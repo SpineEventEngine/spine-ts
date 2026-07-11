@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Final-gate re-review clean; coordinator full verification pending
+Status: Complete; ready to merge
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
@@ -245,5 +245,7 @@ available.
 - The final-gate test-tooling batch passed the complete elevated `pnpm verify`
   gate: 60 files and 1,276 tests passed, with branch coverage at `90.01%`
   (`3488/3875`). The fresh four-lane re-review is clean with no P0-P3
-  findings. A fresh coordinator full-project verification is pending before
-  task completion and merge.
+  findings. Fresh coordinator full-project verification then passed the same
+  60 files and 1,276 tests at `90.01%` branch coverage, together with every
+  generated, tooling, lint, docs/API, proto, and cleanliness gate. T-0032 is
+  complete and ready to merge.
