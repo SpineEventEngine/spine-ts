@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Round 6 review clean; final verification pending
+Status: Final verification fixes verified; post-fix re-review pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -291,3 +291,21 @@ than by a commit naming itself. TypeScript/API docs, security, and
 performance/reliability remained clean; focused delivery/storage Vitest and
 diff checks run by reviewers passed. T-0028 is ready for final coordinator
 verification.
+
+Final coordinator verification found four lint errors from obsolete test type
+assertions that were added while the continuation types were still being
+stabilized. The public types now accept those values directly, so the fix is to
+remove the unnecessary casts and rerun the final verification gate.
+
+After the lint fix, the escalated full verification gate passed the full test
+suite but failed global branch coverage at 89.81% against the 90% threshold.
+The coverage report identified the untested `RecordQuery.validate()`
+continuation mismatch branches, so the fix adds focused public-query tests for
+mismatched continuation length and mismatched continuation sort fields.
+
+Final verification fixes removed obsolete test type assertions and added
+focused public contract tests for continuation validation and invalid inbox
+read offsets. The escalated full `verify` gate passed with 59 test files, 1239
+tests, and 90.02% branch coverage. Because tests changed after Round 6 clean
+review, T-0028 remains open for a final post-fix five-lane re-review before
+merge.

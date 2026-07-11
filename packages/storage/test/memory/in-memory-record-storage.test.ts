@@ -116,11 +116,55 @@ describe("InMemoryRecordStorage", () => {
       offset: 1,
       limit: 1,
       mask: ["id"],
-    } as Parameters<typeof storage.query>[0]);
+    });
 
     expect(page).toHaveLength(1);
     expect(page[0]?.id?.value).toBe("event-5");
     expect(page[0]?.message).toBeUndefined();
+  });
+
+  it("rejects continuations with the wrong number of ordered values", async () => {
+    const storage = createStorage();
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+
+    await expect(
+      storage.query({
+        sort: [{ field: "timestamp", direction: "asc" }],
+        after: {
+          values: [],
+          id: create(EventIdSchema, { value: "event-1" }),
+        },
+      }),
+    ).rejects.toThrow(/continuation must match the sort order/i);
+  });
+
+  it("rejects continuations without a matching sort order", async () => {
+    const storage = createStorage();
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+
+    await expect(
+      storage.query({
+        after: {
+          values: [{ field: "timestamp", value: 1n }],
+          id: create(EventIdSchema, { value: "event-1" }),
+        },
+      }),
+    ).rejects.toThrow(/continuation must match the sort order/i);
+  });
+
+  it("rejects continuations with mismatched ordered fields", async () => {
+    const storage = createStorage();
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+
+    await expect(
+      storage.query({
+        sort: [{ field: "timestamp", direction: "asc" }],
+        after: {
+          values: [{ field: "context.timestamp", value: 1n }],
+          id: create(EventIdSchema, { value: "event-1" }),
+        },
+      }),
+    ).rejects.toThrow(/continuation must match the sort order/i);
   });
 
   it("keeps keyset continuation scoped to the active tenant slice", async () => {
