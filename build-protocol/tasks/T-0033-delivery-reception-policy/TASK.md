@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Round 3 sequencing fix in progress
+Status: Round 3 sequencing fix verified; fresh re-review pending
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
@@ -113,6 +113,10 @@ unimplemented JVM parity.
 - The default durable row outcome is explicit for both cases.
 - Action ownership, execution order, failure accounting, and authoritative
   fallback row state are explicit.
+- Callback failure sequencing is cleanup while the active claim exists,
+  finalize one `ENDPOINT` or aggregated `CLEANUP` result, persist exactly one
+  attempt from that result, then return exactly one public `DeliveryFailure`
+  and consume the existing failure budget once.
 - Claim, lease/fencing, attempt-retention infrastructure, cleanup, and
   status-update failures preserve their existing outcomes. Callback success
   followed by status-update failure is explicitly outside D-0084.
@@ -122,7 +126,12 @@ unimplemented JVM parity.
   attempt facts/accounting without a second action failure or separate action-
   failure facts.
 - The same cleanup rule applies when the callback failure retains attempt 100;
-  exhaustion is observed only on a later claimed pass.
+  that finalized attempt is retained once, and exhaustion is observed only on
+  a later claimed pass.
+- No pre-cleanup retention, rewrite, second retention write, or second failure
+  is allowed. Ordinary attempt-retention write failure occurs after cleanup,
+  remains observational under D-0080, and neither changes authoritative
+  `TO_DELIVER` nor authorizes a terminal status.
 - Retained attempts remain bounded, sanitized, and free of payload bytes, user
   error objects, stack traces, and unbounded text.
 - Immediate repeat is explicitly supported or deferred; if deferred, no prose
@@ -142,10 +151,11 @@ unimplemented JVM parity.
 D-0084 accepts a fixed internal policy for a later implementation task:
 
 - a row classified retryable before callback whose callback then fails retains
-  one bounded sanitized failure attempt, then keeps the claimed row pending
-  `TO_DELIVER`, including when that attempt fills slot 100; claim release uses
-  existing cleanup, whose failure remains one aggregated `CLEANUP` failure
-  with existing attempt and failure-budget accounting;
+  its `KEEP_PENDING` outcome through existing cleanup while the active claim
+  exists, finalizes one `ENDPOINT` or aggregated `CLEANUP` result, persists
+  exactly one bounded sanitized attempt from that result, and returns one
+  public failure that consumes the failure budget once; the same order retains
+  attempt 100, with exhaustion observable only on a later claim;
 - pre-callback exhaustion selects framework-owned `MARK_DELIVERED` after
   exact-message classification and while the row remains claim/fence owned;
 - immediate repeat remains deferred;

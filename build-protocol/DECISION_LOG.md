@@ -2999,15 +2999,23 @@ Decision:
   vocabulary, not TypeScript declarations, public exports, or a promise of a
   configurable action API.
 - When a supported row classified as retryable then fails in its endpoint
-  callback, first persist the bounded sanitized failure attempt, then execute
-  `KEEP_PENDING`. That action still applies when the newly retained attempt
-  fills slot 100; a later pre-callback pass observes exhaustion and selects the
-  exhaustion action after a later claim. The slot-100 callback-failure pass
-  still releases its claim through existing cleanup. The retained facts remain
-  limited to the T-0029 fields and continue to exclude payload bytes, user
-  error objects, stack traces, and unbounded text. Ordinary attempt retention
-  write failure remains observational under D-0080 and does not authorize a
-  terminal status; retained-state corruption still fails closed.
+  callback, use this sequence: (1) observe the endpoint callback failure;
+  (2) execute existing claim cleanup, which realizes the `KEEP_PENDING`
+  outcome while the active claim exists; (3) finalize one failure result as
+  `ENDPOINT` if cleanup succeeds or `CLEANUP` with the aggregated callback and
+  cleanup error if cleanup fails; (4) persist exactly one bounded sanitized
+  retained attempt from that finalized result; and (5) return exactly one
+  public `DeliveryFailure` and consume the existing failure budget once. Do
+  not retain before cleanup, rewrite an earlier attempt, perform a second
+  retention write, or emit a second failure.
+- When the finalized retained attempt is attempt 100, retain it through the
+  same single write. Exhaustion is observed only after a later claim, before
+  that later pass invokes the callback. The retained facts remain limited to
+  the T-0029 fields and continue to exclude payload bytes, user error objects,
+  stack traces, and unbounded text. Ordinary attempt-retention write failure
+  occurs after cleanup and remains observational under D-0080; it does not
+  change the authoritative `TO_DELIVER` status or authorize a terminal status.
+  Retained-state corruption still fails closed.
 - This callback-failure policy does not select an action for claim,
   lease/fencing, attempt-retention infrastructure, cleanup, or status-update
   failures. Those stages preserve their existing outcomes and failure
@@ -3016,21 +3024,21 @@ Decision:
   failure, and D-0084 does not apply `KEEP_PENDING` to it.
 - If the existing cleanup path cannot release or clear the active claim after
   an endpoint callback failure, preserve its current `CLEANUP` classification
-  and accounting. Aggregate the original callback error with the cleanup
-  error, return one public `DeliveryFailure`, consume the existing delivery
-  failure budget once, and retain the existing attempt facts and accounting.
-  Do not emit a second action failure or add separate action-failure facts for
-  failed `KEEP_PENDING` cleanup.
+  and accounting in the one finalized result described above. Aggregate the
+  original callback error with the cleanup error; the subsequent single
+  retention write and single public failure use that finalized result. Do not
+  emit a second action failure or add separate action-failure facts for failed
+  `KEEP_PENDING` cleanup.
 - For a supported row already classified as exhausted before callback
   invocation, select the fixed framework-owned `MARK_DELIVERED` action. Do not
   invoke the endpoint and do not retain another attempt. This adopts the Spine
   JVM default terminal outcome only after the TypeScript bounded retry budget,
   without adding a public monitor or custom action selection.
-- Execute either action while the exact row is held by the active delivery
-  claim and shard lease fence. A callback-failure action occurs after retained-
-  attempt persistence. A pre-callback exhaustion action occurs after the
-  exact-message exhaustion classification and after the row has been claimed
-  and synchronized with the active fence. No unfenced public
+- Execute claim cleanup for the `KEEP_PENDING` outcome while the active
+  delivery claim exists, before finalizing and retaining the callback-failure
+  result. Execute the pre-callback exhaustion action after exact-message
+  exhaustion classification and after the row has been claimed and
+  synchronized with the active shard lease fence. No unfenced public
   `Inbox.markDelivered()` snapshot is an action executor for this policy.
 - Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
   framework drain to reconsider the row; it does not recurse, schedule a run,

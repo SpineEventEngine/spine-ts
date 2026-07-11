@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Round 3 sequencing fix in progress
+Status: Round 3 sequencing fix verified; fresh re-review pending
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -37,8 +37,16 @@ protocol.
 - Verify failed `KEEP_PENDING` claim release remains one existing `CLEANUP`
   failure: callback and cleanup errors are aggregated, the public failure and
   failure budget are each counted once, and retained attempt facts/accounting
-  remain unchanged without separate action-failure facts. This includes the
-  pass that retains attempt 100; exhaustion is observed only on a later claim.
+  remain unchanged without separate action-failure facts.
+- Verify the exact callback-failure order: cleanup while the active claim
+  exists; finalize one `ENDPOINT` or aggregated `CLEANUP` result; retain exactly
+  one attempt from that result; then return one public `DeliveryFailure` and
+  consume the failure budget once. There is no pre-cleanup retention, rewrite,
+  second retention write, or second failure.
+- Verify the same finalized sequence retains attempt 100 and exhaustion is
+  observed only on a later claim. Ordinary attempt-retention write failure is
+  observational under D-0080 after cleanup and neither changes authoritative
+  `TO_DELIVER` nor authorizes a terminal status.
 - Verify only new exhaustion-time `MARK_DELIVERED` action-failure facts/error
   details are required to be bounded and sanitized; the existing enclosing
   `DeliveryFailure` row snapshot and `unknown` error contract remain unchanged
@@ -156,3 +164,17 @@ protocol.
 - `2026-07-11T20:47:00Z`: Resumed decision author
   `019f5297-9471-7a01-a287-9b08ac23250a` as the single Round 3 sequencing fix
   worker. Fresh four-lane re-review remains pending its verified commit.
+- `2026-07-11T20:55:00Z`: Round 3 fix worker aligned D-0084 and current T-0033
+  records with the existing implementable order: callback failure, active-
+  claim cleanup, one finalized `ENDPOINT` or aggregated `CLEANUP` result, one
+  retained-attempt write, and one public failure/failure-budget observation.
+  The same order retains attempt 100 before exhaustion can be observed on a
+  later claim. Pre-cleanup retention, rewrite, duplicate retention, and a
+  second failure are explicitly excluded. Focused verification and commit are
+  pending before fresh re-review.
+- `2026-07-11T21:00:00Z`: Round 3 fix verification passed: `docs:check`,
+  `format:check`, whitespace, untracked-file, changed-scope, status, public-
+  leakage, duplicate-capacity, sequencing, and future-policy checks were
+  clean. TypeDoc reported zero errors and only the known invalid-`origin`
+  warning. Full `pnpm verify` was intentionally not run. Fresh four-lane
+  re-review remains pending the committed fix.
