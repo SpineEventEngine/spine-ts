@@ -139,16 +139,22 @@ is deferred to the final release-readiness gate.
   bounded documentation/status batch plus a focused loop regression. The
   Round 1 findings recorded above are historical and resolved by `17f4abc6`;
   they are not active review findings. Local verification passed; the new
-  fix-batch commit follows in this atomic step and future re-review remains
-  pending.
+  fix batch was committed as `85d2ce62` and fresh re-review remains pending.
 - `2026-07-11T16:20:12Z`: Final local verification for the Round 2 batch
   passed: focused delivery worker/loop Vitest (2 files, 105 tests), generated
   build typecheck, docs check, format check, `git diff --check`, and the
   untracked-output check. The docs check reported zero TypeDoc errors; its
   invalid-local-remote source-link warning is pre-existing environment noise.
-  The four review lanes remain pending re-review after the forthcoming commit.
+  The four review lanes remain pending re-review after commit `85d2ce62`.
 - `2026-07-11T16:13:00Z`: Spawned one Round 2 fix worker for the complete
   findings and residual-risk verification batch. The combined spawn-and-log
   call failed after spawning because its log patch missed exact context; no
-  duplicate worker was created. Its ID will be recovered from the completion
-  notification and recorded before re-review.
+  duplicate worker was created. Completion notification recovered worker
+  `019f51f3-d7cf-7cf1-8278-6a082d0211f9`; it was closed after commit `85d2ce62`.
+- `2026-07-11T16:24:00Z`: Coordinator independently reran the focused
+  delivery worker/loop suites (2 files, 105 tests), generated build typecheck,
+  docs check, format check, whitespace check, and untracked-output check. All
+  passed; docs retained only the known invalid-local-remote source-link warning.
+  The lightweight docs/status lint then corrected stale post-commit wording and
+  the recovered worker identity. No duplicate policy value, public API leak, or
+  future-policy overclaim was found.

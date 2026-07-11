@@ -234,6 +234,5 @@ available.
   TypeDocs with bounded retry exhaustion, qualify the architecture's missing
   retry-policy wording, make current status and inventories accurate, add the
   detailed API-gate wording, and prove loop failure-budget handling for an
-  exhausted head with a retryable tail. These fixes are implemented in the
-  working tree and verified; the fix-batch commit follows in this atomic
-  log-maintenance step.
+  exhausted head with a retryable tail. These fixes were verified and committed
+  as `85d2ce62`; fresh four-lane re-review is pending.
