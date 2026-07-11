@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 6 fix verified locally and pending re-review
+Status: Round 6 fix commit recorded and pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -208,8 +208,19 @@ Branch: `task/T-0029-delivery-attempt-retention`
   passed with the existing TypeDoc invalid-origin warning only. `format:check`
   passed after Markdown reflow. `git diff --check` passed. `git ls-files
 --others --exclude-standard` reported no untracked files.
-- Status: fix verified locally; fresh review package and re-review remain
-  pending after the fix commit.
+- Fix commit: `1a33330f Fix T-0029 round 6 sequence overflow`.
+- Status: fix commit recorded; fresh review package and all five independent
+  review lanes remain pending.
+
+### Round 6 Fix Commit Record
+
+- Round 6 fix worker committed
+  `1a33330f Fix T-0029 round 6 sequence overflow` and was closed after
+  reporting the verification results.
+- The fix rejects a retained `Number.MAX_SAFE_INTEGER` sequence before
+  `nextSequence()` can increment it or use an unsafe value for ring-key
+  arithmetic.
+- Status: pending fresh review package and all five independent review lanes.
 
 ### Round 3 Independent Review - `2026-07-11T08:35:00Z`
 

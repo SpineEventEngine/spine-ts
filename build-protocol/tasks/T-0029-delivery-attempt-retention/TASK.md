@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 6 fix verified locally and pending re-review
+Status: In progress; Round 6 fix commit recorded and pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -288,3 +288,9 @@ required focused Vitest slice, `typecheck:build:generated`, `docs:check`,
 `format:check`, and `git diff --check` passed locally; generated Protobuf
 output remains out of VCS. After the fix commit, T-0029 remains pending a
 fresh review package and re-review.
+
+Round 6 fix worker committed
+`1a33330f Fix T-0029 round 6 sequence overflow` and was closed after reporting
+the focused fix and verification results. The next step is a fresh review
+package from baseline `3820e76d` to the current head and all five independent
+review lanes.
