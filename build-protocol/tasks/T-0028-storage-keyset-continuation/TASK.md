@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Round 3 TypeDoc fix verified; five-lane re-review pending
+Status: Round 4 log-only fix verified; five-lane re-review pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -238,3 +238,25 @@ verification passed: `pnpm --config.verify-deps-before-run=false docs:check`
 passed with the known TypeDoc invalid-origin source-link warning; `pnpm
 --config.verify-deps-before-run=false format:check` passed; and `git diff
 --check` passed. No commit was made by this fix worker.
+
+After the Round 3 fix worker stopped without committing, the coordinator
+committed the verified TypeDoc fix as
+`008cdf29 Clarify T-0028 storage query ids docs` and generated
+`.superpowers/sdd/review-652f75c7..008cdf29.diff` for Round 4 review. Round 4
+independent review found the code/API/security/performance state clean, but
+found durable-log gaps: the logs did not record the coordinator commit and
+fresh package generation after the Round 3 fix worker, and the review-lane
+table still reflected Round 2 statuses.
+
+Round 4 log-only fix worker started after the Round 4 independent review and
+is limited to durable-log files. The fix records its own evidence before/in
+the same work step, clarifies the Round 3 fix-worker/no-commit ->
+coordinator-commit/package chronology, and updates the required review-lane
+table to reflect Round 4 findings and clean lanes. Verification and fresh
+five-lane re-review remain pending.
+
+Round 4 log-only fix verification passed:
+`pnpm --config.verify-deps-before-run=false format:check` passed after
+formatting the review log and then passed on repeat; `git diff --check`
+passed. No code files were edited, and no commit was made by this worker.
+T-0028 remains open for fresh five-lane independent re-review.

@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Round 3 TypeDoc fix verified; five-lane re-review pending
+Status: Round 4 log-only fix verified; five-lane re-review pending
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0028-storage-keyset-continuation`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer      | Status                           |
-| -------------------------- | ------------- | -------------------------------- |
-| Code style/maintainability | Planck        | Round 2 fix; re-review pending   |
-| Documentation              | Chandrasekhar | Round 2 fix; re-review pending   |
-| TypeScript/API docs        | Hubble        | Round 2 clean; re-review pending |
-| Security                   | Maxwell       | Round 2 clean; re-review pending |
-| Performance/reliability    | Jason         | Round 2 clean; re-review pending |
+| Lane                       | Reviewer         | Status                                           |
+| -------------------------- | ---------------- | ------------------------------------------------ |
+| Code style/maintainability | Hubble the 5th   | Round 4 log-only fix verified; re-review pending |
+| Documentation              | Boole the 5th    | Round 4 log-only fix verified; re-review pending |
+| TypeScript/API docs        | Epicurus the 5th | Round 4 clean; log-only fix re-review pending    |
+| Security                   | Zeno the 5th     | Round 4 clean; log-only fix re-review pending    |
+| Performance/reliability    | Goodall the 5th  | Round 4 clean; log-only fix re-review pending    |
 
 ## Review Criteria
 
@@ -223,3 +223,54 @@ docs:check` passed with the known TypeDoc invalid-origin source-link warning;
 - No commit was made by this fix worker.
 - T-0028 remains open for fresh five-lane independent re-review; no lane is
   marked clean by this fix worker.
+
+### Round 4 Independent Review - `2026-07-11T07:35:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-652f75c7..008cdf29.diff` from task baseline
+  `652f75c7` to current HEAD `008cdf29`.
+- Code style/maintainability (Hubble the 5th): [P3] the durable logs did not
+  record the coordinator commit `008cdf29` after the Round 3 fix worker. The
+  code spot checks were clean:
+  `RecordQuery.ids` now says "Exact storage slot identifier filter", slot-ID
+  filtering and copied-slot continuation remain correct, and the continuation
+  seam is still small.
+- Documentation (Boole the 5th): [P2] the durable logs stop at "No commit was
+  made by this fix worker" and miss the post-fix coordinator commit plus fresh
+  Round 4 review package generation; [P3] the required review-lane table is
+  stale and still lists Round 2 statuses. Public docs and TypeDoc wording were
+  otherwise clean and did not overclaim out-of-scope work.
+- TypeScript/API docs (Epicurus the 5th): clean. `RecordQuery.ids` now matches
+  storage slot-ID behavior; continuation types and `InboxReadContinuation`
+  remain documented, exported, and API-check-listed; `offset` remains distinct;
+  generated Protobuf output is absent; `git diff --check 652f75c7..008cdf29`
+  was clean.
+- Security (Zeno the 5th): clean. Continuation bounds, tenant/shard/status
+  isolation, slot-ID query semantics, `CATCH_UP` skipping, legacy
+  `IMPORT_EVENT` fail-closed behavior, and DoS bounds remain intact. Focused
+  Vitest passed with 4 files and 211 tests.
+- Performance/reliability (Goodall the 5th): clean. Pending scans use keyset
+  `after` continuations instead of offsets, budgets and statuses remain
+  bounded, storage ordering/filtering is slot-aware, focused Vitest passed with
+  4 files and 211 tests, and `git diff --check 652f75c7..008cdf29` passed.
+- Action: one fix worker will correct the durable-log commit/package evidence
+  and required review-lane table, run required verification, commit, regenerate
+  the review package, and rerun all five independent review lanes.
+
+### Round 4 Log-Only Fix Worker - `2026-07-11T07:40:00Z`
+
+- Status: verified. This worker is limited to durable-log files and is not
+  editing code.
+- Fix evidence is being recorded before/in the same work step as the table and
+  status corrections. The chronology now explicitly records that the Round 3
+  fix worker did not commit, then the coordinator committed
+  `008cdf29` (`Clarify T-0028 storage query ids docs`) and generated
+  `.superpowers/sdd/review-652f75c7..008cdf29.diff` for Round 4 review.
+- The required review-lane table has been updated from stale Round 2 statuses
+  to the Round 4 reviewer identities/results: code style/maintainability and
+  documentation had log-only findings, while TypeScript/API docs, security,
+  and performance/reliability were clean.
+- Verification passed after the log-only fix:
+  `pnpm --config.verify-deps-before-run=false format:check` passed, and
+  `git diff --check` passed. T-0028 remains open for a fresh five-lane
+  re-review; no code was edited and no commit was made by this worker.
