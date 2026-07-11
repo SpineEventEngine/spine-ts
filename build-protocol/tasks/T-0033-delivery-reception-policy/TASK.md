@@ -1,6 +1,6 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Round 1 fix in progress
+Status: Round 1 fix verified; independent re-review pending
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
@@ -8,9 +8,9 @@ Worktree: `.worktrees/T-0033-delivery-reception-policy`
 
 ## Objective
 
-Decide the smallest framework-owned durable outcome policy for retryable
-supported endpoint failures and the existing 100-attempt exhaustion result
-before runtime code changes inbox outcomes.
+Decide the smallest framework-owned durable outcome policy for supported
+endpoint callback failures after retryable classification and the existing
+100-attempt exhaustion result before runtime code changes inbox outcomes.
 
 ## Human-Imposed Requirements Ledger
 
@@ -51,8 +51,9 @@ Requirements splitter `019f528e-7ee6-7063-bbd4-6add1fe5ae80` returned no
 blocker and recommended this docs/decision-only task as the smallest useful
 slice after T-0032. T-0029 through T-0032 provide retained sanitized failure
 facts, exact-message summaries, retry classification, and an internal
-exhaustion gate. The unresolved boundary is the durable action selected for a
-retryable reception failure versus exhaustion.
+exhaustion gate. The unresolved boundary is the durable action selected after a
+supported row classified as retryable fails in its endpoint callback versus
+pre-callback exhaustion.
 
 The splitter rejected a runtime callback/action interface before policy is
 accepted, and rejected immediate repeat, scheduler/backoff, dead-letter,
@@ -61,7 +62,8 @@ monitor, supervision, topology, and catch-up work as broader follow-up slices.
 ## Scope
 
 - Add one accepted decision, expected as D-0084.
-- Decide retryable supported endpoint failure and exhaustion separately.
+- Decide supported endpoint callback failure after retryable classification
+  and pre-callback exhaustion separately.
 - Define the default durable row outcome for each case.
 - Define the smallest internal action vocabulary needed by the next
   implementation slice without adding TypeScript declarations.
@@ -69,6 +71,9 @@ monitor, supervision, topology, and catch-up work as broader follow-up slices.
   retained-attempt persistence, and delivery status changes.
 - Define how an action execution failure is reported and which durable row
   state remains authoritative.
+- Preserve existing outcomes for claim, lease/fencing, attempt-retention
+  infrastructure, cleanup, and status-update failures; those stages are not
+  action-selection inputs for D-0084.
 - State whether immediate repeat is supported or deferred.
 - Reconcile only active roadmap/status text that would contradict the accepted
   decision while keeping unimplemented policy explicitly future work.
@@ -102,11 +107,14 @@ unimplemented JVM parity.
 
 ## Acceptance Criteria
 
-- One accepted decision covers retryable endpoint failure and exhaustion
-  separately.
+- One accepted decision covers supported endpoint callback failure after
+  retryable classification and pre-callback exhaustion separately.
 - The default durable row outcome is explicit for both cases.
 - Action ownership, execution order, failure accounting, and authoritative
   fallback row state are explicit.
+- Claim, lease/fencing, attempt-retention infrastructure, cleanup, and
+  status-update failures preserve their existing outcomes. Callback success
+  followed by status-update failure is explicitly outside D-0084.
 - Retained attempts remain bounded, sanitized, and free of payload bytes, user
   error objects, stack traces, and unbounded text.
 - Immediate repeat is explicitly supported or deferred; if deferred, no prose
@@ -116,6 +124,9 @@ unimplemented JVM parity.
 - `CATCH_UP` remains pending/skipped and legacy `IMPORT_EVENT` remains
   fail-closed.
 - No public monitor/action or future production-policy API is promised.
+- New action-failure facts or error details are bounded and sanitized without
+  claiming the enclosing existing `DeliveryFailure` is payload-free or
+  changing its public row-snapshot/`unknown` error contract.
 
 ## Accepted Decision Summary
 
@@ -127,8 +138,9 @@ D-0084 accepts a fixed internal policy for a later implementation task:
 - pre-callback exhaustion selects framework-owned `MARK_DELIVERED` after
   exact-message classification and while the row remains claim/fence owned;
 - immediate repeat remains deferred;
-- failed action/status work is a bounded delivery failure and leaves the
-  authoritative durable row pending `TO_DELIVER`.
+- failed action execution leaves the authoritative durable row pending
+  `TO_DELIVER`, and only its newly introduced action-failure facts or error
+  details must be bounded and sanitized.
 
 The minimal prose-only action vocabulary is `KEEP_PENDING` and
 `MARK_DELIVERED`. It creates no TypeScript declaration, package export, public
@@ -140,9 +152,10 @@ pending/skip behavior remains active in the source.
 
 The supplied conservative candidate was validated against the current TS
 claim/status path and the JVM monitor/action path. It was accepted because it
-preserves the TS bounded retry investment for retryable failures, adopts the
-JVM's conservative default terminal outcome only at exhaustion, and keeps all
-status changes under the existing claimed-row/fence boundary. T-0017h was not
+preserves the TS bounded retry investment for endpoint callback failures after
+retryable classification, adopts the JVM's conservative default terminal
+outcome only at exhaustion, and keeps all status changes under the existing
+claimed-row/fence boundary. T-0017h was not
 edited: its complete historical task wording describes the behavior delivered
 by that earlier slice and does not claim to override later accepted decisions.
 

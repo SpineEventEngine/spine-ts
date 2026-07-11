@@ -2979,8 +2979,9 @@ Task: `T-0033`
 
 Context: T-0029 through T-0032 added bounded sanitized attempt retention,
 exact-message summaries, retry classification, and a fixed 100-attempt
-pre-callback exhaustion gate. The current runtime keeps both retryable callback
-failures and exhausted supported rows pending `TO_DELIVER`. Spine JVM instead
+pre-callback exhaustion gate. The current runtime keeps both endpoint callback
+failures after retryable classification and exhausted supported rows pending
+`TO_DELIVER`. Spine JVM instead
 asks `DeliveryMonitor.onReceptionFailure(FailedReception)` for an action after
 a failed dispatch outcome; its default action marks the message delivered, and
 it also offers immediate repeat dispatch. TypeScript does not yet have public
@@ -3005,6 +3006,12 @@ Decision:
   unbounded text. Ordinary attempt retention write failure remains
   observational under D-0080 and does not authorize a terminal status;
   retained-state corruption still fails closed.
+- This callback-failure policy does not select an action for claim,
+  lease/fencing, attempt-retention infrastructure, cleanup, or status-update
+  failures. Those stages preserve their existing outcomes and failure
+  accounting. In particular, a callback that succeeds before the delivery
+  status update fails is a `STATUS_UPDATE` failure, not an endpoint callback
+  failure, and D-0084 does not apply `KEEP_PENDING` to it.
 - For a supported row already classified as exhausted before callback
   invocation, select the fixed framework-owned `MARK_DELIVERED` action. Do not
   invoke the endpoint and do not retain another attempt. This adopts the Spine
@@ -3019,16 +3026,23 @@ Decision:
 - Immediate repeat dispatch is deferred. `KEEP_PENDING` permits only a later
   framework drain to reconsider the row; it does not recurse, schedule a run,
   promise backoff, or imply worker supervision.
-- If `KEEP_PENDING`, `MARK_DELIVERED`, or the underlying status/claim update
-  fails, report one bounded delivery failure for that row and keep the durable
-  inbox row's authoritative outcome pending `TO_DELIVER`. A failed action must
-  not be reported as delivered and must not erase the original callback or
-  exhaustion context. The later implementation task must preserve bounded,
-  payload-free failure reporting and existing failure-budget accounting.
+- If `KEEP_PENDING`, `MARK_DELIVERED`, or its underlying action-specific
+  durable transition fails, report one delivery failure for that row and keep
+  the durable inbox row's authoritative outcome pending `TO_DELIVER`. The new
+  action-failure facts or error details introduced by the later implementation
+  must be bounded and sanitized. A failed action must not be reported as
+  delivered and must not erase the original callback or exhaustion context.
+  Existing failure-budget accounting remains unchanged.
+- D-0084 does not change the enclosing public `DeliveryFailure` contract. Its
+  existing `message` remains a copied `DeliveryEndpointMessage` snapshot that
+  may contain copied `Any.value` payload bytes, and its existing `error`
+  remains `unknown`. T-0033 makes no claim that this enclosing failure is
+  payload-free; any change to that public contract requires a later explicit
+  task.
 - This decision is not executable policy. Until a later implementation task
   changes and verifies the runtime, D-0083 remains the current behavior:
-  retryable failures retain attempts and remain pending, while exhausted rows
-  are skipped and remain pending.
+  endpoint callback failures after retryable classification retain attempts and
+  remain pending, while exhausted rows are skipped and remain pending.
 - Preserve valid `CATCH_UP` rows as pending/skipped and preserve fail-closed
   handling of legacy stored `IMPORT_EVENT` rows. Neither path enters this
   supported-endpoint action policy.
@@ -3050,8 +3064,9 @@ Alternatives considered:
 
 Consequences:
 
-- The later implementation slice has one deterministic outcome for each
-  existing retry classification and a small claim-fenced execution boundary.
+- The later implementation slice has one deterministic outcome for an endpoint
+  callback failure after retryable classification and one for pre-callback
+  exhaustion, with a small claim-fenced execution boundary.
 - Exhaustion will intentionally trade further retries for a terminal delivered
   status after 100 retained failures. No dead-letter record is implied, so the
   bounded retained attempt history remains the available durable diagnostic

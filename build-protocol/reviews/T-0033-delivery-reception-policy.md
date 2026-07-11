@@ -1,6 +1,6 @@
 # T-0033 Review Log
 
-Status: Round 1 fix in progress
+Status: Round 1 fix verified; independent re-review pending
 
 Task: `T-0033 Delivery Reception Failure Policy Decision`
 
@@ -21,7 +21,8 @@ protocol.
 ## Review Criteria
 
 - Check the Human-Imposed Requirements Ledger in the task brief.
-- Verify D-0084 covers retryable endpoint failure and exhaustion separately.
+- Verify D-0084 covers supported endpoint callback failure after retryable
+  classification and pre-callback exhaustion separately.
 - Verify durable row outcomes, action ownership, execution order, action
   failure accounting, and fallback row state are explicit.
 - Verify `KEEP_PENDING` and `MARK_DELIVERED` are prose-only internal decision
@@ -29,7 +30,13 @@ protocol.
 - Verify the decision remains docs-only and does not claim runtime execution,
   package exports, public monitor APIs, immediate repeat, scheduler/backoff,
   dead-letter, topology, catch-up, or production adapter behavior.
-- Verify retained failure facts remain bounded and sanitized.
+- Verify retained attempt facts remain bounded and sanitized.
+- Verify claim, lease/fencing, attempt-retention infrastructure, cleanup, and
+  status-update failures preserve existing outcomes, including callback
+  success followed by status-update failure.
+- Verify only new action-failure facts/error details are required to be bounded
+  and sanitized; the existing enclosing `DeliveryFailure` row snapshot and
+  `unknown` error contract remain unchanged and are not called payload-free.
 - Verify `CATCH_UP` remains pending/skipped and legacy `IMPORT_EVENT` remains
   fail-closed.
 - Ignore historical superseded text unless current task logs, the task brief,
@@ -78,3 +85,18 @@ protocol.
 - `2026-07-11T19:55:00Z`: Resumed decision author
   `019f5297-9471-7a01-a287-9b08ac23250a` as the single fix worker for the
   complete Round 1 batch. Fresh four-lane re-review is pending.
+- `2026-07-11T20:05:00Z`: Round 1 fix worker verified and addressed both P2
+  findings in D-0084 and current T-0033 records. Policy selection now applies
+  only to supported endpoint callback failure after retryable classification
+  and pre-callback exhaustion; all other retained failure stages preserve
+  existing outcomes. New action-failure facts/error details must be bounded
+  and sanitized, while the existing `DeliveryFailure` row snapshot and
+  `unknown` error remain unchanged. Focused verification and the fix commit are
+  pending before fresh four-lane re-review.
+- `2026-07-11T20:10:00Z`: Round 1 fix verification passed. `docs:check`
+  reported zero TypeDoc errors with only the known invalid-`origin` warning;
+  `format:check`, `git diff --check`, and the untracked-file check passed.
+  Lightweight status/API/future-policy lint found no broad current-stage
+  wording, public API leakage, duplicate retry capacity, or executable future-
+  policy claim. Full `pnpm verify` was intentionally not run. Fresh four-lane
+  re-review remains pending the committed fix.
