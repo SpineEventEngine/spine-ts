@@ -1,6 +1,6 @@
 # T-0031 Review Log
 
-Status: Scaffolded; implementation pending
+Status: Implementation worker verification passed; independent review deferred by no-subagent prompt
 
 Task: `T-0031 Internal Delivery Retry Decision Primitive`
 
@@ -40,3 +40,8 @@ Branch: `task/T-0031-delivery-retry-decision`
   `019f5111-4e5a-7d92-ad8e-6c52e38eecf9` recommended an internal retry decision
   primitive as the next smallest non-blocked task. Implementation and review
   are pending.
+- `2026-07-11T13:16:28+0100`: Implementation worker added the internal retry
+  decision primitive and focused tests, then ran worker verification. No
+  independent reviewer subagents were spawned because the direct human prompt
+  for this worker explicitly said not to spawn subagents; review lanes remain
+  available for a later orchestrated review round.

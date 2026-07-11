@@ -1,6 +1,6 @@
 # T-0031: Internal Delivery Retry Decision Primitive
 
-Status: Scaffolded; implementation pending
+Status: Implemented; worker verification passed; independent review deferred by no-subagent prompt
 Started: `2026-07-11T13:05:00Z`
 Baseline commit: `9566466d`
 Branch: `task/T-0031-delivery-retry-decision`
@@ -167,11 +167,9 @@ Impact of JVM evidence:
 
 ## Changed Files
 
-Planned:
-
 - `build-protocol/DECISION_LOG.md`
 - `build-protocol/reviews/T-0031-delivery-retry-decision.md`
 - `build-protocol/tasks/T-0031-delivery-retry-decision/TASK.md`
 - `build-protocol/work-logs/T-0031.md`
-- `packages/server/src/delivery/*`
-- `packages/server/test/delivery/*`
+- `packages/server/src/delivery/delivery-retry-decision.ts`
+- `packages/server/test/delivery/delivery-retry-decision.test.ts`
