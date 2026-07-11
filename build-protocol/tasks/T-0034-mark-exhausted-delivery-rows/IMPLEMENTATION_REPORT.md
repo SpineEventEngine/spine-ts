@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 2 record fixes complete; re-review pending
+Status: Round 2 record fixes verified; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
