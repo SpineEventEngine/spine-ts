@@ -1,6 +1,9 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Round 2 fixes verified; re-review pending
+Status: Round 3 table corrected; fresh four-lane re-review pending
+
+Log-only Round 3 reviewer-table correction and its canonical skill check are
+recorded at the end of this task record.
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
