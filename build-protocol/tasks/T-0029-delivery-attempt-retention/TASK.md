@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 2 findings pending fix
+Status: In progress; Round 2 fixes verified pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -211,3 +211,8 @@ findings`. The fix scope is intentionally limited to durable-log freshness and
 bounded per-message delivery-attempt sequence discovery; generated Protobuf
 output remains out of VCS. After the fix commit, T-0029 remains pending a fresh
 review package and re-review.
+
+Round 2 fix worker committed `0070e853 Fix T-0029 round 2 attempt retention`.
+The fix replaced global retained-attempt sequence queries with bounded direct
+reads of the 100 per-message retention slots, and the task remains pending a
+fresh review package plus all five review lanes.

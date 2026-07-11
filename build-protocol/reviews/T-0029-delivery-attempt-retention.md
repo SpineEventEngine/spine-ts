@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 2 findings pending fix
+Status: Round 2 fixes verified; pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -146,3 +146,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
   2 fix; `docs:check` emitted only the existing TypeDoc invalid-origin warning.
 - Status: after the Round 2 fix commit, T-0029 remains pending a fresh review
   package and re-review.
+
+### Round 2 Fix Commit Record
+
+- Round 2 fix worker committed `0070e853 Fix T-0029 round 2 attempt retention`
+  and was closed after reporting `DONE`.
+- The fix replaced retained-attempt sequence discovery with bounded direct
+  reads of the 100 known per-message retention slots and tightened regression
+  coverage so repeated failed deliveries must not call attempt-storage
+  `queryEntries` on the hot path.
+- Status: pending fresh review package and all five independent review lanes.
