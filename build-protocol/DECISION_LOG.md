@@ -2850,3 +2850,60 @@ Consequences:
 - Reviewers must reject public retry APIs, scheduler behavior, catch-up
   semantics changes, import revival, production topology, or broad storage
   adapter work in T-0030.
+
+## D-0082: Add Internal Retry Decision Before Monitor Policy
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0031`
+
+Context: T-0029 retained sanitized delivery-attempt facts, and T-0030 added an
+internal exact-message summary over those bounded retained slots. Later retry
+monitors or scheduler workers now need a deterministic way to classify one
+message as still retryable or exhausted without exposing public monitor actions
+or scanning all retained attempts. Spine JVM failure handling is broader:
+`DeliveryMonitor.onReceptionFailure(FailedReception)` returns actions such as
+`markDelivered()` or `repeatDispatching()`, and `TargetDelivery` executes those
+actions after failed dispatch outcomes. TypeScript should not expose that
+public policy/action API until lifecycle, scheduling, and public monitor
+ownership are designed.
+
+Decision:
+
+- Run T-0031 as a package-internal delivery retry-decision slice.
+- Consume one `DeliveryAttemptSummary` and a bounded max-attempt configuration.
+- Classify summaries as retryable while retained count is below the configured
+  limit and exhausted at or above the limit.
+- Return immutable, sanitized decision facts: decision kind, count, limit,
+  latest retained stage/reason, and latest accepted flag.
+- Keep the primitive observational only; it must not mutate inbox rows, mark
+  messages delivered, repeat dispatch, schedule timers, or change worker
+  behavior.
+- Keep public `DeliveryMonitor`, `FailedReception`, repeat-dispatch,
+  mark-delivered, backoff/scheduler ownership, production supervision/topology,
+  catch-up storage, and production adapters out of scope.
+
+Alternatives considered:
+
+- Add full JVM-style `DeliveryMonitor` and `FailedReception` APIs now. Rejected
+  because public action execution needs scheduler/lifecycle ownership and is
+  larger than a bounded decision primitive.
+- Integrate retry decisions into `DeliveryLoop` immediately. Rejected because
+  T-0031 should not change failed-row `TO_DELIVER` behavior or introduce
+  immediate retry/backoff semantics.
+- Use broad retained-attempt reads for policy. Rejected because T-0030 created
+  exact-message summaries specifically to avoid hot-path global scans.
+- Run a docs-only reconciliation after T-0030. Rejected because public docs
+  already describe the new retained summary boundary and remaining gaps.
+
+Consequences:
+
+- Later monitor or scheduler work can consume a small deterministic internal
+  decision instead of re-deriving retry exhaustion from retained attempts.
+- Retry policy remains internal and observation-only until a later task defines
+  public monitor/action APIs and lifecycle ownership.
+- Reviewers must reject attempts to add public retry APIs, timers, topology,
+  catch-up semantics, production adapters, or delivery-loop behavior changes in
+  T-0031.
