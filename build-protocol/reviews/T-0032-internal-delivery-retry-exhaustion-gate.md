@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Clean; final coordinator verification passed
+Status: Clean; merged and post-merge verified
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -501,3 +501,11 @@ is deferred to the final release-readiness gate.
   `90.01%` branch coverage (`3488/3875`), docs/API checks with zero TypeDoc
   errors and only the known invalid-local-remote warning, proto lint, and
   generated-output cleanliness. T-0032 is accepted for merge.
+- `2026-07-11T21:18:00Z`: Merged T-0032 into root `main` as `f653bf84`.
+  The first post-merge verify attempt exposed a stale root `node_modules`
+  symlink into a previously removed finished worktree. `pnpm install
+--frozen-lockfile` repaired the workspace links using 199 cached packages
+  with no downloads or tracked changes. The restarted full verifier passed
+  with the same 60 files, 1,276 tests, `90.01%` branch coverage, and all
+  generated, tooling, lint, docs/API, proto, and cleanliness gates. The
+  user-owned `human-review-1-jul.md` remained untouched.

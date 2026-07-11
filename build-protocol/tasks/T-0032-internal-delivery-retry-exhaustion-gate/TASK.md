@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Complete; ready to merge
+Status: Complete; merged and post-merge verified
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
@@ -248,4 +248,6 @@ available.
   findings. Fresh coordinator full-project verification then passed the same
   60 files and 1,276 tests at `90.01%` branch coverage, together with every
   generated, tooling, lint, docs/API, proto, and cleanliness gate. T-0032 is
-  complete and ready to merge.
+  complete. It was merged into `main` as `f653bf84`, and the restarted
+  post-merge full verifier passed after repairing stale local dependency
+  links. The user-owned `human-review-1-jul.md` remained untouched.
