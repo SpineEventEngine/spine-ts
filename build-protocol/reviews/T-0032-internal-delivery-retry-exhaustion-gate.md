@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Round 9 status-record findings pending fix
+Status: Fresh four-lane re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -401,3 +401,9 @@ is deferred to the final release-readiness gate.
 - `2026-07-11T19:02:00Z`: Assigned Round 9 log-only status worker
   `019f5251-9356-7181-88ab-3e3bf775b024` to the consolidated P2/P3. Fresh four-lane
   re-review remains pending its verified commit.
+- `2026-07-11T19:08:00Z`: Status worker commit `f61a891c` replaced
+  round-sensitive active headers with stable review-log pointers and made the
+  task's historical stop/current state truthful. Coordinator pre-review lint
+  appended known commits `991594ea` and `91b01095` to the ledger;
+  `f61a891c` remains the sole future hash under the non-recursive convention.
+  Formatting and whitespace checks passed.
