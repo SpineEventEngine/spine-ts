@@ -1,6 +1,6 @@
 # T-0031: Internal Delivery Retry Decision Primitive
 
-Status: Implemented; coordinator verification passed; independent review pending
+Status: Round 4 review clean; final verification pending
 Started: `2026-07-11T13:05:00Z`
 Baseline commit: `9566466d`
 Branch: `task/T-0031-delivery-retry-decision`
