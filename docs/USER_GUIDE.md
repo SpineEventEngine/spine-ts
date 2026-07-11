@@ -1266,6 +1266,10 @@ raw `Any.value` payload bytes, raw user errors, stack traces, or unbounded
 exception text. Cleanup/replay validation, lease/fencing, and delivery-status
 update failures are reported internally without promising immediate retry, and
 future recovery policy may be needed for abandoned or unavailable rows.
+Package-internal retry-policy preparation can summarize retained attempts for
+one exact inbox message by reading only its 100 known per-message retained
+slots; retry monitors/workers, backoff, scheduling, production supervision,
+topology, catch-up storage, and production adapters remain deferred.
 Malformed or deprecated legacy label data such as stored
 `IMPORT_EVENT` still fails closed as `DeliveryStorageCorruptionError` before
 replay begins. Lease

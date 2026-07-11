@@ -312,6 +312,10 @@ stage/reason; retained attempts do not include raw `Any.value` payload bytes,
 raw user errors, stack traces, or unbounded exception text. Pre-callback claim,
 validation, and lease-fencing failures do not increment accepted endpoint work,
 but they do increment failed work and count toward the internal failure bound.
+Package-internal retry-policy preparation can summarize retained attempts for
+one exact inbox message by reading only its 100 known per-message retained
+slots; this summary is not a public monitor, scheduler, backoff, or production
+worker API.
 Once the endpoint callback or `onMessage` path has been invoked, endpoint
 failures and later framework cleanup/status-update failures are accepted
 endpoint work and may appear in failed work. Live shard ownership plus live
@@ -398,7 +402,8 @@ through validated framework endpoints. The current API does not provide a
 process-wide or production scheduler/supervisor, expose a generic repository
 delivery engine, run projection catch-up through inbox storage, run retry
 monitors, open transport topology, supervise worker processes, or retain raw
-attempt/error history beyond the sanitized internal attempt records.
+attempt/error history beyond the sanitized internal attempt records and their
+package-internal exact-message summaries.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
 reactor handlers with current transaction semantics, not event-sourcing

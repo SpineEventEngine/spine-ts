@@ -56,6 +56,19 @@ export class DeliveryAttempts {
     }
   }
 
+  /** Summarize retained attempts for one exact inbox message. */
+  async summarize(messageId: InboxMessageId): Promise<DeliveryAttemptSummary> {
+    const storage = this.#storage();
+
+    try {
+      const attempts = await readMessageAttempts(storage, messageId);
+
+      return attemptSummary(attempts);
+    } finally {
+      storage.close();
+    }
+  }
+
   /** Record one supported endpoint failure attempt. */
   async recordFailure(input: DeliveryAttemptInput): Promise<void> {
     const attempt = attemptFromInput(input);
@@ -125,6 +138,22 @@ export interface DeliveryAttempt {
   readonly stage: DeliveryFailureStage;
   /** Stable bounded reason for retry policy. */
   readonly reason: DeliveryFailureReason;
+}
+
+/** Internal exact-message view over retained delivery attempts. */
+export interface DeliveryAttemptSummary {
+  /** Retained attempts for the message in ascending attempt sequence. */
+  readonly attempts: readonly DeliveryAttempt[];
+  /** Number of retained attempts for the message. */
+  readonly count: number;
+  /** Latest retained attempt by sequence, when present. */
+  readonly latestAttempt: DeliveryAttempt | undefined;
+  /** Latest retained failure stage, when present. */
+  readonly latestStage: DeliveryFailureStage | undefined;
+  /** Latest retained failure reason, when present. */
+  readonly latestReason: DeliveryFailureReason | undefined;
+  /** Latest retained accepted flag, when present. */
+  readonly latestAccepted: boolean | undefined;
 }
 
 /** Stable delivery failure stage retained for retry policy. */
@@ -214,6 +243,24 @@ async function nextSequence(
   return sequence + 1;
 }
 
+async function readMessageAttempts(
+  storage: RecordStorage<string, Any>,
+  messageId: InboxMessageId,
+): Promise<readonly StoredAttempt[]> {
+  const messageKey = attemptMessageKey(messageId);
+  const attempts: StoredAttempt[] = [];
+
+  for (let slot = 1; slot <= maxAttemptsPerMessage; slot += 1) {
+    const key = attemptKey(messageKey, slot);
+    const record = await storage.read(key);
+    if (record !== undefined) {
+      attempts.push(readStoredAttempt(record, key));
+    }
+  }
+
+  return Object.freeze(attempts.sort((first, second) => first.sequence - second.sequence));
+}
+
 function attemptFromInput(input: DeliveryAttemptInput): AttemptInput {
   const message = input.message;
   const shard = requireShard(message.shard);
@@ -250,22 +297,35 @@ function storedAttempt(input: AttemptInput, sequence: number): StoredAttempt {
 }
 
 function attemptFromStored(stored: StoredAttempt): DeliveryAttempt {
-  const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
-
   return Object.freeze({
     messageId: Object.freeze({
       value: stored.messageId,
-      shard,
+      shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
     }),
     inboxId: Object.freeze({ ...stored.inboxId }),
     signalId: stored.signalId,
     label: stored.label,
-    shard,
+    shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
     node: stored.node,
     attemptedAt: new Date(stored.attemptedAtMs),
     accepted: stored.accepted,
     stage: stored.stage,
     reason: stored.reason,
+  });
+}
+
+function attemptSummary(storedAttempts: readonly StoredAttempt[]): DeliveryAttemptSummary {
+  const attempts = Object.freeze(storedAttempts.map(attemptFromStored));
+  const latestStored = storedAttempts.at(-1);
+  const latestAttempt = latestStored === undefined ? undefined : attemptFromStored(latestStored);
+
+  return Object.freeze({
+    attempts,
+    count: attempts.length,
+    latestAttempt,
+    latestStage: latestStored?.stage,
+    latestReason: latestStored?.reason,
+    latestAccepted: latestStored?.accepted,
   });
 }
 

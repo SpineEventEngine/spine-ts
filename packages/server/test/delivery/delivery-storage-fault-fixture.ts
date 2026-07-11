@@ -118,6 +118,7 @@ export function throwAttemptReadOnce(
 }
 
 export interface DeliveryAttemptQuery {
+  readonly broad?: boolean;
   readonly limit?: number;
   readonly messageKey?: unknown;
 }
@@ -132,17 +133,25 @@ export function recordAttemptQueries(queries: DeliveryAttemptQuery[]): DeliveryS
       const messageKey = (query.filters ?? []).find(
         (filter) => filter.column === "messageKey",
       )?.value;
-      if (messageKey === undefined) {
-        return undefined;
-      }
-
       queries.push(
         Object.freeze({
           ...(query.limit === undefined ? {} : { limit: query.limit }),
-          messageKey,
+          ...(messageKey === undefined ? { broad: true } : { messageKey }),
         }),
       );
       return undefined;
+    },
+  });
+}
+
+export function recordAttemptReads(reads: unknown[]): DeliveryStorageFaultProbe {
+  return Object.freeze({
+    read(context: StorageContext, id: unknown) {
+      if (!context.name.endsWith(".delivery.attempts")) {
+        return;
+      }
+
+      reads.push(id);
     },
   });
 }

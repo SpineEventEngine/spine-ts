@@ -1,6 +1,6 @@
 # T-0030 Review Log
 
-Status: Scaffolded; implementation pending
+Status: Implementation verified; review package ready
 
 Task: `T-0030 Internal Delivery Attempt Summary For Retry Decisions`
 
@@ -35,4 +35,13 @@ Branch: `task/T-0030-delivery-attempt-summary`
 
 ## Rounds
 
-- Pending implementation and first review package.
+- `2026-07-11T10:19:20Z`: Implementation worker completed the first review
+  package. Exact-message summaries are implemented inside
+  `DeliveryAttempts.summarize(messageId)` using bounded reads of the 100 known
+  retained-attempt slots for one message. Focused tests cover exact-message
+  filtering, latest/count/stage/reason/accepted facts, explicit empty
+  summaries, corruption fail-closed behavior, snapshot copying, and no broad
+  retained-attempt query on the summary hot path. Required verification passed;
+  docs describe the summary as internal retry-policy preparation while retry
+  monitors/workers, backoff/scheduler ownership, production supervision,
+  topology, catch-up storage, and production adapters remain deferred.

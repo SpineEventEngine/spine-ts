@@ -133,7 +133,11 @@ Current slice exposes:
   attempt records with message/inbox/shard identity, label, node, attempted
   time, accepted flag, and stable failure stage/reason. Retained attempts never
   include raw `Any.value` payload bytes, raw user errors, stack traces, or
-  unbounded exception text. Endpoint callbacks run only for `HANDLE_COMMAND`,
+  unbounded exception text. Package-internal retry-policy preparation can
+  summarize retained attempts for one exact inbox message by reading only its
+  100 known per-message retained slots; this summary is not a public monitor,
+  scheduler, backoff, production supervision, topology, catch-up storage, or
+  production adapter API. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
   recording, or failure-budget consumption. Pre-callback claim, validation, and
@@ -1034,7 +1038,8 @@ routed target ID.
 Transport topology, broker/process supervision, production delivery policy,
 retry monitors/workers, durable catch-up storage/projection catch-up through
 inbox storage, and production storage adapters remain open production gaps.
-Full production supervision and retry policy remain outside this slice.
+Full production supervision, backoff/scheduler ownership, topology, production
+adapters, catch-up storage, and retry policy remain outside this slice.
 This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;

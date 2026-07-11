@@ -1265,6 +1265,25 @@ describe("Inbox", () => {
     await expect(delivery.attempts.read()).rejects.toThrow(/attempt record/i);
   });
 
+  it("fails closed when summarizing malformed retained delivery attempt records", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord",
+          value: Buffer.from("{not-json", "utf8"),
+        }),
+      ]),
+    });
+
+    await expect(
+      delivery.attempts.summarize(createMessage("message-1", "signal-1", 1n).id),
+    ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(
+      delivery.attempts.summarize(createMessage("message-1", "signal-1", 1n).id),
+    ).rejects.toThrow(/attempt record/i);
+  });
+
   it("rejects oversized stored delivery attempt records before parsing JSON", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

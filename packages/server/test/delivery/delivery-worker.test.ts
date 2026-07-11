@@ -26,6 +26,7 @@ import {
   onInboxQuery,
   packStoredRecord,
   recordAttemptQueries,
+  recordAttemptReads,
   recordInboxQueries,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
@@ -1172,6 +1173,124 @@ describe("Delivery worker", () => {
     }
 
     expect(attemptQueries).toEqual([]);
+  });
+
+  it("summarizes one exact message from bounded retained attempt slots without querying attempts", async () => {
+    const attemptQueries: { broad?: boolean; limit?: number; messageKey?: unknown }[] = [];
+    const attemptReads: unknown[] = [];
+    const faults = deliveryStorageFaults(
+      recordAttemptQueries(attemptQueries),
+      recordAttemptReads(attemptReads),
+    );
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const target = await seed(delivery, "signal-summary-target", 1n);
+    const other = await seed(delivery, "signal-summary-other", 2n);
+
+    await requireAttempts(delivery).recordFailure({
+      message: other,
+      node: "node-b",
+      attemptedAt: new Date("2026-07-08T09:00:05.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    await requireAttempts(delivery).recordFailure({
+      message: target,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+    await requireAttempts(delivery).recordFailure({
+      message: target,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:02.000Z"),
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    attemptQueries.length = 0;
+    attemptReads.length = 0;
+
+    const summary = await requireAttempts(delivery).summarize(target.id);
+
+    expect(summary.count).toBe(2);
+    expect(summary.attempts.map((attempt) => attempt.signalId)).toEqual([
+      "signal-summary-target",
+      "signal-summary-target",
+    ]);
+    expect(summary.latestAttempt).toMatchObject({
+      signalId: "signal-summary-target",
+      accepted: false,
+      stage: "LEASE",
+      reason: "LEASE_INACTIVE",
+    });
+    expect(summary.latestStage).toBe("LEASE");
+    expect(summary.latestReason).toBe("LEASE_INACTIVE");
+    expect(summary.latestAccepted).toBe(false);
+    expect(attemptQueries).toEqual([]);
+    expect(attemptReads).toHaveLength(100);
+    expect(attemptReads[0]).toBe(`${messageKey(target)}:attempt:000000000001`);
+    expect(attemptReads.at(-1)).toBe(`${messageKey(target)}:attempt:000000000100`);
+    expect(
+      attemptReads.every((key) => typeof key === "string" && key.startsWith(messageKey(target))),
+    ).toBe(true);
+  });
+
+  it("returns an explicit empty attempt summary for messages with no retained attempts", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-empty", 1n);
+
+    await expect(requireAttempts(delivery).summarize(message.id)).resolves.toStrictEqual({
+      attempts: [],
+      count: 0,
+      latestAttempt: undefined,
+      latestStage: undefined,
+      latestReason: undefined,
+      latestAccepted: undefined,
+    });
+  });
+
+  it("returns attempt summary snapshots that do not share mutable objects", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = await seed(delivery, "signal-summary-copies", 1n);
+
+    await requireAttempts(delivery).recordFailure({
+      message,
+      node: "node-a",
+      attemptedAt: new Date("2026-07-08T09:00:01.000Z"),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+
+    const first = await requireAttempts(delivery).summarize(message.id);
+    const firstAttempt = first.attempts[0];
+
+    expect(first.latestAttempt).not.toBe(firstAttempt);
+    expect(first.latestAttempt?.attemptedAt).not.toBe(firstAttempt?.attemptedAt);
+    expect(first.latestAttempt?.messageId).not.toBe(firstAttempt?.messageId);
+    expect(first.latestAttempt?.inboxId).not.toBe(firstAttempt?.inboxId);
+
+    first.latestAttempt?.attemptedAt.setFullYear(1999);
+    firstAttempt?.attemptedAt.setFullYear(1998);
+
+    const second = await requireAttempts(delivery).summarize(message.id);
+
+    expect(second.latestAttempt?.attemptedAt).toEqual(new Date("2026-07-08T09:00:01.000Z"));
+    expect(second.attempts[0]?.attemptedAt).toEqual(new Date("2026-07-08T09:00:01.000Z"));
+    expect(second.latestAttempt?.attemptedAt).not.toBe(first.latestAttempt?.attemptedAt);
+    expect(second.attempts[0]?.attemptedAt).not.toBe(firstAttempt?.attemptedAt);
   });
 
   it("does not retain attempts for successes, catch-up skips, or live-owned rows", async () => {
@@ -2728,6 +2847,20 @@ interface DeliveryAttemptOwner {
 
 interface DeliveryAttemptReader {
   read(): Promise<readonly DeliveryAttemptSnapshot[]>;
+  recordFailure(input: {
+    readonly message: InboxMessage;
+    readonly node: string;
+    readonly attemptedAt: Date;
+    readonly accepted: boolean;
+    readonly stage: "CLAIM" | "LEASE" | "ENDPOINT" | "CLEANUP" | "STATUS_UPDATE";
+    readonly reason:
+      | "CLAIM_FAILED"
+      | "LEASE_INACTIVE"
+      | "ENDPOINT_REJECTED"
+      | "CLEANUP_FAILED"
+      | "STATUS_UPDATE_FAILED";
+  }): Promise<void>;
+  summarize(messageId: InboxMessage["id"]): Promise<DeliveryAttemptSummarySnapshot>;
 }
 
 interface DeliveryAttemptSnapshot {
@@ -2741,6 +2874,15 @@ interface DeliveryAttemptSnapshot {
   readonly accepted: boolean;
   readonly stage: string;
   readonly reason: string;
+}
+
+interface DeliveryAttemptSummarySnapshot {
+  readonly attempts: readonly DeliveryAttemptSnapshot[];
+  readonly count: number;
+  readonly latestAttempt: DeliveryAttemptSnapshot | undefined;
+  readonly latestStage: string | undefined;
+  readonly latestReason: string | undefined;
+  readonly latestAccepted: boolean | undefined;
 }
 
 function deferred<T>(): {
