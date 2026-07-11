@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 5 fix verified locally; pending commit and re-review
+Status: Round 5 fixes verified; pending re-review
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -298,4 +298,14 @@ Branch: `task/T-0029-delivery-attempt-retention`
   `docs:check` passed with the existing TypeDoc invalid-origin warning only.
   `format:check` passed. `git diff --check` passed. `git ls-files --others
 --exclude-standard` reported no untracked files.
-- Status: fix commit, fresh review package, and re-review remain pending.
+- Status: fix committed; fresh review package and re-review remain pending.
+
+### Round 5 Fix Commit Record
+
+- Round 5 fix worker committed
+  `23fa2d03 Fix T-0029 round 5 attempt shard validation` and was closed after
+  reporting `DONE`.
+- The fix added fail-closed safe-integer validation for stored
+  retained-attempt shard coordinates, wraps invalid `ShardIndex` ranges as
+  `DeliveryStorageCorruptionError`, and added focused regression coverage.
+- Status: pending fresh review package and all five independent review lanes.

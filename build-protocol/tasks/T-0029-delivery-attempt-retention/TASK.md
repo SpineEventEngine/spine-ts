@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 5 fix verified locally, pending commit and re-review
+Status: In progress; Round 5 fixes verified pending re-review
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -262,5 +262,10 @@ attempt shard coordinates plus durable-log freshness. Focused red/green
 coverage now demonstrates that invalid stored shard totals previously escaped
 as a plain `ShardIndex` error and unsafe shard coordinates were previously
 reported only as a generic identity mismatch. Required local verification
-passed for the fix; the fix commit, fresh review package, and re-review remain
-pending.
+passed for the fix; fresh review package and re-review remain pending after the
+fix commit.
+
+Round 5 fix worker committed
+`23fa2d03 Fix T-0029 round 5 attempt shard validation` and was closed after
+reporting `DONE`. The next step is a fresh review package and all five
+independent review lanes.
