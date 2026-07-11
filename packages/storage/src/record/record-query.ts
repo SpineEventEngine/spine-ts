@@ -1,6 +1,6 @@
 /** Deterministic record query by IDs, columns, sorting, continuations, offsets, limits, and masks. */
 export interface RecordQuery<I> extends RecordReadOptions {
-  /** Exact identifier filter. */
+  /** Exact storage slot identifier filter. */
   readonly ids?: readonly I[];
   /** Exact column filters. */
   readonly filters?: readonly RecordFilter[];

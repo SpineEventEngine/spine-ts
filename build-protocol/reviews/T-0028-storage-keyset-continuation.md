@@ -1,6 +1,6 @@
 # T-0028 Review Log
 
-Status: Round 2 fix verified; five-lane re-review pending
+Status: Round 3 TypeDoc fix verified; five-lane re-review pending
 
 Task: `T-0028 Storage Keyset Continuation For Delivery Scans`
 
@@ -177,5 +177,49 @@ typecheck:build:generated` passed; `pnpm --config.verify-deps-before-run=false
 docs:check` passed with the known TypeDoc invalid-origin source-link warning;
   `pnpm --config.verify-deps-before-run=false format:check` passed after
   formatting the work log; and `git diff --check` passed.
+- T-0028 remains open for fresh five-lane independent re-review; no lane is
+  marked clean by this fix worker.
+
+### Round 3 Independent Review - `2026-07-11T07:25:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-652f75c7..de1b9218.diff` from task baseline
+  `652f75c7` to current HEAD `de1b9218`.
+- Code style/maintainability (Halley the 5th): [P3] `RecordQuery.ids` still
+  says only "Exact identifier filter" in the canonical public property
+  TypeDoc. The implementation now correctly filters storage slot IDs, and
+  `RecordStorage.query()` / `queryEntries()` document that behavior. Tighten
+  the property comment to say "Exact storage slot identifier filter" or
+  equivalent.
+- Documentation: clean. Durable chronology now preserves review, fix,
+  verification, and re-review order; status does not mark T-0028 complete; and
+  public docs do not overclaim production adapters or out-of-scope delivery
+  work.
+- TypeScript/API docs: clean. Continuation types and `InboxReadContinuation`
+  are exported, documented, and API-check-listed; `offset` remains distinct;
+  API docs passed with only the known TypeDoc invalid-origin warning; no
+  generated Protobuf output is present.
+- Security: clean. Continuation bounds, tenant/shard/status isolation,
+  `CATCH_UP` skip semantics, legacy `IMPORT_EVENT` fail-closed behavior, and
+  scan DoS bounds remain intact.
+- Performance/reliability: clean. Keyset continuation removes moving-offset
+  hazards, scan/read budgets remain bounded, leases/claims/statuses are
+  preserved, slot-ID filtering does not regress ordering/index behavior, and
+  focused Vitest passed with 4 files and 211 tests.
+- Action: one fix worker will update the `RecordQuery.ids` property TypeDoc,
+  run required verification, commit, regenerate the review package, and rerun
+  all five independent review lanes.
+
+### Round 3 Fix Worker - `2026-07-11T07:30:00Z`
+
+- Status: verified. The fix worker started after the Round 3 independent
+  review and updated the canonical `RecordQuery.ids` property TypeDoc from
+  "Exact identifier filter" to "Exact storage slot identifier filter."
+- This is a docs/API comment-only fix. Required focused verification passed:
+  `pnpm --config.verify-deps-before-run=false docs:check` passed with the known
+  TypeDoc invalid-origin source-link warning; `pnpm
+--config.verify-deps-before-run=false format:check` passed; and `git diff
+--check` passed.
+- No commit was made by this fix worker.
 - T-0028 remains open for fresh five-lane independent re-review; no lane is
   marked clean by this fix worker.

@@ -1,6 +1,6 @@
 # T-0028: Storage Keyset Continuation For Delivery Scans
 
-Status: Round 2 fix verified; five-lane re-review pending
+Status: Round 3 TypeDoc fix verified; five-lane re-review pending
 Started: `2026-07-11T05:24:00Z`
 Baseline commit: `652f75c7`
 Branch: `task/T-0028-storage-keyset-continuation`
@@ -222,3 +222,19 @@ verification passed after the Round 2 fix batch, including the focused
 storage/delivery Vitest suite, `typecheck:build:generated`, `docs:check`,
 `format:check`, and `git diff --check`. T-0028 remains open for fresh
 five-lane independent re-review.
+
+Round 3 independent review against `de1b9218` found one remaining P3
+documentation issue: the canonical `RecordQuery.ids` property TypeDoc still
+said only "Exact identifier filter" even though the implementation and
+`RecordStorage` docs now define query IDs as storage slot IDs. Documentation,
+TypeScript/API docs, security, and performance/reliability lanes were clean.
+After the fix batch, all five independent review lanes must run again against a
+fresh review package.
+
+Round 3 fix worker started after the Round 3 independent review and updated the
+canonical `RecordQuery.ids` property TypeDoc to say "Exact storage slot
+identifier filter." This is a docs/API comment-only fix. Required focused
+verification passed: `pnpm --config.verify-deps-before-run=false docs:check`
+passed with the known TypeDoc invalid-origin source-link warning; `pnpm
+--config.verify-deps-before-run=false format:check` passed; and `git diff
+--check` passed. No commit was made by this fix worker.
