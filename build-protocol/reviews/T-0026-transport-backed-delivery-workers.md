@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 110 docs/log fix verified; commit pending
+Status: Round 112 docs/API-doc fix verified; commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -245,9 +245,11 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 - Fix: direct delivery now fail-closes after acquiring its row claim but before
   endpoint invocation unless the label is `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`.
-- Evidence: added regression proving a `CATCH_UP` row records a failed run,
-  leaves the row pending, clears only its own claim, and never invokes the
-  callback.
+- Evidence: added regression proving the then-current `CATCH_UP` behavior. This
+  Round 7 evidence is historical and superseded by Round 22/current semantics:
+  `CATCH_UP` remains pending and is skipped before row acceptance, storage
+  claiming, callback invocation, failure recording, and failure-budget
+  consumption.
 - Docs: updated architecture and user-guide delivery summaries plus the
   `DeliveryLoop` class comment to describe shard pickup/renew/release CAS,
   durable row-claim fencing, skipped competing/abandoned claims, claim-free
@@ -3417,3 +3419,44 @@ red/green delivery regressions before the next review pass.
   then-current pre-fix HEAD for Round 108.
 - Style: concrete long durable-record lines were wrapped in the task file, work
   log, and Round 108 fix report.
+- Coordinator commit `8bafff40` (`Document delivery cleanup breadcrumb policy`)
+  recorded this docs/log cleanup and breadcrumb-policy clarification.
+
+### Round 111 Re-review - `2026-07-11T02:39:35Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..8bafff40.diff` from task baseline
+  `ca8fb2b3` to current HEAD `8bafff40`.
+- Code style/maintainability (Carver the 4th): clean. The delivery scan-loop
+  split and durable records are maintainable; source line-length checks passed.
+- Documentation (Ampere the 4th): [P3] older Round 7 evidence says a `CATCH_UP`
+  row records a failed run and clears its claim. This is superseded by Round
+  22/current semantics: `CATCH_UP` remains pending and is skipped before row
+  acceptance, storage claiming, callback invocation, failure recording, and
+  failure-budget consumption.
+- TypeScript/API docs (Dalton the 4th): [P2] public numeric option docs omit
+  enforced upper bounds. `InboxReadOptions.limit` is capped at `1000`;
+  `ShardedWorkRegistryOptions.leaseMs` is capped at `2147483647`.
+- Security (Lovelace the 4th): clean. Label narrowing, fail-closed legacy data,
+  snapshot copying, row/shard fencing, and residual-risk docs remain aligned.
+- Performance/reliability (Curie the 4th): clean. Bounded scan, stale-owner,
+  ownership, and retry caveats remain aligned.
+- Action: record this findings batch, run one docs/API-doc fix worker, verify,
+  commit, and rerun all five required lanes.
+
+### Round 112 Docs/API-Docs Fix - `2026-07-11T02:41:09Z`
+
+- Scope: docs/API-docs only. No runtime behavior changes.
+- Fix: marked the old Round 7 `CATCH_UP` failed-run evidence as historical and
+  superseded by Round 22/current pending-skip semantics.
+- Fix: documented public numeric caps in TypeDoc and curated docs:
+  `InboxReadOptions.limit` must be positive and at most `1000`;
+  `ShardedWorkRegistryOptions.leaseMs` must be between `1000` and
+  `2147483647` milliseconds inclusive.
+- Fix report: added `round-112-fix-report.md`.
+- Verification: passed on `2026-07-11T02:44:37Z`. `docs:check` passed with only
+  the known TypeDoc invalid-origin source-link warning; `format:check` passed;
+  `git diff --check` passed; the stale exact Round 7 `CATCH_UP` failed-run
+  evidence guard returned no matches; and positive cap-wording guards found the
+  `InboxReadOptions.limit` and `ShardedWorkRegistryOptions.leaseMs` caps in
+  source/API docs.

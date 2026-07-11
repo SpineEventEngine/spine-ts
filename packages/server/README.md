@@ -110,9 +110,11 @@ Current slice exposes:
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
-  `InboxReadOptions.limit`, storage-backed shard pickup/renew/release over
-  atomic `RecordStorage.compareAndSet()` handles for one backing store,
-  framework-owned shard renewal as lease fencing for active drains,
+  `InboxReadOptions.limit` values that are positive and at most `1000`,
+  storage-backed shard pickup/renew/release over atomic
+  `RecordStorage.compareAndSet()` handles for one backing store, framework-owned
+  shard renewal as lease fencing for active drains, `ShardedWorkRegistryOptions.leaseMs`
+  values between `1000` and `2147483647` milliseconds inclusive,
   framework-owned bounded runs that pick up one shard and replay only through
   validated endpoints. The package does not expose a raw worker callback API.
   A run skips rows unavailable to its worker first. Its callback limit caps

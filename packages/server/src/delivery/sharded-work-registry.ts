@@ -189,7 +189,7 @@ export interface ShardedWorkRegistryOptions {
   readonly context: StorageContext;
   /** Storage factory used for durable session records. */
   readonly storageFactory: StorageFactory;
-  /** Session lease duration in milliseconds, at least 1000. */
+  /** Session lease duration in milliseconds, from 1000 to 2147483647 inclusive. */
   readonly leaseMs?: number;
   /** Optional clock used for lease expiry decisions. */
   readonly now?: () => Date;

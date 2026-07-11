@@ -165,7 +165,7 @@ export interface InboxMessageInput {
 export interface InboxReadOptions {
   /** Optional delivery statuses to keep. */
   readonly statuses?: readonly DeliveryStatus[];
-  /** Optional positive limit for one ordered page; defaults to a bounded page size. */
+  /** Optional page limit for one ordered page; must be positive and at most 1000. */
   readonly limit?: number;
   /** Optional non-negative page offset in inbox order; defaults to the first row. */
   readonly offset?: number;

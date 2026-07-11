@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 110 docs/log fix verified; commit pending
+Status: Round 112 docs/API-doc fix verified; commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1742,3 +1742,33 @@ Round 110 breadcrumb policy clarification: a docs/log cleanup commit cannot
 embed its own final SHA before the commit exists. The subsequent review or
 final closure records that newly-created cleanup commit; reviewers should not
 ask for cleanup-commit self-breadcrumbs.
+
+Coordinator commit `8bafff40` (`Document delivery cleanup breadcrumb policy`)
+recorded the Round 110 docs/log cleanup and breadcrumb-policy clarification.
+
+Round 111 re-review on `2026-07-11T02:39:35Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..8bafff40.diff` produced clean code
+style/maintainability, security, and performance/reliability lanes.
+Documentation found older Round 7 review-log evidence still said a `CATCH_UP`
+row recorded a failed run and cleared its claim, even though Round 22/current
+semantics supersede that behavior: `CATCH_UP` remains pending and is skipped
+before row acceptance, storage claiming, callback invocation, failure recording,
+and failure-budget consumption. TypeScript/API docs found public numeric option
+docs omit enforced upper bounds: `InboxReadOptions.limit` accepts at most
+`1000`, and `ShardedWorkRegistryOptions.leaseMs` accepts at most `2147483647`.
+Round 112 will mark the old `CATCH_UP` review-log evidence as historical and
+document those numeric caps in TypeDoc/API docs.
+
+Round 112 docs/API-docs fix on `2026-07-11T02:41:09Z`: started the complete
+Round 111 findings batch. The old Round 7 `CATCH_UP` evidence is being marked
+as historical and superseded by Round 22/current pending-skip semantics.
+`InboxReadOptions.limit` and `ShardedWorkRegistryOptions.leaseMs` TypeDoc plus
+curated API docs are being updated to name the enforced `1000` and
+`2147483647` upper bounds. Runtime behavior is unchanged.
+
+Round 112 verification on `2026-07-11T02:44:37Z`: `docs:check` passed with only
+the known TypeDoc invalid-origin source-link warning; `format:check` passed;
+`git diff --check` passed; the stale exact Round 7 `CATCH_UP` failed-run
+evidence guard returned no matches; and positive cap-wording guards found the
+`InboxReadOptions.limit` and `ShardedWorkRegistryOptions.leaseMs` caps in
+source/API docs. No commit was created by request.

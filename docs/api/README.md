@@ -356,18 +356,21 @@ stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve
 renewal; this slice treats that as an in-process trust-boundary limitation rather
 than timer-protected preemption.
-`InboxReadOptions.limit` remains the positive page-size control for a single
-ordered inbox read. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
-`undefined` for missing rows, non-pending rows, or caller snapshots that do not
-match the stored message; already-delivered matching rows are returned
-idempotently. Built contexts use this storage boundary internally for
-process-manager command rows, process-manager event reaction rows, and live
-projection subscriber rows. This slice does not run process-wide
-transport-backed scheduler workers, retry monitors, conveyor/stations, generic
-repository delivery, projection catch-up through inbox storage, broad
-production lifecycle, transport retries, retained attempt history, example app
-work, or production read-side catch-up workers. Event import and aggregate
-importers are removed from the active plan by upstream ADR 0001 D1. Aggregate
+`InboxReadOptions.limit` remains the page-size control for a single ordered
+inbox read and must be positive and at most `1000`.
+`ShardedWorkRegistryOptions.leaseMs` must be between `1000` and `2147483647`
+milliseconds inclusive. `Inbox.markDelivered()` and
+`InboxStorage.markDelivered()` return `undefined` for missing rows, non-pending
+rows, or caller snapshots that do not match the stored message;
+already-delivered matching rows are returned idempotently. Built contexts use
+this storage boundary internally for process-manager command rows,
+process-manager event reaction rows, and live projection subscriber rows. This
+slice does not run process-wide transport-backed scheduler workers, retry
+monitors, conveyor/stations, generic repository delivery, projection catch-up
+through inbox storage, broad production lifecycle, transport retries, retained
+attempt history, example app work, or production read-side catch-up workers.
+Event import and aggregate importers are removed from the active plan by
+upstream ADR 0001 D1. Aggregate
 `@React` handlers are ordinary generated reactor handlers with current
 transaction semantics, not event-sourcing import/applier work.
 Server metadata exports
