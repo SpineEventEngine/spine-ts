@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Implementation complete; review pending
+Status: Safe stop; review findings pending fix
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
@@ -182,3 +182,19 @@ available.
 - `build-protocol/work-logs/T-0032.md`
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
+
+## Safe Stop
+
+- Stopped at `2026-07-11T13:54:58Z` by human request.
+- Implementation commit `bccfed75` is present and coordinator-verified, but
+  first five-lane review is not clean.
+- Open findings:
+  - P2: Replace exhausted-row `Error`/stack exposure with a frozen plain
+    bounded data object and add coverage that `.stack` is not exposed.
+  - P2: Update public/API architecture docs to describe the narrow internal
+    100-attempt exhaustion gate without implying public monitor/scheduler or
+    dead-letter policy.
+  - P3: Narrow `DeliveryMessageResult` so `EXHAUSTED` is not an impossible
+    result from `#deliverMessage()`.
+  - P3: Share the retained-attempt ring size with the retry gate instead of
+    duplicating `100` in separate delivery modules.

@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Implementation complete; review pending
+Status: Safe stop; review findings pending fix
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,11 +10,11 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer | Status  |
 | -------------------------- | -------- | ------- |
-| Code style/maintainability | pending  | Pending |
-| Documentation              | pending  | Pending |
-| TypeScript/API docs        | pending  | Pending |
-| Security                   | pending  | Pending |
-| Performance/reliability    | pending  | Pending |
+| Code style/maintainability | Hilbert  | Finding |
+| Documentation              | Rawls    | Finding |
+| TypeScript/API docs        | Raman    | Finding |
+| Security                   | Planck   | Finding |
+| Performance/reliability    | Carson   | Clean   |
 
 ## Review Criteria
 
@@ -50,3 +50,13 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
   delivery worker/retry-decision/inbox/loop Vitest, build typecheck, docs/API
   checks, formatting, whitespace, and untracked generated-file checks. The five
   required independent review lanes remain pending.
+- `2026-07-11T13:54:58Z`: Round 1 independent review completed against
+  `.superpowers/sdd/review-aa4d52d9..9ac2889d.diff`. Performance/reliability
+  was clean. Code style/maintainability found two P3 issues: an impossible
+  `EXHAUSTED` branch in `DeliveryMessageResult`, and duplicated retry/retention
+  limit constants. Documentation found one P2 issue: public/API architecture
+  docs need to describe the narrow internal 100-attempt exhaustion gate.
+  TypeScript/API docs and security found the same P2 issue: exhausted-row
+  reporting returns an `Error` subclass with readable `.stack`. Next required
+  step is one fix worker for the full findings batch, followed by focused
+  verification, commit, a fresh review package, and all five review lanes again.
