@@ -1,11 +1,15 @@
 # T-0033: Delivery Reception Failure Policy Decision
 
-Status: Complete; ready to merge
+Status: Complete; merged and post-merge verified
 
 Final verification passed `pnpm --config.verify-deps-before-run=false verify`:
 60 test files and 1,276 tests passed with `90.01%` branch coverage
 (`3488/3875`), together with all generated/tooling typechecks, lint, cleanup,
 formatting, docs/API, proto, and generated-output gates.
+
+Merged into `main` as `4e969883`. The post-merge full verifier passed the
+same 60 files, 1,276 tests, and `90.01%` branch coverage with all other gates
+clean. The user-owned `human-review-1-jul.md` remained untouched.
 Started: `2026-07-11T19:08:00Z`
 Baseline commit: `020c8f26`
 Branch: `task/T-0033-delivery-reception-policy`
