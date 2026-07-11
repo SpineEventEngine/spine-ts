@@ -662,19 +662,23 @@ export interface DeliveryRun {
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
-  /** Number of endpoint callback, lease/fencing, status update, or cleanup failures. */
+  /**
+   * Number of observed failures, including bounded retry exhaustion before a
+   * callback and endpoint, lease/fencing, status-update, or cleanup failures.
+   */
   readonly failed: number;
-  /** Per-message failures kept only in the returned run result. */
+  /** Per-message failure observations kept only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
 }
 
 /** Failure from one message in a direct delivery run. */
 export interface DeliveryFailure {
-  /** Independent supported-row snapshot that failed during this run. */
+  /** Independent supported-row snapshot associated with this failure observation. */
   readonly message: DeliveryEndpointMessage;
   /**
-   * Error observed during endpoint callback, lease/fencing,
-   * delivery-status update, or framework cleanup work.
+   * Error observed during endpoint callback, lease/fencing, delivery-status
+   * update, or framework cleanup work; or frozen, stack-free bounded facts
+   * when the internal retained-attempt gate is exhausted before a callback.
    */
   readonly error: unknown;
 }

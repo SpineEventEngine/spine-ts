@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Round 1 fixes verified; re-review pending
+Status: Round 2 fixes verified; re-review pending
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -79,8 +79,17 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/TASK.md`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/implementation-report.md`
 - `build-protocol/work-logs/T-0032.md`
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/DECISION_LOG.md`
+- `build-protocol/RUNTIME_ARCHITECTURE.md`
+- `docs/api/README.md`
+- `packages/server/README.md`
 - `packages/server/src/delivery/delivery.ts`
+- `packages/server/src/delivery/delivery-attempts.ts`
+- `packages/server/src/delivery/delivery-retry-decision.ts`
+- `packages/server/src/delivery/delivery-loop.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
+- `packages/server/test/delivery/delivery-loop.test.ts`
 
 ## Concerns
 
@@ -146,3 +155,46 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
   `pnpm --config.verify-deps-before-run=false format:check`.
 - PASS, exit 0: `git diff --check`.
 - PASS, exit 0 with no output: `git ls-files --others --exclude-standard`.
+
+## Round 2 Fix Report
+
+### Findings Resolved
+
+- Updated public `DeliveryRun`, `DeliveryFailure`, `DeliveryLoopOptions`, and
+  `DeliveryLoopRun` TypeDocs so bounded retry exhaustion is a failed
+  observation, counts against loop failure budgeting, and exposes only
+  stack-free bounded facts before callback invocation. No public retry-policy
+  type was added.
+- Qualified the architecture's missing attempt-counter wording as the still
+  absent public or production policy, preserving the existing internal
+  retained-attempt gate description.
+- Marked the Round 1 findings as historical and resolved, made Round 2 the
+  unambiguous current status, and completed every T-0032 changed-file
+  inventory.
+- Added the narrow internal exhaustion-gate semantics to the detailed durable
+  delivery API section without broad policy claims.
+- Added `counts an exhausted head against the failure bound before retryable
+tail callbacks` in `delivery-loop.test.ts`. It proves an exhausted head
+  consumes the configured failure budget, invokes no endpoint, and leaves a
+  retryable tail pending. The current implementation already satisfied this
+  behavior, so no runtime behavior change was made.
+
+### Commands And Results
+
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-loop.test.ts -t "counts an exhausted head"`.
+  One focused regression test passed.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/delivery/delivery-loop.test.ts`.
+  Two files and 105 tests passed.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false typecheck:build:generated`.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false docs:check`.
+  TypeDoc reported zero errors; its invalid-local-remote source-link warning
+  is pre-existing environment noise.
+- PASS, exit 0:
+  `pnpm --config.verify-deps-before-run=false format:check`.
+- PASS, exit 0: `git diff --check`.
+- PASS, exit 0 with no output: `git ls-files --others --exclude-standard`.
+- PASS, exit 0, final repeat:
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/delivery/delivery-loop.test.ts`.
+  Two files and 105 tests passed.

@@ -5,7 +5,9 @@ import {
   Delivery,
   deliveryAccess,
   type DeliveryDrainOutcome,
+  type DeliveryEndpointMessage,
 } from "../../src/delivery/delivery.js";
+import { deliveryAttemptCapacity } from "../../src/delivery/delivery-attempts.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { ShardSession, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
@@ -828,6 +830,41 @@ describe("DeliveryLoop", () => {
     expect(run.failures).toHaveLength(2);
   });
 
+  it("counts an exhausted head against the failure bound before retryable tail callbacks", async () => {
+    const delivery = createDelivery();
+    const exhausted = await seed(delivery, "signal-exhausted-head", 1n);
+    await recordFailures(delivery, exhausted, deliveryAttemptCapacity);
+    await seed(delivery, "signal-retryable-tail", 2n);
+    const seen: string[] = [];
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      maxFailures: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    }).run();
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 1,
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exhausted-head");
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      { signalId: "signal-exhausted-head", status: "TO_DELIVER" },
+      { signalId: "signal-retryable-tail", status: "TO_DELIVER" },
+    ]);
+  });
+
   it("keeps successful callbacks in one drain while stopping at the failure bound", async () => {
     const delivery = createDelivery();
     const attempts: string[] = [];
@@ -956,6 +993,12 @@ async function seed(
   delivery: Delivery,
   signalId: string,
   version: bigint,
+  label?: DeliveryEndpointMessage["label"],
+): Promise<DeliveryEndpointMessage>;
+async function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
   label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
 ): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
@@ -969,6 +1012,23 @@ async function seed(
   });
 
   return result.message;
+}
+
+async function recordFailures(
+  delivery: Delivery,
+  message: DeliveryEndpointMessage,
+  count: number,
+): Promise<void> {
+  for (let sequence = 1; sequence <= count; sequence += 1) {
+    await delivery.attempts.recordFailure({
+      message,
+      node: `node-${String(sequence).padStart(3, "0")}`,
+      attemptedAt: new Date(Date.UTC(2026, 6, 8, 9, 0, sequence)),
+      accepted: true,
+      stage: "ENDPOINT",
+      reason: "ENDPOINT_REJECTED",
+    });
+  }
 }
 
 async function clearClaimByRecord(

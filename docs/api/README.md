@@ -353,7 +353,13 @@ callback are accepted work and may appear in failed work. Supported endpoint
 failures are also retained internally as sanitized attempt records with
 message/inbox/shard identity, label, node, attempted time, accepted flag, and
 stable failure stage/reason. Retained records do not include raw `Any.value`
-payload bytes, raw user errors, stack traces, or unbounded exception text. Live shard ownership
+payload bytes, raw user errors, stack traces, or unbounded exception text.
+Before a supported callback runs, the internal retained-attempt count for that
+exact inbox message is checked against the same 100-slot bound. An exhausted
+row remains `TO_DELIVER`, skips the callback and another retained attempt
+record, and contributes one stack-free bounded exhaustion observation to direct
+run and loop failure accounting. This narrow gate is internal; it does not add
+public retry-policy configuration or public monitor/action behavior. Live shard ownership
 plus live per-message ownership block competing callback dispatch while
 ownership is current; expired per-message ownership may be replaced during
 claim compare-and-set using the storage clock as abandoned-work recovery. If a

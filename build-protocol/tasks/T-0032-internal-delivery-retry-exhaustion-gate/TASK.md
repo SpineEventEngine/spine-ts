@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: In progress; Round 1 fixes verified, re-review pending
+Status: Round 2 fixes verified; re-review pending
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
@@ -177,20 +177,28 @@ available.
 
 ## Changed Files
 
+- `build-protocol/BUILD_PROTOCOL.md`
 - `build-protocol/DECISION_LOG.md`
+- `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `build-protocol/reviews/T-0032-internal-delivery-retry-exhaustion-gate.md`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/implementation-report.md`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/TASK.md`
 - `build-protocol/work-logs/T-0032.md`
 - `packages/server/src/delivery/delivery.ts`
+- `packages/server/src/delivery/delivery-attempts.ts`
+- `packages/server/src/delivery/delivery-retry-decision.ts`
+- `packages/server/src/delivery/delivery-loop.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
+- `packages/server/test/delivery/delivery-loop.test.ts`
+- `packages/server/README.md`
+- `docs/api/README.md`
 
 ## Resume State
 
 - Stopped at `2026-07-11T13:54:58Z` by human request.
 - Implementation commit `bccfed75` is present and coordinator-verified, but
   first five-lane review is not clean.
-- Open findings:
+- Historical Round 1 findings, resolved by `17f4abc6`:
   - P2: Replace exhausted-row `Error`/stack exposure with a frozen plain
     bounded data object and add coverage that `.stack` is not exposed.
   - P2: Update public/API architecture docs to describe the narrow internal
@@ -221,3 +229,11 @@ available.
   The requested public/API architecture docs describe only the narrow gate.
   Fresh independent re-review remains pending because this worker was directed
   not to spawn subagents.
+- Round 2 review completed at `2026-07-11T16:12:00Z` and superseded the
+  resolved Round 1 batch as the current fix target: align public failure/count
+  TypeDocs with bounded retry exhaustion, qualify the architecture's missing
+  retry-policy wording, make current status and inventories accurate, add the
+  detailed API-gate wording, and prove loop failure-budget handling for an
+  exhausted head with a retryable tail. These fixes are implemented in the
+  working tree and verified; the fix-batch commit follows in this atomic
+  log-maintenance step.

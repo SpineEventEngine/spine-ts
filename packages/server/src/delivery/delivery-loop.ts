@@ -39,7 +39,7 @@ export class DeliveryLoop {
 
   /**
    * Run drains until idle, skipped, stopped, paused after a bounded skipped-only scan streak,
-   * or the failure bound is reached.
+   * or the failure bound is reached, including an internal retry-exhaustion observation.
    */
   run(): Promise<DeliveryLoopRun> {
     if (this.#running !== undefined) {
@@ -150,7 +150,10 @@ export interface DeliveryLoopOptions {
   readonly node: string;
   /** Optional positive accepted-work cap for each drain. */
   readonly limit?: number;
-  /** Maximum failed message attempts before the loop stops. Defaults to one; capped at 1000. */
+  /**
+   * Maximum failed observations before the loop stops, including bounded
+   * retry exhaustion before callback invocation. Defaults to one; capped at 1000.
+   */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: OnDeliveryMessage;
@@ -171,9 +174,12 @@ export interface DeliveryLoopRun {
   readonly accepted: number;
   /** Number of rows delivered across all drains. Unsupported labels are skipped pending. */
   readonly delivered: number;
-  /** Number of endpoint callback, lease/fencing, status update, or cleanup failures. */
+  /**
+   * Number of observed failures, including bounded retry exhaustion before a
+   * callback and endpoint, lease/fencing, status-update, or cleanup failures.
+   */
   readonly failed: number;
-  /** Per-message failures retained only in the returned run result. */
+  /** Per-message failure observations retained only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
 }
 

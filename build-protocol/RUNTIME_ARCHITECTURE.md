@@ -321,7 +321,8 @@ This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
 handoffs, one direct drain call, and a closeable loop owner. It does not yet
 implement a generic repository delivery engine, projection catch-up through
-inbox storage, retry monitors, attempt counters, retained raw delivery error
+inbox storage, retry monitors, public or production retry-attempt counter
+policy beyond the internal retained-attempt gate, retained raw delivery error
 details, production worker supervision, or transport-backed topology. Event
 import and aggregate importers are removed from the active plan by upstream ADR
 0001 D1. Aggregate `@React` handlers, when present, use ordinary

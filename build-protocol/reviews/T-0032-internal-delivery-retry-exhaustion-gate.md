@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: In progress; Round 1 fixes verified, re-review pending
+Status: Round 2 fixes verified; re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | Hilbert  | Finding |
-| Documentation              | Rawls    | Finding |
-| TypeScript/API docs        | Raman    | Finding |
-| Performance/reliability    | Carson   | Clean   |
+| Lane                       | Reviewer   | Status            |
+| -------------------------- | ---------- | ----------------- |
+| Code style/maintainability | Kuhn       | Pending re-review |
+| Documentation              | Tesla      | Pending re-review |
+| TypeScript/API docs        | Ampere     | Pending re-review |
+| Performance/reliability    | Heisenberg | Pending re-review |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -112,3 +112,43 @@ is deferred to the final release-readiness gate.
   entries; current task state requires four lanes. No duplicated retry-capacity
   policy, public API leakage, or future-policy overclaim was found. A fresh
   baseline-to-HEAD review package and all four current lanes are next.
+- `2026-07-11T16:08:00Z`: Generated fresh review package
+  `.superpowers/sdd/review-aa4d52d9..2c3fc1d7.diff` (9 commits, 93,399
+  bytes) after the pre-review lint. Assigned current re-review lanes:
+  code style/maintainability `019f51ef-98ca-7a72-a9a2-aa1c5e608f6f`,
+  documentation `019f51ef-996a-7d71-a0f8-37a63e9cbabd`,
+  TypeScript/API docs `019f51ef-99ee-7830-a667-d8f085be0695`, and
+  performance/reliability `019f51ef-9a77-7c83-837a-8f93d09cb503`.
+  Each reviewer is read-only, must perform the canonical skill check, use the
+  task ledger and package, and ignore superseded historical text unless current
+  task state claims it as active.
+- `2026-07-11T16:12:00Z`: Round 2 completed and all four reviewers were
+  closed. Code style, TypeScript/API docs, and performance/reliability converged
+  on one P3: public `DeliveryRun.failed`, `DeliveryFailure.error`, and loop
+  counter TypeDocs omit bounded retry-exhaustion facts even though exhaustion
+  increments failed counts. Documentation found three P2 status/docs issues:
+  active architecture text still says attempt counters are absent; current
+  task/review records present resolved Round 1 findings as active; and changed
+  file inventories omit the Round 1 docs and capacity-source files.
+  Documentation also noted incomplete gate wording in the detailed API delivery
+  section, and performance/reliability noted no focused loop regression for an
+  exhausted head under failure budgeting. One fix worker must verify and
+  resolve the complete batch before re-review.
+- `2026-07-11T16:20:00Z`: Round 2 fix worker completed the canonical skill
+  applicability check, verified the consolidated findings, and implemented the
+  bounded documentation/status batch plus a focused loop regression. The
+  Round 1 findings recorded above are historical and resolved by `17f4abc6`;
+  they are not active review findings. Local verification passed; the new
+  fix-batch commit follows in this atomic step and future re-review remains
+  pending.
+- `2026-07-11T16:20:12Z`: Final local verification for the Round 2 batch
+  passed: focused delivery worker/loop Vitest (2 files, 105 tests), generated
+  build typecheck, docs check, format check, `git diff --check`, and the
+  untracked-output check. The docs check reported zero TypeDoc errors; its
+  invalid-local-remote source-link warning is pre-existing environment noise.
+  The four review lanes remain pending re-review after the forthcoming commit.
+- `2026-07-11T16:13:00Z`: Spawned one Round 2 fix worker for the complete
+  findings and residual-risk verification batch. The combined spawn-and-log
+  call failed after spawning because its log patch missed exact context; no
+  duplicate worker was created. Its ID will be recovered from the completion
+  notification and recorded before re-review.
