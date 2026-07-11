@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Safe stop; review findings pending fix
+Status: In progress; review findings pending fix
 Started: `2026-07-11T13:30:24Z`
 Baseline commit: `aa4d52d9`
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
@@ -19,7 +19,9 @@ bounded retry budget, while leaving public monitor/action policy for later.
 - Spawn a requirements-splitting sub-agent before implementation.
 - Use one implementation sub-agent for this task.
 - Run independent reviewer sub-agents for code style/maintainability,
-  documentation, TypeScript/API docs, security, and performance/reliability.
+  documentation, TypeScript/API docs, and performance/reliability.
+- Run security review once the coordinated implementation is ready for final
+  project acceptance, or earlier only when explicitly requested.
 - Feed reviewer comments back to one authoring/fix sub-agent and repeat until
   all lanes are clean.
 - Close every participating sub-agent once its role is complete.
@@ -183,7 +185,7 @@ available.
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/test/delivery/delivery-worker.test.ts`
 
-## Safe Stop
+## Resume State
 
 - Stopped at `2026-07-11T13:54:58Z` by human request.
 - Implementation commit `bccfed75` is present and coordinator-verified, but
@@ -198,3 +200,8 @@ available.
     result from `#deliverMessage()`.
   - P3: Share the retained-attempt ring size with the retry gate instead of
     duplicating `100` in separate delivery modules.
+- Development resumed at `2026-07-11T15:50:42Z`. Root `main` protocol commit
+  `ddca89a5` was back-merged without conflicts before the fix round. T-0032 now
+  uses the four current per-task reviewer lanes; the historical security
+  review's no-stack finding remains in the consolidated fix batch because the
+  TypeScript/API-docs reviewer independently reported the same defect.

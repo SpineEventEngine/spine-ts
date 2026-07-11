@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Safe stop; review findings pending fix
+Status: In progress; review findings pending fix
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -13,8 +13,12 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 | Code style/maintainability | Hilbert  | Finding |
 | Documentation              | Rawls    | Finding |
 | TypeScript/API docs        | Raman    | Finding |
-| Security                   | Planck   | Finding |
 | Performance/reliability    | Carson   | Clean   |
+
+The first review round predated protocol commit `ddca89a5` and included a
+security lane. That historical result remains recorded below, but subsequent
+T-0032 rounds use the four current per-task lanes. Project-wide security review
+is deferred to the final release-readiness gate.
 
 ## Review Criteria
 
@@ -59,4 +63,26 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
   TypeScript/API docs and security found the same P2 issue: exhausted-row
   reporting returns an `Error` subclass with readable `.stack`. Next required
   step is one fix worker for the full findings batch, followed by focused
-  verification, commit, a fresh review package, and all five review lanes again.
+  verification, commit, a fresh review package, and all four current review
+  lanes again.
+- `2026-07-11T15:50:42Z`: Autonomous work resumed. Back-merged current
+  `BUILD_PROTOCOL.md` from `main` without conflicts. The historical security
+  lane's no-stack finding remains actionable because the TypeScript/API-docs
+  lane reported the same issue. Next step remains one fix worker for the
+  consolidated findings, followed by focused verification, a fresh review
+  package, lightweight docs/status lint, and all four current review lanes.
+- `2026-07-11T15:50:42Z`: Assigned read-only standalone back-merge integrity
+  reviewer `019f51e1-0955-7791-94f9-c8c38013edbc` before evaluating the staged protocol merge. The
+  reviewer was instructed to perform the canonical skill applicability check,
+  verify conflict and file counts, and report findings with file/line
+  references without modifying the worktree.
+- `2026-07-11T15:54:32Z`: Back-merge reviewer
+  `019f51e1-0955-7791-94f9-c8c38013edbc` reported zero conflicts, four changed documentation/log
+  files, exact `BUILD_PROTOCOL.md` parity with `main` commit `ddca89a5`,
+  no runtime changes, and correct preservation of historical five-lane
+  evidence alongside the current four-lane rule. The reviewer questioned why
+  coordinator log updates had become staged after dispatch. Rejected that
+  comment: the prompt described the pre-dispatch index, while the coordinator
+  intentionally staged the durable records afterward so the protocol merge and
+  its task-state record are committed atomically as required by the Prime
+  Directive. Closed the reviewer after processing its result.
