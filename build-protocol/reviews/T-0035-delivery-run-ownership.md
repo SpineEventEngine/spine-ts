@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 2 independent review in progress
+Status: Round 2 findings pending fix
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5370-5d1d-75e0-84a7-66adcd30755a` | Pending |
-| Documentation              | `019f5370-5db9-7fa0-a2fd-7c2f8582e029` | Pending |
-| TypeScript/API docs        | `019f5370-5e41-7ba2-8d78-225bf25e5c32` | Pending |
-| Performance/reliability    | `019f5370-5ed7-7a92-9d0c-a802f87a5617` | Pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f5370-5d1d-75e0-84a7-66adcd30755a` | P2     |
+| Documentation              | `019f5370-5db9-7fa0-a2fd-7c2f8582e029` | Clean  |
+| TypeScript/API docs        | `019f5370-5e41-7ba2-8d78-225bf25e5c32` | P2     |
+| Performance/reliability    | `019f5370-5ed7-7a92-9d0c-a802f87a5617` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -91,3 +91,10 @@ Security is deferred to final project readiness.
 - `2026-07-11T23:09:00Z`: Generated Round 2 package
   `.superpowers/sdd/review-9200dcce..e7e1adcf.diff` and assigned all four
   current lanes. The live table was updated atomically; results are pending.
+- `2026-07-11T23:14:00Z`: Round 2 completed and all four reviewers were
+  closed. Documentation was clean. The complete fix batch must define
+  per-shard continuation eligibility for mixed outcomes, bound all epoch work
+  against continuous writes, park coalesced work on rejection, retain parked
+  rejection for close aggregation, and define shared/reusable caller-owned
+  environment registration cardinality. One author and fresh four-lane review
+  are required.
