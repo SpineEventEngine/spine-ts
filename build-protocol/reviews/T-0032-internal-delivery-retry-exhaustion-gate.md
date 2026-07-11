@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Round 3 table corrected; fresh four-lane re-review pending
+Status: Round 4 status-record fix applied; fresh four-lane re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer    | Status  |
-| -------------------------- | ----------- | ------- |
-| Code style/maintainability | Anscombe    | Clean   |
-| Documentation              | Descartes   | Clean   |
-| TypeScript/API docs        | Schrodinger | Clean   |
-| Performance/reliability    | Wegener     | Finding |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f520b-902d-75c1-8c82-a95cb4c52c23` | Pending |
+| Documentation              | `019f520b-912a-7102-b06d-30635107377a` | Pending |
+| TypeScript/API docs        | `019f520b-9095-75e1-85d9-6afd7b75eeaa` | Pending |
+| Performance/reliability    | `019f520b-91e1-7ce0-a95a-78728341659d` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -198,3 +198,40 @@ is deferred to the final release-readiness gate.
   `git diff --check`. The changed-file scope contains only this review log,
   the T-0032 task record, and the T-0032 work log; no runtime, test, public
   documentation, or architecture files changed.
+- `2026-07-11T16:36:00Z`: Generated Round 4 package
+  `.superpowers/sdd/review-aa4d52d9..1075f5d2.diff` and updated the active
+  table in the same dispatch step. Assigned code style/maintainability
+  `019f520b-902d-75c1-8c82-a95cb4c52c23`, documentation `019f520b-912a-7102-b06d-30635107377a`,
+  TypeScript/API docs `019f520b-9095-75e1-85d9-6afd7b75eeaa`, and performance/reliability
+  `019f520b-91e1-7ce0-a95a-78728341659d`. Results are pending.
+- `2026-07-11T16:41:00Z`: Round 4 completed and all reviewers were closed.
+  TypeScript/API docs `019f520b-9095-75e1-85d9-6afd7b75eeaa` and
+  performance/reliability `019f520b-91e1-7ce0-a95a-78728341659d` were clean.
+  Code style/maintainability `019f520b-902d-75c1-8c82-a95cb4c52c23` and
+  documentation `019f520b-912a-7102-b06d-30635107377a` found the same P3:
+  the implementation report status/concerns remain at Round 2 and the task
+  header overstates where Round 3 evidence lives. All runtime and public
+  behavior was otherwise clean.
+- `2026-07-11T16:42:00Z`: Assigned log-only fix worker
+  `019f5210-3ed6-7892-8a0c-0826634b4658` to the consolidated Round 4 status-record P3.
+  Fresh four-lane re-review remains pending its verified commit.
+- `2026-07-11T16:44:29Z`: The Round 4 status-record fix performed the canonical
+  skill applicability check before changes. It read the task-provided
+  `receiving-code-review`, `implement`, and `verification-before-completion`
+  skills; checked `build-protocol/skills/EXPECTED_SKILLS.md`; enumerated the
+  full readable `~/.agents/skills` entrypoint set with
+  `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`; and inspected
+  `~/.agents/.skill-lock.json` for the selected skill source repositories and
+  local paths. The selected skills apply to review reception, bounded
+  implementation, and evidence-before-completion verification. Other expected
+  skills were skipped as irrelevant to this log-only status fix; no unreachable
+  source was found and no subagents were spawned.
+- `2026-07-11T16:44:29Z`: Corrected the implementation-report status and durable
+  concerns wording, and corrected the task header's evidence-location claim.
+  The active four-lane table remains pending fresh re-review; all historical
+  review evidence remains preserved.
+- `2026-07-11T16:46:23Z`: Exact post-edit verification passed with exit 0:
+  `pnpm --config.verify-deps-before-run=false format:check` reported that all
+  matched files use Prettier code style, and `git diff --check` produced no
+  output. The pending batch changes only the T-0032 task, implementation report,
+  work log, and review log.
