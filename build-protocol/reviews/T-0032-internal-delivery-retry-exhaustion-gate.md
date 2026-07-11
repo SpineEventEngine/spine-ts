@@ -1,6 +1,6 @@
 # T-0032 Review Log
 
-Status: Round 4 status-record fix applied; fresh four-lane re-review pending
+Status: In progress; Round 5 documentation fix applied; fresh four-lane re-review pending
 
 Task: `T-0032 Internal Delivery Retry Exhaustion Gate`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
 | Lane                       | Reviewer                               | Status  |
 | -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f520b-902d-75c1-8c82-a95cb4c52c23` | Pending |
-| Documentation              | `019f520b-912a-7102-b06d-30635107377a` | Pending |
-| TypeScript/API docs        | `019f520b-9095-75e1-85d9-6afd7b75eeaa` | Pending |
-| Performance/reliability    | `019f520b-91e1-7ce0-a95a-78728341659d` | Pending |
+| Code style/maintainability | `019f5214-ac52-73d2-b44d-b9cd8b7c985c` | Pending |
+| Documentation              | `019f5214-aada-7f61-841d-6c0b1ed870cc` | Pending |
+| TypeScript/API docs        | `019f5214-ab49-76f2-ac89-b6b2a1142efa` | Pending |
+| Performance/reliability    | `019f5214-ad13-7de0-8075-b6c7f7fea02a` | Pending |
 
 The first review round predated protocol commit `ddca89a5` and included a
 security lane. That historical result remains recorded below, but subsequent
@@ -235,3 +235,56 @@ is deferred to the final release-readiness gate.
   matched files use Prettier code style, and `git diff --check` produced no
   output. The pending batch changes only the T-0032 task, implementation report,
   work log, and review log.
+- `2026-07-11T16:48:00Z`: Generated Round 5 package
+  `.superpowers/sdd/review-aa4d52d9..a61e7e3f.diff` and assigned code style
+  `019f5214-ac52-73d2-b44d-b9cd8b7c985c`, documentation `019f5214-aada-7f61-841d-6c0b1ed870cc`,
+  TypeScript/API docs `019f5214-ab49-76f2-ac89-b6b2a1142efa`, and performance/reliability
+  `019f5214-ad13-7de0-8075-b6c7f7fea02a`. The active table was updated in the same dispatch step.
+- `2026-07-11T16:53:00Z`: Round 5 completed and all reviewers were closed.
+  Code style `019f5214-ac52-73d2-b44d-b9cd8b7c985c`, TypeScript/API docs
+  `019f5214-ab49-76f2-ac89-b6b2a1142efa`, and performance/reliability
+  `019f5214-ad13-7de0-8075-b6c7f7fea02a` were clean. Documentation
+  `019f5214-aada-7f61-841d-6c0b1ed870cc` found one P2: three active guide
+  surfaces omit the implemented exhaustion gate and leave replay wording
+  inaccurate for exhausted rows. Runtime, tests, exports, status records,
+  inventories, and active table consistency were otherwise clean.
+- `2026-07-11T16:54:00Z`: Assigned documentation fix worker
+  `019f5219-bd2b-7ce2-93d3-1f5f61267a63` to the complete Round 5 P2. Fresh four-lane
+  re-review remains pending its verified commit.
+- `2026-07-11T16:56:30Z`: The Round 5 documentation fix worker performed the
+  canonical skill applicability check before edits. Session inventory evidence
+  exposed the task-relevant installed skills `receiving-code-review`,
+  `doc-coauthoring`, `implement`, and `verification-before-completion`; the
+  task-provided skill paths named those same four skills. The worker checked
+  `build-protocol/skills/EXPECTED_SKILLS.md`, enumerated the full readable
+  `/Users/armiol/.agents/skills` entrypoint set with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and inspected `/Users/armiol/.agents/.skill-lock.json` for the selected
+  entries. The selected skills were fully read and apply to review reception,
+  documentation refinement, bounded implementation, and evidence-before-
+  completion verification. Other expected skills were skipped as irrelevant to
+  this documentation-only fix; no source was unreachable and no subagents were
+  spawned.
+- `2026-07-11T16:57:30Z`: Applied the Round 5 documentation fix to
+  `docs/architecture/README.md`, `docs/USER_GUIDE.md`, and
+  `build-protocol/DEVELOPER_API.md`. The three surfaces now describe the
+  internal 100-attempt pre-callback gate, `TO_DELIVER` retention, callback and
+  retained-attempt suppression, bounded stack-free failure facts, accepted-work
+  exclusion, failure-budget accounting, and later replay for retryable rows.
+  No runtime, tests, exports, or review-lane table changed. Fresh four-lane
+  re-review remains pending verification and this docs commit.
+- `2026-07-11T17:01:13Z`: Exact documentation-batch verification passed:
+  `pnpm --config.verify-deps-before-run=false docs:check` exited 0 with zero
+  TypeDoc errors and the known invalid-local-remote source-link warning;
+  `pnpm --config.verify-deps-before-run=false format:check` exited 0; `git diff
+--check` exited 0 with no output; and `git ls-files --others
+--exclude-standard` exited 0 with no output. No full `pnpm verify` was run.
+- `2026-07-11T17:04:22Z`: Resumed verification completed successfully:
+  `pnpm --config.verify-deps-before-run=false format:check` exited 0 with all
+  matched files using Prettier code style; `git diff --check` exited 0 with no
+  output; and `git ls-files --others --exclude-standard` exited 0 with no
+  output.
+- `2026-07-11T17:05:45Z`: Post-format verification passed again with exit 0:
+  `pnpm --config.verify-deps-before-run=false format:check` reported all
+  matched files use Prettier code style; `git diff --check` produced no output;
+  and `git ls-files --others --exclude-standard` produced no output.

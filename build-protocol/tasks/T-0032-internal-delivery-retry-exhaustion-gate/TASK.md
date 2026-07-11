@@ -1,6 +1,6 @@
 # T-0032: Internal Delivery Retry Exhaustion Gate
 
-Status: Round 4 status-record fix applied; fresh four-lane re-review pending
+Status: In progress; Round 5 documentation fix applied; fresh four-lane re-review pending
 
 Round 3 reviewer-table correction and canonical skill-check evidence are
 recorded in the T-0032 work and review logs.
@@ -187,6 +187,9 @@ available.
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/implementation-report.md`
 - `build-protocol/tasks/T-0032-internal-delivery-retry-exhaustion-gate/TASK.md`
 - `build-protocol/work-logs/T-0032.md`
+- `build-protocol/DEVELOPER_API.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/src/delivery/delivery-attempts.ts`
 - `packages/server/src/delivery/delivery-retry-decision.ts`
@@ -239,3 +242,34 @@ available.
   detailed API-gate wording, and prove loop failure-budget handling for an
   exhausted head with a retryable tail. These fixes were verified and committed
   as `85d2ce62`; fresh four-lane re-review is pending.
+
+- `2026-07-11T16:56:30Z`: The Round 5 documentation fix worker performed the
+  canonical skill applicability check before edits. Session inventory evidence
+  exposed the task-relevant installed skills `receiving-code-review`,
+  `doc-coauthoring`, `implement`, and `verification-before-completion`; the
+  task-provided skill paths named those same four skills. The worker checked
+  `build-protocol/skills/EXPECTED_SKILLS.md`, enumerated the full readable
+  `/Users/armiol/.agents/skills` entrypoint set with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and inspected `/Users/armiol/.agents/.skill-lock.json` for the selected
+  entries. The selected skills were fully read and apply to review reception,
+  documentation refinement, bounded implementation, and evidence-before-
+  completion verification. Other expected skills were skipped as irrelevant to
+  this documentation-only fix; no source was unreachable and no subagents were
+  spawned.
+- `2026-07-11T17:01:13Z`: Documentation-only verification passed for the Round
+  5 fix: `pnpm --config.verify-deps-before-run=false docs:check` exited 0 with
+  zero TypeDoc errors and the known invalid-local-remote source-link warning;
+  `pnpm --config.verify-deps-before-run=false format:check` exited 0 with all
+  matched files formatted; `git diff --check` exited 0 with no output; and
+  `git ls-files --others --exclude-standard` exited 0 with no output. No full
+  `pnpm verify` was run.
+- `2026-07-11T17:04:22Z`: Resumed verification completed successfully:
+  `pnpm --config.verify-deps-before-run=false format:check` exited 0 with all
+  matched files using Prettier code style. The final `git diff --check` exited 0
+  with no output, and the final `git ls-files --others --exclude-standard`
+  exited 0 with no output.
+- `2026-07-11T17:05:45Z`: Post-format verification passed again with exit 0:
+  `pnpm --config.verify-deps-before-run=false format:check` reported all
+  matched files use Prettier code style; `git diff --check` produced no output;
+  and `git ls-files --others --exclude-standard` produced no output.

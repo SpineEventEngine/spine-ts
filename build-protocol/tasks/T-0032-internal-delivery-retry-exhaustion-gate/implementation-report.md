@@ -1,6 +1,6 @@
 # T-0032 Implementation Report
 
-Status: Round 4 status-record fix applied; fresh four-lane re-review pending
+Status: Round 5 documentation fix applied; fresh four-lane re-review pending
 
 Branch: `task/T-0032-internal-delivery-retry-exhaustion-gate`
 
@@ -83,6 +83,9 @@ Worktree: `.worktrees/T-0032-internal-delivery-retry-exhaustion-gate`
 - `build-protocol/DECISION_LOG.md`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `docs/api/README.md`
+- `build-protocol/DEVELOPER_API.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `packages/server/README.md`
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/src/delivery/delivery-attempts.ts`
@@ -198,3 +201,48 @@ tail callbacks` in `delivery-loop.test.ts`. It proves an exhausted head
 - PASS, exit 0, final repeat:
   `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/delivery/delivery-loop.test.ts`.
   Two files and 105 tests passed.
+
+## Round 5 Documentation Fix
+
+- Technical adjudication: both `docs/USER_GUIDE.md` and
+  `build-protocol/DEVELOPER_API.md` required edits. Each previously described
+  retained-attempt preparation or later replay without stating the implemented
+  100-attempt pre-callback exhaustion gate, exhausted-row `TO_DELIVER`
+  retention, callback and retained-attempt suppression, bounded stack-free
+  failure facts, and failed-work/failure-budget accounting. The edits preserve
+  retryable failures as available for later replay and keep public monitor,
+  scheduler/backoff, dead-letter, topology, catch-up, and production-adapter
+  policy out of scope.
+- The Round 5 documentation fix worker performed the canonical skill
+  applicability check before edits. Session inventory evidence exposed the
+  task-relevant installed skills `receiving-code-review`, `doc-coauthoring`,
+  `implement`, and `verification-before-completion`; the task-provided skill
+  paths named those same four skills. The worker checked
+  `build-protocol/skills/EXPECTED_SKILLS.md`, enumerated the full readable
+  `/Users/armiol/.agents/skills` entrypoint set with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and inspected `/Users/armiol/.agents/.skill-lock.json` for the selected
+  entries. The selected skills were fully read and apply to review reception,
+  documentation refinement, bounded implementation, and evidence-before-
+  completion verification. Other expected skills were skipped as irrelevant to
+  this documentation-only fix; no source was unreachable and no subagents were
+  spawned.
+
+### Commands And Results
+
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false docs:check`.
+  TypeDoc reported zero errors and the known invalid-local-remote source-link
+  warning.
+- PASS, exit 0: `pnpm --config.verify-deps-before-run=false format:check`.
+  All matched files use Prettier code style.
+- PASS, exit 0: `git diff --check` with no output.
+- PASS, exit 0: `git ls-files --others --exclude-standard` with no output.
+- No full `pnpm verify` was run.
+- Resumed final verification at `2026-07-11T17:04:22Z`: PASS, exit 0,
+  `pnpm --config.verify-deps-before-run=false format:check`; PASS, exit 0,
+  `git diff --check` with no output; and PASS, exit 0,
+  `git ls-files --others --exclude-standard` with no output.
+- Post-format verification at `2026-07-11T17:05:45Z`: PASS, exit 0,
+  `pnpm --config.verify-deps-before-run=false format:check`; PASS, exit 0,
+  `git diff --check` with no output; and PASS, exit 0,
+  `git ls-files --others --exclude-standard` with no output.
