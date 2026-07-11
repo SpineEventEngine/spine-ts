@@ -89,3 +89,8 @@ Branch: `task/T-0031-delivery-retry-decision`
   finding record commit `27c17705`, and added the explicit current
   log-maintenance commit convention. Coordinator re-review remains pending, and
   T-0031 is not final.
+- `2026-07-11T13:38:18+0100`: Coordinator inspection added the completed round
+  2 ledger fix commit `63e72ad0` to the work-log commit ledger before generating
+  the next review package. This coordinator log-maintenance commit itself is the
+  current adjacent record covered by the ledger convention; re-review remains
+  pending.
