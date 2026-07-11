@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 7 fix commit recorded and pending re-review
+Status: Round 8 clean review, final verification pending
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer           | Status   |
-| -------------------------- | ------------------ | -------- |
-| Code style/maintainability | Carver the 5th     | Findings |
-| Documentation              | Boyle the 5th      | Clean    |
-| TypeScript/API docs        | Copernicus the 5th | Clean    |
-| Security                   | Faraday the 5th    | Findings |
-| Performance/reliability    | Ptolemy the 5th    | Clean    |
+| Lane                       | Reviewer              | Status |
+| -------------------------- | --------------------- | ------ |
+| Code style/maintainability | Ampere the 5th        | Clean  |
+| Documentation              | Kant the 5th          | Clean  |
+| TypeScript/API docs        | Euler the 5th         | Clean  |
+| Security                   | Chandrasekhar the 5th | Clean  |
+| Performance/reliability    | Pauli the 5th         | Clean  |
 
 ## Review Criteria
 
@@ -441,3 +441,37 @@ Branch: `task/T-0029-delivery-attempt-retention`
   existing TypeDoc invalid-origin warning.
 - Status: fix commit recorded; fresh review package and all five independent
   review lanes remain pending.
+
+### Round 8 Independent Review - `2026-07-11T09:54:12Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..69186e2b.diff` from task baseline
+  `3820e76d` to current HEAD `69186e2b`.
+- Code style/maintainability (Ampere the 5th): clean. No remaining
+  maintainability, naming, helper-cohesion, fixture-clarity, generated-output,
+  or durable-log chronology findings were found.
+- Documentation (Kant the 5th): clean. Public and protocol docs state
+  sanitized internal retained attempt history exists while keeping retry
+  monitors, scheduler/backoff, production supervision/topology, durable
+  catch-up, production storage adapters, import work, aggregate `@Apply`
+  delivery, and public end-user delivery APIs out of scope. Durable logs record
+  `c385d25c` and pending re-review state.
+- TypeScript/API docs (Euler the 5th): clean. The corruption propagation fix
+  does not widen public APIs; no public retry, end-user delivery, or public
+  attempt API appears. Callback snapshots remain narrowed and copied, generated
+  Protobuf output is absent from the diff, and `CATCH_UP`/legacy `IMPORT_EVENT`
+  behavior remains as required.
+- Security (Chandrasekhar the 5th): clean. `DeliveryStorageCorruptionError` is
+  rethrown from retained-attempt recording while ordinary attempt write/storage
+  failures remain observational. Retained records are bounded/sanitized,
+  supported labels are filtered, `CATCH_UP` and legacy `IMPORT_EVENT` paths do
+  not retain attempts, tenant/shard scoping is preserved, and no generated
+  output appears in the diff.
+- Performance/reliability (Pauli the 5th): clean. Bounded hot-path work, ring
+  cap, direct slot reads, CAS/write behavior, failure accounting, pre-callback
+  semantics, `TO_DELIVER` preservation, unsupported-label skips,
+  sequence/shard corruption arithmetic, and the Round 7 corruption rethrow
+  looked sound. The reviewer also reran the required focused delivery-worker
+  and inbox Vitest slice with 66 tests passing and 118 skipped.
+- Status: all five Round 8 review lanes are clean. Final T-0029 verification
+  remains pending before merge.

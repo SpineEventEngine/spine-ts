@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 7 fix commit recorded and pending re-review
+Status: In progress; Round 8 clean review, final verification pending
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -331,3 +331,10 @@ and `git ls-files --others --exclude-standard`; all passed, with only the
 existing TypeDoc invalid-origin warning. The next step is a fresh review
 package from baseline `3820e76d` to the current head and all five independent
 review lanes.
+
+Coordinator recorded the Round 7 fix commit as
+`69186e2b Record T-0029 Round 7 fix commit`, generated
+`.superpowers/sdd/review-3820e76d..69186e2b.diff`, and ran the Round 8
+five-lane review. Code style/maintainability, documentation, TypeScript/API
+docs, security, and performance/reliability were all clean. Final T-0029
+verification remains pending before merge.
