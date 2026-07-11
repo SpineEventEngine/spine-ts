@@ -2738,3 +2738,62 @@ Consequences:
   rather than a production index abstraction.
 - Public docs must keep production storage adapters and retry/supervision gaps
   explicit after this task.
+
+## D-0080: Retain Delivery Attempts Before Retry Monitors
+
+Status: Accepted
+
+Date: 2026-07-11
+
+Task: `T-0029`
+
+Context: T-0028 replaced moving-offset delivery scans with stable storage
+continuations. Durable delivery can now retry failed rows by leaving them
+`TO_DELIVER`, but the only failure evidence is the ephemeral
+`DeliveryRun.failures` object returned to the caller. Spine JVM delivery routes
+failed endpoint reception through `DeliveryMonitor.onReceptionFailure`, which
+receives a `FailedReception` and chooses an action such as marking delivered or
+repeating dispatch. The TypeScript runtime is not ready for monitor policy,
+timers, backoff, worker supervision, or production topology, but later retry
+policy needs durable facts rather than in-memory run results.
+
+Decision:
+
+- Run T-0029 as a narrow delivery-attempt retention slice after storage
+  continuations and before retry monitors/workers.
+- Persist sanitized, framework-owned attempt records for supported durable
+  endpoint failures.
+- Store only bounded delivery facts needed by later retry policy: message,
+  shard/inbox identity, label, node, attempt time, accepted flag, and a stable
+  failure stage/reason.
+- Do not store raw `Any.value` payload bytes, user error objects, stack traces,
+  or unbounded exception text.
+- Keep failed inbox rows `TO_DELIVER` exactly as today; do not add immediate
+  retry, backoff, timers, monitor callbacks, or cancellation policy.
+- Keep `CATCH_UP` skipped and pending unless a later catch-up task explicitly
+  owns those semantics. Keep new `IMPORT_EVENT` writes unsupported and legacy
+  stored rows fail-closed.
+
+Alternatives considered:
+
+- Start retry monitors/workers now. Rejected because policy would either depend
+  on ephemeral run failures or smuggle in storage format and supervision
+  decisions in the same slice.
+- Add full JVM-style `DeliveryMonitor` and `FailedReception` APIs now. Rejected
+  because public monitor policy, repeat callbacks, and mark-delivered actions
+  are broader than the current TypeScript delivery boundary.
+- Record raw errors and payloads for debugging. Rejected because retained
+  attempt history must be safe for production storage, bounded, and free of
+  payload/error leakage.
+- Start production storage adapters or worker supervision first. Rejected
+  because both need attempt/retry semantics to be explicit before deployment
+  policy is useful.
+
+Consequences:
+
+- Later retry policy can be built over durable, bounded failure facts.
+- Public docs can stop saying no retained attempt history exists, while still
+  keeping retry monitors, production supervision, topology, catch-up storage,
+  and production adapters explicit future work.
+- Delivery remains at-least-once/replay-safe; retained attempts are observation
+  state, not a new delivery outcome or retry guarantee.
