@@ -64,7 +64,13 @@ Every development cycle uses:
 - One orchestrating main agent.
 - One requirements-splitting sub-agent.
 - One implementing sub-agent per task or sub-task.
-- Reviewer sub-agents for code style, documentation, TypeScript/API docs, security, and performance/reliability.
+- Reviewer sub-agents for code style, documentation, TypeScript/API docs, and
+  performance/reliability.
+
+Security review is a release-readiness gate, not a per-task reviewer lane.
+Run the dedicated security check once the coordinated implementation is ready
+for final project acceptance, or earlier only when the human explicitly asks
+for a security review.
 
 When spawning sub-agents, the orchestrator must instruct each to impersonate a
 senior engineer specializing in the assigned aspect.
@@ -81,6 +87,11 @@ senior engineer specializing in the assigned aspect.
 8. Review repeats until no comments remain.
 9. The orchestrator integrates the branch.
 10. All participating sub-agents are closed.
+
+The splitter must prefer small task slices. A task should produce a review
+package that one reviewer can inspect carefully in one pass. If the proposed
+diff would mix independent contracts, broad documentation rewrites, generated
+output, and runtime behavior, split it again before implementation starts.
 
 Each task brief must include a "Human-Imposed Requirements Ledger" section. The
 ledger must list every explicit human rule that applies to the task, including
@@ -103,6 +114,10 @@ services, missing details, and finally the to-do example.
 - Do not share write ownership of files unless the orchestrator explicitly serializes the edits.
 - Keep branch names traceable to task IDs.
 - Do not merge a branch until review rounds are complete and logs are updated.
+- After post-merge verification, remove the task worktree when Git reports the
+  branch is merged and the worktree is clean. Do not force-remove a worktree
+  with modified or untracked files unless the human explicitly approves that
+  cleanup.
 
 ## Review Loop
 
@@ -111,8 +126,24 @@ Each feature must receive these independent reviews:
 - code style/maintainability;
 - documentation completeness;
 - TypeScript/API docs;
-- security;
 - performance/reliability.
+
+Before spawning reviewers, the orchestrator must run a lightweight pre-review
+lint pass over the current diff and task records. This pass should be local and
+focused, not a full project gate. It must check for common late-round findings:
+
+- stale task, work-log, review-log, and decision status;
+- duplicated constants or separate policy values that should share one source;
+- accidental public API exports, TypeDoc mentions, or docs for internal-only
+  concepts;
+- docs that overclaim future policy, production behavior, monitor actions,
+  scheduler/backoff behavior, topology, catch-up semantics, or adapters beyond
+  the task's accepted scope.
+
+Run this docs/status lint before reviewer sub-agents receive the review
+package. Use targeted `rg`, `git diff`, and task-log checks. Reserve heavier
+commands for verification gates or when the lightweight pass finds a concrete
+reason to run them.
 
 Reviewer comments are fed back to the authoring sub-agent. The authoring sub-agent must:
 
@@ -125,7 +156,10 @@ The loop stops only when all reviewers report no remaining comments.
 
 Reviewers must explicitly check the human-imposed requirements ledger. A clean
 review is invalid if it ignores a ledger item that is visible in the diff or in
-the examples/docs affected by the task.
+the examples/docs affected by the task. Reviewer prompts must also state that
+historical or superseded text outside the current task state is not a finding
+unless the current task brief, work log, review log, decision log, or changed
+docs claim that text as active behavior.
 
 ## Human Questions
 
@@ -261,6 +295,11 @@ A task cannot be marked complete until:
 - framework or example `USER_GUIDE.md` is updated when user workflow changes;
 - all reviewer rounds are complete;
 - all participating sub-agents are closed.
+
+Use focused tests and task-relevant checks during inner fix loops. Reserve the
+full `pnpm verify` gate for final task acceptance, post-merge verification, or
+explicit human request unless the task itself changes shared build/test
+infrastructure and needs the full gate earlier.
 
 Additional end-user API gates:
 
