@@ -1,6 +1,6 @@
 # T-0034 Implementation Report
 
-Status: Round 2 record fix in progress
+Status: Round 2 record fixes complete; re-review pending
 
 Implementation worker: `019f52d4-d264-77e0-9469-48ff5950328a`
 
@@ -12,9 +12,7 @@ Implementation commits:
 
 - `2ef02898 Implement exhausted delivery outcome`
 - `64091ec6 Avoid exhausted attempt payload copies`
-
-The Round 1 fix commit is pending this report's non-recursive authoring commit;
-the coordinator can identify it from branch `HEAD` and the final worker report.
+- `d8127cca Preserve failed exhaustion claims for cleanup`
 
 ## Result
 

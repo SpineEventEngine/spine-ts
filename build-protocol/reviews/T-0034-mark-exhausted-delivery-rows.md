@@ -1,6 +1,6 @@
 # T-0034 Review Log
 
-Status: Round 2 record fix in progress
+Status: Round 2 record fixes complete; re-review pending
 
 Task: `T-0034 Mark Exhausted Delivery Rows`
 
@@ -94,6 +94,15 @@ Security is deferred to final project readiness.
 - `2026-07-11T22:14:00Z`: Resumed implementation worker
   `019f52d4-d264-77e0-9469-48ff5950328a` as the single log-only fix worker.
   Fresh four-lane re-review remains pending.
+- `2026-07-11T21:09:08Z`: Log-only fix worker completed the receiving-review
+  applicability check and resolved both P3s: the implementation report now
+  names `d8127cca` directly with no pending/`HEAD` locator, and the active work-
+  log participant ledger marks the implementation worker closed. Statuses are
+  aligned for fresh re-review; no runtime, tests, public docs, reviewers, or
+  subagents changed.
+- `2026-07-11T21:09:08Z`: Requested docs, format, whitespace, untracked-output,
+  status, commit-ledger, participant-ledger, and changed-scope checks passed.
+  The two P3 record fixes are ready for fresh four-lane re-review.
 - `2026-07-11T20:55:19Z`: Fix worker completed the resumed applicability check,
   re-read `receiving-code-review`, and verified the complete finding batch.
   Systematic tracing confirmed premature `ActiveClaim.finalize()` clearing as
