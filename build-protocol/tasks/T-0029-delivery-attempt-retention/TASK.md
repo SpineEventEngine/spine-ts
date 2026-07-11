@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 5 fixes verified pending re-review
+Status: In progress; Round 6 findings pending fix
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -269,3 +269,10 @@ Round 5 fix worker committed
 `23fa2d03 Fix T-0029 round 5 attempt shard validation` and was closed after
 reporting `DONE`. The next step is a fresh review package and all five
 independent review lanes.
+
+Coordinator recorded the Round 5 fix commit as
+`a7361306 Record T-0029 Round 5 fix commit`. Round 6 review found the
+implementation mostly clean, but `nextSequence()` can still perform unsafe
+arithmetic when corrupt stored state contains `Number.MAX_SAFE_INTEGER`, and
+durable logs must record current head `a7361306` while keeping re-review
+pending.
