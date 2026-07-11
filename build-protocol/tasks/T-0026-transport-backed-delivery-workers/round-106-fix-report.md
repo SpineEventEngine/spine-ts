@@ -2,8 +2,8 @@
 
 ## Scope
 
-Addressed the Round 105 documentation and maintainability findings against
-current HEAD `18e45b04` (`Clarify delivery scan rescan budget`).
+Addressed the Round 105 documentation and maintainability findings against the
+then-current pre-fix HEAD `18e45b04` (`Clarify delivery scan rescan budget`).
 
 ## Implementation Summary
 

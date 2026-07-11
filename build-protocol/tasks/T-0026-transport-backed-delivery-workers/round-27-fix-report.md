@@ -59,6 +59,10 @@ The existing non-blocking note about `FaultyDeliveryRecordStorage.compareAndSetR
 - `DeliveryLoop` now returns `PAUSED` after two saturated skipped-only drains in one invocation and preserves `scanOffset` for the next `run()`, bounding one invocation while keeping resumable forward progress.
 - `DeliveryWorker` now propagates `PAUSED` as a worker-level stop reason when any owned loop pauses.
 - `packages/server/README.md`, `docs/architecture/README.md`, `docs/USER_GUIDE.md`, and `docs/api/README.md` now explicitly state that direct-drain `limit` caps endpoint callbacks actually invoked and scanning is bounded by `maxReadLimit + limit`. Historical correction recorded in Round 29: skipped/unsupported rows do not consume accepted work or failure budget, but pre-callback claim/validation/lease/cleanup/status-update failures still increment `failed` / `DeliveryLoop.maxFailures` while leaving `accepted` unchanged.
+- Round 108 correction: the previous sentence's accepted-work wording is
+  superseded by the current contract. Pre-callback claim/validation/lease
+  failures do not increment `accepted`; post-callback cleanup/status-update
+  failures are accepted work and may appear in failed work.
 - Historical Round 24 durable notes now mention that `DeliveryEndpoint` was renamed to `OnDeliveryMessage` in Round 25.
 
 ## Verification Commands and Results

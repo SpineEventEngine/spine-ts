@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 106 fix verified; current-HEAD re-review pending
+Status: Round 108 docs/log fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1655,18 +1655,47 @@ mutation, and exit handling all live in one method. Round 106 will fix those
 durable records and split stable-page acquisition/boundary validation from
 per-row draining/cursor accounting without changing delivery behavior.
 
-Round 106 fix implementation on `2026-07-11`: confirmed the Round 104
-coordinator breadcrumb `18e45b04` (`Clarify delivery scan rescan budget`) is now
-present in the task, work, and review logs; marked older Round 29
-cleanup/status-update accepted-work wording as superseded by the current
-contract; and split `Delivery.#drainAvailableMessages()` so stable-page
-acquisition/boundary validation is separate from per-row draining and cursor
-accounting. Public delivery types and behavior were not intentionally changed.
+Round 106 fix implementation recorded at `2026-07-11T02:07:45Z` because the
+worker's exact timestamp was not recorded: confirmed the Round 104 coordinator
+breadcrumb `18e45b04` (`Clarify delivery scan rescan budget`) is now present in
+the task, work, and review logs; marked older Round 29 cleanup/status-update
+accepted-work wording as superseded by the current contract; and split
+`Delivery.#drainAvailableMessages()` so stable-page acquisition/boundary
+validation is separate from per-row draining and cursor accounting. Public
+delivery types and behavior were not intentionally changed.
 
-Round 106 verification on `2026-07-11`: focused stale-head/rescan/read-cap
+Round 106 verification recorded at `2026-07-11T02:07:45Z` because the worker's
+exact timestamp was not recorded: focused stale-head/rescan/read-cap
 delivery-worker Vitest passed with 3 selected tests and 50 skipped; the broader
 delivery worker/loop/runtime/registry Vitest slice passed with 4 files and 146
 tests; `docs:check` passed with only the known invalid TypeDoc `origin`
 source-link warning; `format:check` passed after the repo formatter wrapped the
 touched work/review logs; `git diff --check` passed; and the targeted stale
-accepted-work wording guard returned no matches. No commit was created.
+accepted-work wording guard returned no matches. The fix worker did not create a
+commit before coordinator commit `308cefb7` (`Refine delivery scan loop
+records`) recorded the Round 106 scan-loop and durable-record fix.
+
+Coordinator commit `308cefb7` (`Refine delivery scan loop records`) recorded
+the Round 106 scan-loop and durable-record fix.
+
+Round 107 re-review on `2026-07-11T02:07:45Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..308cefb7.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes; the style
+lane found no implementation maintainability issues after the scan-loop split.
+Documentation found the current coordinator commit breadcrumb `308cefb7` was
+missing and the old Round 106 no-worker-commit wording now contradicted the
+committed HEAD. Documentation also found one missed Round 27 fix-report
+sentence that still grouped cleanup/status-update failures into the
+pre-callback no-accepted-work bucket. Code style/maintainability also found the
+Round 106 work/review log entries harder to audit because one wrapped commit
+title line was not indented and the Round 106 entries used date-only
+timestamps. Round 108 will fix those durable-record issues without production
+code changes.
+
+Round 108 docs/log fix on `2026-07-11T02:07:45Z`: normalized the Round 106
+durable entries to concrete UTC recording timestamps, indented wrapped
+`Clarify delivery scan rescan budget` commit-title lines, replaced stale Round
+106 current-HEAD wording with an explicit coordinator commit `308cefb7`
+breadcrumb, and marked the missed Round 27 accepted-work sentence as superseded
+by the current pre-callback/post-callback accounting contract. No production
+code changed.

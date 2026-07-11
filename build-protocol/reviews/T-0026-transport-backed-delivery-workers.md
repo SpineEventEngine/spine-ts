@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 106 fix verified; current-HEAD re-review pending
+Status: Round 108 docs/log fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -3318,13 +3318,14 @@ red/green delivery regressions before the next review pass.
   and delivery scan-loop maintainability, verify, commit, and rerun all five
   required lanes.
 
-### Round 106 Fix Implementation - `2026-07-11`
+### Round 106 Fix Implementation - `2026-07-11T02:07:45Z`
 
-- Fix: confirmed the Round 104 coordinator breadcrumb `18e45b04` (`Clarify
-delivery scan rescan budget`) is now recorded durably, and marked older Round
-  29 accepted-work wording as superseded where it grouped post-callback
-  cleanup/status-update failures with pre-callback claim/validation/lease
-  failures.
+- Fix: details were normalized to the Round 107 recording timestamp because
+  the worker's exact timestamp was not recorded. Confirmed the Round 104
+  coordinator breadcrumb `18e45b04` (`Clarify delivery scan rescan budget`) is
+  now recorded durably, and marked older Round 29 accepted-work wording as
+  superseded where it grouped post-callback cleanup/status-update failures with
+  pre-callback claim/validation/lease failures.
 - Fix: split `Delivery.#drainAvailableMessages()` into smaller local helpers.
   Stable-page acquisition now owns boundary validation and stale-offset reset,
   while per-row draining owns seen-row allowance, endpoint dispatch, cursor
@@ -3335,4 +3336,45 @@ delivery scan rescan budget`) is now recorded durably, and marked older Round
   `docs:check` passed with only the known invalid TypeDoc `origin` source-link
   warning; `format:check` passed after formatter wrapping; `git diff --check`
   passed; and the targeted stale accepted-work wording guard returned no
-  matches. No commit was created.
+  matches. The fix worker did not create a commit before coordinator commit
+  `308cefb7` (`Refine delivery scan loop records`) recorded this scan-loop and
+  durable-record fix.
+- Coordinator commit `308cefb7` (`Refine delivery scan loop records`) recorded
+  this scan-loop and durable-record fix.
+
+### Round 107 Re-review - `2026-07-11T02:07:45Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..308cefb7.diff` from task baseline
+  `ca8fb2b3` to current HEAD `308cefb7`.
+- Code style/maintainability (Wegener the 4th): [P3] Round 106 durable-log
+  entries are harder to audit because a wrapped commit-title line is not
+  indented and Round 106 entries use date-only timestamps. No code-style or
+  delivery implementation maintainability findings remained after the scan-loop
+  split.
+- Documentation (Mencius the 4th): [P2] current HEAD `308cefb7` is missing
+  from durable breadcrumbs and the Round 106 entries still say no commit was
+  created; [P3] `round-27-fix-report.md` still contains stale accepted-work
+  wording that groups cleanup/status-update failures into the pre-callback
+  no-accepted-work bucket.
+- TypeScript/API docs (Epicurus the 4th): clean. Public types, exports,
+  TypeDoc/API docs, and scan-loop helper typings remain aligned.
+- Security (Descartes the 4th): clean. Focused delivery/context tests passed
+  for 6 files and 169 tests.
+- Performance/reliability (Halley the 4th): clean. Focused stale-head/read-cap
+  and broader delivery worker/loop/runtime/registry tests passed.
+- Action: record this findings batch, run one docs/log fix worker, verify,
+  commit, and rerun all five required lanes.
+
+### Round 108 Docs/Log Fix - `2026-07-11T02:07:45Z`
+
+- Fix: normalized Round 106 durable entries to concrete UTC recording
+  timestamps, indented the wrapped `Clarify delivery scan rescan budget`
+  commit-title line, and replaced stale current-HEAD wording with an explicit
+  coordinator commit `308cefb7` breadcrumb.
+- Fix: marked the missed Round 27 accepted-work sentence as superseded by the
+  current contract: pre-callback claim/validation/lease failures do not
+  increment accepted work, while post-callback cleanup/status-update failures
+  are accepted work and may appear in failed work.
+- Fix: added `round-108-fix-report.md` for this docs/log batch. No production
+  code changed.
