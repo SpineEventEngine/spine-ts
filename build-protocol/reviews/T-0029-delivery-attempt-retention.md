@@ -1,6 +1,6 @@
 # T-0029 Review Log
 
-Status: Round 3 fixes verified; pending re-review
+Status: Round 5 findings pending fix
 
 Task: `T-0029 Delivery Attempt Retention`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0029-delivery-attempt-retention`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer       | Status   |
-| -------------------------- | -------------- | -------- |
-| Code style/maintainability | Bacon the 5th  | Findings |
-| Documentation              | Parfit the 5th | Findings |
-| TypeScript/API docs        | Volta the 5th  | Findings |
-| Security                   | Dalton the 5th | Clean    |
-| Performance/reliability    | Erdos the 5th  | Clean    |
+| Lane                       | Reviewer         | Status   |
+| -------------------------- | ---------------- | -------- |
+| Code style/maintainability | Galileo the 5th  | Findings |
+| Documentation              | Franklin the 5th | Findings |
+| TypeScript/API docs        | Avicenna the 5th | Clean    |
+| Security                   | Averroes the 5th | Findings |
+| Performance/reliability    | Noether the 5th  | Clean    |
 
 ## Review Criteria
 
@@ -243,3 +243,36 @@ Branch: `task/T-0029-delivery-attempt-retention`
   sound. The reviewer also passed the required focused delivery suite.
 - Action: ledger-only fix to record `4e05438e`, then generate a fresh review
   package and rerun all five independent review lanes.
+
+### Round 5 Independent Review - `2026-07-11T08:56:04Z`
+
+- Review package:
+  `.superpowers/sdd/review-3820e76d..f7e3dd37.diff` from task baseline
+  `3820e76d` to current HEAD `f7e3dd37`.
+- Code style/maintainability (Galileo the 5th): [P2] durable current-state
+  headers and the review-lane table were stale after `f7e3dd37`; the work-log
+  commit ledger also stopped at `4e05438e`. Implementation maintainability,
+  bounded slot reads, safe-integer sequence validation, public API boundaries,
+  generated Protobuf hygiene, and whitespace looked clean.
+- Documentation (Franklin the 5th): [P1] task/work/review status headers and
+  review-lane table still described Round 3 state even though Round 4 findings
+  were committed; [P2] the commit/current-state ledger omitted `f7e3dd37`.
+  Public docs, package docs, and `Delivery.drain()` TypeDoc looked accurate.
+- TypeScript/API docs (Avicenna the 5th): clean. Safe-integer sequence
+  validation, bounded slot reads, identity validation, `Any`/timestamp
+  validation, supported labels, public exports, TypeDoc entrypoints, public
+  docs, and generated Protobuf hygiene looked sound.
+- Security (Averroes the 5th): [Low] corrupt stored attempt shard coordinates
+  can escape as a plain `Error` from `new ShardIndex(...)` instead of
+  `DeliveryStorageCorruptionError`; shard coordinates should also be tightened
+  to safe integers. Sanitization, byte caps, sequence validation, bounded slot
+  reads, tenant scoping, supported labels, `CATCH_UP`, and legacy
+  `IMPORT_EVENT` otherwise looked clean.
+- Performance/reliability (Noether the 5th): clean. Unsafe sequences,
+  bounded slot reads, bounded writes/CAS retries, observational attempt
+  recording, `TO_DELIVER` semantics, skip paths, and scope boundaries looked
+  sound. The reviewer also passed the required focused delivery suite.
+- Action: one Round 5 fix worker will update durable summaries/ledger, add
+  fail-closed stored shard-coordinate validation with focused regression
+  coverage, run focused verification, commit, regenerate the review package,
+  and rerun all five independent review lanes.

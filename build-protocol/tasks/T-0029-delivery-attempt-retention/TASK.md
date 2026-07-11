@@ -1,6 +1,6 @@
 # T-0029: Delivery Attempt Retention
 
-Status: In progress; Round 3 fixes verified pending re-review
+Status: In progress; Round 5 findings pending fix
 Started: `2026-07-11T07:24:21Z`
 Baseline commit: `3820e76d`
 Branch: `task/T-0029-delivery-attempt-retention`
@@ -247,3 +247,10 @@ found implementation, API, security, and performance/reliability clean; the
 only finding was that the work-log commit ledger also needs to name
 `4e05438e`. T-0029 remains pending a fresh review package and all five review
 lanes after this ledger-only fix.
+
+Coordinator committed the Round 4 review findings and ledger fix as
+`f7e3dd37 Record T-0029 Round 4 review findings`. Round 5 review found
+documentation/protocol cleanup still required for the current summary/table and
+`f7e3dd37` ledger entry, and a low-severity security finding that corrupt
+stored attempt shard coordinates must fail closed as
+`DeliveryStorageCorruptionError` with safe-integer validation.
