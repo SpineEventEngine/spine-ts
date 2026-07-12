@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 2 assigned; reviewers fully paused
+Status: Review Round 2 skill checks complete; substantive review paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -13,10 +13,10 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 | Lane                       | Reviewer                               | Status                       |
 | -------------------------- | -------------------------------------- | ---------------------------- |
-| Code style/maintainability | `019f55d1-0422-7490-8e00-7f241ed471f0` | Round 1 finding; closed      |
-| Documentation              | `019f55d1-0747-7b03-8d77-7548fb7cde85` | Round 1 findings; closed     |
-| TypeScript/API docs        | `019f55d1-0e42-7c60-9d0b-abadff892fb8` | Round 1 clean; repeat needed |
-| Performance/reliability    | `019f55d1-0ac6-7e50-a90e-215fba97162d` | Round 1 finding; closed      |
+| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Skill check complete; paused |
+| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Skill check complete; paused |
+| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Skill check complete; paused |
+| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Skill check complete; paused |
 
 Security is deferred to final project readiness.
 
@@ -120,3 +120,19 @@ Security is deferred to final project readiness.
   `019f55e3-e0eb-7591-a421-1e41605fdb1b`. Their phase-1 skill checks may begin
   only after this assignment provenance commits; package review remains barred
   until those checks are durably committed.
+- `2026-07-12T10:37:26Z`: Round 2 phase-1 skill checks completed with no package
+  or substantive source inspection:
+  - Style selected/read `code-review-excellence` and `codebase-design`.
+  - Documentation selected/read `code-review-excellence`.
+  - TypeScript/API docs selected/read `typescript-advanced-types` and
+    `code-review-excellence`.
+  - Performance/reliability selected/read `code-review-excellence`,
+    `nodejs-backend-patterns`, `error-handling-patterns`,
+    `javascript-testing-patterns`, and `verification-before-completion`, plus
+    task-relevant backend and async/promise references.
+  - Every lane checked the exposed session inventory, expected-skill manifest,
+    complete 47-entry readable user skill inventory, and matching 47-entry
+    skill-lock provenance, and supplied lane-specific reasons for skipping
+    orchestration, authoring, broader architecture, security, or unrelated web
+    skills. No source was unreachable.
+    Substantive Round 2 review remains paused until this check record commits.
