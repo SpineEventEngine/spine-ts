@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Final review clean; repeated gate pending
+Status: Complete; final review and verification passed
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -235,6 +235,10 @@ membership.
   and performance/reliability all returned clean. Review accepted the runtime
   semantics and meaningful 16-test coverage batch. API docs confirmed 205 root
   exports and no internal evidence leakage. Repeat native full verify remains.
+- PASS: Final native `pnpm verify` on review-closing commit `5cea49c9`: ordinary
+  and coverage runs each passed 60 files / 1,309 tests; coverage is 95.14%
+  statements, 90.11% branches, 98.20% functions, and 95.15% lines. Typecheck,
+  lint, cleanup, formatting, docs/API, Proto, and generated-clean gates passed.
 - PASS: Final test-only coverage cycle added retained-epoch validation and
   duplicate/stale-row behavior, package-internal cursor/access/concurrent-start
   errors, invalid admission/progress handling, and new-obligation shard

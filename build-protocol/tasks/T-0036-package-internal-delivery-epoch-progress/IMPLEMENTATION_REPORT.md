@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Final review clean; repeated gate pending
+Status: Complete; final review and verification passed
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -150,5 +150,5 @@ Baseline: `67da0b1c`
   (6,898/7,249). Before this cycle global branches were 89.73%
   (3,576/3,985).
 
-Round 5 is clean across all four lanes. The repeated final native gate and merge
-remain.
+Round 5 is clean and final native verification passes all gates. T-0036 is ready
+to merge.
