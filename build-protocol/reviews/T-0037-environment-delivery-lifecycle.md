@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 7 docs fix active
+Status: Round 7 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -65,6 +65,17 @@ Security is deferred to final project readiness.
   startup scope rebinds to that generation before later-write admission, and a
   racing eligible attach joins it. Only permanent close or independent
   ownership cardinality may reject the attach.
+- Confirm reusable explicit stop installs one bounded canonical tenant/
+  configured-scope readiness owner from old-route close through the fresh
+  recovery snapshot and survivor route rebind, then transfers each buffered
+  scope losslessly and exactly once into fresh pending admission before later-
+  write admission. The TDD interleaving persists a write after the snapshot but
+  before rebind and proves eventual admission without an unrelated trigger.
+- Confirm T-0037b may settle with a combined error only after retirement, while
+  T-0037e creates the fresh generation and rebinds every surviving registration,
+  readiness route, and configured/startup scope through a finally-equivalent
+  path before propagating that result. A reporting-rejection test proves later
+  readiness works and the original error propagates exactly once.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
@@ -80,6 +91,11 @@ Security is deferred to final project readiness.
   observable `Server`, `RunningServer`, and `ServerEnvironment` lifecycle. Both
   add no public export, signature, or option, and public docs never name or
   describe package-internal explicit generation stop.
+- Confirm the fixed reviewed-package ledger includes every commit in
+  `0308bc4a..045aa86c` exactly once, including `045aa86c`, and excludes Round 7
+  assignment/findings/current-worker orchestration until a later fixed package
+  is generated. Those current records remain in timestamped Events and
+  Participants, avoiding impossible maintenance-commit self-reference.
 
 ## Rounds
 
@@ -320,3 +336,21 @@ Security is deferred to final project readiness.
 - `2026-07-12T06:24:30Z`: Assigned single Round 7 docs fix worker
   `019f54ff-9b04-7353-9099-47e8b0d561a8` with the complete reusable-stop race,
   finally-safe rebind, and fixed-package ledger batch. Runtime scope is frozen.
+- `2026-07-12T06:28:24Z`: The Round 7 worker authored the complete accepted
+  batch. Active contracts now specify the bounded readiness bridge through the
+  fresh snapshot/rebind gap, exact-once fresh admission, finally-equivalent
+  survivor restoration before original/combined error propagation, and focused
+  interleaving/reporting-rejection TDD. The fixed package ledger now matches
+  `0308bc4a..045aa86c`; post-package orchestration stays in Events/Participants.
+  Worker and coordinator verification remain pending, and no clean review is
+  claimed.
+- `2026-07-12T06:30:00Z`: Worker verification passed targeted reusable-stop/
+  finally-rebind lint, exact 36-commit fixed-package ledger comparison,
+  docs/API, format, diff, exact eight-file tracked scope, zero-untracked, and
+  frozen-path checks. TypeDoc retained 205 expected server exports with only
+  the known invalid-`origin` warning. Coordinator verification and fresh review
+  remain pending; no clean review is claimed.
+- `2026-07-12T06:33:25Z`: Coordinator closed the worker and independently
+  repeated race/rebind, exact fixed-package ledger, docs/API, format, diff,
+  exact-scope, untracked, and frozen-path checks. All passed with only the known
+  invalid-`origin` warning. Fresh all-lane review remains required.

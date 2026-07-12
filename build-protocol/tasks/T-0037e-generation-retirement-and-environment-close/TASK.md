@@ -58,13 +58,19 @@ close, and ordered owned-facility close after quiescence. It does not implement
 another stop/await/retire path or handle failed-start rollback.
 
 Reusable explicit stop leaves registrations live but closes their old-
-generation readiness admission. After retirement, the lifecycle gate creates
-exactly one fresh generation and rebinds every surviving registration,
-readiness route, and configured/startup obligation scope to that generation
-before reopening later-write admission. Durable writes during the stop remain
-pending and participate in that fresh generation's recovery; no surviving scope
-may remain bound to the retired generation or outside both owners. An eligible
-attach racing this rebinding joins the same fresh generation.
+generation readiness admission and installs one bounded canonical tenant/
+configured-scope transition buffer, or equivalent persistence barrier. That
+owner covers write readiness after the old route closes through the fresh
+recovery snapshot and readiness-route rebind. After retirement, the lifecycle
+gate creates exactly one fresh generation, rebinds every surviving registration,
+readiness route, and configured/startup obligation scope to it, and transfers
+each buffered scope losslessly and exactly once into fresh pending admission
+before reopening later-write admission. These post-retirement steps execute
+through a `finally`-equivalent path even when T-0037b settles with a stop,
+settlement, classification, reporting, or retirement error; T-0037e propagates
+the original or combined error once only after the complete rebind. No surviving
+scope may remain bound to the retired generation or outside both owners. An
+eligible attach racing this rebinding joins the same fresh generation.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -108,11 +114,21 @@ network or context/resource ordering.
   instance. It rejects only if permanent environment close wins or independent
   ownership cardinality refuses the registration.
 - A deterministic race test starts reusable explicit stop with existing live
-  registrations, races one otherwise eligible attach, and writes during and
-  after rebinding. It proves no old/new generation overlap, exactly one fresh
-  generation, every survivor and the racing attach bound to it, recovery of the
-  during-stop durable write, and readiness admission for the later write. Only
+  registrations, races one otherwise eligible attach, and pauses after fresh
+  recovery captures its durable snapshot but before survivor readiness routes
+  rebind. A supported write then persists in a surviving canonical tenant/
+  configured scope. Its readiness enters the bounded transition owner, is
+  transferred losslessly and exactly once into fresh pending admission during
+  rebind, and is eventually admitted without any unrelated readiness trigger.
+  The test also proves no old/new generation overlap, exactly one fresh
+  generation, and every survivor and the racing attach bound to it. Only
   permanent close or ownership-cardinality rejection may reject the attach.
+- A reporting-rejection test makes T-0037b retire the old generation and settle
+  with the reporting error. T-0037e still creates the fresh generation, rebinds
+  every surviving registration/readiness/configured/startup scope, and transfers
+  transition readiness through its finally-equivalent path before propagating
+  the original error exactly once. A later supported write then emits readiness
+  and runs in the fresh generation without another stop or recovery trigger.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 7 docs fix active
+Status: Round 7 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -26,8 +26,12 @@ T-0037d's transition barrier gives persistence after direct-drain admission
 closes but before readiness routing is installed a bounded canonical-scope
 buffer, then transfers each scope exactly once before startup admission.
 T-0037e's reusable explicit stop rebinds every surviving registration,
-readiness route, and configured/startup scope to exactly one fresh generation;
-an eligible racing attach joins it without old/new overlap.
+readiness route, and configured/startup scope to exactly one fresh generation
+through a finally-equivalent path before propagating the retirement result. A
+bounded canonical-scope bridge owns readiness through the fresh recovery
+snapshot and route rebind, transferring each buffered scope losslessly and
+exactly once before later-write admission; an eligible racing attach joins the
+same generation without old/new overlap.
 
 ## Grounding Facts
 
@@ -60,9 +64,12 @@ coordinator verification, was committed as `98b4a284`, and was reconciled
 through `1b127f87`. Round 5 completed all four lanes with one stale-status
 finding in the active parent summaries. That finding's docs fix passed worker
 and coordinator verification, was committed as `96c27f11`, and was reconciled
-through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs
-findings. Their fix passed worker and coordinator verification; fresh review
-remains pending and no clean review is claimed.
+through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs findings
+and its verified fix formed reviewed package `0308bc4a..045aa86c`. Round 7
+accepted the reusable-stop readiness bridge, finally-equivalent survivor
+rebind, and fixed-package ledger findings. The Round 7 fix passed worker and
+coordinator verification; fresh review remains pending, and no clean review is
+claimed.
 
 ## Verification
 
@@ -90,6 +97,7 @@ was committed as `98b4a284`, and was reconciled through `1b127f87`. Round 5
 completed all four lanes with one stale-status finding in the active parent
 summaries. That finding's docs fix passed worker and coordinator verification;
 it was committed as `96c27f11` and reconciled through `a8c2f3c5`. Round 6
-completed all four lanes with accepted docs findings. Their fix passed worker
-and coordinator verification; fresh review remains pending and no clean review
-is claimed.
+completed all four lanes with accepted docs findings and its verified fix formed
+reviewed package `0308bc4a..045aa86c`. Round 7 accepted findings; its docs fix is
+authored, coordinator verification and fresh review remain pending, and no clean
+review is claimed.

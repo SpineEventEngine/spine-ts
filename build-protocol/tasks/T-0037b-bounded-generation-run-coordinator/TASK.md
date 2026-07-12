@@ -62,9 +62,10 @@ consumption/reporting step, and permanently retires that coordinator's
 worker/loops in D-0085 order through a `finally`-equivalent path. If the supplied
 step rejects, the primitive preserves and aggregates that failure with any
 other stop/settlement/retirement failures, attempts retirement exactly once,
-and settles with the combined result only afterward. It is idempotent and reusable by later lifecycle
-owners; it does not own registration removal, record selection, an environment
-generation slot, or fresh-generation race policy.
+and may settle with the combined error only afterward. It is idempotent and
+reusable by later lifecycle owners; it does not own registration removal,
+record selection, an environment generation slot, fresh-generation race policy,
+or the caller's finally-equivalent post-retirement survivor rebind.
 
 It does not decide which server registration owns an obligation or retain
 canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
@@ -108,7 +109,9 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - When boundary record consumption/reporting rejects, retirement is still
   attempted exactly once, the old worker/loops cannot be reused, and the
   rejection is preserved and aggregated with other failures only after
-  retirement settles.
+  retirement settles. The primitive may settle with that combined error;
+  T-0037e's reusable explicit-stop caller must complete fresh-generation
+  creation and survivor rebind before propagating it.
 - Existing package-internal/direct `DeliveryWorker.start()` compatibility and
   all T-0036 tests remain unchanged.
 

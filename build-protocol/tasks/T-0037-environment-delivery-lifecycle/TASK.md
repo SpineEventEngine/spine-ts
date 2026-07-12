@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 7 docs fix active
+Status: Round 7 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -76,8 +76,10 @@ barrier that awaits already-admitted direct exact drain before environment
 admission and buffers transition-time persistence until readiness is installed
 belong to `d`; ordinary
 detach, explicit generation stop, ordinary/permanent-close primitive invocation,
-surviving-registration rebinding plus the deterministic wait-through-retirement
-fresh-generation attach race, and
+the bounded canonical-scope bridge through fresh recovery/route rebind,
+finally-equivalent surviving-registration rebinding before retirement-result
+propagation, plus the deterministic wait-through-retirement fresh-generation
+attach race, and
 environment close belong to `e`; and network/server ordering belongs to `f`.
 Retry timing and public policy remain
 outside every child. The `d` and `e` callers do not overlap or reopen the
@@ -185,5 +187,8 @@ used for child runtime work.
   the active parent summaries. That finding's docs fix passed worker and
   coordinator verification, was committed as `96c27f11`, and was reconciled
   through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs
-  findings. Their fix passed worker and coordinator verification; fresh review
-  remains pending and no clean review is claimed.
+  findings and its verified fix formed reviewed package
+  `0308bc4a..045aa86c`. Round 7 accepted the reusable-stop readiness bridge,
+  finally-equivalent survivor rebind, and fixed-package ledger findings. The
+  Round 7 fix passed worker and coordinator verification; fresh review remains
+  pending, and no clean review is claimed.

@@ -3449,6 +3449,9 @@ Decision:
   classification, or retirement failure under existing aggregation semantics,
   and exposes the combined failure only after retirement has been attempted.
   Reporting failure cannot leave a coordinator or its worker/loops reusable.
+  The primitive may therefore settle with that combined error after retirement;
+  a reusable environment lifecycle caller remains responsible for completing
+  any required fresh-generation transition before propagating the result.
 - Attach, detach, generation stop, and environment close use the same
   package-internal lifecycle gate. If attach linearizes before reusable last
   detach or explicit generation stop marks the generation stopping, it joins the
@@ -3464,15 +3467,25 @@ Decision:
   ownership cardinality refuses it. No reusable-stop policy may reject it merely
   because retirement is in progress.
 - Reusable explicit generation stop leaves registrations live, so retirement
-  alone cannot complete that transition. Before the lifecycle gate reopens
-  later-write admission, it creates exactly one fresh generation and rebinds
-  every surviving registration, readiness route, and configured/startup
-  obligation scope to it. Durable writes accepted while old-generation
-  admission is closed remain pending and participate in the fresh generation's
-  recovery. An otherwise eligible attach racing the rebinding joins that same
-  generation. No surviving scope may remain bound to the retired generation or
-  outside both owners; no old/new generation overlap is allowed, and only
-  permanent close or independent ownership cardinality may reject the attach.
+  alone cannot complete that transition. Closing old-generation readiness
+  installs one bounded canonical tenant/configured-scope transition buffer, or
+  an equivalent persistence barrier, that owns readiness for writes from that
+  close through the fresh recovery snapshot and readiness-route rebind. After
+  old retirement, the lifecycle creates exactly one fresh generation and
+  rebinds every surviving registration, readiness route, and configured/startup
+  obligation scope to it. It transfers each buffered scope losslessly and
+  exactly once into the fresh generation's pending admission before reopening
+  later-write admission. Thus a write persisted after fresh recovery captures
+  its snapshot but before routes rebind still causes an eventual fresh-
+  generation run without an unrelated trigger. Fresh-generation creation,
+  complete survivor rebind, and buffered-scope transfer run through a `finally`-
+  equivalent lifecycle path even if T-0037b settles after retirement with a
+  stop, settlement, classification, reporting, or retirement error; only then
+  does T-0037e propagate the original or combined error once. An otherwise
+  eligible attach racing the rebinding joins that same generation. No surviving
+  scope may remain bound to the retired generation or outside both owners; no
+  old/new generation overlap is allowed, and only permanent close or
+  independent ownership cardinality may reject the attach.
   README and TypeDoc describe only observable `Server`, `RunningServer`, and
   `ServerEnvironment` behavior; they do not name or describe this package-
   internal explicit-stop operation.
@@ -3658,9 +3671,12 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   lifecycle explicit-stop entry point; server/handoff code cannot call the
   primitive directly. It also owns fresh-generation race policy: an otherwise
   eligible attach arriving after reusable explicit stop begins waits through
-  retirement; every surviving registration, readiness route, and
-  configured/startup scope rebinds to exactly one fresh generation before later
-  writes can strand; and the attach joins that same generation, rejecting only
+  retirement; one bounded canonical-scope transition owner covers writes
+  through fresh recovery and route rebind; every surviving registration,
+  readiness route, and configured/startup scope rebinds to exactly one fresh
+  generation through a finally-equivalent path before any retirement result is
+  propagated or later writes can strand; buffered scopes transfer losslessly
+  and exactly once; and the attach joins that same generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
   also owns close refusal and permanent environment close. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,

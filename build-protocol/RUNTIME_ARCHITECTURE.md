@@ -402,7 +402,9 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    per-shard interpretation of T-0036 evidence, and the reusable authoritative
    coordinator-instance stop/await/retire primitive. Retirement still runs when
    caller-supplied record consumption/reporting rejects; combined failure is
-   exposed only after retirement is attempted.
+   exposed only after retirement is attempted. A reusable lifecycle caller may
+   receive that error only after completing its own required post-retirement
+   transition.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, the
@@ -422,8 +424,15 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    explicit stop begins waits through full retirement while every surviving
    registration, readiness route, and configured/startup scope rebinds to
    exactly one fresh generation before later writes can strand, then joins that
-   generation; only permanent close or independent ownership cardinality may
-   reject it. Server and handoff code cannot call the primitive directly.
+   generation. One bounded canonical tenant/configured-scope transition buffer,
+   or equivalent persistence barrier, owns readiness from old-route close
+   through the fresh recovery snapshot and route rebind, then transfers each
+   scope losslessly and exactly once into fresh pending admission. Fresh-
+   generation creation, complete survivor rebind, and transfer finish through a
+   finally-equivalent path before any stop/settlement/reporting/retirement error
+   propagates; only permanent close or independent ownership cardinality may
+   reject the attach. Server and handoff code cannot call the primitive
+   directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
 
