@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 7 findings accepted; fix pending
+Status: Round 7 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -317,3 +317,6 @@ Security is deferred to final project readiness.
   rebind; survivor rebind must complete through a finally-equivalent path before
   a retirement/reporting failure propagates; and the commit ledger must include
   package-head reconciliation commit `045aa86c`. All other lanes are clean.
+- `2026-07-12T06:24:30Z`: Assigned single Round 7 docs fix worker
+  `019f54ff-9b04-7353-9099-47e8b0d561a8` with the complete reusable-stop race,
+  finally-safe rebind, and fixed-package ledger batch. Runtime scope is frozen.
