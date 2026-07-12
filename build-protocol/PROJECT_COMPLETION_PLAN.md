@@ -314,23 +314,21 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 
 ### T-0037b: Bounded Generation Run Coordinator
 
-**Entry:** Resume the existing worktree at `dd3d90c8`. Do not reimplement or
-reopen completed Round 1-4 work.
+**Entry:** Resume the existing worktree at `4adb0b4f`. Do not reimplement or
+reopen completed Round 1-5 review work.
 
 **Immediate actions:**
 
-1. Confirm the worktree is clean and the active status mirrors all say Round 5
-   substantive review pending.
-2. Use the existing package for endpoint `066c295d...`; regenerate only if the
-   endpoint or package integrity differs.
-3. Resume from safe-stop commit `4adb0b4f`. Round 5 is complete and every
-   reviewer is closed; do not repeat the clean documentation or TypeScript/API
-   lanes.
-4. Return the two accepted P1 findings recorded in the current review log to the
+1. Confirm the worktree is clean and all status mirrors say Round 5 has two
+   accepted findings pending a fix, with every reviewer closed and no fixer
+   assigned.
+2. Preserve endpoint `066c295d...` and its package as Round 5 review evidence;
+   do not repeat the clean documentation or TypeScript/API lanes.
+3. Return the two accepted P1 findings recorded in the current review log to the
    existing Terra Medium implementation context: cap one active turn to one
    successor admission, and keep synchronous `worker.start()` invariant throws
    outside ordinary promise-rejection settlement.
-5. Use focused TDD, verify the complete batch, freeze a new literal endpoint,
+4. Use focused TDD, verify the complete batch, freeze a new literal endpoint,
    and rerun only style/maintainability and performance/reliability unless the
    fix changes another concern.
 

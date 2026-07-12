@@ -33,6 +33,9 @@ without a project `max_threads` value.
   actual `gpt-5.6-terra` / `high`, reported CLEAN. Reviewer closed.
 - Both completed canonical skill checks, made no edits, and spawned no
   subagents.
+- First documentation re-review found two residual stale lines in the T-0037b
+  execution packet. Corrected its entry and immediate actions to the canonical
+  `4adb0b4f` two-finding/no-fixer state.
 
 ## Required Concerns
 
