@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Pre-review fixes complete; required four-lane review pending
+Status: Round 1 findings accepted; fixes pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 

@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Required four-lane review in progress
+Status: Round 1 findings accepted; fixes pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status      |
-| -------------------------- | -------------------------------------- | ----------- |
-| Code style/maintainability | `019f5435-93e2-7bb3-bf54-1644a88de98e` | In progress |
-| Documentation              | `019f5435-b294-7d30-aa06-f2e596f0bb0d` | In progress |
-| TypeScript/API docs        | `019f5435-dd92-7282-b914-3dacc12e87d9` | In progress |
-| Performance/reliability    | `019f5436-0605-7623-bd9a-65162ff92066` | In progress |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f5435-93e2-7bb3-bf54-1644a88de98e` | Findings |
+| Documentation              | `019f5435-b294-7d30-aa06-f2e596f0bb0d` | Findings |
+| TypeScript/API docs        | `019f5435-dd92-7282-b914-3dacc12e87d9` | Clean    |
+| Performance/reliability    | `019f5436-0605-7623-bd9a-65162ff92066` | P1       |
 
 Security is deferred to final project readiness.
 
@@ -91,3 +91,12 @@ Security is deferred to final project readiness.
   all four required independent lanes. Each prompt is constrained to current
   actionable state and must ignore superseded history unless active records
   still claim it.
+- `2026-07-12T02:50:00Z`: Closed all Round 1 reviewers. TypeScript/API docs
+  returned clean. Documentation found two current-state ledger/status issues.
+  Maintainability found five accepted structure/clarity cleanups in the loop,
+  admitted drain, and sweep tests. Performance/reliability found a P1: epoch
+  admission spans multiple reads, allowing a concurrent row to join a later
+  admission page despite post-admission exclusion semantics. One complete fix
+  worker must move admission to one bounded query, cover the race, address the
+  accepted cleanups, reconcile logs, verify, commit, and regenerate the package
+  before all four lanes rerun.

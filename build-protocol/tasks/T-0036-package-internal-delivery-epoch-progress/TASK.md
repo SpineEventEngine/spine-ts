@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Required four-lane review in progress
+Status: Round 1 findings accepted; fixes pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -157,6 +157,13 @@ membership.
   Documentation emitted only the existing invalid-`origin` source-link warning.
 - PASS: Implementation committed as `1ea10745`; review-package status
   reconciliation is the sole future hash under the commit-ledger convention.
+- REVIEW: Round 1 TypeScript/API docs was clean. Documentation found stale
+  current status and commit-ledger wording. Maintainability requested smaller
+  transition methods, clearer sweep naming/invariant text, removal of an unused
+  shard parameter and summary getter, and clearer sweep-test boundaries.
+  Performance/reliability found that multi-page admission is not atomic: a row
+  written between admission reads can join the active epoch. One single-read
+  admission fix batch is required before all-lane rereview.
 
 ## Implementation Result
 
