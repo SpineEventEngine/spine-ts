@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Implementation accepted; independent review pending
+Status: Round 1 independent review assigned
 
 Started: `2026-07-12T17:05:11Z`
 

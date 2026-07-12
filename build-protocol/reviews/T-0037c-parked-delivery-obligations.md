@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Implementation accepted; independent review pending
+Status: Round 1 independent review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -100,3 +100,10 @@ an applicable review or a concrete N/A disposition under
   `gpt-5.6-terra` / `medium` from authoritative fixed-role runtime metadata,
   matching explicit dispatch. Coordinator verification repeated five delivery
   suites/192 tests, all typechecks, changed-file lint/format, and diff hygiene.
+- `2026-07-12T17:51:14Z`: Review endpoint `9b0396a3` is frozen in
+  `.superpowers/sdd/review-c65f2c23..9b0396a3.diff` (five commits, 49,973
+  bytes). Assigned style/maintainability at expected Terra High, documentation
+  at expected Luna Medium, TypeScript/API docs at expected Terra High, and
+  performance/reliability at expected Terra High. All four concerns are
+  relevant to the new internal state model, declarations, architecture wording,
+  and boundedness semantics. Security remains deferred.
