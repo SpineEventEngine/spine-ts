@@ -81,9 +81,12 @@ network or context/resource ordering.
 - Explicit generation stop is distinct from detach and environment close. Under
   the same lifecycle gate it closes generation admission, invokes T-0037b's
   stop/await/consume/retire primitive, leaves registrations and a caller-owned
-  environment reusable, and applies the same wait-or-reject attach race order;
-  a later eligible trigger/attach may create exactly one fresh generation, never
-  reuse or overlap the retired instance.
+  environment reusable. An otherwise eligible attach arriving after explicit
+  stop begins waits through complete stop, active-work settlement, rejection
+  classification, record consumption/reporting, and permanent retirement, then
+  creates or joins exactly one fresh generation without reusing or overlapping
+  the retired instance. It rejects only if permanent environment close wins or
+  independent ownership cardinality refuses the registration.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.
@@ -98,9 +101,12 @@ network or context/resource ordering.
   facilities without closing them beneath active work.
 - Eligible unreported causes aggregate once through existing retryable-close
   behavior; reported unresolved causes are consumed without resurfacing.
-- Existing README/TypeDoc contracts describe live-registration close refusal,
-  explicit stop/reuse, and observable close failure/order behavior without
-  adding a public export, signature, or option; API export checks stay green.
+- Existing public README/TypeDoc contracts describe only observable
+  `ServerEnvironment.close()` live-registration refusal, caller-owned environment
+  reuse after server detach, and close ordering/failure behavior. They do not
+  name, describe, or expose package-internal explicit generation stop; focused
+  public-leak and API export checks stay green with no new public export,
+  signature, or option.
 
 ## D-0085 Invariants
 

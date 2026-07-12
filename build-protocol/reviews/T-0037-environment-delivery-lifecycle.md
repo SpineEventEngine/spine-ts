@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 3 docs fix active
+Status: Round 3 fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -48,14 +48,19 @@ Security is deferred to final project readiness.
 - Confirm T-0037a's readiness callback is synchronous and non-throwing so
   observer failure cannot change durable receive/batch/exact-drain outcomes.
 - Confirm T-0037d alone performs the no-overlap switch from pre-attachment
-  immediate exact drain to environment coordination and tests the different
-  truthful handoff settlement boundary after attachment.
+  immediate exact drain to environment coordination: a blocked already-admitted
+  exact drain keeps attachment/startup environment admission pending until it
+  settles, while every subsequent receive uses readiness only.
 - Confirm T-0037b alone owns the reusable coordinator-instance
   stop/await/retire primitive and guarantees retirement after record-reporting
   rejection; T-0037d invokes it only for failed-start empty-generation
   rollback/replacement, and T-0037e invokes it only for explicit generation
   stop, ordinary last detach, and permanent close plus fresh-generation race
   policy.
+- Confirm an otherwise eligible attach arriving after reusable explicit stop
+  begins waits through full retirement and creates or joins exactly one fresh
+  generation. It may reject only after permanent close wins or independent
+  ownership cardinality refuses it.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
@@ -64,7 +69,9 @@ Security is deferred to final project readiness.
   permitted emitted internal declaration changes.
 - Confirm T-0037e/f require updates to existing README/TypeDoc behavioral
   contracts and API export checks while adding no public export, signature, or
-  option.
+  option. Public docs describe only observable `ServerEnvironment.close()`
+  refusal, reuse, ordering, and failure behavior and never name package-internal
+  explicit generation stop.
 
 ## Rounds
 
@@ -183,3 +190,20 @@ Security is deferred to final project readiness.
   `019f54c6-ad7d-7991-9ac5-0e54ebc73b64` with the complete four-item batch.
   Runtime/public/generated scope remains frozen and no fix or clean result is
   claimed.
+- `2026-07-12T05:23:12Z`: The Round 3 worker authored the complete accepted docs
+  batch across D-0085/D-0086, architecture, parent/report, T-0037d/e, and durable
+  records. The package now specifies the already-admitted exact-drain attachment
+  barrier, deterministic reusable explicit-stop attach retirement/fresh-
+  generation outcome, and public close documentation without the internal stop
+  operation. Focused verification and fresh all-lane review remain pending; no
+  clean review is claimed.
+- `2026-07-12T05:28:12Z`: The Round 3 worker passed fresh
+  status/ownership/public-leak lint, `docs:check`, `format:check`,
+  `git diff --check`, exact eight-file tracked scope, zero-untracked, frozen-path,
+  and child-only-brief checks. TypeDoc retained 205 server exports with only the
+  known invalid-`origin` warning. Coordinator verification and fresh all-lane
+  review remain pending; no clean review is claimed.
+- `2026-07-12T05:30:58Z`: Coordinator independently inspected all corrected
+  contracts, closed the fix worker, and repeated docs/API, format, diff, exact-
+  scope, stale-status, public-leak, and race-wording checks. All passed with the
+  known invalid-`origin` warning only. Fresh all-lane review remains required.

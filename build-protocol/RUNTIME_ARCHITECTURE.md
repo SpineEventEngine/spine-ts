@@ -406,15 +406,21 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, the
-   no-overlap transition from direct immediate exact drain to environment
-   coordination, and registration-scoped rollback, including invoking T-0037b's
-   primitive and clearing/replacing the empty generation slot after sole failed
-   attachment.
+   no-overlap barrier that closes new direct exact-drain admission, awaits any
+   already-admitted direct exact drain in the attaching scope, installs
+   readiness routing, and only then admits startup/environment work. Subsequent
+   receives use readiness only. It also owns registration-scoped rollback,
+   including invoking T-0037b's primitive and clearing/replacing the empty
+   generation slot after sole failed attachment.
 5. T-0037e owns ordinary detach and explicit generation stop, invoking that
    existing primitive for explicit stop, ordinary last detach, and permanent
    close through the sole package-internal environment-lifecycle explicit-stop
    entry point, plus fresh-generation races, close refusal, and permanent
-   environment close. Server and handoff code cannot call the primitive directly.
+   environment close. An otherwise eligible attach arriving after reusable
+   explicit stop begins waits through full retirement and creates or joins
+   exactly one fresh generation; only permanent close or independent ownership
+   cardinality may reject it. Server and handoff code cannot call the primitive
+   directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
 

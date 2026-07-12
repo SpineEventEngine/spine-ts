@@ -77,13 +77,16 @@ It does not yet change `Server.start()` or listener ordering.
   retired generation exists at a time; retirement permits one later fresh
   generation where the environment remains reusable.
 - Attachment installs readiness routing and disables direct immediate exact
-  drain as one lifecycle-gated ownership transition before startup admission.
-  Before attachment, handoff completion/error behavior still follows exact
-  drain. After attachment, handoff settles from durable persistence plus
-  non-throwing readiness submission and does not await or surface endpoint
-  outcome; lifecycle settlement/reporting owns it. No handoff exact drain can
-  overlap an environment-owned worker run for the same durable row or attached
-  scope.
+  drain as one lifecycle-gated ownership barrier before startup admission. A
+  focused concurrency test blocks an already-admitted direct exact drain, begins
+  attachment, and proves attachment/startup environment admission remains
+  pending until that drain settles. The barrier closes new direct-drain
+  admission before it waits, then installs readiness and admits environment work;
+  every subsequent receive settles from durable persistence plus non-throwing
+  readiness submission only and neither invokes nor awaits exact drain. Before
+  attachment, handoff completion/error behavior still follows exact drain. No
+  handoff exact drain can overlap an environment-owned worker run for the same
+  durable row or attached scope.
 - Startup installs readiness after context assembly, enumerates pre-existing
   supported tenant work using each built context's actual storage, and awaits
   one finite recovery obligation.

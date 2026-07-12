@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 3 docs fix active
+Status: Round 3 fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -65,10 +65,12 @@ tenant/configured-scope coalescing, and the
 reusable coordinator-instance stop/await/retire primitive belong to `b`;
 bounded operational/cause records belong to `c`; attachment/startup and
 failed-start rollback invocation/empty-slot replacement plus the no-overlap
-transition from direct exact drain to environment coordination belong to `d`;
-ordinary detach, explicit generation stop, ordinary/permanent-close primitive
-invocation, fresh-generation race policy, and environment close belong to `e`;
-and network/server ordering belongs to `f`. Retry timing and public policy remain
+barrier that awaits already-admitted direct exact drain before environment
+admission and routes later receives through readiness belong to `d`; ordinary
+detach, explicit generation stop, ordinary/permanent-close primitive invocation,
+the deterministic wait-through-retirement fresh-generation attach race, and
+environment close belong to `e`; and network/server ordering belongs to `f`.
+Retry timing and public policy remain
 outside every child. The `d` and `e` callers do not overlap or reopen the
 finally-safe primitive.
 
@@ -163,3 +165,9 @@ used for child runtime work.
   `git diff --check`, exact eleven-file tracked scope, no-untracked inspection,
   and child-only-brief checks. Docs retained 205 expected server exports and only
   the known invalid-`origin` warning. Fresh four-lane review remains required.
+- ROUND 3: All four lanes reviewed package `0308bc4a..49b3fb4b` and closed with
+  one accepted docs batch. The assigned worker has authored the attachment
+  exact-drain barrier, deterministic reusable explicit-stop attach race,
+  internal-stop public-doc exclusion, and current-status reconciliation.
+  Worker verification passed; coordinator verification and fresh four-lane
+  review remain pending, and no clean review is claimed.

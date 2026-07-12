@@ -3183,14 +3183,19 @@ Decision:
   partitions remain eligible for one later bounded run without a concurrent
   package-internal/direct worker start.
 - Before environment attachment owns a context, its existing immediate exact
-  drain remains the compatibility owner. Environment attachment installs
-  readiness routing and disables direct exact-drain invocation as one serialized
-  transition before admitting startup recovery. The direct and environment run
-  owners cannot overlap for an attached context or durable row. Before that
-  transition, existing exact-drain completion and error behavior remains. After
-  it, the local handoff settles from durable persistence plus non-throwing
-  readiness submission and does not await or surface endpoint delivery outcome;
-  lifecycle settlement/reporting owns that later outcome.
+  drain remains the compatibility owner. Environment attachment makes the
+  ownership switch an atomic serialized barrier: it closes admission to new
+  direct exact drains, waits for every already-admitted direct exact drain in the
+  attaching scope to settle, installs readiness routing, and only then admits
+  startup recovery or other environment-owned work. Attachment and startup
+  admission remain pending while an earlier exact drain is active. Every receive
+  admitted after the switch uses durable persistence plus synchronous
+  non-throwing readiness only and cannot invoke direct exact drain. The direct
+  and environment run owners therefore cannot overlap for an attached context,
+  durable row, or scope. Before the switch, existing exact-drain completion and
+  error behavior remains. After it, the local handoff does not await or surface
+  endpoint delivery outcome; lifecycle settlement/reporting owns that later
+  outcome.
 - Retryable failures left `TO_DELIVER` remain the responsibility of this same
   owner. `FAILED` records that later reconsideration is needed but does not
   immediately retrigger itself. A later package-internal retry-readiness policy
@@ -3440,17 +3445,19 @@ Decision:
   and exposes the combined failure only after retirement has been attempted.
   Reporting failure cannot leave a coordinator or its worker/loops reusable.
 - Attach, detach, generation stop, and environment close use the same
-  package-internal lifecycle gate. If attach linearizes before last detach marks
-  the generation stopping, it becomes another live registration and last detach
-  has not begun. If attach arrives after that transition begins, it waits for
+  package-internal lifecycle gate. If attach linearizes before reusable last
+  detach or explicit generation stop marks the generation stopping, it joins the
+  current generation subject to ownership cardinality. An otherwise eligible
+  attach that arrives after either reusable stop transition begins waits through
   complete old-generation stop, active-work settlement, rejection
   classification, record consumption/reporting, and permanent retirement. It
   never joins the stopping generation and no fresh worker overlaps the old one.
   If the environment remains open after retirement, the first waiting attach
   creates exactly one fresh generation and startup recovery; later eligible
-  attaches join that fresh generation subject to ownership cardinality. If
-  environment close wins the serialized transition instead, waiting and later
-  attaches reject and no fresh generation is created.
+  attaches join that same fresh generation. Such an attach rejects only if
+  permanent environment close wins the serialized transition or independent
+  ownership cardinality refuses it. No reusable-stop policy may reject it merely
+  because retirement is in progress.
 - Server shutdown order is: stop that server's external network intake and
   sessions; detach its package-internal registration and serialize against
   active delivery work while its contexts and endpoint dependencies remain
@@ -3621,15 +3628,21 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   rollback, including invoking T-0037b's primitive and clearing/replacing the
   empty generation slot after sole/first-registration rollback so a
   caller-owned environment remains reusable. T-0037d also owns the atomic
-  ownership transition that installs environment readiness routing and disables
-  direct immediate exact-drain invocation for attached contexts, so the two run
-  owners never overlap. T-0037e owns ordinary detach, explicit generation stop,
+  ownership barrier that closes new direct exact-drain admission, awaits every
+  already-admitted direct exact drain in the attaching scope, installs
+  environment readiness routing, and only then admits startup/environment work,
+  so the two run owners never overlap and later receives use readiness only.
+  T-0037e owns ordinary detach, explicit generation stop,
   invoking the same existing primitive for explicit stop, ordinary last detach,
   and permanent close, including the sole package-internal environment-
   lifecycle explicit-stop entry point; server/handoff code cannot call the
-  primitive directly. It also owns fresh-generation race policy, close refusal, and
-  permanent environment close. T-0037f alone integrates those seams with listener startup, network
-  shutdown, contexts, resources, and owned facilities. T-0037d does not own
+  primitive directly. It also owns fresh-generation race policy: an otherwise
+  eligible attach arriving after reusable explicit stop begins waits through
+  retirement and creates or joins exactly one fresh generation, rejecting only
+  after permanent close or independent ownership-cardinality refusal. T-0037e
+  also owns close refusal and permanent environment close. T-0037f alone
+  integrates those seams with listener startup, network shutdown, contexts,
+  resources, and owned facilities. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback
   or coordinator-instance retirement.
 - Each child depends on the preceding child and receives its own branch,
