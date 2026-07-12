@@ -2,7 +2,26 @@
 
 ## Current Status
 
-All relevant concerns are clean; N/A and deferred dispositions are verified.
+Original retuning is clean. Concurrent-cap follow-up is locally verified;
+documentation and performance/reliability re-review are pending.
+
+The historical Round 1 concurrency finding and fix below were superseded by a
+later explicit human instruction removing the numerical concurrent-agent cap.
+Current governing files retain ownership/independence and complete-wave rules
+without a project `max_threads` value.
+
+## Concurrent-Cap Follow-Up
+
+- Documentation is relevant to current-rule and historical-supersession
+  accuracy; assigned `gpt-5.6-luna` / `medium`.
+- Performance/reliability is relevant to capacity, ownership, depth, and
+  complete-wave behavior; assigned `gpt-5.6-terra` / `high`.
+- Style/maintainability is N/A because no production/code-structure behavior
+  changed. TypeScript/API docs is N/A because no framework API path changed.
+  Security remains deferred because no runtime trust boundary changed.
+- Local gate: current bundled Codex strict parsing, Prettier, current-rule
+  scans, and `git diff --check` passed. Root status contains only the intended
+  protocol files plus untouched `human-review-1-jul.md`.
 
 ## Required Concerns
 

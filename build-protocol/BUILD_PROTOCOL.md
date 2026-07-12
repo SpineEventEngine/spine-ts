@@ -133,11 +133,13 @@ rename an agent role.
 
 ### Concurrency And Ownership
 
-- Configure at most four agent threads, including the parent, and one subagent
-  depth. Subagents must not spawn another layer.
-- With the parent active, run at most three child agents concurrently. Sequence
-  additional relevant reviewer lanes, but collect and deduplicate the complete
-  review wave before returning one accepted finding batch to implementation.
+- Configure one subagent depth. Do not set a project-level numerical limit on
+  concurrent agent threads; use the selected execution surface's available
+  capacity. Subagents must not spawn another layer.
+- Run independent relevant reviewer lanes concurrently when capacity allows and
+  sequence only for dependencies or platform capacity. Collect and deduplicate
+  the complete review wave before returning one accepted finding batch to
+  implementation.
 - Run no more than one production-code-writing agent against overlapping files
   at a time.
 - Parallelize only genuinely independent work, especially read-only
@@ -227,11 +229,11 @@ migrations, authentication/security, or destructive behavior always requires
 the corresponding Terra High review. Add Sol High review only when Terra High
 cannot establish the answer or the high-risk escalation rule applies.
 
-At most three reviewers run concurrently while the parent is active. If more
-than three concerns are relevant, close or retain the completed results from
-the first lanes, run the remaining lanes, then aggregate and deduplicate every
-finding in the complete wave before assigning fixes. Do not begin fixes from a
-partial wave.
+Run independent relevant reviewers concurrently when the execution surface has
+capacity. If a lane must be sequenced for capacity or dependency reasons,
+retain completed results, run the remaining lanes, then aggregate and
+deduplicate every finding in the complete wave before assigning fixes. Do not
+begin fixes from a partial wave.
 
 Before spawning reviewers, the orchestrator must run a lightweight pre-review
 lint pass over the current diff and task records. This pass should be local and

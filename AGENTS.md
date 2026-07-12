@@ -55,10 +55,11 @@ agent identities.
 
 ## Concurrency And Ownership
 
-- At most four agent threads may exist, including the parent.
-- Therefore, run at most three child agents concurrently. Sequence any extra
-  reviewer lanes, and collect the complete review wave before returning one
-  accepted finding batch for fixes.
+- The project imposes no numerical cap on concurrent agent threads. Use the
+  execution surface's available capacity while obeying file ownership and
+  independence rules. Sequence work only when capacity or dependencies require
+  it, and collect a complete review wave before returning one accepted finding
+  batch for fixes.
 - Subagents must not spawn subagents.
 - Only one production-code writer may own overlapping files at a time.
 - Parallelize only independent read-only exploration, documentation/API

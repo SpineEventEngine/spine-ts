@@ -284,9 +284,10 @@ Before spawning reviewers, perform a lightweight local audit and record it:
    performance/reliability. Spawn only relevant lanes, each bounded to its
    concern, the milestone diff, and affected execution paths. A skipped lane
    requires a concrete N/A reason.
-4. Run no more than three reviewer children concurrently. Sequence extra
-   relevant lanes, then aggregate and deduplicate the complete wave before any
-   finding returns to implementation.
+4. Run genuinely independent relevant lanes concurrently using available
+   execution-surface capacity. Sequence only for dependencies or capacity, then
+   aggregate and deduplicate the complete wave before any finding returns to
+   implementation.
 5. Prompts must state exact task scope, accepted exclusions, public boundary,
    review package, and the historical-text rule.
 6. Close every reviewer immediately after collecting its result.
@@ -322,13 +323,16 @@ reopen completed Round 1-4 work.
    substantive review pending.
 2. Use the existing package for endpoint `066c295d...`; regenerate only if the
    endpoint or package integrity differs.
-3. Run at most three of the four Round 5 substantive reviewers concurrently,
-   then sequence the remaining lane. Their skill checks are already recorded;
-   do not create duplicate reviewer identities or start fixes before the
-   complete wave is aggregated.
-4. Review against `40329cad..066c295d`, not the later safe-stop-only commits.
-5. Close reviewers, record all findings, and route one complete finding batch
-   through one fix worker if needed.
+3. Resume from safe-stop commit `4adb0b4f`. Round 5 is complete and every
+   reviewer is closed; do not repeat the clean documentation or TypeScript/API
+   lanes.
+4. Return the two accepted P1 findings recorded in the current review log to the
+   existing Terra Medium implementation context: cap one active turn to one
+   successor admission, and keep synchronous `worker.start()` invariant throws
+   outside ordinary promise-rejection settlement.
+5. Use focused TDD, verify the complete batch, freeze a new literal endpoint,
+   and rerun only style/maintainability and performance/reliability unless the
+   fix changes another concern.
 
 **Acceptance behavior:**
 
@@ -860,9 +864,10 @@ Use parallelism only where outputs do not block or overwrite each other:
 - During each runtime implementation, a sidecar researcher may inspect JVM
   evidence while the coordinator prepares deterministic RED tests, but only one
   author edits the task worktree.
-- At most three relevant reviewer lanes run concurrently after local pre-review
-  lint. Sequence extra lanes, aggregate the complete wave before fixes, and give
-  every canonical concern a durable clean or justified N/A disposition.
+- Relevant reviewer lanes run concurrently after local pre-review lint when
+  genuinely independent and capacity allows. Sequence only for dependencies or
+  capacity, aggregate the complete wave before fixes, and give every canonical
+  concern a durable clean or justified N/A disposition.
 - After T-0037f, docs inventory, example acceptance inventory, and security
   threat-model preparation may run concurrently as read-only work.
 - T-0039 and T-0040 edits do not run concurrently because example documentation
