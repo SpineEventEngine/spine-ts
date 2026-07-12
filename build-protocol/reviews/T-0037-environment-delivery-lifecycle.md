@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Requirements split pending; implementation review not started
+Status: Requirements splitter active; implementation review not started
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -29,3 +29,6 @@ Security is deferred to final project readiness.
 
 - `2026-07-12T04:15:00Z`: Created review scaffold. No reviewer is assigned;
   requirements splitting and coordinator scope validation are first.
+- `2026-07-12T04:18:00Z`: Assigned read-only requirements splitter
+  `019f548a-4e89-7183-867e-c52d97bd6b0b`; required implementation review lanes
+  remain unassigned.

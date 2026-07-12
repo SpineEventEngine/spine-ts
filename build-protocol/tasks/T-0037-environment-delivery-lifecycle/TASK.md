@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Requirements split pending
+Status: Requirements splitter active
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -50,4 +50,5 @@ runtime code changes.
 
 ## Verification
 
-- Pending requirements split and coordinator validation.
+- Requirements splitter `019f548a-4e89-7183-867e-c52d97bd6b0b` assigned;
+  coordinator validation pending its return.
