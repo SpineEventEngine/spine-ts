@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 1 findings accepted; fixes pending
+Status: Round 1 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -78,3 +78,7 @@ Security is deferred to final project readiness.
   callers, server-owned failed-start permanent cleanup, complete inherited
   child ledgers, and accurate declaration/direct compatibility wording. Fresh
   review waits for one docs fix worker, verification, and commit.
+- `2026-07-12T04:44:00Z`: Assigned docs fix worker
+  `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
+  package generation and all four lanes remain pending its return, coordinator
+  verification, and commit.
