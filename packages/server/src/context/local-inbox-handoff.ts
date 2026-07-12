@@ -68,13 +68,17 @@ export class DeliveryReadiness {
     return settledHandoff;
   }
 
-  transition(scopes: readonly DeliveryReady[], onReady: OnDeliveryReady): Promise<void> {
+  transition(
+    scopes: readonly DeliveryReady[],
+    onReady: OnDeliveryReady,
+    options: { readonly allowEmpty?: boolean } = {},
+  ): Promise<void> {
     if (this.#mode !== "direct" && this.#mode !== "failed") {
       return Promise.reject(new Error("Delivery readiness ownership is already transferred."));
     }
     let configured: Map<string, DeliveryReady>;
     try {
-      configured = configuredScopes(scopes);
+      configured = configuredScopes(scopes, options.allowEmpty === true);
     } catch (error) {
       return Promise.resolve().then(() => {
         throw error;
@@ -172,12 +176,15 @@ export function deliveryReady(endpoint: DeliveryEndpoint, tenantId?: string): De
   });
 }
 
-function configuredScopes(scopes: readonly DeliveryReady[]): Map<string, DeliveryReady> {
+function configuredScopes(
+  scopes: readonly DeliveryReady[],
+  allowEmpty: boolean,
+): Map<string, DeliveryReady> {
   const configured = new Map<string, DeliveryReady>();
   for (const scope of scopes) {
     configured.set(readyKey(scope), cloneReady(scope));
   }
-  if (configured.size === 0) {
+  if (configured.size === 0 && !allowEmpty) {
     throw new Error("Delivery readiness transition requires configured scopes.");
   }
   return configured;

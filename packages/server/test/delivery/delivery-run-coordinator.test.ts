@@ -24,6 +24,23 @@ import {
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryRunCoordinator", () => {
+  it("admits later configured scopes into the same generation", async () => {
+    const first = scope("first", 0, 2);
+    const second = scope("second", 1, 2);
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, fulfilled(0, 2, "IDLE")),
+      (obligation) => workerEvidence(obligation, fulfilled(1, 2, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [first], worker });
+
+    await coordinator.start([first]);
+    coordinator.configure([second]);
+    await coordinator.start([second]);
+
+    expect(worker.starts).toHaveLength(2);
+    expect(entry(worker.starts, 1).obligation.scopes).toEqual([second]);
+  });
+
   it("serializes starts and losslessly merges repeated disjoint readiness", async () => {
     const first = deferred<DeliveryWorkerEvidence>();
     const second = deferred<DeliveryWorkerEvidence>();

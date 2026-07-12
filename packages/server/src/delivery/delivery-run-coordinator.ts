@@ -28,13 +28,18 @@ export class DeliveryRunCoordinator {
     readonly worker: DeliveryRunWorker;
   }) {
     this.#worker = options.worker;
-    for (const candidate of options.scopes) {
-      const scope = cloneScope(candidate);
-      this.#configured.set(scopeKey(scope), scope);
-    }
+    this.#configure(options.scopes);
     if (this.#configured.size === 0) {
       throw new Error("Delivery run coordinator requires at least one configured scope.");
     }
+  }
+
+  /** @internal Extend this live generation with later registered canonical scopes. */
+  configure(scopes: readonly DeliveryRunScope[]): void {
+    if (!this.#accepting) {
+      throw new Error("Delivery run coordinator admission is closed.");
+    }
+    this.#configure(scopes);
   }
 
   get replacementSafe(): boolean {
@@ -120,6 +125,13 @@ export class DeliveryRunCoordinator {
     });
     for (const configured of admitted) {
       this.#pending.set(scopeKey(configured), configured);
+    }
+  }
+
+  #configure(scopes: readonly DeliveryRunScope[]): void {
+    for (const candidate of scopes) {
+      const scope = cloneScope(candidate);
+      this.#configured.set(scopeKey(scope), scope);
     }
   }
 

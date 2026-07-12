@@ -46,6 +46,8 @@ import {
   type RepositoryView,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 interface InternalSystemPairing {
@@ -79,6 +81,7 @@ interface InternalDeliveryEndpoint {
 interface InternalDeliveryDescriptor {
   readonly storageFactory: StorageFactory;
   startupScopes(): Promise<readonly InternalDeliveryScope[]>;
+  storageContext(scope: InternalDeliveryScope): StorageContext;
   endpoints(): readonly InternalDeliveryEndpoint[];
   onReady(onReady: (ready: unknown) => void): () => void;
   transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
@@ -322,11 +325,22 @@ describe("BoundedContext assembly", () => {
 
     expect(internalDeliveryDescriptor(single).storageFactory).toBe(storageFactory);
     await expect(internalDeliveryDescriptor(single).startupScopes()).resolves.toEqual([{}]);
+    expect(internalDeliveryDescriptor(single).storageContext({})).toEqual({
+      name: "Tasks",
+      multitenant: false,
+    });
     expect(internalDeliveryDescriptor(multitenant).storageFactory).toBe(storageFactory);
     await expect(internalDeliveryDescriptor(multitenant).startupScopes()).resolves.toEqual([
       { tenantId: "tenant-a" },
       { tenantId: "tenant-b" },
     ]);
+    expect(
+      internalDeliveryDescriptor(multitenant).storageContext({ tenantId: "tenant-a" }),
+    ).toEqual({
+      name: "Customers",
+      multitenant: true,
+      tenantId: "tenant-a",
+    });
   });
 
   it("describes configured supported delivery endpoints and their shards", async () => {
@@ -394,6 +408,18 @@ describe("BoundedContext assembly", () => {
         shard: { index: 0, ofTotal: 1 },
       },
     ]);
+
+    const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+      ownership: "caller",
+      descriptors: [boundedContextAccess.delivery(context)],
+    });
+    expect(attachment.startup.scopes).toHaveLength(2);
+    await context.commandBus().post(createAggregateCommand("command-attached", "task-attached"));
+    await waitForCondition(
+      async () =>
+        (await context.stand().read(ProcessManagerStateSchema, "task-attached")) !== undefined,
+      "attached environment delivery",
+    );
   });
 
   it("rejects blank multitenant index entries", async () => {
@@ -1475,7 +1501,7 @@ function createProjectionCommand(id: string) {
   });
 }
 
-function createAggregateCommand(id: string) {
+function createAggregateCommand(id: string, targetId = "task-ready") {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -1485,7 +1511,7 @@ function createAggregateCommand(id: string) {
     }),
     schema: AggregateStateSchema,
     message: create(AggregateStateSchema, {
-      id: "task-ready",
+      id: targetId,
       name: "Task Ready",
       archived: false,
     }),
@@ -1548,10 +1574,13 @@ function createGeneratedRegistryRoot(
   return createGeneratedRegistryFixture(entities).root;
 }
 
-async function waitForCondition(predicate: () => boolean, label: string): Promise<void> {
+async function waitForCondition(
+  predicate: () => boolean | Promise<boolean>,
+  label: string,
+): Promise<void> {
   const deadline = Date.now() + 500;
   while (Date.now() < deadline) {
-    if (predicate()) {
+    if (await predicate()) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 5));

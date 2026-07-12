@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 duplicate-descriptor preflight finding assigned
+Status: Slice 2 duplicate-descriptor fix focused verified; four-lane review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -214,3 +214,21 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   input can partially transfer readiness ownership before duplicate rejection.
   One Terra Medium owner must add a focused RED and make duplicate identity a
   no-mutation preflight failure before the four-lane package is frozen.
+- `2026-07-12T21:36:00Z`: The duplicate preflight fix and complete Slice 2
+  regression gate pass independently (166/166 plus generated build typecheck
+  and diff hygiene). The implementation is ready to commit; four-lane review
+  remains pending and security remains deferred.
+- The existing owner resumed the finding under fully read
+  `receiving-code-review` and strict `test-driven-development`. The fix package
+  remains limited to duplicate identity preflight, its focused proof, and
+  canonical evidence; Slice 3 and public lifecycle work remain excluded.
+- The duplicate-descriptor fix is focused verified for the paused four-lane
+  review. RED proved the duplicate reached transition; GREEN validates one
+  temporary identity set before any WeakSet marking or descriptor method call.
+  Environment tests pass 9/9 and the seven-file regression passes 166/166. The
+  failed claim intentionally remains for Slice 3 rollback, while the descriptor
+  remains fresh and succeeds in a later valid Slice 2 attachment.
+- Final handoff checks pass: 9/9 focused attachment tests, 166/166 seven-file
+  regressions, generated typecheck, ESLint/cleanup, format, diff hygiene,
+  public-leak scan, generated/protected scan, and identical status mirrors.
+  Four-lane review may resume; no commit or full verification was performed.

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 duplicate-descriptor preflight finding assigned
+Status: Slice 2 duplicate-descriptor fix focused verified; four-lane review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -317,6 +317,13 @@ one attachment input passes the two-pass freshness check. The first transition
 may install ownership before the duplicate transition rejects. Reject duplicate
 descriptor identities during synchronous generation preflight, before any
 descriptor is marked, tenant scope is enumerated, or readiness transition runs.
+
+The focused fix validates the complete input through one temporary identity set
+before mutating generation descriptor ownership. A repeated identity now
+rejects before `startupScopes()`, `storageContext()`, `transition()`, or the
+installed readiness callback can run. Because Slice 3 owns failed registration
+cleanup, the failed caller claim remains; the descriptor itself remains fresh
+and succeeds in one later valid caller attachment to the same generation.
 
 ### Slice 1 Round 3 Findings
 
