@@ -6,7 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0037b at safe-stop commit `dd3d90c8`
+Active implementation frontier: T-0037b at safe-stop commit `4adb0b4f`
 
 ## Purpose
 
@@ -69,12 +69,12 @@ closure, not unimplemented product work.
 - Worktree:
   `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0037b-bounded-generation-run-coordinator`
 - Branch: `task/T-0037b-bounded-generation-run-coordinator`
-- Safe-stop commit: `dd3d90c8`
+- Safe-stop commit: `4adb0b4f`
 - Implementation endpoint: `066c295d4860754be97341b802e05faa0da92370`
 - Review package:
   `.superpowers/sdd/review-40329cad..066c295d.diff`
-- State: Round 5 role skill checks are recorded; substantive Round 5 review has
-  not begun.
+- State: Round 5 is complete with two accepted P1 findings, every reviewer is
+  closed, and no fix worker is assigned.
 - Last coordinator verification: four files, 180 focused tests, both
   typechecks, ESLint, Prettier, and `git diff --check` passed.
 

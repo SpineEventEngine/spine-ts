@@ -23,6 +23,17 @@ without a project `max_threads` value.
   scans, and `git diff --check` passed. Root status contains only the intended
   protocol files plus untouched `human-review-1-jul.md`.
 
+### Follow-Up Review
+
+- Documentation reviewer `019f571a-fcf3-7ed0-966b-70482ba0a18d`, actual
+  `gpt-5.6-luna` / `medium`, found one stale completion-plan header that still
+  named T-0037b safe stop `dd3d90c8` and pre-review state. Corrected it to
+  `4adb0b4f` and the two-finding/no-fixer state. Reviewer closed.
+- Performance/reliability reviewer `019f571a-fd8b-7082-9210-e1f8047fde74`,
+  actual `gpt-5.6-terra` / `high`, reported CLEAN. Reviewer closed.
+- Both completed canonical skill checks, made no edits, and spawned no
+  subagents.
+
 ## Required Concerns
 
 | Concern                 | Relevance                                                                                   | Status                            |
