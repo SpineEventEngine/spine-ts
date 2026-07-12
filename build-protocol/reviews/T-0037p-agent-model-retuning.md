@@ -2,18 +2,17 @@
 
 ## Current Status
 
-Round 1 complete: all four accepted findings are implemented and focused
-verification is clean; affected-lane re-review is pending.
+Round 1 fixes are frozen; style and performance/reliability re-review assigned.
 
 ## Required Concerns
 
-| Concern                 | Relevance                                                                                   | Status                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Two accepted findings fixed; re-review pending   |
-| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Clean                                            |
-| TypeScript/API docs     | N/A: no TypeScript/public framework API, declarations, package exports, or API docs changed | N/A verified by changed-path scan                |
-| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Three accepted findings fixed; re-review pending |
-| Security                | Deferred to final release; this task changes no runtime trust boundary                      | Deferred                                         |
+| Concern                 | Relevance                                                                                   | Status                            |
+| ----------------------- | ------------------------------------------------------------------------------------------- | --------------------------------- |
+| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Round 2 assigned: Terra High      |
+| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Clean                             |
+| TypeScript/API docs     | N/A: no TypeScript/public framework API, declarations, package exports, or API docs changed | N/A verified by changed-path scan |
+| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Round 2 assigned: Terra High      |
+| Security                | Deferred to final release; this task changes no runtime trust boundary                      | Deferred                          |
 
 ## Pre-Review Lint
 
@@ -94,3 +93,12 @@ from style; findings 3 and 4 came from reliability. Documentation is clean.
 - Protected-file status check: exit 0 with no output.
 - Runtime/type/API verification: N/A because the fix batch changes protocol
   text only.
+
+## Round 2 Review Package
+
+- Baseline: `c1528f85`
+- Endpoint: `f454fe46`
+- Package: `.superpowers/sdd/review-c1528f85..f454fe46.diff`
+- Size: 70,472 bytes
+- Relevant lanes: style/maintainability and performance/reliability, both Terra
+  High. Documentation remains clean; TypeScript/API docs remains N/A.
