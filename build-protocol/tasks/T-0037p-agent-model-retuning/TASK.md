@@ -1,6 +1,6 @@
 # T-0037p: Agent Model Retuning
 
-Status: Concurrent-cap follow-up verified; targeted re-review pending
+Status: Complete; concurrent cap removed and re-reviewed clean
 
 Started: `2026-07-12`
 

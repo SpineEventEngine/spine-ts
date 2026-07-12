@@ -2,8 +2,8 @@
 
 ## Current Status
 
-Original retuning is clean. Concurrent-cap follow-up is locally verified;
-documentation and performance/reliability re-review are pending.
+Original retuning and concurrent-cap follow-up are clean. N/A and deferred
+dispositions remain verified.
 
 The historical Round 1 concurrency finding and fix below were superseded by a
 later explicit human instruction removing the numerical concurrent-agent cap.
@@ -36,6 +36,9 @@ without a project `max_threads` value.
 - First documentation re-review found two residual stale lines in the T-0037b
   execution packet. Corrected its entry and immediate actions to the canonical
   `4adb0b4f` two-finding/no-fixer state.
+- Final documentation re-review after `d281b2c2`: CLEAN, actual
+  `gpt-5.6-luna` / `medium`; reviewer closed. All current T-0037b references and
+  no-cap instructions are consistent.
 
 ## Required Concerns
 
