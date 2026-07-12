@@ -1,6 +1,6 @@
 # T-0037p: Agent Model Retuning
 
-Status: Round 1 findings assigned for focused fix
+Status: Round 1 fix batch verified; affected-lane re-review pending
 
 Started: `2026-07-12`
 

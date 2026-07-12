@@ -213,16 +213,24 @@ Apply this packet to every implementation or docs task.
 
 1. Confirm the dependency is integrated on `main` and post-merge verification
    passed.
-2. Inspect actual repository state, frame one coherent milestone, and record its
+2. Confirm the selected execution surface supports every required model profile
+   and explicit model/reasoning dispatch. Desktop support is sufficient when a
+   separate shell CLI is stale; update or switch only an incapable selected
+   surface.
+3. Inspect actual repository state, frame one coherent milestone, and record its
    functional acceptance criteria and genuinely high-risk assumptions.
-3. Read the task brief, current accepted decisions, affected public docs, and
+4. Read the task brief, current accepted decisions, affected public docs, and
    relevant Spine JVM server evidence for server-module work.
-4. Invoke the requirements splitter on Sol High only for the selective planning
+5. Invoke the requirements splitter on Sol High only for the selective planning
    triggers in `BUILD_PROTOCOL.md`; use a short orchestrator outline otherwise.
-5. Perform and record the canonical skill-applicability check.
-6. Create one branch/worktree for the task when write isolation is useful.
-7. Create/update the task, work log, and review log before code/doc edits.
-8. Record baseline SHA, branch, worktree, author agent, and start timestamp.
+6. Perform and record the canonical skill-applicability check.
+7. Create one branch/worktree for the task when write isolation is useful.
+8. Create/update the task, work log, and review log before code/doc edits.
+9. Record baseline SHA, branch, worktree, author agent, and start timestamp.
+10. For every child, record its existing role or dispatched function, scope,
+    expected model, and reasoning before dispatch; confirm both were explicit
+    dispatch fields and record actual runtime metadata before accepting its
+    work.
 
 ### 2. Implement
 
@@ -276,15 +284,18 @@ Before spawning reviewers, perform a lightweight local audit and record it:
    performance/reliability. Spawn only relevant lanes, each bounded to its
    concern, the milestone diff, and affected execution paths. A skipped lane
    requires a concrete N/A reason.
-4. Prompts must state exact task scope, accepted exclusions, public boundary,
+4. Run no more than three reviewer children concurrently. Sequence extra
+   relevant lanes, then aggregate and deduplicate the complete wave before any
+   finding returns to implementation.
+5. Prompts must state exact task scope, accepted exclusions, public boundary,
    review package, and the historical-text rule.
-5. Close every reviewer immediately after collecting its result.
-6. If there are findings, record the complete accepted batch first and return
+6. Close every reviewer immediately after collecting its result.
+7. If there are findings, record the complete accepted batch first and return
    it to the existing implementation context when available. Use one fresh fix
    worker only when that context cannot continue. Verify locally, commit,
    regenerate the package, and rerun the affected lanes; rerun another lane only
    when the fix changed its concern.
-7. Do not run a per-task security lane.
+8. Do not run a per-task security lane.
 
 ### 6. Accept And Integrate
 
@@ -311,8 +322,10 @@ reopen completed Round 1-4 work.
    substantive review pending.
 2. Use the existing package for endpoint `066c295d...`; regenerate only if the
    endpoint or package integrity differs.
-3. Run the four Round 5 substantive reviewers. Their skill checks are already
-   recorded; do not create duplicate reviewer identities.
+3. Run at most three of the four Round 5 substantive reviewers concurrently,
+   then sequence the remaining lane. Their skill checks are already recorded;
+   do not create duplicate reviewer identities or start fixes before the
+   complete wave is aggregated.
 4. Review against `40329cad..066c295d`, not the later safe-stop-only commits.
 5. Close reviewers, record all findings, and route one complete finding batch
    through one fix worker if needed.
@@ -773,8 +786,9 @@ registry loader, testing utilities, example, docs, and dependencies.
    distinguish runtime, development-only, unreachable, and accepted findings.
 3. Spawn the dedicated final security reviewer only now.
 4. For findings, create small security fix children grouped by one trust
-   boundary, use regression tests, and run the normal four task reviewers plus
-   security re-review for affected boundaries.
+   boundary, use regression tests, run every relevant task-review concern with
+   justified N/A dispositions for the rest, and rerun security review for each
+   affected boundary.
 5. Repeat the final security review until clean or until a human explicitly
    accepts a documented residual risk.
 
@@ -846,9 +860,9 @@ Use parallelism only where outputs do not block or overwrite each other:
 - During each runtime implementation, a sidecar researcher may inspect JVM
   evidence while the coordinator prepares deterministic RED tests, but only one
   author edits the task worktree.
-- Relevant reviewer lanes run concurrently after local pre-review lint; every
-  canonical concern still receives a durable clean or justified N/A
-  disposition.
+- At most three relevant reviewer lanes run concurrently after local pre-review
+  lint. Sequence extra lanes, aggregate the complete wave before fixes, and give
+  every canonical concern a durable clean or justified N/A disposition.
 - After T-0037f, docs inventory, example acceptance inventory, and security
   threat-model preparation may run concurrently as read-only work.
 - T-0039 and T-0040 edits do not run concurrently because example documentation

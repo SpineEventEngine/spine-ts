@@ -86,6 +86,23 @@ Always start with the least expensive GPT-5.6 configuration suitable for the
 function and pass the model plus reasoning explicitly when spawning. An omitted
 model inherits the parent and is a protocol defect.
 
+Before the first child dispatch in a session, verify that the selected
+execution surface supports the required model profiles and explicit child
+model/reasoning selection. The current Desktop surface may satisfy this gate
+even when a separate shell CLI is stale. If the selected surface cannot meet
+the allocation, update that surface or select another capable installed
+surface. A stale inactive surface is evidence to route around or update, not a
+project blocker while another surface can execute the protocol.
+
+Every child assignment must have a durable task/review-log entry naming the
+existing role or orchestrator-dispatched function, bounded scope, expected
+model, and expected reasoning. Before accepting the result, the orchestrator
+must confirm that model and reasoning were explicit dispatch fields and record
+the actual values from runtime metadata. An omitted dispatch field or missing,
+inherited, unavailable, or mismatched runtime evidence invalidates the result
+and requires redispatch with the correct profile. This is an orchestrator
+assignment-acceptance gate; it does not create a verifier role.
+
 | Existing function                                                                                               | Model           | Reasoning                                        |
 | --------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------ |
 | Main orchestration in future sessions                                                                           | `gpt-5.6-sol`   | `medium`                                         |
@@ -118,6 +135,9 @@ rename an agent role.
 
 - Configure at most four agent threads, including the parent, and one subagent
   depth. Subagents must not spawn another layer.
+- With the parent active, run at most three child agents concurrently. Sequence
+  additional relevant reviewer lanes, but collect and deduplicate the complete
+  review wave before returning one accepted finding batch to implementation.
 - Run no more than one production-code-writing agent against overlapping files
   at a time.
 - Parallelize only genuinely independent work, especially read-only
@@ -206,6 +226,12 @@ serialized data, aggregate consistency, transaction/concurrency/idempotency,
 migrations, authentication/security, or destructive behavior always requires
 the corresponding Terra High review. Add Sol High review only when Terra High
 cannot establish the answer or the high-risk escalation rule applies.
+
+At most three reviewers run concurrently while the parent is active. If more
+than three concerns are relevant, close or retain the completed results from
+the first lanes, run the remaining lanes, then aggregate and deduplicate every
+finding in the complete wave before assigning fixes. Do not begin fixes from a
+partial wave.
 
 Before spawning reviewers, the orchestrator must run a lightweight pre-review
 lint pass over the current diff and task records. This pass should be local and

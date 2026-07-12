@@ -2,18 +2,18 @@
 
 ## Current Status
 
-Round 1 complete: documentation clean; four accepted findings require one
-focused fix and affected-lane re-review.
+Round 1 complete: all four accepted findings are implemented and focused
+verification is clean; affected-lane re-review is pending.
 
 ## Required Concerns
 
-| Concern                 | Relevance                                                                                   | Status                            |
-| ----------------------- | ------------------------------------------------------------------------------------------- | --------------------------------- |
-| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Two accepted findings             |
-| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Clean                             |
-| TypeScript/API docs     | N/A: no TypeScript/public framework API, declarations, package exports, or API docs changed | N/A verified by changed-path scan |
-| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Three accepted findings           |
-| Security                | Deferred to final release; this task changes no runtime trust boundary                      | Deferred                          |
+| Concern                 | Relevance                                                                                   | Status                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Two accepted findings fixed; re-review pending   |
+| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Clean                                            |
+| TypeScript/API docs     | N/A: no TypeScript/public framework API, declarations, package exports, or API docs changed | N/A verified by changed-path scan                |
+| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Three accepted findings fixed; re-review pending |
+| Security                | Deferred to final release; this task changes no runtime trust boundary                      | Deferred                                         |
 
 ## Pre-Review Lint
 
@@ -65,3 +65,32 @@ subagents, and was closed.
 
 Finding 1 was independently reported by style and reliability. Finding 2 came
 from style; findings 3 and 4 came from reliability. Documentation is clean.
+
+## Round 1 Fix Batch
+
+- Reviewer concurrency is explicitly capped at three children while the parent
+  is active; extra lanes are sequenced and the complete wave is aggregated
+  before fixes begin.
+- Security fixes now run relevant task concerns with justified N/A dispositions
+  plus security re-review for affected trust boundaries.
+- Every child assignment records expected role/function, scope, model, and
+  reasoning, then records actual dispatch/runtime metadata before acceptance;
+  missing or inherited metadata is rejected without creating a verifier role.
+- Startup validates the selected execution surface. Desktop support satisfies
+  the gate when a separate shell CLI is stale; an incapable selected surface is
+  updated or replaced without blocking another capable surface.
+
+## Round 1 Fix Verification
+
+- ChatGPT Desktop-bundled `codex-cli 0.144.0-alpha.4` strict project-config
+  parsing: exit 0.
+- Targeted concurrency, complete-wave, assignment metadata,
+  execution-surface, and security re-review scans: exit 0 with all required
+  rules found.
+- Negative scan for stale normal-four-reviewer and unbounded reviewer-wave
+  wording: exit 0 with no matches.
+- Prettier: exit 0 for every changed Markdown file.
+- `git diff --check`: exit 0.
+- Protected-file status check: exit 0 with no output.
+- Runtime/type/API verification: N/A because the fix batch changes protocol
+  text only.

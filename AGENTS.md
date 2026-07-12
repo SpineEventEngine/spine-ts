@@ -30,6 +30,21 @@ the normal autonomous cycle.
 Always pass the model and reasoning explicitly when spawning a subagent. Never
 allow the parent model to become the accidental default for a child.
 
+Before accepting child work, record the assignment's existing role or
+orchestrator-dispatched function, expected model, and expected reasoning in the
+task or review log. Before accepting the result, confirm that both fields were
+explicit in the dispatch and record the actual child model and reasoning from
+runtime metadata. Reject and redispatch work when either dispatch field is
+omitted or actual metadata is unavailable or mismatched; inherited parent
+defaults are not acceptable evidence. This is an orchestrator acceptance gate,
+not a separate verifier role.
+
+At session startup, confirm that the selected execution surface supports the
+required model profiles and explicit child model/reasoning dispatch. Desktop
+support satisfies this gate even when a separate shell CLI is stale. If the
+selected surface is incapable, update it or select a capable installed surface;
+do not block work merely because an unused surface needs an update.
+
 ## Existing Roles
 
 Do not invent, rename, merge, or replace project roles. Project `.codex` files
@@ -41,6 +56,9 @@ agent identities.
 ## Concurrency And Ownership
 
 - At most four agent threads may exist, including the parent.
+- Therefore, run at most three child agents concurrently. Sequence any extra
+  reviewer lanes, and collect the complete review wave before returning one
+  accepted finding batch for fixes.
 - Subagents must not spawn subagents.
 - Only one production-code writer may own overlapping files at a time.
 - Parallelize only independent read-only exploration, documentation/API
