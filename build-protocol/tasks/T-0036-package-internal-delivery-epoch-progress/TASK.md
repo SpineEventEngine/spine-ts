@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Requirements split complete; coordinator design validation pending
+Status: Design validated; implementation assignment pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -100,8 +100,28 @@ lifecycle code, or generated files.
 - Keep compatibility rejection separate from richer internal evidence.
 - Successful callbacks must not reset the per-start bound.
 
+## Coordinator Design Constraint
+
+The current inbox order uses caller-visible `whenReceived`, `version`, and a
+random message ID. The low-level public receive path accepts caller-provided
+time/version, so a callback can append a post-admission row that sorts before an
+admission high-watermark. A bare latest-key bound is therefore insufficient.
+
+Implementation must first prove with tests that normally ordered and backdated
+callback writes are excluded from the current epoch. Use a bounded immutable
+admission snapshot or an equally strong package-internal mechanism. A finite
+work counter may additionally bound execution but cannot alone establish row
+membership.
+
 ## Verification
 
 - PASS: Read-only requirements split completed; no files or generated artifacts
   changed by the splitter.
-- Pending coordinator storage-order validation and baseline verification.
+- PASS: Coordinator inspected TypeScript inbox ordering/storage and the local
+  Spine JVM delivery specification. Bare key high-watermark was rejected;
+  bounded snapshot/equivalent membership is required.
+- PASS: Fresh-worktree generated build and focused delivery loop/worker suites:
+  3 files, 123 tests.
+- NOTE: Initial focused test/typecheck attempts failed only because fresh
+  ignored workspace/protobuf outputs were absent; dependency install and
+  `proto:generate` restored the expected baseline without tracked output.

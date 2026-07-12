@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Requirements split complete; implementation pending
+Status: Design validated; implementation pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -20,6 +20,8 @@ Security is deferred to final project readiness.
 ## Review Criteria
 
 - Finite admitted epoch cannot be extended by useful work or callback writes.
+- Backdated post-admission writes must also be excluded; a key high-watermark or
+  work counter alone is insufficient.
 - Opaque continuation survives `PAUSED`; only paused shards continue.
 - Ordered fulfilled/rejected evidence preserves shard, cause, and obligation.
 - Existing direct rejection and stop/concurrent-start behavior remains compatible.
@@ -36,3 +38,7 @@ Security is deferred to final project readiness.
 - `2026-07-12T01:51:00Z`: Closed the splitter. T-0036 remains one minimal
   loop/worker internal contract; coordinator storage-order validation and
   implementation are pending.
+- `2026-07-12T01:57:00Z`: Coordinator rejected a bare key high-watermark after
+  inspecting current ordering and public receive inputs. Baseline generated
+  build and focused 3-file / 123-test verification passed after generating
+  ignored fresh-worktree artifacts. Implementation assignment is next.
