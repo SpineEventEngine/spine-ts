@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 2 four-lane review in progress
+Status: Slice 3 Round 2 blocking findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -464,3 +464,9 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected profiles: style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-12T23:51:00Z`: Round 2 is complete and all reviewers are closed.
+  Runtime profiles matched dispatch. Two blocking findings remain: serialized
+  queued admission must recheck/clean up against a newly retained rollback, and
+  reported-overlap keys must preserve owner identity for equal facts in
+  distinct storage contexts. One Terra Medium owner receives both before Round
+  3.

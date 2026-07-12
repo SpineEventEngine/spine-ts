@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 2 four-lane review in progress
+Status: Slice 3 Round 2 blocking findings assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -399,6 +399,18 @@ remain later tasks.
 
 One Terra Medium owner receives the complete batch with deterministic phase,
 quiescence, concurrency, boundedness, and fresh-cause tests before Round 2.
+
+### Slice 3 Round 2 Findings
+
+1. Recheck unsafe rollback admission when each serialized attachment operation
+   begins. A caller queued before the preceding failure must release its
+   preclaimed registration and perform no descriptor transition/startup work;
+   it must not overwrite the retained rollback.
+2. Keep reported-overlap identity owner-qualified end to end. Equal readiness
+   facts in distinct descriptor/storage owners must neither inherit nor resolve
+   each other's blocker; add a deterministic equal-facts sibling test.
+
+One Terra Medium owner receives both under TDD before Round 3.
 
 ### Slice 3 Round 1 fix outcome
 
