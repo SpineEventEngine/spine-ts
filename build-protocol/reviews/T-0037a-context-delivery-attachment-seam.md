@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 3 findings logged; fix assignment pending
+Status: Round 3 fix worker assigned; paused for assignment commit
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -329,3 +329,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
      TypeScript/API docs was clean; style and performance/reliability independently
      reported finding 1. All four lanes repeat after one fix batch and a fresh
      package.
+- `2026-07-12T11:04:46Z`: Assigned sole fix worker
+  `019f55ff-758b-7670-b419-92acfc34faf3` for both accepted findings; worker is
+  paused until assignment provenance commits.
