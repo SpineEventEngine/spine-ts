@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Implementation active; RED pending
+Status: Coordinator lifecycle correction pending
 
 Started: `2026-07-12T11:43:52Z`
 
