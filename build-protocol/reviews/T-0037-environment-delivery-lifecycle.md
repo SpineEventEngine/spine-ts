@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 17 all lanes clean; final verification pending
+Status: Format fix verified; full verification rerun pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -13,10 +13,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f55ad-97cd-7270-97b9-1c7eeb3e9d36` | Clean |
-| Documentation              | `019f55ad-986a-7781-9c23-923ce20ff84a` | Clean |
-| TypeScript/API docs        | `019f55ad-98f3-7673-b71b-92194658883c` | Clean |
-| Performance/reliability    | `019f55ad-9986-7e13-b148-a96dcd1c6a47` | Clean |
+| Code style/maintainability | `019f55ad-97cd-7270-97b9-1c7eeb3e9d36` | Clean  |
+| Documentation              | `019f55ad-986a-7781-9c23-923ce20ff84a` | Clean  |
+| TypeScript/API docs        | `019f55ad-98f3-7673-b71b-92194658883c` | Clean  |
+| Performance/reliability    | `019f55ad-9986-7e13-b148-a96dcd1c6a47` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -818,3 +818,11 @@ Security is deferred to final project readiness.
   interleavings, status authority, API boundary, boundedness, and retry/facility
   safety. Security remains deferred to final project readiness. Final full task
   verification remains pending.
+- `2026-07-12T09:40:22Z`: Final `pnpm verify` reached generated typecheck, tooling
+  typecheck, lint, cleanup enforcement, and formatting; it failed because this
+  review log was not Prettier-clean. No runtime failure was observed before the
+  gate stopped. The failure is accepted as a narrow formatting fix; full verify
+  must be rerun afterward.
+- `2026-07-12T09:41:18Z`: Applied Prettier only to this review log. Repository-
+  wide `pnpm format:check` and `git diff --check` passed. The narrow fix is
+  verified; a clean-branch full `pnpm verify` rerun remains pending.
