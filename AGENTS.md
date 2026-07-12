@@ -87,5 +87,10 @@ agent identities.
 7. Record acceptance, evidence, resolved findings, limitations, and the next
    milestone, then continue automatically.
 
+After each task is complete, reviewed, merged, and post-merge verified, push
+the completed task branch and updated `main` to `origin`. Push any task tags at
+the same boundary. A task is not durably closed until the push succeeds or a
+real remote/authentication blocker is recorded.
+
 Do not pause for routine implementation choices. Stop only for the blockers
 listed in `build-protocol/BUILD_PROTOCOL.md` and the completion plan.

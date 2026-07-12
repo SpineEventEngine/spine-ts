@@ -212,6 +212,26 @@ services, missing details, and finally the to-do example.
   with modified or untracked files unless the human explicitly approves that
   cleanup.
 
+## Remote Synchronization
+
+The canonical remote is `origin`, currently
+`https://github.com/armiol/spine-ts.git` (a user-level Git URL rewrite may show
+the equivalent SSH transport).
+
+After each task is complete, reviewed, merged into `main`, and post-merge
+verified:
+
+1. push the completed task branch to `origin`;
+2. push updated `main` to `origin`;
+3. push any task/release tags created by that task;
+4. record the pushed refs and resulting remote state in the task work log; and
+5. only then mark remote synchronization complete and continue.
+
+A push failure is handled like other tooling failures: diagnose credentials,
+network, remote policy, or non-fast-forward state without rewriting or losing
+local history. It is a real blocker only when the required remote state cannot
+be established safely.
+
 ## Review Loop
 
 Each task must record a disposition for these independent review concerns:
