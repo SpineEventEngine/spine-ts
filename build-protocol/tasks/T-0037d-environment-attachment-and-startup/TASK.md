@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 1 review assigned
+Status: Slice 1 Round 1 seven-finding fix assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -225,6 +225,27 @@ and must consume rather than reopen earlier slice contracts.
   focused files and 145 tests, all generated/build/tooling typechecks,
   changed-file ESLint/Prettier, and diff hygiene. Slice 1 is ready to freeze for
   its own four-lane review before Slice 2 consumes the barrier.
+
+### Slice 1 Round 1 Findings
+
+One Terra Medium fix owner must prove and resolve this complete deduplicated
+batch before Slice 1 re-review:
+
+1. Register the direct handoff gate before invoking a readiness callback, so a
+   reentrant transition cannot miss admitted direct work.
+2. Preserve ownership for every already-persisted batch row when a later write
+   or earlier drain fails; do not abandon it into an owner gap.
+3. Never silently drop unconfigured readiness after direct admission closes;
+   fail closed or retain explicit ownership without changing durable receive
+   outcomes.
+4. Make `DeliveryHandoff.complete()` one-shot/idempotent across concurrent,
+   repeated, and post-`abandon()` calls so no late duplicate drain can start.
+5. Lock route ownership after transfer; later `onReady()` replacement must not
+   detach the installed environment route.
+6. Make the promise-returning transition expose validation failure through its
+   promise channel rather than synchronously throwing.
+7. Remove active task/log claims that overstate batch and invariant coverage
+   until the new regressions prove them.
 
 ## Slice 1 Outcome
 

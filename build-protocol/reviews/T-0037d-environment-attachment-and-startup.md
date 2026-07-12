@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 1 review assigned
+Status: Slice 1 Round 1 seven-finding fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -44,3 +44,10 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   Terra High, and reliability Terra High. All four concerns are relevant to the
   new private barrier contract, descriptor access, handoff behavior, and race
   tests; security remains deferred.
+- `2026-07-12T18:55:59Z`: Round 1 is complete and every reviewer is closed.
+  Runtime fixed-role metadata confirms style/API/reliability used actual Terra
+  High and docs used actual Luna Medium, all matching dispatch. Seven accepted
+  findings cover reentrant gate publication, partial-batch ownership, unknown
+  scopes, one-shot handoffs, route locking, promise failure consistency, and
+  active evidence overclaim. One Terra Medium fix owner receives the complete
+  batch before re-review; Slice 2 remains blocked on clean barrier semantics.
