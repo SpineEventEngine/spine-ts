@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Round 5 retuned review wave 1 assigned
+Status: Round 5 wave 2 and style provenance retry assigned
 
 Started: `2026-07-12T11:43:52Z`
 

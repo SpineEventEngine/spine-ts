@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Round 5 retuned review wave 1 assigned
+Status: Round 5 wave 2 and style provenance retry assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Expected model/reasoning  | Wave | Status                 |
-| -------------------------- | ------------------------- | ---- | ---------------------- |
-| Code style/maintainability | `gpt-5.6-terra` / `high`  | 1    | Assigned               |
-| Documentation              | `gpt-5.6-luna` / `medium` | 1    | Assigned               |
-| TypeScript/API docs        | `gpt-5.6-terra` / `high`  | 1    | Assigned               |
-| Performance/reliability    | `gpt-5.6-terra` / `high`  | 2    | Sequenced after wave 1 |
+| Lane                       | Expected model/reasoning  | Wave    | Status                                                                |
+| -------------------------- | ------------------------- | ------- | --------------------------------------------------------------------- |
+| Code style/maintainability | `gpt-5.6-terra` / `high`  | 2 retry | Prior CLEAN invalid: actual metadata unavailable; redispatch assigned |
+| Documentation              | `gpt-5.6-luna` / `medium` | 1       | CLEAN; actual profile matched; closed                                 |
+| TypeScript/API docs        | `gpt-5.6-terra` / `high`  | 1       | CLEAN; actual profile matched; closed                                 |
+| Performance/reliability    | `gpt-5.6-terra` / `high`  | 2       | Assigned                                                              |
 
 Security is deferred to final project readiness.
 
