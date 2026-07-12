@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 9 docs fixes verified; fresh review pending
+Status: Round 10 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f551a-2cb6-7b30-bdb7-a7ba65775e27` | P1     |
-| Documentation              | `019f551a-2d28-7953-8de9-27d6caf330a6` | P1     |
-| TypeScript/API docs        | `019f551a-2e3b-73a2-b0a4-aec6a2af2f9e` | Clean  |
-| Performance/reliability    | `019f551a-2dac-7820-818f-f6c6a98a0654` | P1/P2  |
+| Code style/maintainability | `019f5534-0451-7a83-b3c4-75b5d2730ccb` | P1/P2 |
+| Documentation              | `019f5534-04ea-7aa1-aa55-147089a0fd3d` | P1/P2 |
+| TypeScript/API docs        | `019f5534-0573-7e80-89d7-95335707717c` | P1/P2 |
+| Performance/reliability    | `019f5534-060f-7911-b159-58acef9049f6` | P1/P2 |
 
 Security is deferred to final project readiness.
 
@@ -464,3 +464,14 @@ Security is deferred to final project readiness.
   order, failure-state, stale-status, historical-ledger, docs/API, format, diff,
   exact-scope, untracked, and frozen-path checks. All passed with only the known
   invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T07:21:46Z`: Round 9 fixes were committed as `ee6fb396`; generated
+  package `.superpowers/sdd/review-0308bc4a..ee6fb396.diff` (45 commits,
+  187,052 bytes) and assigned all four Round 10 lanes.
+- `2026-07-12T07:26:48Z`: Closed all four Round 10 lanes. Accepted one complete
+  batch: quiescence failure must retain endpoint-dependent contexts/resources/
+  facilities and unsafe generation slot for retry, while post-quiescence
+  reporting or inert cleanup failures continue later cleanup; ordinary last
+  detach must clear a safe retired slot before propagating those later errors;
+  architecture must distinguish retirement/reporting failure from fresh-
+  transition failure; and the split handoff status must be current. All other
+  contracts are clean.
