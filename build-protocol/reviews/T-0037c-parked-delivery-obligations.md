@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -160,3 +160,7 @@ an applicable review or a concrete N/A disposition under
   typecheck chains, lint/cleanup/format, TypeDoc/API, Protobuf, and generated
   cleanliness. The post-review line wrap is N/A to every specialist concern;
   all accepted review dispositions remain clean. T-0037c is merge-ready.
+- `2026-07-12T18:22:10Z`: Merge commit `a98a0170` integrated the reviewed task
+  into `main`; the full post-merge gate passed 62 files and 1,380 tests in
+  normal and coverage runs plus every typecheck, lint/cleanup/format, docs/API,
+  Protobuf, and generated-cleanliness check. Review closure is final.

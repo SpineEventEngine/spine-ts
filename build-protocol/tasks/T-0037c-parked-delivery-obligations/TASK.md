@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Started: `2026-07-12T17:05:11Z`
 
