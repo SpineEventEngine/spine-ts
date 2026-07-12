@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Complete; merge pending
+Status: Complete and integrated
 
 Started: `2026-07-12T09:52:53Z`
 

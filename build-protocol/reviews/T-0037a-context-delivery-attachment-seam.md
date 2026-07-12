@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Complete; merge pending
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -559,3 +559,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
   1,325 tests in both normal and coverage runs, coverage above all thresholds,
   and all typecheck/lint/format/docs/Protobuf/generated-cleanliness gates green.
   T-0037a is complete and merge-ready.
+- `2026-07-12T11:41:59Z`: Merge commit `be20a912` integrated T-0037a into
+  `main`; post-merge full verification repeated the complete green gate. Review
+  closure is final for this child.
