@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Round 1 fixes verified; targeted re-review pending
+Status: Round 2 targeted re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -138,3 +138,9 @@ an applicable review or a concrete N/A disposition under
 - `2026-07-12T18:06:28Z`: Coordinator verification independently repeated 205
   focused regression tests, all typechecks, changed-file lint/format, and diff
   hygiene. The seven-finding fix batch is accepted for targeted re-review.
+- `2026-07-12T18:09:03Z`: Round 2 reviews the one-commit fix delta frozen at
+  `.superpowers/sdd/review-0693e661..903c3a7c.diff` (40,915 bytes). Expected
+  profiles are style Terra High, docs Luna Medium, TypeScript/API docs Terra
+  High, and reliability Terra High. All four lanes are relevant because the fix
+  changes internal contracts, runtime state transitions, tests, and current
+  durable evidence. Security remains deferred.

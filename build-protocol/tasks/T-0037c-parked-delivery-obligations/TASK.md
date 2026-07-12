@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Round 1 fixes verified; targeted re-review pending
+Status: Round 2 targeted re-review assigned
 
 Started: `2026-07-12T17:05:11Z`
 
