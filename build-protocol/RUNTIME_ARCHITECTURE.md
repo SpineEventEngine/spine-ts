@@ -25,13 +25,16 @@ types unless the current implementation needs that precision. Prefer `Inbox`,
 long names. Public standalone helper functions are disallowed unless a task log
 records why a class/object/prototype method would be worse.
 
-The first TS `Server` slice is intentionally narrower than Spine JVM's complete
-server/runtime environment. It owns a Node HTTP/2 listener over `SpineServices`,
-defaults to `127.0.0.1`, returns a `RunningServer` with `host`, `port`,
-`baseUrl`, and idempotent `close()`, and shuts down in this order: stop network
-intake, close active HTTP/2 sessions, then close owned contexts/resources. It
-does not introduce `ServerEnvironment`, process supervision, worker management,
-durable scheduling, or ZeroMQ-specific public API.
+The first TS `Server` slice was intentionally narrower than Spine JVM's
+complete server/runtime environment. It introduced a Node HTTP/2 listener over
+`SpineServices`, defaulted to `127.0.0.1`, returned a `RunningServer` with
+`host`, `port`, `baseUrl`, and idempotent `close()`, and did not introduce
+`ServerEnvironment`, process supervision, worker management, durable
+scheduling, or ZeroMQ-specific public API. Current source now also has a small
+explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
+facilities, and close ownership. Its optional closeable delivery facility is
+not an active delivery scheduler. D-0085 assigns a package-internal
+environment-owned bounded-run lifecycle to a successor implementation.
 
 ## Read-Side and Write-Side Segregation
 
@@ -316,10 +319,16 @@ delivery worker boundary:
   is framework-owned lease fencing for active drains. The package does not
   expose a raw worker callback API; normal replay stays behind validated framework
   endpoints. This is a lifecycle wrapper over the direct primitive, not
-  production retry policy, production supervision, or transport topology. A
-  paused loop resumes from a saved
-  internal cursor and safely resets that cursor if earlier pending rows
-  disappeared. Renewal runs on the same JavaScript event loop as the endpoint
+  production retry policy, production supervision, or transport topology.
+  Current direct drains/pages are bounded, and a skipped-only scan streak
+  returns the bounded `PAUSED` outcome. The current `DeliveryLoop` uses an
+  internal resume cursor only between drains within one `run()` and clears that
+  cursor before returning `PAUSED`. A later explicit start can therefore rescan
+  from the head and does not yet retain finite-epoch continuation across runs.
+  T-0036 will add package-internal opaque continuation plus an admission
+  high-watermark or equivalent finite bound and selective paused-shard progress
+  across one-shot runs; it does not expose a public cursor, epoch, result, or
+  scheduling API. Renewal runs on the same JavaScript event loop as the endpoint
   callback, so a CPU-bound synchronous callback can still starve timer-driven
   renewal; this slice treats that as an in-process trust-boundary limitation;
   and
