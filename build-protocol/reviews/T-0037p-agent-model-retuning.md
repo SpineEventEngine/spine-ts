@@ -2,7 +2,43 @@
 
 ## Current Status
 
-All relevant concerns are clean; N/A and deferred dispositions are verified.
+Original retuning and concurrent-cap follow-up are clean. N/A and deferred
+dispositions remain verified.
+
+The historical Round 1 concurrency finding and fix below were superseded by a
+later explicit human instruction removing the numerical concurrent-agent cap.
+Current governing files retain ownership/independence and complete-wave rules
+without a project `max_threads` value.
+
+## Concurrent-Cap Follow-Up
+
+- Documentation is relevant to current-rule and historical-supersession
+  accuracy; assigned `gpt-5.6-luna` / `medium`.
+- Performance/reliability is relevant to capacity, ownership, depth, and
+  complete-wave behavior; assigned `gpt-5.6-terra` / `high`.
+- Style/maintainability is N/A because no production/code-structure behavior
+  changed. TypeScript/API docs is N/A because no framework API path changed.
+  Security remains deferred because no runtime trust boundary changed.
+- Local gate: current bundled Codex strict parsing, Prettier, current-rule
+  scans, and `git diff --check` passed. Root status contains only the intended
+  protocol files plus untouched `human-review-1-jul.md`.
+
+### Follow-Up Review
+
+- Documentation reviewer `019f571a-fcf3-7ed0-966b-70482ba0a18d`, actual
+  `gpt-5.6-luna` / `medium`, found one stale completion-plan header that still
+  named T-0037b safe stop `dd3d90c8` and pre-review state. Corrected it to
+  `4adb0b4f` and the two-finding/no-fixer state. Reviewer closed.
+- Performance/reliability reviewer `019f571a-fd8b-7082-9210-e1f8047fde74`,
+  actual `gpt-5.6-terra` / `high`, reported CLEAN. Reviewer closed.
+- Both completed canonical skill checks, made no edits, and spawned no
+  subagents.
+- First documentation re-review found two residual stale lines in the T-0037b
+  execution packet. Corrected its entry and immediate actions to the canonical
+  `4adb0b4f` two-finding/no-fixer state.
+- Final documentation re-review after `d281b2c2`: CLEAN, actual
+  `gpt-5.6-luna` / `medium`; reviewer closed. All current T-0037b references and
+  no-cap instructions are consistent.
 
 ## Required Concerns
 

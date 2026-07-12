@@ -1,6 +1,6 @@
 # T-0037p: Agent Model Retuning
 
-Status: Complete; integrated and post-merge verified
+Status: Complete; concurrent cap removed and re-reviewed clean
 
 Started: `2026-07-12`
 
@@ -27,7 +27,8 @@ continuation.
   uses Terra High; mechanical evidence uses Luna Low/Medium; docs/dependency/API
   verification uses Luna Medium.
 - Use Standard speed, not Fast/boost; do not use Max or Ultra normally.
-- Configure at most four threads and one subagent depth.
+- Configure one subagent depth. A later human follow-up removes the numerical
+  concurrent-thread cap; execution-surface capacity now governs concurrency.
 - One production writer owns overlapping files; parallel work is genuinely
   independent; preserve user and dirty-worktree changes.
 - Deep planning and Sol High are selective, not automatic.
@@ -73,7 +74,7 @@ triage remain orchestrator-dispatched functions using Luna Low/Medium.
 ## Acceptance
 
 - Project `.codex/config.toml` defaults future sessions to Sol Medium, disables
-  fast mode, and sets `max_threads = 4`, `max_depth = 1`.
+  fast mode, sets `max_depth = 1`, and does not impose `max_threads`.
 - Every existing subagent role has one project-scoped model profile matching
   its real remit.
 - Root `AGENTS.md`, build protocol, completion plan, and role profiles agree on
@@ -84,3 +85,11 @@ triage remain orchestrator-dispatched functions using Luna Low/Medium.
 - Codex strict configuration parsing, formatting, docs/status lint, and diff
   hygiene pass.
 - The change is reviewed, integrated, and T-0037b resumes under the allocation.
+
+## Human Follow-Up
+
+On `2026-07-12`, the human removed the project restriction on the maximum
+number of concurrent agents. This supersedes the earlier four-thread/three-child
+cap recorded in historical review events. Single-writer ownership, independent
+parallel work, complete review-wave aggregation, and `max_depth = 1` remain
+binding.

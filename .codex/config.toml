@@ -5,7 +5,6 @@ model_reasoning_effort = "medium"
 fast_mode = false
 
 [agents]
-max_threads = 4
 max_depth = 1
 
 [agents.requirements_splitter]
