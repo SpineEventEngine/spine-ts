@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 1 active
+Status: Review Round 1 fixes pending assignment
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5644-7a31-71f3-bde1-c833f14be1f5` | Ready  |
-| Documentation              | `019f5644-8948-7532-9d69-124561e1164c` | Ready  |
-| TypeScript/API docs        | `019f5644-9beb-7251-a197-3246cb4d6670` | Ready  |
-| Performance/reliability    | `019f5644-b455-7d10-826f-e18f19e445be` | Ready  |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f5644-7a31-71f3-bde1-c833f14be1f5` | Findings |
+| Documentation              | `019f5644-8948-7532-9d69-124561e1164c` | Findings |
+| TypeScript/API docs        | `019f5644-9beb-7251-a197-3246cb4d6670` | Findings |
+| Performance/reliability    | `019f5644-b455-7d10-826f-e18f19e445be` | Findings |
 
 Security is deferred to final project readiness.
 
@@ -135,3 +135,11 @@ Security is deferred to final project readiness.
   web, and implementation workflows outside its lane. No required local source
   was unreachable. Substantive Round 1 review may start after this record
   commits.
+- `2026-07-12T12:29:36Z`: Round 1 completed; every reviewer was closed. Six
+  unique findings remain after deduplication: high-severity readiness stranded
+  during active-promise finalization; non-atomic mixed-scope admission;
+  overbroad worker-rejection catch masking coordinator/evidence defects;
+  replacement safety published before permanent retirement; throwing stop
+  marked complete before success; and missing/misleading internal lifecycle
+  contract docs. One TDD fix worker must receive the complete list, after which
+  all four lanes rerun against a fresh literal-endpoint package.
