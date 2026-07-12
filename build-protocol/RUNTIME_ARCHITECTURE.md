@@ -400,11 +400,15 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    deduplicated by canonical tenant/configured scope and bounded by current
    tenant/configured scope cardinality rather than notification count,
    per-shard interpretation of T-0036 evidence, and the reusable authoritative
-   coordinator-instance stop/await/retire primitive. Retirement still runs when
-   caller-supplied record consumption/reporting rejects; combined failure is
-   exposed only after retirement is attempted. A reusable lifecycle caller may
-   receive that error only after completing its own required post-retirement
-   transition.
+   coordinator-instance stop/await/retire primitive. It closes admission and
+   stops, awaits quiescence, classifies, consumes/reports eligible records, then
+   permanently retires and cleans up in that order. Once stop/await succeeds,
+   irreversible admission closure, stopped state, and quiescence prevent any old
+   start, notification, or endpoint invocation despite later reporting or
+   cleanup failure; cleanup failure may leak only inert resources. A distinct
+   inability to establish quiescence prohibits slot replacement. A reusable
+   lifecycle caller may receive the combined error only after completing its
+   required slot clearing or fresh-generation transition.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, the
@@ -414,8 +418,10 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    scope bound, transfers each buffered scope exactly once into the installed
    route, and only then admits startup/environment work. Subsequent receives use
    readiness only; no durable row loses both owners. It also owns registration-
-   scoped rollback, including invoking T-0037b's primitive and clearing/
-   replacing the empty generation slot after sole failed attachment.
+   scoped rollback, including invoking T-0037b's primitive and clearing the
+   retired empty generation slot through a finally-equivalent path after sole
+   failed attachment despite reporting or retirement-cleanup failure. It may
+   replace that slot only when quiescence was established.
 5. T-0037e owns ordinary detach and explicit generation stop, invoking that
    existing primitive for explicit stop, ordinary last detach, and permanent
    close through the sole package-internal environment-lifecycle explicit-stop
@@ -428,10 +434,16 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    or equivalent persistence barrier, owns readiness from old-route close
    through the fresh recovery snapshot and route rebind, then transfers each
    scope losslessly and exactly once into fresh pending admission. Fresh-
-   generation creation, complete survivor rebind, and transfer finish through a
-   finally-equivalent path before any stop/settlement/reporting/retirement error
-   propagates; only permanent close or independent ownership cardinality may
-   reject the attach. Server and handoff code cannot call the primitive
+   generation creation, complete survivor rebind, and transfer normally finish
+   before any earlier retirement/reporting error propagates. If fresh
+   construction, rebind, or transfer fails, no partial generation is published;
+   the old instance remains admission-closed, stopped, and quiescent after
+   retirement/cleanup was attempted, and the bounded transition owner retains
+   untransferred scopes while the aggregated transition result propagates. No
+   self-loop occurs; a later external
+   lifecycle/readiness retry alone completes one fresh generation and exact-once
+   transfer/rebind. Only permanent close or independent ownership cardinality
+   may reject the attach. Server and handoff code cannot call the primitive
    directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.

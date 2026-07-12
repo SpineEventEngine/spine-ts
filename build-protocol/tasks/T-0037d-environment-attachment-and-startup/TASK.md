@@ -58,9 +58,14 @@ and awaits one finite recovery result before declaring attachment ready.
 When failed-start rollback removes the first or sole registration, this child
 invokes T-0037b's existing authoritative coordinator-instance
 stop/await/retire primitive, supplies the T-0037c record-consumption step, and
-clears the empty generation slot only after retirement settles. A later attach
-to an open caller-owned environment may replace that empty slot with one fresh
-generation. This is failed-start rollback ownership only.
+clears the stopped, quiescent, permanently retired empty generation slot through
+a finally-equivalent path before propagating any combined reporting or cleanup
+error. The primitive preserves close-admission/stop, await, classify, consume/
+report, then permanent-retirement/cleanup order. A later attach to an open
+caller-owned environment may then install one fresh generation without overlap.
+If the primitive cannot establish quiescence, rollback retains the slot and
+prohibits replacement instead of claiming endpoint safety. This is failed-start
+rollback ownership only.
 
 The child exposes an internal attachment handle for future server integration.
 It does not yet change `Server.start()` or listener ordering.
@@ -117,9 +122,16 @@ It does not yet change `Server.start()` or listener ordering.
   D-0085 plain startup blocker message and no original-cause chain.
 - A sole failed attachment quiesces its empty generation internally while a
   caller-owned environment remains reusable: rollback invokes T-0037b's
-  primitive in exact stop/await/consume/retire order, clears the retired empty
-  slot, and a later attach creates one fresh coordinator without reusing or
-  overlapping the retired instance. Permanent close remains T-0037e.
+  primitive in exact close-admission/stop, await, classify, consume/report, then
+  permanent-retirement/cleanup order and clears the inert retired empty slot
+  through a finally-equivalent path before propagating cleanup errors. Separate
+  reporting-failure and permanent-retirement-cleanup-failure tests prove the
+  original sole-registration start still rejects once; the old instance cannot
+  start, accept notification, or invoke endpoints; the slot is cleared; and the
+  caller-owned environment later attaches one fresh generation without reuse or
+  old/new overlap. A cleanup error may leak inert resources but cannot reactivate
+  the instance. A quiescence failure instead retains the unsafe slot and rejects
+  replacement. Permanent close remains T-0037e.
 
 ## D-0085 Invariants
 

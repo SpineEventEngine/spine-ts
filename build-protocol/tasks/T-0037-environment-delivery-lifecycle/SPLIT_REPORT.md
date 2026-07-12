@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 9 docs fix active
+Status: Round 9 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -27,11 +27,16 @@ closes but before readiness routing is installed a bounded canonical-scope
 buffer, then transfers each scope exactly once before startup admission.
 T-0037e's reusable explicit stop rebinds every surviving registration,
 readiness route, and configured/startup scope to exactly one fresh generation
-through a finally-equivalent path before propagating the retirement result. A
+before propagating the result of close-admission/stop, await quiescence,
+classify, consume/report, then permanent-retirement/cleanup. The old instance's
+stopped and quiescent state is fail-closed even if reporting or cleanup fails. A
 bounded canonical-scope bridge owns readiness through the fresh recovery
 snapshot and route rebind, transferring each buffered scope losslessly and
-exactly once before later-write admission; an eligible racing attach joins the
-same generation without old/new overlap.
+exactly once before later-write admission. Transition construction/rebind/
+transfer failure publishes no partial generation, keeps admission closed, and
+retains bounded scopes for one later external retry without self-looping; an
+eligible racing attach then joins the same eventual generation without old/new
+overlap.
 
 ## Grounding Facts
 
@@ -71,8 +76,10 @@ rebind, and fixed-package ledger findings. The Round 7 fix passed worker and
 coordinator verification and was committed as `628224d4`. Round 8 completed all
 four lanes with the dedicated retirement-failure TDD and this stale active-
 summary correction as its two-item finding; that docs fix passed worker and
-coordinator verification. Fresh review remains pending and no clean review is
-claimed.
+coordinator verification. Round 9 accepted the connected fail-closed retirement,
+non-empty failure-buffer, failed-start retired-slot, and retryable transition-
+failure batch. Its docs fix is authored; coordinator verification remains
+pending and no clean review is claimed.
 
 ## Verification
 
@@ -106,4 +113,6 @@ passed worker and coordinator verification and was committed as `628224d4`.
 Round 8 completed all four lanes with a two-item finding: add the dedicated
 post-consumption permanent-retirement-failure TDD case and correct this stale
 active verification summary. The Round 8 docs fix passed worker and coordinator
-verification; fresh review remains pending, and no clean review is claimed.
+verification. Round 9's connected failure-state docs fix passed worker and
+coordinator verification; fresh review remains pending, and no clean review is
+claimed.

@@ -56,16 +56,22 @@ admitted obligation, invokes `deliveryWorkerAccess.start(...)`, continues only
 returns or publishes bounded internal settlement evidence for later ownership
 layers.
 
-The retirement primitive closes coordinator admission, calls stop, awaits and
-classifies active settlement, awaits one caller-supplied operational-record
-consumption/reporting step, and permanently retires that coordinator's
-worker/loops in D-0085 order through a `finally`-equivalent path. If the supplied
-step rejects, the primitive preserves and aggregates that failure with any
-other stop/settlement/retirement failures, attempts retirement exactly once,
-and may settle with the combined error only afterward. It is idempotent and
-reusable by later lifecycle owners; it does not own registration removal,
-record selection, an environment generation slot, fresh-generation race policy,
-or the caller's finally-equivalent post-retirement survivor rebind.
+The retirement primitive closes coordinator admission, calls stop, and awaits
+active settlement to establish quiescence. It then classifies settlement,
+awaits one caller-supplied operational-record consumption/reporting step, and
+only afterward permanently retires and performs fallible cleanup of worker/loop
+resources through a `finally`-equivalent path. Once stop/await succeeds,
+irreversible admission closure, stopped state, and proven quiescence mean the
+old instance can never start, accept notification, or invoke endpoints again.
+Reporting or cleanup failure is preserved and aggregated but cannot reactivate
+or make the instance reusable; cleanup failure may leak only inert resources.
+The primitive may settle with the combined error only after retirement/cleanup
+is attempted, and that postcondition is safe for a lifecycle owner to clear or
+replace the slot. A distinct inability to establish quiescence prohibits
+replacement. The primitive is idempotent and reusable by later lifecycle
+owners; it does not own registration removal, record selection, an environment
+generation slot, fresh-generation race policy, or the caller's post-retirement
+slot clearing/survivor rebind.
 
 It does not decide which server registration owns an obligation or retain
 canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
@@ -104,14 +110,21 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   pending scopes; every disjoint eligible notified scope survives and receives
   its one later bounded admission without restarting rejected scope.
 - The authoritative retirement primitive closes admission before the next
-  one-shot start, calls stop, awaits active work without interruption, awaits
-  boundary record consumption, and retires the worker/loops exactly once.
+  one-shot start, calls stop, awaits active work without interruption to prove
+  quiescence, classifies settlement, awaits boundary record consumption/
+  reporting, and only then performs permanent retirement/cleanup exactly once.
 - When boundary record consumption/reporting rejects, retirement is still
-  attempted exactly once, the old worker/loops cannot be reused, and the
-  rejection is preserved and aggregated with other failures only after
-  retirement settles. The primitive may settle with that combined error;
-  T-0037e's reusable explicit-stop caller must complete fresh-generation
-  creation and survivor rebind before propagating it.
+  attempted through the finally-equivalent path. Old admission remains closed,
+  stopped state and quiescence make start/notification and endpoint invocation
+  impossible, and the rejection is preserved and aggregated with cleanup
+  failure. A cleanup error may leak inert resources but cannot reactivate the
+  instance. Focused TDD injects reporting failure and permanent-retirement
+  cleanup failure separately after quiescence and proves this postcondition is
+  safe for a lifecycle owner to clear or replace its slot before the combined
+  error propagates.
+- A distinct focused case where active-work settlement cannot establish
+  quiescence leaves the slot non-replaceable; it does not claim retirement or
+  endpoint safety. T-0037d/e must not clear or replace that instance.
 - Existing package-internal/direct `DeliveryWorker.start()` compatibility and
   all T-0036 tests remain unchanged.
 

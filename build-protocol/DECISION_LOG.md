@@ -3430,28 +3430,41 @@ Decision:
   atomically mark the generation stopping and close trigger admission and local
   notification; call the worker stop path so a `PAUSED` result cannot start
   another one-shot run; await already-active work without forcibly interrupting
-  its current drain; classify any rejection under the established
-  registration/generation ownership rule; consume every operational record
-  eligible at this boundary and report only still-`unreported` causes; then
-  permanently retire the old worker, loops, and generation. Stop always precedes
-  await and record consumption. A durable write racing after admission closes
-  remains pending. After reusable last detach or explicit generation stop while
-  the same caller-owned environment remains open, a later generation of that
-  environment can recover it. After permanent `ServerEnvironment.close()`, no
-  generation of that same environment is possible. Recovery then requires a
-  separately created environment/process over storage that remains externally
-  available and persistent, if facility ownership and backend lifetime permit;
-  this decision makes no recovery promise after environment-owned storage is
+  its current drain and establish that no old worker/loop can invoke an endpoint
+  again; classify rejection; consume every operational record eligible at this
+  boundary and report only still-`unreported` causes; then permanently retire
+  the old worker, loops, and generation and perform fallible cleanup. Stop always
+  precedes await, await establishes quiescence before classification, and
+  classification plus record consumption/reporting precede permanent retirement/
+  cleanup. Once stop/await succeeds, irreversible admission closure, stopped
+  state, and proven quiescence mean the old instance can never start, accept
+  notification, or invoke endpoints again. A later reporting or cleanup failure
+  is aggregated but cannot reactivate or make that instance reusable; cleanup
+  failure may only leak inert resources. A durable write racing after admission
+  closes remains pending.
+  After reusable last detach or explicit generation stop while the same caller-
+  owned environment remains open, a later generation can recover it only after
+  quiescence is established. A failure that cannot establish quiescence is
+  distinct: the old slot cannot be cleared or replaced because endpoint safety
+  is not proven. After permanent `ServerEnvironment.close()`, no generation of
+  that same environment is possible. Recovery then requires a separately
+  created environment/process over storage that remains externally available
+  and persistent, if facility ownership and backend lifetime permit; this
+  decision makes no recovery promise after environment-owned storage is
   permanently closed.
 - The coordinator-instance primitive must retire in a `finally`-equivalent path
   even when the caller-supplied operational-record consumption/reporting step
-  rejects. It preserves that rejection, combines it with any stop, settlement,
-  classification, or retirement failure under existing aggregation semantics,
-  and exposes the combined failure only after retirement has been attempted.
-  Reporting failure cannot leave a coordinator or its worker/loops reusable.
-  The primitive may therefore settle with that combined error after retirement;
-  a reusable environment lifecycle caller remains responsible for completing
-  any required fresh-generation transition before propagating the result.
+  rejects. It preserves that failure, combines it with any stop, settlement,
+  classification, or permanent-retirement cleanup failure under existing
+  aggregation semantics, and exposes the combined failure only after retirement/
+  cleanup is attempted in the authoritative order. Once stop/await establishes
+  quiescence, admission is irreversibly closed, the instance is stopped, and no
+  old worker/loop can invoke endpoints again. Reporting or cleanup failure cannot
+  reverse that fail-closed postcondition; cleanup failure may leave only inert
+  resources. A reusable lifecycle caller may therefore clear or replace its
+  slot and complete any required fresh-generation transition before propagating
+  the combined result. If quiescence itself cannot be established, the primitive
+  reports that distinct unsafe result and replacement is prohibited.
 - Attach, detach, generation stop, and environment close use the same
   package-internal lifecycle gate. If attach linearizes before reusable last
   detach or explicit generation stop marks the generation stopping, it joins the
@@ -3478,14 +3491,22 @@ Decision:
   later-write admission. Thus a write persisted after fresh recovery captures
   its snapshot but before routes rebind still causes an eventual fresh-
   generation run without an unrelated trigger. Fresh-generation creation,
-  complete survivor rebind, and buffered-scope transfer run through a `finally`-
-  equivalent lifecycle path even if T-0037b settles after retirement with a
-  stop, settlement, classification, reporting, or retirement error; only then
-  does T-0037e propagate the original or combined error once. An otherwise
-  eligible attach racing the rebinding joins that same generation. No surviving
-  scope may remain bound to the retired generation or outside both owners; no
-  old/new generation overlap is allowed, and only permanent close or
-  independent ownership cardinality may reject the attach.
+  complete survivor rebind, and buffered-scope transfer normally finish before
+  T-0037e propagates an earlier retirement or reporting error once. If fresh
+  construction, route rebind, or transfer itself fails, the old generation stays
+  admission-closed, stopped, and quiescent after permanent retirement/cleanup
+  was attempted, no partial fresh generation is published, later-write admission
+  stays closed, and the bounded canonical transition owner retains
+  every not-yet-transferred scope. T-0037e preserves and aggregates the
+  transition error with any earlier error, then propagates that result
+  truthfully; it does not self-loop. Only a later external lifecycle/readiness
+  retry may complete exactly one fresh generation, perform exact-once retained-
+  scope transfer and route rebind, and reopen admission. An otherwise eligible
+  attach racing the transition waits for that same eventual generation. The
+  transition owner prevents an ownership gap while the old instance's stopped,
+  quiescent state prevents old/new overlap. No surviving scope may return to the
+  retired generation, and only permanent close or independent ownership
+  cardinality may reject the attach.
   README and TypeDoc describe only observable `Server`, `RunningServer`, and
   `ServerEnvironment` behavior; they do not name or describe this package-
   internal explicit-stop operation.
@@ -3653,12 +3674,17 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   notification seam. T-0037b owns serialized bounded generation runs, lossless
   bounded canonical-scope coalescing, T-0036 evidence
   interpretation, and the reusable authoritative coordinator-instance
-  stop/await/retire primitive. T-0037c owns finite canonical operational
+  stop/await/retire primitive, including the fail-closed stopped/quiescent
+  postcondition while preserving classify/consume/report-before-retirement
+  order. T-0037c owns finite canonical operational
   obligation and cause-reporting records. T-0037d owns environment
   registration cardinality, attachment, startup recovery, and failed-start
   rollback, including invoking T-0037b's primitive and clearing/replacing the
-  empty generation slot after sole/first-registration rollback so a
-  caller-owned environment remains reusable. T-0037d also owns the atomic
+  empty generation slot through a finally-equivalent path after sole/first-
+  registration rollback when quiescence is established, even if reporting or
+  retirement cleanup fails, so a caller-owned environment remains reusable.
+  It must retain the slot and prohibit replacement if quiescence is not
+  established. T-0037d also owns the atomic
   ownership barrier that closes new direct exact-drain admission, awaits every
   already-admitted direct exact drain in the attaching scope, gives persistence
   during route installation one bounded transition readiness buffer, transfers
@@ -3674,9 +3700,13 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   retirement; one bounded canonical-scope transition owner covers writes
   through fresh recovery and route rebind; every surviving registration,
   readiness route, and configured/startup scope rebinds to exactly one fresh
-  generation through a finally-equivalent path before any retirement result is
-  propagated or later writes can strand; buffered scopes transfer losslessly
-  and exactly once; and the attach joins that same generation, rejecting only
+  generation before any retirement result is propagated or later writes can
+  strand; buffered scopes transfer losslessly and exactly once; transition-
+  construction/rebind/transfer failure retains the bounded transition owner,
+  publishes no partial generation, keeps admission closed, propagates the
+  aggregated error without self-looping, and permits only a later external retry
+  to finish the same exact-once transition; and the attach joins that same
+  generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
   also owns close refusal and permanent environment close. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,
@@ -3699,8 +3729,9 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   cardinality, never trigger or repeated-notification count; per-shard
   rather than aggregate scheduling; no spin from fulfilled `FAILED`/`SKIPPED`
   or rejected starts; bounded parked state; ownership-scoped startup/cleanup;
-  one reusable stop-before-await-before-consume-before-retire coordinator
-  primitive with non-overlapping lifecycle callers; and network, endpoint,
+  one reusable stop-before-await-before-classify-before-consume/report-before-
+  retire/cleanup coordinator primitive with non-overlapping lifecycle callers
+  and a quiescence-gated replacement postcondition; and network, endpoint,
   transport, and storage close ordering.
 - JVM evidence is adopted narrowly: delivery ownership belongs at environment
   level and local post-persist notification may submit readiness. The TS

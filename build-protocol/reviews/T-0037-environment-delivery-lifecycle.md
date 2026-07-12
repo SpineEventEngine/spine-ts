@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 9 docs fix active
+Status: Round 9 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -54,8 +54,13 @@ Security is deferred to final project readiness.
   installation has one bounded transition readiness owner; and route transfer
   produces exactly one eventual lifecycle admission before startup opens.
 - Confirm T-0037b alone owns the reusable coordinator-instance
-  stop/await/retire primitive and guarantees retirement after record-reporting
-  rejection; T-0037d invokes it only for failed-start empty-generation
+  stop/await/retire primitive and preserves close-admission/stop, await
+  quiescence, classify, consume/report, then permanent-retirement/cleanup order.
+  Once stop/await succeeds, irreversible admission closure, stopped state, and
+  quiescence prevent later start, notification, endpoint invocation, or reuse
+  despite reporting or cleanup failure; cleanup may leak only inert resources.
+  A distinct inability to establish quiescence prohibits replacement. T-0037d
+  invokes the primitive only for failed-start empty-generation
   rollback/replacement, and T-0037e invokes it only for explicit generation
   stop, ordinary last detach, and permanent close plus fresh-generation race
   policy.
@@ -75,9 +80,22 @@ Security is deferred to final project readiness.
   T-0037e creates the fresh generation and rebinds every surviving registration,
   readiness route, and configured/startup scope through a finally-equivalent
   path before propagating that result. Distinct reporting-rejection and post-
-  consumption permanent-retirement-failure tests each prove exact-once buffered
-  canonical-scope transfer, later readiness admission, and exact-once error
-  propagation only after complete survivor rebinding.
+  consumption permanent-retirement-failure tests each persist a canonical-scope
+  write after the fresh snapshot but before route rebind, prove the bounded
+  buffer is non-empty, then prove exact-once transfer/admission and exact-once
+  error propagation only after complete survivor rebinding.
+- Confirm T-0037d clears a stopped, quiescent, permanently retired sole-
+  registration empty slot through a finally-equivalent path before propagating
+  reporting or cleanup errors. Separate tests prove the inert old instance
+  cannot start, accept notification, or invoke endpoints and permit one later
+  fresh attachment without overlap; a quiescence failure instead retains the
+  slot and prohibits replacement.
+- Confirm fresh construction, route rebind, or buffered-transfer failure keeps
+  old retirement irreversible, publishes no partial fresh generation, closes
+  later-write admission, and retains bounded canonical transition scopes. The
+  transition error is preserved/aggregated and propagated without self-loop;
+  only a later external lifecycle/readiness retry completes one fresh generation,
+  exact-once transfer/rebind, and admission without owner gap or overlap.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
@@ -406,3 +424,43 @@ Security is deferred to final project readiness.
   `019f551e-c16e-79b0-b0e3-c73be3b2cda0` with the complete fail-closed
   retirement, rollback-slot, non-empty buffer, and retryable transition-failure
   batch. Runtime/public/generated scope remains frozen.
+- `2026-07-12T07:00:45Z`: Round 9 worker authored the complete connected docs
+  fix across D-0085/D-0086, architecture, parent/report/review criteria, T-0037b/
+  d/e, and durable status. The package now specifies quiescence-gated fail-closed
+  retirement, non-empty reporting/cleanup failure buffers, finally-safe failed-
+  start slot clearing, and externally retryable transition failure without
+  partial publication or self-loop. Worker verification and coordinator
+  verification remain pending; the historical ledger through `045aa86c` is
+  unchanged.
+- `2026-07-12T07:07:54Z`: Round 9 worker verification passed targeted fail-
+  closed retirement, failed-start rollback, non-empty failure-buffer, and
+  externally retryable transition-failure lint; active stale-status lint; exact
+  36-commit historical-ledger comparison plus unchanged-section check;
+  `pnpm docs:check`; `pnpm format:check`; `git diff --check`; exact nine-file
+  tracked scope; zero untracked files; and frozen runtime/test/example/generated/
+  public-doc/user-file checks. TypeDoc retained 205 expected server exports with
+  zero errors and only the known invalid-`origin` warning. Coordinator
+  verification remains pending; no clean review is claimed.
+- `2026-07-12T07:11:41Z`: Coordinator corrected the authored ordering before
+  acceptance. The worker removed the invented pre-consumption logical-retirement
+  phase and restored D-0085's authoritative close-admission/stop, await
+  quiescence, classify, consume/report, then permanent-retirement/cleanup order
+  across every active contract and test criterion. Fail-closed replacement now
+  rests on irreversible admission closure, stopped state, and proven quiescence;
+  cleanup failure may leak inert resources but cannot reactivate them. All other
+  Round 9 fixes remain authored. Fresh worker and coordinator verification are
+  pending; the historical ledger through `045aa86c` remains unchanged.
+- `2026-07-12T07:15:27Z`: Correction-specific worker verification passed the
+  authoritative-order/no-active-logical-retirement lint, inert cleanup-failure
+  and non-replaceable-quiescence-failure lint, retained Round 9 non-empty-buffer/
+  rollback/transition-failure lint, active stale-status lint, exact unchanged
+  36-entry historical ledger, `pnpm docs:check`, `pnpm format:check`,
+  `git diff --check`, exact nine-file tracked scope, zero untracked files, and
+  frozen runtime/test/example/generated/public-doc/user-file checks. TypeDoc
+  retained 205 expected server exports with zero errors and only the known
+  invalid-`origin` warning. Coordinator verification remains pending; no clean
+  review is claimed.
+- `2026-07-12T07:18:27Z`: Coordinator closed the worker and repeated exact-
+  order, failure-state, stale-status, historical-ledger, docs/API, format, diff,
+  exact-scope, untracked, and frozen-path checks. All passed with only the known
+  invalid-`origin` warning. Fresh all-lane review remains required.

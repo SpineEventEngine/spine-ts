@@ -65,12 +65,22 @@ recovery snapshot and readiness-route rebind. After retirement, the lifecycle
 gate creates exactly one fresh generation, rebinds every surviving registration,
 readiness route, and configured/startup obligation scope to it, and transfers
 each buffered scope losslessly and exactly once into fresh pending admission
-before reopening later-write admission. These post-retirement steps execute
-through a `finally`-equivalent path even when T-0037b settles with a stop,
-settlement, classification, reporting, or retirement error; T-0037e propagates
-the original or combined error once only after the complete rebind. No surviving
-scope may remain bound to the retired generation or outside both owners. An
-eligible attach racing this rebinding joins the same fresh generation.
+before reopening later-write admission. T-0037b preserves close-admission/stop,
+await, classify, consume/report, then permanent-retirement/cleanup order. When
+it returns a replacement-safe stopped/quiescent postcondition with a reporting
+or cleanup error, these post-retirement steps still complete before T-0037e
+propagates the original or combined error once. Cleanup failure may leak inert
+resources but cannot reactivate the old instance. If fresh construction, route
+rebind, or buffered transfer itself fails, the old generation remains admission-
+closed, stopped, and quiescent after retirement/cleanup was attempted; no partial
+fresh generation is published; later-write admission remains closed; and the
+bounded transition owner retains every not-yet-transferred canonical scope.
+T-0037e preserves and aggregates the transition error, propagates it truthfully,
+and does not self-loop. Only a later external lifecycle/readiness retry may
+complete one fresh generation, exact-once retained-scope transfer and route
+rebind, then reopen admission. No surviving scope may return to the old
+generation or fall outside the transition owner. An eligible attach racing this
+transition waits to join the same eventual fresh generation.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -124,19 +134,35 @@ network or context/resource ordering.
   generation, and every survivor and the racing attach bound to it. Only
   permanent close or ownership-cardinality rejection may reject the attach.
 - A reporting-rejection test makes T-0037b retire the old generation and settle
-  with the reporting error. T-0037e still creates the fresh generation, rebinds
-  every surviving registration/readiness/configured/startup scope, and transfers
-  transition readiness through its finally-equivalent path before propagating
-  the original error exactly once. A later supported write then emits readiness
-  and runs in the fresh generation without another stop or recovery trigger.
+  with the reporting error. After fresh recovery captures its snapshot but
+  before route rebind, the test persists a supported write in a surviving
+  canonical scope and proves the bounded transition buffer is non-empty.
+  T-0037e still creates the fresh generation, rebinds every surviving
+  registration/readiness/configured/startup scope, and transfers that scope into
+  fresh pending admission exactly once before propagating the original error
+  exactly once. The buffered write is admitted by the fresh generation without
+  another stop or recovery trigger.
 - A distinct retirement-failure test injects failure from permanent retirement
   after old-generation stop, active-work settlement, and operational-record
-  consumption have completed. T-0037e still creates exactly one fresh
-  generation; rebinds every surviving registration, readiness route, and
-  configured/startup scope to it; and transfers every buffered canonical scope
-  into fresh pending admission exactly once. The test proves later readiness is
-  admitted by that fresh generation and only then observes the retirement error,
-  propagated exactly once.
+  consumption have completed. After fresh recovery captures its snapshot but
+  before route rebind, it persists a supported write in a surviving canonical
+  scope and proves the bounded transition buffer is non-empty. T-0037e still
+  creates exactly one fresh generation; rebinds every surviving registration,
+  readiness route, and configured/startup scope to it; and transfers that scope
+  into fresh pending admission exactly once. The test proves the buffered write
+  is admitted by that fresh generation and only then observes the retirement
+  error, propagated exactly once.
+- Injected fresh-construction, route-rebind, and buffered-transfer failure cases
+  prove the old generation stays admission-closed, stopped, and quiescent after
+  retirement/cleanup was attempted; no partial fresh generation becomes current;
+  later-write admission remains closed; and the canonical transition owner
+  retains a non-empty set bounded by current tenant/configured-scope cardinality.
+  Each operation propagates its transition error exactly once, aggregated with
+  an earlier retirement/reporting error when both exist, and performs no
+  recursive or background retry. A later external lifecycle/readiness request
+  completes exactly one fresh generation, rebinds every survivor and route
+  without owner gap or old/new overlap, transfers each retained scope exactly
+  once, and only then reopens admission.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

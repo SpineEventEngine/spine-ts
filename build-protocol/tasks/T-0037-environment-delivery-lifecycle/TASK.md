@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 9 docs fix active
+Status: Round 9 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -83,7 +83,10 @@ attach race, and
 environment close belong to `e`; and network/server ordering belongs to `f`.
 Retry timing and public policy remain
 outside every child. The `d` and `e` callers do not overlap or reopen the
-finally-safe primitive.
+finally-safe primitive. That primitive preserves close-admission/stop, await
+quiescence, classify, consume/report, then permanent-retirement/cleanup order;
+its fail-closed replacement postcondition comes from stopped state and proven
+quiescence, not a separate pre-consumption retirement phase.
 
 Each child depends on its predecessor and is Candidate/not started. No child
 branch, work log, review log, or implementation claim exists. D-0086 records
@@ -193,5 +196,8 @@ used for child runtime work.
   Round 7 fix passed worker and coordinator verification and was committed as
   `628224d4`. Round 8 completed all four lanes with the dedicated retirement-
   failure TDD and stale split-report summary as its two-item finding. That docs
-  fix passed worker and coordinator verification; fresh review remains pending,
-  and no clean review is claimed.
+  fix passed worker and coordinator verification. Round 9 accepted the connected
+  fail-closed retirement, non-empty failure-buffer, failed-start retired-slot,
+  and retryable transition-failure batch; its docs fix passed worker and
+  coordinator verification. Fresh review remains pending and no clean review is
+  claimed.
