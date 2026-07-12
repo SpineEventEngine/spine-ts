@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 9 four-lane review in progress
+Status: Round 9 findings recorded; decision fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f53dd-c6b4-7a82-b1ec-ae8fb76257e3` | Active |
-| Documentation              | `019f53dd-c756-70e2-8b45-384826bb29a1` | Active |
-| TypeScript/API docs        | `019f53dd-c875-7532-9274-25816cfb99fc` | Active |
-| Performance/reliability    | `019f53dd-c7e5-7dd0-9bbb-12ae636ccd41` | Active |
+| Code style/maintainability | `019f53dd-c6b4-7a82-b1ec-ae8fb76257e3` | P2     |
+| Documentation              | `019f53dd-c756-70e2-8b45-384826bb29a1` | P1/P2  |
+| TypeScript/API docs        | `019f53dd-c875-7532-9274-25816cfb99fc` | Clean  |
+| Performance/reliability    | `019f53dd-c7e5-7dd0-9bbb-12ae636ccd41` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -391,3 +391,10 @@ Security is deferred to final project readiness.
   `019f53dd-c875-7532-9274-25816cfb99fc`, and performance/reliability
   `019f53dd-c7e5-7dd0-9bbb-12ae636ccd41`. Prompts are package-only and ignore
   superseded history unless current records claim it active.
+- `2026-07-12T01:14:00Z`: Round 9 completed and all reviewers were closed.
+  Accepted findings require bounded/coalesced lifecycle cause retention,
+  explicit non-lifecycle treatment of fulfilled `FAILED`, and accurate recovery
+  wording for permanent environment close. The code-style P3 about the
+  sole-future-hash convention was rejected because package metadata is not a
+  durable self-ledger entry. One decision fix worker and fresh review are
+  required.
