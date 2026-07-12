@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -412,3 +412,7 @@ assigned at the safe stop.
   typechecks, lint/format/cleanup enforcement, TypeDoc/API, Protobuf, and
   generated-cleanliness gates. With every affected review concern clean,
   T-0037b is accepted and merge-ready.
+- `2026-07-12T17:02:19Z`: Merge commit `5472bd85` integrated the accepted task
+  into `main`; the full post-merge gate passed with 61 files and 1,357 tests in
+  normal and coverage runs plus every typecheck, lint/format, cleanup, docs/API,
+  Protobuf, and generated-cleanliness check. Review closure is final.

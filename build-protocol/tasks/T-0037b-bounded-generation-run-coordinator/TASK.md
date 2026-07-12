@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Started: `2026-07-12T11:43:52Z`
 
