@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 4 review in progress
+Status: Slice 3 Round 4 findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -556,3 +556,15 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   promotion, stable generation-local overlap identity, exact worker stop
   deduplication, attachment-path evidence, and current claims. Superseded
   chronology and later lifecycle are non-actionable; security remains deferred.
+- `2026-07-12T23:42:47Z`: Round 4 is complete and all reviewers are closed.
+  Actual runtime profiles match explicit dispatch. TypeScript/API docs is clean.
+  Documentation requests correction of the active stale `PENDING` summary and
+  ambiguous “no commit” wording. Style and reliability deduplicate to one
+  blocking owner-retention defect: registration rollback does not remove failed
+  owner scopes from the environment configured set or append-only coordinator,
+  causing lifetime growth and later settlement scans despite a bounded overlap
+  ledger.
+- One Terra Medium implementation owner receives the complete batch. Required
+  evidence is scoped coordinator owner removal after quiescence, sibling
+  preservation, bounded repeated-failure owner/configured/settled state, and
+  truthful current records. Round 5 and security remain pending.

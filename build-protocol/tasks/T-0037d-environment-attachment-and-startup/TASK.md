@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 4 review in progress
+Status: Slice 3 Round 4 findings assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -455,6 +455,23 @@ fresh generation/worker and exact stop/await/report/retire chronology, plus
 attachment-path same-storage D-0085 blocking/resolution and distinct-storage
 isolation. No public contract, descriptor contract, later detach/close policy,
 listener wiring, or cross-generation persistence is added.
+
+### Slice 3 Round 4 Findings
+
+1. Reclaim failed registration owner state after quiescence and permanent owner
+   retirement. The environment's configured-owner set and T-0037b coordinator
+   currently retain every ephemeral owner and scope, so repeated same-domain
+   failures still grow later settlement work linearly even though the stable
+   D-0085 ledger is bounded. Add the smallest package-internal scoped
+   coordinator removal, preserve siblings and retry safety, and prove bounded
+   owner/configured/settled retention across repeated failures.
+2. Replace the unscoped active `PENDING` work-log line with truthful current
+   progress, and clarify that “no commit” refers to the implementation owner's
+   handoff before the coordinator created the frozen review commit.
+
+Style and reliability reported the same owner-retention defect; documentation
+reported the two record defects. TypeScript/API docs is clean. One existing
+Terra Medium owner receives the deduplicated batch under TDD before Round 5.
 
 ### Slice 3 Round 3 fix outcome
 
