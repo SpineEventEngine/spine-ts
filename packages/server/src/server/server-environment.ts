@@ -161,6 +161,7 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle>;
+  retryFailedStart(environment: ServerEnvironment): Promise<void>;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
@@ -173,6 +174,13 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
     }
     return attachments.attach(options);
+  },
+  retryFailedStart(environment: ServerEnvironment) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Rollback retry requires a ServerEnvironment instance."));
+    }
+    return attachments.retryFailedStart();
   },
 });
 

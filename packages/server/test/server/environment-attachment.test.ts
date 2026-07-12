@@ -14,12 +14,21 @@ import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/deliv
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { deliveryStorageFaults, onInboxQuery } from "../delivery/delivery-storage-fault-fixture.js";
 import {
+  EnvironmentAttachments,
   EnvironmentRegistrations,
   RegistrationReadiness,
   startupObligations,
+  type EnvironmentGenerationWorker,
 } from "../../src/server/environment-attachment.js";
-import type { DeliveryRunScope } from "../../src/delivery/delivery-run-coordinator.js";
-import { EnvironmentDeliveryWorker } from "../../src/server/environment-delivery-worker.js";
+import type {
+  DeliveryRunObligation,
+  DeliveryRunScope,
+} from "../../src/delivery/delivery-run-coordinator.js";
+import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
+import {
+  EnvironmentDeliveryWorker,
+  type EnvironmentDeliveryRuntime,
+} from "../../src/server/environment-delivery-worker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 
 describe("EnvironmentRegistrations", () => {
@@ -47,6 +56,25 @@ describe("EnvironmentRegistrations", () => {
     );
     expect(exclusive.count).toBe(1);
     expect(owner.generation).not.toBe(first.generation);
+  });
+
+  it("removes one failed registration and clears only an empty retired generation", () => {
+    const registrations = new EnvironmentRegistrations();
+    const first = registrations.claim("caller");
+    const second = registrations.claim("caller");
+
+    expect(registrations.remove(second.token)).toBe(1);
+    expect(registrations.count).toBe(1);
+    expect(() => {
+      registrations.clear(first.generation);
+    }).toThrow("Environment generation still has live registrations.");
+
+    expect(registrations.remove(first.token)).toBe(0);
+    registrations.clear(first.generation);
+    const fresh = registrations.claim("caller");
+
+    expect(fresh.generation).not.toBe(first.generation);
+    expect(registrations.count).toBe(1);
   });
 });
 
@@ -173,6 +201,23 @@ describe("EnvironmentDeliveryWorker", () => {
         scopes: [firstScope],
       });
     }).toThrow("Environment delivery owner is already configured.");
+
+    await worker.retireOwners([firstScope.owner.key]);
+    await expect(worker.start(firstObligation, [first.ready.shard])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+    await expect(worker.retireOwners(["missing-owner"])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+    expect(() => worker.start({ scopes: [] }, [])).toThrow(
+      "Environment delivery obligation requires exactly one owner.",
+    );
+    expect(() => worker.start({ scopes: [firstScope, secondScope] }, [])).toThrow(
+      "Environment delivery obligation requires exactly one owner.",
+    );
+
+    await worker.start(secondObligation, [second.ready.shard]);
+    expect(second.replayed).toEqual(["second-row"]);
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
@@ -504,6 +549,206 @@ describe("ServerEnvironment attachment", () => {
   });
 });
 
+describe("failed attachment rollback", () => {
+  it("removes only the failed registration and shapes an overlapping reported blocker", async () => {
+    const reported: unknown[][] = [];
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report: (causes) => {
+        reported.push([...causes]);
+        return Promise.resolve();
+      },
+    });
+    const sibling = descriptor(
+      "SiblingLive",
+      "type.example.dev/SharedRollback",
+      new InMemoryStorageFactory(),
+    );
+    const rejected = descriptor(
+      "RejectedOverlap",
+      "type.example.dev/SharedRollback",
+      new InMemoryStorageFactory(),
+    );
+    const blocker = descriptor(
+      "BlockedOverlap",
+      "type.example.dev/SharedRollback",
+      new InMemoryStorageFactory(),
+    );
+    const disjoint = descriptor(
+      "DisjointLive",
+      "type.example.dev/DisjointRollback",
+      new InMemoryStorageFactory(),
+    );
+    const rejection = new Error("attaching registration rejected");
+
+    worker.enqueue("FAILED", { rejected: rejection });
+    const siblingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [rejected.value] }),
+    ).rejects.toBe(rejection);
+
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.retiredOwners).toEqual([["environment-owner-2"]]);
+    expect(reported).toEqual([[rejection]]);
+    expect(siblingHandle.records()).toEqual([
+      expect.objectContaining({ hasCause: false, occurrences: 0 }),
+    ]);
+
+    await rejected.readiness.claim(rejected.ready).complete(() => Promise.resolve());
+    await Promise.resolve();
+    expect(worker.starts).toBe(2);
+
+    worker.enqueue("IDLE", "IDLE", "IDLE");
+    await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+
+    let blocked: unknown;
+    try {
+      await attachments.attach({ ownership: "caller", descriptors: [blocker.value] });
+    } catch (error) {
+      blocked = error;
+    }
+    expect(blocked).toEqual(
+      new Error("Startup recovery is blocked by an unresolved shared delivery obligation."),
+    );
+    expect(blocked).not.toHaveProperty("cause");
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [disjoint.value] }),
+    ).resolves.toBeDefined();
+    expect(siblingHandle.records()).toEqual([
+      expect.objectContaining({ hasCause: false, occurrences: 0 }),
+    ]);
+  });
+
+  it.each(["report", "retire"] as const)(
+    "clears an inert sole generation after %s failure and admits one fresh generation",
+    async (failureKind) => {
+      const startFailure = new Error("sole startup rejected");
+      const cleanupFailure = new Error(`${failureKind} failed`);
+      const workers: LifecycleWorker[] = [];
+      const events: string[] = [];
+      const failed = descriptor(
+        `Sole-${failureKind}`,
+        `type.example.dev/Sole-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const fresh = descriptor(
+        `Fresh-${failureKind}`,
+        `type.example.dev/Fresh-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+
+      const firstWorker = new LifecycleWorker(events);
+      firstWorker.enqueue({ rejected: startFailure });
+      if (failureKind === "retire") {
+        firstWorker.retireFailures.push(cleanupFailure);
+      }
+      workers.push(firstWorker);
+      let factoryCall = 0;
+      const controlled = new EnvironmentAttachments({
+        createWorker() {
+          const selected = workers[factoryCall];
+          factoryCall += 1;
+          return selected ?? new LifecycleWorker();
+        },
+        report: () => {
+          events.push("report");
+          return failureKind === "report" ? Promise.reject(cleanupFailure) : Promise.resolve();
+        },
+      });
+
+      await expect(
+        controlled.attach({ ownership: "caller", descriptors: [failed.value] }),
+      ).rejects.toMatchObject({ errors: [startFailure, cleanupFailure] });
+      expect(firstWorker.events).toEqual(["start", "stop", "await", "report", "retire"]);
+      await failed.readiness.claim(failed.ready).complete(() => Promise.resolve());
+      await Promise.resolve();
+      expect(firstWorker.starts).toBe(1);
+
+      const freshWorker = new LifecycleWorker();
+      freshWorker.enqueue("IDLE");
+      workers.push(freshWorker);
+      const handle = await controlled.attach({
+        ownership: "caller",
+        descriptors: [fresh.value],
+      });
+
+      expect(handle.generation).toBeDefined();
+      expect(factoryCall).toBe(2);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(1);
+    },
+  );
+
+  it("retains an unsafe sole slot and resumes the same rollback without duplicate stop", async () => {
+    const startFailure = new Error("sole startup rejected");
+    const quiescenceFailure = new Error("await quiescence failed");
+    const events: string[] = [];
+    const workers: LifecycleWorker[] = [];
+    const firstWorker = new LifecycleWorker(events);
+    firstWorker.enqueue({ rejected: startFailure });
+    firstWorker.awaitFailures.push(quiescenceFailure);
+    workers.push(firstWorker);
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls] ?? new LifecycleWorker(events);
+        factoryCalls += 1;
+        return worker;
+      },
+      report: () => {
+        events.push("report");
+        return Promise.resolve();
+      },
+    });
+    const failed = descriptor(
+      "UnsafeSole",
+      "type.example.dev/UnsafeSole",
+      new InMemoryStorageFactory(),
+    );
+    const replacement = descriptor(
+      "RejectedReplacement",
+      "type.example.dev/RejectedReplacement",
+      new InMemoryStorageFactory(),
+    );
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toMatchObject({ errors: [startFailure, expect.any(Error)] });
+    expect(events).toEqual(["start", "stop", "await"]);
+    expect(factoryCalls).toBe(1);
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [replacement.value] }),
+    ).rejects.toThrow("Environment generation rollback requires an explicit retry.");
+    expect(replacement.enumerations).toBe(0);
+    expect(factoryCalls).toBe(1);
+
+    await attachments.retryFailedStart();
+    expect(events).toEqual(["start", "stop", "await", "await", "report", "retire"]);
+    expect(firstWorker.stopCalls).toBe(1);
+    expect(firstWorker.awaitCalls).toBe(2);
+    expect(firstWorker.retireCalls).toBe(1);
+
+    const freshWorker = new LifecycleWorker(events);
+    freshWorker.enqueue("IDLE");
+    workers.push(freshWorker);
+    const fresh = await attachments.attach({
+      ownership: "caller",
+      descriptors: [replacement.value],
+    });
+
+    expect(fresh.generation).toBeDefined();
+    expect(factoryCalls).toBe(2);
+    expect(freshWorker.starts).toBe(1);
+  });
+});
+
 interface TestDescriptor {
   readonly value: ContextDeliveryDescriptor;
   readonly context: StorageContext;
@@ -631,6 +876,109 @@ function message(ready: DeliveryReady, signalId: string) {
 
 function runScope(ownerKey: string, ready: DeliveryReady): DeliveryRunScope {
   return Object.freeze({ owner: Object.freeze({ key: ownerKey }), ready });
+}
+
+type LifecycleResult = "FAILED" | "IDLE" | { readonly rejected: Error };
+
+class LifecycleWorker implements EnvironmentGenerationWorker {
+  readonly #results: LifecycleResult[] = [];
+  readonly #events: string[];
+  readonly awaitFailures: Error[] = [];
+  readonly retireFailures: Error[] = [];
+  readonly retiredOwners: string[][] = [];
+  starts = 0;
+  stopCalls = 0;
+  awaitCalls = 0;
+  retireCalls = 0;
+
+  constructor(events: string[] = []) {
+    this.#events = events;
+  }
+
+  get events(): readonly string[] {
+    return this.#events;
+  }
+
+  enqueue(...results: LifecycleResult[]): void {
+    this.#results.push(...results);
+  }
+
+  add(runtime: EnvironmentDeliveryRuntime): void {
+    void runtime;
+  }
+
+  start(
+    obligation: DeliveryRunObligation,
+    shards: readonly ShardIndex[],
+  ): Promise<DeliveryWorkerEvidence> {
+    this.starts += 1;
+    this.#events.push("start");
+    const result = this.#results.shift();
+    if (result === undefined) {
+      return Promise.reject(new Error("Missing lifecycle worker result."));
+    }
+    return Promise.resolve({
+      obligation,
+      shards: Object.freeze(
+        shards.map((shard) =>
+          typeof result === "string"
+            ? {
+                status: "fulfilled" as const,
+                shard,
+                obligation,
+                run: lifecycleRun(result),
+                progress: lifecycleProgress(),
+              }
+            : {
+                status: "rejected" as const,
+                shard,
+                obligation,
+                cause: result.rejected,
+                progress: lifecycleProgress(),
+              },
+        ),
+      ),
+    });
+  }
+
+  stop(): void {
+    this.stopCalls += 1;
+    this.#events.push("stop");
+  }
+
+  awaitSettled(): Promise<void> {
+    this.awaitCalls += 1;
+    this.#events.push("await");
+    const failure = this.awaitFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+  }
+
+  retire(): Promise<void> {
+    this.retireCalls += 1;
+    this.#events.push("retire");
+    const failure = this.retireFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+  }
+
+  retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    this.retiredOwners.push([...ownerKeys]);
+    return Promise.resolve();
+  }
+}
+
+function lifecycleProgress() {
+  return Object.freeze({
+    runs: 1,
+    processed: 0,
+    accepted: 0,
+    delivered: 0,
+    failed: 0,
+    failures: Object.freeze([]),
+  });
+}
+
+function lifecycleRun(status: "FAILED" | "IDLE") {
+  return Object.freeze({ status, ...lifecycleProgress() });
 }
 
 async function until(predicate: () => boolean): Promise<void> {

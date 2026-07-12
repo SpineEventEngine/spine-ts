@@ -14,7 +14,10 @@ import { ShardIndex } from "../delivery/shard-index.js";
 import {
   EnvironmentDeliveryWorker,
   type EnvironmentDeliveryRuntime,
+  type EnvironmentGenerationWorker,
 } from "./environment-delivery-worker.js";
+
+export type { EnvironmentGenerationWorker } from "./environment-delivery-worker.js";
 
 /** @internal Ownership relation for one package-internal environment registration. */
 export type EnvironmentOwnership = "caller" | "server";
@@ -40,6 +43,12 @@ export interface EnvironmentAttachOptions {
 export interface EnvironmentAttachmentHandle extends EnvironmentRegistrationClaim {
   readonly startup: DeliveryRunSettlement;
   records(): readonly ParkedDeliveryObligationRecord[];
+}
+
+/** @internal Construction seams for deterministic package lifecycle tests. */
+export interface EnvironmentAttachmentsOptions {
+  readonly createWorker?: () => EnvironmentGenerationWorker;
+  readonly report?: (causes: readonly unknown[]) => Promise<void>;
 }
 
 /** @internal Synchronous cardinality gate owned by one ServerEnvironment instance. */
@@ -71,15 +80,48 @@ export class EnvironmentRegistrations {
     this.#claims.set(claim.token, claim);
     return claim;
   }
+
+  /** @internal Remove one failed attachment without disturbing sibling claims. */
+  remove(token: string): number {
+    if (!this.#claims.delete(token)) {
+      throw new Error("Environment registration is not active.");
+    }
+    return this.#claims.size;
+  }
+
+  /** @internal Release an empty generation only after its retirement is safe. */
+  clear(generation: EnvironmentGeneration): void {
+    if (this.#claims.size > 0) {
+      throw new Error("Environment generation still has live registrations.");
+    }
+    if (this.#generation !== generation) {
+      throw new Error("Environment generation is not current.");
+    }
+    this.#generation = undefined;
+    this.#ownership = undefined;
+  }
 }
 
 /** @internal One ServerEnvironment's serialized generation attachment owner. */
 export class EnvironmentAttachments {
   readonly #registrations = new EnvironmentRegistrations();
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
+  readonly #createWorker: () => EnvironmentGenerationWorker;
+  readonly #report: (causes: readonly unknown[]) => Promise<void>;
   #serial = Promise.resolve();
+  #failedRollback: FailedStartRollback | undefined;
+
+  constructor(options: EnvironmentAttachmentsOptions = {}) {
+    this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
+    this.#report = options.report ?? (() => Promise.resolve());
+  }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
+    if (this.#failedRollback !== undefined) {
+      return Promise.reject(
+        new Error("Environment generation rollback requires an explicit retry."),
+      );
+    }
     let claim: EnvironmentRegistrationClaim;
     try {
       claim = this.#registrations.claim(options.ownership);
@@ -88,29 +130,114 @@ export class EnvironmentAttachments {
     }
     let generation = this.#generations.get(claim.generation);
     if (generation === undefined) {
-      generation = new DeliveryGeneration();
+      generation = new DeliveryGeneration(this.#createWorker(), this.#report);
       this.#generations.set(claim.generation, generation);
     }
-    const attaching = this.#serial.then(() => generation.attach(claim, options.descriptors));
+    const attaching = this.#serial.then(() =>
+      this.#attachRegistration(generation, claim, options.descriptors),
+    );
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
     );
     return attaching;
   }
+
+  retryFailedStart(): Promise<void> {
+    const rollback = this.#failedRollback;
+    if (rollback === undefined) {
+      return Promise.reject(new Error("Environment has no failed-start rollback to retry."));
+    }
+    const retrying = this.#serial.then(() => this.#continueRollback(rollback));
+    this.#serial = retrying.then(
+      () => undefined,
+      () => undefined,
+    );
+    return retrying;
+  }
+
+  async #attachRegistration(
+    generation: DeliveryGeneration,
+    claim: EnvironmentRegistrationClaim,
+    descriptors: readonly ContextDeliveryDescriptor[],
+  ): Promise<EnvironmentAttachmentHandle> {
+    try {
+      return await generation.attach(claim, descriptors);
+    } catch (startError) {
+      const remaining = this.#registrations.remove(claim.token);
+      try {
+        if (remaining > 0) {
+          await generation.rollbackRegistration(claim.token);
+        } else {
+          const rollback = { claim, generation };
+          this.#failedRollback = rollback;
+          await this.#continueRollback(rollback);
+        }
+      } catch (rollbackError) {
+        throw failedStartError(startError, rollbackError);
+      }
+      throw startError;
+    }
+  }
+
+  async #continueRollback(rollback: FailedStartRollback): Promise<void> {
+    try {
+      await rollback.generation.retireFailedRegistration(rollback.claim.token);
+    } finally {
+      if (rollback.generation.replacementSafe) {
+        this.#generations.delete(rollback.claim.generation);
+        this.#registrations.clear(rollback.claim.generation);
+        if (this.#failedRollback === rollback) {
+          this.#failedRollback = undefined;
+        }
+      }
+    }
+  }
+}
+
+interface FailedStartRollback {
+  readonly claim: EnvironmentRegistrationClaim;
+  readonly generation: DeliveryGeneration;
+}
+
+interface GenerationRegistration {
+  readonly readiness: RegistrationReadiness;
+  readonly scopes: readonly DeliveryRunScope[];
+  readonly ownerKeys: readonly string[];
+}
+
+interface ReportedFailure {
+  readonly domain: ReadonlySet<string>;
+  readonly obligations: ParkedDeliveryObligations;
 }
 
 class DeliveryGeneration {
-  readonly #worker = new EnvironmentDeliveryWorker();
+  readonly #worker: EnvironmentGenerationWorker;
+  readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #descriptors = new WeakSet<ContextDeliveryDescriptor>();
   readonly #runtimes = new WeakMap<
     ContextDeliveryDescriptor,
     Map<string, EnvironmentDeliveryRuntime>
   >();
   readonly #obligations = new Map<string, ParkedDeliveryObligations>();
+  readonly #registrations = new Map<string, GenerationRegistration>();
+  readonly #reportedFailures: ReportedFailure[] = [];
   readonly #configuredOwners = new Set<string>();
   #coordinator: DeliveryRunCoordinator | undefined;
   #nextOwner = 0;
+  #retiredWithoutCoordinator = false;
+
+  constructor(
+    worker: EnvironmentGenerationWorker,
+    report: (causes: readonly unknown[]) => Promise<void>,
+  ) {
+    this.#worker = worker;
+    this.#report = report;
+  }
+
+  get replacementSafe(): boolean {
+    return this.#coordinator?.replacementSafe ?? this.#retiredWithoutCoordinator;
+  }
 
   async attach(
     claim: EnvironmentRegistrationClaim,
@@ -124,8 +251,47 @@ class DeliveryGeneration {
       this.#addRuntime(runtime);
     }
     const readiness = this.#readiness(registration);
+    this.#registrations.set(claim.token, {
+      readiness,
+      scopes: registration.scopes,
+      ownerKeys: Object.freeze(registration.runtimes.map(({ owner }) => owner.key)),
+    });
     await this.#transition(registration, readiness);
     return await this.#recover(claim, readiness.open(registration.scopes));
+  }
+
+  async rollbackRegistration(token: string): Promise<void> {
+    const state = this.#registrations.get(token);
+    state?.readiness.fail();
+    const failures: unknown[] = [];
+    try {
+      await this.#consumeRegistration(token, false);
+    } catch (error) {
+      failures.push(error);
+    }
+    if (state !== undefined) {
+      try {
+        await this.#worker.retireOwners(state.ownerKeys);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this.#registrations.delete(token);
+    throwFailures(failures, "Environment registration rollback failed.");
+  }
+
+  async retireFailedRegistration(token: string): Promise<void> {
+    this.#registrations.get(token)?.readiness.fail();
+    if (this.#coordinator === undefined) {
+      await this.#consumeRegistration(token, true);
+      this.#registrations.delete(token);
+      this.#retiredWithoutCoordinator = true;
+      return;
+    }
+    await this.#coordinator.retire(async () => {
+      await this.#consumeRegistration(token, true);
+      this.#registrations.delete(token);
+    });
   }
 
   #readiness(registration: AssembledRegistration): RegistrationReadiness {
@@ -157,10 +323,52 @@ class DeliveryGeneration {
     claim: EnvironmentRegistrationClaim,
     startup: readonly DeliveryRunScope[],
   ): Promise<EnvironmentAttachmentHandle> {
+    const blocked = this.#hasReportedOverlap(startup);
     const settlement = await this.#start(startup);
     const obligations = this.#recordObligations(claim.token, startup, settlement);
-    throwRejected(obligations?.records() ?? []);
+    throwRejected(obligations?.records() ?? [], blocked);
     return handle(claim, settlement, obligations);
+  }
+
+  async #consumeRegistration(token: string, consumeGeneration: boolean): Promise<void> {
+    const state = this.#registrations.get(token);
+    const obligations = this.#obligations.get(token);
+    if (state === undefined || obligations === undefined) {
+      return;
+    }
+    const units = state.scopes.map(scopeKey);
+    const causes = obligations.report([
+      { owner: { kind: "registration", token }, obligation: "startup", units },
+    ]);
+    let reportFailure: unknown;
+    try {
+      if (causes.length > 0) {
+        await this.#report(causes);
+      }
+    } catch (error) {
+      reportFailure = error;
+    }
+    obligations.removeRegistration(token);
+    if (consumeGeneration) {
+      this.#obligations.delete(token);
+    } else if (obligations.records().length > 0) {
+      this.#reportedFailures.push({
+        domain: new Set(state.scopes.map(({ ready }) => readyKey(ready))),
+        obligations,
+      });
+    }
+    if (reportFailure !== undefined) {
+      throw asError(reportFailure);
+    }
+  }
+
+  #hasReportedOverlap(scopes: readonly DeliveryRunScope[]): boolean {
+    const domain = new Set(scopes.map(({ ready }) => readyKey(ready)));
+    return this.#reportedFailures.some(
+      ({ domain: failed, obligations }) =>
+        intersects(domain, failed) &&
+        obligations.records().some((record) => record.hasCause && record.reportedSinceResolution),
+    );
   }
 
   async #start(startup: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
@@ -312,6 +520,11 @@ export class RegistrationReadiness {
     this.#buffered.set(scopeKey(scope), scope);
   }
 
+  fail(): void {
+    this.#mode = "failed";
+    this.#buffered.clear();
+  }
+
   open(startup: readonly DeliveryRunScope[]): readonly DeliveryRunScope[] {
     if (this.#mode !== "waiting") {
       throw new Error("Registration readiness can only open once.");
@@ -408,13 +621,47 @@ export function startupObligations(
   return obligations;
 }
 
-function throwRejected(records: readonly ParkedDeliveryObligationRecord[]): void {
+function throwRejected(records: readonly ParkedDeliveryObligationRecord[], blocked: boolean): void {
   const causes = records.flatMap((record) => (record.hasCause ? [record.cause] : []));
+  if (blocked) {
+    causes.push(
+      new Error("Startup recovery is blocked by an unresolved shared delivery obligation."),
+    );
+  }
   if (causes.length === 1) {
     throw causes[0];
   }
   if (causes.length > 1) {
     throw new AggregateError(causes, "Environment attachment startup recovery failed.");
+  }
+}
+
+function intersects(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
+  for (const value of first) {
+    if (second.has(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
+  const rollbackErrors: readonly unknown[] =
+    rollbackError instanceof AggregateError
+      ? (rollbackError.errors as readonly unknown[])
+      : [rollbackError];
+  return new AggregateError(
+    [asError(startError), ...rollbackErrors.map(asError)],
+    "Environment attachment failed and rollback also failed.",
+  );
+}
+
+function throwFailures(failures: readonly unknown[], message: string): void {
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length > 1) {
+    throw new AggregateError(failures, message);
   }
 }
 

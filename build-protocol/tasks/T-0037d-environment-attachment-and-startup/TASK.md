@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 review clean; Slice 3 implementation assigned
+Status: Slice 3 focused verified; review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -519,3 +519,50 @@ Round 4 record verification corrected the sole active polarity typo above.
 Task/work/review scanning found no other active inaccurate occurrence; reviewer
 finding chronology remains unchanged. Record Prettier and `git diff --check`
 pass with identical Status mirrors and no source/test diff.
+
+### Slice 3 focused implementation outcome
+
+Slice 3 adds only package-internal failed-attachment rollback. A failed shared
+registration is removed from admission and readiness without disturbing sibling
+registration state, progress, parked records, or worker ownership. Previously
+reported overlapping unresolved work adds the exact D-0085 plain startup
+blocker, without chaining the earlier cause; disjoint work remains sibling
+owned.
+
+The first/sole caller registration uses the existing coordinator `retire()` and
+parked-obligation APIs. Observable retirement order is stop, quiescence,
+classification/report consumption, permanent worker retirement, and safe slot
+clear. Reporting or post-quiescence cleanup failure still leaves the old
+generation inert and safely clears its slot while rejecting the original start
+once. Quiescence failure retains the generation and dependencies, blocks a
+replacement, and exposes one package-internal same-operation retry. The retry
+does not repeat stop, completes the remaining phases once, then permits exactly
+one fresh generation.
+
+Strict TDD REDs first observed missing registration removal and four failed
+rollback scenarios before the internal lifecycle seam and implementation
+existed. GREEN proves sibling isolation, exact blocker shaping, report and
+cleanup failure behavior, quiescence retention/retry order and counts, slot
+clear/retention, and one fresh generation. A final real-worker adapter test
+proves owner-only retirement leaves its sibling selectable and rejects missing
+or invalid owner selection.
+
+The final focused gate passes 7 files/181 tests and native server loopback
+passes 21/21 after the expected sandbox-only `listen EPERM`. Affected lifecycle
+coverage passes at 96.33% statements, 90.61% branches, 97.70% functions, and
+96.57% lines. Generated build typecheck, ESLint/cleanup, formatting, diff, and
+public/generated/protected scans are the recorded handoff gate. Full `pnpm
+verify`, commit, Slice 3-excluded lifecycle policy, and public API/Server wiring
+remain absent.
+
+Slice 3 changed exactly these implementation-owned files:
+
+- `packages/server/src/server/environment-attachment.ts`
+- `packages/server/src/server/environment-delivery-worker.ts`
+- `packages/server/src/server/server-environment.ts`
+- `packages/server/test/server/environment-attachment.test.ts`
+- this task and its canonical work/review records
+
+Final `pnpm lint:generated`, repository Prettier, and `git diff --check` pass.
+Public entrypoint/package/lockfile diffs and generated/Protobuf/protected-human-
+review scans are empty; all three Status mirrors are identical.

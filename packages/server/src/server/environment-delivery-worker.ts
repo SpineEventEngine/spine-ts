@@ -22,8 +22,14 @@ export interface EnvironmentDeliveryRuntime {
   readonly scopes: readonly DeliveryRunScope[];
 }
 
+/** @internal Generation worker plus failed-registration owner retirement. */
+export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
+  add(runtime: EnvironmentDeliveryRuntime): void;
+  retireOwners(ownerKeys: readonly string[]): Promise<void>;
+}
+
 /** @internal Routes each owner-partitioned obligation to its exact runtime worker. */
-export class EnvironmentDeliveryWorker implements DeliveryRunWorker {
+export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
 
   add(runtime: EnvironmentDeliveryRuntime): void {
@@ -82,6 +88,28 @@ export class EnvironmentDeliveryWorker implements DeliveryRunWorker {
       }
     }
     throwFailures(failures, "Environment delivery worker retirement failed.");
+  }
+
+  async retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    const selected = ownerKeys.map((key) => {
+      const worker = this.#workers.get(key);
+      if (worker === undefined) {
+        throw new Error("Environment delivery owner is not configured.");
+      }
+      return { key, worker };
+    });
+    for (const { worker } of selected) {
+      worker.stop();
+    }
+    await Promise.all(selected.map(({ worker }) => worker.awaitSettled()));
+    const retired = await Promise.allSettled(selected.map(({ worker }) => worker.retire()));
+    for (const { key } of selected) {
+      this.#workers.delete(key);
+    }
+    const failures = retired.flatMap((result) =>
+      result.status === "rejected" ? [result.reason as unknown] : [],
+    );
+    throwFailures(failures, "Environment registration worker retirement failed.");
   }
 }
 

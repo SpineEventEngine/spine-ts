@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 review clean; Slice 3 implementation assigned
+Status: Slice 3 focused verified; review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -392,3 +392,33 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Runtime profiles matched dispatch. Slice 2 review is closed. Slice 3 is
   assigned to one Terra Medium owner; its four-lane review remains pending
   focused implementation and verification.
+- Slice 3 resumed under fully read `implement`, `receiving-code-review`, and
+  strict TDD. JVM/server evidence was refreshed before production edits and
+  supports the accepted private environment owner, centralized delivery
+  dependencies, and no-public-lifecycle boundary. The change remains limited
+  to registration-scoped failed-start rollback consuming the existing
+  coordinator retirement and parked-record APIs; review awaits RED/GREEN
+  evidence.
+- Slice 3 is focused verified and ready for its bounded review. The private
+  package diff removes only a failed attaching registration, preserves sibling
+  readiness/progress/parked attribution, shapes the exact cause-less D-0085
+  blocker only for overlapping already-reported unresolved work, and retains
+  disjoint ownership.
+- Sole-generation failure consumes existing `DeliveryRunCoordinator.retire`
+  and `ParkedDeliveryObligations` behavior. Deterministic evidence covers
+  stop/quiescence/report/retire order, report and post-quiescence cleanup
+  failures with safe slot clearing, quiescence failure with unsafe-slot
+  retention, no duplicate stop on same-operation retry, and exactly one later
+  fresh generation. The real worker adapter also proves exact owner retirement
+  does not remove its sibling.
+- Final focused evidence is environment 20/20, canonical seven files 181/181,
+  and native server loopback 21/21 after expected sandbox `listen EPERM`.
+  Corrected affected-lifecycle coverage is 96.33% statements, 90.61% branches,
+  97.70% functions, and 96.57% lines. Generated typecheck, ESLint/cleanup,
+  formatting, and diff checks pass; public entrypoint/package/lockfile and
+  generated/Protobuf/protected scans are empty; Status mirrors are identical.
+  Four-lane Slice 3 review remains pending; security remains deferred to final
+  readiness.
+- `2026-07-12T23:21:00Z`: Coordinator independently repeated 181 focused
+  regressions, generated build typecheck, repository format, and diff hygiene.
+  All pass. Slice 3 is ready for a committed review package.
