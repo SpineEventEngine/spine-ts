@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 4 review active
+Status: Round 4 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54d0-a74c-7e23-966a-1343310bfc40` | Active |
-| Documentation              | `019f54d0-a842-7510-b8b4-cd20449be726` | Active |
-| TypeScript/API docs        | `019f54d0-a7b9-75a0-a76d-25f4e43197b6` | Active |
-| Performance/reliability    | `019f54d0-a8db-7d92-8a4f-1f51ff08daf6` | Active |
+| Code style/maintainability | `019f54d0-a74c-7e23-966a-1343310bfc40` | P1/P2  |
+| Documentation              | `019f54d0-a842-7510-b8b4-cd20449be726` | P1     |
+| TypeScript/API docs        | `019f54d0-a7b9-75a0-a76d-25f4e43197b6` | P1     |
+| Performance/reliability    | `019f54d0-a8db-7d92-8a4f-1f51ff08daf6` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -214,3 +214,12 @@ Security is deferred to final project readiness.
   `.superpowers/sdd/review-0308bc4a..0ca43f28.diff` (21 commits, 113,308 bytes)
   and assigned all four Round 4 lanes with targeted active-state, race, and
   public-boundary checks.
+- `2026-07-12T05:36:21Z`: Closed all four Round 4 lanes and accepted one
+  complete batch: transition-time persistence must be buffered/routed so it
+  loses neither delivery owner; surviving registrations/readiness scopes must
+  rebind to the one fresh generation after reusable explicit stop; T-0037f
+  public docs must also exclude internal-stop vocabulary; every child ledger
+  must carry canonical skill applicability and Human Review Reset rules, with
+  the bounded-context caution in T-0037a; the parent ledger must state no
+  duplicate roles and participant closure; and active undated status prose must
+  reflect completed Round 3 verification and Round 4 findings.
