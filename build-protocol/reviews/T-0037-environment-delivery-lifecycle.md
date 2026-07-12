@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 2 docs fixes committed; fresh review pending
+Status: Round 3 review active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54b4-1ad3-7310-8650-848f599a82dc` | P1/P2  |
-| Documentation              | `019f54b4-1bfb-7c20-97b5-e5c6ad6cca92` | P1/P2  |
-| TypeScript/API docs        | `019f54b4-1b82-7222-8d91-153508c77665` | P1/P2  |
-| Performance/reliability    | `019f54b4-1ca2-7d13-a741-fcff85863e6f` | P1     |
+| Code style/maintainability | `019f54c2-3cd7-7c82-b55e-421c6ab9e635` | Active |
+| Documentation              | `019f54c2-3d46-7111-a97b-9ee8b2bc1394` | Active |
+| TypeScript/API docs        | `019f54c2-3dcc-7f11-a9be-118128bbef3a` | Active |
+| Performance/reliability    | `019f54c2-3e53-7ad1-8f16-485575a5e38a` | Active |
 
 Security is deferred to final project readiness.
 
@@ -167,3 +167,8 @@ Security is deferred to final project readiness.
 - `2026-07-12T05:16:11Z`: Commit `7281ba07` recorded the complete verified
   Round 2 fixes. No fresh lane has been assigned or run and no clean review is
   claimed.
+- `2026-07-12T05:17:27Z`: Generated fixed-baseline package
+  `.superpowers/sdd/review-0308bc4a..49b3fb4b.diff` (16 commits, 101,433 bytes)
+  and assigned all four Round 3 lanes. Prompts target the corrected ownership
+  and failure contracts and ignore superseded history unless active records
+  still claim it.
