@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 1 docs fix worker active
+Status: Round 1 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -9,14 +9,14 @@ Baseline: `ab8fc9f4`
 D-0085's environment lifecycle successor is too broad for one implementation
 and review package. D-0086 sequences it without changing its semantics:
 
-| Order | Child   | Exclusive invariant ownership                                                                        |
-| ----- | ------- | ---------------------------------------------------------------------------------------------------- |
-| 1     | T-0037a | Built-context delivery descriptor, actual storage, tenants, endpoints/shards, post-persist readiness |
-| 2     | T-0037b | Serialized/coalesced finite T-0036 starts and per-shard disposition handling                         |
-| 3     | T-0037c | Finite canonical parked obligations and one-time cause reporting                                     |
-| 4     | T-0037d | Environment registrations, startup recovery, attribution, failed-start rollback                      |
-| 5     | T-0037e | Detach, stop/retire/reuse, close refusal, permanent environment close                                |
-| 6     | T-0037f | Listener startup and network/context/resource/facility shutdown ordering                             |
+| Order | Child   | Exclusive invariant ownership                                                                   |
+| ----- | ------- | ----------------------------------------------------------------------------------------------- |
+| 1     | T-0037a | Descriptor, actual storage, tenants, endpoint/shards, per-successful-row readiness              |
+| 2     | T-0037b | Finite starts, bounded lossless scope merge, dispositions, reusable stop/await/retire primitive |
+| 3     | T-0037c | Finite canonical parked obligations and one-time cause reporting                                |
+| 4     | T-0037d | Registrations/startup, failed-start primitive invocation, empty-generation slot replacement     |
+| 5     | T-0037e | Ordinary detach/close invocation, fresh-generation races, close refusal, permanent close        |
+| 6     | T-0037f | Listener startup and network/context/resource/facility shutdown ordering                        |
 
 Every child is Candidate/not started and depends on its predecessor. Each will
 receive its own branch, work/review records, TDD cycle, focused checks, and four
@@ -39,14 +39,24 @@ catch-up stations, and global storage copying are rejected.
 
 After parent review/integration, create only T-0037a's implementation branch
 and durable logs. Its first RED tests must pin the built-context descriptor,
-actual storage factory, tenant scopes, and notification-after-persist ordering.
-It must preserve the current immediate exact drain and must not start a worker
-or attach an environment registration.
+actual storage factory, tenant scopes, and readiness after every successful row
+persistence, including earlier rows in a partially failed `receiveAll` flow and
+none for a rejected write. It must preserve the current immediate exact drain
+and must not start a worker or attach an environment registration.
+
+The reviewed package boundary is `9e90a006`; the current docs-fix assignment is
+recorded by `652db999`. This uncommitted fix package makes no review claim and
+names no future fix hash.
 
 ## Verification
 
-`pnpm docs:check` passed after the standard fresh-worktree generated declaration
-build, with zero errors and only the known invalid-`origin` warning.
+`pnpm docs:check` passed after the standard fresh-worktree ignored-declaration
+bootstrap, with zero errors and only the known invalid-`origin` warning.
 `pnpm format:check`, `git diff --check`, tracked scope, untracked scope, and
-child-artifact checks passed. Full `pnpm verify` was intentionally not run for
-this docs-only inner loop. No required review lane is claimed.
+child-artifact checks passed for the original split package. Full `pnpm verify`
+was intentionally not run for that docs-only inner loop. Round 1 produced
+accepted findings. The complete fix package then passed fresh `docs:check`,
+`format:check`, `git diff --check`, exact tracked/untracked scope, and
+child-artifact checks with unchanged 205 server exports and only the known
+invalid-`origin` warning. Full `pnpm verify` remains reserved. No fresh review
+is claimed.

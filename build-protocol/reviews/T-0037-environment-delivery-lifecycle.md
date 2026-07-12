@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 1 docs fix worker active
+Status: Round 1 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -38,6 +38,22 @@ Security is deferred to final project readiness.
   changed active docs claim it.
 - No public lifecycle, monitor, scheduler, retry-policy, or adapter API may
   appear without a new accepted decision.
+- Confirm T-0037a emits readiness after every successful individual row
+  persistence, including earlier successful rows in partial `receiveAll`/batch
+  failure, and emits none for rejected/unattempted writes.
+- Confirm T-0037b's single pending admission losslessly unions every eligible
+  canonical configured scope, is bounded by descriptors/shards rather than
+  trigger count, and preserves disjoint scopes across mixed partitions.
+- Confirm T-0037b alone owns the reusable coordinator-instance
+  stop/await/retire primitive, T-0037d invokes it only for failed-start empty-
+  generation rollback/replacement, and T-0037e invokes it only for ordinary
+  last detach/permanent close plus fresh-generation race policy.
+- Confirm server-owned startup failure attempts rollback/quiescence,
+  context/resource cleanup, and permanent environment/facility close in D-0085
+  order without listener intake, aggregating failures without skipped cleanup.
+- Confirm all six child ledgers copy every applicable inherited human rule and
+  distinguish no committed generated artifacts/root-public API changes from
+  permitted emitted internal declaration changes.
 
 ## Rounds
 
@@ -78,6 +94,25 @@ Security is deferred to final project readiness.
   callers, server-owned failed-start permanent cleanup, complete inherited
   child ledgers, and accurate declaration/direct compatibility wording. Fresh
   review waits for one docs fix worker, verification, and commit.
+- `2026-07-12T04:44:00Z`: Commit `9e90a006` recorded the complete accepted
+  findings, and `652db999` recorded the single docs-fix worker assignment. The
+  fix remains uncommitted as required; no future hash or review result is
+  claimed.
+- `2026-07-12T04:53:38Z`: The assigned docs fix worker authored the complete
+  accepted batch across D-0085/D-0086, architecture, parent/report, all six
+  child briefs, and durable logs. Verification is pending. No fresh reviewer is
+  assigned and no clean review or fix commit is claimed.
+- `2026-07-12T04:55:02Z`: The docs fix package passed `docs:check`,
+  `format:check`, `git diff --check`, exact scope/untracked inspection, and the
+  child-only-brief artifact check. Full `pnpm verify` remains reserved. No fresh
+  reviewer is assigned, no lane has rerun, and no clean review or fix commit is
+  claimed.
+- `2026-07-12T04:59:52Z`: Coordinator independently repeated the focused
+  pre-review gate. Docs/API generation retained 205 expected server exports
+  with only the known invalid-`origin` warning; formatting, diff integrity,
+  exact scope, child-artifact shape, stale-status wording, and public-boundary
+  searches passed. The completed fix worker is closed. A fresh fixed-baseline
+  package and all four lanes are still required before acceptance.
 - `2026-07-12T04:44:00Z`: Assigned docs fix worker
   `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
   package generation and all four lanes remain pending its return, coordinator

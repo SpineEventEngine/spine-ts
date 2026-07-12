@@ -12,14 +12,27 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
 
 ## Human-Imposed Requirements Ledger
 
-- Implement only this child in its future isolated branch/worktree with one
-  author, TDD, focused checks, and all four required review lanes.
+- Continue autonomously until this child is complete or a real blocker occurs;
+  keep the implementation/review package small and limited to this child.
+- Implement only this child in its own future branch/worktree with one author
+  using TDD.
+- Do not assign duplicate authors or reviewers for the same role, and close
+  every participating author/reviewer agent after its role completes.
+- Before server-module implementation, inspect and record the relevant Spine
+  JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
+- Run lightweight docs/status lint before review.
+- Run all four independent review lanes until clean; defer security review to
+  final project readiness.
+- Use focused inner-loop tests/checks; run full `pnpm verify` only at final child
+  acceptance and again after merge.
+- Treat superseded history as non-actionable unless an active record claims it.
 - Preserve the existing public `Server`, `RunningServer`, and
-  `ServerEnvironment` surface unless a separate accepted decision authorizes a
-  change.
+  `ServerEnvironment` surface.
 - Use T-0037d/e attachment and detach handles; do not reproduce environment,
   coordinator, or parked-record logic in server code.
-- Keep generated Protobuf output out of VCS and do not touch
+- Commit no generated artifacts and make no root/public export or API change;
+  emitted internal declarations may change.
+- Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Current Fact
@@ -57,6 +70,13 @@ aggregation across these ordered phases.
 - Startup rejection attributable to that registration prevents listener intake
   and aggregates context/resource/registration cleanup failures through the
   existing failed-start model without closing a shared caller-owned environment.
+- When startup fails with a server-owned environment, no listener is opened;
+  registration rollback and generation quiescence are attempted first while
+  endpoint dependencies remain open, then every context and resource close is
+  attempted, then permanent environment/facility close is attempted in D-0085
+  order. Failures from startup, rollback/quiescence, contexts/resources, and
+  permanent environment/facility close aggregate without skipping any later
+  cleanup phase.
 - Close order is network intake and sessions; registration detach/quiescence
   while endpoint dependencies remain open; eligible cause aggregation; context
   and resource close; then owned environment facilities.
@@ -85,5 +105,5 @@ aggregation across these ordered phases.
 
 No retry delay/backoff/jitter/timer selection, public monitoring/actions,
 process supervision, topology/adapters, `CATCH_UP` delivery, legacy
-`IMPORT_EVENT` support, generated/example changes, or T-0036 redesign belongs
-here.
+`IMPORT_EVENT` support, committed generated artifacts, example changes, or
+T-0036 redesign belongs here.

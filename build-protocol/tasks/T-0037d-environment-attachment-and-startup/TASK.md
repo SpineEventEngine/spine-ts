@@ -13,13 +13,27 @@ integration.
 
 ## Human-Imposed Requirements Ledger
 
-- Implement only this child in its future isolated branch/worktree with one
-  author, TDD, focused checks, and all four required review lanes.
+- Continue autonomously until this child is complete or a real blocker occurs;
+  keep the implementation/review package small and limited to this child.
+- Implement only this child in its own future branch/worktree with one author
+  using TDD.
+- Do not assign duplicate authors or reviewers for the same role, and close
+  every participating author/reviewer agent after its role completes.
+- Before server-module implementation, inspect and record the relevant Spine
+  JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
+- Run lightweight docs/status lint before review.
+- Run all four independent review lanes until clean; defer security review to
+  final project readiness.
+- Use focused inner-loop tests/checks; run full `pnpm verify` only at final child
+  acceptance and again after merge.
+- Treat superseded history as non-actionable unless an active record claims it.
 - Preserve existing public `ServerEnvironment` construction/options and add no
   public attach, detach, generation, scheduler, monitor, or retry surface.
 - Use T-0037a descriptors, T-0037b coordination, and T-0037c records; do not
   duplicate their ownership.
-- Keep generated Protobuf output out of VCS and do not touch
+- Commit no generated artifacts and make no root/public export or API change;
+  emitted internal declarations may change.
+- Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Exact Ownership
@@ -31,6 +45,13 @@ admission, post-persist readiness routing, and failed-start rollback. It
 assembles startup obligation scopes from T-0037a's built-context descriptors,
 including actual storage factories and enumerated tenants, installs readiness,
 and awaits one finite recovery result before declaring attachment ready.
+
+When failed-start rollback removes the first or sole registration, this child
+invokes T-0037b's existing authoritative coordinator-instance
+stop/await/retire primitive, supplies the T-0037c record-consumption step, and
+clears the empty generation slot only after retirement settles. A later attach
+to an open caller-owned environment may replace that empty slot with one fresh
+generation. This is failed-start rollback ownership only.
 
 The child exposes an internal attachment handle for future server integration.
 It does not yet change `Server.start()` or listener ordering.
@@ -64,7 +85,10 @@ It does not yet change `Server.start()` or listener ordering.
 - An already-reported unresolved overlapping shared cause produces exactly the
   D-0085 plain startup blocker message and no original-cause chain.
 - A sole failed attachment quiesces its empty generation internally while a
-  caller-owned environment remains reusable; permanent close remains T-0037e.
+  caller-owned environment remains reusable: rollback invokes T-0037b's
+  primitive in exact stop/await/consume/retire order, clears the retired empty
+  slot, and a later attach creates one fresh coordinator without reusing or
+  overlapping the retired instance. Permanent close remains T-0037e.
 
 ## D-0085 Invariants
 
@@ -80,6 +104,7 @@ It does not yet change `Server.start()` or listener ordering.
 ## Explicit Exclusions
 
 No public lifecycle option, final `Server.start()` wiring, network intake,
-ordinary detach, reusable generation retirement, environment close, facility
-close, retry timing, monitor/action API, topology, or T-0036 redesign belongs
-here.
+ordinary detach/last-detach invocation, permanent-close invocation,
+fresh-generation attach/detach/close race policy, environment/facility close,
+retry timing, monitor/action API, topology, or T-0036 redesign belongs here.
+This child invokes but does not reopen T-0037b's retirement primitive.

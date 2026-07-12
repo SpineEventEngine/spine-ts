@@ -3163,12 +3163,21 @@ Decision:
   propagate or aggregate through the existing failed-start error model. Cleanup
   does not claim or delete durable pending rows; their later recoverability
   follows the environment/storage lifetime rules below.
-- After a newly supported inbox row is durably persisted, the local write path
-  notifies the same package-internal seam. Notification carries readiness only;
-  it does not carry a timer, backoff value, monitor action, payload, or retry
-  policy. A notification during an active run is coalesced, so work committed
-  after that run's last relevant read receives one later bounded run without a
-  concurrent `DeliveryWorker.start()` call.
+- After each individual newly supported inbox row is durably persisted, the
+  local write path notifies the same package-internal seam. This is a per-row
+  durability boundary: each successful row emits independently of call,
+  configured scope, or batch grouping. Every successful earlier row in a
+  `receiveAll` or other batch remains notified when a later row rejects, while
+  a rejected or unattempted write emits no readiness. Notification carries
+  readiness only; it does not carry a
+  timer, backoff value, monitor action, payload, or retry policy. Notifications
+  during an active run merge idempotently into one pending admission containing
+  every eligible canonical configured scope they identify. The pending set
+  deduplicates by configured scope and is bounded by attached descriptors and
+  configured shards, not trigger count; it cannot retain only the first or last
+  scope. Thus disjoint writes and scopes from mixed fulfilled/rejected
+  partitions remain eligible for one later bounded run without a concurrent
+  package-internal/direct worker start.
 - Retryable failures left `TO_DELIVER` remain the responsibility of this same
   owner. `FAILED` records that later reconsideration is needed but does not
   immediately retrigger itself. A later package-internal retry-readiness policy
@@ -3582,15 +3591,22 @@ Attachment And Startup`, `T-0037e Generation Retirement And Environment
 Close`, and `T-0037f Server Lifecycle Integration`.
 - The invariant map is exclusive. T-0037a owns package-internal built-context
   delivery descriptors, actual storage-factory access, startup tenant
-  enumeration, endpoint/shard attachment facts, and post-persist readiness
-  emission. T-0037b owns serialized/coalesced bounded generation runs and
-  T-0036 evidence interpretation. T-0037c owns finite canonical operational
+  enumeration, endpoint/shard attachment facts, and per-successful-row
+  post-persist readiness emission. T-0037b owns serialized bounded generation
+  runs, lossless bounded canonical-scope coalescing, T-0036 evidence
+  interpretation, and the reusable authoritative coordinator-instance
+  stop/await/retire primitive. T-0037c owns finite canonical operational
   obligation and cause-reporting records. T-0037d owns environment
   registration cardinality, attachment, startup recovery, and failed-start
-  rollback. T-0037e owns detach, generation stop/retirement/reuse, close
-  refusal, and permanent environment close. T-0037f alone integrates those
-  seams with listener startup, network shutdown, contexts, resources, and
-  owned facilities.
+  rollback, including invoking T-0037b's primitive and clearing/replacing the
+  empty generation slot after sole/first-registration rollback so a
+  caller-owned environment remains reusable. T-0037e owns ordinary detach,
+  invoking the same existing primitive for ordinary last detach and permanent
+  close, fresh-generation race policy, close refusal, and permanent environment
+  close. T-0037f alone integrates those seams with listener startup, network
+  shutdown, contexts, resources, and owned facilities. T-0037d does not own
+  ordinary detach or race policy; T-0037e does not reopen failed-start rollback
+  or coordinator-instance retirement.
 - Each child depends on the preceding child and receives its own branch,
   implementation log, review log, TDD cycle, focused verification, and four
   required review lanes when implementation starts. Candidate briefs do not
@@ -3602,11 +3618,14 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   replace the current exact-drain behavior before a later child owns the
   transition.
 - Every child preserves D-0085 rather than redesigning it: one environment
-  owner; finite one-shot T-0036 runs; readiness only after durable persistence;
-  per-shard rather than aggregate scheduling; no spin from fulfilled
-  `FAILED`/`SKIPPED` or rejected starts; bounded parked state; ownership-scoped
-  startup/cleanup; stop-before-await-before-consume retirement; and network,
-  endpoint, transport, and storage close ordering.
+  owner; finite one-shot T-0036 runs; readiness after every successful
+  individual row persistence and never a rejected write; one lossless pending
+  canonical-scope union bounded by descriptors/configured shards; per-shard
+  rather than aggregate scheduling; no spin from fulfilled `FAILED`/`SKIPPED`
+  or rejected starts; bounded parked state; ownership-scoped startup/cleanup;
+  one reusable stop-before-await-before-consume-before-retire coordinator
+  primitive with non-overlapping lifecycle callers; and network, endpoint,
+  transport, and storage close ordering.
 - JVM evidence is adopted narrowly: delivery ownership belongs at environment
   level and local post-persist notification may submit readiness. The TS
   implementation must not copy a process singleton, per-message threads,

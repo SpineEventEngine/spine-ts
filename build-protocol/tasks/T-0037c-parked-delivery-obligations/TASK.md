@@ -12,13 +12,26 @@ duplicate reporting, or premature lifecycle ownership decisions.
 
 ## Human-Imposed Requirements Ledger
 
-- Implement only this child in its future isolated branch/worktree with one
-  author, TDD, focused checks, and all four required review lanes.
+- Continue autonomously until this child is complete or a real blocker occurs;
+  keep the implementation/review package small and limited to this child.
+- Implement only this child in its own future branch/worktree with one author
+  using TDD.
+- Do not assign duplicate authors or reviewers for the same role, and close
+  every participating author/reviewer agent after its role completes.
+- Before server-module implementation, inspect and record the relevant Spine
+  JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
+- Run lightweight docs/status lint before review.
+- Run all four independent review lanes until clean; defer security review to
+  final project readiness.
+- Use focused inner-loop tests/checks; run full `pnpm verify` only at final child
+  acceptance and again after merge.
+- Treat superseded history as non-actionable unless an active record claims it.
 - Preserve D-0085's distinction between unresolved operational work and
   one-time cause reporting.
-- Keep every record/key/helper package-internal and absent from root exports,
-  generated declarations, examples, environment options, and public API docs.
-- Keep generated Protobuf output out of VCS and do not touch
+- Keep every record/key/helper package-internal. Commit no generated artifacts
+  and make no root/public export or API change; emitted internal declarations
+  may change. Add no example, environment option, or public API docs.
+- Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Exact Ownership

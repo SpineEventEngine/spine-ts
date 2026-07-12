@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 1 docs fix worker active
+Status: Round 1 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -59,11 +59,15 @@ verified, merged, and cleaned child tasks:
 5. `T-0037e Generation Retirement And Environment Close`
 6. `T-0037f Server Lifecycle Integration`
 
-The invariant map is strict: context descriptors/readiness belong to `a`,
-bounded/coalesced worker execution to `b`, bounded operational/cause records to
-`c`, attachment/startup/rollback to `d`, retirement/reuse/environment close to
-`e`, and network/server ordering to `f`. Retry timing and public policy remain
-outside every child.
+The invariant map is strict: descriptors and per-successful-row readiness belong
+to `a`; bounded runs, lossless bounded canonical-scope coalescing, and the
+reusable coordinator-instance stop/await/retire primitive belong to `b`;
+bounded operational/cause records belong to `c`; attachment/startup and
+failed-start rollback invocation/empty-slot replacement belong to `d`; ordinary
+detach, ordinary/permanent-close primitive invocation, fresh-generation race
+policy, and environment close belong to `e`; and network/server ordering belongs
+to `f`. Retry timing and public policy remain outside every child. The `d` and
+`e` callers do not overlap or reopen the primitive.
 
 Each child depends on its predecessor and is Candidate/not started. No child
 branch, work log, review log, or implementation claim exists. D-0086 records
@@ -121,14 +125,16 @@ used for child runtime work.
   task/report/work/review records, and six child `TASK.md` files. Each child
   directory contains only its brief; no runtime, tests, examples, generated,
   public API docs, child work logs, or child review logs changed.
-- PENDING: Four required review lanes. No implementation or review completion
-  is claimed.
+- ROUND 1: All four required lanes completed with accepted findings. The docs
+  fix package later passed its focused verification but has not been freshly
+  reviewed; no clean review is claimed.
 - PASS: Coordinator repeated `docs:check`, `format:check`, `git diff --check`,
   and exact scope/untracked inspection. Docs emitted only the known invalid-
   `origin` warning and retained 205 expected server exports. Lightweight status
   lint corrected completed-step and no-commit attribution wording.
 - PASS: Split package committed as `7ff3d50a`; review-boundary reconciliation
-  is the sole future hash under the ledger convention.
+  was later recorded through `9e90a006`, and docs-fix assignment was recorded
+  as `652db999`. This fix package remains uncommitted and claims no future hash.
 - REVIEW: Round 1 accepted findings: require readiness after each successful
   row persistence including partial batches; define bounded lossless merged
   coalescing across every eligible notified scope; place a reusable authoritative
@@ -137,3 +143,8 @@ used for child runtime work.
   failed startup; copy every applicable inherited rule into all six child
   ledgers; and correct declaration/public compatibility wording. One docs fix
   batch and fresh all-lane review are required.
+- PASS: The Round 1 docs fix batch passed `pnpm docs:check`,
+  `pnpm format:check`, `git diff --check`, exact tracked/untracked scope, and
+  child-artifact checks. Docs retained 205 expected server exports and only the
+  known invalid-`origin` warning. Full `pnpm verify` remains reserved. Fresh
+  four-lane review is pending and no clean review is claimed.

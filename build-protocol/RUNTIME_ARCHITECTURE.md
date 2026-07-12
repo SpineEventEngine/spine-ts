@@ -392,14 +392,20 @@ evidence remain package-internal, explicitly invoked, and unchanged.
 D-0086 maps the future D-0085 lifecycle into six strict slices:
 
 1. T-0037a owns context delivery descriptors, actual storage, tenant startup
-   scopes, endpoint/shard facts, and post-persist readiness.
-2. T-0037b owns serialized/coalesced finite generation runs and per-shard
-   interpretation of T-0036 evidence.
+   scopes, endpoint/shard facts, and readiness after every successful
+   individual row persistence, including successful rows in a partially failed
+   batch and never a rejected write.
+2. T-0037b owns serialized finite generation runs, one lossless pending union
+   deduplicated by canonical configured scope and bounded by descriptors/shards,
+   per-shard interpretation of T-0036 evidence, and the reusable authoritative
+   coordinator-instance stop/await/retire primitive.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, and
-   registration-scoped rollback.
-5. T-0037e owns detach, generation stop/retirement/reuse, close refusal, and
+   registration-scoped rollback, including invoking T-0037b's primitive and
+   clearing/replacing the empty generation slot after sole failed attachment.
+5. T-0037e owns ordinary detach, invoking that existing primitive for ordinary
+   last detach/permanent close, fresh-generation races, close refusal, and
    permanent environment close.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
@@ -412,3 +418,6 @@ local persistence. The TS sequence rejects JVM singleton state, per-message
 threads, repeat callbacks, public monitor actions, catch-up stations, and
 global storage-factory copying. Retry timing and all public scheduler,
 monitoring, health, topology, adapter, and catch-up policy remain deferred.
+The sequence adds no root/public export or API change and commits no generated
+artifact; package-internal declarations emitted by normal documentation/type
+builds may change with internal implementation.

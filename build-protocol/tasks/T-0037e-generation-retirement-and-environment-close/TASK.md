@@ -6,29 +6,45 @@ Dependency: T-0037d complete and integrated.
 
 ## Objective
 
-Complete the environment seam with registration detach, authoritative
-generation stop/retirement/reuse, live-registration close refusal, and
-permanent environment/facility close.
+Complete the environment seam with registration detach, ordinary/permanent
+invocation of the existing authoritative coordinator retirement primitive,
+fresh-generation race policy, live-registration close refusal, and permanent
+environment/facility close.
 
 ## Human-Imposed Requirements Ledger
 
-- Implement only this child in its future isolated branch/worktree with one
-  author, TDD, focused checks, and all four required review lanes.
+- Continue autonomously until this child is complete or a real blocker occurs;
+  keep the implementation/review package small and limited to this child.
+- Implement only this child in its own future branch/worktree with one author
+  using TDD.
+- Do not assign duplicate authors or reviewers for the same role, and close
+  every participating author/reviewer agent after its role completes.
+- Before server-module implementation, inspect and record the relevant Spine
+  JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
+- Run lightweight docs/status lint before review.
+- Run all four independent review lanes until clean; defer security review to
+  final project readiness.
+- Use focused inner-loop tests/checks; run full `pnpm verify` only at final child
+  acceptance and again after merge.
+- Treat superseded history as non-actionable unless an active record claims it.
 - Preserve existing public `close()` methods and rejection channels; add no
   public detach, registration, generation, scheduler, or retry option.
 - Serialize attach, detach, generation stop, and environment close through the
   same package-internal lifecycle gate from T-0037d.
-- Keep generated Protobuf output out of VCS and do not touch
+- Commit no generated artifacts and make no root/public export or API change;
+  emitted internal declarations may change.
+- Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Exact Ownership
 
 This child owns internal detach barriers, non-last versus last-detach record
-consumption, the authoritative stop-before-await-before-consume sequence,
-permanent generation retirement, fresh generation creation after reusable
-caller-owned retirement, `ServerEnvironment.close()` live-registration
-refusal, permanent admission close, and ordered owned-facility close after
-quiescence.
+consumption, invoking T-0037b's existing authoritative primitive for ordinary
+last detach and zero-registration permanent close, fresh-generation
+attach/detach/close race policy after reusable caller-owned retirement,
+`ServerEnvironment.close()` live-registration refusal, permanent admission
+close, and ordered owned-facility close after quiescence. It does not implement
+another stop/await/retire path or handle failed-start rollback.
 
 It supplies internal detach/close operations for T-0037f. It does not own HTTP/2
 network or context/resource ordering.
@@ -50,7 +66,8 @@ network or context/resource ordering.
   and leaves sibling work/readiness/records active.
 - Last detach closes trigger/notification admission, calls worker stop, awaits
   active work, classifies rejection, reports/consumes eligible records, and
-  permanently retires old worker/loops in that exact order.
+  permanently retires old worker/loops in that exact order by invoking the
+  T-0037b primitive rather than duplicating it.
 - A caller-owned environment can later create exactly one fresh generation;
   stopped worker/loop instances are never reused or overlapped.
 - Environment close with any live registration rejects before changing
@@ -76,6 +93,8 @@ network or context/resource ordering.
 
 ## Explicit Exclusions
 
-No HTTP/2 listener/session change, context/resource close integration, public
-detach/registration API, retry timing, public monitor/health/action surface,
-topology, adapter, catch-up path, or T-0036 change belongs here.
+No failed-start rollback or empty-slot replacement for failed attachment,
+coordinator retirement implementation, HTTP/2 listener/session change,
+context/resource close integration, public detach/registration API, retry
+timing, public monitor/health/action surface, topology, adapter, catch-up path,
+or T-0036 change belongs here.

@@ -13,12 +13,25 @@ internals or replacing the current local handoff owner prematurely.
 
 ## Human-Imposed Requirements Ledger
 
-- Implement only this child in its future isolated branch/worktree with one
-  author, TDD, focused checks, and all four required review lanes.
+- Continue autonomously until this child is complete or a real blocker occurs;
+  keep the implementation/review package small and limited to this child.
+- Implement only this child in its own future branch/worktree with one author
+  using TDD.
+- Do not assign duplicate authors or reviewers for the same role, and close
+  every participating author/reviewer agent after its role completes.
+- Before server-module implementation, inspect and record the relevant Spine
+  JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
+- Run lightweight docs/status lint before review.
+- Run all four independent review lanes until clean; defer security review to
+  final project readiness.
+- Use focused inner-loop tests/checks; run full `pnpm verify` only at final child
+  acceptance and again after merge.
+- Treat superseded history as non-actionable unless an active record claims it.
 - Preserve D-0085 and D-0086; this child is context attachment only.
-- Keep every new type and access path package-internal. Add no root export,
-  public option, generated declaration, example, or public API documentation.
-- Keep generated Protobuf output out of VCS and do not touch
+- Keep every new type and access path package-internal. Commit no generated
+  artifacts and make no root/public export or API change; emitted internal
+  declarations may change. Add no public option, example, or public API docs.
+- Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Current Facts
@@ -39,9 +52,11 @@ internals or replacing the current local handoff owner prematurely.
 This child alone owns the package-internal descriptor for a built context's
 actual delivery storage, tenant enumeration, supported endpoint/shard facts,
 and a readiness callback installed around the existing handoff path. Readiness
-is emitted only after the supported inbox write has durably settled. The seam
-must preserve tenant identity and sufficient configured obligation identity for
-later attachment; it must not carry payloads, errors, timing, or policy.
+is emitted after every successful individual supported-row persistence,
+including each earlier success when a later `receiveAll`/batch row rejects. A
+rejected or unattempted write emits none. The seam must preserve tenant identity
+and sufficient configured obligation identity for later attachment; it must not
+carry payloads, errors, timing, or policy.
 
 The current immediate exact drain remains authoritative in this child. A later
 child may switch lifecycle ownership only after a coordinator and environment
@@ -68,11 +83,22 @@ registration exist.
   copied from the environment default.
 - Multitenant startup enumeration returns recorded tenants; single-tenant
   attachment produces exactly its non-tenant delivery scope.
-- Supported handoffs notify readiness only after persistence fulfills, once per
-  committed handoff scope; persistence rejection emits no readiness.
+- A successful single-row `receive` emits exactly one readiness notification
+  after its persistence fulfills and before exact-drain work can settle.
+- A rejected single-row persistence emits no readiness, and a later drain
+  rejection cannot retract readiness for the row already persisted.
+- A successful `receiveAll` emits once for every individually persisted row,
+  even when multiple rows map to the same configured scope; call, configured-
+  scope, and batch grouping never reduce the per-row emission count.
+- When row N in `receiveAll` rejects, every earlier successfully persisted row
+  has already emitted readiness exactly once, while row N and later unattempted
+  rows emit none.
+- When all batch writes persist but a later exact drain rejects, every persisted
+  row has still emitted readiness exactly once.
 - Existing exact-row immediate drain, deduplication, tenant validation, and
   close behavior remain green.
-- Package-root exports and generated API docs remain unchanged.
+- Package-root exports and public API docs remain unchanged; emitted internal
+  declarations may change and no generated artifact is committed.
 
 ## D-0085 Invariants
 
