@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 1 fixes focused verified; Round 2 review pending
+Status: Slice 2 Round 2 four-lane review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -304,3 +304,8 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   regressions, generated build typecheck, and diff hygiene. All pass. The
   complete owner-qualified, tenant-durable, finite-readiness fix is ready for a
   committed Round 2 package; security remains deferred.
+- `2026-07-12T22:27:00Z`: Round 2 package is
+  `.superpowers/sdd/review-b614b9a4..dc85433d.diff` (two commits, 103,405
+  bytes). Expected fixed-role profiles are style Terra High, documentation Luna
+  Medium, TypeScript/API docs Terra High, and reliability Terra High. Scope is
+  the complete Round 1 fix and current claims only; security remains deferred.

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 1 fixes focused verified; Round 2 review pending
+Status: Slice 2 Round 2 four-lane review in progress
 
 Started: `2026-07-12T18:25:27Z`
 
