@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 3 record corrections assigned
+Status: Slice 2 Round 3 records verified; Round 4 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -485,13 +485,23 @@ exact drains, zero coordinator inbox queries, and zero replay. Releasing the
 peer makes attachment reject with `Registration readiness received an
 unconfigured scope.` before startup admission. A later configured durable fact
 is ignored by failed mode, starts no exact drain or worker query, and both rows
-remain `TO_DELIVER`. Together with the direct canonical-map helper, this proves
-finite one-bit unknown handling without per-key product retention. Existing
-production behavior passed, so this closure changes tests and records only.
+remain `TO_DELIVER`. Those integration observations prove fail-closed behavior,
+zero coordinator work, and no later admission; they do not directly expose
+retained-state cardinality. Finite one-bit/no-per-key retention is established
+by the current `RegistrationReadiness` source structure — one boolean invalid
+flag and a canonical-only buffered map — together with the direct finite helper
+that drives 4,096 distinct unknown facts.
 
 Final focused verification passes environment 15/15 and the canonical seven
 files 176/176. Generated typecheck, ESLint/cleanup, changed-file Prettier,
-`git diff --check`, public/generated/Protobuf/protected, production-diff, and
-identical-Status scans pass. The repository-wide format check reports one
-committed Round 1 source mismatch in `environment-delivery-worker.ts`; this
-test-only closure intentionally does not create a production formatting delta.
+`git diff --check`, public/generated/Protobuf/protected, and identical-Status
+scans pass. Frozen commit `e0c1a5e3` contains the integration test and records
+plus a mechanical Prettier-only change to
+`environment-delivery-worker.ts`. It contains no behavioral, public API,
+package-export, or Protobuf production change; repository-wide formatting
+passes with that mechanical correction.
+
+Round 3 record-only verification confirms the current diff contains exactly
+the three canonical records and no source/test/package/Protobuf file. Targeted
+docs/status overclaim lint, record Prettier, and `git diff --check` pass; all
+three Status headers remain identical.

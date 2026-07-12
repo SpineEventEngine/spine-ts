@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 3 record corrections assigned
+Status: Slice 2 Round 3 records verified; Round 4 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -314,28 +314,32 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   clean. Reliability requires one deterministic two-descriptor stalled-peer
   attachment race proving unknown dynamic readiness remains finite, causes
   fail-closed attachment, and admits zero coordinator work. One Terra Medium
-  owner receives this test-only finding; Round 3 remains pending.
+  owner receives the focused race; the later frozen package also includes the
+  coordinator's mechanical worker-format correction. Round 3 remains pending.
 - The assigned integration proof resumed under fully read
   `receiving-code-review` and strict TDD. The race is reachable through the
   current attachment transition order and can prove worker non-admission by
   observing the transferred descriptor's real inbox-query count. The direct
   finite-gate helper remains useful supporting evidence, but does not replace
   this two-descriptor race.
-- The required integration race is GREEN without a production delta. Through
-  real `EnvironmentAttachments`, one transferred descriptor routes 4,096
-  distinct unknown tenant facts while its peer transition remains blocked.
-  Observable state stays bounded: callbacks complete, exact-drain and worker
-  query counts remain zero, attachment rejects with the canonical outer-domain
-  error after peer release, and failed mode ignores a later configured fact
-  while both rows remain durable. Environment tests pass 15/15 and the
-  seven-file regression passes 176/176; generated typecheck, ESLint, and
-  cleanup pass. Round 3 may review this test-and-record closure only.
-- Final verification is environment 15/15 and seven files 176/176, with
-  generated typecheck, ESLint/cleanup, changed-file formatting, diff/public/
-  generated/protected hygiene, zero production diff, and identical Status
-  mirrors. The full format scan has one pre-existing committed Round 1 warning
-  in `environment-delivery-worker.ts`; it is not changed in this test-only
-  review closure.
+- The required integration race is GREEN without a behavioral production fix.
+  Through real `EnvironmentAttachments`, one transferred descriptor routes
+  4,096 distinct unknown tenant facts while its peer transition remains blocked.
+  Callbacks complete, exact-drain and worker query counts remain zero,
+  attachment rejects with the canonical outer-domain error after peer release,
+  and failed mode ignores a later configured fact while both rows remain
+  durable. These observations prove fail-closed/no-work/no-later-admission
+  behavior. Finite one-bit/no-per-key retention is established separately by
+  the current `RegistrationReadiness` source structure and direct helper.
+  Environment tests pass 15/15 and the seven-file regression passes 176/176;
+  generated typecheck, ESLint, and cleanup pass.
+- Superseded pre-coordinator handoff evidence recorded a zero production diff
+  and one worker-format warning. The coordinator subsequently applied that
+  mechanical Prettier correction before freezing `e0c1a5e3`, so the package
+  includes a production file delta but no behavioral/public/API/export/
+  Protobuf change. Final verification is environment 15/15 and seven files
+  176/176, with generated typecheck, ESLint/cleanup, repository-wide format,
+  diff/public/generated/protected hygiene, and identical Status mirrors.
 - `2026-07-12T22:37:00Z`: Coordinator independently repeated 176 focused tests,
   generated build typecheck, full format check, and diff hygiene after the
   mechanical worker-format correction. All pass. Round 3 remains pending.
@@ -351,3 +355,15 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   later-admission behavior; one-bit retention is established by current source
   inspection and the finite helper design, not observable from that race alone.
   One Terra Medium record-fix owner is assigned before Round 4.
+- Round 3 record correction resumed under fully read `receiving-code-review`.
+  Frozen-commit inspection confirms the mechanical worker formatting delta and
+  the narrower proof attribution above. This correction changes canonical
+  records only; source/tests and all later lifecycle scope remain untouched.
+- Final record-only lint passes: active outcome claims use the corrected proof
+  attribution and mechanical-delta wording, historical contradictions are
+  explicitly superseded chronology, Status mirrors are identical, all three
+  records pass Prettier, and `git diff --check` is clean. The current diff has
+  no source/test/package/Protobuf file.
+- `2026-07-12T22:47:00Z`: Coordinator record verification passes. The
+  three-record correction is ready to commit for Round 4; no runtime/test/API
+  change exists in this fix.
