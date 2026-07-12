@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 3 active
+Status: Review Round 3 findings logged; fix assignment pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Active |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Active |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Active |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Active |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Finding |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Finding |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Clean   |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Finding |
 
 Security is deferred to final project readiness.
 
@@ -317,3 +317,15 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:00:49Z`: Complete skill-provenance commit `6a0ba0dd` finished;
   all four substantive Round 3 lanes started against the fixed immutable
   package and current durable records.
+- `2026-07-12T11:03:11Z`: Round 3 accepted findings:
+  1. Require the persisted row's complete target/label/shard identity to match
+     a configured descriptor endpoint before readiness. Both handoff families
+     advertise `ShardIndex.single()`; add focused non-single-shard no-readiness
+     regressions while preserving persistence and exact-drain failures.
+  2. Replace the performance lane's selected-skill placeholder with the four
+     exact local paths and replace every grouped skipped-skill phrase in Round
+     3 provenance with each exact skill name and its individual reason. Correct
+     the work-log claim only after exact provenance is present.
+     TypeScript/API docs was clean; style and performance/reliability independently
+     reported finding 1. All four lanes repeat after one fix batch and a fresh
+     package.

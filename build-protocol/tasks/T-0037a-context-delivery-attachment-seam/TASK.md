@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Review Round 3 active
+Status: Review Round 3 findings logged; fix assignment pending
 
 Started: `2026-07-12T09:52:53Z`
 
