@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Required review clean; final verification pending
+Status: Required review clean; final coverage fix pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -224,6 +224,11 @@ membership.
   and performance/reliability all returned clean. The API lane confirmed 205
   expected server exports and no root/subpath leakage; reliability passed 2
   focused files / 55 tests. Final full verification remains.
+- GATE: Sandboxed full verify reached 54/60 files but listener/IPC tests failed
+  with expected `EPERM`. Native rerun passed all 60 files / 1,293 tests, then
+  coverage ran all 1,293 tests successfully but failed the global branch
+  threshold: 89.73% actual versus 90% required. Add focused coverage for new
+  epoch branches, rerun review lanes, and repeat the full native gate.
 - PASS: At `2026-07-12T04:42:00Z`, the coordinator independently passed the
   four-file / 260-test suite, generated build, changed-file ESLint,
   `docs:check`, `format:check`, and `git diff --check` after the one-time

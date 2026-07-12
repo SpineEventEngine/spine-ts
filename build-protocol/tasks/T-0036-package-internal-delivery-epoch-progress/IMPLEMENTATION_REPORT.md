@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Required review clean; final verification pending
+Status: Required review clean; final coverage fix pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -143,5 +143,6 @@ Baseline: `67da0b1c`
   passed, and changed-file ESLint passed.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
 
-Round 4 is clean across all required lanes. Only the final task gate and merge
-remain.
+Round 4 is clean. Native ordinary tests pass 60 files / 1,293 tests, but final
+coverage is 89.73% branches against the 90% gate. Focused coverage tests, fresh
+review, the repeated final gate, and merge remain.

@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 4 clean; required review complete
+Status: Round 4 clean; final-gate coverage fix pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -191,3 +191,8 @@ Security is deferred to final project readiness.
   declarations and no export/API leakage. Performance/reliability found no
   issue and passed 2 files / 55 tests. Required review is complete; final full
   verification remains.
+- `2026-07-12T04:55:00Z`: Final native ordinary tests passed 60 files / 1,293
+  tests, but the coverage run failed only the global branch threshold at 89.73%
+  versus 90%. Review remains clean for the current code; focused coverage tests
+  are required, followed by a fresh package and all four lanes because tracked
+  tests will change.
