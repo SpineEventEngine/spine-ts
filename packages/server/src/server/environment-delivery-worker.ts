@@ -25,12 +25,15 @@ export interface EnvironmentDeliveryRuntime {
 /** @internal Generation worker plus failed-registration owner retirement. */
 export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
   add(runtime: EnvironmentDeliveryRuntime): void;
+  stopOwners(ownerKeys: readonly string[]): void;
+  awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void>;
   retireOwners(ownerKeys: readonly string[]): Promise<void>;
 }
 
 /** @internal Routes each owner-partitioned obligation to its exact runtime worker. */
 export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
+  readonly #stoppedOwners = new Set<string>();
 
   add(runtime: EnvironmentDeliveryRuntime): void {
     if (this.#workers.has(runtime.owner.key)) {
@@ -90,7 +93,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     throwFailures(failures, "Environment delivery worker retirement failed.");
   }
 
-  async retireOwners(ownerKeys: readonly string[]): Promise<void> {
+  stopOwners(ownerKeys: readonly string[]): void {
     const selected = ownerKeys.map((key) => {
       const worker = this.#workers.get(key);
       if (worker === undefined) {
@@ -98,18 +101,39 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       }
       return { key, worker };
     });
-    for (const { worker } of selected) {
+    for (const { key, worker } of selected) {
+      if (this.#stoppedOwners.has(key)) {
+        continue;
+      }
       worker.stop();
+      this.#stoppedOwners.add(key);
     }
+  }
+
+  async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
+    const selected = ownerKeys.map((key) => ({ worker: this.#requiredWorker(key) }));
     await Promise.all(selected.map(({ worker }) => worker.awaitSettled()));
+  }
+
+  async retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    const selected = ownerKeys.map((key) => ({ key, worker: this.#requiredWorker(key) }));
     const retired = await Promise.allSettled(selected.map(({ worker }) => worker.retire()));
     for (const { key } of selected) {
       this.#workers.delete(key);
+      this.#stoppedOwners.delete(key);
     }
     const failures = retired.flatMap((result) =>
       result.status === "rejected" ? [result.reason as unknown] : [],
     );
     throwFailures(failures, "Environment registration worker retirement failed.");
+  }
+
+  #requiredWorker(key: string): DeliveryRunWorker {
+    const worker = this.#workers.get(key);
+    if (worker === undefined) {
+      throw new Error("Environment delivery owner is not configured.");
+    }
+    return worker;
   }
 }
 

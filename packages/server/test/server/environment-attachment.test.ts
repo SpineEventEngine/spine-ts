@@ -202,6 +202,12 @@ describe("EnvironmentDeliveryWorker", () => {
       });
     }).toThrow("Environment delivery owner is already configured.");
 
+    expect(() => {
+      worker.stopOwners(["missing-owner"]);
+    }).toThrow("Environment delivery owner is not configured.");
+    worker.stopOwners([firstScope.owner.key]);
+    worker.stopOwners([firstScope.owner.key]);
+    await worker.awaitOwnersSettled([firstScope.owner.key]);
     await worker.retireOwners([firstScope.owner.key]);
     await expect(worker.start(firstObligation, [first.ready.shard])).rejects.toThrow(
       "Environment delivery owner is not configured.",
@@ -550,12 +556,14 @@ describe("ServerEnvironment attachment", () => {
 });
 
 describe("failed attachment rollback", () => {
-  it("removes only the failed registration and shapes an overlapping reported blocker", async () => {
+  it("quiesces a failed shared owner before report and retirement while preserving its sibling", async () => {
+    const events: string[] = [];
     const reported: unknown[][] = [];
-    const worker = new LifecycleWorker();
+    const worker = new LifecycleWorker(events);
     const attachments = new EnvironmentAttachments({
       createWorker: () => worker,
       report: (causes) => {
+        events.push("report");
         reported.push([...causes]);
         return Promise.resolve();
       },
@@ -593,6 +601,14 @@ describe("failed attachment rollback", () => {
 
     expect(worker.stopCalls).toBe(0);
     expect(worker.retiredOwners).toEqual([["environment-owner-2"]]);
+    expect(events).toEqual([
+      "start",
+      "start",
+      "stopOwners",
+      "awaitOwners",
+      "report",
+      "retireOwners",
+    ]);
     expect(reported).toEqual([[rejection]]);
     expect(siblingHandle.records()).toEqual([
       expect.objectContaining({ hasCause: false, occurrences: 0 }),
@@ -602,7 +618,7 @@ describe("failed attachment rollback", () => {
     await Promise.resolve();
     expect(worker.starts).toBe(2);
 
-    worker.enqueue("IDLE", "IDLE", "IDLE");
+    worker.enqueue("IDLE", { rejected: new Error("fresh blocked rejection") }, "IDLE");
     await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
     await until(() => worker.starts === 3);
 
@@ -624,6 +640,67 @@ describe("failed attachment rollback", () => {
       expect.objectContaining({ hasCause: false, occurrences: 0 }),
     ]);
   });
+
+  it.each(["stop", "await"] as const)(
+    "retains a failed shared rollback when selected-owner %s cannot prove safety",
+    async (failureKind) => {
+      const events: string[] = [];
+      const reported: unknown[][] = [];
+      const worker = new LifecycleWorker(events);
+      const safetyFailure = new Error(`${failureKind} selected owner failed`);
+      if (failureKind === "stop") {
+        worker.stopOwnerFailures.push(safetyFailure);
+      } else {
+        worker.awaitOwnerFailures.push(safetyFailure);
+      }
+      const attachments = new EnvironmentAttachments({
+        createWorker: () => worker,
+        report: (causes) => {
+          events.push("report");
+          reported.push([...causes]);
+          return Promise.resolve();
+        },
+      });
+      const sibling = descriptor(
+        `SharedSibling-${failureKind}`,
+        `type.example.dev/SharedSafety-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const failed = descriptor(
+        `SharedFailed-${failureKind}`,
+        `type.example.dev/SharedSafety-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const replacement = descriptor(
+        `SharedReplacement-${failureKind}`,
+        `type.example.dev/SharedReplacement-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      worker.enqueue("IDLE", { rejected: new Error("shared startup rejected") });
+      await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+
+      await expect(
+        attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+      ).rejects.toBeInstanceOf(AggregateError);
+      expect(reported).toEqual([]);
+      expect(worker.retiredOwners).toEqual([]);
+      expect(events).not.toContain("report");
+      await expect(
+        attachments.attach({ ownership: "caller", descriptors: [replacement.value] }),
+      ).rejects.toThrow("Environment generation rollback requires an explicit retry.");
+
+      await attachments.retryFailedStart();
+      expect(worker.stopOwnerCalls).toBe(failureKind === "stop" ? 2 : 1);
+      expect(worker.awaitOwnerCalls).toBe(failureKind === "stop" ? 1 : 2);
+      expect(reported).toHaveLength(1);
+      expect(worker.retiredOwners).toEqual([["environment-owner-2"]]);
+
+      worker.enqueue("IDLE");
+      await expect(
+        attachments.attach({ ownership: "caller", descriptors: [replacement.value] }),
+      ).resolves.toBeDefined();
+    },
+  );
 
   it.each(["report", "retire"] as const)(
     "clears an inert sole generation after %s failure and admits one fresh generation",
@@ -747,7 +824,115 @@ describe("failed attachment rollback", () => {
     expect(factoryCalls).toBe(2);
     expect(freshWorker.starts).toBe(1);
   });
+
+  it("coalesces simultaneous failed-start retries around one in-flight operation", async () => {
+    const startFailure = new Error("coalesced startup rejected");
+    const worker = new LifecycleWorker();
+    worker.enqueue({ rejected: startFailure });
+    worker.awaitFailures.push(new Error("first quiescence failed"));
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const failed = descriptor(
+      "CoalescedRetry",
+      "type.example.dev/CoalescedRetry",
+      new InMemoryStorageFactory(),
+    );
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBeInstanceOf(AggregateError);
+
+    const settle = Promise.withResolvers<undefined>();
+    worker.awaitGates.push(settle.promise);
+    const first = attachments.retryFailedStart();
+    const second = attachments.retryFailedStart();
+
+    expect(second).toBe(first);
+    settle.resolve(undefined);
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(worker.stopCalls).toBe(1);
+    expect(worker.awaitCalls).toBe(2);
+    expect(worker.retireCalls).toBe(1);
+  });
+
+  it("deduplicates thousands of reported shared failures to the configured ready domain", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sharedType = "type.example.dev/BoundedReportedFailure";
+    const sibling = descriptor("BoundedSibling", sharedType, new InMemoryStorageFactory());
+    worker.enqueue("IDLE");
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+
+    for (let attempt = 0; attempt < 2048; attempt += 1) {
+      const failed = descriptor(
+        `BoundedFailure-${attempt.toString()}`,
+        sharedType,
+        new InMemoryStorageFactory(),
+      );
+      worker.enqueue({ rejected: new Error(`failure-${attempt.toString()}`) });
+      await expect(
+        attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+      ).rejects.toBeInstanceOf(Error);
+    }
+
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+  });
+
+  it("removes a reported overlap after successful recovery of its configured domain", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sharedType = "type.example.dev/ResolvedReportedFailure";
+    const sibling = descriptor("ResolvedSibling", sharedType, new InMemoryStorageFactory());
+    const failed = descriptor("ResolvedFailure", sharedType, new InMemoryStorageFactory());
+    const recovered = descriptor("ResolvedRecovery", sharedType, new InMemoryStorageFactory());
+    worker.enqueue("IDLE", { rejected: new Error("reported failure") });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBeInstanceOf(Error);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+
+    worker.enqueue("IDLE");
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [recovered.value] }),
+    ).resolves.toBeDefined();
+    expect(unresolvedReportedDomainCount(attachments)).toBe(0);
+  });
+
+  it("throws only the plain shared blocker when an overlapping attempt has a fresh cause", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sharedType = "type.example.dev/BlockedFreshCause";
+    const sibling = descriptor("BlockedSibling", sharedType, new InMemoryStorageFactory());
+    const failed = descriptor("BlockedReported", sharedType, new InMemoryStorageFactory());
+    const blocked = descriptor("BlockedFresh", sharedType, new InMemoryStorageFactory());
+    worker.enqueue(
+      "IDLE",
+      { rejected: new Error("already reported") },
+      { rejected: new Error("fresh rejection") },
+    );
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBeInstanceOf(Error);
+
+    let rejection: unknown;
+    try {
+      await attachments.attach({ ownership: "caller", descriptors: [blocked.value] });
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toEqual(
+      new Error("Startup recovery is blocked by an unresolved shared delivery obligation."),
+    );
+    expect(rejection).not.toBeInstanceOf(AggregateError);
+    expect(rejection).not.toHaveProperty("cause");
+  });
 });
+
+function unresolvedReportedDomainCount(attachments: EnvironmentAttachments): number {
+  return (
+    attachments as EnvironmentAttachments & { readonly unresolvedReportedDomainCount: number }
+  ).unresolvedReportedDomainCount;
+}
 
 interface TestDescriptor {
   readonly value: ContextDeliveryDescriptor;
@@ -884,12 +1069,17 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly #results: LifecycleResult[] = [];
   readonly #events: string[];
   readonly awaitFailures: Error[] = [];
+  readonly awaitGates: Promise<void>[] = [];
   readonly retireFailures: Error[] = [];
+  readonly stopOwnerFailures: Error[] = [];
+  readonly awaitOwnerFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
   starts = 0;
   stopCalls = 0;
   awaitCalls = 0;
   retireCalls = 0;
+  stopOwnerCalls = 0;
+  awaitOwnerCalls = 0;
 
   constructor(events: string[] = []) {
     this.#events = events;
@@ -950,7 +1140,10 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
     this.awaitCalls += 1;
     this.#events.push("await");
     const failure = this.awaitFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    if (failure !== undefined) {
+      return Promise.reject(failure);
+    }
+    return this.awaitGates.shift() ?? Promise.resolve();
   }
 
   retire(): Promise<void> {
@@ -960,7 +1153,26 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
     return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
 
+  stopOwners(ownerKeys: readonly string[]): void {
+    void ownerKeys;
+    this.stopOwnerCalls += 1;
+    this.#events.push("stopOwners");
+    const failure = this.stopOwnerFailures.shift();
+    if (failure !== undefined) {
+      throw failure;
+    }
+  }
+
+  awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
+    void ownerKeys;
+    this.awaitOwnerCalls += 1;
+    this.#events.push("awaitOwners");
+    const failure = this.awaitOwnerFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+  }
+
   retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    this.#events.push("retireOwners");
     this.retiredOwners.push([...ownerKeys]);
     return Promise.resolve();
   }

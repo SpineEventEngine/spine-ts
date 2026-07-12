@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 1 blocking findings assigned
+Status: Slice 3 Round 1 fixes focused verified; Round 2 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -433,3 +433,29 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   selected-owner failure, concurrent retry coalescing, bounded reported-overlap
   state, and unconditional plain D-0085 blocker shaping. One Terra Medium owner
   receives the complete batch; Round 2 remains pending.
+- Round 1 fix applicability was rechecked with `receiving-code-review` and
+  strict TDD before production edits. Each finding is observable in current
+  source and fits the accepted private Slice 3 boundary. Deterministic REDs will
+  precede the selected-owner phase split, retry coalescing, bounded overlap
+  replacement/resolution, and unconditional plain-blocker shaping.
+- The complete pre-production RED is 7 failed/19 passed across 26 environment
+  tests, with one expected failure for each phase/retry/boundedness/resolution/
+  blocker behavior and separate stop/await unsafe cases. Production remains
+  unchanged at this checkpoint.
+- Focused GREEN is 26/26. The private phase split, retained unsafe operation,
+  in-flight retry memoization, bounded owner-qualified ready-domain ledger,
+  resolution cleanup, and blocker precedence all satisfy their deterministic
+  regressions. Full focused/static verification remains pending.
+- Round 1 fixes are focused verified for Round 2 review. Shared selected-owner
+  order is stop/await/report/retire; unsafe failure retains every dependency and
+  one retry operation; simultaneous retries share one promise; the reported
+  overlap ledger is bounded and resolution-aware; and D-0085 is unconditionally
+  plain when prior overlap remains unresolved, including a fresh rejection.
+- Final evidence is environment 26/26, canonical seven files 187/187, native
+  server loopback 21/21, and coverage 96.49% statements, 90.21% branches, 98.25%
+  functions, and 96.73% lines. Generated typecheck, ESLint/cleanup, formatting,
+  diff/public/generated/protected, and identical-Status checks form the handoff
+  gate. Round 2 four-lane review remains pending; security stays deferred.
+- `2026-07-12T23:44:00Z`: Coordinator independently repeated 187 focused
+  regressions, generated build typecheck, repository format, and diff hygiene.
+  All pass. The complete Round 1 fix is ready for a committed Round 2 package.

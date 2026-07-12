@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 1 blocking findings assigned
+Status: Slice 3 Round 1 fixes focused verified; Round 2 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -399,6 +399,34 @@ remain later tasks.
 
 One Terra Medium owner receives the complete batch with deterministic phase,
 quiescence, concurrency, boundedness, and fresh-cause tests before Round 2.
+
+### Slice 3 Round 1 fix outcome
+
+The complete five-finding batch is implemented under strict TDD. Shared
+selected-owner rollback now closes readiness/admission, stops owners, retries
+quiescence without repeating a completed stop, then classifies/consumes/reports
+before permanent owner retirement and registration deletion. A stop or await
+that cannot establish safety retains the rollback, registration, parked state,
+and worker dependencies; replacement remains blocked until the same private
+retry operation succeeds. A throwing stop is retried because T-0037b defines
+that throw as incomplete stop; a completed stop is never repeated after await
+failure.
+
+`retryFailedStart()` publishes one in-flight promise before advancing rollback,
+so simultaneous callers receive the same promise and resolve together. Reported
+unresolved overlap state is one finite canonical ready-domain map retaining the
+latest owner-qualified scope identity. Repeated failures replace that entry,
+successful exact startup removes it, and historical sibling settlement cannot
+erase a fresh rejection. Existing overlap takes precedence over any fresh
+cause and throws only the exact plain D-0085 blocker.
+
+Focused RED failed 7/26 before production edits. GREEN passes 26/26; the
+seven-file Slice 1/2/3 plus T-0037a/b/c regression passes 187/187; native server
+loopback passes 21/21. Affected coverage passes at 96.49% statements, 90.21%
+branches, 98.25% functions, and 96.73% lines. Changed files are the private
+environment attachment/worker modules, their focused test, and canonical
+TASK/work/review records. No public API/export, later lifecycle, generated
+artifact, subagent, commit, or full `pnpm verify` is included.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now

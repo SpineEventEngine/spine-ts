@@ -116,6 +116,15 @@ export class EnvironmentAttachments {
     this.#report = options.report ?? (() => Promise.resolve());
   }
 
+  /** @internal Bounded diagnostic cardinality for focused lifecycle verification. */
+  get unresolvedReportedDomainCount(): number {
+    let count = 0;
+    for (const generation of this.#generations.values()) {
+      count += generation.unresolvedReportedDomainCount;
+    }
+    return count;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
       return Promise.reject(
@@ -148,12 +157,7 @@ export class EnvironmentAttachments {
     if (rollback === undefined) {
       return Promise.reject(new Error("Environment has no failed-start rollback to retry."));
     }
-    const retrying = this.#serial.then(() => this.#continueRollback(rollback));
-    this.#serial = retrying.then(
-      () => undefined,
-      () => undefined,
-    );
-    return retrying;
+    return this.#continueRollback(rollback);
   }
 
   async #attachRegistration(
@@ -165,14 +169,15 @@ export class EnvironmentAttachments {
       return await generation.attach(claim, descriptors);
     } catch (startError) {
       const remaining = this.#registrations.remove(claim.token);
+      const rollback: FailedStartRollback = {
+        claim,
+        generation,
+        retireGeneration: remaining === 0,
+        inFlight: undefined,
+      };
+      this.#failedRollback = rollback;
       try {
-        if (remaining > 0) {
-          await generation.rollbackRegistration(claim.token);
-        } else {
-          const rollback = { claim, generation };
-          this.#failedRollback = rollback;
-          await this.#continueRollback(rollback);
-        }
+        await this.#continueRollback(rollback);
       } catch (rollbackError) {
         throw failedStartError(startError, rollbackError);
       }
@@ -180,35 +185,69 @@ export class EnvironmentAttachments {
     }
   }
 
-  async #continueRollback(rollback: FailedStartRollback): Promise<void> {
-    try {
-      await rollback.generation.retireFailedRegistration(rollback.claim.token);
-    } finally {
-      if (rollback.generation.replacementSafe) {
-        this.#generations.delete(rollback.claim.generation);
-        this.#registrations.clear(rollback.claim.generation);
-        if (this.#failedRollback === rollback) {
-          this.#failedRollback = undefined;
-        }
-      }
+  #continueRollback(rollback: FailedStartRollback): Promise<void> {
+    if (rollback.inFlight !== undefined) {
+      return rollback.inFlight;
     }
+    const gate = Promise.withResolvers<undefined>();
+    rollback.inFlight = gate.promise;
+    void this.#performRollback(rollback).then(
+      () => {
+        this.#completeRollback(rollback);
+        gate.resolve(undefined);
+      },
+      (error: unknown) => {
+        if (this.#rollbackSafe(rollback)) {
+          this.#completeRollback(rollback);
+        } else {
+          rollback.inFlight = undefined;
+        }
+        gate.reject(error);
+      },
+    );
+    return gate.promise;
+  }
+
+  async #performRollback(rollback: FailedStartRollback): Promise<void> {
+    if (rollback.retireGeneration) {
+      await rollback.generation.retireFailedRegistration(rollback.claim.token);
+    } else {
+      await rollback.generation.rollbackRegistration(rollback.claim.token);
+    }
+  }
+
+  #rollbackSafe(rollback: FailedStartRollback): boolean {
+    return rollback.retireGeneration
+      ? rollback.generation.replacementSafe
+      : !rollback.generation.hasRegistration(rollback.claim.token);
+  }
+
+  #completeRollback(rollback: FailedStartRollback): void {
+    if (rollback.retireGeneration) {
+      this.#generations.delete(rollback.claim.generation);
+      this.#registrations.clear(rollback.claim.generation);
+    }
+    this.#failedRollback = undefined;
   }
 }
 
 interface FailedStartRollback {
   readonly claim: EnvironmentRegistrationClaim;
   readonly generation: DeliveryGeneration;
+  readonly retireGeneration: boolean;
+  inFlight: Promise<undefined> | undefined;
 }
 
 interface GenerationRegistration {
   readonly readiness: RegistrationReadiness;
   readonly scopes: readonly DeliveryRunScope[];
   readonly ownerKeys: readonly string[];
+  rollback?: RegistrationRollback;
 }
 
-interface ReportedFailure {
-  readonly domain: ReadonlySet<string>;
-  readonly obligations: ParkedDeliveryObligations;
+interface RegistrationRollback {
+  stopped: boolean;
+  quiescent: boolean;
 }
 
 class DeliveryGeneration {
@@ -221,7 +260,7 @@ class DeliveryGeneration {
   >();
   readonly #obligations = new Map<string, ParkedDeliveryObligations>();
   readonly #registrations = new Map<string, GenerationRegistration>();
-  readonly #reportedFailures: ReportedFailure[] = [];
+  readonly #reportedFailures = new ReportedFailures();
   readonly #configuredOwners = new Set<string>();
   #coordinator: DeliveryRunCoordinator | undefined;
   #nextOwner = 0;
@@ -237,6 +276,14 @@ class DeliveryGeneration {
 
   get replacementSafe(): boolean {
     return this.#coordinator?.replacementSafe ?? this.#retiredWithoutCoordinator;
+  }
+
+  get unresolvedReportedDomainCount(): number {
+    return this.#reportedFailures.size;
+  }
+
+  hasRegistration(token: string): boolean {
+    return this.#registrations.has(token);
   }
 
   async attach(
@@ -262,19 +309,29 @@ class DeliveryGeneration {
 
   async rollbackRegistration(token: string): Promise<void> {
     const state = this.#registrations.get(token);
-    state?.readiness.fail();
+    if (state === undefined) {
+      return;
+    }
+    state.readiness.fail();
+    const rollback = (state.rollback ??= { stopped: false, quiescent: false });
+    if (!rollback.stopped) {
+      this.#worker.stopOwners(state.ownerKeys);
+      rollback.stopped = true;
+    }
+    if (!rollback.quiescent) {
+      await this.#worker.awaitOwnersSettled(state.ownerKeys);
+      rollback.quiescent = true;
+    }
     const failures: unknown[] = [];
     try {
       await this.#consumeRegistration(token, false);
     } catch (error) {
       failures.push(error);
     }
-    if (state !== undefined) {
-      try {
-        await this.#worker.retireOwners(state.ownerKeys);
-      } catch (error) {
-        failures.push(error);
-      }
+    try {
+      await this.#worker.retireOwners(state.ownerKeys);
+    } catch (error) {
+      failures.push(error);
     }
     this.#registrations.delete(token);
     throwFailures(failures, "Environment registration rollback failed.");
@@ -323,9 +380,11 @@ class DeliveryGeneration {
     claim: EnvironmentRegistrationClaim,
     startup: readonly DeliveryRunScope[],
   ): Promise<EnvironmentAttachmentHandle> {
-    const blocked = this.#hasReportedOverlap(startup);
+    const previouslyBlocked = this.#reportedFailures.overlaps(startup);
     const settlement = await this.#start(startup);
     const obligations = this.#recordObligations(claim.token, startup, settlement);
+    this.#reportedFailures.resolve(startup, settlement);
+    const blocked = previouslyBlocked && this.#reportedFailures.overlaps(startup);
     throwRejected(obligations?.records() ?? [], blocked);
     return handle(claim, settlement, obligations);
   }
@@ -351,24 +410,13 @@ class DeliveryGeneration {
     obligations.removeRegistration(token);
     if (consumeGeneration) {
       this.#obligations.delete(token);
-    } else if (obligations.records().length > 0) {
-      this.#reportedFailures.push({
-        domain: new Set(state.scopes.map(({ ready }) => readyKey(ready))),
-        obligations,
-      });
+    } else {
+      this.#reportedFailures.record(state.scopes, obligations.records());
+      this.#obligations.delete(token);
     }
     if (reportFailure !== undefined) {
       throw asError(reportFailure);
     }
-  }
-
-  #hasReportedOverlap(scopes: readonly DeliveryRunScope[]): boolean {
-    const domain = new Set(scopes.map(({ ready }) => readyKey(ready)));
-    return this.#reportedFailures.some(
-      ({ domain: failed, obligations }) =>
-        intersects(domain, failed) &&
-        obligations.records().some((record) => record.hasCause && record.reportedSinceResolution),
-    );
   }
 
   async #start(startup: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
@@ -622,12 +670,10 @@ export function startupObligations(
 }
 
 function throwRejected(records: readonly ParkedDeliveryObligationRecord[], blocked: boolean): void {
-  const causes = records.flatMap((record) => (record.hasCause ? [record.cause] : []));
   if (blocked) {
-    causes.push(
-      new Error("Startup recovery is blocked by an unresolved shared delivery obligation."),
-    );
+    throw new Error("Startup recovery is blocked by an unresolved shared delivery obligation.");
   }
+  const causes = records.flatMap((record) => (record.hasCause ? [record.cause] : []));
   if (causes.length === 1) {
     throw causes[0];
   }
@@ -636,13 +682,42 @@ function throwRejected(records: readonly ParkedDeliveryObligationRecord[], block
   }
 }
 
-function intersects(first: ReadonlySet<string>, second: ReadonlySet<string>): boolean {
-  for (const value of first) {
-    if (second.has(value)) {
-      return true;
+class ReportedFailures {
+  readonly #ownersByReady = new Map<string, string>();
+
+  get size(): number {
+    return this.#ownersByReady.size;
+  }
+
+  record(
+    scopes: readonly DeliveryRunScope[],
+    records: readonly ParkedDeliveryObligationRecord[],
+  ): void {
+    const unresolved = new Set(
+      records
+        .filter(({ hasCause, reportedSinceResolution }) => hasCause && reportedSinceResolution)
+        .flatMap(({ units }) => units),
+    );
+    for (const scope of scopes) {
+      const ownerScope = scopeKey(scope);
+      if (unresolved.has(ownerScope)) {
+        this.#ownersByReady.set(readyKey(scope.ready), ownerScope);
+      }
     }
   }
-  return false;
+
+  overlaps(scopes: readonly DeliveryRunScope[]): boolean {
+    return scopes.some(({ ready }) => this.#ownersByReady.has(readyKey(ready)));
+  }
+
+  resolve(scopes: readonly DeliveryRunScope[], settlement: DeliveryRunSettlement): void {
+    const current = new Set(scopes.map(scopeKey));
+    for (const { scope, disposition } of settlement.scopes) {
+      if (current.has(scopeKey(scope)) && disposition !== "REJECTED") {
+        this.#ownersByReady.delete(readyKey(scope.ready));
+      }
+    }
+  }
 }
 
 function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
