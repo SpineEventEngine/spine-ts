@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 3 fixes pending assignment
+Status: Review Round 3 fixes assigned; worker paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -239,3 +239,6 @@ Security is deferred to final project readiness.
   reentry before active-gate publication, task rejection-evidence overclaim,
   and an unnecessary marker-object terminal checkpoint. One TDD fix worker must
   receive the complete list before all four lanes rerun.
+- `2026-07-12T13:27:36Z`: Resumed sole author
+  `019f5626-b85c-7da3-8971-98e0ae652b25` as the one Round 3 fix worker, paused
+  until this assignment provenance commits. No reviewer remains open.
