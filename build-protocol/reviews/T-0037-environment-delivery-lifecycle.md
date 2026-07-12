@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 3 findings accepted; fix pending
+Status: Round 3 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -179,3 +179,7 @@ Security is deferred to final project readiness.
   omit the package-internal explicit-stop operation; and undated parent/work
   prose must describe the active Round 3 state. One docs fix worker and fresh
   all-lane review remain required.
+- `2026-07-12T05:22:19Z`: Assigned single Round 3 docs fix worker
+  `019f54c6-ad7d-7991-9ac5-0e54ebc73b64` with the complete four-item batch.
+  Runtime/public/generated scope remains frozen and no fix or clean result is
+  claimed.
