@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 5 docs fix verified; fresh review pending
+Status: Round 5 docs fix committed; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -272,3 +272,5 @@ Security is deferred to final project readiness.
   format, diff, exact-scope, untracked, and frozen-path checks passed. TypeDoc
   retained 205 server exports with only the known invalid-`origin` warning.
   Fresh all-lane review remains required.
+- `2026-07-12T06:01:17Z`: Commit `96c27f11` recorded the verified Round 5
+  stale-status fix. No fresh lane has run and no clean review is claimed.
