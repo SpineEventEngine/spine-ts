@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 2 docs/status findings; fix pending
+Status: Round 2 docs/status fix worker active
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 

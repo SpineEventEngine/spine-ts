@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 2 docs/status findings; fix pending
+Status: Round 2 docs/status fix worker active
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -134,3 +134,6 @@ Security is deferred to final project readiness.
   found only stale current implementation-report remaining-work text and the
   missing known `add82669` ledger entry. One narrow docs/status fix worker and
   fresh all-lane rereview are required.
+- `2026-07-12T04:12:00Z`: Assigned docs/status fix worker
+  `019f544a-f2c8-73e3-9b0e-c6a7ec35bd02` with both accepted documentation
+  findings only. No rereview is claimed.
