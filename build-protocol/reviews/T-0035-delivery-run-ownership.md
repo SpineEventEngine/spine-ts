@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 8 four-lane review in progress
+Status: Round 8 finding recorded; architecture fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f53d2-0583-7b03-ad45-31ffb176baae` | Active |
-| Documentation              | `019f53d2-0613-7f62-b4a2-5c4f77dfce9e` | Active |
-| TypeScript/API docs        | `019f53d2-0696-7b83-8b3d-14a12cc55221` | Active |
-| Performance/reliability    | `019f53d2-0715-7531-9972-a935e656c134` | Active |
+| Code style/maintainability | `019f53d2-0583-7b03-ad45-31ffb176baae` | Clean  |
+| Documentation              | `019f53d2-0613-7f62-b4a2-5c4f77dfce9e` | Clean  |
+| TypeScript/API docs        | `019f53d2-0696-7b83-8b3d-14a12cc55221` | Clean  |
+| Performance/reliability    | `019f53d2-0715-7531-9972-a935e656c134` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -355,3 +355,8 @@ Security is deferred to final project readiness.
   `019f53d2-0696-7b83-8b3d-14a12cc55221`, and performance/reliability
   `019f53d2-0715-7531-9972-a935e656c134`. Prompts are package-only and ignore
   superseded history unless current records claim it active.
+- `2026-07-12T00:57:00Z`: Round 8 completed and all reviewers were closed.
+  Three lanes were clean. Performance/reliability requires active architecture
+  wording to say current `PAUSED` clears cross-run cursor state and T-0036 will
+  add bounded continuation, rather than claiming that behavior already exists.
+  One architecture/docs fix worker and fresh four-lane review are required.
