@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 implemented and coordinator-verified; review pending
+Status: Slice 1 Round 1 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -38,3 +38,9 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
 - `2026-07-12T18:49:21Z`: Coordinator verification repeated 145 focused tests,
   all typechecks, changed-file lint/format, and diff hygiene. Slice 1 review is
   pending; security remains deferred to project readiness.
+- `2026-07-12T18:50:51Z`: Slice 1 is frozen in
+  `.superpowers/sdd/review-b1c916fe..a22e30f2.diff` (one commit, 46,588 bytes).
+  Expected profiles: style Terra High, docs Luna Medium, TypeScript/API docs
+  Terra High, and reliability Terra High. All four concerns are relevant to the
+  new private barrier contract, descriptor access, handoff behavior, and race
+  tests; security remains deferred.
