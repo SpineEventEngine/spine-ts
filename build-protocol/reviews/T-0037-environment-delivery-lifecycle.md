@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 16 findings accepted; fix pending
+Status: Round 16 docs fix worker active
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -780,3 +780,7 @@ Security is deferred to final project readiness.
   and require each e2 reporting/retirement error test to create non-empty
   transition-buffer work before proving all-scope exact-once transfer. All other
   split, API-boundary, documentation, and reliability checks were clean.
+- `2026-07-12T09:22:48Z`: Assigned single Round 16 documentation fix worker
+  `019f55a2-d63d-7a12-9f7c-7e6679b85ee4` the complete accepted batch. The
+  worker owns only the stale active references, child count, e2 error-test
+  interleavings, and connected status/log updates; editing waits for this commit.

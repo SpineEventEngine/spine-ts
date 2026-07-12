@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 16 findings accepted; fix pending
+Status: Round 16 docs fix worker active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `TASK.md`; timestamped Events are audit detail, not competing authority.
