@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Final coverage-gate worker active
+Status: Coverage gate passed; fresh package and rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -229,6 +229,17 @@ membership.
   coverage ran all 1,293 tests successfully but failed the global branch
   threshold: 89.73% actual versus 90% required. Add focused coverage for new
   epoch branches, rerun review lanes, and repeat the full native gate.
+- PASS: Final test-only coverage cycle added retained-epoch validation and
+  duplicate/stale-row behavior, package-internal cursor/access/concurrent-start
+  errors, invalid admission/progress handling, and new-obligation shard
+  readmission. Focused coverage passed 2 files / 71 tests; the selected delivery
+  sources measured 258/375 branches, including 91.75% for `delivery-loop.ts`
+  and 95.45% for `delivery-worker.ts`. Native `pnpm verify` passed ordinary and
+  coverage runs at 60 files / 1,309 tests. Global coverage is now 95.14%
+  statements (7,036/7,395), 90.11% branches (3,591/3,985), 98.20% functions
+  (1,918/1,953), and 95.15% lines (6,898/7,249), up from 89.73% branches
+  (3,576/3,985). The test change still requires a fresh fixed-baseline package
+  and all four rereview lanes; no clean rereview is claimed.
 - PASS: At `2026-07-12T04:42:00Z`, the coordinator independently passed the
   four-file / 260-test suite, generated build, changed-file ESLint,
   `docs:check`, `format:check`, and `git diff --check` after the one-time

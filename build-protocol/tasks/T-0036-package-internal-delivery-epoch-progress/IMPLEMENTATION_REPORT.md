@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Final coverage-gate worker active
+Status: Coverage gate passed; fresh package and rereview pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -141,8 +141,16 @@ Baseline: `67da0b1c`
   retained array after one-time canonicalization. Focused operation/stale-state
   tests passed 2 tests, the four-file suite passed 260 tests, generated `tsc -b`
   passed, and changed-file ESLint passed.
-- NOT RUN: full `pnpm verify`, per explicit task direction.
+- PASS: Final focused coverage command passed 2 files / 71 tests. Selected
+  delivery sources measured 258/375 branches; `delivery-loop.ts` reached
+  91.75% and `delivery-worker.ts` reached 95.45%.
+- PASS: Native full `pnpm verify` passed ordinary and coverage runs at 60 files
+  / 1,309 tests. Coverage measured 95.14% statements (7,036/7,395), 90.11%
+  branches (3,591/3,985), 98.20% functions (1,918/1,953), and 95.15% lines
+  (6,898/7,249). Before this cycle global branches were 89.73%
+  (3,576/3,985).
 
-Round 4 is clean. Native ordinary tests pass 60 files / 1,293 tests, but final
-coverage is 89.73% branches against the 90% gate. Focused coverage tests, fresh
-review, the repeated final gate, and merge remain.
+The coverage gate now passes. Because tracked tests changed after Round 4, the
+coordinator must commit the test-only batch, generate a fresh fixed-baseline
+package, and rerun all four review lanes before merge. This worker claims no
+clean rereview.

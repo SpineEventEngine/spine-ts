@@ -134,6 +134,34 @@ describe("DeliveryWorker", () => {
     restore();
   });
 
+  it("rejects an internal start while shard evidence is still settling", async () => {
+    const delivery = createDelivery();
+    const activeDrain = deferred<DeliveryDrainOutcome>();
+    const restore = deliveryAccess.replace(delivery, () => activeDrain.promise);
+    const worker = new DeliveryWorker({
+      delivery,
+      shards: [ShardIndex.single()],
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({ kind: "notification" });
+    const running = deliveryWorkerAccess.start(worker, obligation);
+
+    expect(() => deliveryWorkerAccess.start(worker, obligation)).toThrow(
+      "DeliveryWorker is already running.",
+    );
+
+    activeDrain.resolve(deliveryOutcome());
+    await expect(running).resolves.toMatchObject({ obligation });
+    restore();
+  });
+
+  it("rejects internal worker access for non-worker instances", () => {
+    expect(() =>
+      deliveryWorkerAccess.start({} as DeliveryWorker, Object.freeze({ kind: "notification" })),
+    ).toThrow("Delivery worker access requires a DeliveryWorker instance.");
+  });
+
   it("close waits for active loop drains", async () => {
     const delivery = createDelivery();
     const barrier = deferred<undefined>();
@@ -278,6 +306,39 @@ describe("DeliveryWorker", () => {
       run: { status: "PAUSED" },
     });
     expect(calls).toEqual([0, 0]);
+    restore();
+  });
+
+  it("starts all terminal shards again for a new obligation", async () => {
+    const delivery = createDelivery();
+    const shards = [new ShardIndex(0, 2), new ShardIndex(1, 2)];
+    const calls: number[] = [];
+    const restore = deliveryAccess.replace(delivery, (shard) => {
+      calls.push(shard.index);
+      return Promise.resolve(
+        deliveryOutcome(deliveryRun({ status: shard.index === 0 ? "SKIPPED" : "DRAINED" })),
+      );
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const firstObligation = Object.freeze({ kind: "startup" });
+    const nextObligation = Object.freeze({ kind: "notification" });
+
+    await expect(deliveryWorkerAccess.start(worker, firstObligation)).resolves.toMatchObject({
+      shards: [{ run: { status: "SKIPPED" } }, { run: { status: "IDLE" } }],
+    });
+    await expect(deliveryWorkerAccess.start(worker, firstObligation)).resolves.toMatchObject({
+      shards: [],
+    });
+    await expect(deliveryWorkerAccess.start(worker, nextObligation)).resolves.toMatchObject({
+      obligation: nextObligation,
+      shards: [{ run: { status: "SKIPPED" } }, { run: { status: "IDLE" } }],
+    });
+    expect(calls).toEqual([0, 1, 0, 1]);
     restore();
   });
 

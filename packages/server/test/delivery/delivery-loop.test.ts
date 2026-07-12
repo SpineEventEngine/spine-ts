@@ -345,6 +345,54 @@ describe("DeliveryLoop", () => {
     expect(faults.inboxQueries).toBe(1);
   });
 
+  it("accepts an empty package-internal resume cursor", async () => {
+    const delivery = createDelivery();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { resume: {} },
+      ),
+    ).resolves.toMatchObject({
+      run: { status: "DRAINED", processed: 0, accepted: 0, delivered: 0, failed: 0 },
+    });
+  });
+
+  it.each([
+    ["cursor", null, /resume cursor must be an object/i],
+    ["continuation", { after: null }, /cursor continuation must be an object/i],
+    [
+      "message ID",
+      { after: { messageId: 42, whenReceived: new Date(), version: 1n } },
+      /requires a message id/i,
+    ],
+    [
+      "receive time",
+      { after: { messageId: "message-1", whenReceived: "today", version: 1n } },
+      /requires a valid receive time/i,
+    ],
+    [
+      "version",
+      { after: { messageId: "message-1", whenReceived: new Date(), version: 1 } },
+      /requires a bigint version/i,
+    ],
+  ])("rejects an invalid package-internal resume %s", async (_label, resume, expected) => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { resume: resume as never },
+      ),
+    ).rejects.toThrow(expected);
+    expect(faults.inboxQueries).toBe(0);
+  });
+
   it("rejects oversized resume cursor message IDs before querying inbox storage", async () => {
     const faults = deliveryStorageFaults();
     const delivery = createDelivery(faults.storageFactory);
@@ -933,6 +981,121 @@ describe("DeliveryLoop", () => {
       ),
     ).toThrow("Loop drain access requires a Delivery instance.");
   });
+
+  it("rejects loop progress access for non-loop instances", () => {
+    expect(() => deliveryLoopAccess.progress({} as DeliveryLoop)).toThrow(
+      "Delivery loop access requires a DeliveryLoop instance.",
+    );
+  });
+
+  it("rejects a retained epoch with a missing admitted row", async () => {
+    const delivery = createDelivery();
+    const messages: InboxMessage[] = [];
+    messages.length = 1;
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { epoch: { messages, next: 0 } },
+      ),
+    ).rejects.toThrow("Delivery epoch progress is invalid.");
+  });
+
+  it("observes a duplicate retained row only once", async () => {
+    const delivery = createDelivery();
+    const message = await seed(delivery, "signal-duplicate-retained", 1n);
+    const seen: string[] = [];
+
+    const outcome = await deliveryAccess.drain(
+      delivery,
+      ShardIndex.single(),
+      {
+        node: "node-a",
+        onMessage(delivered) {
+          seen.push(delivered.signalId);
+        },
+      },
+      { epoch: { messages: [message, message], next: 0 } },
+    );
+
+    expect(seen).toEqual(["signal-duplicate-retained"]);
+    expect(outcome).toMatchObject({
+      run: { processed: 1, accepted: 1, delivered: 1, failed: 0 },
+      epochProgress: { next: 2, complete: true },
+    });
+  });
+
+  it("rejects a non-pending row in a retained epoch", async () => {
+    const delivery = createDelivery();
+    const pending = await seed(delivery, "signal-stale-retained-status", 1n);
+    const delivered = await delivery.inbox.markDelivered(pending);
+    if (delivered === undefined) {
+      throw new Error("Expected the seeded row to be marked delivered.");
+    }
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { epoch: { messages: [delivered], next: 0 } },
+      ),
+    ).rejects.toThrow('Delivery worker does not support "DELIVERED" message status.');
+  });
+
+  it("rejects invalid progress returned for an admitted epoch", async () => {
+    const delivery = createDelivery();
+    const restore = deliveryAccess.replace(delivery, () =>
+      Promise.resolve({
+        run: {
+          status: "DRAINED",
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        },
+        exhaustedSkippedScan: false,
+        epochProgress: { next: Number.NaN, complete: false },
+      }),
+    );
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage: () => undefined,
+    });
+
+    await expect(loop.run()).rejects.toThrow("Delivery epoch progress is invalid.");
+    restore();
+  });
+
+  it.each([undefined, ""])(
+    "rejects invalid multitenant context during epoch admission: %s",
+    async (tenantId) => {
+      const delivery = new Delivery({
+        context: {
+          name: "Tasks",
+          multitenant: true,
+          tenantId,
+        } as never,
+        storageFactory: new InMemoryStorageFactory(),
+      });
+      const loop = new DeliveryLoop({
+        delivery,
+        shard: ShardIndex.single(),
+        node: "node-a",
+        onMessage: () => undefined,
+      });
+
+      await expect(loop.run()).rejects.toThrow(
+        /Multitenant storage "Tasks\.delivery\.inbox" requires context\.tenantId\./,
+      );
+      expect(deliveryLoopAccess.progress(loop)).toMatchObject({ runs: 0, processed: 0 });
+    },
+  );
 
   it("stop prevents starting a new drain", async () => {
     const delivery = createDelivery();

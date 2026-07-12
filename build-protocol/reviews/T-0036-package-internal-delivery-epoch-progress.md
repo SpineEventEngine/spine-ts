@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 4 clean; final coverage-gate worker active
+Status: Coverage gate passed; fresh package and all-lane rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -199,3 +199,13 @@ Security is deferred to final project readiness.
 - `2026-07-12T04:57:00Z`: Assigned coverage worker
   `019f546d-37cf-7333-a2c3-c477800d34ed` with the test-only threshold batch.
   Fresh package and all four lanes remain required after the fix commit.
+- `2026-07-12T05:10:00Z`: Coverage worker completed the uncommitted test-only
+  batch. Focused coverage passed 2 files / 71 tests with 258/375 selected-source
+  branches; `delivery-loop.ts` reached 91.75% and `delivery-worker.ts` reached
+  95.45%. Sandboxed full verification again failed only the six known
+  loopback/IPC files with `EPERM`; native `pnpm verify` then passed ordinary and
+  coverage runs at 60 files / 1,309 tests. Global branches improved from
+  3,576/3,985 (89.73%) to 3,591/3,985 (90.11%); statements are 95.14%,
+  functions 98.20%, and lines 95.15%. Round 4 remains historical evidence for
+  its fixed package, but these tracked tests require a fresh package and all
+  four lanes. No clean rereview is claimed.
