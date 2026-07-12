@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Architecture metadata redispatch assigned
+Status: TDD implementation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -18,3 +18,8 @@ an applicable review or a concrete N/A disposition under
   actual runtime model/reasoning metadata was unavailable despite a substantive
   no-blocker result. One replacement read-only splitter is assigned with
   expected explicit `gpt-5.6-sol` / `high`.
+- `2026-07-12T17:27:24Z`: Replacement splitter
+  `019f5757-72c2-7152-827a-b8cf224d98d7` was also rejected and closed because
+  actual runtime metadata was unavailable. Neither planning result is accepted
+  authority. The repository's existing implementation-ready task contract now
+  governs one explicit Terra Medium implementer; review remains pending.

@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Architecture metadata redispatch assigned
+Status: TDD implementation assigned
 
 Started: `2026-07-12T17:05:11Z`
 
@@ -71,6 +71,20 @@ assigned once at the milestone boundary. Expected explicit profile is
 `gpt-5.6-sol` / `high`. It must not edit files or spawn subagents. Its output
 must narrow this task without adding public policy or work owned by T-0037d and
 later children.
+
+Both explicit Sol High planning dispatches were rejected because the execution
+surface did not expose actual child model/reasoning metadata. Their substantive
+outputs are not accepted task authority. The existing accepted task and
+completion-plan TDD contracts are already implementation-ready, so no third
+planning pass is justified.
+
+## Implementation Assignment
+
+One existing implementer owns the bounded table, focused tests, narrow current
+architecture wording, and durable records under explicit expected
+`gpt-5.6-terra` / `medium`. It must use TDD, keep T-0037b coordinator production
+code unchanged unless a proved acceptance blocker requires otherwise, and add
+no public export or later-lifecycle ownership.
 
 ## Likely Files
 
