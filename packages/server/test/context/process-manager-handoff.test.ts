@@ -1,7 +1,8 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { runInNewContext } from "node:vm";
+import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
@@ -9,8 +10,302 @@ import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
+const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("emits readiness after persistence before exact drain settles", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      async replay() {
+        startReplay();
+        await replayReleased;
+      },
+    });
+
+    const receive = inbox.receive(
+      delivery,
+      {
+        inboxId: { targetId: "pm-ready", targetTypeUrl },
+        signalId: "signal-ready",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      },
+      "tenant-a",
+    );
+    await replayStarted;
+
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+
+    releaseReplay();
+    await receive;
+  });
+
+  it("emits for each persisted batch row before a later persistence rejection", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inputs = ["first", "second", "unattempted"].map((targetId) => ({
+      inboxId: { targetId, targetTypeUrl },
+      signalId: "event-partial",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard: ShardIndex.single(),
+    }));
+    const firstInput = inputs[0];
+    if (firstInput === undefined) {
+      throw new Error("Expected a first partial-batch input.");
+    }
+    const receive = vi
+      .fn()
+      .mockResolvedValueOnce(writtenResult(firstInput, 1n))
+      .mockRejectedValueOnce(new Error("second write rejected"));
+    const delivery = { inbox: { receive } } as unknown as Delivery;
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      replay: () => Promise.resolve(),
+    });
+
+    await expect(inbox.receiveAll(delivery, inputs, "tenant-a")).rejects.toThrow(
+      "second write rejected",
+    );
+
+    expect(receive).toHaveBeenCalledTimes(2);
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "REACT_UPON_EVENT",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+  });
+
+  it("matches batch readiness without rebuilding the global endpoint snapshot", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.resolve(),
+    });
+    const endpoints = vi.spyOn(inbox, "endpoints");
+
+    await inbox.receiveAll(
+      delivery,
+      ["first", "second"].map((targetId) => ({
+        inboxId: { targetId, targetTypeUrl },
+        signalId: `command-${targetId}`,
+        label: "HANDLE_COMMAND" as const,
+        status: "TO_DELIVER" as const,
+        shard: ShardIndex.single(),
+      })),
+      "tenant-a",
+    );
+
+    expect(endpoints).not.toHaveBeenCalled();
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+  });
+
+  it("isolates readiness observer failure from every batch write and exact drain", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const seen: string[] = [];
+    let notifications = 0;
+    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+      notifications += 1;
+      throw new Error("observer failed");
+    });
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay(message) {
+        seen.push(message.inboxId.targetId);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => ({
+          inboxId: { targetId, targetTypeUrl },
+          signalId: "event-observer-failure",
+          label: "REACT_UPON_EVENT" as const,
+          status: "TO_DELIVER" as const,
+          shard: ShardIndex.single(),
+        })),
+      ),
+    ).resolves.toHaveLength(2);
+    expect(notifications).toBe(2);
+    expect(seen).toEqual(["first", "second"]);
+  });
+
+  it("contains a rejected readiness promise created in another realm", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const foreign = runInNewContext(`
+      (() => {
+        let reject;
+        const promise = new Promise((_, onRejected) => {
+          reject = onRejected;
+        });
+        return { promise, reject };
+      })()
+    `) as ForeignDeferred;
+    const then = vi.spyOn(foreign.promise, "then");
+    let markObserved!: () => void;
+    const observed = new Promise<void>((resolve) => {
+      markObserved = resolve;
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+      markObserved();
+      return foreign.promise;
+    });
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.resolve(),
+    });
+
+    const receive = inbox.receive(delivery, {
+      inboxId: { targetId: "pm-foreign-observer", targetTypeUrl },
+      signalId: "foreign-observer-failure",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+    });
+    await observed;
+    await Promise.resolve();
+
+    expect(then).toHaveBeenCalledOnce();
+    foreign.reject(new Error("foreign observer failed"));
+    await expect(receive).resolves.toBeDefined();
+  });
+
+  it("emits no readiness for a rejected write or a duplicate without new persistence", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const rejectedDelivery = {
+      inbox: { receive: () => Promise.reject(new Error("write rejected")) },
+    } as unknown as Delivery;
+    const input = {
+      inboxId: { targetId: "pm-dedup", targetTypeUrl },
+      signalId: "signal-dedup",
+      label: "HANDLE_COMMAND" as const,
+      status: "TO_DELIVER" as const,
+      shard: ShardIndex.single(),
+    };
+
+    await expect(inbox.receive(rejectedDelivery, input)).rejects.toThrow("write rejected");
+    expect(ready).toEqual([]);
+
+    const duplicate = writtenResult(input, 1n).message;
+    const duplicateDelivery = {
+      inbox: {
+        receive: () => Promise.resolve({ outcome: "DUPLICATE", message: duplicate }),
+        readMessage: () => Promise.resolve({ ...duplicate, status: "DELIVERED" }),
+      },
+      drainMessage: () =>
+        Promise.resolve({
+          status: "DRAINED",
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        }),
+    } as unknown as Delivery;
+
+    await inbox.receive(duplicateDelivery, input);
+
+    expect(ready).toEqual([]);
+  });
+
+  it("emits for all persisted batch rows before a later exact drain rejection", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const drainFailure = new Error("batch replay failed");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.reject(drainFailure),
+    });
+
+    const result = await inbox
+      .receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => ({
+          inboxId: { targetId, targetTypeUrl },
+          signalId: "event-drain-failure",
+          label: "REACT_UPON_EVENT" as const,
+          status: "TO_DELIVER" as const,
+          shard: ShardIndex.single(),
+        })),
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(result).toBe(drainFailure);
+    expect(ready).toHaveLength(2);
+  });
   it("replays existing durable command and event rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -22,6 +317,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -83,6 +379,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -134,6 +431,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -192,6 +490,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -255,6 +554,7 @@ describe("LocalProcessManagerInbox", () => {
     ];
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -263,6 +563,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -335,6 +636,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -343,6 +645,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -421,6 +724,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -429,6 +733,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -492,6 +797,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -565,6 +871,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -572,6 +879,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: unrelatedProcessManagerTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         unrelatedSeen.push(message);
         return Promise.reject(new Error("unrelated process-manager should not replay"));
@@ -649,6 +957,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("target failed"));
       },
@@ -684,6 +993,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         const reason = "not-an-error" as unknown as Error;
 
@@ -747,11 +1057,13 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("scheduled rows should not replay"));
       },
@@ -780,6 +1092,7 @@ describe("LocalProcessManagerInbox", () => {
         status: "SCHEDULED",
       },
     ]);
+    expect(ready).toEqual([]);
   });
 
   it("rejects when the inbox label is not HANDLE_COMMAND", async () => {
@@ -787,11 +1100,13 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("unexpected replay"));
       },
@@ -820,6 +1135,78 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
       },
     ]);
+    expect(ready).toEqual([]);
+  });
+
+  it("emits no readiness when the registered target does not configure the persisted label", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.CommandOnlyProcessManager";
+    const replayFailure = new Error("unconfigured event label should not replay");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.reject(replayFailure),
+    });
+
+    await expect(
+      inbox.receive(delivery, {
+        inboxId: { targetId: "pm-label-mismatch", targetTypeUrl },
+        signalId: "event-label-mismatch",
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      }),
+    ).rejects.toBe(replayFailure);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-label-mismatch",
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+      },
+    ]);
+    expect(ready).toEqual([]);
+  });
+
+  it("emits no readiness for a persisted shard outside the configured endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const shard = new ShardIndex(0, 2);
+    const replayFailure = new Error("non-configured shard should preserve drain failure");
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.reject(replayFailure),
+    });
+
+    await expect(
+      inbox.receive(delivery, {
+        inboxId: { targetId: "pm-shard-mismatch", targetTypeUrl },
+        signalId: "command-shard-mismatch",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard,
+      }),
+    ).rejects.toBe(replayFailure);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      {
+        signalId: "command-shard-mismatch",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      },
+    ]);
+    expect(ready).toEqual([]);
   });
 
   it("rejects when no process-manager command target is registered", async () => {
@@ -827,7 +1214,8 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
 
     await expect(
       inbox.receive(delivery, {
@@ -852,8 +1240,14 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
       },
     ]);
+    expect(ready).toEqual([]);
   });
 });
+
+interface ForeignDeferred {
+  readonly promise: Promise<never>;
+  reject(error: Error): void;
+}
 
 function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
@@ -863,4 +1257,16 @@ function pause(milliseconds: number): Promise<void> {
 
 function corruptedInput(input: unknown): ReceiveInput {
   return input as ReceiveInput;
+}
+
+function writtenResult(input: ReceiveInput, version: bigint) {
+  return {
+    outcome: "WRITTEN" as const,
+    message: {
+      ...input,
+      id: { value: `row-${String(version)}`, shard: input.shard },
+      whenReceived: new Date("2026-07-12T09:00:00.000Z"),
+      version,
+    },
+  };
 }

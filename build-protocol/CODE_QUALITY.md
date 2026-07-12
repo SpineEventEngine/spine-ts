@@ -148,14 +148,16 @@ Every task, including documentation-only tasks, must be reviewed by these review
 - code style/maintainability reviewer;
 - documentation reviewer;
 - TypeScript/API docs reviewer;
-- security reviewer;
 - performance/reliability reviewer.
 
 Reviewers must produce actionable comments. The authoring sub-agent must address them or record an explicit accepted exception. Review repeats until no comments remain.
 
-## Security Standards
+Security review is a final project/release-readiness gate, or runs earlier only
+when the human explicitly requests it.
 
-Security review must check:
+## Final Security Gate
+
+The final security review must check:
 
 - unsafe deserialization or `Any` unpacking;
 - validation bypasses;

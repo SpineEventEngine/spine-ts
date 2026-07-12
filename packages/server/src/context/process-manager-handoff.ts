@@ -1,25 +1,54 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
+import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
 import {
+  configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
+  deliveryEndpoint,
+  type DeliveryEndpoint,
+  DeliveryReadiness,
   drainLocalInboxMessage,
   localInboxHandoffKey,
+  type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
+  readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
+  readonly #readiness: DeliveryReadiness;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
 
-  constructor(contextName: string) {
+  constructor(
+    contextName: string,
+    readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
+  ) {
     this.#contextName = contextName;
+    this.#readiness =
+      readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
   }
 
   register(target: ProcessManagerInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
+    this.#endpoints.set(
+      target.targetTypeUrl,
+      Object.freeze(
+        target.labels.map((label) =>
+          deliveryEndpoint({
+            label,
+            inboxId: { targetTypeUrl: target.targetTypeUrl },
+            shard: ShardIndex.single(),
+          }),
+        ),
+      ),
+    );
+  }
+
+  endpoints(): readonly DeliveryEndpoint[] {
+    return Object.freeze([...this.#endpoints.values()].flat());
   }
 
   /** Replay one already-durable inbox row through registered process-manager targets. */
@@ -67,7 +96,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    const message = await this.#writeInboxRow(delivery, input, new Date());
+    const message = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
     await this.#drainInboxRow(delivery, message, deliveryTenantId);
     return message;
@@ -84,7 +113,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     try {
       for (const row of rows) {
         if (row.owner !== undefined) {
-          row.owner.message = await this.#writeInboxRow(delivery, row.input, whenReceived);
+          row.owner.message = await this.#writeInboxRow(
+            delivery,
+            row.input,
+            whenReceived,
+            deliveryTenantId,
+          );
         }
       }
       for (const row of rows) {
@@ -110,6 +144,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     delivery: Delivery,
     input: ProcessManagerInput,
     whenReceived: Date,
+    deliveryTenantId?: string,
   ): Promise<InboxMessage> {
     const written = await delivery.inbox.receive({
       inboxId: input.inboxId,
@@ -122,6 +157,16 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
+
+    if (written.outcome === "WRITTEN") {
+      const endpoint = configuredDeliveryEndpoint(
+        written.message,
+        this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
+      );
+      if (endpoint !== undefined) {
+        this.#readiness.notify(endpoint, deliveryTenantId);
+      }
+    }
 
     return written.message;
   }

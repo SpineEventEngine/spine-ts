@@ -66,6 +66,23 @@ interface InternalTenantIndex {
   keep(tenantId: string): Promise<void>;
 }
 
+interface InternalDeliveryScope {
+  readonly tenantId?: string;
+}
+
+interface InternalDeliveryEndpoint {
+  readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
+  readonly targetTypeUrl: string;
+  readonly shard: { readonly index: number; readonly ofTotal: number };
+}
+
+interface InternalDeliveryDescriptor {
+  readonly storageFactory: StorageFactory;
+  startupScopes(): Promise<readonly InternalDeliveryScope[]>;
+  endpoints(): readonly InternalDeliveryEndpoint[];
+  onReady(onReady: (ready: unknown) => void): () => void;
+}
+
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
@@ -184,6 +201,14 @@ function internalTenantIndex(context: BoundedContext): InternalTenantIndex {
   ).tenantIndex(context);
 }
 
+function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDescriptor {
+  return (
+    boundedContextAccess as unknown as {
+      delivery(context: BoundedContext): InternalDeliveryDescriptor;
+    }
+  ).delivery(context);
+}
+
 describe("BoundedContext assembly", () => {
   it("rejects empty or blank context names", () => {
     expect(() => BoundedContext.singleTenant("\t\n")).toThrow(BoundedContextNameError);
@@ -270,6 +295,92 @@ describe("BoundedContext assembly", () => {
     const recoveredIndex = internalTenantIndex(recovered);
 
     await expect(recoveredIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+  });
+
+  it("describes actual delivery storage and tenant startup scopes through internal access", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const single = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
+    const multitenant = BoundedContext.multitenant("Customers")
+      .withStorageFactory(storageFactory)
+      .build();
+
+    await internalTenantIndex(multitenant).keep("tenant-b");
+    await internalTenantIndex(multitenant).keep("tenant-a");
+
+    expect(internalDeliveryDescriptor(single).storageFactory).toBe(storageFactory);
+    await expect(internalDeliveryDescriptor(single).startupScopes()).resolves.toEqual([{}]);
+    expect(internalDeliveryDescriptor(multitenant).storageFactory).toBe(storageFactory);
+    await expect(internalDeliveryDescriptor(multitenant).startupScopes()).resolves.toEqual([
+      { tenantId: "tenant-a" },
+      { tenantId: "tenant-b" },
+    ]);
+  });
+
+  it("describes configured supported delivery endpoints and their shards", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskProcessManager,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+      {
+        entityType: TaskProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "onProjection",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskProcessManager)
+      .add(TaskProjection)
+      .buildAsync();
+
+    expect(internalDeliveryDescriptor(context).endpoints()).toEqual([
+      {
+        label: "HANDLE_COMMAND",
+        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        shard: { index: 0, ofTotal: 1 },
+      },
+      {
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+
+    const ready: unknown[] = [];
+    const stopObserving = internalDeliveryDescriptor(context).onReady((scope) => ready.push(scope));
+    await context.commandBus().post(createAggregateCommand("command-ready"));
+    stopObserving();
+
+    expect(ready).toEqual([
+      {
+        label: "HANDLE_COMMAND",
+        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        shard: { index: 0, ofTotal: 1 },
+      },
+      {
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
   });
 
   it("rejects blank multitenant index entries", async () => {
@@ -1347,6 +1458,23 @@ function createProjectionCommand(id: string) {
       id: "task-1",
       name: "Task",
       priority: 1,
+    }),
+  });
+}
+
+function createAggregateCommand(id: string) {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: "task-ready",
+      name: "Task Ready",
+      archived: false,
     }),
   });
 }

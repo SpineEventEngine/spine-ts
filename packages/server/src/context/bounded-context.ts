@@ -30,6 +30,12 @@ import {
   type EventSubscription,
 } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import {
+  type DeliveryEndpoint,
+  DeliveryReadiness,
+  type DeliveryReady,
+  type OnDeliveryReady,
+} from "./local-inbox-handoff.js";
 import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { createTenantIndex, type TenantIndex } from "./tenant-index.js";
@@ -131,10 +137,25 @@ interface RepositoryRegistration {
 
 interface PmInbox extends ProcessManagerInbox {
   register(target: ProcessManagerInboxTarget): void;
+  endpoints(): readonly DeliveryEndpoint[];
 }
 
 interface PrjInbox extends ProjectionInbox {
   register(target: ProjectionInboxTarget): void;
+  endpoints(): readonly DeliveryEndpoint[];
+}
+
+/** @internal One context tenant scope eligible for delivery startup. */
+export interface DeliveryTenantScope {
+  readonly tenantId?: string;
+}
+
+/** @internal Built-context delivery facts and readiness route. */
+export interface ContextDeliveryDescriptor {
+  readonly storageFactory: StorageFactory;
+  startupScopes(): Promise<readonly DeliveryTenantScope[]>;
+  endpoints(): readonly DeliveryEndpoint[];
+  onReady(onReady: OnDeliveryReady): () => void;
 }
 
 interface RegistrationSnapshot {
@@ -247,6 +268,7 @@ const eventSubscribers = new WeakMap<
 const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>();
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
+const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
   (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
@@ -266,6 +288,7 @@ interface BoundedContextAccess {
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
+  delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
   | ((
@@ -346,8 +369,12 @@ export class BoundedContext {
       acceptedEventTypes: () => exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
     });
-    this.#processManagerInbox = new LocalProcessManagerInbox(this.#snapshot.name.value);
-    this.#projectionInbox = new LocalProjectionInbox(this.#snapshot.name.value);
+    const deliveryReadiness = new DeliveryReadiness();
+    this.#processManagerInbox = new LocalProcessManagerInbox(
+      this.#snapshot.name.value,
+      deliveryReadiness,
+    );
+    this.#projectionInbox = new LocalProjectionInbox(this.#snapshot.name.value, deliveryReadiness);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
@@ -359,6 +386,16 @@ export class BoundedContext {
     contextSystemPairings.set(this, createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
+    contextDeliveryDescriptors.set(
+      this,
+      createDeliveryDescriptor(
+        storageFactory,
+        tenantIndex,
+        this.#processManagerInbox,
+        this.#projectionInbox,
+        deliveryReadiness,
+      ),
+    );
     try {
       this.#registerRepositories(repositories);
     } catch (error) {
@@ -666,6 +703,16 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
 
     return storageFactory;
+  },
+
+  delivery(context: BoundedContext): ContextDeliveryDescriptor {
+    const descriptor = contextDeliveryDescriptors.get(context);
+
+    if (descriptor === undefined) {
+      throw new TypeError("Delivery access requires a built BoundedContext instance.");
+    }
+
+    return descriptor;
   },
 });
 
@@ -1379,8 +1426,36 @@ function cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex)
   contextSystemPairings.delete(context);
   contextTenantIndexes.delete(context);
   contextStorageFactories.delete(context);
+  contextDeliveryDescriptors.delete(context);
   eventSubscribers.delete(context);
   tenantIndex.close();
+}
+
+function createDeliveryDescriptor(
+  storageFactory: StorageFactory,
+  tenantIndex: TenantIndex,
+  processManagers: PmInbox,
+  projections: PrjInbox,
+  readiness: DeliveryReadiness,
+): ContextDeliveryDescriptor {
+  return Object.freeze({
+    storageFactory,
+    async startupScopes(): Promise<readonly DeliveryTenantScope[]> {
+      if (tenantIndex.tenantMode === "single-tenant") {
+        return Object.freeze([Object.freeze({})]);
+      }
+
+      return Object.freeze(
+        (await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })),
+      );
+    },
+    endpoints(): readonly DeliveryEndpoint[] {
+      return Object.freeze([...processManagers.endpoints(), ...projections.endpoints()]);
+    },
+    onReady(onReady: (ready: DeliveryReady) => void): () => void {
+      return readiness.onReady(onReady);
+    },
+  });
 }
 
 function closePreparedRepositories(

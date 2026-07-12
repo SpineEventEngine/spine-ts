@@ -457,6 +457,8 @@ type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "versio
 export interface ProcessManagerInboxTarget {
   /** Target process-manager state type URL routed by this replay target. */
   readonly targetTypeUrl: string;
+  /** Supported delivery labels configured for this target. */
+  readonly labels: readonly ProcessManagerInboxLabel[];
   /** Replays one durable inbox message under the active delivery tenant. */
   replay(message: ProcessManagerInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
@@ -661,6 +663,10 @@ function createPmInboxTarget(
 
   return Object.freeze({
     targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    labels: Object.freeze([
+      ...(routing.commandSchemas.length === 0 ? [] : (["HANDLE_COMMAND"] as const)),
+      ...(routing.eventSchemas.length === 0 ? [] : (["REACT_UPON_EVENT"] as const)),
+    ]),
     replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
       replayPmInbox(repository, routing, message, deliveryTenantId),
   });
