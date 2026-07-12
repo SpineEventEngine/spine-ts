@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Pre-review fixes complete; required four-lane review not started
+Status: Implementation committed; required four-lane review not started
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -83,3 +83,6 @@ Security is deferred to final project readiness.
   tests, generated build, changed-file ESLint, docs/API checks, formatting, and
   whitespace. The implementation is ready to commit and package for the first
   required independent four-lane review.
+- `2026-07-12T02:43:00Z`: Committed implementation as `1ea10745` and
+  reconciled active status plus the durable commit ledger. Fixed-baseline
+  review-package generation is next.

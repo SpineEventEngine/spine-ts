@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Pre-review fixes complete; required four-lane review pending
+Status: Implementation committed; required four-lane review pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -155,6 +155,8 @@ membership.
 - PASS: Coordinator repeated the 4-file / 258-test suite, generated build,
   changed-file ESLint, `docs:check`, `format:check`, and `git diff --check`.
   Documentation emitted only the existing invalid-`origin` source-link warning.
+- PASS: Implementation committed as `1ea10745`; review-package status
+  reconciliation is the sole future hash under the commit-ledger convention.
 
 ## Implementation Result
 
