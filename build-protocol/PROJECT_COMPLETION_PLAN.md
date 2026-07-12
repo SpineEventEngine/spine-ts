@@ -1,0 +1,911 @@
+# Spine TS Project Completion Plan
+
+Status: Ready for execution after this planning commit
+
+Plan date: 2026-07-12
+
+Starting `main`: `40329cad`
+
+Active implementation frontier: T-0037b at safe-stop commit `dd3d90c8`
+
+## Purpose
+
+This is the executable plan from the current repository state to a completed
+initial Spine TS framework release. Completion means all of the following are
+true together:
+
+- the accepted framework runtime is implemented and integrated;
+- public TypeScript and Protobuf contracts are coherent and tested;
+- package documentation, architecture documentation, and API reference match
+  the implementation;
+- the framework user guide describes supported workflows without exposing
+  framework internals;
+- the to-do example is runnable, documented, and proves the required real
+  command, delivery, query, subscription, validation, refusal, gRPC, and local
+  multi-process behavior;
+- the final security review is clean or has explicit accepted exceptions;
+- the full repository release gate passes with at least 90% branch coverage;
+- generated output remains reproducible and untracked;
+- durable task, work, review, decision, and status records are reconciled;
+- all task subagents are closed and completed task worktrees are removed.
+
+This plan is intentionally more prescriptive than a roadmap. A coordinator
+should be able to execute each packet without first rebuilding project history.
+
+## Authority And Reconciliation Rules
+
+Use sources in this order when statements conflict:
+
+1. Explicit human instructions in the current task.
+2. Accepted decisions in `DECISION_LOG.md`, especially D-0085 and D-0086.
+3. Current task `TASK.md` status and scope in the active task worktree.
+4. `TECHNICAL_SPEC.md`, `RUNTIME_ARCHITECTURE.md`, `DEVELOPER_API.md`,
+   `PROTOBUF_CONTRACT.md`, `TODO_EXAMPLE_SPEC.md`, and `CODE_QUALITY.md`.
+5. `BUILD_PROTOCOL.md` for execution and quality procedure.
+6. Timestamped work/review logs as historical evidence.
+
+Historical text is not active state merely because it appears in a diff.
+Reviewers must ignore superseded text unless the current task brief, current
+status mirrors, or changed public documentation claims it as current behavior.
+
+The candidate headers for T-0037b onward on root `main` do not override the
+active T-0037b worktree. The active worktree's T-0037b status is canonical.
+Bootstrap-era T000/T001 statuses are stale records to reconcile at final
+closure, not unimplemented product work.
+
+## Starting State
+
+### Root
+
+- Repository: `/Users/armiol/development/experiments/spine-ts`
+- Branch: `main`
+- Baseline at plan creation: `40329cad`
+- T-0037a is integrated and post-merge verified.
+- `human-review-1-jul.md` is user-owned and must never be read, edited, staged,
+  committed, deleted, moved, or used as a project input.
+
+### Active T-0037b
+
+- Worktree:
+  `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0037b-bounded-generation-run-coordinator`
+- Branch: `task/T-0037b-bounded-generation-run-coordinator`
+- Safe-stop commit: `dd3d90c8`
+- Implementation endpoint: `066c295d4860754be97341b802e05faa0da92370`
+- Review package:
+  `.superpowers/sdd/review-40329cad..066c295d.diff`
+- State: Round 5 role skill checks are recorded; substantive Round 5 review has
+  not begun.
+- Last coordinator verification: four files, 180 focused tests, both
+  typechecks, ESLint, Prettier, and `git diff --check` passed.
+
+### Historical Branches And Worktrees
+
+Older branches that are not merged by ancestry are not automatically pending
+product work. Their accepted changes are already represented on `main` through
+later branch lines. Dirty or scratch-only worktrees are preserved archival
+state. Do not merge, rebase, delete, or repair them during the critical path.
+Handle optional archival cleanup only after release, with a separate explicit
+maintenance task.
+
+## Initial Release Scope
+
+### Included
+
+- Protobuf-first domain modeling and copied Spine wire contracts.
+- Generated handler registry for bare decorators.
+- Command/event buses, aggregate, process manager, and projection execution.
+- Framework-owned transactions, state validation, and default command routing.
+- Storage, event journal, inbox, claims, shard leases, bounded delivery loops,
+  delivery-attempt accounting, and exhaustion gate.
+- Environment-owned delivery readiness, generation coordination, lifecycle,
+  startup recovery, detach, reusable stop, permanent close, and server ordering.
+- Query and subscription services and real local gRPC-compatible server.
+- Adapter-neutral signal transport and ZeroMQ same-host IPC.
+- Framework and example testing utilities.
+- Public docs, API reference, architecture notes, guides, and runnable example.
+
+### Explicitly Not Release Blocking
+
+Do not create tasks for these unless a new human decision changes scope:
+
+- distributed multi-host transport;
+- production process supervision;
+- retry delay, backoff, jitter, or timer policy;
+- public monitor, scheduler, health, action, or dead-letter APIs;
+- production transport topology or adapter policy;
+- projection `CATCH_UP` delivery through the inbox worker;
+- legacy `IMPORT_EVENT` support;
+- aggregate import/importers, `ImportBus`, or aggregate `@Apply` delivery;
+- JVM source-level compatibility;
+- production persistence, authentication, deployment, tracing, or health checks
+  in the to-do example.
+
+Existing public compatibility symbols may remain only with their already
+accepted narrow framework/testing/legacy descriptions. Do not expand them.
+
+## Definition Of Done
+
+The project is complete only when every item below has evidence on final
+`main`:
+
+### Framework
+
+- T-0037b, T-0037c, T-0037d, T-0037e1, T-0037e2, T-0037e3, and T-0037f are
+  complete, reviewed, merged in order, and post-merge verified.
+- `ServerEnvironment` is the sole environment delivery owner.
+- Startup recovery settles before listener intake.
+- Network intake stops before detach and delivery quiescence.
+- Endpoint-dependent contexts/resources remain open until quiescence is
+  established.
+- Shared and owned environment cleanup preserve their distinct ownership.
+- No public lifecycle implementation details or speculative policy leak.
+- Compatibility and Protobuf/type-URL tests pass.
+
+### Documentation
+
+- Root and all six package READMEs describe current supported behavior.
+- `docs/USER_GUIDE.md` covers installation, generation, decorated handlers,
+  context assembly, command/event execution, query/subscription, storage,
+  delivery, server lifecycle, testing, and supported limitations.
+- `docs/api/README.md` and generated TypeDoc match all public exports.
+- `docs/architecture/README.md` and protocol architecture/spec files distinguish
+  implemented behavior from accepted exclusions.
+- No docs promise future retry, monitoring, topology, or catch-up policy.
+- Every command and code snippet uses only supported public APIs.
+
+### Example
+
+- A clean generation/build produces the ignored handler registry and compiled
+  app.
+- The app starts a real local gRPC-compatible server.
+- Black-box tests prove acknowledgement, asynchronous handling, projection
+  delivery, query, subscription, validation failure, and business refusal.
+- A real child-process/local-IPC test demonstrates the required local
+  multi-process bus mode without framework-internal application wiring.
+- Example source passes all forbidden end-user API scans.
+- Example README and user guide are copy-paste accurate.
+
+### Quality And Release
+
+- Every per-task review concern has a recorded clean result when relevant, or a
+  concrete justified N/A disposition: style/maintainability, documentation,
+  TypeScript/API docs, and performance/reliability.
+- One final project-wide security review is clean or every exception is
+  explicit, narrow, durable, and human-accepted.
+- `pnpm --config.verify-deps-before-run=false verify` passes natively.
+- Global branch coverage is at least 90% with useful margin where practical.
+- Protobuf lint and generated-clean checks pass.
+- `git diff --check` passes and final tracked/untracked inspection is clean
+  except the untouched user-owned file.
+- All subagents are closed; completed clean worktrees are removed.
+
+## Critical Path
+
+```mermaid
+flowchart TD
+  B["T-0037b Review Closure"] --> C["T-0037c Parked Obligations"]
+  C --> D["T-0037d Attachment And Startup"]
+  D --> E1["T-0037e1 Registration Detach"]
+  E1 --> E2["T-0037e2 Reusable Stop"]
+  E2 --> E3["T-0037e3 Permanent Close"]
+  E3 --> F["T-0037f Server Integration"]
+  F --> A["T-0038 Capability Audit"]
+  A --> DOC1["T-0039a Canonical Docs Reconciliation"]
+  DOC1 --> DOC2["T-0039b Package And API Docs"]
+  DOC2 --> DOC3["T-0039c Framework User Guide"]
+  DOC3 --> EX1["T-0040a Multi-Process Example"]
+  EX1 --> EX2["T-0040b Example Acceptance"]
+  EX2 --> EX3["T-0040c Example Guide Closure"]
+  EX3 --> SEC["T-0041 Final Security Gate"]
+  SEC --> REL["T-0042 Release And Project Closure"]
+```
+
+Runtime children are strictly serial because each owns a prerequisite lifecycle
+contract. After T-0037f, research for T-0039 and T-0040 may run in parallel,
+but edits and integration remain in the order above so docs and example target
+stable runtime behavior.
+
+## Fast Execution Protocol
+
+Apply this packet to every implementation or docs task.
+
+### 1. Frame And Start
+
+1. Confirm the dependency is integrated on `main` and post-merge verification
+   passed.
+2. Confirm the selected execution surface supports every required model profile
+   and explicit model/reasoning dispatch. Desktop support is sufficient when a
+   separate shell CLI is stale; update or switch only an incapable selected
+   surface.
+3. Inspect actual repository state, frame one coherent milestone, and record its
+   functional acceptance criteria and genuinely high-risk assumptions.
+4. Read the task brief, current accepted decisions, affected public docs, and
+   relevant Spine JVM server evidence for server-module work.
+5. Invoke the requirements splitter on Sol High only for the selective planning
+   triggers in `BUILD_PROTOCOL.md`; use a short orchestrator outline otherwise.
+6. Perform and record the canonical skill-applicability check.
+7. Create one branch/worktree for the task when write isolation is useful.
+8. Create/update the task, work log, and review log before code/doc edits.
+9. Record baseline SHA, branch, worktree, author agent, and start timestamp.
+10. For every child, record its existing role or dispatched function, scope,
+    expected model, and reasoning before dispatch; confirm both were explicit
+    dispatch fields and record actual runtime metadata before accepting its
+    work.
+
+### 2. Implement
+
+1. Use one Terra Medium author at a time for overlapping production files.
+2. For runtime changes, write deterministic RED tests first, then GREEN code,
+   then a small refactor only when needed.
+3. Keep public exports unchanged unless the task explicitly owns a public API.
+4. Update durable logs with each material decision and verification result.
+5. Commit generated Protobuf and handler-registry output never.
+6. Stop the slice if it begins owning behavior assigned to a later task.
+
+### 3. Mechanical Verification
+
+Use Luna Low/Medium for focused tests, deterministic checks, and failure-log
+classification during implementation/fix loops:
+
+```bash
+pnpm --config.verify-deps-before-run=false exec vitest run <focused-test-files>
+pnpm --config.verify-deps-before-run=false typecheck:build:generated
+pnpm --config.verify-deps-before-run=false exec eslint <changed-ts-files>
+pnpm --config.verify-deps-before-run=false exec prettier --check <changed-files>
+git diff --check
+```
+
+Add `docs:check` when public docs, TSDoc, exports, or declarations change. Add
+focused Protobuf checks only when proto sources or generation tooling change.
+
+### 4. Pre-Review Lint
+
+Before spawning reviewers, perform a lightweight local audit and record it:
+
+1. Canonical task status equals work-log and review-log current status.
+2. No stale `pending`, `candidate`, `awaiting review`, or prior-round claim is
+   presented as current state.
+3. No duplicated constant/helper was added where an existing owner exists.
+4. No package-internal type, callback, cursor, registration, generation,
+   obligation, retry, or lifecycle primitive leaks from a public root.
+5. Public docs describe current observable behavior only and do not claim
+   future policy.
+6. Historical superseded text is clearly historical and not treated as active.
+7. Example/doc code passes the end-user API prohibition scan when touched.
+8. Generated output and review-package scratch material are untracked only.
+
+### 5. Targeted Review
+
+1. Resolve and record the immutable endpoint with `git rev-parse HEAD`.
+2. Generate the review package with literal baseline and endpoint SHAs. Never
+   pass moving `HEAD` as the endpoint.
+3. Record a relevance disposition for all four existing concerns:
+   style/maintainability, documentation, TypeScript/API docs, and
+   performance/reliability. Spawn only relevant lanes, each bounded to its
+   concern, the milestone diff, and affected execution paths. A skipped lane
+   requires a concrete N/A reason.
+4. Run no more than three reviewer children concurrently. Sequence extra
+   relevant lanes, then aggregate and deduplicate the complete wave before any
+   finding returns to implementation.
+5. Prompts must state exact task scope, accepted exclusions, public boundary,
+   review package, and the historical-text rule.
+6. Close every reviewer immediately after collecting its result.
+7. If there are findings, record the complete accepted batch first and return
+   it to the existing implementation context when available. Use one fresh fix
+   worker only when that context cannot continue. Verify locally, commit,
+   regenerate the package, and rerun the affected lanes; rerun another lane only
+   when the fix changed its concern.
+8. Do not run a per-task security lane.
+
+### 6. Accept And Integrate
+
+1. Run the task's focused suite plus final task `pnpm verify` only after all
+   relevant lanes are clean and every concern has a recorded disposition.
+2. Record exact verification evidence and mark task/log/review mirrors complete.
+3. Commit closure records.
+4. Merge into root `main` without staging unrelated files.
+5. Run post-merge focused verification and full `pnpm verify` where required by
+   the task protocol.
+6. Record post-merge evidence on `main`.
+7. Remove the completed worktree only when Git reports it clean.
+
+## Runtime Execution Packets
+
+### T-0037b: Bounded Generation Run Coordinator
+
+**Entry:** Resume the existing worktree at `dd3d90c8`. Do not reimplement or
+reopen completed Round 1-4 work.
+
+**Immediate actions:**
+
+1. Confirm the worktree is clean and the active status mirrors all say Round 5
+   substantive review pending.
+2. Use the existing package for endpoint `066c295d...`; regenerate only if the
+   endpoint or package integrity differs.
+3. Run at most three of the four Round 5 substantive reviewers concurrently,
+   then sequence the remaining lane. Their skill checks are already recorded;
+   do not create duplicate reviewer identities or start fixes before the
+   complete wave is aggregated.
+4. Review against `40329cad..066c295d`, not the later safe-stop-only commits.
+5. Close reviewers, record all findings, and route one complete finding batch
+   through one fix worker if needed.
+
+**Acceptance behavior:**
+
+- readiness starts are serialized;
+- pending readiness is a lossless canonical scope union bounded by live
+  tenant/configured scope cardinality, not notification count;
+- only `PAUSED` shards continue within a finite obligation;
+- `FAILED`, `SKIPPED`, `STOPPED`, and rejected starts do not spin;
+- rejected evidence retains exact scope and last-safe progress without keeping
+  the obligation object;
+- retirement closes admission, stops, awaits quiescence, classifies, invokes
+  caller consumption/reporting, and permanently retires/cleans up in order;
+- reporting or inert cleanup failure cannot reactivate a quiescent generation;
+- inability to prove quiescence prohibits replacement and later phases;
+- same-operation retry resumes without duplicating completed stop work;
+- no coordinator concept or new export appears in the public package root.
+
+**Focused gate:** coordinator tests, delivery-worker runtime tests, T-0036
+delivery loop/worker regressions, generated typecheck, lint/format, docs/API
+export check if declarations changed, then final task `pnpm verify`.
+
+**Exit:** merge to `main`, post-merge verify, record integration, remove clean
+worktree. T-0037c may start only afterward.
+
+### T-0037c: Parked Delivery Obligations
+
+**Objective:** Add one finite internal table for unresolved operational
+obligations and one-time cause reporting.
+
+**Files:** new internal delivery record module, minimal T-0037b settlement
+integration, focused tests, task/work/review logs, current architecture wording.
+
+**TDD sequence:**
+
+1. Prove repeated rejection cannot increase key/cause cardinality beyond live
+   registration/configured-shard bounds plus one shared record.
+2. Add canonical keys for registration+scope, generation+shard, and at most one
+   shared generation-spanning record.
+3. Prove deterministic representative selection and saturating occurrence
+   counts at `Number.MAX_SAFE_INTEGER`.
+4. Prove selected causes report once while unresolved operational work remains.
+5. Prove later rejection installs at most one fresh representative without
+   retaining error history.
+6. Prove successful re-evaluation consumes only work actually re-evaluated.
+7. Prove owner-removal reclassification coalesces without arbitrary subset
+   keys or duplicate causes.
+8. Prove fulfilled `FAILED` creates operational readiness only, not a cause.
+
+**Boundary:** no real registrations, startup, retirement, public monitoring,
+timing policy, or public export.
+
+**Focused gate:** parked-obligation tests, T-0037b coordinator tests, delivery
+worker regressions, typecheck/lint/format/diff, public-leak scan, final verify.
+
+### T-0037d: Environment Attachment And Startup
+
+**Objective:** Make `ServerEnvironment` the sole internal owner of attachment,
+one current generation, readiness routing, finite startup recovery, and
+registration-scoped failed-start rollback.
+
+**Files:** `server-environment.ts`, small internal environment lifecycle
+modules, minimal access changes to T-0037a/b/c, focused environment tests, logs,
+architecture wording.
+
+**TDD sequence:**
+
+1. Prove caller-owned registrations share one generation while server-owned
+   environment registration is exclusive.
+2. Close new direct exact-drain admission before attachment and await every
+   already-admitted exact drain in scope.
+3. Buffer persistence readiness during route installation in a canonical
+   bounded transition owner; transfer each scope once before startup admission.
+4. Prove no row loses both owners and exact drain never overlaps the
+   environment worker for the same work.
+5. Enumerate startup scopes from T-0037a descriptors using the actual context
+   storage factory and tenant index.
+6. Await one finite startup recovery result before attachment readiness.
+7. Attribute rejected evidence by registration/scope; do not fail startup for
+   fulfilled `FAILED` alone or disjoint sibling rejection.
+8. Roll back only the failed registration and preserve siblings.
+9. For a sole failed attach, invoke T-0037b retirement in order and clear a
+   quiescent retired slot despite reporting/inert cleanup error.
+10. For quiescence failure, retain the slot and endpoint dependencies; retry the
+    same operation without duplicated closure/stop, then permit one fresh attach.
+
+**Boundary:** no `Server.start()` listener wiring, ordinary detach, reusable
+stop, permanent close, public registration API, timing policy, or topology.
+
+**Focused gate:** environment attachment/startup/race tests, context handoff
+tests, T-0037b/c tests, server environment regressions, public export scan,
+typecheck/lint/format/diff, final verify.
+
+### T-0037e1: Registration Detach Lifecycle
+
+**Objective:** Add registration-scoped non-last detach and ordinary last-detach
+retirement without owning reusable stop or permanent close.
+
+**TDD sequence:**
+
+1. Non-last detach closes only departing readiness, awaits its work barrier,
+   consumes/reports only eligible departing/newly orphaned records, and keeps
+   sibling generation identity and endpoints usable.
+2. Non-last failure retry resumes registration cleanup/reporting only and never
+   stops/retires the generation or clears its slot.
+3. Ordinary last detach invokes T-0037b's primitive and clears only a proven
+   quiescent retired slot.
+4. Reporting and inert cleanup failures still permit safe slot clearing before
+   propagation and one later fresh first attach.
+5. Quiescence failure retains unsafe ownership; same-operation retry completes
+   remaining phases once.
+6. Detach/attach races linearize: attach either joins before stop or waits and
+   joins one fresh generation after safe retirement.
+
+**Boundary:** no reusable stop, permanent close, facilities, failed-start
+rollback, server integration, public detach/registration API, or examples.
+
+**Focused gate:** detach/race/retry tests, T-0037d regressions, public leak/API
+checks, typecheck/lint/format/diff, final verify.
+
+### T-0037e2: Reusable Generation Stop
+
+**Objective:** Implement the sole package-internal reusable stop and exact-once
+transition to one fresh generation while registrations survive.
+
+**Required four phases:**
+
+1. Rebind every surviving registration and readiness route with per-unit
+   checkpoints.
+2. Transfer every configured, startup, buffered, and retained canonical scope
+   once into fresh pending admission with separate checkpoints.
+3. Publish the sole fresh candidate.
+4. Reopen later-write admission.
+
+**TDD sequence:**
+
+1. Explicit stop creates the candidate even without a racing attach.
+2. A racing eligible attach waits and joins the same candidate.
+3. Writes during transition remain in the bounded transition owner and are
+   admitted without an unrelated trigger.
+4. Construction failure creates no candidate; retry creates exactly one.
+5. Partial rebind/transfer failure retains the candidate and per-unit progress;
+   external retry resumes without repeats or self-looping.
+6. Quiescence failure retains old generation and dependencies; retry resumes
+   after completed closure/stop.
+7. Separate reporting and inert retirement failures still complete all four
+   replacement phases before propagating the original error once.
+8. Internal-access tests prove no server/handoff caller invokes the primitive
+   directly and no public explicit-stop API/docs exist.
+
+**Focused gate:** reusable-stop transition/race/retry tests, T-0037d/e1
+regressions, public-leak scans, typecheck/lint/format/diff, final verify.
+
+### T-0037e3: Permanent Environment Close
+
+**Objective:** Implement live-registration close refusal and zero-registration
+permanent close with safe retirement and owned-facility teardown.
+
+**TDD sequence:**
+
+1. Close with live registrations refuses before any lifecycle mutation.
+2. Close/attach race has one serialized winner.
+3. Zero-registration close permanently rejects later attachment/readiness,
+   retires the generation, clears only a quiescent slot, and attempts every
+   owned facility close once.
+4. Quiescence failure retains the slot, dependencies, and facilities and runs
+   no later phase; retry completes exactly once.
+5. Reporting/inert cleanup errors aggregate without skipping safe slot clearing
+   and remaining facility close attempts.
+6. Unreported causes surface once; reported unresolved causes do not resurface.
+7. Public docs, if changed, describe only independently observable
+   `ServerEnvironment.close()` behavior and never internal stop.
+
+**Boundary:** no server/listener integration, ordinary detach, reusable stop,
+public lifecycle option, retry timing, or topology.
+
+**Focused gate:** permanent close/refusal/race/facility tests, T-0037d/e1/e2
+regressions, public API/docs checks, typecheck/lint/format/diff, final verify.
+
+### T-0037f: Server Lifecycle Integration
+
+**Objective:** Wire the stable environment lifecycle into `Server.start()` and
+`RunningServer.close()` without reproducing environment logic.
+
+**Startup order:**
+
+1. Build contexts/resources.
+2. Attach contexts and install readiness.
+3. Await finite startup recovery.
+4. Open listener.
+
+**Close order:**
+
+1. Stop network intake and sessions.
+2. Detach registration and await delivery quiescence while endpoint
+   dependencies remain open.
+3. Surface eligible causes once.
+4. Close contexts and resources.
+5. Close environment/facilities only when server-owned and exclusive.
+
+**TDD sequence:**
+
+1. Listener never opens before successful recovery.
+2. Caller-owned failed startup cleans only server-owned contexts/resources and
+   leaves the environment/facilities reusable.
+3. Caller-owned quiescence failure defers endpoint-dependent cleanup; explicit
+   retry resumes T-0037d rollback and permits a later fresh server attachment.
+4. Server-owned failed startup retires safely before contexts/resources and
+   permanent environment close; quiescence failure retains all dependencies.
+5. Non-last running-server close leaves sibling server/generation usable;
+   failure retry is registration-scoped and non-retiring.
+6. Last close retires the generation and respects owned environment ordering.
+7. Transport/storage never close beneath active delivery; no `PAUSED` run starts
+   after stop admission.
+8. Existing host, port, base URL, listener failure, shared/owned environment,
+   and retryable/idempotent close contracts remain compatible.
+9. README/TSDoc describe observable startup recovery, close ordering, errors,
+   and caller-owned reuse without exposing registrations/generations/internal
+   stop or adding public exports/options.
+
+**Focused gate:** server startup/close/failure/race tests; all T-0037 environment
+and delivery suites; context handoff tests; server API export test; docs check;
+typecheck/lint/format/diff; final verify.
+
+**Exit:** Reconcile D-0085/D-0086 and T-0037 parent status as implemented,
+merge, post-merge full verify, and remove the clean worktree. The framework
+runtime then enters release audit, not another speculative runtime roadmap.
+
+## Framework Closure Packets
+
+### T-0038: Accepted Capability Audit
+
+**Objective:** Prove the integrated framework satisfies the accepted initial
+release contract and classify every remaining statement as implemented,
+documented exclusion, stale historical text, or real defect.
+
+**Method:**
+
+1. Create a traceability matrix from `TECHNICAL_SPEC.md`,
+   `PROTOBUF_CONTRACT.md`, `DEVELOPER_API.md`, `RUNTIME_ARCHITECTURE.md`,
+   `TODO_EXAMPLE_SPEC.md`, and `CODE_QUALITY.md` to implementation/tests/docs.
+2. Audit public exports from package roots and `scripts/check-api-docs.mjs`.
+3. Audit compatibility tests for message shapes and type URLs.
+4. Audit end-user API prohibitions in example and guide snippets.
+5. Audit accepted exclusions so conceptual/future text is not mislabeled as a
+   missing implementation.
+6. Record evidence in a durable release-readiness matrix under
+   `build-protocol/release/`.
+
+**Finding rule:**
+
+- Documentation/status mismatch moves to T-0039.
+- Example-only gap moves to T-0040.
+- Security issue moves to T-0041.
+- A mandatory framework behavior defect creates the smallest possible numbered
+  T-0038 child, with one behavior owner and one regression test. Do not create a
+  broad new roadmap or add excluded production policy.
+
+**Known checks:** command acknowledgement and asynchronous handling; aggregate,
+process manager, projection, query, subscription, validation, lifecycle,
+storage, local IPC, delivery, generated registry, default route, custom route,
+wire shape, and type URL.
+
+**Gate:** clean results for every relevant review concern and justified N/A
+dispositions for the rest over the matrix and any audit-only status changes. If
+code defects are found, complete and integrate their tiny T-0038 children,
+rerun the matrix, then close T-0038.
+
+### T-0039a: Canonical Specification And Status Reconciliation
+
+**Objective:** Make protocol specifications and durable status records describe
+the final implemented runtime and its explicit exclusions.
+
+**Files:** protocol specs/architecture/decision task status records only. Do not
+rewrite public user guidance in this slice.
+
+**Required work:**
+
+- update current delivery lifecycle wording after T-0037f;
+- mark D-0085/D-0086 implementation outcomes without changing decisions;
+- reconcile T-0037 parent/children and current work/review status mirrors;
+- close stale T000/T001 bootstrap headers with factual historical notes;
+- remove stale claims that implemented behavior is pending;
+- preserve explicit future/out-of-scope policy;
+- avoid mass-editing historical event entries.
+
+**Gate:** docs/status lint, links, formatting/diff, clean relevant review
+concerns with justified N/A dispositions, and exact changed-file scope.
+
+### T-0039b: Package READMEs And API Reference
+
+**Objective:** Reconcile root/package READMEs, public TSDoc, API overview, and
+TypeDoc with the final public surface.
+
+**Required surfaces:** root README; `packages/{core,proto,server,storage,
+transport,testing}/README.md`; `docs/api/README.md`; public TSDoc; TypeDoc.
+
+**Required checks:**
+
+- every exported symbol is covered by API checks;
+- examples compile against public package imports;
+- no internal coordinator, obligation, registration, generation, cursor,
+  lifecycle access, ZeroMQ endpoint, or storage implementation detail leaks;
+- lifecycle docs state only observable `Server`, `RunningServer`, and
+  `ServerEnvironment` behavior;
+- legacy compatibility symbols retain narrow accepted wording;
+- package limitations agree with accepted exclusions;
+- links and command snippets are valid.
+
+**Gate:** generated typecheck, `docs:check`, API export tests, README snippet
+checks where available, format/diff, and clean relevant review concerns with
+justified N/A dispositions.
+
+### T-0039c: Framework User Guide Closure
+
+**Objective:** Make `docs/USER_GUIDE.md` sufficient for a new framework user to
+build and run a server application without reading internal source.
+
+**Required journey:**
+
+1. Install and generate Protobuf-ES output.
+2. Model IDs, state, commands, and events with Spine conventions.
+3. Write bare-decorated aggregate/process-manager/projection handlers with
+   valid explicit return types.
+4. Generate and load the framework-owned handler registry.
+5. Assemble storage, bounded contexts, and server environment.
+6. Start and close a server with correct lifecycle expectations.
+7. Post commands and understand immediate acknowledgement/asynchronous work.
+8. Query and subscribe to state.
+9. Handle validation and business refusal.
+10. Test through `@spine-ts/testing` and real gRPC clients.
+11. Understand delivery guarantees, replay-safe handler expectations, local IPC
+    trust boundaries, and supported limitations.
+
+**Prohibitions:** no framework envelopes in ordinary handlers, no schema-bearing
+decorators, no `@Apply`, no manual transactions, no internal IDs, no default
+target extraction, no handler materialization, no internal lifecycle APIs.
+
+**Gate:** compile or test all practical snippets, end-user API scan, docs check,
+links, format/diff, and clean relevant review concerns with justified N/A
+dispositions.
+
+## Example Closure Packets
+
+### T-0040a: Local Multi-Process To-Do Mode
+
+**Objective:** Satisfy the remaining example requirement by demonstrating real
+same-host multi-process bus behavior with the existing transport abstraction
+and ZeroMQ adapter.
+
+**Design investigation first:** Identify the smallest supported public runtime
+composition that allows a parent/test process and a child worker process to
+exchange a real to-do signal over local IPC. Reuse existing runtime routing and
+transport APIs. Do not expose package internals merely to make the example pass.
+
+**Implementation requirements:**
+
+- add a purpose-specific example worker entry point or test fixture;
+- spawn a real Node child process;
+- allocate a private temporary IPC directory and deterministic logical IDs;
+- perform a readiness handshake before sending work;
+- route at least one generated to-do command/event payload through the real bus
+  transport and prove handling in the other process;
+- close sockets, child process, temporary files, server, contexts, and
+  environment deterministically on success and failure;
+- bound all waits with useful timeout diagnostics;
+- retain local-only, single-host scope and make no production supervision claim.
+
+**Escalation rule:** If the demonstration needs a missing mandatory public
+framework seam, stop example edits, create one tiny T-0038 framework child,
+review/integrate it, then resume T-0040a. Never import `packages/**/src`
+internals from committed example application code.
+
+**Gate:** child-process/IPC focused test natively, transport/runtime regressions,
+typecheck/lint/format/diff, generated cleanliness, and clean relevant review
+concerns with justified N/A dispositions.
+
+### T-0040b: To-Do Black-Box Acceptance
+
+**Objective:** Consolidate the to-do app as the release specimen for supported
+public behavior after the final environment lifecycle lands.
+
+**Acceptance suite:**
+
+- clean Protobuf and handler-registry generation;
+- standalone server on an ephemeral loopback port;
+- immediate successful command acknowledgement;
+- eventual aggregate/projection handling through asynchronous delivery;
+- query-all, query-by-ID, and supported column filtering;
+- subscription activation, updates, cancellation, and shutdown;
+- validation error with packed Spine validation details;
+- business refusal for invalid complete/reopen transitions;
+- default-route missing/invalid first-field ID rejection before handler call;
+- generated registry failure and recovery behavior;
+- server close waits for delivery lifecycle and leaves no listener/session;
+- real local multi-process test from T-0040a;
+- no private framework source imports except explicitly isolated framework test
+  fixtures that are not presented as application code.
+
+**Static audit:** reject framework envelopes, `packCommand`/`packEvent` in
+handlers, schema-bearing decorators, aggregate `@Apply`, transaction controls,
+`EventIdSchema`, default-route extraction helpers, and handler materializers.
+
+**Gate:** example build and focused suite, native loopback/IPC run, public API
+scan, generated clean check, coverage, format/diff, clean relevant review
+concerns with justified N/A dispositions, then final task verify.
+
+### T-0040c: To-Do README And User Guide Closure
+
+**Objective:** Make the example independently runnable and accurately explain
+both single-process server use and the bounded local multi-process demonstration.
+
+**README:** concise prerequisites, generation/build, start, smoke command,
+focused tests, demonstrated features, and explicit non-production limitations.
+
+**User guide:** command variants, queries, subscriptions, validation/refusal,
+generated registry, lifecycle/shutdown, local multi-process test/mode, and links
+to framework guidance.
+
+**Verification:** run every documented command from a clean generated state;
+execute the client smoke against a real server; check links and imports; ensure
+no future production policy is claimed; run docs/status lint and every relevant
+review concern, recording justified N/A dispositions for the rest.
+
+## Security And Release Packets
+
+### T-0041: Final Project Security Gate
+
+**Objective:** Perform the one project-wide security review after framework,
+docs, and example are stable.
+
+**Review scope:** all public packages, generated-code boundaries, server/gRPC,
+transport/ZeroMQ, storage, delivery, query/subscription, handler analyzer/
+registry loader, testing utilities, example, docs, and dependencies.
+
+**Required threat checks:**
+
+- unsafe deserialization and `Any` unpacking;
+- schema/type URL confusion and malformed wire records;
+- validation/default-route bypass;
+- tenant isolation in storage, delivery, query, and subscription;
+- command/query authorization extension points and documented trust model;
+- local IPC directory permissions, endpoint injection, identity, and same-host
+  trust boundary;
+- path traversal, symlink, module URL, and generated-registry loading;
+- sensitive payload/error/stack logging;
+- unbounded payloads, queues, subscriptions, regex work, retained errors,
+  delivery records, retry loops, and child-process waits;
+- listener/session and shutdown resource leaks;
+- dependency vulnerabilities and install-script risk.
+
+**Execution:**
+
+1. Create a repository-grounded threat model and security findings log.
+2. Run lockfile/dependency audit using the approved package-manager mechanism;
+   distinguish runtime, development-only, unreachable, and accepted findings.
+3. Spawn the dedicated final security reviewer only now.
+4. For findings, create small security fix children grouped by one trust
+   boundary, use regression tests, run every relevant task-review concern with
+   justified N/A dispositions for the rest, and rerun security review for each
+   affected boundary.
+5. Repeat the final security review until clean or until a human explicitly
+   accepts a documented residual risk.
+
+**Exit:** committed threat model/report, no unresolved security findings, and
+all security/fix agents closed.
+
+### T-0042: Release Readiness And Project Closure
+
+**Objective:** Produce final evidence that the framework, docs, guide, example,
+and repository are ready together.
+
+**Preflight:**
+
+1. Confirm all prior tasks are integrated and no active product branch remains.
+2. Confirm task/work/review statuses agree and no active reviewer/fix state is
+   stale.
+3. Regenerate all ignored outputs from a clean generated state.
+4. Confirm no generated output is tracked and no source artifact is stale.
+5. Confirm all public docs and examples reference current public imports.
+
+**Final gates:**
+
+```bash
+pnpm --config.verify-deps-before-run=false verify
+git diff --check
+git status --short
+git ls-files 'packages/*/generated/**' 'examples/*/generated/**'
+```
+
+Run the full verify gate natively because loopback and local IPC tests require
+real OS resources. Record test-file/test counts, all coverage dimensions,
+TypeDoc/API counts, Proto lint, and generated-clean results.
+
+Also run explicit release smoke checks:
+
+- start the to-do server on an ephemeral port;
+- post, query, subscribe, cancel, and close through real clients;
+- run the local multi-process example acceptance;
+- run forbidden end-user API scans;
+- run stale status/docs wording scans;
+- run package build/import smoke for every public package export;
+- verify all relative Markdown links and documented commands.
+
+**Final review:** one release-readiness review package covering changes since
+the last accepted release-audit baseline. Run style/maintainability,
+documentation, TypeScript/API docs, and performance/reliability lanes. Re-run
+security only if release fixes touched a security boundary. Fix and repeat
+until clean.
+
+**Closure records:**
+
+- mark the completion plan and release matrix complete;
+- reconcile T000/T001 and all active roadmap/task status mirrors;
+- record final main SHA and exact verification evidence;
+- record explicit initial-release exclusions;
+- close every subagent;
+- remove every completed clean task worktree;
+- leave historical dirty worktrees untouched unless a separate cleanup task is
+  explicitly authorized;
+- confirm `human-review-1-jul.md` remains untouched and untracked.
+
+The project is complete only after the closure commit itself is verified on
+`main`.
+
+## Parallelism Without Rework
+
+Use parallelism only where outputs do not block or overwrite each other:
+
+- During each runtime implementation, a sidecar researcher may inspect JVM
+  evidence while the coordinator prepares deterministic RED tests, but only one
+  author edits the task worktree.
+- At most three relevant reviewer lanes run concurrently after local pre-review
+  lint. Sequence extra lanes, aggregate the complete wave before fixes, and give
+  every canonical concern a durable clean or justified N/A disposition.
+- After T-0037f, docs inventory, example acceptance inventory, and security
+  threat-model preparation may run concurrently as read-only work.
+- T-0039 and T-0040 edits do not run concurrently because example documentation
+  should link to stable final framework guidance.
+- Security fixes are grouped by disjoint trust boundary only when their files
+  and behavior do not overlap.
+
+Never parallelize two authors in the same lifecycle module or spawn duplicate
+reviewers for one lane. The expected speedup comes from smaller slices, focused
+inner gates, concurrent reviewer lanes, immutable review endpoints, and no
+repeated discovery work.
+
+## Blocker Policy
+
+Stop only for a real blocker:
+
+- an accepted requirement cannot be satisfied without changing a human-owned
+  product decision;
+- required external source/dependency access remains unavailable after approved
+  native execution is attempted;
+- repository corruption or conflicting user-owned changes make safe progress
+  impossible;
+- a final security residual risk requires human acceptance.
+
+Test failures, review findings, coverage drops, merge conflicts, sandboxed
+loopback/IPC failures, and difficult implementation are not blockers. Diagnose,
+request the already-authorized native execution when needed, fix, and continue.
+
+## Progress Reporting Template
+
+At every safe stop or task merge, record:
+
+```text
+Current task and canonical status:
+Baseline and current endpoint SHA:
+Completed implementation/review rounds:
+Focused verification evidence:
+Remaining findings:
+Active subagents and roles:
+Worktree status:
+Immediate next action:
+Critical-path tasks remaining:
+```
+
+Do not claim completion from a prior run. Re-run the relevant command and cite
+fresh output before every completion or release statement.

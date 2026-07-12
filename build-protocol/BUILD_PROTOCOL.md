@@ -59,10 +59,12 @@ Required persistent files during implementation:
 
 ## Agent Roles
 
-Every development cycle uses:
+The autonomous cycle has these existing roles available. The orchestrator and
+implementer are used for ordinary implementation; the splitter and reviewers
+are invoked according to the selective rules below:
 
 - One orchestrating main agent.
-- One requirements-splitting sub-agent.
+- One requirements-splitting sub-agent when a deep-planning trigger applies.
 - One implementing sub-agent per task or sub-task.
 - Reviewer sub-agents for code style, documentation, TypeScript/API docs, and
   performance/reliability.
@@ -75,18 +77,107 @@ for a security review.
 When spawning sub-agents, the orchestrator must instruct each to impersonate a
 senior engineer specializing in the assigned aspect.
 
+### Model Allocation
+
+Use Standard speed. Do not enable Fast/boost mode. Max and Ultra reasoning are
+outside the normal autonomous cycle.
+
+Always start with the least expensive GPT-5.6 configuration suitable for the
+function and pass the model plus reasoning explicitly when spawning. An omitted
+model inherits the parent and is a protocol defect.
+
+Before the first child dispatch in a session, verify that the selected
+execution surface supports the required model profiles and explicit child
+model/reasoning selection. The current Desktop surface may satisfy this gate
+even when a separate shell CLI is stale. If the selected surface cannot meet
+the allocation, update that surface or select another capable installed
+surface. A stale inactive surface is evidence to route around or update, not a
+project blocker while another surface can execute the protocol.
+
+Every child assignment must have a durable task/review-log entry naming the
+existing role or orchestrator-dispatched function, bounded scope, expected
+model, and expected reasoning. Before accepting the result, the orchestrator
+must confirm that model and reasoning were explicit dispatch fields and record
+the actual values from runtime metadata. An omitted dispatch field or missing,
+inherited, unavailable, or mismatched runtime evidence invalidates the result
+and requires redispatch with the correct profile. This is an orchestrator
+assignment-acceptance gate; it does not create a verifier role.
+
+| Existing function                                                                                               | Model           | Reasoning                                        |
+| --------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------ |
+| Main orchestration in future sessions                                                                           | `gpt-5.6-sol`   | `medium`                                         |
+| Requirements splitting, architecture, domain modelling, public-contract design, or difficult milestone planning | `gpt-5.6-sol`   | `high`                                           |
+| Normal TypeScript implementation, ordinary fixes, and bounded refactoring                                       | `gpt-5.6-terra` | `medium`                                         |
+| Correctness, DDD, compatibility, concurrency, persistence, security, or difficult public-contract review        | `gpt-5.6-terra` | `high`                                           |
+| Builds, tests, typechecking, linting, log triage, and repository scanning                                       | `gpt-5.6-luna`  | `low`, or `medium` for nontrivial classification |
+| Dependency, documentation, package, and version-specific API verification                                       | `gpt-5.6-luna`  | `medium`                                         |
+| High-risk architecture or correctness escalation                                                                | `gpt-5.6-sol`   | `high`                                           |
+
+The requirements splitter is the existing architecture/planning role. Invoke it
+only for a new subsystem or bounded context, changed aggregate/entity
+responsibility, public or serialized contract, command/event/domain-service
+semantics, transaction/consistency/concurrency/idempotency rule, or a
+demonstrated architectural blocker. Ordinary implementation outlines and fixes
+remain with the Sol Medium orchestrator and Terra Medium implementer.
+
+Escalate Luna to Terra only when evidence gathering becomes nontrivial code
+reasoning. Escalate Terra Medium to Terra High for deeper correctness analysis.
+Escalate Terra to Sol High only for demonstrated ambiguity, architectural
+significance, repeated lower-tier failure, or high-risk behavior. After the
+uncertainty is resolved, return ordinary implementation and verification to
+Terra and Luna.
+
+The project has no separate verifier role. Mechanical validation is an
+orchestrator-dispatched function using Luna Low/Medium; this does not create or
+rename an agent role.
+
+### Concurrency And Ownership
+
+- Configure at most four agent threads, including the parent, and one subagent
+  depth. Subagents must not spawn another layer.
+- With the parent active, run at most three child agents concurrently. Sequence
+  additional relevant reviewer lanes, but collect and deduplicate the complete
+  review wave before returning one accepted finding batch to implementation.
+- Run no more than one production-code-writing agent against overlapping files
+  at a time.
+- Parallelize only genuinely independent work, especially read-only
+  exploration, docs/API verification, test analysis, and targeted review.
+- Give every reviewer one distinct, bounded concern over the milestone diff and
+  affected execution paths. Do not run interchangeable full-repository reviews
+  after each small change.
+- Return confirmed findings to the existing implementation context whenever it
+  remains available. Create a fresh fix context only when the original context
+  is closed, unavailable, or the complete finding batch is genuinely separate.
+- Use isolated worktrees only for separate write-heavy workstreams that are
+  genuinely independent. Preserve unrelated user changes and dirty-worktree
+  contents.
+
 ## Work Breakdown
 
-1. The orchestrator writes the initial task brief and updates the task log.
-2. A dedicated splitting sub-agent decomposes requirements into tasks and sub-tasks.
-3. The orchestrator reviews the split, asks blocking human questions, and records answers.
-4. Each task/sub-task receives its own implementation branch and worktree.
-5. One implementation sub-agent owns that task/sub-task branch.
-6. Reviewers review only that branch.
-7. Authoring sub-agent addresses review comments.
-8. Review repeats until no comments remain.
-9. The orchestrator integrates the branch.
-10. All participating sub-agents are closed.
+1. The orchestrator inspects actual repository state, frames one coherent
+   milestone, records functional acceptance criteria and high-risk assumptions,
+   and updates the task log.
+2. When the selective deep-planning triggers above apply, the requirements
+   splitter decomposes the milestone. Ordinary work uses a short orchestrator
+   outline and does not invoke the splitter.
+3. The orchestrator reviews any split, asks only blocking human questions, and
+   records answers.
+4. Each write-heavy task/sub-task receives its own implementation branch and
+   worktree when isolation is useful.
+5. One Terra Medium implementation sub-agent owns that task/sub-task branch and
+   its behavior-focused tests.
+6. Luna Low/Medium mechanical validation runs the narrowest useful tests,
+   typechecks, lint, format, builds, examples, and log classification before
+   review. Ordinary failures return directly to implementation.
+7. Relevant existing reviewers review only the milestone package, assigned
+   concern, and affected paths.
+8. Confirmed comments return to the existing implementation context when
+   possible; affected checks run first, then the appropriate regression suite.
+9. Review repeats until every relevant concern has no remaining comments and
+   every canonical concern has a recorded clean or justified N/A disposition.
+10. The orchestrator records acceptance, evidence, resolved findings, known
+    limitations, and the next milestone; integrates the branch; closes every
+    participant; and continues automatically.
 
 The splitter must prefer small task slices. A task should produce a review
 package that one reviewer can inspect carefully in one pass. If the proposed
@@ -121,12 +212,26 @@ services, missing details, and finally the to-do example.
 
 ## Review Loop
 
-Each feature must receive these independent reviews:
+Each task must record a disposition for these independent review concerns:
 
 - code style/maintainability;
 - documentation completeness;
 - TypeScript/API docs;
 - performance/reliability.
+
+Spawn the existing reviewer for every concern relevant to changed behavior.
+An N/A disposition is allowed only when the task log gives a concrete reason
+the concern cannot be affected. Public framework compatibility, persisted or
+serialized data, aggregate consistency, transaction/concurrency/idempotency,
+migrations, authentication/security, or destructive behavior always requires
+the corresponding Terra High review. Add Sol High review only when Terra High
+cannot establish the answer or the high-risk escalation rule applies.
+
+At most three reviewers run concurrently while the parent is active. If more
+than three concerns are relevant, close or retain the completed results from
+the first lanes, run the remaining lanes, then aggregate and deduplicate every
+finding in the complete wave before assigning fixes. Do not begin fixes from a
+partial wave.
 
 Before spawning reviewers, the orchestrator must run a lightweight pre-review
 lint pass over the current diff and task records. This pass should be local and
@@ -145,14 +250,16 @@ package. Use targeted `rg`, `git diff`, and task-log checks. Reserve heavier
 commands for verification gates or when the lightweight pass finds a concrete
 reason to run them.
 
-Reviewer comments are fed back to the authoring sub-agent. The authoring sub-agent must:
+Reviewer comments are fed back to the current authoring sub-agent context when
+it remains available. The authoring sub-agent must:
 
 - update code/docs/tests;
 - update the task log;
 - explain any rejected comment;
 - request another review round.
 
-The loop stops only when all reviewers report no remaining comments.
+The loop stops only when all relevant reviewers report no remaining comments
+and every canonical concern has a recorded clean or justified N/A disposition.
 
 Reviewers must explicitly check the human-imposed requirements ledger. A clean
 review is invalid if it ignores a ledger item that is visible in the diff or in
