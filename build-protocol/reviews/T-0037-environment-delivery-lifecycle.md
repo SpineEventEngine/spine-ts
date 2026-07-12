@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 8 docs fixes verified; fresh review pending
+Status: Round 9 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f550a-8deb-7b41-aa73-a93c569a9196` | P2     |
-| Documentation              | `019f550a-8e55-79f1-ace6-72e3792e6e8e` | P1     |
-| TypeScript/API docs        | `019f550a-8edf-7203-a76d-86a478b71389` | P1/P2  |
-| Performance/reliability    | `019f550a-8f68-7983-b67d-c3512ac5638e` | P2     |
+| Code style/maintainability | `019f551a-2cb6-7b30-bdb7-a7ba65775e27` | P1     |
+| Documentation              | `019f551a-2d28-7953-8de9-27d6caf330a6` | P1     |
+| TypeScript/API docs        | `019f551a-2e3b-73a2-b0a4-aec6a2af2f9e` | Clean  |
+| Performance/reliability    | `019f551a-2dac-7820-818f-f6c6a98a0654` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -390,3 +390,15 @@ Security is deferred to final project readiness.
   format, diff, exact-scope, untracked, and frozen-path checks. All passed with
   only the known invalid-`origin` warning. Fresh all-lane review remains
   required.
+- `2026-07-12T06:53:34Z`: Round 8 fixes were committed as `349f8c32`; generated
+  package `.superpowers/sdd/review-0308bc4a..349f8c32.diff` (42 commits,
+  165,282 bytes) and assigned all four Round 9 lanes. The explicitly historical
+  ledger retains its named `045aa86c` boundary.
+- `2026-07-12T06:57:12Z`: Closed all four Round 9 lanes. Accepted one connected
+  failure-state batch: T-0037b retirement failure must leave old admission and
+  worker/loops irrevocably disabled before replacement; each reporting- and
+  retirement-failure test must create non-empty transition work; T-0037d must
+  clear a retired empty slot before propagating failed-start cleanup errors;
+  and T-0037e must retain bounded transition state with closed admission and
+  retry/aggregation semantics when fresh construction/rebind/transfer itself
+  fails. The TypeScript/API lane and all unrelated contracts are clean.
