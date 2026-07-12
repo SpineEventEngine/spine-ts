@@ -27,12 +27,16 @@ export class DeliveryReadiness {
   #mode: "direct" | "transition" | "routed" = "direct";
   #configured = new Map<string, DeliveryReady>();
   #buffered = new Map<string, DeliveryReady>();
+  #unconfigured = new Map<string, DeliveryReady>();
 
   constructor(onReady: OnDeliveryReady = () => undefined) {
     this.#onReady = onReady;
   }
 
   onReady(onReady: OnDeliveryReady): () => void {
+    if (this.#mode === "routed") {
+      return () => undefined;
+    }
     this.#onReady = onReady;
     return () => {
       if (this.#onReady === onReady) {
@@ -43,17 +47,17 @@ export class DeliveryReadiness {
 
   claim(ready?: DeliveryReady): DeliveryHandoff {
     if (this.#mode === "direct") {
+      const handoff = this.#directHandoff();
       if (ready !== undefined) {
         this.#notify(ready);
       }
-      return this.#directHandoff();
+      return handoff;
     }
     if (ready !== undefined) {
       if (this.#mode === "transition") {
         const key = readyKey(ready);
-        if (this.#configured.has(key)) {
-          this.#buffered.set(key, cloneReady(ready));
-        }
+        const owner = this.#configured.has(key) ? this.#buffered : this.#unconfigured;
+        owner.set(key, cloneReady(ready));
       } else {
         this.#notify(ready);
       }
@@ -65,7 +69,14 @@ export class DeliveryReadiness {
     if (this.#mode !== "direct") {
       return Promise.reject(new Error("Delivery readiness ownership is already transferred."));
     }
-    const configured = configuredScopes(scopes);
+    let configured: Map<string, DeliveryReady>;
+    try {
+      configured = configuredScopes(scopes);
+    } catch (error) {
+      return Promise.resolve().then(() => {
+        throw error;
+      });
+    }
     this.#configured = configured;
     this.#mode = "transition";
     const admitted = [...this.#active];
@@ -75,34 +86,46 @@ export class DeliveryReadiness {
       for (const ready of this.#buffered.values()) {
         this.#notify(ready);
       }
+      for (const ready of this.#unconfigured.values()) {
+        this.#notify(ready);
+      }
       this.#buffered.clear();
+      this.#unconfigured.clear();
     });
   }
 
   #directHandoff(): DeliveryHandoff {
     const gate = Promise.withResolvers<undefined>();
     this.#active.add(gate.promise);
-    let settled = false;
+    let abandoned = false;
+    let completion: Promise<void> | undefined;
     const finish = (): void => {
-      if (!settled) {
-        settled = true;
-        this.#active.delete(gate.promise);
-      }
+      gate.resolve(undefined);
+      this.#active.delete(gate.promise);
     };
     return Object.freeze({
-      complete: async (onDrain: () => Promise<void>) => {
-        try {
-          await onDrain();
-          gate.resolve(undefined);
-        } catch (error) {
-          gate.resolve(undefined);
-          throw error;
-        } finally {
-          finish();
+      complete: (onDrain: () => Promise<void>) => {
+        if (completion !== undefined) {
+          return completion;
         }
+        if (abandoned) {
+          return settled;
+        }
+        try {
+          completion = Promise.resolve(onDrain());
+        } catch (error) {
+          completion = Promise.resolve().then(() => {
+            throw error;
+          });
+        }
+        void completion.then(finish, finish);
+        return completion;
       },
       abandon: () => {
-        gate.resolve(undefined);
+        if (completion !== undefined || abandoned) {
+          return;
+        }
+        abandoned = true;
         finish();
       },
     });
@@ -126,8 +149,9 @@ export interface DeliveryHandoff {
   abandon(): void;
 }
 
+const settled = Promise.resolve();
 const settledHandoff: DeliveryHandoff = Object.freeze({
-  complete: () => Promise.resolve(),
+  complete: () => settled,
   abandon: () => undefined,
 });
 

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 1 seven-finding fix assigned
+Status: Slice 1 Round 1 fixes coordinator-verified; re-review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -247,19 +247,30 @@ batch before Slice 1 re-review:
 7. Remove active task/log claims that overstate batch and invariant coverage
    until the new regressions prove them.
 
+- `2026-07-12T19:07:40Z`: Independent coordinator verification repeated the six
+  focused files and 151 tests, all generated/build/tooling typechecks,
+  changed-file ESLint/Prettier, and diff hygiene. The complete seven-finding
+  fix is accepted for re-review; the exceptional unknown-scope retention remains
+  an explicit boundedness/ownership review target before Slice 2.
+
 ## Slice 1 Outcome
 
-Implemented one package-internal `DeliveryReadiness` ownership barrier shared
-by process-manager single/batch receives and projection receives. A durable
-write claims either direct-drain or transition/route ownership synchronously:
-transition closes new direct admission, waits every prior claim, deduplicates
-buffered canonical scopes within the configured-scope map, installs the route,
-and transfers buffered scopes once. Routed receives submit non-throwing
-readiness and never invoke or await exact drain. Existing direct completion,
-failure, duplicate, batch, and observer behavior remains covered.
+The complete Round 1 batch is implemented and focused verified. Direct gates
+are published before readiness callbacks; handoff completion is one-shot across
+concurrent/repeated/abandoned calls; transition validation rejects through its
+Promise; and routed ownership cannot be replaced by later `onReady()` calls.
+Process-manager batches exact-drain every persisted row after either a later
+write failure or an earlier drain failure while preserving the first failure.
 
-The only later-slice interface is the package-internal descriptor
+Configured transition readiness remains deduplicated and bounded by the
+configured canonical scope map. A readiness key omitted from that map is
+retained separately and transferred after admitted drains instead of being
+dropped or changing the durable receive outcome. This exceptional retention is
+not claimed to be bounded by an invalid/incomplete configured set; Slice 2 must
+assemble the complete canonical scope domain before invoking transition.
+
+The later-slice interface remains the package-internal descriptor
 `transition(scopes, onReady)` method. No registration, generation, startup,
 rollback, public API/export, listener, lifecycle policy, or generated artifact
-was added. Slice 2 may consume this frozen barrier without reopening its
-ownership semantics.
+was added. Slice 2 must not consume the barrier until Round 1 re-review accepts
+this corrected package.

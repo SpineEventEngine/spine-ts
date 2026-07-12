@@ -113,36 +113,74 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   ): Promise<readonly InboxMessage[]> {
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
+    const failures: unknown[] = [];
 
     try {
-      for (const row of rows) {
-        if (row.owner !== undefined) {
-          row.owner.written = await this.#writeInboxRow(
-            delivery,
-            row.input,
-            whenReceived,
-            deliveryTenantId,
-          );
-        }
+      await this.#writeRows(delivery, rows, whenReceived, deliveryTenantId, failures);
+      await this.#drainRows(delivery, rows, deliveryTenantId, failures);
+      if (failures.length > 0) {
+        throw failures[0];
       }
-      for (const row of rows) {
-        if (row.owner === undefined) {
-          await row.promise;
-          continue;
-        }
-        const written = requireWritten(row.owner);
+      return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
+    } finally {
+      this.#cleanupRows(rows);
+    }
+  }
 
+  async #writeRows(
+    delivery: Delivery,
+    rows: readonly BatchRow[],
+    whenReceived: Date,
+    deliveryTenantId: string | undefined,
+    failures: unknown[],
+  ): Promise<void> {
+    for (const row of rows) {
+      if (row.owner === undefined) {
+        continue;
+      }
+      try {
+        row.owner.written = await this.#writeInboxRow(
+          delivery,
+          row.input,
+          whenReceived,
+          deliveryTenantId,
+        );
+      } catch (error) {
+        failures.push(error);
+        return;
+      }
+    }
+  }
+
+  async #drainRows(
+    delivery: Delivery,
+    rows: readonly BatchRow[],
+    deliveryTenantId: string | undefined,
+    failures: unknown[],
+  ): Promise<void> {
+    for (const row of rows) {
+      if (row.owner === undefined) {
+        try {
+          await row.promise;
+        } catch (error) {
+          failures.push(error);
+        }
+        continue;
+      }
+      const written = row.owner.written;
+      if (written === undefined) {
+        rejectRow(row.owner, failures[0]);
+        continue;
+      }
+      try {
         await written.handoff.complete(() =>
           this.#drainInboxRow(delivery, written.message, deliveryTenantId),
         );
         resolveRow(row.owner, written.message);
+      } catch (error) {
+        failures.push(error);
+        rejectRow(row.owner, error);
       }
-      return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
-    } catch (error) {
-      rejectRows(rows, error);
-      throw error;
-    } finally {
-      this.#cleanupRows(rows);
     }
   }
 
@@ -281,27 +319,14 @@ function createInboxDeferred(): InboxDeferred {
   return { promise, resolve, reject, settled: false };
 }
 
-function requireWritten(owner: InboxDeferred): InboxWrite {
-  if (owner.written === undefined) {
-    throw new Error("Process-manager inbox batch row was not written before drain.");
-  }
-
-  return owner.written;
-}
-
 function resolveRow(owner: InboxDeferred, message: InboxMessage): void {
   owner.settled = true;
   owner.resolve(message);
 }
 
-function rejectRows(rows: readonly BatchRow[], reason: unknown): void {
-  for (const row of rows) {
-    if (row.owner !== undefined && !row.owner.settled) {
-      row.owner.written?.handoff.abandon();
-      row.owner.settled = true;
-      row.owner.reject(reason);
-    }
-  }
+function rejectRow(owner: InboxDeferred, reason: unknown): void {
+  owner.settled = true;
+  owner.reject(reason);
 }
 
 function assertProcessManagerMessage(

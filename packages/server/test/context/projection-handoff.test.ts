@@ -43,7 +43,7 @@ describe("LocalProjectionInbox", () => {
     const transition = readiness.transition(
       [
         {
-          tenantId: "tenant-a",
+          tenantId: "tenant-b",
           label: "UPDATE_SUBSCRIBER",
           targetTypeUrl,
           shard: ShardIndex.single(),

@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 1 seven-finding fix assigned
+Status: Slice 1 Round 1 fixes coordinator-verified; re-review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -51,3 +51,18 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   scopes, one-shot handoffs, route locking, promise failure consistency, and
   active evidence overclaim. One Terra Medium fix owner receives the complete
   batch before re-review; Slice 2 remains blocked on clean barrier semantics.
+- Round 1 fix work resumed under `receiving-code-review` plus strict TDD. The
+  previous active outcome/frozen claims are withdrawn. Re-review remains
+  pending one complete seven-finding fix package with focused RED/GREEN evidence;
+  no partial finding is returned for review.
+- The complete seven-finding batch is fixed and focused verified for re-review.
+  RED was 8 expected failures/89 passes; GREEN is 97/97 affected context tests
+  and 151/151 in the six-file Slice 1/T-0037a/b/c regression set. Coverage and
+  all focused static/status gates pass. The corrected record distinguishes the
+  configured cardinality-bounded buffer from exceptional retained readiness
+  omitted by an invalid/incomplete configuration. No reviewer has yet accepted
+  this fix package; all four canonical lanes remain pending re-review.
+- `2026-07-12T19:07:40Z`: Coordinator verification independently repeated 151
+  tests, all typechecks, changed-file lint/format, and diff hygiene. The fix is
+  ready for all four re-review lanes, including explicit reliability review of
+  unknown-scope retention and the Slice 2 complete-domain dependency.

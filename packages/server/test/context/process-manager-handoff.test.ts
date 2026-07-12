@@ -14,6 +14,78 @@ type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("exact-drains persisted batch rows before propagating a later write failure", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inputs = ["persisted", "rejected"].map((targetId) =>
+      processInput(targetTypeUrl, targetId),
+    );
+    const first = inputs[0];
+    if (first === undefined) {
+      throw new Error("Expected one persisted batch input.");
+    }
+    const persisted = writtenResult(first, 1n).message;
+    const writeFailure = new Error("second write failed");
+    const drainMessage = vi.fn().mockResolvedValue({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+      failures: [],
+    });
+    const delivery = {
+      inbox: {
+        receive: vi
+          .fn()
+          .mockResolvedValueOnce({ outcome: "WRITTEN", message: persisted })
+          .mockRejectedValueOnce(writeFailure),
+        readMessage: () => Promise.resolve({ ...persisted, status: "DELIVERED" }),
+      },
+      drainMessage,
+    } as unknown as Delivery;
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(),
+    });
+
+    await expect(inbox.receiveAll(delivery, inputs)).rejects.toBe(writeFailure);
+    expect(drainMessage).toHaveBeenCalledOnce();
+    expect(drainMessage.mock.calls[0]?.[0]).toMatchObject({
+      inboxId: { targetId: "persisted" },
+    });
+  });
+
+  it("continues exact-draining persisted batch rows after an earlier drain fails", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const drainFailure = new Error("first drain failed");
+    const replayed: string[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        replayed.push(message.inboxId.targetId);
+        return message.inboxId.targetId === "first"
+          ? Promise.reject(drainFailure)
+          : Promise.resolve();
+      },
+    });
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
+      ),
+    ).rejects.toBe(drainFailure);
+    expect(replayed).toEqual(["first", "second"]);
+  });
+
   it("buffers persisted rows while direct drain ownership transfers", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },

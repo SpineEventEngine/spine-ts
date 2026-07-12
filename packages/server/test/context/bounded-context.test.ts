@@ -211,10 +211,14 @@ function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDe
 }
 
 describe("BoundedContext assembly", () => {
-  it("exposes the private delivery ownership transition through its descriptor", () => {
+  it("rejects private delivery transition validation through its promise", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
+    let transition: Promise<void> | undefined;
 
-    expect(() => internalDeliveryDescriptor(context).transition([], () => undefined)).toThrow(
+    expect(() => {
+      transition = internalDeliveryDescriptor(context).transition([], () => undefined);
+    }).not.toThrow();
+    await expect(transition).rejects.toThrow(
       "Delivery readiness transition requires configured scopes.",
     );
   });
