@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Coordinator lifecycle correction pending
+Status: Implementation verified; review package pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -84,3 +84,41 @@ Security is deferred to final project readiness.
   `019f5626-b85c-7da3-8971-98e0ae652b25` for the focused concrete-lifecycle
   correction, paused until assignment provenance commits. Reviewer lanes remain
   unassigned.
+- `2026-07-12T12:09:45Z`: Assignment provenance `f41e507c` was confirmed. The
+  author verified and accepted the concrete adapter finding and entered strict
+  TDD. A real `DeliveryWorker` adapter RED must fail before lifecycle source is
+  changed; abstract fake evidence alone is not accepted.
+- `2026-07-12T12:10:43Z`: Real-adapter RED produced two intended failures: early
+  quiescence resolution during a blocked drain and successful internal restart
+  after no-op retirement. Production lifecycle code remained unchanged for the
+  run.
+- `2026-07-12T12:12:15Z`: The same two real-adapter tests passed after the
+  minimal package-internal worker lifecycle access was wired. Concrete
+  quiescence now observes active settlement, permanent retirement closes later
+  internal starts, and retirement does not duplicate coordinator stop.
+- `2026-07-12T12:12:33Z`: In-progress coordinator inspection added one concrete
+  completion condition: permanent retirement must reject both internal adapter
+  starts and the worker's public compatibility `start()` entry point. Review
+  remains held for focused regression coverage and GREEN verification.
+- `2026-07-12T12:13:06Z`: Author accepted the public-entry follow-up and entered
+  a focused RED while preserving all existing pre-retirement compatibility
+  tests.
+- `2026-07-12T12:13:37Z`: Focused RED confirmed public `DeliveryWorker.start()`
+  bypassed permanent retirement while the internal adapter path was already
+  closed. No other behavior failed in the filtered run.
+- `2026-07-12T12:14:13Z`: Focused GREEN passed the two concrete lifecycle tests.
+  Permanent retirement now closes both worker start entry points through one
+  private guard without changing pre-retirement public compatibility.
+- `2026-07-12T12:15:27Z`: Correction completion verification passed four focused
+  files and 165 tests, both canonical typechecks, changed-file ESLint/Prettier,
+  lightweight docs/status/public-leak/overclaim checks, and `git diff --check`.
+  The seven-file task patch remains uncommitted for coordinator verification.
+- `2026-07-12T12:17:22Z`: Independent coordinator verification passed the four
+  focused files with 165 tests, both canonical typechecks, changed-file ESLint
+  and Prettier, and diff hygiene. The sole author is closed. Reviewer lanes
+  remain unassigned until the final lightweight lint and implementation commit
+  freeze the review endpoint.
+- `2026-07-12T12:18:31Z`: Lightweight pre-review status, duplicate-policy,
+  internal-public-leak, and future-policy-overclaim checks passed. Reviewers
+  remain unassigned until the implementation commit and literal-endpoint review
+  package are recorded.

@@ -20,6 +20,8 @@ export class DeliveryWorker {
   readonly #states: DeliveryShardState[];
   #obligation: DeliveryWorkerObligation | undefined;
   #running: Promise<unknown> | undefined;
+  #stopped = false;
+  #retired = false;
 
   /** Configure worker loops for one node over known delivery shards. */
   constructor(options: DeliveryWorkerOptions) {
@@ -41,13 +43,16 @@ export class DeliveryWorker {
     );
     this.#states = shards.map(() => "READY");
     deliveryWorkerInternals.set(this, {
-      start: (obligation) => this.#startInternal(obligation),
+      start: (obligation, shards) => this.#startInternal(obligation, shards),
+      awaitSettled: () => this.#awaitSettled(),
+      retire: () => this.#retire(),
     });
     Object.freeze(this);
   }
 
   /** Start all configured loops and resolve when they stop. */
   start(): Promise<DeliveryWorkerRun> {
+    this.#requireNotRetired();
     if (this.#running !== undefined) {
       throw new Error("DeliveryWorker is already running.");
     }
@@ -66,6 +71,7 @@ export class DeliveryWorker {
 
   /** Prevent future drain starts without interrupting current drains. */
   stop(): void {
+    this.#stopped = true;
     for (const loop of this.#loops) {
       loop.stop();
     }
@@ -77,7 +83,11 @@ export class DeliveryWorker {
     await this.#running;
   }
 
-  #startInternal(obligation: DeliveryWorkerObligation): Promise<DeliveryWorkerEvidence> {
+  #startInternal(
+    obligation: DeliveryWorkerObligation,
+    shards?: readonly ShardIndex[],
+  ): Promise<DeliveryWorkerEvidence> {
+    this.#requireNotRetired();
     if (this.#running !== undefined) {
       throw new Error("DeliveryWorker is already running.");
     }
@@ -86,15 +96,41 @@ export class DeliveryWorker {
       this.#states.fill("READY");
     }
 
-    const entries = this.#allEntries().filter(({ index }) => {
+    const selected = shards === undefined ? undefined : new Set(shards.map((shard) => shard.key()));
+    const entries = this.#allEntries().filter(({ index, shard }) => {
       const state = this.#states[index];
-      return state === "READY" || state === "PAUSED" || state === "REJECTED";
+      const eligible = state === "READY" || state === "PAUSED" || state === "REJECTED";
+      return eligible && (selected === undefined || selected.has(shard.key()));
     });
     const running = this.#settle(entries, obligation).finally(() => {
       this.#running = undefined;
     });
     this.#running = running;
     return running;
+  }
+
+  #awaitSettled(): Promise<void> {
+    const running = this.#running;
+    return running === undefined
+      ? Promise.resolve()
+      : running.then(
+          () => undefined,
+          () => undefined,
+        );
+  }
+
+  #retire(): Promise<void> {
+    if (!this.#stopped) {
+      return Promise.reject(new Error("DeliveryWorker must be stopped before retirement."));
+    }
+    this.#retired = true;
+    return this.#awaitSettled();
+  }
+
+  #requireNotRetired(): void {
+    if (this.#retired) {
+      throw new Error("DeliveryWorker is permanently retired.");
+    }
   }
 
   async #settle(
@@ -196,11 +232,19 @@ export interface DeliveryWorkerAccess {
   start(
     worker: DeliveryWorker,
     obligation: DeliveryWorkerObligation,
+    shards?: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
+  awaitSettled(worker: DeliveryWorker): Promise<void>;
+  retire(worker: DeliveryWorker): Promise<void>;
 }
 
 interface DeliveryWorkerInternals {
-  readonly start: (obligation: DeliveryWorkerObligation) => Promise<DeliveryWorkerEvidence>;
+  readonly start: (
+    obligation: DeliveryWorkerObligation,
+    shards?: readonly ShardIndex[],
+  ) => Promise<DeliveryWorkerEvidence>;
+  readonly awaitSettled: () => Promise<void>;
+  readonly retire: () => Promise<void>;
 }
 
 interface DeliveryShardEntry {
@@ -233,14 +277,28 @@ export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]) {
     return workerStatus(loops);
   },
-  start(worker: DeliveryWorker, obligation: DeliveryWorkerObligation) {
-    const internals = deliveryWorkerInternals.get(worker);
-    if (internals === undefined) {
-      throw new Error("Delivery worker access requires a DeliveryWorker instance.");
-    }
-    return internals.start(obligation);
+  start(
+    worker: DeliveryWorker,
+    obligation: DeliveryWorkerObligation,
+    shards?: readonly ShardIndex[],
+  ) {
+    return requireWorkerInternals(worker).start(obligation, shards);
+  },
+  awaitSettled(worker: DeliveryWorker) {
+    return requireWorkerInternals(worker).awaitSettled();
+  },
+  retire(worker: DeliveryWorker) {
+    return requireWorkerInternals(worker).retire();
   },
 });
+
+function requireWorkerInternals(worker: DeliveryWorker): DeliveryWorkerInternals {
+  const internals = deliveryWorkerInternals.get(worker);
+  if (internals === undefined) {
+    throw new Error("Delivery worker access requires a DeliveryWorker instance.");
+  }
+  return internals;
+}
 
 async function compatibilityWorkerRun(
   evidence: Promise<DeliveryWorkerEvidence>,
