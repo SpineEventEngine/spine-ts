@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 4 fix worker assigned; paused for assignment commit
+Status: Round 4 fix active; RED pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -497,3 +497,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:20:54Z`: Assigned sole fix worker
   `019f560d-e277-7d13-9c09-f9e10d8381ff` for the accepted performance finding;
   worker remains paused until assignment provenance commits.
+- `2026-07-12T11:21:42Z`: Assignment provenance commit `e65ddf31` completed;
+  started the worker with focused global-endpoint-call RED required before
+  production changes.
