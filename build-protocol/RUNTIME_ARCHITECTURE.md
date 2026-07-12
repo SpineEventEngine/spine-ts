@@ -418,7 +418,10 @@ implementation child:
    route-rebind, or buffered-transfer error instead propagates while that
    transition remains incomplete and retained for external retry.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
-   reporting.
+   reporting. Its package-internal table uses only configured registration or
+   generation obligations plus one shared record; reporting does not resolve
+   operational work, and fulfilled `FAILED` retains no cause. It does not
+   install a lifecycle owner, retry policy, monitor, or server wiring.
 4. T-0037d owns environment registration cardinality, startup recovery, the
    no-overlap barrier that closes new direct exact-drain admission, awaits any
    already-admitted direct exact drain in the attaching scope, buffers canonical
