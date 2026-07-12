@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 1 findings logged; fix assignment pending
+Status: Round 1 fix worker assigned; paused for assignment commit
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -89,3 +89,6 @@ Security is deferred to final project readiness.
   6. Reconcile `CODE_QUALITY.md` with the protocol's final-only security review.
   7. Remove two internal comments that overclaim future lifecycle ownership.
   8. Remove `future` from the current work/review mirror description.
+- `2026-07-12T10:20:29Z`: Assigned sole fix worker
+  `019f55d6-d9cb-7730-a13b-61bb97e092ba` for the complete eight-item batch;
+  worker is paused until assignment provenance is committed.
