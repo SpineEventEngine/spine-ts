@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Required review clean; final coverage fix pending
+Status: Final coverage-gate worker active
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 

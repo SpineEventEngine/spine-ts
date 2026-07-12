@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 4 clean; final-gate coverage fix pending
+Status: Round 4 clean; final coverage-gate worker active
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -196,3 +196,6 @@ Security is deferred to final project readiness.
   versus 90%. Review remains clean for the current code; focused coverage tests
   are required, followed by a fresh package and all four lanes because tracked
   tests will change.
+- `2026-07-12T04:57:00Z`: Assigned coverage worker
+  `019f546d-37cf-7333-a2c3-c477800d34ed` with the test-only threshold batch.
+  Fresh package and all four lanes remain required after the fix commit.
