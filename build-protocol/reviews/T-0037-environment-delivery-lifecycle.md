@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 1 docs fixes verified; fresh review pending
+Status: Round 1 docs fixes committed; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -113,6 +113,9 @@ Security is deferred to final project readiness.
   exact scope, child-artifact shape, stale-status wording, and public-boundary
   searches passed. The completed fix worker is closed. A fresh fixed-baseline
   package and all four lanes are still required before acceptance.
+- `2026-07-12T05:00:49Z`: Commit `3847e1b6` recorded the complete verified
+  Round 1 docs fixes. No fresh lane has been assigned or run and no clean
+  review is claimed.
 - `2026-07-12T04:44:00Z`: Assigned docs fix worker
   `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
   package generation and all four lanes remain pending its return, coordinator
