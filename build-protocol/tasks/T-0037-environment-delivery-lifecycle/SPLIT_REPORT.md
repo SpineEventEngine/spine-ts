@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 14 docs fixes verified; fresh review pending
+Status: Round 15 findings accepted; fix pending
 
 Baseline: `ab8fc9f4`
 

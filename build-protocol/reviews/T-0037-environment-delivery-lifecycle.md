@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 14 docs fixes verified; fresh review pending
+Status: Round 15 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5573-79eb-7b60-b670-e9e2c39006a4` | P2     |
-| Documentation              | `019f5573-7a5a-7d32-8b6d-8083ba0bc00b` | P2     |
-| TypeScript/API docs        | `019f5573-7ae5-7f63-87a5-0cb33eeeb49d` | P1/P2  |
-| Performance/reliability    | `019f5573-7b78-7651-8ee1-0f14f2ef7716` | P1     |
+| Code style/maintainability | `019f5588-77fb-74f0-8ae4-c48a0d43b0b2` | P1/P2 |
+| Documentation              | `019f5588-7899-7292-94f5-532d586f0f21` | Clean |
+| TypeScript/API docs        | `019f5588-7920-7ef3-8cb1-f1e5025b6064` | P1    |
+| Performance/reliability    | `019f5588-79bd-7520-a553-d5a7f15eb456` | Clean |
 
 Security is deferred to final project readiness.
 
@@ -717,3 +717,15 @@ Security is deferred to final project readiness.
   ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` checks. TypeDoc retained 205 server exports with only the
   known invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T08:54:01Z`: Committed the verified Round 14 fix as `3e93cade`,
+  resolved full endpoint `3e93cade333cb238f3eed01fdf2ae535ebc34e96`, and
+  generated `.superpowers/sdd/review-0308bc4a..3e93cade.diff` with that literal
+  endpoint in its header (60 commits, 255,469 bytes). Passed lightweight pre-
+  review lint and assigned all four Round 15 lanes.
+- `2026-07-12T08:59:11Z`: Closed all four Round 15 lanes. Accepted one complete
+  docs/split batch: transfer configured/startup/buffered/retained scopes only in
+  the scope-transfer phase; require publish and admission reopen in reporting/
+  retirement-error tests; split T-0037e into independently sequenced detach,
+  reusable-stop, and permanent-close children before implementation; and make
+  the parent TASK status the sole canonical current-state source with all other
+  headers explicit mirrors. Documentation and reliability lanes were clean.
