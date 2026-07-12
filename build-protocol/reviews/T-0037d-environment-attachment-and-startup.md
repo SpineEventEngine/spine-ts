@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 3 four-lane review in progress
+Status: Slice 3 Round 3 findings under bounded architecture resolution
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -498,3 +498,8 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected profiles: style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-13T00:11:00Z`: Round 3 is complete and all reviewers are closed.
+  Runtime profiles matched dispatch. Blocking findings are dynamic sole-
+  rollback reclassification after queued-claim cleanup and an unreachable,
+  unbounded ephemeral-owner overlap ledger. One bounded Sol High requirements
+  resolution is assigned before the Terra fix owner resumes.

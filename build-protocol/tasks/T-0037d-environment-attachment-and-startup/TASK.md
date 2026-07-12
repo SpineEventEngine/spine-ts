@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 3 four-lane review in progress
+Status: Slice 3 Round 3 findings under bounded architecture resolution
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -411,6 +411,23 @@ quiescence, concurrency, boundedness, and fresh-cause tests before Round 2.
    each other's blocker; add a deterministic equal-facts sibling test.
 
 One Terra Medium owner receives both under TDD before Round 3.
+
+### Slice 3 Round 3 Findings
+
+1. Recompute whether rollback is now sole after queued claims are removed. A
+   rollback initially classified shared must retire/clear the generation if it
+   becomes the last claim before retry completes; prove a genuinely fresh
+   generation/worker, not only claim count.
+2. Ephemeral exact owner keys make reported overlap unreachable after the failed
+   descriptor is retired, so records only grow and the D-0085 path is tested
+   only as a helper. Define a stable generation-local overlap-domain identity
+   that is reachable across a replacement descriptor over the same actual
+   storage/context while still isolating equal readiness facts in different
+   storage owners. Bound, deduplicate, resolve, and prove it end to end.
+
+This is a demonstrated architecture ambiguity between stable overlap semantics
+and storage-owner isolation. The existing requirements splitter receives one
+read-only `gpt-5.6-sol` / `high` resolution before the Terra owner resumes.
 
 ### Slice 3 Round 2 fix outcome
 
