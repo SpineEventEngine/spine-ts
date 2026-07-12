@@ -1,6 +1,6 @@
 # T-0037p: Agent Model Retuning
 
-Status: Implementation verified; targeted review pending
+Status: Round 1 findings assigned for focused fix
 
 Started: `2026-07-12`
 
