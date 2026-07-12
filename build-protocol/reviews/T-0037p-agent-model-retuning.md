@@ -2,16 +2,16 @@
 
 ## Current Status
 
-Implementation verified; targeted review pending.
+Frozen package assigned to three relevant targeted reviewers.
 
 ## Required Concerns
 
 | Concern                 | Relevance                                                                                   | Status                            |
 | ----------------------- | ------------------------------------------------------------------------------------------- | --------------------------------- |
-| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Assigned after frozen package     |
-| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Assigned after frozen package     |
+| Style/maintainability   | Relevant to durable instruction clarity and duplication                                     | Assigned: Terra High              |
+| Documentation           | Relevant to protocol consistency and current-state accuracy                                 | Assigned: Luna Medium             |
 | TypeScript/API docs     | N/A: no TypeScript/public framework API, declarations, package exports, or API docs changed | N/A verified by changed-path scan |
-| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Assigned after frozen package     |
+| Performance/reliability | Relevant to concurrency limits, ownership, and autonomous failure routing                   | Assigned: Terra High              |
 | Security                | Deferred to final release; this task changes no runtime trust boundary                      | Deferred                          |
 
 ## Pre-Review Lint
@@ -24,3 +24,10 @@ Implementation verified; targeted review pending.
 - Changed-path scan found no package source, example, public API docs, generated
   output, or `human-review-1-jul.md` change.
 - Prettier and `git diff --check` passed.
+
+## Review Package
+
+- Baseline: `c1528f85`
+- Endpoint: `f8c4dc3f`
+- Package: `.superpowers/sdd/review-c1528f85..f8c4dc3f.diff`
+- Size: 56,617 bytes
