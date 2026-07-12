@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 4 concurrent-test finding assigned for focused fix
+Status: Slice 1 Round 4 fix focused verified; targeted re-review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -152,5 +152,30 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   deduplicate to one blocking issue: the test yields before starting the loser,
   allowing the winner to install its route, so it does not prove a competing
   retry cannot reset buffered transition state or replace the pending callback.
-  The active Round 3 package-label typo is included in the same Terra Medium
-  fix batch. Slice 2 remains pending clean Slice 1 closure.
+  The active package label is corrected to Round 4 in the same Terra Medium fix
+  batch. Slice 2 remains pending clean Slice 1 closure.
+- Round 4 fix work resumed with all three status mirrors identical. The renewed
+  canonical skill check selected and fully read `receiving-code-review` for
+  chronology verification and `test-driven-development` for the corrected
+  race-first gate; `verification-before-completion` remains selected for fresh
+  final evidence. Installed-skill evidence came from the supplied inventory,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, full readable entrypoint
+  enumeration, and `/Users/armiol/.agents/.skill-lock.json`. Orchestration,
+  architecture, API, and security skills remain N/A under the sole-owner,
+  test-only, no-public-contract scope.
+- The prior simultaneous-retry claim is narrowed to post-transfer callback
+  immutability. It does not count as evidence of transition-state competition
+  or buffered-state immutability.
+- The corrected Round 4 regression passed its first focused execution (26/26)
+  without a production change. Before any yield, the winner owns transition,
+  configured readiness is buffered, the loser transition is created, omitted
+  readiness is buffered, and neither callback has run. The loser rejects with
+  the canonical already-transferred message; only the winner flushes both in
+  order and owns later readiness. Six-file regressions pass 156/156; affected
+  coverage clears all 90% thresholds; generated typecheck, lint/cleanup,
+  format, diff, public-leak, and generated/protected scans pass. This test-plus-
+  record package is ready for targeted re-review; Slice 2 remains out of scope.
+- `2026-07-12T20:52:00Z`: Coordinator independently repeated 156 focused
+  regressions, generated build typecheck, changed-file lint/format, and diff
+  hygiene. All pass. The corrected chronology is ready for committed targeted
+  re-review; no production or public API delta exists.

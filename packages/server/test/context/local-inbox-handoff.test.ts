@@ -298,18 +298,20 @@ describe("DeliveryReadiness", () => {
     const loserRoute: DeliveryReady[] = [];
     let directDrains = 0;
     const winner = readiness.transition([configured, omitted], (next) => winnerRoute.push(next));
-    await readiness.claim(configured).complete(() => {
+    const configuredReadiness = readiness.claim(configured).complete(() => {
       directDrains += 1;
       return Promise.resolve();
     });
     const loser = readiness.transition([omitted], (next) => loserRoute.push(next));
-    await readiness.claim(omitted).complete(() => {
+    const omittedReadiness = readiness.claim(omitted).complete(() => {
       directDrains += 1;
       return Promise.resolve();
     });
 
+    expect(winnerRoute).toEqual([]);
+    expect(loserRoute).toEqual([]);
     await expect(loser).rejects.toThrow("Delivery readiness ownership is already transferred.");
-    await winner;
+    await Promise.all([configuredReadiness, omittedReadiness, winner]);
     expect(staleRoute).toEqual([]);
     expect(winnerRoute).toEqual([configured, omitted]);
     expect(loserRoute).toEqual([]);

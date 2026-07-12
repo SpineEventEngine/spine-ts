@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 4 concurrent-test finding assigned for focused fix
+Status: Slice 1 Round 4 fix focused verified; targeted re-review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -320,9 +320,11 @@ post-transfer route immutability. Buffer the winner's readiness, start the loser
 and buffer the remaining readiness before any `await`; then prove neither route
 ran early and only the winner flushes the complete buffered set.
 
-Round 3 is a test-only correctness closure. The simultaneous-retry regression
-passed on first execution: transition mode is published synchronously, so one
-retry wins, the competitor rejects with the canonical already-transferred
-message, winner-buffered readiness transfers once, only the winner route is
-installed, and subsequent readiness remains winner-owned without direct drain.
-No production source or Slice 2 behavior changed.
+The Round 3 test-only regression established post-transfer route immutability,
+but its intervening `await` did not establish transition-state competition or
+buffered-state immutability. The corrected Round 4 chronology now proves both:
+the winner buffers configured readiness, the loser starts and rejects while the
+winner is still transitioning, omitted readiness is buffered before any yield,
+neither callback runs synchronously, and only the winner flushes both scopes in
+order and owns later readiness. No production source or Slice 2 behavior
+changed.
