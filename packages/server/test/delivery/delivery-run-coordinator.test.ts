@@ -56,6 +56,30 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.maxConcurrent).toBe(1);
   });
 
+  it("publishes active work before a synchronous worker notification can reenter", async () => {
+    const first = deferred<DeliveryWorkerEvidence>();
+    const second = deferred<DeliveryWorkerEvidence>();
+    const scopes = [scope("first", 0, 2), scope("second", 1, 2)];
+    let notified = false;
+    const worker = new FakeRunWorker([first.promise, second.promise], [], undefined, () => {
+      if (!notified) {
+        notified = true;
+        coordinator.notify(entry(scopes, 1));
+      }
+    });
+    const coordinator = new DeliveryRunCoordinator({ scopes, worker });
+
+    const settled = coordinator.start([entry(scopes, 0)]);
+
+    await until(() => worker.starts.length === 1);
+    expect(worker.maxConcurrent).toBe(1);
+    expect(worker.starts).toHaveLength(1);
+    first.resolve(workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 2, "IDLE")));
+    await until(() => worker.starts.length === 2);
+    second.resolve(workerEvidence(entry(worker.starts, 1).obligation, fulfilled(1, 2, "IDLE")));
+    await settled;
+  });
+
   it("pumps readiness accepted between drain settlement and active finalization", async () => {
     const scopes = [scope("first", 0, 2), scope("second", 1, 2)];
     let onStartSettled = () => undefined;
@@ -570,16 +594,23 @@ class FakeRunWorker implements DeliveryRunWorker {
   readonly #results: WorkerResult[];
   readonly #events: string[];
   #onStartSettled: (() => void) | undefined;
+  readonly #onStart: (() => void) | undefined;
   #active = 0;
   maxConcurrent = 0;
   stopCalls = 0;
   retireCalls = 0;
   retireFailure: Error | undefined;
 
-  constructor(results: WorkerResult[], events: string[] = [], onStartSettled?: () => void) {
+  constructor(
+    results: WorkerResult[],
+    events: string[] = [],
+    onStartSettled?: () => void,
+    onStart?: () => void,
+  ) {
     this.#results = [...results];
     this.#events = events;
     this.#onStartSettled = onStartSettled;
+    this.#onStart = onStart;
   }
 
   start(
@@ -589,6 +620,7 @@ class FakeRunWorker implements DeliveryRunWorker {
     this.starts.push({ obligation, shards });
     this.#active += 1;
     this.maxConcurrent = Math.max(this.maxConcurrent, this.#active);
+    this.#onStart?.();
     const result = this.#results.shift();
     if (result === undefined) {
       throw new Error("Missing fake worker result.");

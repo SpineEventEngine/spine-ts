@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 3 fixes assigned; worker paused
+Status: Review Round 3 fixes verified; fresh package pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -242,3 +242,27 @@ Security is deferred to final project readiness.
 - `2026-07-12T13:27:36Z`: Resumed sole author
   `019f5626-b85c-7da3-8971-98e0ae652b25` as the one Round 3 fix worker, paused
   until this assignment provenance commits. No reviewer remains open.
+- `2026-07-12T13:29:47Z`: Assignment provenance `7aa6a47d` was confirmed. The
+  author verified and accepted the complete three-finding Round 3 batch under
+  the existing review-reception/TDD skill record. Synchronous worker-start
+  reentry receives focused RED before runtime change; the acceptance wording
+  and boolean terminal-checkpoint corrections remain scope-neutral follow-ups.
+- `2026-07-12T13:30:47Z`: Focused RED deterministically observed two immediate
+  starts when the first worker start synchronously notified readiness. The
+  failure occurs before the active promise is published and directly confirms
+  the Round 3 high-reliability finding; no production edit preceded it.
+- `2026-07-12T13:32:23Z`: All 28 coordinator tests passed after publishing a
+  resolver gate before synchronous drain entry. Existing immediate-start and
+  late-finalizer handoff tests remain green, the new reentry case holds maximum
+  concurrency at one, both terminal getters and retirement retention use one
+  boolean checkpoint, and task rejection wording now matches actual evidence.
+- `2026-07-12T13:35:34Z`: Round 3 completion verification passed four focused
+  files and 179 tests, both canonical typechecks, changed-file ESLint/Prettier,
+  lightweight status/public-leak/duplicate-policy/overclaim/chronology checks,
+  and diff hygiene. All three findings are fixed in the exact five-file
+  uncommitted patch; independent coordinator verification and a fresh four-lane
+  review remain required.
+- `2026-07-12T13:37:45Z`: Independent coordinator verification passed 179
+  focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
+  diff hygiene. All three Round 3 fixes are accepted and the worker is closed;
+  a fresh literal-endpoint package and all four lanes remain.

@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Review Round 3 fixes assigned; worker paused
+Status: Review Round 3 fixes verified; fresh package pending
 
 Started: `2026-07-12T11:43:52Z`
 
@@ -114,9 +114,12 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   and only `PAUSED` continues the current finite obligation.
 - Mixed `FAILED`/`PAUSED` evidence continues only the paused shard regardless
   of aggregate status.
-- Every started promise is observed immediately. Rejection preserves T-0036
-  shard/cause/obligation/progress evidence, clears the active slot, and does not
-  self-restart.
+- Every started promise is observed immediately. An outer worker-start promise
+  rejection records the attempted shard scope and cause with synthetic empty
+  progress; `DeliveryScopeSettlement` does not retain an obligation. Validated
+  rejected per-shard evidence preserves its exact obligation identity and
+  last-safe progress while being interpreted, then records that cause and
+  progress in the scope settlement. Neither rejection path self-restarts.
 - A later external readiness request may explicitly reconsider rejected work;
   normal fulfillment honors every eligible scope in the merged pending
   admission.

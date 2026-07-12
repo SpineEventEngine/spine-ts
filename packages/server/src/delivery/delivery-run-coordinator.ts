@@ -19,7 +19,7 @@ export class DeliveryRunCoordinator {
   #accepting = true;
   #stopCalled = false;
   #fault: Error | undefined;
-  #final: DeliveryRunFinal | undefined;
+  #finalized = false;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
 
@@ -38,11 +38,11 @@ export class DeliveryRunCoordinator {
   }
 
   get replacementSafe(): boolean {
-    return this.#final !== undefined;
+    return this.#finalized;
   }
 
   get retired(): boolean {
-    return this.#final !== undefined;
+    return this.#finalized;
   }
 
   start(scopes: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
@@ -94,7 +94,7 @@ export class DeliveryRunCoordinator {
     }
 
     const retirement = this.#advanceRetirement().catch((error: unknown) => {
-      if (this.#final === undefined) {
+      if (!this.#finalized) {
         this.#retirement = undefined;
       }
       throw error;
@@ -120,7 +120,8 @@ export class DeliveryRunCoordinator {
     if (this.#active !== undefined) {
       return this.#active;
     }
-    const draining = this.#drainPending().catch((cause: unknown) => {
+    const gate = Promise.withResolvers<undefined>();
+    const draining = gate.promise.catch((cause: unknown) => {
       const fault = asError(cause);
       this.#fault ??= fault;
       throw this.#fault;
@@ -134,6 +135,9 @@ export class DeliveryRunCoordinator {
       }
     });
     this.#active = active;
+    void this.#drainPending().then(() => {
+      gate.resolve(undefined);
+    }, gate.reject);
     return active;
   }
 
@@ -236,7 +240,7 @@ export class DeliveryRunCoordinator {
     } catch (error) {
       failures.push(error);
     }
-    this.#final = Object.freeze({ complete: true });
+    this.#finalized = true;
     throwFailures(failures);
   }
 }
@@ -289,10 +293,6 @@ export class DeliveryRunQuiescenceError extends Error {
     this.name = "DeliveryRunQuiescenceError";
     this.cause = cause;
   }
-}
-
-interface DeliveryRunFinal {
-  readonly complete: true;
 }
 
 /** @internal Adapts a T-0036 worker to the generation coordinator seam. */
