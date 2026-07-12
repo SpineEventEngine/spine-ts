@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Requirements split in progress
+Status: Requirements splitter active
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -25,3 +25,6 @@ Security is deferred to final project readiness.
 
 - `2026-07-12T01:45:00Z`: Created the review scaffold. No reviewer has been
   assigned.
+- `2026-07-12T01:47:00Z`: Assigned read-only requirements splitter
+  `019f5401-bea0-7c72-9975-173e28a12a09`; implementation review remains
+  pending the split and implementation.
