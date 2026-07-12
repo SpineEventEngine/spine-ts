@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 8 finding recorded; architecture fix pending
+Status: Round 8 architecture fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -360,3 +360,6 @@ Security is deferred to final project readiness.
   wording to say current `PAUSED` clears cross-run cursor state and T-0036 will
   add bounded continuation, rather than claiming that behavior already exists.
   One architecture/docs fix worker and fresh four-lane review are required.
+- `2026-07-12T00:58:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 8 architecture
+  fix worker. Fresh four-lane review remains pending after verification.
