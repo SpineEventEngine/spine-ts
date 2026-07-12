@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 3 active
+Status: Review Round 3 fixes pending assignment
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5673-a653-7ba3-965f-9774a41f3de6` | Ready  |
-| Documentation              | `019f5673-a70a-72e0-9b6a-5ae5d5ca6d68` | Ready  |
-| TypeScript/API docs        | `019f5673-a794-7ee0-ae32-906465a966fb` | Ready  |
-| Performance/reliability    | `019f5673-a824-7563-908f-a6becf670c65` | Ready  |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f5673-a653-7ba3-965f-9774a41f3de6` | Findings |
+| Documentation              | `019f5673-a70a-72e0-9b6a-5ae5d5ca6d68` | Findings |
+| TypeScript/API docs        | `019f5673-a794-7ee0-ae32-906465a966fb` | Clean    |
+| Performance/reliability    | `019f5673-a824-7563-908f-a6becf670c65` | Findings |
 
 Security is deferred to final project readiness.
 
@@ -234,3 +234,8 @@ Security is deferred to final project readiness.
   review/design/API/types/error/verification skills; and explicitly skipped
   duplicate, authoring, web/security, debugging, and implementation workflows
   outside its lane. No required local source was unreachable.
+- `2026-07-12T13:26:10Z`: Round 3 completed and every reviewer was closed.
+  TypeScript/API docs is clean. Three findings remain: synchronous worker-start
+  reentry before active-gate publication, task rejection-evidence overclaim,
+  and an unnecessary marker-object terminal checkpoint. One TDD fix worker must
+  receive the complete list before all four lanes rerun.
