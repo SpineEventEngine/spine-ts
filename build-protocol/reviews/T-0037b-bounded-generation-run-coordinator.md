@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Round 5 two-finding fix implemented; focused verification complete; review pending
+Status: Round 5 targeted fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -388,3 +388,10 @@ assigned at the safe stop.
   found matching current status mirrors, no public/API or generated leakage,
   no duplicated policy constant, and no future-policy overclaim. Round 5 will
   re-review only the concerns affected by these two runtime fixes.
+- `2026-07-12T16:49:47Z`: Fix endpoint `526bf458` is pushed and frozen in
+  `.superpowers/sdd/review-1bcde72f..526bf458.diff` (one commit, 18,452 bytes).
+  Style/maintainability and performance/reliability are assigned independently,
+  each with explicit expected `gpt-5.6-terra` / `high`. Documentation is N/A
+  because no user-facing/current behavioral documentation changed beyond
+  accurate review evidence; TypeScript/API docs is N/A because the internal fix
+  changes no export or contract. Final security review remains project-scoped.
