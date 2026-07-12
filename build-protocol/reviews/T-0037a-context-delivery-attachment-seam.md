@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 3 assigned; reviewers fully paused
+Status: Review Round 3 skill checks complete; substantive review paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,14 +11,97 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Finding |
-| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Finding |
-| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Clean   |
-| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Clean   |
+| Lane                       | Reviewer                               | Status                       |
+| -------------------------- | -------------------------------------- | ---------------------------- |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Skill check complete; paused |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Skill check complete; paused |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Skill check complete; paused |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Skill check complete; paused |
 
 Security is deferred to final project readiness.
+
+## Round 3 Skill Checks
+
+Common evidence for all four lanes:
+
+- No assignment supplied explicit skill names or paths. Each lane triaged the
+  exposed session inventory before reading skill bodies.
+- Each read `build-protocol/skills/EXPECTED_SKILLS.md` (8 expected skills), ran
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+  over the complete installed directory, and found 47 readable entrypoints.
+  Count checks used the same command piped to `wc -l` or an equivalent readable
+  loop after macOS `find` rejected unsupported `-readable`.
+- Each inspected `/Users/armiol/.agents/.skill-lock.json` with `jq`; it is
+  version 3 with 47 matching skill records and no dismissed entry. Provenance
+  queries enumerated or selected `.skills` entries including source repository,
+  source type, source URL, and `skillPath`.
+- No skill source was unreachable. No package, changed source, or substantive
+  task record was inspected and no file was edited during phase 1.
+
+Style/maintainability reviewer `019f55f6-f8d3-7630-9ecf-88e97b009e3e`:
+
+- Fully read all 529 lines of `code-review-excellence` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md` and all 114
+  lines of `codebase-design` from `mattpocock/skills` at
+  `/Users/armiol/.agents/skills/codebase-design/SKILL.md`.
+- Skipped `review` (would launch duplicate subreviews),
+  `requesting-code-review` (coordinator dispatch), `receiving-code-review`
+  (finding recipient), broad web/security `best-practices`, the dedicated
+  TypeScript and performance lanes, Express/Fastify-oriented
+  `nodejs-backend-patterns`, broad architecture/API/domain skills, test
+  implementation skills, monorepo management, completion/SDD/worktree
+  coordinator skills, and implementation/TDD skills because this lane is
+  read-only and narrowly maintainability-focused.
+
+Documentation reviewer `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5`:
+
+- Fully read all 529 lines of `code-review-excellence` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md` and all 139
+  lines of `verification-before-completion` from `obra/superpowers` at
+  `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`.
+- Its targeted lock query selected `code-review-excellence`,
+  `verification-before-completion`, `doc-coauthoring`,
+  `architecture-decision-records`, `review`, `requesting-code-review`, and
+  `receiving-code-review` entries.
+- Skipped `doc-coauthoring` (interactive authoring),
+  `architecture-decision-records` (no ADR work), `review` (duplicate subreview
+  orchestration), request/receive review skills (other roles), `.docx`
+  `documents:documents`, product-specific `openai-docs`, and broad
+  web/security `best-practices` because this is an immutable repository-record
+  review.
+
+TypeScript/API docs reviewer `019f55f6-ff64-7e93-bd56-958adb44661a`:
+
+- Fully read all 529 lines of `code-review-excellence` and all 318 lines of
+  `typescript-advanced-types`, both from `wshobson/agents`, at
+  `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md` and
+  `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`.
+  The lock records their source URL as `https://github.com/wshobson/agents.git`
+  and their provenance paths under `plugins/developer-essentials/skills/` and
+  `plugins/javascript-typescript/skills/` respectively.
+- Skipped REST/GraphQL `api-design-principles`, duplicate-review `review`,
+  coordinator `requesting-code-review`, completion-gate
+  `verification-before-completion`, authoring `doc-coauthoring`, runtime
+  `nodejs-backend-patterns`, broad web `best-practices`, deferred security,
+  maintainability-lane `codebase-design`, and finding-recipient
+  `receiving-code-review` because this lane owns only TypeScript declarations,
+  exports, leakage, and JSDoc.
+
+Performance/reliability reviewer `019f55f7-02da-75a3-8f01-a9f79466affc`:
+
+- Fully read `code-review-excellence`, `nodejs-backend-patterns`,
+  `error-handling-patterns`, and `javascript-testing-patterns`, all from
+  `wshobson/agents`, at their exact
+  `/Users/armiol/.agents/skills/<name>/SKILL.md` entrypoints (1,232 total lines).
+- Its lock queries enumerated all records and selected names matching
+  `code-review`, `nodejs-backend`, `javascript-testing`, `error-handling`,
+  `performance`, and `requesting-code-review`.
+- Skipped browser-focused `performance`, request/receive/duplicate-review and
+  SDD coordinator skills, completion-gate `verification-before-completion`,
+  dedicated TypeScript/maintainability lanes, debugging absent a discovered
+  failure, implementation/TDD skills, broad web/security skills, broader
+  event-store/CQRS/projection architecture, monorepo management, and worktree
+  setup because this lane is read-only and runtime-reliability focused.
 
 ## Review Criteria
 
@@ -228,3 +311,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
   `019f55f6-ff64-7e93-bd56-958adb44661a`, and performance/reliability
   `019f55f7-02da-75a3-8f01-a9f79466affc`. Phase-1 skill checks remain barred
   until this assignment provenance commits.
+- `2026-07-12T10:58:36Z`: All four phase-1 reports completed. Their complete
+  canonical evidence is preserved in `Round 3 Skill Checks`; substantive review
+  remains paused until this record commits.
