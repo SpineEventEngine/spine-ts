@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 3 fix worker active
+Status: Round 3 fix worker complete; fix commit pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -8,8 +8,8 @@ Baseline: `67da0b1c`
 
 ## Result
 
-- `DeliveryLoop` admits a bounded immutable snapshot of exact pending inbox
-  message IDs before callbacks run. Admission is exactly one inbox read capped
+- `DeliveryLoop` admits a bounded immutable snapshot of detached canonical
+  pending inbox rows before callbacks run. Admission is exactly one inbox read capped
   by the existing storage read limit, currently 1,000 rows, so an inter-page
   write cannot join the active epoch.
 - Completed capped snapshots advance through finite admission sweeps. Sweep
@@ -17,7 +17,11 @@ Baseline: `67da0b1c`
   rows remain eligible while explicit epochs eventually reach every finite
   unsupported-prefix depth. Sweep state is one continuation and two counters,
   not an ever-growing remembered-ID set.
-- Internal epoch drains read only admitted IDs. Normally ordered and backdated
+- Internal epoch drains consume admitted rows without preliminary per-ID storage
+  reads. Admission canonicalizes and detaches mutable `Date` and `Any.value`
+  state once; read-only drain internals reuse the private frozen retained array.
+  Durable claim/mark CAS remains authoritative, so stale
+  status or claim changes skip callbacks. Normally ordered and backdated
   post-admission rows remain pending until a later new epoch.
 - Each explicit loop run starts at most two bounded drains. `PAUSED` retains the
   opaque snapshot index; `IDLE`, `FAILED`, `SKIPPED`, and `STOPPED` clear or
@@ -72,12 +76,19 @@ Baseline: `67da0b1c`
 - Cycle 6 GREEN: epoch admission became one storage-bounded read sourced from
   `inboxStorageAccess.maxReadLimit`; the focused regression observed one query
   and no inter-page delivery, and the updated 40-test loop suite passed.
+- Cycle 7 RED: one capped unsupported epoch performed one admission query and
+  1,000 sequential inbox point reads.
+- Cycle 7 GREEN: the epoch retained admitted rows after one canonical detachment
+  and drained the private frozen array directly. The same focused test observed one query and zero point reads;
+  stale durable status and live-claim changes also produced no callback,
+  accepted work, delivery, or failure.
 
 ## Round 1 Fix Files
 
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/src/delivery/delivery-loop.ts`
 - `packages/server/test/delivery/delivery-loop.test.ts`
+- `packages/server/test/delivery/delivery-storage-fault-fixture.ts`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `build-protocol/tasks/T-0036-package-internal-delivery-epoch-progress/TASK.md`
 - `build-protocol/tasks/T-0036-package-internal-delivery-epoch-progress/IMPLEMENTATION_REPORT.md`
@@ -120,9 +131,18 @@ Baseline: `67da0b1c`
   runtime, tests, or architecture semantics. Lightweight docs/status lint,
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check` passed; docs
   emitted only the known invalid-`origin` warning. No rereview is claimed.
+- PASS: cycle 7 RED failed as intended with 1,000 point reads after one capped
+  admission query; focused GREEN passed 2 tests / skipped 39.
+- PASS: Round 3 loop suite, 41 tests; four-file delivery suite, 4 files / 260
+  tests; generated `tsc -b`; changed-file ESLint over four TypeScript files.
+- PASS: Round 3 `pnpm docs:check`, `pnpm format:check`, and `git diff --check`;
+  docs emitted only the known invalid-`origin` source-link warning.
+- PASS: Coordinator pre-review performance follow-up reused the private frozen
+  retained array after one-time canonicalization. Focused operation/stale-state
+  tests passed 2 tests, the four-file suite passed 260 tests, generated `tsc -b`
+  passed, and changed-file ESLint passed.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
 
-The Round 1 fixes, coordinator verification, Round 2 package, and docs/status
-fix commit are complete. Only a fresh review package and all-lane rereview plus
-the final task gate/merge remain. No rereview is claimed by this docs/status
-pass.
+The Round 3 package was already generated. After this fix batch, only the fix
+commit, package rereview, and final task gate/merge remain. This worker does not
+claim rereview.

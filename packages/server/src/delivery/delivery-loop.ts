@@ -8,7 +8,8 @@ import {
   type DeliveryRun,
   type OnDeliveryMessage,
 } from "./delivery.js";
-import type { InboxMessage, InboxMessageId, InboxReadContinuation } from "./inbox.js";
+import { InboxRecords } from "./inbox-records.js";
+import type { InboxMessage, InboxReadContinuation } from "./inbox.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
@@ -336,15 +337,15 @@ class DeliveryLoopSummary {
 }
 
 class DeliveryEpoch {
-  readonly #messageIds: readonly InboxMessageId[];
+  readonly #messages: readonly InboxMessage[];
   readonly #nextAdmissionAfter: InboxReadContinuation | undefined;
   #next = 0;
 
   private constructor(
-    messageIds: readonly InboxMessageId[],
+    messages: readonly InboxMessage[],
     nextAdmissionAfter: InboxReadContinuation | undefined,
   ) {
-    this.#messageIds = Object.freeze([...messageIds]);
+    this.#messages = Object.freeze(messages.map(epochMessageSnapshot));
     this.#nextAdmissionAfter = nextAdmissionAfter;
   }
 
@@ -364,7 +365,7 @@ class DeliveryEpoch {
         ? epochContinuation(last)
         : undefined;
 
-    return new DeliveryEpoch(messages.map(epochMessageId), nextAdmissionAfter);
+    return new DeliveryEpoch(messages, nextAdmissionAfter);
   }
 
   get nextAdmissionAfter(): InboxReadContinuation | undefined {
@@ -372,14 +373,14 @@ class DeliveryEpoch {
   }
 
   advance(next: number): void {
-    if (!Number.isSafeInteger(next) || next < this.#next || next > this.#messageIds.length) {
+    if (!Number.isSafeInteger(next) || next < this.#next || next > this.#messages.length) {
       throw new Error("Delivery epoch progress is invalid.");
     }
     this.#next = next;
   }
 
   slice(): DeliveryEpochSlice {
-    return Object.freeze({ messageIds: this.#messageIds, next: this.#next });
+    return Object.freeze({ messages: this.#messages, next: this.#next });
   }
 }
 
@@ -476,8 +477,8 @@ function addLoopProgress(progress: DeliveryLoopProgress, run: DeliveryRun): Deli
   );
 }
 
-function epochMessageId(message: InboxMessage): InboxMessageId {
-  return Object.freeze({ value: message.id.value, shard: message.shard });
+function epochMessageSnapshot(message: InboxMessage): InboxMessage {
+  return InboxRecords.read(InboxRecords.write(message));
 }
 
 function epochContinuation(message: InboxMessage): InboxReadContinuation {

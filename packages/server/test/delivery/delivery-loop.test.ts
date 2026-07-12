@@ -97,7 +97,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-admitted", "signal-backdated"]);
   });
 
-  it("admits an epoch with one query before an inter-page write can join", async () => {
+  it("drains a capped unsupported epoch with one query and no point reads", async () => {
     const faults = deliveryStorageFaults(onInboxQueryNumber(2, onInterPageQuery));
     const delivery = createDelivery(faults.storageFactory);
     const seen: string[] = [];
@@ -113,9 +113,11 @@ describe("DeliveryLoop", () => {
     for (let index = 1; index <= inboxStorageAccess.maxReadLimit; index += 1) {
       await seed(delivery, `signal-prefix-${String(index)}`, BigInt(index), "CATCH_UP");
     }
+    const inboxReadsBeforeRun = faults.inboxReads;
 
     await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
     expect(faults.inboxQueries).toBe(1);
+    expect(faults.inboxReads - inboxReadsBeforeRun).toBe(0);
     expect(seen).toEqual([]);
 
     async function onInterPageQuery(): Promise<void> {
@@ -157,6 +159,61 @@ describe("DeliveryLoop", () => {
       failed: 0,
     });
     expect(seen).toEqual(["signal-1", "signal-2", "signal-3"]);
+  });
+
+  it("does not deliver stale admitted rows after durable status and claim changes", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    await seed(delivery, "signal-first", 1n);
+    await seed(delivery, "signal-second", 2n);
+    const deliveredBeforeDrain = await seed(delivery, "signal-now-delivered", 3n);
+    const claimedBeforeDrain = await seed(delivery, "signal-now-claimed", 4n);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      processed: 2,
+      accepted: 2,
+      delivered: 2,
+      failed: 0,
+    });
+    await expect(delivery.inbox.markDelivered(deliveredBeforeDrain)).resolves.toMatchObject({
+      signalId: "signal-now-delivered",
+      status: "DELIVERED",
+    });
+    await expect(
+      inboxStorageAccess.claim(
+        delivery.inbox.storage,
+        claimedBeforeDrain,
+        new ShardSession(
+          "competing-message-owner",
+          shard,
+          "node-b",
+          new Date("2026-07-12T04:29:00.000Z"),
+          new Date("2099-07-12T04:30:00.000Z"),
+        ),
+      ),
+    ).resolves.toMatchObject({ signalId: "signal-now-claimed" });
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      runs: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-first", "signal-second"]);
   });
 
   it("retries a previously failed row on a later run", async () => {

@@ -24,6 +24,7 @@ export function deliveryStorageFaults(
     opens: 0,
     compareAndSets: 0,
     inboxQueries: 0,
+    inboxReads: 0,
   };
 
   return Object.freeze({
@@ -36,6 +37,9 @@ export function deliveryStorageFaults(
     },
     get inboxQueries() {
       return plan.inboxQueries;
+    },
+    get inboxReads() {
+      return plan.inboxReads;
     },
   });
 }
@@ -335,6 +339,7 @@ export interface DeliveryStorageFaultFixture {
   readonly opens: number;
   readonly compareAndSets: number;
   readonly inboxQueries: number;
+  readonly inboxReads: number;
 }
 
 interface DeliveryFaultPlan {
@@ -342,6 +347,7 @@ interface DeliveryFaultPlan {
   opens: number;
   compareAndSets: number;
   inboxQueries: number;
+  inboxReads: number;
 }
 
 interface DeliveryStorageFaultProbe {
@@ -450,6 +456,9 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
   }
 
   protected async readRecord(id: I): Promise<R | undefined> {
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      this.#plan.inboxReads += 1;
+    }
     const record = await this.#delegate.read(id);
 
     for (const probe of this.#plan.probes) {

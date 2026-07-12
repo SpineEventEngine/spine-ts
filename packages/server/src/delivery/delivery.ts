@@ -13,7 +13,6 @@ import {
   Inbox,
   InboxMessageError,
   type InboxMessage,
-  type InboxMessageId,
   type InboxReadContinuation,
 } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
@@ -176,17 +175,13 @@ export class Delivery {
     let next = initial;
     let examined = 0;
 
-    while (next < epoch.messageIds.length && examined < scanBudget) {
-      const id = epoch.messageIds[next];
-      if (id === undefined) {
+    while (next < epoch.messages.length && examined < scanBudget) {
+      const message = epoch.messages[next];
+      if (message === undefined) {
         throw new Error("Delivery epoch progress is invalid.");
       }
-      const message = await inbox.readMessage(id);
       next += 1;
       examined += 1;
-      if (message?.status !== "TO_DELIVER") {
-        continue;
-      }
 
       await this.#tryDrainMessage(inbox, attempts, progress, message, onMessage, lease, active);
       if (progress.accepted >= limit) {
@@ -198,7 +193,7 @@ export class Delivery {
     }
 
     const safeNext = progress.failed === 0 ? next : initial;
-    const complete = safeNext >= epoch.messageIds.length;
+    const complete = safeNext >= epoch.messages.length;
     const run = progress.finish({}).run;
 
     return Object.freeze({
@@ -864,7 +859,7 @@ export interface DeliveryDrainOutcome {
 
 /** @internal Immutable admitted row membership and opaque loop position. */
 export interface DeliveryEpochSlice {
-  readonly messageIds: readonly InboxMessageId[];
+  readonly messages: readonly InboxMessage[];
   readonly next: number;
 }
 

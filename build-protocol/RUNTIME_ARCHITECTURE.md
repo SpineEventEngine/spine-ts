@@ -323,10 +323,15 @@ delivery worker boundary:
   Direct drains/pages remain bounded. At the start of a new loop epoch, the
   loop performs exactly one adapter-neutral inbox read and admits at most the
   storage read limit, currently 1,000 ordered pending rows, into an immutable
-  exact-message ID snapshot. This snapshot, rather than a caller-controlled
+  canonical row snapshot. Admission detaches `Date` and `Any.value` state once;
+  the loop then passes its private frozen retained array directly to read-only
+  drain internals. This snapshot, rather than a caller-controlled
   ordering key or a work counter, defines epoch membership, so a write between
   storage pages cannot join the active epoch and callback writes remain outside
-  it. Each explicit `run()` starts at most two bounded drains. If admitted members remain,
+  it. Admitted drains do not reread each row by ID; supported rows still pass
+  through durable claim and mark compare-and-set operations, so a status or
+  claim change after admission skips stale work without invoking the endpoint.
+  Each explicit `run()` starts at most two bounded drains. If admitted members remain,
   `PAUSED` retains the snapshot and opaque index for a later explicit run;
   otherwise `IDLE` completes the epoch. Capped epochs advance through finite
   admission sweeps whose depth doubles after each pass. Each pass restarts at
@@ -334,7 +339,7 @@ delivery worker boundary:
   eligible in a later explicit epoch, while increasing pass depth still makes
   forward progress through an arbitrarily large finite unsupported prefix.
   The sweep retains only one ordering continuation and two counters; it does
-  not retain an ever-growing set of prior message IDs. A stop observed
+  not retain an ever-growing set of prior rows. A stop observed
   while admission is in flight prevents the first drain from starting. The
   worker's package-internal invocation associates one opaque obligation with
   configured shards and returns ordered fulfilled/rejected evidence. Fulfilled `FAILED` and

@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 3 fix worker active
+Status: Round 3 fix worker complete; fix commit pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -161,3 +161,21 @@ Security is deferred to final project readiness.
   `019f5457-20d4-79e0-954b-87db35becd6c` with every accepted finding. Fresh
   package generation and all four lanes remain pending coordinator verification
   and commit.
+- `2026-07-12T04:35:00Z`: Round 3 fix worker completed cycle 7 runtime work.
+  RED measured 1,000 sequential point reads after one capped admission query;
+  GREEN retained detached canonical admitted rows and measured zero point reads.
+  Stale durable status/live-claim changes remained callback-free through claim
+  CAS. Focused GREEN, 41 loop tests, 4 files / 260 tests, generated `tsc -b`,
+  and changed-file ESLint passed. Documentation and final lightweight gates
+  remain; no rereview is claimed.
+- `2026-07-12T04:38:00Z`: Closed the Round 3 fix worker after `docs:check`,
+  `format:check`, and whitespace checks passed with only the known invalid-
+  `origin` docs warning. Coordinator fix commit, package rereview, and final
+  gate remain; no review is claimed by this fix batch.
+- `2026-07-12T04:40:00Z`: Coordinator pre-review performance audit accepted a
+  follow-up: `DeliveryEpoch.slice()` redundantly canonicalized every retained
+  row on every drain. Delivery internals are read-only and inbox claim/mark CAS
+  canonicalizes its inputs, so the loop now reuses the private frozen array
+  after one admission-time detachment. Focused tests passed 2 tests, the
+  four-file suite passed 260 tests, generated `tsc -b` passed, and changed-file
+  ESLint, formatting, and final whitespace checks passed. No rereview is claimed.

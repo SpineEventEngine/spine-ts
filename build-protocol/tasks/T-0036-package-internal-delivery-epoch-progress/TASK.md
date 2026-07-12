@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 3 fix worker active
+Status: Round 3 fix worker complete; fix commit pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -65,7 +65,7 @@ complete internal interface without reopening worker internals.
 ## Test-First Acceptance
 
 - Continuous supported appends do not extend an admitted epoch.
-- `PAUSED` resumes the same exact admitted IDs beyond saved progress without
+- `PAUSED` resumes the same exact admitted rows beyond saved progress without
   rebuilding that epoch. A large unsupported prefix advances across completed
   single-read admission chunks. Completed passes restart at the head to keep
   later backdated rows eligible while growing pass depth preserves forward
@@ -186,8 +186,10 @@ membership.
   known invalid-`origin` warning. No rereview is claimed. A docs/status fix
   commit, fresh review package, all-lane rereview, and the final gate/merge
   remain.
-- PASS: Round 2 docs/status fixes committed as `40793085`; package-boundary
-  reconciliation is the sole future hash under the ledger convention.
+- PASS: Round 2 docs/status fixes committed as `40793085`; status was
+  reconciled in `32827343`, and Round 3 package
+  `.superpowers/sdd/review-67da0b1c..32827343.diff` was generated from that
+  fixed boundary. No future hash remains from that phase.
 - REVIEW: Round 3 code style and TypeScript/API docs returned clean.
   Documentation found one stale implementation-report remaining-work line.
   Performance/reliability found a P1 adapter-cost issue: admitted rows are read
@@ -195,17 +197,46 @@ membership.
   storage operations for one 1,000-row epoch. Retain bounded canonical admitted
   row snapshots while claim CAS preserves current-state safety, add operation-
   count coverage, correct status, and rerun all lanes.
+- PASS: TDD cycle 7 measured 1,000 sequential inbox point reads after the one
+  capped admission query. Retaining detached canonical admitted rows removed
+  those reads; the focused operation-count regression then passed with one
+  query and zero point reads. A later admitted supported row changed to
+  `DELIVERED` and another acquired a live claim before `PAUSED` continuation;
+  durable claim CAS skipped both without callback, accepted work, delivery, or
+  failure.
+- PASS: Round 3 fix verification so far: focused GREEN 2 tests, loop suite 41
+  tests, four delivery files / 260 tests, generated `tsc -b`, and changed-file
+  ESLint over all four changed TypeScript files. Documentation, formatting, and
+  final diff/status checks remain before worker closure. Full `pnpm verify`
+  remains reserved.
+- PASS: `pnpm docs:check`, `pnpm format:check`, and `git diff --check` passed on
+  the Round 3 fix tree. Docs emitted only the known invalid-`origin` source-link
+  warning. The worker claims no rereview; fix commit, package rereview, and the
+  final task gate/merge remain.
+- PASS: Coordinator pre-review performance follow-up removed per-drain
+  whole-epoch canonical copies while preserving one-time admission detachment.
+  Focused operation/stale-state tests passed 2 tests, the four-file suite passed
+  260 tests, generated `tsc -b` passed, and changed-file ESLint passed. No
+  private array-identity contract was added.
+- PASS: At `2026-07-12T04:42:00Z`, the coordinator independently passed the
+  four-file / 260-test suite, generated build, changed-file ESLint,
+  `docs:check`, `format:check`, and `git diff --check` after the one-time
+  snapshot-copy optimization. Only the eventual Round 3 fix commit remains a
+  future hash; package rereview and the final gate still follow it.
 
 ## Implementation Result
 
-- Each loop admits exact pending message IDs from one inbox read capped by the
-  existing storage read limit, currently 1,000 rows, and retains only an opaque
-  index across `PAUSED`. Completed capped epochs advance through finite
+- Each loop admits detached canonical pending-row snapshots from one inbox read
+  capped by the existing storage read limit, currently 1,000 rows, and retains
+  only those bounded rows plus an opaque index across `PAUSED`. Canonical
+  detachment occurs once at admission; read-only drain internals reuse the
+  private frozen retained array and perform no preliminary per-ID row read.
+  Supported rows remain guarded by durable claim and mark CAS. Completed capped epochs advance through finite
   admission sweeps whose chunk depth doubles between passes. Restarting each
   pass at the head keeps later backdated rows eligible; increasing depth
   preserves progress through arbitrary finite unsupported prefixes without an
   ever-growing remembered-ID set.
-- Exact-message epoch drains exclude all post-admission rows regardless of
+- Exact-row epoch drains exclude all post-admission rows regardless of
   caller timestamp/version ordering and bound both supported and skipped work.
 - Package-internal worker evidence preserves configured order, obligation,
   fulfilled run/progress, and rejected original cause/progress. Direct
