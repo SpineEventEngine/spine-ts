@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 2 docs/status fix worker active
+Status: Round 2 docs/status fixes complete; rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -137,3 +137,9 @@ Security is deferred to final project readiness.
 - `2026-07-12T04:12:00Z`: Assigned docs/status fix worker
   `019f544a-f2c8-73e3-9b0e-c6a7ec35bd02` with both accepted documentation
   findings only. No rereview is claimed.
+- `2026-07-12T04:14:00Z`: Closed the docs/status fix worker after correcting
+  both accepted findings and aligning all four durable statuses. Runtime,
+  tests, and architecture semantics are unchanged. Lightweight docs/status
+  lint, docs, formatting, and whitespace checks passed with only the known
+  invalid-`origin` docs warning. A fresh package and all four independent lanes
+  must rerun; no clean rereview is claimed by this pass.
