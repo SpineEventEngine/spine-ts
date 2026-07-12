@@ -3444,9 +3444,15 @@ Decision:
   closes remains pending.
   After reusable last detach or explicit generation stop while the same caller-
   owned environment remains open, a later generation can recover it only after
-  quiescence is established. A failure that cannot establish quiescence is
-  distinct: the old slot cannot be cleared or replaced because endpoint safety
-  is not proven. After permanent `ServerEnvironment.close()`, no generation of
+  quiescence is established. Ordinary last detach clears its stopped,
+  proven-quiescent retired current-generation slot through a finally-equivalent
+  path before propagating a reporting or inert permanent-cleanup error, so a
+  later attach can create one fresh generation without overlap. A failure that
+  cannot establish quiescence is distinct: the old slot and every endpoint-
+  dependent context, resource, and facility remain retained because endpoint
+  safety is not proven. That unsafe state requires an explicit lifecycle retry;
+  it cannot clear or replace the slot or close dependencies beneath possibly
+  active work. After permanent `ServerEnvironment.close()`, no generation of
   that same environment is possible. Recovery then requires a separately
   created environment/process over storage that remains externally available
   and persistent, if facility ownership and backend lifetime permit; this
@@ -3464,7 +3470,8 @@ Decision:
   resources. A reusable lifecycle caller may therefore clear or replace its
   slot and complete any required fresh-generation transition before propagating
   the combined result. If quiescence itself cannot be established, the primitive
-  reports that distinct unsafe result and replacement is prohibited.
+  reports that distinct unsafe result; replacement and endpoint-dependent
+  teardown are prohibited until an explicit retry proves quiescence.
 - Attach, detach, generation stop, and environment close use the same
   package-internal lifecycle gate. If attach linearizes before reusable last
   detach or explicit generation stop marks the generation stopping, it joins the
@@ -3528,9 +3535,12 @@ Decision:
   awaits work is partitioned before aggregation: non-last detach includes only
   the departing registration's records and newly orphaned generation records,
   while live shared generation and sibling records remain parked. Shutdown
-  continues every remaining close and propagates or aggregates all eligible
-  close failures consistently with the existing `RetryableCloseGroup` behavior.
-  Transport or storage must never close beneath an active run.
+  continues every remaining close after quiescence and propagates or aggregates
+  all eligible reporting and inert cleanup failures consistently with the
+  existing `RetryableCloseGroup` behavior. If quiescence cannot be established,
+  shutdown instead retains the registration's unsafe generation slot plus its
+  endpoint-dependent contexts, resources, delivery facilities, transport, and
+  storage for explicit retry; it does not close beneath possibly active work.
 - Implement D-0085 in small sequenced successors. The smallest first successor
   is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
   package-internal `DeliveryLoop`/`DeliveryWorker` prerequisites: cap the full
@@ -3708,7 +3718,10 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   to finish the same exact-once transition; and the attach joins that same
   generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
-  also owns close refusal and permanent environment close. T-0037f alone
+  also owns finally-equivalent clearing of an ordinary last-detach slot after
+  proven quiescence despite reporting or inert permanent-cleanup error. It
+  retains the unsafe slot when quiescence fails. T-0037e also owns close refusal
+  and permanent environment close. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,
   resources, and owned facilities. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback

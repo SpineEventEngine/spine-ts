@@ -406,9 +406,12 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    irreversible admission closure, stopped state, and quiescence prevent any old
    start, notification, or endpoint invocation despite later reporting or
    cleanup failure; cleanup failure may leak only inert resources. A distinct
-   inability to establish quiescence prohibits slot replacement. A reusable
-   lifecycle caller may receive the combined error only after completing its
-   required slot clearing or fresh-generation transition.
+   inability to establish quiescence prohibits slot replacement and endpoint-
+   dependent teardown until explicit retry. A reusable lifecycle caller may
+   receive an earlier retirement/reporting error only after completing its
+   required slot clearing or fresh-generation transition. A fresh-construction,
+   route-rebind, or buffered-transfer error instead propagates while that
+   transition remains incomplete and retained for external retry.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, the
@@ -443,8 +446,11 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    self-loop occurs; a later external
    lifecycle/readiness retry alone completes one fresh generation and exact-once
    transfer/rebind. Only permanent close or independent ownership cardinality
-   may reject the attach. Server and handoff code cannot call the primitive
-   directly.
+   may reject the attach. Ordinary last detach clears a stopped,
+   proven-quiescent retired current-generation slot through a finally-equivalent
+   path before propagating reporting or inert permanent-cleanup errors; a
+   quiescence failure retains the unsafe slot. Server and handoff code cannot
+   call the primitive directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
 

@@ -62,6 +62,15 @@ error consumption, then close contexts/resources, and finally close an owned
 environment's facilities. It also owns failed-listener and failed-start
 aggregation across these ordered phases.
 
+Cleanup continuation depends on the delivery safety boundary. Once quiescence
+is proven, reporting errors and failures from permanent cleanup of inert
+delivery state do not reactivate delivery, and all later context, resource, and
+facility close attempts continue. If quiescence itself fails, endpoint safety
+is unknown: the registration's unsafe generation slot and every endpoint-
+dependent context, resource, delivery facility, transport, and storage remain
+open for an explicit lifecycle retry. Server cleanup must not close beneath
+possibly active work.
+
 ## Likely Files
 
 - `packages/server/src/server/server.ts`
@@ -82,11 +91,13 @@ aggregation across these ordered phases.
   existing failed-start model without closing a shared caller-owned environment.
 - When startup fails with a server-owned environment, no listener is opened;
   registration rollback and generation quiescence are attempted first while
-  endpoint dependencies remain open, then every context and resource close is
-  attempted, then permanent environment/facility close is attempted in D-0085
-  order. Failures from startup, rollback/quiescence, contexts/resources, and
-  permanent environment/facility close aggregate without skipping any later
-  cleanup phase.
+  endpoint dependencies remain open. After proven quiescence, every context and
+  resource close is attempted, then permanent environment/facility close is
+  attempted in D-0085 order; reporting or inert permanent-cleanup errors are
+  aggregated without skipping those later phases. If quiescence fails, the
+  unsafe generation slot and endpoint-dependent contexts/resources/facilities
+  are retained for explicit retry instead of being closed beneath possibly
+  active work.
 - Close order is network intake and sessions; registration detach/quiescence
   while endpoint dependencies remain open; eligible cause aggregation; context
   and resource close; then owned environment facilities.
@@ -94,7 +105,9 @@ aggregation across these ordered phases.
   usable. Last close retires the generation; owned-environment close occurs
   only after exclusive detach and context/resource close.
 - Active and earlier parked rejections surface only at their truthful boundary
-  and once; all remaining close hooks still run after failures.
+  and once. After proven quiescence, all remaining close hooks still run after
+  reporting or inert cleanup failures; quiescence failure retains unsafe
+  endpoint dependencies for explicit retry.
 - Transport or storage never closes beneath an active delivery run, and a
   `PAUSED` outcome cannot start after stop admission.
 - Existing host/port/baseUrl, idempotent/retryable close, listener failure,
@@ -114,7 +127,8 @@ aggregation across these ordered phases.
 - Startup recovery precedes network intake; detach/quiescence precedes endpoint
   and facility close.
 - Close aggregation includes only eligible still-unreported causes and
-  preserves operational cleanup even after an error.
+  preserves later cleanup after post-quiescence reporting or inert cleanup
+  errors, while quiescence failure prohibits endpoint-dependent teardown.
 - No public scheduler, monitor, health, retry, registration, or detach surface
   is introduced.
 

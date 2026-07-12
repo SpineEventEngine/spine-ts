@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 10 docs fix worker active
+Status: Round 10 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -78,8 +78,12 @@ four lanes with the dedicated retirement-failure TDD and this stale active-
 summary correction as its two-item finding; that docs fix passed worker and
 coordinator verification. Round 9 accepted the connected fail-closed retirement,
 non-empty failure-buffer, failed-start retired-slot, and retryable transition-
-failure batch. Its docs fix is authored; coordinator verification remains
-pending and no clean review is claimed.
+failure batch. Its docs fix passed worker and coordinator verification and was
+committed as `ee6fb396`. Round 10 accepted the quiescence-failure endpoint-
+retention boundary, ordinary last-detach safe slot clearing, fresh-transition
+error qualification, this stale handoff correction, and work-log chronology.
+The Round 10 docs fix is authored; coordinator verification and fresh review
+remain pending, and no clean review is claimed.
 
 ## Verification
 

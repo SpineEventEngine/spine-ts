@@ -57,6 +57,14 @@ attach/detach/close race policy after reusable caller-owned retirement,
 close, and ordered owned-facility close after quiescence. It does not implement
 another stop/await/retire path or handle failed-start rollback.
 
+Ordinary last detach clears the stopped, proven-quiescent, permanently retired
+current-generation slot through a finally-equivalent path before propagating a
+reporting error or inert permanent-cleanup error. A later eligible attach can
+therefore create one fresh generation without reusing or overlapping the old
+instance. If quiescence cannot be established, the slot remains current and
+unsafe, replacement is prohibited, and endpoint-dependent resources remain
+open for an explicit lifecycle retry.
+
 Reusable explicit stop leaves registrations live but closes their old-
 generation readiness admission and installs one bounded canonical tenant/
 configured-scope transition buffer, or equivalent persistence barrier. That
@@ -108,9 +116,19 @@ network or context/resource ordering.
 - Last detach closes trigger/notification admission, calls worker stop, awaits
   active work, classifies rejection, reports/consumes eligible records, and
   permanently retires old worker/loops in that exact order by invoking the
-  T-0037b primitive rather than duplicating it.
+  T-0037b primitive rather than duplicating it. Once quiescence is proven, it
+  clears the retired current-generation slot through a finally-equivalent path
+  before propagating reporting or inert permanent-cleanup errors. If quiescence
+  fails, it retains the unsafe slot and endpoint-dependent resources for
+  explicit retry.
 - A caller-owned environment can later create exactly one fresh generation;
   stopped worker/loop instances are never reused or overlapped.
+- Separate ordinary-last-detach tests inject a reporting error and a permanent-
+  cleanup error after proven quiescence. Each proves the retired current slot is
+  cleared before that error propagates, then performs a later fresh attach and
+  proves exactly one fresh generation with no old/new overlap. A distinct
+  quiescence-failure test proves the unsafe current slot is retained and the
+  later attach cannot replace it.
 - Explicit generation stop is distinct from detach and environment close. Under
   the same lifecycle gate it closes generation admission, invokes T-0037b's
   stop/await/consume/retire primitive, leaves registrations and a caller-owned
@@ -188,6 +206,9 @@ network or context/resource ordering.
 ## D-0085 Invariants
 
 - Stop always precedes await and operational-record consumption.
+- Endpoint-dependent resources remain open when quiescence is not proven;
+  reporting or inert cleanup errors after proven quiescence cannot reactivate
+  delivery or prevent finally-equivalent safe slot clearing.
 - Durable writes after admission closes remain pending; reuse can recover them
   only through a fresh generation when storage remains available.
 - Permanent close promises no recovery after environment-owned storage closes.

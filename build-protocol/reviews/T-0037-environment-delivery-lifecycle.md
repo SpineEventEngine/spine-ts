@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 10 docs fix worker active
+Status: Round 10 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5534-0451-7a83-b3c4-75b5d2730ccb` | P1/P2 |
-| Documentation              | `019f5534-04ea-7aa1-aa55-147089a0fd3d` | P1/P2 |
-| TypeScript/API docs        | `019f5534-0573-7e80-89d7-95335707717c` | P1/P2 |
-| Performance/reliability    | `019f5534-060f-7911-b159-58acef9049f6` | P1/P2 |
+| Code style/maintainability | `019f5534-0451-7a83-b3c4-75b5d2730ccb` | P1/P2  |
+| Documentation              | `019f5534-04ea-7aa1-aa55-147089a0fd3d` | P1/P2  |
+| TypeScript/API docs        | `019f5534-0573-7e80-89d7-95335707717c` | P1/P2  |
+| Performance/reliability    | `019f5534-060f-7911-b159-58acef9049f6` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -59,7 +59,8 @@ Security is deferred to final project readiness.
   Once stop/await succeeds, irreversible admission closure, stopped state, and
   quiescence prevent later start, notification, endpoint invocation, or reuse
   despite reporting or cleanup failure; cleanup may leak only inert resources.
-  A distinct inability to establish quiescence prohibits replacement. T-0037d
+  A distinct inability to establish quiescence prohibits replacement and
+  endpoint-dependent teardown until explicit retry. T-0037d
   invokes the primitive only for failed-start empty-generation
   rollback/replacement, and T-0037e invokes it only for explicit generation
   stop, ordinary last detach, and permanent close plus fresh-generation race
@@ -84,6 +85,12 @@ Security is deferred to final project readiness.
   write after the fresh snapshot but before route rebind, prove the bounded
   buffer is non-empty, then prove exact-once transfer/admission and exact-once
   error propagation only after complete survivor rebinding.
+- Confirm ordinary last detach clears its stopped, proven-quiescent,
+  permanently retired current-generation slot through a finally-equivalent path
+  before propagating reporting or inert permanent-cleanup errors. Separate
+  reporting-error and permanent-cleanup-error tests each perform a later fresh
+  attach and prove exactly one fresh generation without old/new overlap. A
+  quiescence failure instead retains the unsafe slot and prohibits replacement.
 - Confirm T-0037d clears a stopped, quiescent, permanently retired sole-
   registration empty slot through a finally-equivalent path before propagating
   reporting or cleanup errors. Separate tests prove the inert old instance
@@ -96,9 +103,12 @@ Security is deferred to final project readiness.
   transition error is preserved/aggregated and propagated without self-loop;
   only a later external lifecycle/readiness retry completes one fresh generation,
   exact-once transfer/rebind, and admission without owner gap or overlap.
-- Confirm server-owned startup failure attempts rollback/quiescence,
-  context/resource cleanup, and permanent environment/facility close in D-0085
-  order without listener intake, aggregating failures without skipped cleanup.
+- Confirm server-owned startup failure attempts rollback/quiescence without
+  listener intake while endpoint dependencies stay open. After proven
+  quiescence, reporting or inert permanent-cleanup errors do not skip later
+  context/resource/environment/facility cleanup. A quiescence failure retains
+  the unsafe generation slot and endpoint-dependent contexts/resources/
+  facilities for explicit retry, never closing beneath possibly active work.
 - Confirm the parent prohibits duplicate agents per role and requires every
   participant closed. Confirm parent and all six child ledgers require the
   canonical skill check for every implementation/review role and the Human
@@ -473,9 +483,20 @@ Security is deferred to final project readiness.
   reporting or inert cleanup failures continue later cleanup; ordinary last
   detach must clear a safe retired slot before propagating those later errors;
   architecture must distinguish retirement/reporting failure from fresh-
-  transition failure; and the split handoff status must be current. All other
-  contracts are clean.
+  transition failure; the split handoff status must be current; and the work-log
+  events must be chronological. All other contracts are clean.
 - `2026-07-12T07:28:48Z`: Assigned single Round 10 documentation fix worker
   `019f553a-7491-7893-9ade-d4d6c820ff89` the complete accepted batch. The
   worker owns documentation only, must preserve the fixed historical package
   ledger, and may begin editing only after this assignment is committed.
+- `2026-07-12T07:30:15Z`: The Round 10 docs fix worker authored the complete
+  accepted batch across D-0085/D-0086, runtime architecture, T-0037e/f,
+  parent/report/review/work status, and event chronology. The authoritative
+  lifecycle order and fixed 36-entry historical package ledger remain intact.
+  Coordinator verification and fresh all-lane review remain pending.
+- `2026-07-12T07:37:52Z`: Coordinator closed the worker, inspected all eight
+  changed files, and independently passed lifecycle/error-path lint, active
+  stale-status and 84-event chronology checks, the byte-identical 36-entry
+  historical ledger check, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check`. TypeDoc retained 205 server exports with only the known
+  invalid-`origin` warning. Fresh all-lane review remains required.
