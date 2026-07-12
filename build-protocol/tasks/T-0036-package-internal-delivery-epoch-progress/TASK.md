@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 3 fix worker complete; fix commit pending
+Status: Round 3 fixes committed; rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -218,6 +218,8 @@ membership.
   Focused operation/stale-state tests passed 2 tests, the four-file suite passed
   260 tests, generated `tsc -b` passed, and changed-file ESLint passed. No
   private array-identity contract was added.
+- PASS: Round 3 fixes committed as `e6c92128`; package-boundary reconciliation
+  is the sole future hash under the ledger convention.
 - PASS: At `2026-07-12T04:42:00Z`, the coordinator independently passed the
   four-file / 260-test suite, generated build, changed-file ESLint,
   `docs:check`, `format:check`, and `git diff --check` after the one-time

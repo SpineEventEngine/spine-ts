@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 3 fix worker complete; fix commit pending
+Status: Round 3 fixes committed; rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -179,3 +179,6 @@ Security is deferred to final project readiness.
   after one admission-time detachment. Focused tests passed 2 tests, the
   four-file suite passed 260 tests, generated `tsc -b` passed, and changed-file
   ESLint, formatting, and final whitespace checks passed. No rereview is claimed.
+- `2026-07-12T04:43:00Z`: Committed Round 3 fixes as `e6c92128` and reconciled
+  the fixed-baseline ledger. Fresh package generation and all four independent
+  lanes remain.
