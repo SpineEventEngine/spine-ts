@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 10 docs fixes verified; fresh review pending
+Status: Round 11 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5534-0451-7a83-b3c4-75b5d2730ccb` | P1/P2  |
-| Documentation              | `019f5534-04ea-7aa1-aa55-147089a0fd3d` | P1/P2  |
-| TypeScript/API docs        | `019f5534-0573-7e80-89d7-95335707717c` | P1/P2  |
-| Performance/reliability    | `019f5534-060f-7911-b159-58acef9049f6` | P1/P2  |
+| Code style/maintainability | `019f5543-f279-7b22-be6a-7d75005a2a66` | P2/P3  |
+| Documentation              | `019f5543-f2e8-73a3-bced-9c3d5d885451` | P2     |
+| TypeScript/API docs        | `019f5543-f36a-7c41-aeb2-4147dbb2470a` | P2     |
+| Performance/reliability    | `019f5543-f401-7733-bddb-0133f4459808` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -500,3 +500,14 @@ Security is deferred to final project readiness.
   historical ledger check, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check`. TypeDoc retained 205 server exports with only the known
   invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T07:39:15Z`: Committed the verified Round 10 fix as `724e384d`,
+  generated fixed package `.superpowers/sdd/review-0308bc4a..724e384d.diff`
+  (48 commits, 199,821 bytes), passed the lightweight pre-review lint, and
+  assigned all four Round 11 lanes against that exact package.
+- `2026-07-12T07:44:03Z`: Closed all four Round 11 lanes. Accepted one complete
+  docs batch: the bounded transition owner must explicitly retain the sole
+  constructed-but-unpublished fresh candidate across rebind/transfer failure;
+  quiescence-failure tests must complete a later successful explicit retry;
+  active parent summaries must record verified Round 10 and active Round 11;
+  and Participants must be ordered from Round 1 forward. All other child-slice,
+  API-leakage, documentation, and reliability checks were clean.
