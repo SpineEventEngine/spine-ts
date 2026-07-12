@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 3 fixes focused verified; Round 4 review pending
+Status: Slice 3 Round 4 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -548,3 +548,11 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   format, diff, and status checks. Native server loopback passes 21/21 after the
   expected sandbox-only `listen EPERM`. The fix is ready for a committed Round
   4 package; full verify and final security remain deferred.
+- `2026-07-12T23:34:35Z`: Round 4 package is
+  `.superpowers/sdd/review-871efa55..cdd8b951.diff` (one commit, 56,536 bytes).
+  Pre-review status/docs/API/policy lint is clean. Expected explicit profiles
+  are style Terra High, documentation Luna Medium, TypeScript/API docs Terra
+  High, and reliability Terra High. Prompts are bounded to dynamic rollback
+  promotion, stable generation-local overlap identity, exact worker stop
+  deduplication, attachment-path evidence, and current claims. Superseded
+  chronology and later lifecycle are non-actionable; security remains deferred.
