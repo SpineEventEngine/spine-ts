@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 5 docs fix committed; fresh review pending
+Status: Round 6 review active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54e1-4811-76e0-99de-6ea06f1f1c53` | P1     |
-| Documentation              | `019f54e1-48ab-77a3-90de-ca923caf0ae3` | P2     |
-| TypeScript/API docs        | `019f54e1-492e-76c1-a63a-25682a1cfc0e` | P1     |
-| Performance/reliability    | `019f54e1-49c9-7390-afd4-d9b03fa97af2` | P2     |
+| Code style/maintainability | `019f54eb-9835-7f21-93c6-ae4af96acb5f` | Active |
+| Documentation              | `019f54eb-98f0-7701-a78b-9862d0bbdc61` | Active |
+| TypeScript/API docs        | `019f54eb-997e-76b2-bab6-5cf1e6739911` | Active |
+| Performance/reliability    | `019f54eb-9a28-75c2-affb-9f1a17ab9a4d` | Active |
 
 Security is deferred to final project readiness.
 
@@ -274,3 +274,6 @@ Security is deferred to final project readiness.
   Fresh all-lane review remains required.
 - `2026-07-12T06:01:17Z`: Commit `96c27f11` recorded the verified Round 5
   stale-status fix. No fresh lane has run and no clean review is claimed.
+- `2026-07-12T06:02:39Z`: Generated fixed-baseline package
+  `.superpowers/sdd/review-0308bc4a..a8c2f3c5.diff` (31 commits, 135,277 bytes)
+  after a zero-match stale-status lint and assigned all four Round 6 lanes.

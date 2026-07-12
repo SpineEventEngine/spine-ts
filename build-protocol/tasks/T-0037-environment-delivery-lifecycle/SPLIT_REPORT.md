@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 5 docs fix committed; fresh review pending
+Status: Round 6 review active
 
 Baseline: `ab8fc9f4`
 
