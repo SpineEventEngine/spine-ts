@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Round 2 targeted re-review assigned
+Status: Complete and merge-ready
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -144,3 +144,19 @@ an applicable review or a concrete N/A disposition under
   High, and reliability Terra High. All four lanes are relevant because the fix
   changes internal contracts, runtime state transitions, tests, and current
   durable evidence. Security remains deferred.
+- `2026-07-12T18:13:25Z`: Round 2 is clean in all four lanes and every reviewer
+  is closed. Runtime fixed-role metadata confirms style, TypeScript/API docs,
+  and reliability used actual Terra High, while documentation used actual Luna
+  Medium, all matching explicit dispatch. The selected-reporting, explicit
+  cause-presence, safe-count, cause-cleanup, fulfilled-`FAILED`, and atomic
+  plural-reclassification fixes have no remaining actionable finding. Final
+  verification remains; security stays deferred to project readiness.
+- `2026-07-12T18:14:41Z`: Final cleanup enforcement found one 123-character
+  focused-test title. Wrapping that title is a mechanical post-review cleanup
+  with no runtime, contract, documentation, or test behavior change; the full
+  gate will restart.
+- `2026-07-12T18:18:06Z`: Restarted full verification passed 62 files and
+  1,380 tests in normal and coverage runs, all coverage thresholds, both
+  typecheck chains, lint/cleanup/format, TypeDoc/API, Protobuf, and generated
+  cleanliness. The post-review line wrap is N/A to every specialist concern;
+  all accepted review dispositions remain clean. T-0037c is merge-ready.

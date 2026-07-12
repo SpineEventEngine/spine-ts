@@ -100,7 +100,7 @@ describe("ParkedDeliveryObligations", () => {
     expect(obligations.records()).toEqual([]);
   });
 
-  it("reclassifies removed-owner work into a configured generation record without subset keys or duplicate causes", () => {
+  it("reclassifies removed-owner work without subset keys or duplicate causes", () => {
     const obligations = table();
     const one = new Error("one");
     const two = new Error("two");
