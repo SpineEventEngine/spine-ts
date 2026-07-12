@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 15 split fixes verified; fresh review pending
+Status: Round 16 findings accepted; fix pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -13,10 +13,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5588-77fb-74f0-8ae4-c48a0d43b0b2` | P1/P2  |
-| Documentation              | `019f5588-7899-7292-94f5-532d586f0f21` | Clean  |
-| TypeScript/API docs        | `019f5588-7920-7ef3-8cb1-f1e5025b6064` | P1     |
-| Performance/reliability    | `019f5588-79bd-7520-a553-d5a7f15eb456` | Clean  |
+| Code style/maintainability | `019f559e-393d-7cb0-9b7c-ee4bc03da726` | P2    |
+| Documentation              | `019f559e-39dc-7e81-8032-dbb76acfdf91` | P1/P2 |
+| TypeScript/API docs        | `019f559e-3a68-74e2-b469-89d3e05dc138` | P1    |
+| Performance/reliability    | `019f559e-3afc-7ae1-ac6b-4505eaef48ae` | P1/P2 |
 
 Security is deferred to final project readiness.
 
@@ -769,3 +769,14 @@ Security is deferred to final project readiness.
   ledger, exact 11-file scope/frozen-path, `pnpm docs:check`,
   `pnpm format:check`, and `git diff --check` checks. TypeDoc retained 205 server
   exports with only the known invalid-`origin` warning. Fresh review is required.
+- `2026-07-12T09:17:46Z`: Committed the verified Round 15 split as `a86825d7`,
+  resolved full endpoint `a86825d79396960be57fef0fed216a9047744059`, and
+  generated `.superpowers/sdd/review-0308bc4a..a86825d7.diff` with that literal
+  endpoint in its header (63 commits, 266,559 bytes). Passed lightweight pre-
+  review lint and assigned all four Round 16 lanes.
+- `2026-07-12T09:21:59Z`: Closed all four Round 16 lanes. Accepted one cleanup
+  batch: replace stale active `T-0037e` ownership in T-0037b/c/d with exact
+  e1/e2/e3 owners; correct the top-level architecture from six to eight children;
+  and require each e2 reporting/retirement error test to create non-empty
+  transition-buffer work before proving all-scope exact-once transfer. All other
+  split, API-boundary, documentation, and reliability checks were clean.
