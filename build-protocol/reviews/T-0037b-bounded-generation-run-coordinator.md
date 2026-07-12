@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 2 fixes assigned; worker paused
+Status: Review Round 2 fixes verified; fresh package pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -194,3 +194,33 @@ Security is deferred to final project readiness.
 - `2026-07-12T12:56:48Z`: Resumed sole author
   `019f5626-b85c-7da3-8971-98e0ae652b25` as the one Round 2 fix worker, paused
   until this assignment provenance commits. No reviewer remains open.
+- `2026-07-12T12:59:50Z`: Assignment provenance `ead42cd8` was confirmed. The
+  sole author technically verified and accepted all five findings under the
+  existing review-reception/TDD skill record. Focused behavioral RED is active;
+  terminal-checkpoint, declaration-order, and task-wording corrections follow
+  without public API expansion.
+- `2026-07-12T13:01:30Z`: Behavioral RED produced seven intended failures across
+  notify-only fatal visibility, ordered retirement aggregation, both obligation
+  identity levels, and all three exact-shard-domain variants. Terminal rejection
+  idempotency already passes and will be preserved by one final checkpoint.
+- `2026-07-12T13:01:54Z`: Docs/status chronology check confirmed this review-log
+  event block is strictly ordered. The work log alone needs its misplaced
+  `12:40:44Z` entries restored before completion.
+- `2026-07-12T13:04:56Z`: Live-source reconciliation confirmed the primary class
+  now immediately follows imports and the active finalizer has one slot-clear
+  assignment. The coordinator note described an earlier transient state; no
+  duplicate remains in the current patch.
+- `2026-07-12T13:06:11Z`: All five findings are implemented. Eight selected
+  GREEN cases and all 27 coordinator tests passed; tooling typecheck and focused
+  ESLint passed. Retained fatal visibility/ordered aggregation, exact evidence
+  validation, one final checkpoint, primary declaration order, corrected stop-
+  retry wording, and log chronology are ready for the focused completion gate.
+- `2026-07-12T13:07:45Z`: Round 2 completion verification passed four focused
+  files and 178 tests, both canonical typechecks, changed-file ESLint/Prettier,
+  lightweight status/public-leak/duplicate-policy/overclaim/chronology checks,
+  and `git diff --check`. Expanded fatal aggregation has no remaining failure or
+  hang. Five exact files remain uncommitted for coordinator verification.
+- `2026-07-12T13:09:28Z`: Independent coordinator verification passed 178
+  focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
+  diff hygiene. All five Round 2 fixes and durable chronology are accepted; the
+  worker is closed. A fresh literal-endpoint package and all four lanes remain.

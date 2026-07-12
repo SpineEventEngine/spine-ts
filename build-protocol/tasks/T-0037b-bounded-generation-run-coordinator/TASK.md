@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Review Round 2 fixes assigned; worker paused
+Status: Review Round 2 fixes verified; fresh package pending
 
 Started: `2026-07-12T11:43:52Z`
 
@@ -77,8 +77,9 @@ or make the instance reusable; cleanup failure may leak only inert resources.
 The primitive may settle with the combined error only after retirement/cleanup
 is attempted, and that postcondition is safe for a lifecycle owner to clear or
 replace the slot. A distinct inability to establish quiescence prohibits
-replacement. An explicit retry resumes that same admission-closed, stopped
-primitive invocation without repeating admission closure or stop. Once the
+replacement. An explicit retry resumes that same admission-closed primitive
+invocation without repeating admission closure or a successfully completed
+stop; a stop that threw before quiescence must be retried. Once the
 retry proves quiescence, it performs classification, the caller-supplied
 eligible record consumption/reporting step, and permanent retirement/cleanup
 exactly once. The primitive is idempotent and reusable by later lifecycle

@@ -9,56 +9,6 @@ import {
 } from "./delivery-worker.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** @internal Canonical tenant, endpoint, and shard identity admitted for one generation. */
-export type DeliveryRunScope = DeliveryReady;
-
-/** @internal Finite package-owned worker obligation for one canonical scope union. */
-export interface DeliveryRunObligation extends DeliveryWorkerObligation {
-  readonly scopes: readonly DeliveryRunScope[];
-}
-
-/** @internal Generation worker seam used by the bounded run coordinator. */
-export interface DeliveryRunWorker {
-  start(
-    obligation: DeliveryRunObligation,
-    shards: readonly ShardIndex[],
-  ): Promise<DeliveryWorkerEvidence>;
-  /** Irreversibly stops loop admission. A throw means stop did not complete and must be retried. */
-  stop(): void;
-  /** Waits for active work to settle without interrupting it; rejection means quiescence is unproved. */
-  awaitSettled(): Promise<void>;
-  /**
-   * Requires a completed stop and proven settlement. Permanently closes every
-   * worker start entry before settling, even when inert-resource cleanup fails.
-   */
-  retire(): Promise<void>;
-}
-
-/** @internal Latest bounded disposition for one configured canonical scope. */
-export interface DeliveryScopeSettlement {
-  readonly scope: DeliveryRunScope;
-  readonly disposition: "IDLE" | "PARKED" | "REJECTED" | "STOPPED";
-  readonly cause?: unknown;
-  readonly progress?: DeliveryLoopProgress;
-}
-
-/** @internal Bounded generation evidence retained by the coordinator. */
-export interface DeliveryRunSettlement {
-  readonly scopes: readonly DeliveryScopeSettlement[];
-  readonly pending: readonly DeliveryRunScope[];
-}
-
-/** @internal Retirement failed before quiescence and the instance cannot be replaced. */
-export class DeliveryRunQuiescenceError extends Error {
-  override readonly cause: unknown;
-
-  constructor(cause: unknown) {
-    super("Delivery run coordinator could not establish quiescence.");
-    this.name = "DeliveryRunQuiescenceError";
-    this.cause = cause;
-  }
-}
-
 /** @internal Serializes finite worker starts for one delivery generation. */
 export class DeliveryRunCoordinator {
   readonly #worker: DeliveryRunWorker;
@@ -68,11 +18,10 @@ export class DeliveryRunCoordinator {
   #active: Promise<void> | undefined;
   #accepting = true;
   #stopCalled = false;
-  #replacementSafe = false;
-  #retired = false;
+  #fault: Error | undefined;
+  #final: DeliveryRunFinal | undefined;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
-  #retirementFinal = false;
 
   constructor(options: {
     readonly scopes: readonly DeliveryRunScope[];
@@ -89,16 +38,19 @@ export class DeliveryRunCoordinator {
   }
 
   get replacementSafe(): boolean {
-    return this.#replacementSafe;
+    return this.#final !== undefined;
   }
 
   get retired(): boolean {
-    return this.#retired;
+    return this.#final !== undefined;
   }
 
   start(scopes: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
     if (!this.#accepting) {
       return Promise.reject(new Error("Delivery run coordinator admission is closed."));
+    }
+    if (this.#fault !== undefined) {
+      return Promise.reject(this.#fault);
     }
     try {
       this.#admit(scopes);
@@ -110,7 +62,7 @@ export class DeliveryRunCoordinator {
   }
 
   notify(scope: DeliveryRunScope): void {
-    if (!this.#accepting) {
+    if (!this.#accepting || this.#fault !== undefined) {
       return;
     }
     try {
@@ -142,7 +94,7 @@ export class DeliveryRunCoordinator {
     }
 
     const retirement = this.#advanceRetirement().catch((error: unknown) => {
-      if (!this.#retirementFinal) {
+      if (this.#final === undefined) {
         this.#retirement = undefined;
       }
       throw error;
@@ -168,10 +120,15 @@ export class DeliveryRunCoordinator {
     if (this.#active !== undefined) {
       return this.#active;
     }
-    const active = this.#drainPending().finally(() => {
+    const draining = this.#drainPending().catch((cause: unknown) => {
+      const fault = asError(cause);
+      this.#fault ??= fault;
+      throw this.#fault;
+    });
+    const active = draining.finally(() => {
       if (this.#active === active) {
         this.#active = undefined;
-        if (this.#accepting && this.#pending.size > 0) {
+        if (this.#accepting && this.#fault === undefined && this.#pending.size > 0) {
           return this.#ensureActive();
         }
       }
@@ -199,6 +156,7 @@ export class DeliveryRunCoordinator {
         this.#recordStartFailure(scopes, shards, cause);
         return;
       }
+      validateWorkerEvidence(obligation, shards, evidence);
       const rejected = this.#recordEvidence(scopes, evidence);
       this.#parkPending(rejected);
       if (!this.#accepting) {
@@ -260,14 +218,14 @@ export class DeliveryRunCoordinator {
       this.#stopCalled = true;
     }
 
+    await this.#active?.catch(() => undefined);
     try {
-      await this.#active;
       await this.#worker.awaitSettled();
     } catch (cause) {
       throw new DeliveryRunQuiescenceError(cause);
     }
 
-    const failures: unknown[] = [];
+    const failures: unknown[] = this.#fault === undefined ? [] : [this.#fault];
     try {
       await this.#onReport?.(this.settlement());
     } catch (error) {
@@ -278,11 +236,63 @@ export class DeliveryRunCoordinator {
     } catch (error) {
       failures.push(error);
     }
-    this.#replacementSafe = true;
-    this.#retired = true;
-    this.#retirementFinal = true;
+    this.#final = Object.freeze({ complete: true });
     throwFailures(failures);
   }
+}
+
+/** @internal Canonical tenant, endpoint, and shard identity admitted for one generation. */
+export type DeliveryRunScope = DeliveryReady;
+
+/** @internal Finite package-owned worker obligation for one canonical scope union. */
+export interface DeliveryRunObligation extends DeliveryWorkerObligation {
+  readonly scopes: readonly DeliveryRunScope[];
+}
+
+/** @internal Generation worker seam used by the bounded run coordinator. */
+export interface DeliveryRunWorker {
+  start(
+    obligation: DeliveryRunObligation,
+    shards: readonly ShardIndex[],
+  ): Promise<DeliveryWorkerEvidence>;
+  /** Irreversibly stops loop admission. A throw means stop did not complete and must be retried. */
+  stop(): void;
+  /** Waits for active work to settle without interrupting it; rejection means quiescence is unproved. */
+  awaitSettled(): Promise<void>;
+  /**
+   * Requires a completed stop and proven settlement. Permanently closes every
+   * worker start entry before settling, even when inert-resource cleanup fails.
+   */
+  retire(): Promise<void>;
+}
+
+/** @internal Latest bounded disposition for one configured canonical scope. */
+export interface DeliveryScopeSettlement {
+  readonly scope: DeliveryRunScope;
+  readonly disposition: "IDLE" | "PARKED" | "REJECTED" | "STOPPED";
+  readonly cause?: unknown;
+  readonly progress?: DeliveryLoopProgress;
+}
+
+/** @internal Bounded generation evidence retained by the coordinator. */
+export interface DeliveryRunSettlement {
+  readonly scopes: readonly DeliveryScopeSettlement[];
+  readonly pending: readonly DeliveryRunScope[];
+}
+
+/** @internal Retirement failed before quiescence and the instance cannot be replaced. */
+export class DeliveryRunQuiescenceError extends Error {
+  override readonly cause: unknown;
+
+  constructor(cause: unknown) {
+    super("Delivery run coordinator could not establish quiescence.");
+    this.name = "DeliveryRunQuiescenceError";
+    this.cause = cause;
+  }
+}
+
+interface DeliveryRunFinal {
+  readonly complete: true;
 }
 
 /** @internal Adapts a T-0036 worker to the generation coordinator seam. */
@@ -323,6 +333,32 @@ function pausedShards(evidence: DeliveryWorkerEvidence): readonly ShardIndex[] {
         : [],
     ),
   );
+}
+
+function validateWorkerEvidence(
+  obligation: DeliveryRunObligation,
+  requested: readonly ShardIndex[],
+  evidence: DeliveryWorkerEvidence,
+): void {
+  if (evidence.obligation !== obligation) {
+    throw new Error("Delivery worker evidence obligation does not match the current obligation.");
+  }
+
+  const requestedKeys = new Set(requested.map((shard) => shard.key()));
+  const seen = new Set<string>();
+  for (const shard of evidence.shards) {
+    if (shard.obligation !== obligation) {
+      throw new Error("Delivery worker shard obligation does not match the current obligation.");
+    }
+    const key = shard.shard.key();
+    if (!requestedKeys.has(key) || seen.has(key)) {
+      throw new Error("Delivery worker evidence does not match the requested shard domain.");
+    }
+    seen.add(key);
+  }
+  if (seen.size !== requestedKeys.size) {
+    throw new Error("Delivery worker evidence does not match the requested shard domain.");
+  }
 }
 
 function shardSettlement(

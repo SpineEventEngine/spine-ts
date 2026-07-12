@@ -218,6 +218,89 @@ describe("DeliveryRunCoordinator", () => {
     expect(coordinator.settlement().scopes).toEqual([]);
   });
 
+  it("surfaces a notify-only invariant fault at the next observable start", async () => {
+    const configured = scope("first", 0, 1);
+    const worker = new FakeRunWorker([
+      (obligation) => malformedWorkerEvidence(obligation, configured.shard),
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+    coordinator.notify(configured);
+    await until(() => worker.starts.length === 1);
+    await flushMicrotasks();
+
+    await expect(coordinator.start([configured])).rejects.toThrow(TypeError);
+    expect(worker.starts).toHaveLength(1);
+  });
+
+  it("retires after a notify-only fault and aggregates every final failure", async () => {
+    const configured = scope("first", 0, 1);
+    const events: string[] = [];
+    const reportingFailure = new Error("reporting failed");
+    const cleanupFailure = new Error("cleanup failed");
+    const worker = new FakeRunWorker(
+      [(obligation) => malformedWorkerEvidence(obligation, configured.shard)],
+      events,
+    );
+    worker.retireFailure = cleanupFailure;
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+    coordinator.notify(configured);
+    await until(() => worker.starts.length === 1);
+    await flushMicrotasks();
+    const thrown = await coordinator
+      .retire(() => {
+        events.push("report");
+        return Promise.reject(reportingFailure);
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([
+      expect.any(TypeError),
+      reportingFailure,
+      cleanupFailure,
+    ]);
+    expect(events).toEqual(["stop", "await", "report", "retire"]);
+    expect(coordinator.replacementSafe).toBe(true);
+    expect(coordinator.retired).toBe(true);
+  });
+
+  it.each(["top-level", "shard"] as const)(
+    "rejects %s obligation identity mismatch",
+    async (kind) => {
+      const configured = scope("first", 0, 1);
+      const worker = new FakeRunWorker([
+        (obligation) => identityMismatchEvidence(kind, obligation, configured.shard),
+      ]);
+      const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+      await expect(coordinator.start([configured])).rejects.toThrow(
+        kind === "top-level"
+          ? "Delivery worker evidence obligation does not match the current obligation."
+          : "Delivery worker shard obligation does not match the current obligation.",
+      );
+      expect(coordinator.settlement().scopes).toEqual([]);
+    },
+  );
+
+  it.each(["missing", "duplicate", "foreign"] as const)(
+    "rejects %s shard evidence outside the exact requested domain",
+    async (kind) => {
+      const scopes = [scope("first", 0, 2), scope("second", 1, 2)];
+      const worker = new FakeRunWorker([
+        (obligation) => shardDomainMismatchEvidence(kind, obligation),
+      ]);
+      const coordinator = new DeliveryRunCoordinator({ scopes, worker });
+
+      await expect(coordinator.start(scopes)).rejects.toThrow(
+        "Delivery worker evidence does not match the requested shard domain.",
+      );
+      expect(coordinator.settlement().scopes).toEqual([]);
+    },
+  );
+
   it("retires in stop, quiescence, report, and cleanup order", async () => {
     const events: string[] = [];
     const worker = new FakeRunWorker([], events);
@@ -319,6 +402,30 @@ describe("DeliveryRunCoordinator", () => {
 
     expect(thrown).toBeInstanceOf(AggregateError);
     expect((thrown as AggregateError).errors).toEqual([reportingFailure, cleanupFailure]);
+    expect(coordinator.replacementSafe).toBe(true);
+    expect(coordinator.retired).toBe(true);
+  });
+
+  it("retains a final rejection without repeating retirement phases", async () => {
+    const events: string[] = [];
+    const cleanupFailure = new Error("cleanup failed");
+    const worker = new FakeRunWorker([], events);
+    worker.retireFailure = cleanupFailure;
+    const coordinator = new DeliveryRunCoordinator({ scopes: [scope("first", 0, 1)], worker });
+    let reports = 0;
+    const onReport = () => {
+      reports += 1;
+      events.push("report");
+      return Promise.resolve();
+    };
+
+    await expect(coordinator.retire(onReport)).rejects.toBe(cleanupFailure);
+    await expect(coordinator.retire(onReport)).rejects.toBe(cleanupFailure);
+
+    expect(events).toEqual(["stop", "await", "report", "retire"]);
+    expect(reports).toBe(1);
+    expect(worker.stopCalls).toBe(1);
+    expect(worker.retireCalls).toBe(1);
     expect(coordinator.replacementSafe).toBe(true);
     expect(coordinator.retired).toBe(true);
   });
@@ -610,6 +717,53 @@ function malformedWorkerEvidence(
   }) as unknown as DeliveryWorkerEvidence;
 }
 
+function identityMismatchEvidence(
+  kind: "top-level" | "shard",
+  obligation: DeliveryRunObligation,
+  shard: ShardIndex,
+): DeliveryWorkerEvidence {
+  const foreign = Object.freeze({ scopes: obligation.scopes });
+  return Object.freeze({
+    obligation: kind === "top-level" ? foreign : obligation,
+    shards: Object.freeze([
+      Object.freeze({
+        status: "fulfilled",
+        shard,
+        obligation: kind === "shard" ? foreign : obligation,
+        run: loopRun("IDLE"),
+        progress: loopProgress(),
+      }),
+    ]),
+  });
+}
+
+function shardDomainMismatchEvidence(
+  kind: "missing" | "duplicate" | "foreign",
+  obligation: DeliveryRunObligation,
+): DeliveryWorkerEvidence {
+  const requested = [fulfilledEvidence(obligation, new ShardIndex(0, 2))];
+  if (kind === "duplicate") {
+    requested.push(fulfilledEvidence(obligation, new ShardIndex(0, 2)));
+  }
+  if (kind === "foreign") {
+    requested.push(fulfilledEvidence(obligation, new ShardIndex(0, 3)));
+  }
+  return Object.freeze({ obligation, shards: Object.freeze(requested) });
+}
+
+function fulfilledEvidence(
+  obligation: DeliveryRunObligation,
+  shard: ShardIndex,
+): DeliveryShardEvidence {
+  return Object.freeze({
+    status: "fulfilled",
+    shard,
+    obligation,
+    run: loopRun("IDLE"),
+    progress: loopProgress(),
+  });
+}
+
 function loopRun(status: DeliveryLoopRun["status"]): DeliveryLoopRun {
   return Object.freeze({
     status,
@@ -675,6 +829,12 @@ async function until(condition: () => boolean): Promise<void> {
     await Promise.resolve();
   }
   throw new Error("Condition was not reached.");
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await Promise.resolve();
+  }
 }
 
 function entry<T>(values: readonly T[], index: number): T {
