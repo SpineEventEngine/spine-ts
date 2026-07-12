@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 3 fixes verified; fresh review pending
+Status: Round 3 fixes committed; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -47,8 +47,8 @@ and must not start a worker or attach an environment registration.
 The verified Round 1 fix was committed as `3847e1b6`; reconciliation through
 `80ef21e2` formed the Round 2 review boundary. Round 2 fixes were committed as
 `7281ba07`. Round 3 reviewed package `0308bc4a..49b3fb4b`; its accepted docs
-fixes are authored and passed worker verification. Coordinator verification and
-fresh four-lane review remain pending. No clean review is claimed.
+fixes were committed as `97107fae` after worker and coordinator verification.
+Fresh four-lane review remains pending. No clean review is claimed.
 
 ## Verification
 

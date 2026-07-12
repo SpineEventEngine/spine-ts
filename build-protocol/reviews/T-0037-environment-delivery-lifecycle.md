@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 3 fixes verified; fresh review pending
+Status: Round 3 fixes committed; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -207,3 +207,6 @@ Security is deferred to final project readiness.
   contracts, closed the fix worker, and repeated docs/API, format, diff, exact-
   scope, stale-status, public-leak, and race-wording checks. All passed with the
   known invalid-`origin` warning only. Fresh all-lane review remains required.
+- `2026-07-12T05:32:03Z`: Commit `97107fae` recorded the complete verified
+  Round 3 docs fixes. No fresh lane has been assigned or run and no clean review
+  is claimed.
