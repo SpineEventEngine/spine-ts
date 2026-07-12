@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 5 four-lane review in progress
+Status: Slice 2 review clean; Slice 3 implementation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -388,3 +388,7 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected profiles: style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-12T23:02:00Z`: Round 5 is clean and every reviewer is closed.
+  Runtime profiles matched dispatch. Slice 2 review is closed. Slice 3 is
+  assigned to one Terra Medium owner; its four-lane review remains pending
+  focused implementation and verification.

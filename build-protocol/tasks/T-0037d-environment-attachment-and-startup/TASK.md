@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 5 four-lane review in progress
+Status: Slice 2 review clean; Slice 3 implementation assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -371,6 +371,15 @@ unknown dynamic scopes through the already-transferred peer, prove the
 attachment fails closed after the peer settles, and prove no coordinator work
 was admitted and no unknown per-key state was retained. Direct helper-only
 coverage does not satisfy this lifecycle race.
+
+Round 5 accepted all Slice 2 behavior and evidence with four clean lanes. Slice
+2 is closed. Slice 3 now owns only registration-scoped failed-start rollback:
+sibling isolation, D-0085 blocker shaping, sole failed-generation quiescence/
+classification/reporting/retirement/slot clearing, cleanup/reporting failure
+safety, and same-operation retry after quiescence failure. It consumes the
+existing T-0037b retirement primitive and T-0037c records without reopening
+their contracts. Ordinary detach/stop/close and server lifecycle integration
+remain later tasks.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now
