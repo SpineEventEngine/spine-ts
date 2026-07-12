@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 8 findings accepted; fix pending
+Status: Round 8 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -365,3 +365,6 @@ Security is deferred to final project readiness.
   buffered transfer, and delayed error propagation; the split-report active
   verification paragraph must record completed Round 7 verification and
   `628224d4`. Every other lane is clean.
+- `2026-07-12T06:41:42Z`: Assigned single Round 8 docs fix worker
+  `019f550f-5342-7af0-b0d5-0e50f9450c6c` with the retirement-failure TDD and
+  stale split-report batch. Runtime/public/generated scope remains frozen.
