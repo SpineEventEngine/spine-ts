@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Six-slice decomposition accepted; docs review not started
+Status: Durable split author active; docs review not started
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -36,3 +36,6 @@ Security is deferred to final project readiness.
   Parent T-0037 is now a docs/sequencing task. A single docs author must create
   the durable child briefs and invariant map before the four required review
   lanes are assigned.
+- `2026-07-12T04:28:00Z`: Assigned split author
+  `019f5492-4938-7522-a8c4-ddff533eab67`. Four required lanes remain pending
+  author return, coordinator verification, and fixed-baseline packaging.
