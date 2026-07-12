@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Implementation author assigned; test-first work pending
+Status: Pre-review fixes complete; required four-lane review pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -65,8 +65,10 @@ complete internal interface without reopening worker internals.
 ## Test-First Acceptance
 
 - Continuous supported appends do not extend an admitted epoch.
-- A large unsupported prefix pauses, then resumes beyond saved progress to an
-  admitted supported tail without restarting at the head.
+- A large unsupported prefix pauses, then resumes the active admitted epoch
+  beyond saved progress without restarting that epoch at the head. Completed
+  capped admission passes may restart at the head to keep later backdated rows
+  eligible while growing pass depth preserves forward progress.
 - Useful work is bounded per start like skipped work.
 - Mixed `PAUSED`/`FAILED`/`SKIPPED` selectively reruns only `PAUSED`.
 - Rejected and fulfilled sibling shard evidence remains ordered and associated.
@@ -125,3 +127,49 @@ membership.
 - NOTE: Initial focused test/typecheck attempts failed only because fresh
   ignored workspace/protobuf outputs were absent; dependency install and
   `proto:generate` restored the expected baseline without tracked output.
+- PASS: TDD cycle 1 proved normally ordered and backdated callback writes were
+  previously admitted during an active run, then passed after exact-ID snapshot
+  admission and bounded useful-work continuation.
+- PASS: TDD cycle 2 proved the internal ordered shard-evidence invocation was
+  absent, then passed with selective `PAUSED` continuation and associated
+  shard/obligation/cause/progress evidence.
+- PASS: TDD cycle 3 proved admission rejection could expose stale prior-epoch
+  progress, then passed after progress reset moved before admission.
+- PASS: Focused loop/worker baseline expanded to 3 files / 128 tests; focused
+  loop/worker/delivery/inbox regressions passed 4 files / 257 tests.
+- PASS: Generated TypeScript build (`tsc -b`). Full `pnpm verify` was not run,
+  per task direction.
+- FINDING: Coordinator pre-review audit found that retaining only the capped
+  ordering continuation can permanently bypass a post-admission backdated row
+  at or before that continuation. The starvation fix must preserve eventual
+  eligibility of those rows without extending the active immutable epoch.
+- FINDING: Changed-file ESLint reports two stop guards as statically
+  unnecessary. Preserve the asynchronous stop behavior through a lint-clean
+  implementation.
+- PASS: TDD cycle 5 proved that a later backdated row remained bypassed while
+  every subsequent admission stayed capped, then passed after finite growing
+  admission sweeps periodically restarted from the inbox head.
+- PASS: Final pre-review fix verification: loop suite 39 tests; four-file
+  delivery suite 258 tests; generated `tsc -b`; changed-file ESLint over all
+  five changed TypeScript source/test files.
+- PASS: Coordinator repeated the 4-file / 258-test suite, generated build,
+  changed-file ESLint, `docs:check`, `format:check`, and `git diff --check`.
+  Documentation emitted only the existing invalid-`origin` source-link warning.
+
+## Implementation Result
+
+- Each loop admits up to 10,000 exact pending message IDs in immutable inbox
+  order and retains only an opaque index across `PAUSED`. Completed capped
+  epochs advance through finite admission sweeps whose depth doubles between
+  passes. Restarting each pass at the head keeps later backdated rows eligible;
+  increasing depth preserves progress through arbitrary finite unsupported
+  prefixes without an ever-growing remembered-ID set.
+- Exact-message epoch drains exclude all post-admission rows regardless of
+  caller timestamp/version ordering and bound both supported and skipped work.
+- Package-internal worker evidence preserves configured order, obligation,
+  fulfilled run/progress, and rejected original cause/progress. Direct
+  `DeliveryWorker.start()` retains its existing throw policy.
+- No root export, environment lifecycle, retry timing, generated source,
+  example, or public delivery declaration changed.
+- Stop observed during admission prevents the first drain; stop after a drain
+  starts still lets that drain settle before `STOPPED`.

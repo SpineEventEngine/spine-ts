@@ -137,21 +137,25 @@ describe("DeliveryWorker", () => {
   it("close waits for active loop drains", async () => {
     const delivery = createDelivery();
     const barrier = deferred<undefined>();
+    const started = deferred<undefined>();
     const worker = new DeliveryWorker({
       delivery,
       shards: [ShardIndex.single()],
       node: "worker-a",
-      onMessage: () => barrier.promise,
+      onMessage() {
+        started.resolve(undefined);
+        return barrier.promise;
+      },
     });
     let closed = false;
 
     await seed(delivery, "signal-slow", 1n);
     const running = worker.start();
+    await started.promise;
     const closing = worker.close().then(() => {
       closed = true;
     });
 
-    await Promise.resolve();
     expect(closed).toBe(false);
 
     barrier.resolve(undefined);
@@ -218,6 +222,144 @@ describe("DeliveryWorker", () => {
 
     expect(thrown).toBeInstanceOf(AggregateError);
     expect((thrown as AggregateError).errors).toEqual([first, second]);
+    restore();
+  });
+
+  it("selectively continues only paused fulfilled shards for the same obligation", async () => {
+    const delivery = createDelivery();
+    const shards = [new ShardIndex(0, 3), new ShardIndex(1, 3), new ShardIndex(2, 3)];
+    const calls: number[] = [];
+    const restore = deliveryAccess.replace(delivery, (shard) => {
+      calls.push(shard.index);
+      if (shard.index === 0) {
+        return Promise.resolve(
+          Object.freeze({
+            ...deliveryOutcome(),
+            exhaustedSkippedScan: true,
+            epochProgress: Object.freeze({ next: 0, complete: false }),
+          }),
+        );
+      }
+      if (shard.index === 1) {
+        return Promise.resolve(deliveryOutcome(deliveryRun({ failed: 1 })));
+      }
+      return Promise.resolve(deliveryOutcome(deliveryRun({ status: "SKIPPED" })));
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({ kind: "startup" });
+
+    const first = await deliveryWorkerAccess.start(worker, obligation);
+
+    expect(first.shards.map((result) => result.status)).toEqual([
+      "fulfilled",
+      "fulfilled",
+      "fulfilled",
+    ]);
+    expect(
+      first.shards.map((result) => (result.status === "fulfilled" ? result.run.status : undefined)),
+    ).toEqual(["PAUSED", "FAILED", "SKIPPED"]);
+    expect(first.shards.map(({ shard }) => shard)).toEqual(shards);
+    expect(first.shards.every((result) => result.obligation === obligation)).toBe(true);
+    expect(calls).toEqual([0, 1, 2, 0]);
+
+    calls.length = 0;
+    const continued = await deliveryWorkerAccess.start(worker, obligation);
+
+    expect(continued.shards).toHaveLength(1);
+    expect(continued.shards[0]).toMatchObject({
+      status: "fulfilled",
+      shard: shards[0],
+      obligation,
+      run: { status: "PAUSED" },
+    });
+    expect(calls).toEqual([0, 0]);
+    restore();
+  });
+
+  it("keeps ordered rejected causes with fulfilled sibling progress and obligation", async () => {
+    const firstCause = new Error("first shard failed");
+    const secondCause = new Error("third shard failed");
+    const delivery = createDelivery();
+    const shards = [new ShardIndex(0, 3), new ShardIndex(1, 3), new ShardIndex(2, 3)];
+    const restore = deliveryAccess.replace(delivery, (shard) => {
+      if (shard.index === 0) {
+        return Promise.reject(firstCause);
+      }
+      if (shard.index === 2) {
+        return Promise.reject(secondCause);
+      }
+      return Promise.resolve(deliveryOutcome());
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({ kind: "notification" });
+
+    const evidence = await deliveryWorkerAccess.start(worker, obligation);
+
+    expect(evidence.shards.map(({ status }) => status)).toEqual([
+      "rejected",
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(evidence.shards.map(({ shard }) => shard)).toEqual(shards);
+    expect(evidence.shards.every((result) => result.obligation === obligation)).toBe(true);
+    expect(
+      evidence.shards.map((result) =>
+        result.status === "rejected" ? result.cause : result.run.status,
+      ),
+    ).toEqual([firstCause, "IDLE", secondCause]);
+    expect(evidence.shards[0]).toMatchObject({
+      status: "rejected",
+      cause: firstCause,
+      progress: { runs: 0, processed: 0, accepted: 0, delivered: 0, failed: 0 },
+    });
+    restore();
+  });
+
+  it("retries a rejected shard only after a later explicit invocation", async () => {
+    const cause = new Error("first shard failed once");
+    const delivery = createDelivery();
+    const shards = [new ShardIndex(0, 2), new ShardIndex(1, 2)];
+    const calls: number[] = [];
+    let rejectFirstShard = true;
+    const restore = deliveryAccess.replace(delivery, (shard) => {
+      calls.push(shard.index);
+      if (shard.index === 0 && rejectFirstShard) {
+        rejectFirstShard = false;
+        return Promise.reject(cause);
+      }
+      return Promise.resolve(deliveryOutcome());
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({ kind: "retry" });
+
+    const first = await deliveryWorkerAccess.start(worker, obligation);
+
+    expect(first.shards.map(({ status }) => status)).toEqual(["rejected", "fulfilled"]);
+    expect(calls).toEqual([0, 1]);
+    await Promise.resolve();
+    expect(calls).toEqual([0, 1]);
+
+    const retried = await deliveryWorkerAccess.start(worker, obligation);
+
+    expect(retried.shards).toMatchObject([
+      { status: "fulfilled", shard: shards[0], obligation, run: { status: "IDLE" } },
+    ]);
+    expect(calls).toEqual([0, 1, 0]);
     restore();
   });
 
@@ -297,7 +439,7 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-function deliveryRun(): DeliveryRun {
+function deliveryRun(overrides: Partial<DeliveryRun> = {}): DeliveryRun {
   return Object.freeze({
     status: "DRAINED",
     processed: 0,
@@ -305,6 +447,7 @@ function deliveryRun(): DeliveryRun {
     delivered: 0,
     failed: 0,
     failures: Object.freeze([]),
+    ...overrides,
   });
 }
 

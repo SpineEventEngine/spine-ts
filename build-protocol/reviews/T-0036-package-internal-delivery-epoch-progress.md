@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Implementation author assigned; review pending
+Status: Pre-review fixes complete; required four-lane review not started
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -45,3 +45,41 @@ Security is deferred to final project readiness.
 - `2026-07-12T01:59:00Z`: Assigned single implementation author
   `019f540c-561a-7803-8e47-5dc9acad565b`. Fresh four-lane review remains pending
   author and coordinator verification.
+- `2026-07-12T02:16:18Z`: Implementation and focused verification completed.
+  Three initial red/green cycles, 3-file / 128-test loop/worker verification,
+  4-file / 254-test delivery regression verification, and generated `tsc -b`
+  passed.
+  Fresh code style, documentation, TypeScript/API docs, and
+  performance/reliability review lanes are next.
+- `2026-07-12T02:23:27Z`: The implementation author ran advisory read-only
+  code style, documentation, TypeScript/API docs, and performance/reliability
+  audits. These do not satisfy the required independent four-lane review. The
+  advisory reliability audit found two actionable issues: capped unsupported
+  epochs could repeatedly re-admit the same head and starve a supported tail,
+  and stop during admission could start a later drain. Both findings were
+  reproduced by cycle 4 RED tests.
+- `2026-07-12T02:24:52Z`: Fixed both reliability findings. A completed cap
+  advances the next explicit epoch beyond the unsupported head, and stop during
+  admission starts zero drains. Focused regressions and the full 38-test loop
+  suite passed; required independent review remains pending.
+- `2026-07-12T02:31:47Z`: Coordinator pre-review verification passed 4 files /
+  257 tests and generated TypeScript build, then found that the retained cap
+  continuation can permanently bypass a later backdated row at or before that
+  boundary. Changed-file ESLint also found two statically unnecessary stop
+  guards. Both issues must be fixed before the review package is committed.
+- `2026-07-12T02:38:06Z`: Pre-review fix cycle 5 reproduced the backdated-row
+  bypass under a continuously capped tail, then replaced the sticky boundary
+  with finite growing admission sweeps. Stop checks remain after admission and
+  active-drain awaits through a lint-clean lifecycle query. The loop suite
+  passed 39 tests, the four-file delivery suite passed 258 tests, generated
+  `tsc -b` passed, and changed-file ESLint passed. No required reviewer lane ran
+  during this fix batch.
+- `2026-07-12T02:40:00Z`: Closed the pre-review fix worker. Lightweight
+  docs/status lint passed after clarifying that only a completed capped
+  admission pass may restart at the head. Current status, worker closure,
+  commit ledger, package-root API leakage, policy constants, and deferred
+  lifecycle wording are aligned. Required reviewers remain unassigned.
+- `2026-07-12T02:42:00Z`: Coordinator pre-commit gate passed 4 files / 258
+  tests, generated build, changed-file ESLint, docs/API checks, formatting, and
+  whitespace. The implementation is ready to commit and package for the first
+  required independent four-lane review.
