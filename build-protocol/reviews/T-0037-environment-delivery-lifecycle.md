@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 7 docs fixes verified; fresh review pending
+Status: Round 8 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54fa-bf5b-7210-8df9-f58ad944fa09` | P1     |
-| Documentation              | `019f54fa-bfc9-7512-905a-d5f2ef0c8f5c` | P1     |
-| TypeScript/API docs        | `019f54fa-c050-7612-a80b-8ec157e1fe36` | P2     |
-| Performance/reliability    | `019f54fa-c0ce-7811-9f99-796504d5158e` | P1/P2  |
+| Code style/maintainability | `019f550a-8deb-7b41-aa73-a93c569a9196` | P2     |
+| Documentation              | `019f550a-8e55-79f1-ace6-72e3792e6e8e` | P1     |
+| TypeScript/API docs        | `019f550a-8edf-7203-a76d-86a478b71389` | P1/P2  |
+| Performance/reliability    | `019f550a-8f68-7983-b67d-c3512ac5638e` | P2     |
 
 Security is deferred to final project readiness.
 
@@ -354,3 +354,14 @@ Security is deferred to final project readiness.
   repeated race/rebind, exact fixed-package ledger, docs/API, format, diff,
   exact-scope, untracked, and frozen-path checks. All passed with only the known
   invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T06:36:31Z`: Round 7 fixes were committed as `628224d4`; generated
+  fixed package `.superpowers/sdd/review-0308bc4a..628224d4.diff` (39 commits,
+  157,048 bytes) and assigned all four Round 8 lanes. The historical fixed-
+  package ledger retains its explicit `045aa86c` boundary; later orchestration
+  is recorded in events/participants.
+- `2026-07-12T06:40:33Z`: Closed all four Round 8 lanes. Accepted one complete
+  two-item batch: T-0037e needs a dedicated retirement-failure test proving
+  fresh-generation creation, complete survivor/route/scope rebind, exact-once
+  buffered transfer, and delayed error propagation; the split-report active
+  verification paragraph must record completed Round 7 verification and
+  `628224d4`. Every other lane is clean.
