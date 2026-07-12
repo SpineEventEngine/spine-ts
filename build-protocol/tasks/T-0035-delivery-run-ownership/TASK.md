@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 8 architecture fix in progress
+Status: Round 8 architecture fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -106,6 +106,12 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   direct drains and skipped-scan pause streaks are bounded, while a whole loop
   can remain active under continuous supported writes and has no automatic
   restart guarantee after settlement.
+- Active architecture distinguishes bounded current direct pages and the
+  bounded `PAUSED` outcome from cross-run continuation: current `DeliveryLoop`
+  clears its resume cursor before `PAUSED`, so repeated explicit starts may
+  rescan the head and do not yet retain a finite epoch. T-0036 adds only
+  package-internal opaque continuation/high-watermark-or-equivalent bounds and
+  selective paused-shard progress, without public API.
 - `ServerEnvironment.delivery` is not called a scheduler merely because it is
   closeable.
 - Startup recovery and retryable pending-row wakeups have an owner without
@@ -329,6 +335,13 @@ Current runtime remains explicitly started and lacks the successor's full epoch
 bound and automatic lifecycle ownership. T-0034, pending/skipped `CATCH_UP`,
 and fail-closed legacy `IMPORT_EVENT` remain unchanged.
 
+The active architecture now states the same current/future boundary: direct
+drains/pages and the skipped-only `PAUSED` outcome are bounded today, but
+`DeliveryLoop` clears its cursor before returning `PAUSED`, so later explicit
+starts do not retain finite-epoch continuation. T-0036 supplies the future
+package-internal opaque continuation/high-watermark-or-equivalent bound and
+selective paused-shard progress without a public cursor or scheduling API.
+
 ## Likely Changed Files
 
 - `build-protocol/DECISION_LOG.md`
@@ -458,6 +471,21 @@ active delivery scheduler.
   `IMPORT_EVENT`, complete chronology, `git diff --check`, aligned status, exact
   four-file scope, zero-untracked, and successor-task-file absence checks.
 - NOT RUN: full `pnpm verify` in Round 7, per explicit task direction.
+- PASS: Round 8 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted source-to-architecture assertions for bounded direct pages,
+  bounded skipped-only `PAUSED`, current pre-return cursor clearing, possible
+  repeated-start head rescan, absent retained cross-run finite epoch, and future
+  T-0036 internal opaque continuation/high-watermark-or-equivalent/selective-
+  paused-shard progress without public API.
+- PASS: D-0085 alignment without decision edit, complete chronology,
+  `git diff --check`, aligned status, exact architecture-plus-three-record scope,
+  zero-untracked, and successor-task-file absence checks.
+- NOT RUN: full `pnpm verify` in Round 8, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 8 generated build,
+  docs/API, formatting, source/current-future architecture assertions,
+  whitespace, exact scope, chronology, zero-untracked, compatibility, and
+  public-API leakage checks.
 - PASS: Coordinator independently repeated the Round 7 generated build,
   docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
   stop order, lifecycle-gate race, fresh-generation, internal blocker,

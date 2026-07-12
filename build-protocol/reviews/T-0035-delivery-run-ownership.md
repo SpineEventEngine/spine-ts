@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 8 architecture fix in progress
+Status: Round 8 architecture fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -363,3 +363,23 @@ Security is deferred to final project readiness.
 - `2026-07-12T00:58:00Z`: Resumed decision author
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 8 architecture
   fix worker. Fresh four-lane review remains pending after verification.
+- `2026-07-12T01:00:07Z`: Fix worker re-read `receiving-code-review` and
+  verified the finding against current loop source and D-0085. The corrected
+  active guide now says current pages and skipped-only `PAUSED` are bounded,
+  current `DeliveryLoop` clears cross-run resume state before `PAUSED`, and
+  T-0036 will add only internal opaque continuation/bounding and selective
+  paused-shard progress. No starvation, failure, or public API behavior is
+  inferred. Author verification is pending; fresh review remains coordinator-
+  owned.
+- `2026-07-12T01:02:14Z`: Round 8 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  current-versus-T-0036 architecture assertions, D-0085 alignment, chronology
+  lint, whitespace, exact architecture-plus-three-record scope, aligned status,
+  zero-untracked, and no-successor-task-file checks. Full `pnpm verify` was not
+  run. The author remains active for coordinator closure; fresh four-lane review
+  remains pending coordinator dispatch.
+- `2026-07-12T01:05:00Z`: Coordinator closed the Round 8 fix author and
+  independently passed generated build, docs/API, formatting, source/current-
+  future architecture assertions, whitespace, scope, status, 76-event
+  chronology, compatibility, and public-API leakage checks. Fresh review is
+  next.
