@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Format fix verified; full verification rerun pending
+Status: Complete; ready to merge
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -826,3 +826,8 @@ Security is deferred to final project readiness.
 - `2026-07-12T09:41:18Z`: Applied Prettier only to this review log. Repository-
   wide `pnpm format:check` and `git diff --check` passed. The narrow fix is
   verified; a clean-branch full `pnpm verify` rerun remains pending.
+- `2026-07-12T09:44:47Z`: Clean-branch full `pnpm verify` passed generated and
+  tooling typechecks, lint, cleanup enforcement, format, 60 test files and 1,309
+  tests, coverage (95.14% statements, 90.11% branches), docs/API checks with 205
+  server exports and only the known invalid-`origin` warning, proto lint, and
+  generated-output cleanliness. T-0037 is complete and ready to merge.
