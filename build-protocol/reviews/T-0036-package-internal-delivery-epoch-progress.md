@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 3 fixes committed; rereview pending
+Status: Round 4 four-lane rereview in progress
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f5452-cad2-79d0-a416-3a0376ccbdf9` | Clean   |
-| Documentation              | `019f5452-ee1e-7113-a05d-941fb92315cd` | Finding |
-| TypeScript/API docs        | `019f5453-0d87-7813-8c26-a55e107b2319` | Clean   |
-| Performance/reliability    | `019f5453-2eda-76b2-aad5-8407e2b04601` | P1      |
+| Lane                       | Reviewer                               | Status      |
+| -------------------------- | -------------------------------------- | ----------- |
+| Code style/maintainability | `019f5464-a3af-73a2-8d0e-9b19beffc9ea` | In progress |
+| Documentation              | `019f5464-c18c-7f31-b2c9-a8c701e06161` | In progress |
+| TypeScript/API docs        | `019f5464-e008-7033-b746-c882596981c9` | In progress |
+| Performance/reliability    | `019f5465-076d-7da3-984b-4c518aab1fdf` | In progress |
 
 Security is deferred to final project readiness.
 
@@ -182,3 +182,7 @@ Security is deferred to final project readiness.
 - `2026-07-12T04:43:00Z`: Committed Round 3 fixes as `e6c92128` and reconciled
   the fixed-baseline ledger. Fresh package generation and all four independent
   lanes remain.
+- `2026-07-12T04:45:00Z`: Generated package
+  `.superpowers/sdd/review-67da0b1c..6406ea55.diff` (140,911 bytes) and assigned
+  all four Round 4 lanes. Prompts recognize the post-package assignment commit
+  convention and require current-state-only findings.
