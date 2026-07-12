@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Required four-lane review in progress
+Status: Round 1 findings accepted; fixes pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -129,3 +129,11 @@ used for child runtime work.
   lint corrected completed-step and no-commit attribution wording.
 - PASS: Split package committed as `7ff3d50a`; review-boundary reconciliation
   is the sole future hash under the ledger convention.
+- REVIEW: Round 1 accepted findings: require readiness after each successful
+  row persistence including partial batches; define bounded lossless merged
+  coalescing across every eligible notified scope; place a reusable authoritative
+  coordinator stop/retire primitive before attachment rollback and assign its
+  callers without overlap; cover permanent server-owned environment cleanup on
+  failed startup; copy every applicable inherited rule into all six child
+  ledgers; and correct declaration/public compatibility wording. One docs fix
+  batch and fresh all-lane review are required.

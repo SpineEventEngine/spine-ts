@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Required four-lane review in progress
+Status: Round 1 findings accepted; fixes pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status      |
-| -------------------------- | -------------------------------------- | ----------- |
-| Code style/maintainability | `019f549e-ae4c-7331-8df1-2b803be3d7b9` | In progress |
-| Documentation              | `019f549e-d1c3-7890-afbd-287223adeee2` | In progress |
-| TypeScript/API docs        | `019f549e-fdfe-7b31-97cf-6027e947720b` | In progress |
-| Performance/reliability    | `019f549f-23a5-7911-86ba-686c659cb690` | In progress |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f549e-ae4c-7331-8df1-2b803be3d7b9` | P1       |
+| Documentation              | `019f549e-d1c3-7890-afbd-287223adeee2` | Findings |
+| TypeScript/API docs        | `019f549e-fdfe-7b31-97cf-6027e947720b` | Findings |
+| Performance/reliability    | `019f549f-23a5-7911-86ba-686c659cb690` | P1       |
 
 Security is deferred to final project readiness.
 
@@ -72,3 +72,9 @@ Security is deferred to final project readiness.
   `.superpowers/sdd/review-0308bc4a..1057a425.diff` (57,891 bytes) and assigned
   all four required independent lanes. Prompts explicitly ignore superseded
   history unless active records still claim it.
+- `2026-07-12T04:42:00Z`: Closed all Round 1 lanes. Accepted complete batch:
+  per-row readiness for partial batches, bounded lossless scope coalescing, a
+  pre-attachment authoritative retirement primitive with non-overlapping
+  callers, server-owned failed-start permanent cleanup, complete inherited
+  child ledgers, and accurate declaration/direct compatibility wording. Fresh
+  review waits for one docs fix worker, verification, and commit.

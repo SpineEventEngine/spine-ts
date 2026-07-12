@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Required four-lane review in progress
+Status: Round 1 findings accepted; fixes pending
 
 Baseline: `ab8fc9f4`
 
