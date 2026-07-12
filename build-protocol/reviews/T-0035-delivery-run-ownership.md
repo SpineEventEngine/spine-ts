@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 7 four-lane review in progress
+Status: Round 7 findings recorded; decision fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f53c3-f38d-7e80-86f3-3500f68858a1` | Active |
-| Documentation              | `019f53c3-f430-77b2-9b1f-92f17f290928` | Active |
-| TypeScript/API docs        | `019f53c3-f4c4-7770-9efd-0d6a19a33dfd` | Active |
-| Performance/reliability    | `019f53c3-f543-7470-befe-6add2c4c25bb` | Active |
+| Code style/maintainability | `019f53c3-f38d-7e80-86f3-3500f68858a1` | Clean  |
+| Documentation              | `019f53c3-f430-77b2-9b1f-92f17f290928` | P1     |
+| TypeScript/API docs        | `019f53c3-f4c4-7770-9efd-0d6a19a33dfd` | Clean  |
+| Performance/reliability    | `019f53c3-f543-7470-befe-6add2c4c25bb` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -317,3 +317,9 @@ Security is deferred to final project readiness.
   `019f53c3-f4c4-7770-9efd-0d6a19a33dfd`, and performance/reliability
   `019f53c3-f543-7470-befe-6add2c4c25bb`. Prompts are package-only and ignore
   superseded history unless current records claim it active.
+- `2026-07-12T00:45:00Z`: Round 7 completed and all reviewers were closed.
+  Code style and TypeScript/API docs were clean. Required fixes are deterministic
+  stop-before-await last-detach ordering, attach serialization through complete
+  old-generation quiescence, and a package-internal non-causal startup blocker
+  when the overlapping original cause was already reported. One decision fix
+  worker and fresh review are required.
