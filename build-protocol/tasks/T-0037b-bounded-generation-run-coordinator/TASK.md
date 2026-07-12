@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Review Round 2 active
+Status: Review Round 2 fixes pending assignment
 
 Started: `2026-07-12T11:43:52Z`
 

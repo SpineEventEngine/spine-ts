@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 2 active
+Status: Review Round 2 fixes pending assignment
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f565c-b21c-7850-af9f-680bc66174da` | Ready  |
-| Documentation              | `019f565c-b2bd-7370-ac51-79b5250d23aa` | Ready  |
-| TypeScript/API docs        | `019f565c-b338-7141-a356-0d73de9ee3b9` | Ready  |
-| Performance/reliability    | `019f565c-b3c9-7ae1-8ff9-dc3690f09308` | Ready  |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f565c-b21c-7850-af9f-680bc66174da` | Findings |
+| Documentation              | `019f565c-b2bd-7370-ac51-79b5250d23aa` | Findings |
+| TypeScript/API docs        | `019f565c-b338-7141-a356-0d73de9ee3b9` | Findings |
+| Performance/reliability    | `019f565c-b3c9-7ae1-8ff9-dc3690f09308` | Findings |
 
 Security is deferred to final project readiness.
 
@@ -184,3 +184,10 @@ Security is deferred to final project readiness.
   review/design/API/types/performance/error/verification skills; and explicitly
   skipped duplicate, authoring, web/security, debugging, and implementation
   workflows outside its lane. No required local source was unreachable.
+- `2026-07-12T12:55:01Z`: Round 2 completed and every reviewer was closed. Five
+  unique findings remain after deduplication: notify-only invariant failures
+  disappear; worker evidence lacks obligation/exact-shard validation; terminal
+  state has three synchronized sources of truth; the primary coordinator class
+  is not first; and task retry wording wrongly forbids retrying a stop that did
+  not complete. One TDD fix worker must receive the complete list before a
+  fresh four-lane review.
