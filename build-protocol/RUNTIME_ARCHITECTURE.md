@@ -321,11 +321,12 @@ delivery worker boundary:
   endpoints. This is a lifecycle wrapper over the direct primitive, not
   production retry policy, production supervision, or transport topology.
   Direct drains/pages remain bounded. At the start of a new loop epoch, the
-  loop reads at most 10,000 ordered pending rows into an immutable exact-message
-  ID snapshot. This snapshot, rather than a caller-controlled ordering key or a
-  work counter, defines epoch membership, so both normally ordered and
-  backdated callback writes remain outside the active epoch. Each explicit
-  `run()` starts at most two bounded drains. If admitted members remain,
+  loop performs exactly one adapter-neutral inbox read and admits at most the
+  storage read limit, currently 1,000 ordered pending rows, into an immutable
+  exact-message ID snapshot. This snapshot, rather than a caller-controlled
+  ordering key or a work counter, defines epoch membership, so a write between
+  storage pages cannot join the active epoch and callback writes remain outside
+  it. Each explicit `run()` starts at most two bounded drains. If admitted members remain,
   `PAUSED` retains the snapshot and opaque index for a later explicit run;
   otherwise `IDLE` completes the epoch. Capped epochs advance through finite
   admission sweeps whose depth doubles after each pass. Each pass restarts at

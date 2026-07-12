@@ -76,73 +76,100 @@ export class DeliveryLoop {
   async #runLoop(): Promise<DeliveryLoopRun> {
     this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
+    const admission = await this.#admitEpoch(summary);
+    if (admission !== undefined) {
+      return admission;
+    }
+
+    let resumableScanRuns = 0;
+    for (;;) {
+      const remainingFailures = this.#maxFailures - summary.failed;
+      const outcome = await this.#drain(this.#drainLimit(), remainingFailures);
+      this.#recordOutcome(summary, outcome);
+      const transition = this.#outcomeTransition(summary, outcome, resumableScanRuns);
+      if (transition.kind === "TERMINAL") {
+        return this.#finish(summary, transition);
+      }
+      resumableScanRuns = transition.resumableScanRuns;
+    }
+  }
+
+  async #admitEpoch(summary: DeliveryLoopSummary): Promise<DeliveryLoopRun | undefined> {
     if (this.#epoch === undefined) {
       this.#progress = loopProgress();
       this.#epoch = await DeliveryEpoch.admit(this.#delivery, this.#shard, this.#admission.after);
     }
+    return this.#isStopped() ? this.#finish(summary, terminalTransition("STOPPED")) : undefined;
+  }
+
+  #recordOutcome(summary: DeliveryLoopSummary, outcome: DeliveryDrainOutcome): void {
+    this.#resume = outcome.resumeCursor;
+    summary.add(outcome.run);
+    this.#progress = addLoopProgress(this.#progress, outcome.run);
+  }
+
+  #outcomeTransition(
+    summary: DeliveryLoopSummary,
+    outcome: DeliveryDrainOutcome,
+    resumableScanRuns: number,
+  ): LoopTransition {
     if (this.#isStopped()) {
+      return terminalTransition("STOPPED");
+    }
+    if (outcome.run.status === "SKIPPED") {
+      return terminalTransition("SKIPPED");
+    }
+    if (summary.failed >= this.#maxFailures && outcome.run.failed > 0) {
+      return terminalTransition("FAILED");
+    }
+    return outcome.epochProgress === undefined
+      ? this.#availableTransition(outcome, resumableScanRuns)
+      : this.#epochTransition(outcome, resumableScanRuns);
+  }
+
+  #epochTransition(outcome: DeliveryDrainOutcome, resumableScanRuns: number): LoopTransition {
+    const progress = outcome.epochProgress;
+    if (progress === undefined || this.#epoch === undefined) {
+      throw new Error("Delivery epoch progress is unavailable.");
+    }
+    this.#epoch.advance(progress.next);
+    const nextRuns = resumableScanRuns + 1;
+    if (progress.complete) {
+      return terminalTransition("IDLE", true);
+    }
+    if (nextRuns >= maxResumableScanRuns) {
+      this.#resume = undefined;
+      return terminalTransition("PAUSED");
+    }
+    return continueTransition(nextRuns);
+  }
+
+  #availableTransition(outcome: DeliveryDrainOutcome, resumableScanRuns: number): LoopTransition {
+    const { run } = outcome;
+    if (run.accepted !== 0 || run.delivered !== 0 || run.failed !== 0) {
+      return continueTransition(0);
+    }
+    if (!outcome.exhaustedSkippedScan) {
+      return terminalTransition("IDLE");
+    }
+    const nextRuns = resumableScanRuns + 1;
+    return nextRuns >= maxResumableScanRuns
+      ? terminalTransition("PAUSED")
+      : continueTransition(nextRuns);
+  }
+
+  #finish(summary: DeliveryLoopSummary, transition: TerminalTransition): DeliveryLoopRun {
+    if (transition.status === "PAUSED") {
+      return summary.result(transition.status);
+    }
+    if (transition.completedEpoch && this.#epoch !== undefined) {
+      this.#admission.complete(this.#epoch.nextAdmissionAfter);
+    } else {
       this.#admission.reset();
-      this.#epoch = undefined;
-      return summary.result("STOPPED");
     }
-    let resumableScanRuns = 0;
-    for (;;) {
-      const remainingFailures = this.#maxFailures - summary.failed;
-      const limit = this.#drainLimit();
-      const outcome = await this.#drain(limit, remainingFailures);
-      const { run } = outcome;
-      this.#resume = outcome.resumeCursor;
-      summary.add(run);
-      this.#progress = addLoopProgress(this.#progress, run);
-      if (this.#isStopped()) {
-        this.#admission.reset();
-        this.#epoch = undefined;
-        this.#resume = undefined;
-        return summary.result("STOPPED");
-      }
-      if (run.status === "SKIPPED") {
-        this.#admission.reset();
-        this.#epoch = undefined;
-        this.#resume = undefined;
-        return summary.result("SKIPPED");
-      }
-      if (summary.failed >= this.#maxFailures && run.failed > 0) {
-        this.#admission.reset();
-        this.#epoch = undefined;
-        this.#resume = undefined;
-        return summary.result("FAILED");
-      }
-      if (outcome.epochProgress !== undefined) {
-        this.#epoch.advance(outcome.epochProgress.next);
-        resumableScanRuns += 1;
-        if (outcome.epochProgress.complete) {
-          this.#admission.complete(this.#epoch.nextAdmissionAfter);
-          this.#epoch = undefined;
-          this.#resume = undefined;
-          return summary.result("IDLE");
-        }
-        if (resumableScanRuns >= maxResumableScanRuns) {
-          this.#resume = undefined;
-          return summary.result("PAUSED");
-        }
-        continue;
-      }
-      if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
-        if (outcome.exhaustedSkippedScan) {
-          resumableScanRuns += 1;
-          if (resumableScanRuns >= maxResumableScanRuns) {
-            return summary.result("PAUSED");
-          }
-          continue;
-        }
-        resumableScanRuns = 0;
-        this.#admission.reset();
-        this.#epoch = undefined;
-        this.#resume = undefined;
-        return summary.result("IDLE");
-      }
-      resumableScanRuns = 0;
-    }
+    this.#epoch = undefined;
+    this.#resume = undefined;
+    return summary.result(transition.status);
   }
 
   #drain(limit: number, remainingFailures: number): Promise<DeliveryDrainOutcome> {
@@ -183,8 +210,20 @@ export class DeliveryLoop {
 
 const maxDeliveryLoopFailures = 1_000;
 const maxResumableScanRuns = 2;
-const maxAdmittedEpochMessages = 10_000;
 type DeliveryResumeCursor = DeliveryDrainOutcome["resumeCursor"];
+
+type LoopTransition = ContinueTransition | TerminalTransition;
+
+interface ContinueTransition {
+  readonly kind: "CONTINUE";
+  readonly resumableScanRuns: number;
+}
+
+interface TerminalTransition {
+  readonly kind: "TERMINAL";
+  readonly status: DeliveryLoopStatus;
+  readonly completedEpoch: boolean;
+}
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {
@@ -270,10 +309,6 @@ class DeliveryLoopSummary {
   #failed = 0;
   readonly #failures: DeliveryFailure[] = [];
 
-  get runs(): number {
-    return this.#runs;
-  }
-
   get failed(): number {
     return this.#failed;
   }
@@ -318,36 +353,18 @@ class DeliveryEpoch {
     shard: ShardIndex,
     initialAfter: InboxReadContinuation | undefined,
   ): Promise<DeliveryEpoch> {
-    const messageIds: InboxMessageId[] = [];
-    let after = initialAfter;
+    const messages = await delivery.inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: inboxStorageAccess.maxReadLimit,
+      ...(initialAfter === undefined ? {} : { after: initialAfter }),
+    });
+    const last = messages.at(-1);
+    const nextAdmissionAfter =
+      messages.length === inboxStorageAccess.maxReadLimit && last !== undefined
+        ? epochContinuation(last)
+        : undefined;
 
-    while (messageIds.length < maxAdmittedEpochMessages) {
-      const limit = Math.min(
-        inboxStorageAccess.maxReadLimit,
-        maxAdmittedEpochMessages - messageIds.length,
-      );
-      const messages = await delivery.inbox.read(shard, {
-        statuses: ["TO_DELIVER"],
-        limit,
-        ...(after === undefined ? {} : { after }),
-      });
-      for (const message of messages) {
-        messageIds.push(epochMessageId(message));
-      }
-      if (messages.length < limit) {
-        break;
-      }
-      const last = messages.at(-1);
-      if (last === undefined) {
-        break;
-      }
-      after = epochContinuation(last);
-    }
-
-    return new DeliveryEpoch(
-      messageIds,
-      messageIds.length === maxAdmittedEpochMessages ? after : undefined,
-    );
+    return new DeliveryEpoch(messages.map(epochMessageId), nextAdmissionAfter);
   }
 
   get nextAdmissionAfter(): InboxReadContinuation | undefined {
@@ -368,8 +385,8 @@ class DeliveryEpoch {
 
 class DeliveryAdmissionSweep {
   #after: InboxReadContinuation | undefined;
-  #completed = 0n;
-  #length = 1n;
+  #completedChunks = 0n;
+  #chunksPerPass = 1n;
 
   get after(): InboxReadContinuation | undefined {
     return this.#after;
@@ -381,11 +398,12 @@ class DeliveryAdmissionSweep {
       return;
     }
 
-    this.#completed += 1n;
-    if (this.#completed === this.#length) {
+    // Every pass starts at the head and doubles its chunk reach before the next restart.
+    this.#completedChunks += 1n;
+    if (this.#completedChunks === this.#chunksPerPass) {
       this.#after = undefined;
-      this.#completed = 0n;
-      this.#length *= 2n;
+      this.#completedChunks = 0n;
+      this.#chunksPerPass *= 2n;
       return;
     }
     this.#after = next;
@@ -393,9 +411,20 @@ class DeliveryAdmissionSweep {
 
   reset(): void {
     this.#after = undefined;
-    this.#completed = 0n;
-    this.#length = 1n;
+    this.#completedChunks = 0n;
+    this.#chunksPerPass = 1n;
   }
+}
+
+function continueTransition(resumableScanRuns: number): ContinueTransition {
+  return Object.freeze({ kind: "CONTINUE", resumableScanRuns });
+}
+
+function terminalTransition(
+  status: DeliveryLoopStatus,
+  completedEpoch = false,
+): TerminalTransition {
+  return Object.freeze({ kind: "TERMINAL", status, completedEpoch });
 }
 
 function loopRun(

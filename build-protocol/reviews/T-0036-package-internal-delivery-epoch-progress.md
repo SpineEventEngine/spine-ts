@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 1 fix worker active
+Status: Round 1 fixes coordinator-verified; commit and rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -104,3 +104,21 @@ Security is deferred to final project readiness.
   `019f543b-8e45-7722-98db-eb218dde8937` with every accepted finding. Fresh
   package generation and all four rereview lanes remain pending its return,
   coordinator verification, and commit.
+- `2026-07-12T03:56:00Z`: Round 1 fixes implemented. Cycle 6 reproduced the
+  inter-page admission race, then constrained each new epoch to one read capped
+  by the existing storage limit. The loop transition was split into semantic
+  admission/outcome/terminal methods with centralized non-`PAUSED` cleanup;
+  sweep naming/tests and unused declarations were cleaned up. Focused GREEN and
+  the updated 40-test loop suite passed. Coordinator verification, commit,
+  package regeneration, and all four rereview lanes remain pending; no rereview
+  ran in this fix batch.
+- `2026-07-12T03:59:00Z`: Worker verification passed: focused cycle 6 GREEN,
+  full 40-test loop suite, four delivery files / 259 tests, generated `tsc -b`,
+  changed-file ESLint, `docs:check`, `format:check`, and `git diff --check`.
+  Full `pnpm verify` remains reserved. Coordinator verification/commit and all
+  four rereview lanes remain pending.
+- `2026-07-12T04:02:00Z`: Closed the Round 1 fix worker. Coordinator repeated
+  4 files / 259 tests, generated build, changed-file ESLint, docs/API checks,
+  formatting, and whitespace; all passed with only the known TypeDoc source-link
+  warning. Lightweight status/API/policy lint passed. Fix commit, fresh package,
+  and all four rereview lanes remain.

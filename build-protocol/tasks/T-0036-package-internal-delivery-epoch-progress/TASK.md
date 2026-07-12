@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 1 fix worker active
+Status: Round 1 fixes coordinator-verified; commit and rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -65,10 +65,11 @@ complete internal interface without reopening worker internals.
 ## Test-First Acceptance
 
 - Continuous supported appends do not extend an admitted epoch.
-- A large unsupported prefix pauses, then resumes the active admitted epoch
-  beyond saved progress without restarting that epoch at the head. Completed
-  capped admission passes may restart at the head to keep later backdated rows
-  eligible while growing pass depth preserves forward progress.
+- `PAUSED` resumes the same exact admitted IDs beyond saved progress without
+  rebuilding that epoch. A large unsupported prefix advances across completed
+  single-read admission chunks. Completed passes restart at the head to keep
+  later backdated rows eligible while growing pass depth preserves forward
+  progress.
 - Useful work is bounded per start like skipped work.
 - Mixed `PAUSED`/`FAILED`/`SKIPPED` selectively reruns only `PAUSED`.
 - Rejected and fulfilled sibling shard evidence remains ordered and associated.
@@ -155,8 +156,9 @@ membership.
 - PASS: Coordinator repeated the 4-file / 258-test suite, generated build,
   changed-file ESLint, `docs:check`, `format:check`, and `git diff --check`.
   Documentation emitted only the existing invalid-`origin` source-link warning.
-- PASS: Implementation committed as `1ea10745`; review-package status
-  reconciliation is the sole future hash under the commit-ledger convention.
+- PASS: Implementation committed as `1ea10745`; review status was reconciled in
+  `a1714e1f`, reviewers were assigned in `a3187dcf`, and findings were recorded
+  in `0c0b18e7`. Only the eventual Round 1 fix commit remains a future hash.
 - REVIEW: Round 1 TypeScript/API docs was clean. Documentation found stale
   current status and commit-ledger wording. Maintainability requested smaller
   transition methods, clearer sweep naming/invariant text, removal of an unused
@@ -164,15 +166,19 @@ membership.
   Performance/reliability found that multi-page admission is not atomic: a row
   written between admission reads can join the active epoch. One single-read
   admission fix batch is required before all-lane rereview.
+- PASS: Round 1 fix coordinator gate: 4 delivery files / 259 tests, generated
+  build, changed-file ESLint, `docs:check`, `format:check`, and
+  `git diff --check`. Only the known invalid-`origin` TypeDoc warning remains.
 
 ## Implementation Result
 
-- Each loop admits up to 10,000 exact pending message IDs in immutable inbox
-  order and retains only an opaque index across `PAUSED`. Completed capped
-  epochs advance through finite admission sweeps whose depth doubles between
-  passes. Restarting each pass at the head keeps later backdated rows eligible;
-  increasing depth preserves progress through arbitrary finite unsupported
-  prefixes without an ever-growing remembered-ID set.
+- Each loop admits exact pending message IDs from one inbox read capped by the
+  existing storage read limit, currently 1,000 rows, and retains only an opaque
+  index across `PAUSED`. Completed capped epochs advance through finite
+  admission sweeps whose chunk depth doubles between passes. Restarting each
+  pass at the head keeps later backdated rows eligible; increasing depth
+  preserves progress through arbitrary finite unsupported prefixes without an
+  ever-growing remembered-ID set.
 - Exact-message epoch drains exclude all post-admission rows regardless of
   caller timestamp/version ordering and bound both supported and skipped work.
 - Package-internal worker evidence preserves configured order, obligation,

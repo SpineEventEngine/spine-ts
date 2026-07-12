@@ -97,6 +97,32 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-admitted", "signal-backdated"]);
   });
 
+  it("admits an epoch with one query before an inter-page write can join", async () => {
+    const faults = deliveryStorageFaults(onInboxQueryNumber(2, onInterPageQuery));
+    const delivery = createDelivery(faults.storageFactory);
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    for (let index = 1; index <= inboxStorageAccess.maxReadLimit; index += 1) {
+      await seed(delivery, `signal-prefix-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
+    expect(faults.inboxQueries).toBe(1);
+    expect(seen).toEqual([]);
+
+    async function onInterPageQuery(): Promise<void> {
+      await seed(delivery, "signal-between-pages", 1_001n);
+    }
+  });
+
   it("bounds useful work per start and resumes the admitted epoch explicitly", async () => {
     const delivery = createDelivery();
     const seen: string[] = [];
@@ -353,11 +379,12 @@ describe("DeliveryLoop", () => {
     });
   });
 
-  it("continues after a finite skipped-row scan to reach a supported tail row", async () => {
+  it("continues across finite skipped epochs to reach a supported tail row", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
+    const unsupportedTail = inboxStorageAccess.maxReadLimit + 2;
 
-    for (let index = 1; index <= 1_002; index += 1) {
+    for (let index = 1; index <= unsupportedTail; index += 1) {
       await delivery.inbox.receive({
         inboxId: targetInbox(),
         signalId: `signal-catch-up-${String(index)}`,
@@ -368,10 +395,9 @@ describe("DeliveryLoop", () => {
         version: BigInt(index),
       });
     }
-    await seed(delivery, "signal-supported-tail", 1_003n);
+    await seed(delivery, "signal-supported-tail", BigInt(unsupportedTail + 1));
     const seen: string[] = [];
-
-    const run = await new DeliveryLoop({
+    const loop = new DeliveryLoop({
       delivery,
       shard,
       node: "node-a",
@@ -379,7 +405,11 @@ describe("DeliveryLoop", () => {
       onMessage(message) {
         seen.push(message.signalId);
       },
-    }).run();
+    });
+
+    await expectIdleWithoutDelivery(loop);
+    await expectIdleWithoutDelivery(loop);
+    const run = await loop.run();
 
     expect(seen).toEqual(["signal-supported-tail"]);
     expect(run).toMatchObject({ status: "IDLE", runs: 1, accepted: 1, delivered: 1, failed: 0 });
@@ -389,8 +419,9 @@ describe("DeliveryLoop", () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
     const limit = 1;
+    const admittedMessages = inboxStorageAccess.maxReadLimit;
 
-    for (let index = 1; index <= 2_002; index += 1) {
+    for (let index = 1; index <= admittedMessages; index += 1) {
       await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
     }
 
@@ -404,8 +435,8 @@ describe("DeliveryLoop", () => {
 
     expect(run).toMatchObject({
       status: "IDLE",
-      runs: 2,
-      processed: (inboxStorageAccess.maxReadLimit + limit) * 2,
+      runs: 1,
+      processed: admittedMessages,
       accepted: 0,
       delivered: 0,
       failed: 0,
@@ -425,20 +456,17 @@ describe("DeliveryLoop", () => {
       },
     });
     const seen: string[] = [];
+    const admissionChunk = inboxStorageAccess.maxReadLimit;
+    const unsupportedPrefixEnd = admissionChunk + 1;
+    const supportedTailVersion = unsupportedPrefixEnd + 1;
 
-    for (let index = 1; index <= 10_001; index += 1) {
+    for (let index = 1; index <= unsupportedPrefixEnd; index += 1) {
       await seed(delivery, `signal-capped-${String(index)}`, BigInt(index), "CATCH_UP");
     }
-    await seed(delivery, "signal-after-cap", 10_002n);
+    await seed(delivery, "signal-after-cap", BigInt(supportedTailVersion));
 
-    for (let run = 0; run < 2; run += 1) {
-      await expect(loop.run()).resolves.toMatchObject({ status: "PAUSED", delivered: 0 });
-    }
-    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
-    for (let run = 0; run < 2; run += 1) {
-      await expect(loop.run()).resolves.toMatchObject({ status: "PAUSED", delivered: 0 });
-    }
-    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
+    await expectIdleWithoutDelivery(loop);
+    await expectIdleWithoutDelivery(loop);
     await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
 
     expect(seen).toEqual(["signal-after-cap"]);
@@ -457,13 +485,16 @@ describe("DeliveryLoop", () => {
         seen.push(message.signalId);
       },
     });
+    const admissionChunk = inboxStorageAccess.maxReadLimit;
+    const unsupportedPrefixEnd = admissionChunk + 1;
+    const forwardTailVersion = unsupportedPrefixEnd + 1;
 
-    for (let index = 1; index <= 10_001; index += 1) {
+    for (let index = 1; index <= unsupportedPrefixEnd; index += 1) {
       await seed(delivery, `signal-prefix-${String(index)}`, BigInt(index), "CATCH_UP");
     }
-    await seed(delivery, "signal-forward-tail", 10_002n);
+    await seed(delivery, "signal-forward-tail", BigInt(forwardTailVersion));
 
-    await expect(loop.run()).resolves.toMatchObject({ status: "PAUSED", delivered: 0 });
+    await expectIdleWithoutDelivery(loop);
     await delivery.inbox.receive({
       inboxId: targetInbox(),
       signalId: "signal-later-backdated",
@@ -473,18 +504,18 @@ describe("DeliveryLoop", () => {
       whenReceived: new Date("2026-07-08T08:00:00.000Z"),
       version: 0n,
     });
-    for (let index = 10_003; index <= 20_002; index += 1) {
+    const growingTailEnd = forwardTailVersion + admissionChunk;
+    for (let index = forwardTailVersion + 1; index <= growingTailEnd; index += 1) {
       await seed(delivery, `signal-growing-tail-${String(index)}`, BigInt(index), "CATCH_UP");
     }
 
-    await expect(loop.run()).resolves.toMatchObject({ status: "PAUSED", delivered: 0 });
-    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
-    await expect(loop.run()).resolves.toMatchObject({ status: "PAUSED", delivered: 1 });
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
 
-    expect(seen).toEqual(["signal-later-backdated"]);
+    expect(seen).toEqual(["signal-later-backdated", "signal-forward-tail"]);
   });
 
-  it("resets a paused scan cursor when earlier pending rows disappear before resume", async () => {
+  it("continues the admission sweep when earlier pending rows disappear", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
     const seen: string[] = [];
@@ -507,21 +538,22 @@ describe("DeliveryLoop", () => {
     const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
 
     expect(paused).toMatchObject({
-      status: "PAUSED",
-      runs: 2,
-      processed: 2_002,
+      status: "IDLE",
+      runs: 1,
+      processed: inboxStorageAccess.maxReadLimit,
       delivered: 0,
       failed: 0,
     });
     expect(seen).toEqual([]);
 
-    for (const message of pending.slice(0, 1_503)) {
+    for (const message of pending) {
       await expect(delivery.inbox.markDelivered(message)).resolves.toMatchObject({
         id: message.id,
         status: "DELIVERED",
       });
     }
 
+    await expectIdleWithoutDelivery(loop);
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
@@ -574,8 +606,8 @@ describe("DeliveryLoop", () => {
     expect(claim?.signalId).toBe("signal-now-supported");
     expect(paused).toMatchObject({
       status: "IDLE",
-      runs: 2,
-      processed: 2_002,
+      runs: 1,
+      processed: inboxStorageAccess.maxReadLimit,
       delivered: 0,
       failed: 0,
     });
@@ -588,14 +620,14 @@ describe("DeliveryLoop", () => {
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
     expect(seen).toEqual(["signal-now-supported"]);
   });
 
-  it("resets a resumed cursor after tail delivery so a cleared head claim is not starved", async () => {
+  it("advances after reconsidering a cleared head claim", async () => {
     let now = new Date("2026-07-08T09:00:00.000Z");
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -646,20 +678,27 @@ describe("DeliveryLoop", () => {
     }
 
     await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-cleared-head"]);
+
+    await expect(loop.run()).resolves.toMatchObject({
       status: "PAUSED",
       delivered: 2,
       failed: 0,
     });
-    expect(seen.slice(0, 2)).toEqual(["signal-cleared-head", "signal-supported-tail-1002"]);
+    expect(seen).toEqual([
+      "signal-cleared-head",
+      "signal-supported-tail-1002",
+      "signal-supported-tail-1003",
+    ]);
 
-    await expect(loop.run()).resolves.toMatchObject({
-      status: "IDLE",
-      delivered: 2,
-      failed: 0,
-    });
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1, failed: 0 });
   });
 
-  it("drops a stale skipped-only resume cursor so a cleared head claim is reconsidered", async () => {
+  it("restarts a pass so a cleared head claim is reconsidered", async () => {
     let now = new Date("2026-07-08T09:00:00.000Z");
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -715,7 +754,7 @@ describe("DeliveryLoop", () => {
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
@@ -727,7 +766,7 @@ describe("DeliveryLoop", () => {
       clearSkippedRows: () => undefined as Promise<void> | void,
     };
     const faults = deliveryStorageFaults(
-      onInboxQueryNumber(4, async () => {
+      onInboxQueryNumber(3, async () => {
         await race.clearSkippedRows();
       }),
     );
@@ -759,6 +798,7 @@ describe("DeliveryLoop", () => {
       }
     };
 
+    await expectIdleWithoutDelivery(loop);
     const run = await loop.run();
 
     expect(run).toMatchObject({
@@ -774,7 +814,7 @@ describe("DeliveryLoop", () => {
       clearSkippedRows: () => undefined as Promise<void> | void,
     };
     const faults = deliveryStorageFaults(
-      onInboxQueryNumber(4, async () => {
+      onInboxQueryNumber(3, async () => {
         await race.clearSkippedRows();
       }),
     );
@@ -809,6 +849,7 @@ describe("DeliveryLoop", () => {
       }
     };
 
+    await expectIdleWithoutDelivery(loop);
     const run = await loop.run();
 
     expect(run).toMatchObject({
@@ -1211,6 +1252,10 @@ function createDelivery(storageFactory: StorageFactory = new InMemoryStorageFact
     context: { name: "Tasks", multitenant: false },
     storageFactory,
   });
+}
+
+async function expectIdleWithoutDelivery(loop: DeliveryLoop): Promise<void> {
+  await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0, failed: 0 });
 }
 
 async function seed(

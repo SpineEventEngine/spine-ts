@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 1 fix worker active
+Status: Round 1 fixes coordinator-verified; commit and rereview pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -9,8 +9,9 @@ Baseline: `67da0b1c`
 ## Result
 
 - `DeliveryLoop` admits a bounded immutable snapshot of exact pending inbox
-  message IDs before callbacks run. The snapshot is capped at 10,000 rows and
-  therefore cannot be extended by useful work or callback writes.
+  message IDs before callbacks run. Admission is exactly one inbox read capped
+  by the existing storage read limit, currently 1,000 rows, so an inter-page
+  write cannot join the active epoch.
 - Completed capped snapshots advance through finite admission sweeps. Sweep
   depth doubles after each pass restarts at the inbox head, so later backdated
   rows remain eligible while explicit epochs eventually reach every finite
@@ -65,16 +66,23 @@ Baseline: `67da0b1c`
 - Cycle 5 GREEN: finite growing admission sweeps restarted from the head,
   admitted the later backdated row without changing the active epoch, and
   retained forward progress through capped unsupported chunks.
+- Cycle 6 RED: a supported row inserted before the second admission page joined
+  the active epoch and was delivered; the focused regression observed the old
+  multi-read admission behavior.
+- Cycle 6 GREEN: epoch admission became one storage-bounded read sourced from
+  `inboxStorageAccess.maxReadLimit`; the focused regression observed one query
+  and no inter-page delivery, and the updated 40-test loop suite passed.
 
-## Files
+## Round 1 Fix Files
 
 - `packages/server/src/delivery/delivery.ts`
 - `packages/server/src/delivery/delivery-loop.ts`
-- `packages/server/src/delivery/delivery-worker.ts`
 - `packages/server/test/delivery/delivery-loop.test.ts`
-- `packages/server/test/delivery/delivery-worker-runtime.test.ts`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
-- T-0036 task, work, review, and implementation-report records.
+- `build-protocol/tasks/T-0036-package-internal-delivery-epoch-progress/TASK.md`
+- `build-protocol/tasks/T-0036-package-internal-delivery-epoch-progress/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0036.md`
+- `build-protocol/reviews/T-0036-package-internal-delivery-epoch-progress.md`
 
 ## Verification
 
@@ -91,8 +99,25 @@ Baseline: `67da0b1c`
 - PASS: final loop suite, 39 tests.
 - PASS: final loop/worker/delivery/inbox suite, 4 files / 258 tests.
 - PASS: final changed-file ESLint over five TypeScript source/test files.
+- PASS: cycle 6 RED command
+  `pnpm exec vitest run packages/server/test/delivery/delivery-loop.test.ts -t "admits an epoch with one query before an inter-page write can join"`;
+  1 failed as intended because the inter-page row was delivered.
+- PASS: cycle 6 GREEN with the same focused command; 1 passed / 39 skipped.
+- PASS: full loop command
+  `pnpm exec vitest run packages/server/test/delivery/delivery-loop.test.ts`;
+  40 passed.
+- PASS: four-file command over `delivery-loop.test.ts`,
+  `delivery-worker-runtime.test.ts`, `delivery-worker.test.ts`, and
+  `inbox.test.ts`; 4 files / 259 tests passed.
+- PASS: generated typecheck `pnpm typecheck:build:generated` (`tsc -b`).
+- PASS: changed-file ESLint over `delivery-loop.ts`, `delivery.ts`, and
+  `delivery-loop.test.ts`.
+- PASS: `pnpm docs:check`; only the existing invalid-`origin` source-link
+  warning was emitted.
+- PASS: `pnpm format:check` and `git diff --check`.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
 
-The coordinator pre-review findings are fixed. Fresh four-lane review and its
-subsequent review-loop gates remain before task completion; no required reviewer
-lane ran in this fix batch.
+The Round 1 findings are implemented and worker verification is clean. The
+coordinator's verification and fix commit, a regenerated review package, and
+fresh four-lane rereview remain; no required reviewer lane ran in this fix
+batch.

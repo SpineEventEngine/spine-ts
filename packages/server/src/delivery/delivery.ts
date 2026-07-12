@@ -133,7 +133,6 @@ export class Delivery {
         return await this.#drainAdmittedMessages(
           scope.inbox,
           scope.attempts,
-          session.shard,
           limit,
           options.onMessage,
           lease,
@@ -164,7 +163,6 @@ export class Delivery {
   async #drainAdmittedMessages(
     inbox: Inbox,
     attempts: DeliveryAttempts,
-    shard: ShardIndex,
     limit: number,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
