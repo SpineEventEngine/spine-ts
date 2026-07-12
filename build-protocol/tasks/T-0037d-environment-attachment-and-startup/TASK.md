@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 5 targeted re-review in progress
+Status: Slice 1 review clean; Slice 2 implementation assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -303,6 +303,14 @@ The later-slice interface remains the package-internal descriptor
 rollback, public API/export, listener, lifecycle policy, or generated artifact
 was added. Slice 2 must not consume the barrier until targeted recovery
 re-review accepts this corrected package.
+
+Round 5 accepted the corrected transition-state competitor proof with all four
+canonical lanes clean. Slice 1 is closed and may now be consumed by Slice 2.
+Slice 2 owns only the private environment generation/registration lifecycle,
+caller-owned sharing, server-owned exclusivity, canonical descriptor/storage/
+tenant scope assembly, readiness transfer, and one finite startup recovery
+result with truthful attribution. Registration-scoped failed-start rollback
+remains Slice 3 and must not be implemented in this pass.
 
 ### Slice 1 Round 3 Findings
 

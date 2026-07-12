@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 5 targeted re-review in progress
+Status: Slice 1 review clean; Slice 2 implementation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -184,3 +184,9 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   Expected fixed-role profiles are style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. The bounded target
   is the corrected transition-state competitor proof and current records only.
+- `2026-07-12T21:00:00Z`: Round 5 is clean and all reviewers are closed.
+  Fixed-role runtime metadata confirms style/API/reliability used Terra High and
+  documentation used Luna Medium, matching dispatch. All four canonical
+  concerns found no actionable defect. Slice 1 review is closed. Slice 2
+  implementation is assigned to the existing Terra Medium owner; its four-lane
+  review remains pending until the bounded slice builds and focused tests pass.
