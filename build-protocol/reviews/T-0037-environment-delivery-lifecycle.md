@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 12 findings accepted; fix pending
+Status: Round 12 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -568,3 +568,7 @@ Security is deferred to final project readiness.
   completion; dynamic summaries must become stable, explicitly scoped history;
   and future review packages must use the endpoint SHA in their header. All
   other API-leakage, documentation, style, and reliability checks were clean.
+- `2026-07-12T08:05:28Z`: Assigned single Round 12 documentation fix worker
+  `019f555c-0f63-7ad0-ba1d-e61f9b5ef118` the complete accepted batch. The
+  worker owns documentation and durable process instructions only, must preserve
+  the fixed historical ledger, and may edit only after this assignment commit.
