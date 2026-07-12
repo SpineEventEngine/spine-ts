@@ -162,6 +162,32 @@ describe("DeliveryWorker", () => {
     ).toThrow("Delivery worker access requires a DeliveryWorker instance.");
   });
 
+  it("starts only explicitly admitted shards for a new internal obligation", async () => {
+    const delivery = createDelivery();
+    const shards = [new ShardIndex(0, 3), new ShardIndex(1, 3), new ShardIndex(2, 3)];
+    const calls: number[] = [];
+    const restore = deliveryAccess.replace(delivery, (shard) => {
+      calls.push(shard.index);
+      return Promise.resolve(deliveryOutcome());
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    const obligation = Object.freeze({ kind: "admitted" });
+
+    const selected = [shards[0], shards[2]].filter(
+      (shard): shard is ShardIndex => shard !== undefined,
+    );
+    const evidence = await deliveryWorkerAccess.start(worker, obligation, selected);
+
+    expect(evidence.shards.map(({ shard }) => shard)).toEqual([shards[0], shards[2]]);
+    expect(calls).toEqual([0, 2]);
+    restore();
+  });
+
   it("close waits for active loop drains", async () => {
     const delivery = createDelivery();
     const barrier = deferred<undefined>();

@@ -1,6 +1,15 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Candidate; not started
+Status: Complete and merge-ready
+
+Started: `2026-07-12T11:43:52Z`
+
+Baseline commit: `40329cad`
+
+Branch: `task/T-0037b-bounded-generation-run-coordinator`
+
+This `Status` header is canonical for T-0037b. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037a complete and integrated; T-0036 package-internal evidence
 is the worker interface consumed by this child.
@@ -15,7 +24,7 @@ per-shard dispositions without assigning registration ownership yet.
 
 - Continue autonomously until this child is complete or a real blocker occurs;
   keep the implementation/review package small and limited to this child.
-- Implement only this child in its own future branch/worktree with one author
+- Implement only this child in its own branch/worktree with one author
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
@@ -68,8 +77,9 @@ or make the instance reusable; cleanup failure may leak only inert resources.
 The primitive may settle with the combined error only after retirement/cleanup
 is attempted, and that postcondition is safe for a lifecycle owner to clear or
 replace the slot. A distinct inability to establish quiescence prohibits
-replacement. An explicit retry resumes that same admission-closed, stopped
-primitive invocation without repeating admission closure or stop. Once the
+replacement. An explicit retry resumes that same admission-closed primitive
+invocation without repeating admission closure or a successfully completed
+stop; a stop that threw before quiescence must be retried. Once the
 retry proves quiescence, it performs classification, the caller-supplied
 eligible record consumption/reporting step, and permanent retirement/cleanup
 exactly once. The primitive is idempotent and reusable by later lifecycle
@@ -87,7 +97,7 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - `packages/server/src/delivery/delivery-worker.ts` only for a minimal internal
   access extension proven necessary by the coordinator
 - Focused coordinator tests under `packages/server/test/delivery/`
-- This task's future durable task/work/review records and narrow architecture
+- This task's durable task/work/review records and narrow architecture
   wording
 
 ## TDD Acceptance
@@ -104,9 +114,12 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   and only `PAUSED` continues the current finite obligation.
 - Mixed `FAILED`/`PAUSED` evidence continues only the paused shard regardless
   of aggregate status.
-- Every started promise is observed immediately. Rejection preserves T-0036
-  shard/cause/obligation/progress evidence, clears the active slot, and does not
-  self-restart.
+- Every started promise is observed immediately. An outer worker-start promise
+  rejection records the attempted shard scope and cause with synthetic empty
+  progress; `DeliveryScopeSettlement` does not retain an obligation. Validated
+  rejected per-shard evidence preserves its exact obligation identity and
+  last-safe progress while being interpreted, then records that cause and
+  progress in the scope settlement. Neither rejection path self-restarts.
 - A later external readiness request may explicitly reconsider rejected work;
   normal fulfillment honors every eligible scope in the merged pending
   admission.
@@ -147,6 +160,28 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - `FAILED`, `SKIPPED`, and rejection do not create readiness or spin.
 - Retry readiness may call this seam later, but delay/backoff/timing is absent.
 - No singleton, threads, repeat callbacks, public monitor, or catch-up station.
+
+## Round 5 Fix Record
+
+- Existing implementation role completed the assigned two-P1 batch with actual
+  profile `gpt-5.6-terra` / `medium`.
+- Skill applicability check: `receiving-code-review`,
+  `test-driven-development`, and `verification-before-completion` were read
+  and applied. The first governed technical acceptance of the two findings;
+  the second required both focused REDs before runtime edits; the third governs
+  the recorded completion evidence.
+- RED: `pnpm vitest run packages/server/test/delivery/delivery-run-coordinator.test.ts`
+  reported exactly the intended failures: a synchronous worker-start throw was
+  settled as `REJECTED`, and successor-time readiness kept the initial start
+  unresolved until test timeout.
+- GREEN: synchronous `DeliveryRunWorker.start()` invocation is outside the
+  promise-rejection handler, so synchronous lifecycle throws fault and reject
+  the coordinator without synthetic settlement. Each active turn consumes no
+  more than its initial admission plus one successor, including the existing
+  late-finalizer handoff; readiness during that successor remains pending for a
+  later external `start()`.
+- No public exports, generated files, worker/loop behavior, or retirement
+  ownership changed. Fresh review remains required before task acceptance.
 
 ## Explicit Exclusions
 
