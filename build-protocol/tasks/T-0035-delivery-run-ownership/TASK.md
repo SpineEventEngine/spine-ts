@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 10 clean; final verification pending
+Status: Complete; final verification passed; ready to merge
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -530,6 +530,11 @@ active delivery scheduler.
   docs/API, formatting, whitespace, exact scope, chronology, bounded retention,
   fulfilled-`FAILED` disposition, recovery limits, convention preservation,
   compatibility, and public-API leakage checks.
+- PASS: Final full `pnpm --config.verify-deps-before-run=false verify`: 60 test
+  files / 1,282 tests passed in ordinary and coverage runs; coverage 95.01%
+  statements, 90.03% branches, 98.17% functions, and 95.02% lines; typecheck,
+  lint, cleanup rules, formatting, docs/API, protobuf lint, and generated-output
+  checks passed with only the known invalid-`origin` TypeDoc warning.
 - PASS: Coordinator independently repeated the Round 8 generated build,
   docs/API, formatting, source/current-future architecture assertions,
   whitespace, exact scope, chronology, zero-untracked, compatibility, and
