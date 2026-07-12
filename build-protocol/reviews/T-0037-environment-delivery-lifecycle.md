@@ -1,0 +1,31 @@
+# T-0037 Review Log
+
+Status: Requirements split pending; implementation review not started
+
+Task: `T-0037 Environment Delivery Lifecycle`
+
+Branch: `task/T-0037-environment-delivery-lifecycle`
+
+## Required Review Lanes
+
+| Lane                       | Reviewer | Status  |
+| -------------------------- | -------- | ------- |
+| Code style/maintainability | pending  | Pending |
+| Documentation              | pending  | Pending |
+| TypeScript/API docs        | pending  | Pending |
+| Performance/reliability    | pending  | Pending |
+
+Security is deferred to final project readiness.
+
+## Review Criteria
+
+- To be finalized by the requirements split before implementation.
+- Historical superseded text is non-actionable unless current task records or
+  changed active docs claim it.
+- No public lifecycle, monitor, scheduler, retry-policy, or adapter API may
+  appear without a new accepted decision.
+
+## Rounds
+
+- `2026-07-12T04:15:00Z`: Created review scaffold. No reviewer is assigned;
+  requirements splitting and coordinator scope validation are first.
