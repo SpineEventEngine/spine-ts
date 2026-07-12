@@ -1,6 +1,6 @@
 # T-0037p: Agent Model Retuning
 
-Status: Complete; clean targeted review
+Status: Complete; integrated and post-merge verified
 
 Started: `2026-07-12`
 
