@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Coordinator-verified; required review pending
+Status: Committed; required review pending
 
 Baseline: `ab8fc9f4`
 

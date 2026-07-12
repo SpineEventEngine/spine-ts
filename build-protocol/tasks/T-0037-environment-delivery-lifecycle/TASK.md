@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Split package coordinator-verified; required review pending
+Status: Split package committed; required review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -127,3 +127,5 @@ used for child runtime work.
   and exact scope/untracked inspection. Docs emitted only the known invalid-
   `origin` warning and retained 205 expected server exports. Lightweight status
   lint corrected completed-step and no-commit attribution wording.
+- PASS: Split package committed as `7ff3d50a`; review-boundary reconciliation
+  is the sole future hash under the ledger convention.

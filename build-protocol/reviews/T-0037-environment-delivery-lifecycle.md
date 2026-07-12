@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Split package coordinator-verified; required review not started
+Status: Split package committed; required review not started
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -65,3 +65,6 @@ Security is deferred to final project readiness.
   status-lint findings, and repeated docs/API, formatting, whitespace, and exact
   scope checks successfully. Fixed-baseline commit/package generation and all
   four lanes remain.
+- `2026-07-12T04:35:00Z`: Committed split package as `7ff3d50a` and reconciled
+  its active ledger. Fixed-baseline package generation and all four lanes are
+  next.
