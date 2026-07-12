@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 5 stale-status finding accepted; fix pending
+Status: Round 5 docs fix active
 
 Baseline: `ab8fc9f4`
 

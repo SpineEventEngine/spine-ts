@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 5 stale-status finding accepted; fix pending
+Status: Round 5 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -261,3 +261,6 @@ Security is deferred to final project readiness.
   parent task and split report still say Round 4 coordinator verification is
   pending. No runtime, ownership, API, reliability, ledger, or public-doc
   finding remains. One docs fix worker and fresh all-lane review are required.
+- `2026-07-12T05:55:01Z`: Assigned single Round 5 docs fix worker
+  `019f54e4-9866-7483-940b-0e43a27102ff` to reconcile the two active undated
+  summaries and durable status only. All substantive scope remains frozen.
