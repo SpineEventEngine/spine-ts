@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 11 docs fixes verified; fresh review pending
+Status: Round 12 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5543-f279-7b22-be6a-7d75005a2a66` | P2/P3  |
-| Documentation              | `019f5543-f2e8-73a3-bced-9c3d5d885451` | P2     |
-| TypeScript/API docs        | `019f5543-f36a-7c41-aeb2-4147dbb2470a` | P2     |
-| Performance/reliability    | `019f5543-f401-7733-bddb-0133f4459808` | P1/P2  |
+| Code style/maintainability | `019f5556-83f4-7193-8cc2-caae9edc4b62` | P1/P2  |
+| Documentation              | `019f5556-84ab-7862-9aa2-fb22e2c18cb9` | P1/P2  |
+| TypeScript/API docs        | `019f5556-8529-7fe2-a013-e81f7e2a4e3f` | P2     |
+| Performance/reliability    | `019f5556-85cc-7830-8374-49d9ec265f57` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -557,3 +557,14 @@ Security is deferred to final project readiness.
   ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` checks. TypeDoc retained 205 server exports with only the
   known invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T07:59:33Z`: Committed the verified Round 11 fix as `34f8f5e4`,
+  generated fixed package `.superpowers/sdd/review-0308bc4a..34f8f5e4.diff`
+  (51 commits, 215,313 bytes), passed lightweight pre-review lint, and assigned
+  all four Round 12 lanes against that exact package.
+- `2026-07-12T08:04:36Z`: Closed all four Round 12 lanes. Accepted one complete
+  batch: T-0037d must own successful retry of caller-owned failed-start rollback;
+  fresh-transition rebind must precede transfer consistently; rebind/transfer
+  failure tests must fail after non-empty partial progress and preserve per-unit
+  completion; dynamic summaries must become stable, explicitly scoped history;
+  and future review packages must use the endpoint SHA in their header. All
+  other API-leakage, documentation, style, and reliability checks were clean.
