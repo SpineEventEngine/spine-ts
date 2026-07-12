@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 13 docs fix worker active
+Status: Round 13 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -79,8 +79,14 @@ detach, explicit generation stop, ordinary/permanent-close primitive invocation,
 the bounded canonical-scope bridge through fresh recovery/route rebind,
 finally-equivalent surviving-registration rebinding before retirement-result
 propagation, plus the deterministic wait-through-retirement fresh-generation
-attach race, and
-environment close belong to `e`; and network/server ordering belongs to `f`.
+attach race, and environment close belong to `e`. Its explicit-stop and zero-
+registration-close quiescence-failure cases retain unsafe ownership and resume
+the same operation without repeating completed phases; the reusable path then
+performs rebind, retained-scope transfer, publication, and admission reopen in
+that order, while permanent close clears the safe slot and closes facilities
+exactly once. Network/server ordering belongs to `f`, including retry of T-0037d
+caller-owned failed-start rollback through deferred server cleanup while the
+shared environment stays open and proves one later fresh server attachment.
 Retry timing and public policy remain
 outside every child. The `d` and `e` callers do not overlap or reopen the
 finally-safe primitive. That primitive preserves close-admission/stop, await

@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 13 docs fix worker active
+Status: Round 13 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5567-10b2-74e1-886b-03084a91336b` | P2    |
-| Documentation              | `019f5567-111a-7c23-a6c2-c4207d514b23` | P2    |
-| TypeScript/API docs        | `019f5567-119d-7743-a798-17c5ac044e8a` | Clean |
-| Performance/reliability    | `019f5567-1231-70f2-a5b0-6ff9cab56b57` | P1    |
+| Code style/maintainability | `019f5567-10b2-74e1-886b-03084a91336b` | P2     |
+| Documentation              | `019f5567-111a-7c23-a6c2-c4207d514b23` | P2     |
+| TypeScript/API docs        | `019f5567-119d-7743-a798-17c5ac044e8a` | Clean  |
+| Performance/reliability    | `019f5567-1231-70f2-a5b0-6ff9cab56b57` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -105,6 +105,22 @@ Security is deferred to final project readiness.
   Its explicit retry must complete the same lifecycle operation, clear the slot
   only after proving quiescence and exact-once remaining phases, and permit one
   later fresh attach without overlap.
+- Confirm reusable explicit stop has a separate deterministic quiescence-
+  failure retry case. The first attempt retains the unsafe current generation,
+  live registrations, transition readiness owner/buffer, and endpoint
+  dependencies and performs no later authoritative or fresh-transition phase.
+  Retry resumes the same admission-closed/stopped operation without duplicate
+  phases, proves quiescence, completes retirement exactly once, then performs
+  exact-once survivor/readiness-route rebind, retained-scope transfer into fresh
+  pending admission, publication, and admission reopen with one generation and
+  no overlap.
+- Confirm zero-registration permanent close separately retries quiescence
+  failure. The failed attempt retains the unsafe slot and dependencies, tears
+  down no facility, keeps permanent close in progress, and prohibits attach or
+  replacement. Retry resumes the same close without duplicate stop/admission
+  closure, completes every remaining authoritative phase, safe slot clear, and
+  each owned-facility close exactly once, then remains permanently closed.
+  Refusal while registrations remain live stays a separate case.
 - Confirm T-0037d clears a stopped, quiescent, permanently retired sole-
   registration empty slot through a finally-equivalent path before propagating
   reporting or cleanup errors. Separate tests prove the inert old instance
@@ -136,6 +152,15 @@ Security is deferred to final project readiness.
   completes classification, eligible consumption/reporting, permanent
   retirement/cleanup, slot clearing, and deferred server cleanup exactly once,
   without duplicating admission closure or stop.
+- Confirm caller-owned startup failure has its own server integration case when
+  T-0037d rollback cannot quiesce. No listener opens; endpoint-dependent
+  contexts/resources and caller-owned environment/facilities remain open.
+  Explicit retry of the same server cleanup resumes the same rollback without
+  duplicate admission closure or stop, proves quiescence, completes remaining
+  rollback phases and safe slot clearing exactly once, and closes deferred
+  server-owned contexts/resources exactly once without closing the shared
+  environment or facilities. Confirm one later eligible fresh attachment/server
+  reuses that environment with one generation and no overlap.
 - Confirm the parent prohibits duplicate agents per role and requires every
   participant closed. Confirm parent and all six child ledgers require the
   canonical skill check for every implementation/review role and the Human
@@ -149,10 +174,10 @@ Security is deferred to final project readiness.
   add no public export, signature, or option, and public docs never name or
   describe package-internal explicit generation stop.
 - Confirm the fixed reviewed-package ledger includes every commit in
-  `0308bc4a..045aa86c` exactly once, including `045aa86c`, and excludes Round 7
-  assignment/findings/current-worker orchestration until a later fixed package
-  is generated. Those current records remain in timestamped Events and
-  Participants, avoiding impossible maintenance-commit self-reference.
+  `0308bc4a..045aa86c` exactly once, including `045aa86c`. This is its permanent
+  historical scope: it excludes every later commit. All later package and
+  orchestration evidence belongs in timestamped Events and Participants,
+  avoiding impossible maintenance-commit self-reference.
 - Confirm review-package generation first resolves the endpoint with
   `git rev-parse HEAD` and passes that literal commit SHA to the script. A fixed
   package header must never identify its endpoint as the moving name `HEAD`.
@@ -623,3 +648,21 @@ Security is deferred to final project readiness.
   `019f556b-7c6f-71e2-ac25-7617fd83b0de` the complete accepted batch. The
   worker owns documentation only, must preserve the fixed historical ledger,
   and may edit only after this assignment is committed.
+- `2026-07-12T08:23:46Z`: Round 13 documentation fix authored the accepted
+  authoritative transition order, permanent historical-ledger scope, reusable
+  explicit-stop and zero-registration-close quiescence retries, and caller-owned
+  failed-start server-cleanup retry. Coordinator verification remains pending;
+  no clean review is claimed.
+- `2026-07-12T08:29:19Z`: Round 13 worker verification passed targeted order,
+  ledger-scope, explicit-stop retry, permanent-close retry, caller-owned server-
+  cleanup retry, status, 104-event chronology, 67-participant uniqueness,
+  byte-identical 36-entry ledger, docs, format, whitespace, exact eight-file
+  scope, untracked, and frozen-path checks. TypeDoc retained 205 server exports
+  with only the known invalid-`origin` warning. Coordinator verification remains
+  pending.
+- `2026-07-12T08:30:01Z`: Coordinator closed the worker and independently passed
+  transition-order, permanent-ledger-scope, all three retry-continuation,
+  105-event chronology, 67-participant uniqueness, byte-identical 36-entry
+  ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` checks. TypeDoc retained 205 server exports with only the
+  known invalid-`origin` warning. Fresh all-lane review remains required.

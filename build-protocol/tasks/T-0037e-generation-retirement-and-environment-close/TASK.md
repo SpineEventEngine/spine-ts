@@ -167,6 +167,19 @@ network or context/resource ordering.
   The test also proves no old/new generation overlap, exactly one fresh
   generation, and every survivor and the racing attach bound to it. Only
   permanent close or ownership-cardinality rejection may reject the attach.
+- A distinct deterministic reusable-explicit-stop test injects quiescence
+  failure before classification. The failed attempt retains the unsafe current
+  generation, all live registrations, the transition owner and readiness
+  buffer, and every endpoint dependency. It performs no classification,
+  operational-record consumption/reporting, permanent retirement, or fresh-
+  generation transition. Explicit retry resumes that same admission-closed,
+  stopped operation without duplicating either completed phase, proves
+  quiescence, and completes classification, eligible consumption/reporting,
+  and permanent retirement/cleanup exactly once. It then rebinds every survivor
+  and readiness route exactly once, transfers every retained scope into fresh
+  pending admission exactly once, publishes the sole fresh candidate, and only
+  then reopens later-write admission. The test proves one fresh generation, no
+  old/new overlap, and no duplicated phase across the failed attempt and retry.
 - A reporting-rejection test makes T-0037b retire the old generation and settle
   with the reporting error. After fresh recovery captures its snapshot but
   before route rebind, the test persists a supported write in a surviving
@@ -221,6 +234,17 @@ network or context/resource ordering.
 - Zero-registration close permanently rejects later attachments/triggers,
   retires any generation, then closes owned delivery/tracing/transport/storage
   facilities without closing them beneath active work.
+- A deterministic zero-registration permanent-close test injects quiescence
+  failure after admission closure and stop. The failed close retains the unsafe
+  current-generation slot and every endpoint dependency, performs no
+  classification, eligible consumption/reporting, permanent retirement, slot
+  clearing, or facility teardown, leaves permanent close in progress, and
+  prohibits attachment or replacement. Explicit retry resumes that same close
+  without duplicating admission closure or stop, proves quiescence, completes
+  classification, eligible consumption/reporting, permanent retirement/cleanup,
+  and safe slot clearing exactly once, then closes each owned facility exactly
+  once and leaves the environment permanently closed. This retry case is
+  separate from refusal while any registration remains live.
 - Eligible unreported causes aggregate once through existing retryable-close
   behavior; reported unresolved causes are consumed without resurfacing.
 - API export and public-leak checks stay green with no new public export,

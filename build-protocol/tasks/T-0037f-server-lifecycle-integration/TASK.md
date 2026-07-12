@@ -93,6 +93,18 @@ exactly once.
 - Startup rejection attributable to that registration prevents listener intake
   and aggregates context/resource/registration cleanup failures through the
   existing failed-start model without closing a shared caller-owned environment.
+- When caller-owned startup failure rollback cannot establish quiescence, a
+  deterministic integration test proves that no listener opens, every endpoint-
+  dependent context and resource remains open, and the caller-owned environment
+  and its facilities remain open. Explicit retry of that same server cleanup
+  invokes and resumes T-0037d's retained failed-start rollback without
+  duplicating admission closure or stop, proves quiescence, completes every
+  remaining rollback phase and safe generation-slot clearing exactly once, and
+  closes each deferred server-owned context and resource exactly once. It never
+  closes the caller-owned environment or its facilities. The test then uses
+  that environment for one later eligible fresh attachment and server, proving
+  one fresh generation and no old/new overlap. This caller-owned continuation
+  is distinct from the server-owned environment case below.
 - When startup fails with a server-owned environment, no listener is opened;
   registration rollback and generation quiescence are attempted first while
   endpoint dependencies remain open. After proven quiescence, every context and

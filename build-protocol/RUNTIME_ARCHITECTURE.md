@@ -451,7 +451,9 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    awaits all already-admitted bounded candidate work before propagating the
    aggregated error, so no endpoint invocation continues after propagation. No
    self-loop occurs; a later external lifecycle/readiness retry resumes that same
-   candidate, never constructs another, and completes exact-once transfer/rebind.
+   candidate, never constructs another, and completes exact-once survivor and
+   readiness-route rebind, exact-once retained-scope transfer into fresh pending
+   admission, candidate publication, and only then later-write admission reopen.
    Only permanent close or independent ownership cardinality may reject the
    attach. Ordinary last detach clears a stopped,
    proven-quiescent retired current-generation slot through a finally-equivalent

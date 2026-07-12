@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 13 docs fix worker active
+Status: Round 13 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -39,6 +39,16 @@ constructed, the sole unpublished candidate remains owned by that transition;
 rebind/transfer failure waits for admitted candidate work to settle, and retry
 resumes that same candidate rather than constructing another. An eligible racing
 attach then joins the same eventual generation without old/new overlap.
+If reusable explicit stop cannot establish quiescence, it retains the unsafe
+generation, live registrations, transition readiness owner, and endpoint
+dependencies; explicit retry resumes the same stop and completes retirement,
+rebind, retained-scope transfer, publication, and admission reopen exactly once.
+If zero-registration permanent close cannot establish quiescence, it retains
+the unsafe slot and facilities with close still in progress; retry completes
+retirement, safe slot clearing, and owned-facility teardown exactly once and
+remains permanently closed. T-0037f separately resumes a caller-owned failed-
+start rollback through deferred server cleanup without closing the shared
+environment, then proves one later fresh server attachment without overlap.
 
 ## Grounding Facts
 

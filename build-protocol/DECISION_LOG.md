@@ -3459,6 +3459,25 @@ Decision:
   resume deferred server cleanup or permit exactly one later fresh attachment
   without old/new overlap. The initial failed attempt does not classify,
   consume/report, retire, clear the slot, or tear down endpoint dependencies.
+  Reusable explicit generation stop and zero-registration permanent close obey
+  that same quiescence-failure retry boundary. For reusable explicit stop, the
+  failed attempt retains the unsafe current generation, live registrations,
+  transition owner and readiness buffer, and every endpoint dependency. It
+  performs no classification, consumption/reporting, retirement, or fresh-
+  generation transition. Explicit retry resumes the same admission-closed,
+  stopped operation without repeating admission closure or stop, proves
+  quiescence, completes each remaining authoritative retirement phase exactly
+  once, and then performs survivor/readiness-route rebind, retained-scope
+  transfer into fresh pending admission, candidate publication, and later-write
+  admission reopen exactly once, with one generation and no overlap. For a
+  zero-registration permanent close, the failed attempt retains the unsafe slot
+  and endpoint dependencies, performs no later retirement or facility teardown,
+  leaves permanent close in progress, and prohibits attachment or replacement.
+  Retry resumes that same close without repeating admission closure or stop,
+  proves quiescence, completes classification, eligible consumption/reporting,
+  retirement, and slot clearing, then closes every owned facility exactly once
+  and leaves the environment permanently closed. Refusal while registrations
+  remain live is a separate pre-transition outcome.
   After permanent `ServerEnvironment.close()`, no generation of that same
   environment is possible. Recovery then requires a separately
   created environment/process over storage that remains externally available
@@ -3557,6 +3576,17 @@ Decision:
   admission closure or stop, proves quiescence, then performs classification,
   eligible consumption/reporting, permanent retirement/cleanup, slot clearing,
   and remaining server cleanup exactly once.
+  When startup failure occurs against a caller-owned environment and rollback
+  cannot establish quiescence, the server opens no listener and retains every
+  endpoint-dependent context and resource while leaving the caller-owned
+  environment and its facilities open. Explicit retry of that same server
+  cleanup resumes T-0037d's same failed-start rollback without repeating
+  admission closure or stop, proves quiescence, completes the remaining
+  rollback phases and safe slot clearing exactly once, and closes deferred
+  server-owned contexts and resources exactly once. It never closes the caller-
+  owned environment or facilities. That environment remains reusable for one
+  later eligible fresh attachment and server without old/new overlap. This is
+  distinct from server-owned environment continuation and teardown.
 - Implement D-0085 in small sequenced successors. The smallest first successor
   is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
   package-internal `DeliveryLoop`/`DeliveryWorker` prerequisites: cap the full
@@ -3755,9 +3785,21 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   retains the unsafe slot when quiescence fails, then an explicit retry resumes
   the same transition and completes the remaining authoritative phases exactly
   once after proving quiescence. T-0037e also owns close refusal and permanent
-  environment close. T-0037f alone
+  environment close. Its deterministic failure coverage also retries the same
+  reusable explicit-stop operation after quiescence failure while retaining
+  live registrations, transition readiness ownership, and endpoint
+  dependencies, then completes retirement and the ordered rebind, transfer,
+  publication, and admission-reopen transition exactly once. Separately, it
+  retries the same zero-registration permanent close after quiescence failure,
+  retaining the unsafe slot and facilities until quiescence is proven, then
+  completing retirement, safe slot clearing, and owned-facility teardown
+  exactly once while remaining permanently closed. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,
-  resources, and owned facilities. T-0037d does not own
+  resources, and owned facilities. For caller-owned failed startup, T-0037f
+  resumes T-0037d's retained rollback through quiescence and exact-once deferred
+  server cleanup while leaving the shared environment open and proving one
+  later eligible fresh server attachment without overlap; server-owned
+  continuation remains separate. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback
   or coordinator-instance retirement.
 - Each child depends on the preceding child and receives its own branch,
