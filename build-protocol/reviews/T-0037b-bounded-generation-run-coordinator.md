@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 1 skill checks pending
+Status: Review Round 1 active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status              |
-| -------------------------- | -------------------------------------- | ------------------- |
-| Code style/maintainability | `019f5644-7a31-71f3-bde1-c833f14be1f5` | Skill check pending |
-| Documentation              | `019f5644-8948-7532-9d69-124561e1164c` | Skill check pending |
-| TypeScript/API docs        | `019f5644-9beb-7251-a197-3246cb4d6670` | Skill check pending |
-| Performance/reliability    | `019f5644-b455-7d10-826f-e18f19e445be` | Skill check pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f5644-7a31-71f3-bde1-c833f14be1f5` | Ready  |
+| Documentation              | `019f5644-8948-7532-9d69-124561e1164c` | Ready  |
+| TypeScript/API docs        | `019f5644-9beb-7251-a197-3246cb4d6670` | Ready  |
+| Performance/reliability    | `019f5644-b455-7d10-826f-e18f19e445be` | Ready  |
 
 Security is deferred to final project readiness.
 
@@ -127,3 +127,11 @@ Security is deferred to final project readiness.
   independent reviewers above are reserved and paused pending this provenance
   commit. Each lane must complete and durably record its canonical skill check
   before receiving the substantive review prompt.
+- `2026-07-12T12:23:09Z`: All four canonical reviewer skill checks completed
+  without package inspection or edits: each reconciled 47 readable installed
+  entrypoints with 47 lock-v3 records and all 8 expected skills, selected and
+  fully read lane-relevant review/design/docs/types/performance/error/verification
+  skills, and explicitly skipped duplicate orchestration, authoring, security,
+  web, and implementation workflows outside its lane. No required local source
+  was unreachable. Substantive Round 1 review may start after this record
+  commits.
