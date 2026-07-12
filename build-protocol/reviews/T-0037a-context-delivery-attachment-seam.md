@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 2 skill checks complete; substantive review paused
+Status: Review Round 2 active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status                       |
-| -------------------------- | -------------------------------------- | ---------------------------- |
-| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Skill check complete; paused |
-| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Skill check complete; paused |
-| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Skill check complete; paused |
-| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Skill check complete; paused |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Active |
+| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Active |
+| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Active |
+| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Active |
 
 Security is deferred to final project readiness.
 
@@ -136,3 +136,6 @@ Security is deferred to final project readiness.
     orchestration, authoring, broader architecture, security, or unrelated web
     skills. No source was unreachable.
     Substantive Round 2 review remains paused until this check record commits.
+- `2026-07-12T10:39:17Z`: Skill-check provenance commit `37c97e55` completed;
+  all four substantive Round 2 lanes started against the fixed immutable
+  package and current durable records.
