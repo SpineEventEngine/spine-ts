@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 12 docs fixes verified; fresh review pending
+Status: Round 13 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5556-83f4-7193-8cc2-caae9edc4b62` | P1/P2  |
-| Documentation              | `019f5556-84ab-7862-9aa2-fb22e2c18cb9` | P1/P2  |
-| TypeScript/API docs        | `019f5556-8529-7fe2-a013-e81f7e2a4e3f` | P2     |
-| Performance/reliability    | `019f5556-85cc-7830-8374-49d9ec265f57` | P1/P2  |
+| Code style/maintainability | `019f5567-10b2-74e1-886b-03084a91336b` | P2    |
+| Documentation              | `019f5567-111a-7c23-a6c2-c4207d514b23` | P2    |
+| TypeScript/API docs        | `019f5567-119d-7743-a798-17c5ac044e8a` | Clean |
+| Performance/reliability    | `019f5567-1231-70f2-a5b0-6ff9cab56b57` | P1    |
 
 Security is deferred to final project readiness.
 
@@ -607,3 +607,15 @@ Security is deferred to final project readiness.
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check` checks. TypeDoc
   retained 205 server exports with only the known invalid-`origin` warning.
   Fresh all-lane review remains required.
+- `2026-07-12T08:17:30Z`: Committed the verified Round 12 fix as `9849179d`,
+  resolved full endpoint `9849179df1ed97b4997067ab8e56d6f61f6fa51e`, and
+  generated `.superpowers/sdd/review-0308bc4a..9849179d.diff` with that literal
+  immutable endpoint in its header (54 commits, 225,982 bytes). Passed
+  lightweight pre-review lint and assigned all four Round 13 lanes.
+- `2026-07-12T08:21:29Z`: Closed all four Round 13 lanes. Accepted one complete
+  docs batch: runtime architecture must state rebind, transfer, publish, reopen;
+  the fixed-ledger criterion must use permanent historical scope; T-0037e must
+  deterministically retry quiescence failure for reusable explicit stop and
+  zero-registration permanent close; and T-0037f must carry caller-owned failed-
+  start retry through deferred server cleanup while leaving the environment open
+  and reusable. The API lane and all other checks were clean.
