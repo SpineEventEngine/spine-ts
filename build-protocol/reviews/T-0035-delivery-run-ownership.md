@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Complete; all four lanes clean; final verification passed
+Status: Complete; merged to main; post-merge verification passed
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -437,3 +437,6 @@ Security is deferred to final project readiness.
   files / 1,282 tests in ordinary and coverage runs, coverage above all gates,
   and clean typecheck/lint/format/docs/protobuf/generated checks. T-0035 is
   accepted for merge.
+- `2026-07-12T01:43:00Z`: Merge `8f19e0bc` integrated T-0035 into `main`, and
+  the full post-merge project gate repeated successfully. Review closure remains
+  clean.

@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Complete; final verification passed; ready to merge
+Status: Complete; merged to main; post-merge verification passed
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -535,6 +535,8 @@ active delivery scheduler.
   statements, 90.03% branches, 98.17% functions, and 95.02% lines; typecheck,
   lint, cleanup rules, formatting, docs/API, protobuf lint, and generated-output
   checks passed with only the known invalid-`origin` TypeDoc warning.
+- PASS: Post-merge full verification on `main` at merge `8f19e0bc` repeated the
+  same 60 files / 1,282 tests, coverage, and all project gates successfully.
 - PASS: Coordinator independently repeated the Round 8 generated build,
   docs/API, formatting, source/current-future architecture assertions,
   whitespace, exact scope, chronology, zero-untracked, compatibility, and
