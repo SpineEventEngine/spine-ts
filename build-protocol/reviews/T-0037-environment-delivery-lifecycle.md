@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 2 docs fix active
+Status: Round 2 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -42,18 +42,29 @@ Security is deferred to final project readiness.
   persistence, including earlier successful rows in partial `receiveAll`/batch
   failure, and emits none for rejected/unattempted writes.
 - Confirm T-0037b's single pending admission losslessly unions every eligible
-  canonical configured scope, is bounded by descriptors/shards rather than
-  trigger count, and preserves disjoint scopes across mixed partitions.
+  canonical tenant/configured scope, preserves tenant identity, is bounded by
+  the current tenant/configured domain rather than trigger/repeated-notification
+  count, and preserves disjoint scopes across mixed partitions.
+- Confirm T-0037a's readiness callback is synchronous and non-throwing so
+  observer failure cannot change durable receive/batch/exact-drain outcomes.
+- Confirm T-0037d alone performs the no-overlap switch from pre-attachment
+  immediate exact drain to environment coordination and tests the different
+  truthful handoff settlement boundary after attachment.
 - Confirm T-0037b alone owns the reusable coordinator-instance
-  stop/await/retire primitive, T-0037d invokes it only for failed-start empty-
-  generation rollback/replacement, and T-0037e invokes it only for ordinary
-  last detach/permanent close plus fresh-generation race policy.
+  stop/await/retire primitive and guarantees retirement after record-reporting
+  rejection; T-0037d invokes it only for failed-start empty-generation
+  rollback/replacement, and T-0037e invokes it only for explicit generation
+  stop, ordinary last detach, and permanent close plus fresh-generation race
+  policy.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
 - Confirm all six child ledgers copy every applicable inherited human rule and
   distinguish no committed generated artifacts/root-public API changes from
   permitted emitted internal declaration changes.
+- Confirm T-0037e/f require updates to existing README/TypeDoc behavioral
+  contracts and API export checks while adding no public export, signature, or
+  option.
 
 ## Rounds
 
@@ -134,7 +145,22 @@ Security is deferred to final project readiness.
   `019f54b8-abb6-78d1-9d4a-a60a24f18ebc` with the complete eight-item batch.
   Runtime, tests, examples, current public docs, generated output, and the
   user-owned file remain frozen. No fix or clean-review result is claimed.
-- `2026-07-12T04:44:00Z`: Assigned docs fix worker
-  `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
-  package generation and all four lanes remain pending its return, coordinator
-  verification, and commit.
+- `2026-07-12T05:14:00Z`: The Round 2 worker authored the complete accepted
+  batch across governing decisions, architecture, parent/report, child briefs,
+  and durable records. The package now has exclusive exact-drain transition and
+  explicit-stop ownership, finally-safe retirement, tenant-aware bounded
+  admission, non-throwing readiness, precise generation/registration terms,
+  current status boundaries, and public behavioral-documentation acceptance.
+  Focused verification is pending; no fresh reviewer is assigned and no clean
+  review is claimed.
+- `2026-07-12T05:14:30Z`: The Round 2 fix package passed fresh lightweight
+  docs/status lint, `docs:check`, `format:check`, `git diff --check`, exact
+  eleven-file tracked scope, no-untracked inspection, and child-only-brief
+  checks. TypeDoc retained 205 expected server exports and only the known
+  invalid-`origin` warning. No reviewer is assigned yet; fresh all-lane review
+  remains required and no clean result is claimed.
+- `2026-07-12T05:15:20Z`: Coordinator independently inspected the corrected
+  invariant ownership and repeated the focused pre-review gate. Docs/API,
+  format, diff integrity, exact scope, child-artifact shape, public-boundary,
+  and active-status checks passed; the fix worker is closed. No clean review
+  is claimed until all four fresh lanes complete.

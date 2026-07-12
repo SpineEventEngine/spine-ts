@@ -51,16 +51,24 @@ internals or replacing the current local handoff owner prematurely.
 
 This child alone owns the package-internal descriptor for a built context's
 actual delivery storage, tenant enumeration, supported endpoint/shard facts,
-and a readiness callback installed around the existing handoff path. Readiness
+and a synchronous non-throwing readiness callback installed around the existing
+handoff path. Readiness
 is emitted after every successful individual supported-row persistence,
 including each earlier success when a later `receiveAll`/batch row rejects. A
 rejected or unattempted write emits none. The seam must preserve tenant identity
 and sufficient configured obligation identity for later attachment; it must not
 carry payloads, errors, timing, or policy.
 
-The current immediate exact drain remains authoritative in this child. A later
-child may switch lifecycle ownership only after a coordinator and environment
-registration exist.
+Notification failure is not part of the seam: implementations must isolate any
+observer machinery behind the callback and make the callback return normally.
+It cannot reject `receive()` after persistence, stop later `receiveAll()` writes,
+or alter exact-drain error compatibility. Internal observation failure, if any,
+must be handled by its owner without entering this callback payload or return
+channel.
+
+The current immediate exact drain remains authoritative in this child. T-0037d
+alone may switch lifecycle ownership after a coordinator and environment
+registration exist; this seam must support that later atomic no-overlap switch.
 
 ## Likely Files
 
@@ -95,6 +103,9 @@ registration exist.
   rows emit none.
 - When all batch writes persist but a later exact drain rejects, every persisted
   row has still emitted readiness exactly once.
+- The callback is synchronous and non-throwing. Observer implementation failure
+  cannot reject a durable single-row receive, interrupt later batch writes, or
+  replace an exact-drain error; focused tests pin those compatibility outcomes.
 - Existing exact-row immediate drain, deduplication, tenant validation, and
   close behavior remain green.
 - Package-root exports and public API docs remain unchanged; emitted internal
@@ -114,5 +125,6 @@ registration exist.
 ## Explicit Exclusions
 
 No worker coordinator, coalescing, parked record, environment registration,
-startup recovery, rollback, detach, generation, server lifecycle integration,
-retry timing, public API, or T-0036 loop/worker change belongs here.
+direct-drain disablement, startup recovery, rollback, detach, generation,
+server lifecycle integration, retry timing, public API, or T-0036 loop/worker
+change belongs here.

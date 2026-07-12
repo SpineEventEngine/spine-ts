@@ -30,8 +30,10 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
   `ServerEnvironment` surface.
 - Use T-0037d/e attachment and detach handles; do not reproduce environment,
   coordinator, or parked-record logic in server code.
-- Commit no generated artifacts and make no root/public export or API change;
-  emitted internal declarations may change.
+- Commit no generated artifacts and add no root/public export, signature, or
+  option; emitted internal declarations may change. Update existing README and
+  TypeDoc lifecycle contracts for observable startup/close behavior and run API
+  export checks.
 - Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
@@ -89,6 +91,10 @@ aggregation across these ordered phases.
   `PAUSED` outcome cannot start after stop admission.
 - Existing host/port/baseUrl, idempotent/retryable close, listener failure,
   context build failure, and shared/owned environment behavior remain covered.
+- Existing README/TypeDoc contracts describe startup recovery rejection,
+  failed-start cleanup aggregation, and running-server close order/errors
+  without adding a public export, signature, or option; API export checks remain
+  green.
 
 ## D-0085 Invariants
 

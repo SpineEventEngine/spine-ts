@@ -3169,15 +3169,28 @@ Decision:
   configured scope, or batch grouping. Every successful earlier row in a
   `receiveAll` or other batch remains notified when a later row rejects, while
   a rejected or unattempted write emits no readiness. Notification carries
-  readiness only; it does not carry a
-  timer, backoff value, monitor action, payload, or retry policy. Notifications
+  readiness only and uses a synchronous non-throwing package-internal callback;
+  observer failure cannot reject a completed persistence, interrupt later batch
+  writes, or replace the existing handoff result. It does not carry a timer,
+  backoff value, monitor action, payload, error, or retry policy. Notifications
   during an active run merge idempotently into one pending admission containing
-  every eligible canonical configured scope they identify. The pending set
-  deduplicates by configured scope and is bounded by attached descriptors and
-  configured shards, not trigger count; it cannot retain only the first or last
-  scope. Thus disjoint writes and scopes from mixed fulfilled/rejected
+  every eligible canonical tenant/configured scope they identify. The pending
+  set preserves tenant identity, deduplicates by canonical scope, and is bounded
+  by the current tenant/configured descriptor/shard domain, not trigger or
+  repeated-notification count. Legitimate growth may track current tenant or
+  configuration cardinality; it cannot retain only the first or last scope.
+  Thus disjoint writes and scopes from mixed fulfilled/rejected
   partitions remain eligible for one later bounded run without a concurrent
   package-internal/direct worker start.
+- Before environment attachment owns a context, its existing immediate exact
+  drain remains the compatibility owner. Environment attachment installs
+  readiness routing and disables direct exact-drain invocation as one serialized
+  transition before admitting startup recovery. The direct and environment run
+  owners cannot overlap for an attached context or durable row. Before that
+  transition, existing exact-drain completion and error behavior remains. After
+  it, the local handoff settles from durable persistence plus non-throwing
+  readiness submission and does not await or surface endpoint delivery outcome;
+  lifecycle settlement/reporting owns that later outcome.
 - Retryable failures left `TO_DELIVER` remain the responsibility of this same
   owner. `FAILED` records that later reconsideration is needed but does not
   immediately retrigger itself. A later package-internal retry-readiness policy
@@ -3420,6 +3433,12 @@ Decision:
   available and persistent, if facility ownership and backend lifetime permit;
   this decision makes no recovery promise after environment-owned storage is
   permanently closed.
+- The coordinator-instance primitive must retire in a `finally`-equivalent path
+  even when the caller-supplied operational-record consumption/reporting step
+  rejects. It preserves that rejection, combines it with any stop, settlement,
+  classification, or retirement failure under existing aggregation semantics,
+  and exposes the combined failure only after retirement has been attempted.
+  Reporting failure cannot leave a coordinator or its worker/loops reusable.
 - Attach, detach, generation stop, and environment close use the same
   package-internal lifecycle gate. If attach linearizes before last detach marks
   the generation stopping, it becomes another live registration and last detach
@@ -3592,18 +3611,24 @@ Close`, and `T-0037f Server Lifecycle Integration`.
 - The invariant map is exclusive. T-0037a owns package-internal built-context
   delivery descriptors, actual storage-factory access, startup tenant
   enumeration, endpoint/shard attachment facts, and per-successful-row
-  post-persist readiness emission. T-0037b owns serialized bounded generation
-  runs, lossless bounded canonical-scope coalescing, T-0036 evidence
+  post-persist readiness emission through a synchronous non-throwing internal
+  notification seam. T-0037b owns serialized bounded generation runs, lossless
+  bounded canonical-scope coalescing, T-0036 evidence
   interpretation, and the reusable authoritative coordinator-instance
   stop/await/retire primitive. T-0037c owns finite canonical operational
   obligation and cause-reporting records. T-0037d owns environment
   registration cardinality, attachment, startup recovery, and failed-start
   rollback, including invoking T-0037b's primitive and clearing/replacing the
   empty generation slot after sole/first-registration rollback so a
-  caller-owned environment remains reusable. T-0037e owns ordinary detach,
-  invoking the same existing primitive for ordinary last detach and permanent
-  close, fresh-generation race policy, close refusal, and permanent environment
-  close. T-0037f alone integrates those seams with listener startup, network
+  caller-owned environment remains reusable. T-0037d also owns the atomic
+  ownership transition that installs environment readiness routing and disables
+  direct immediate exact-drain invocation for attached contexts, so the two run
+  owners never overlap. T-0037e owns ordinary detach, explicit generation stop,
+  invoking the same existing primitive for explicit stop, ordinary last detach,
+  and permanent close, including the sole package-internal environment-
+  lifecycle explicit-stop entry point; server/handoff code cannot call the
+  primitive directly. It also owns fresh-generation race policy, close refusal, and
+  permanent environment close. T-0037f alone integrates those seams with listener startup, network
   shutdown, contexts, resources, and owned facilities. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback
   or coordinator-instance retirement.
@@ -3615,12 +3640,12 @@ Close`, and `T-0037f Server Lifecycle Integration`.
 - T-0037a is the first handoff. It must expose one small package-internal
   `boundedContextAccess` descriptor/readiness seam grounded in built-context
   state. It does not start a worker, attach an environment registration, or
-  replace the current exact-drain behavior before a later child owns the
-  transition.
+  replace the current exact-drain behavior before T-0037d owns the transition.
 - Every child preserves D-0085 rather than redesigning it: one environment
   owner; finite one-shot T-0036 runs; readiness after every successful
   individual row persistence and never a rejected write; one lossless pending
-  canonical-scope union bounded by descriptors/configured shards; per-shard
+  canonical-scope union bounded by current canonical tenant/configured scope
+  cardinality, never trigger or repeated-notification count; per-shard
   rather than aggregate scheduling; no spin from fulfilled `FAILED`/`SKIPPED`
   or rejected starts; bounded parked state; ownership-scoped startup/cleanup;
   one reusable stop-before-await-before-consume-before-retire coordinator

@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 2 docs fix active
+Status: Round 2 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -59,15 +59,18 @@ verified, merged, and cleaned child tasks:
 5. `T-0037e Generation Retirement And Environment Close`
 6. `T-0037f Server Lifecycle Integration`
 
-The invariant map is strict: descriptors and per-successful-row readiness belong
-to `a`; bounded runs, lossless bounded canonical-scope coalescing, and the
+The invariant map is strict: descriptors and synchronous non-throwing per-
+successful-row readiness belong to `a`; bounded runs, lossless bounded canonical
+tenant/configured-scope coalescing, and the
 reusable coordinator-instance stop/await/retire primitive belong to `b`;
 bounded operational/cause records belong to `c`; attachment/startup and
-failed-start rollback invocation/empty-slot replacement belong to `d`; ordinary
-detach, ordinary/permanent-close primitive invocation, fresh-generation race
-policy, and environment close belong to `e`; and network/server ordering belongs
-to `f`. Retry timing and public policy remain outside every child. The `d` and
-`e` callers do not overlap or reopen the primitive.
+failed-start rollback invocation/empty-slot replacement plus the no-overlap
+transition from direct exact drain to environment coordination belong to `d`;
+ordinary detach, explicit generation stop, ordinary/permanent-close primitive
+invocation, fresh-generation race policy, and environment close belong to `e`;
+and network/server ordering belongs to `f`. Retry timing and public policy remain
+outside every child. The `d` and `e` callers do not overlap or reopen the
+finally-safe primitive.
 
 Each child depends on its predecessor and is Candidate/not started. No child
 branch, work log, review log, or implementation claim exists. D-0086 records
@@ -126,15 +129,17 @@ used for child runtime work.
   directory contains only its brief; no runtime, tests, examples, generated,
   public API docs, child work logs, or child review logs changed.
 - ROUND 1: All four required lanes completed with accepted findings. The docs
-  fix package later passed its focused verification but has not been freshly
-  reviewed; no clean review is claimed.
+  fix package later passed focused verification and was committed as
+  `3847e1b6`; Round 2 then reviewed the reconciled `80ef21e2` boundary and found
+  the additional accepted batch below. No clean review is claimed.
 - PASS: Coordinator repeated `docs:check`, `format:check`, `git diff --check`,
   and exact scope/untracked inspection. Docs emitted only the known invalid-
   `origin` warning and retained 205 expected server exports. Lightweight status
   lint corrected completed-step and no-commit attribution wording.
-- PASS: Split package committed as `7ff3d50a`; review-boundary reconciliation
-  was later recorded through `9e90a006`, and docs-fix assignment was recorded
-  as `652db999`. This fix package remains uncommitted and claims no future hash.
+- PASS: Split package committed as `7ff3d50a`; Round 1 findings and assignment
+  were recorded by `9e90a006` and `652db999`, the verified fix was committed as
+  `3847e1b6`, and reconciliation through `80ef21e2` formed the Round 2 review
+  boundary.
 - REVIEW: Round 1 accepted findings: require readiness after each successful
   row persistence including partial batches; define bounded lossless merged
   coalescing across every eligible notified scope; place a reusable authoritative
@@ -146,5 +151,15 @@ used for child runtime work.
 - PASS: The Round 1 docs fix batch passed `pnpm docs:check`,
   `pnpm format:check`, `git diff --check`, exact tracked/untracked scope, and
   child-artifact checks. Docs retained 205 expected server exports and only the
-  known invalid-`origin` warning. Full `pnpm verify` remains reserved. Fresh
-  four-lane review is pending and no clean review is claimed.
+  known invalid-`origin` warning. Full `pnpm verify` remains reserved. This is
+  historical Round 1 evidence; Round 2 findings supersede its then-pending
+  review state.
+- ROUND 2: Package `0308bc4a..80ef21e2` was reviewed after assignment commit
+  `9e723afe`; accepted findings were recorded by `45f737b4`. The single Round 2
+  docs fix worker authored and verified the complete accepted batch. All four
+  fresh review lanes remain required; no clean review is claimed.
+- PASS: The complete Round 2 docs fix passed lightweight stale-status/ownership/
+  public-boundary lint, `pnpm docs:check`, `pnpm format:check`,
+  `git diff --check`, exact eleven-file tracked scope, no-untracked inspection,
+  and child-only-brief checks. Docs retained 205 expected server exports and only
+  the known invalid-`origin` warning. Fresh four-lane review remains required.

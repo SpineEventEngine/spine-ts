@@ -40,9 +40,12 @@ This child owns one generation's worker construction input, one active start,
 one idempotently merged pending admission, immediate rejection observation,
 per-shard transition rules, and the reusable authoritative coordinator-instance
 stop/await/retire primitive. The pending admission contains every eligible
-notified canonical configured scope, deduplicates by that scope, and is bounded
-by attached descriptors/configured shards rather than trigger count. It never
-retains only the first or last trigger. The coordinator creates a finite
+notified canonical tenant/configured scope, deduplicates by that scope, and is
+bounded by the current canonical tenant and configured descriptor/shard domain
+rather than trigger or repeated-notification count. Legitimate growth tracks
+current tenants/configuration and preserves tenant identity; notifications do
+not create unbounded duplicate scope state. It never retains only the first or
+last trigger. The coordinator creates a finite
 admitted obligation, invokes `deliveryWorkerAccess.start(...)`, continues only
 `PAUSED` shards within that obligation, and stops between one-shot runs. It
 returns or publishes bounded internal settlement evidence for later ownership
@@ -50,8 +53,11 @@ layers.
 
 The retirement primitive closes coordinator admission, calls stop, awaits and
 classifies active settlement, awaits one caller-supplied operational-record
-consumption/reporting step, and then permanently retires that coordinator's
-worker/loops in D-0085 order. It is idempotent and reusable by later lifecycle
+consumption/reporting step, and permanently retires that coordinator's
+worker/loops in D-0085 order through a `finally`-equivalent path. If the supplied
+step rejects, the primitive preserves and aggregates that failure with any
+other stop/settlement/retirement failures, attempts retirement exactly once,
+and settles with the combined result only afterward. It is idempotent and reusable by later lifecycle
 owners; it does not own registration removal, record selection, an environment
 generation slot, or fresh-generation race policy.
 
@@ -74,8 +80,10 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   run, notifications for disjoint configured scopes merge into one later
   bounded admission containing all eligible scopes.
 - Repeated notifications for the same canonical configured scope are
-  idempotent; the pending set is bounded by descriptors/configured shards and
-  cannot grow with trigger count or collapse to first/last scope.
+  idempotent; the pending set preserves tenant identity and is bounded by the
+  current canonical tenant/configured descriptor/shard domain. It may grow with
+  legitimate current tenant/configuration cardinality, but not trigger count or
+  repeated notifications, and cannot collapse to first/last scope.
 - `IDLE` completes, `FAILED` and `SKIPPED` park, `STOPPED` does not continue,
   and only `PAUSED` continues the current finite obligation.
 - Mixed `FAILED`/`PAUSED` evidence continues only the paused shard regardless
@@ -92,6 +100,10 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - The authoritative retirement primitive closes admission before the next
   one-shot start, calls stop, awaits active work without interruption, awaits
   boundary record consumption, and retires the worker/loops exactly once.
+- When boundary record consumption/reporting rejects, retirement is still
+  attempted exactly once, the old worker/loops cannot be reused, and the
+  rejection is preserved and aggregated with other failures only after
+  retirement settles.
 - Existing package-internal/direct `DeliveryWorker.start()` compatibility and
   all T-0036 tests remain unchanged.
 

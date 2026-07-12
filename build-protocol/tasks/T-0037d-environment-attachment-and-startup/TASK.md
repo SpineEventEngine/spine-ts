@@ -38,10 +38,13 @@ integration.
 
 ## Exact Ownership
 
-This child owns the package-internal lifecycle gate for attach/startup, one
-delivery generation per environment, caller-owned shared registration
-cardinality, server-owned exclusivity, registration tokens, startup recovery
-admission, post-persist readiness routing, and failed-start rollback. It
+This child owns the package-internal lifecycle gate for attach/startup, at most
+one current/non-retired delivery generation per environment at a time,
+caller-owned shared registration cardinality, registration for a server-owned
+environment exclusivity, registration tokens, startup recovery admission,
+post-persist readiness routing, the atomic no-overlap ownership switch from
+direct immediate exact drain to environment coordination for attached contexts,
+and failed-start rollback. It
 assembles startup obligation scopes from T-0037a's built-context descriptors,
 including actual storage factories and enumerated tenants, installs readiness,
 and awaits one finite recovery result before declaring attachment ready.
@@ -69,8 +72,18 @@ It does not yet change `Server.start()` or listener ordering.
 ## TDD Acceptance
 
 - Multiple caller-owned registrations share exactly one generation/coordinator;
-  an environment-owned registration is exclusive, with conflicts rejected
-  before registration or work admission.
+  a registration for a server-owned environment is exclusive, with conflicts
+  rejected before registration or work admission. At most one current/non-
+  retired generation exists at a time; retirement permits one later fresh
+  generation where the environment remains reusable.
+- Attachment installs readiness routing and disables direct immediate exact
+  drain as one lifecycle-gated ownership transition before startup admission.
+  Before attachment, handoff completion/error behavior still follows exact
+  drain. After attachment, handoff settles from durable persistence plus
+  non-throwing readiness submission and does not await or surface endpoint
+  outcome; lifecycle settlement/reporting owns it. No handoff exact drain can
+  overlap an environment-owned worker run for the same durable row or attached
+  scope.
 - Startup installs readiness after context assembly, enumerates pre-existing
   supported tenant work using each built context's actual storage, and awaits
   one finite recovery obligation.
@@ -104,7 +117,8 @@ It does not yet change `Server.start()` or listener ordering.
 ## Explicit Exclusions
 
 No public lifecycle option, final `Server.start()` wiring, network intake,
-ordinary detach/last-detach invocation, permanent-close invocation,
+ordinary detach/last-detach invocation, explicit-generation-stop invocation,
+permanent-close invocation,
 fresh-generation attach/detach/close race policy, environment/facility close,
 retry timing, monitor/action API, topology, or T-0036 redesign belongs here.
 This child invokes but does not reopen T-0037b's retirement primitive.

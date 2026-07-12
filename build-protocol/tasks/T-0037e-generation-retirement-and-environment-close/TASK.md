@@ -6,10 +6,10 @@ Dependency: T-0037d complete and integrated.
 
 ## Objective
 
-Complete the environment seam with registration detach, ordinary/permanent
-invocation of the existing authoritative coordinator retirement primitive,
-fresh-generation race policy, live-registration close refusal, and permanent
-environment/facility close.
+Complete the environment seam with registration detach, explicit generation
+stop, ordinary/permanent invocation of the existing authoritative coordinator
+retirement primitive, fresh-generation race policy, live-registration close
+refusal, and permanent environment/facility close.
 
 ## Human-Imposed Requirements Ledger
 
@@ -31,20 +31,28 @@ environment/facility close.
   public detach, registration, generation, scheduler, or retry option.
 - Serialize attach, detach, generation stop, and environment close through the
   same package-internal lifecycle gate from T-0037d.
-- Commit no generated artifacts and make no root/public export or API change;
-  emitted internal declarations may change.
+- Commit no generated artifacts and add no root/public export, signature, or
+  option; emitted internal declarations may change. Update the existing README
+  and TypeDoc lifecycle contracts for observable close behavior and run API
+  export checks.
 - Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
 ## Exact Ownership
 
 This child owns internal detach barriers, non-last versus last-detach record
-consumption, invoking T-0037b's existing authoritative primitive for ordinary
-last detach and zero-registration permanent close, fresh-generation
+consumption, explicit generation stop as a lifecycle-gated internal operation,
+invoking T-0037b's existing authoritative primitive for explicit stop, ordinary
+last detach, and zero-registration permanent close, fresh-generation
 attach/detach/close race policy after reusable caller-owned retirement,
 `ServerEnvironment.close()` live-registration refusal, permanent admission
 close, and ordered owned-facility close after quiescence. It does not implement
 another stop/await/retire path or handle failed-start rollback.
+
+One package-internal environment-lifecycle explicit-stop entry point owned here
+is the sole explicit-stop caller of T-0037b's primitive. Server integration and
+handoff code may use the completed environment seam but cannot call the
+primitive directly or introduce another explicit-stop path.
 
 It supplies internal detach/close operations for T-0037f. It does not own HTTP/2
 network or context/resource ordering.
@@ -70,6 +78,15 @@ network or context/resource ordering.
   T-0037b primitive rather than duplicating it.
 - A caller-owned environment can later create exactly one fresh generation;
   stopped worker/loop instances are never reused or overlapped.
+- Explicit generation stop is distinct from detach and environment close. Under
+  the same lifecycle gate it closes generation admission, invokes T-0037b's
+  stop/await/consume/retire primitive, leaves registrations and a caller-owned
+  environment reusable, and applies the same wait-or-reject attach race order;
+  a later eligible trigger/attach may create exactly one fresh generation, never
+  reuse or overlap the retired instance.
+- Focused internal-access tests prove the T-0037e environment entry point is the
+  sole explicit-stop caller and server/handoff code has no direct primitive
+  access.
 - Environment close with any live registration rejects before changing
   admission, stopping work, consuming records, or closing facilities; retry
   after all internal detaches may succeed.
@@ -81,6 +98,9 @@ network or context/resource ordering.
   facilities without closing them beneath active work.
 - Eligible unreported causes aggregate once through existing retryable-close
   behavior; reported unresolved causes are consumed without resurfacing.
+- Existing README/TypeDoc contracts describe live-registration close refusal,
+  explicit stop/reuse, and observable close failure/order behavior without
+  adding a public export, signature, or option; API export checks stay green.
 
 ## D-0085 Invariants
 

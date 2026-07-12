@@ -394,19 +394,27 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
 1. T-0037a owns context delivery descriptors, actual storage, tenant startup
    scopes, endpoint/shard facts, and readiness after every successful
    individual row persistence, including successful rows in a partially failed
-   batch and never a rejected write.
+   batch and never a rejected write. Its internal notification is synchronous
+   and non-throwing, so observation cannot change durable receive outcomes.
 2. T-0037b owns serialized finite generation runs, one lossless pending union
-   deduplicated by canonical configured scope and bounded by descriptors/shards,
+   deduplicated by canonical tenant/configured scope and bounded by current
+   tenant/configured scope cardinality rather than notification count,
    per-shard interpretation of T-0036 evidence, and the reusable authoritative
-   coordinator-instance stop/await/retire primitive.
+   coordinator-instance stop/await/retire primitive. Retirement still runs when
+   caller-supplied record consumption/reporting rejects; combined failure is
+   exposed only after retirement is attempted.
 3. T-0037c owns bounded canonical operational obligations and one-time cause
    reporting.
-4. T-0037d owns environment registration cardinality, startup recovery, and
-   registration-scoped rollback, including invoking T-0037b's primitive and
-   clearing/replacing the empty generation slot after sole failed attachment.
-5. T-0037e owns ordinary detach, invoking that existing primitive for ordinary
-   last detach/permanent close, fresh-generation races, close refusal, and
-   permanent environment close.
+4. T-0037d owns environment registration cardinality, startup recovery, the
+   no-overlap transition from direct immediate exact drain to environment
+   coordination, and registration-scoped rollback, including invoking T-0037b's
+   primitive and clearing/replacing the empty generation slot after sole failed
+   attachment.
+5. T-0037e owns ordinary detach and explicit generation stop, invoking that
+   existing primitive for explicit stop, ordinary last detach, and permanent
+   close through the sole package-internal environment-lifecycle explicit-stop
+   entry point, plus fresh-generation races, close refusal, and permanent
+   environment close. Server and handoff code cannot call the primitive directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
 
@@ -418,6 +426,8 @@ local persistence. The TS sequence rejects JVM singleton state, per-message
 threads, repeat callbacks, public monitor actions, catch-up stations, and
 global storage-factory copying. Retry timing and all public scheduler,
 monitoring, health, topology, adapter, and catch-up policy remain deferred.
-The sequence adds no root/public export or API change and commits no generated
-artifact; package-internal declarations emitted by normal documentation/type
-builds may change with internal implementation.
+The sequence adds no root/public export, signature, or option and commits no
+generated artifact; package-internal declarations emitted by normal
+documentation/type builds may change with internal implementation. Existing
+README and TypeDoc contracts must nevertheless document the observable startup
+and close behavior when T-0037e/f implement it.
