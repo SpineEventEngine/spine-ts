@@ -3,6 +3,7 @@ import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
+  configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
   deliveryEndpoint,
   type DeliveryEndpoint,
@@ -11,6 +12,8 @@ import {
   localInboxHandoffKey,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
+
+const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
 
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
@@ -36,7 +39,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return Object.freeze(
       [...this.#targets.values()].map((target) =>
         deliveryEndpoint({
-          label: "UPDATE_SUBSCRIBER",
+          label: projectionLabels[0],
           inboxId: { targetTypeUrl: target.targetTypeUrl },
           shard: ShardIndex.single(),
         }),
@@ -79,14 +82,13 @@ export class LocalProjectionInbox implements ProjectionInbox {
     });
 
     if (written.outcome === "WRITTEN") {
-      this.#readiness.notify(
-        deliveryEndpoint({
-          label: input.label,
-          inboxId: written.message.inboxId,
-          shard: written.message.shard,
-        }),
-        deliveryTenantId,
+      const endpoint = configuredDeliveryEndpoint(
+        written.message,
+        this.#targets.has(written.message.inboxId.targetTypeUrl) ? projectionLabels : undefined,
       );
+      if (endpoint !== undefined) {
+        this.#readiness.notify(endpoint, deliveryTenantId);
+      }
     }
 
     await drainLocalInboxMessage({

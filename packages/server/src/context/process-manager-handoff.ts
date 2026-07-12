@@ -3,6 +3,7 @@ import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
 import {
+  configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
   deliveryEndpoint,
   type DeliveryEndpoint,
@@ -155,14 +156,13 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     });
 
     if (written.outcome === "WRITTEN") {
-      this.#readiness.notify(
-        deliveryEndpoint({
-          label: input.label,
-          inboxId: written.message.inboxId,
-          shard: written.message.shard,
-        }),
-        deliveryTenantId,
+      const endpoint = configuredDeliveryEndpoint(
+        written.message,
+        this.#targets.get(written.message.inboxId.targetTypeUrl)?.labels,
       );
+      if (endpoint !== undefined) {
+        this.#readiness.notify(endpoint, deliveryTenantId);
+      }
     }
 
     return written.message;

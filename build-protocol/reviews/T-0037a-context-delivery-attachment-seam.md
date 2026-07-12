@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 2 fixes active; RED pending
+Status: Round 2 fixes coordinator-verified; repeat review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -193,3 +193,30 @@ Security is deferred to final project readiness.
 - `2026-07-12T10:44:51Z`: Assignment provenance commit `37023df5` completed;
   started the worker with focused configured-endpoint RED required before
   production edits.
+- `2026-07-12T10:44:52Z`: The Round 2 fix worker completed and durably recorded
+  its canonical pre-action skill check in the work log. It used the exposed
+  session inventory, the expected-skill manifest, the complete 47-entry
+  readable `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name
+SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
+  fully read `test-driven-development`, `receiving-code-review`,
+  `javascript-testing-patterns`, `codebase-design`, `implement`, and
+  `verification-before-completion` from their exact installed entrypoints;
+  named skips and reasons are preserved in the work log. No source was
+  unreachable, and no test or production edit preceded this check.
+- `2026-07-12T10:45:21Z`: Round 2 fix RED recorded before production edits.
+  Seven focused persisted-row cases across process-manager and projection
+  handoffs, including a target-specific supported-label mismatch, each failed
+  only because readiness was emitted for a scheduled, mismatched-label, or
+  missing-target row; the remaining 26 focused tests and durable persistence/
+  exact-drain assertions passed.
+- `2026-07-12T10:50:52Z`: The sole Round 2 fix worker completed the accepted
+  behavioral batch without committing. One shared package-internal helper now
+  requires `WRITTEN` plus `TO_DELIVER` plus a registered target's exact
+  configured label before readiness. Fresh verification passed 91 context/API
+  tests, 144 repository compatibility tests, both required typechecks, and
+  changed TypeScript ESLint, changed-file formatting, lightweight docs/status
+  lint, and diff integrity. No public/docs/example/generated/untracked leakage
+  was found. Coordinator verification and all four repeat lanes remain pending.
+- `2026-07-12T10:53:37Z`: Coordinator verification and lightweight pre-review
+  lint passed for the Round 2 fix. The complete batch is ready to commit as the
+  fresh literal endpoint for all four repeat lanes.

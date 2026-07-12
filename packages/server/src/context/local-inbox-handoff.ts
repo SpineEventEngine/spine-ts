@@ -191,3 +191,17 @@ export function deliveryEndpoint(input: {
     shard: new ShardIndex(input.shard.index, input.shard.ofTotal),
   });
 }
+
+export function configuredDeliveryEndpoint(
+  message: InboxMessage,
+  labels: readonly SupportedDeliveryLabel[] | undefined,
+): DeliveryEndpoint | undefined {
+  if (message.status !== "TO_DELIVER") {
+    return undefined;
+  }
+  const label = labels?.find((candidate) => candidate === message.label);
+
+  return label === undefined
+    ? undefined
+    : deliveryEndpoint({ label, inboxId: message.inboxId, shard: message.shard });
+}

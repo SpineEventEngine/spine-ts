@@ -85,6 +85,11 @@ describe("LocalProcessManagerInbox", () => {
     const delivery = { inbox: { receive } } as unknown as Delivery;
     const ready: unknown[] = [];
     const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      replay: () => Promise.resolve(),
+    });
 
     await expect(inbox.receiveAll(delivery, inputs, "tenant-a")).rejects.toThrow(
       "second write rejected",
@@ -1008,7 +1013,8 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1042,6 +1048,7 @@ describe("LocalProcessManagerInbox", () => {
         status: "SCHEDULED",
       },
     ]);
+    expect(ready).toEqual([]);
   });
 
   it("rejects when the inbox label is not HANDLE_COMMAND", async () => {
@@ -1049,7 +1056,8 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1083,6 +1091,43 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
       },
     ]);
+    expect(ready).toEqual([]);
+  });
+
+  it("emits no readiness when the registered target does not configure the persisted label", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.CommandOnlyProcessManager";
+    const replayFailure = new Error("unconfigured event label should not replay");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.reject(replayFailure),
+    });
+
+    await expect(
+      inbox.receive(delivery, {
+        inboxId: { targetId: "pm-label-mismatch", targetTypeUrl },
+        signalId: "event-label-mismatch",
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      }),
+    ).rejects.toBe(replayFailure);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-label-mismatch",
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+      },
+    ]);
+    expect(ready).toEqual([]);
   });
 
   it("rejects when no process-manager command target is registered", async () => {
@@ -1090,7 +1135,8 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
 
     await expect(
       inbox.receive(delivery, {
@@ -1115,6 +1161,7 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
       },
     ]);
+    expect(ready).toEqual([]);
   });
 });
 
