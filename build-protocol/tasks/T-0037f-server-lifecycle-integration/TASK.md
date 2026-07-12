@@ -18,6 +18,11 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
+- Every implementation and review role must perform and durably record the
+  canonical skill-applicability check from `BUILD_PROTOCOL.md` before its work.
+- Apply the Human Review Reset: prefer the smallest JVM-familiar concepts,
+  replace or delete wrong abstractions instead of preserving them, and invent
+  no abstraction without corresponding Spine JVM evidence.
 - Before server-module implementation, inspect and record the relevant Spine
   JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
 - Run lightweight docs/status lint before review.
@@ -34,6 +39,9 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
   option; emitted internal declarations may change. Update existing README and
   TypeDoc lifecycle contracts for observable startup/close behavior and run API
   export checks.
+- README and TypeDoc must describe only observable `Server`, `RunningServer`,
+  and `ServerEnvironment` behavior; they must not name or describe the package-
+  internal explicit generation-stop operation.
 - Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
@@ -93,8 +101,9 @@ aggregation across these ordered phases.
   context build failure, and shared/owned environment behavior remain covered.
 - Existing README/TypeDoc contracts describe startup recovery rejection,
   failed-start cleanup aggregation, and running-server close order/errors
-  without adding a public export, signature, or option; API export checks remain
-  green.
+  without naming or describing package-internal explicit generation stop and
+  without adding a public export, signature, or option; focused public-leak and
+  API export checks remain green.
 
 ## D-0085 Invariants
 

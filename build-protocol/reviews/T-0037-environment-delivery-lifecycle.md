@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 4 docs fix active
+Status: Round 4 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -50,7 +50,9 @@ Security is deferred to final project readiness.
 - Confirm T-0037d alone performs the no-overlap switch from pre-attachment
   immediate exact drain to environment coordination: a blocked already-admitted
   exact drain keeps attachment/startup environment admission pending until it
-  settles, while every subsequent receive uses readiness only.
+  settles; persistence after direct-drain admission closes but before route
+  installation has one bounded transition readiness owner; and route transfer
+  produces exactly one eventual lifecycle admission before startup opens.
 - Confirm T-0037b alone owns the reusable coordinator-instance
   stop/await/retire primitive and guarantees retirement after record-reporting
   rejection; T-0037d invokes it only for failed-start empty-generation
@@ -59,18 +61,23 @@ Security is deferred to final project readiness.
   policy.
 - Confirm an otherwise eligible attach arriving after reusable explicit stop
   begins waits through full retirement and creates or joins exactly one fresh
-  generation. It may reject only after permanent close wins or independent
-  ownership cardinality refuses it.
+  generation. Every surviving registration, readiness route, and configured/
+  startup scope rebinds to that generation before later-write admission, and a
+  racing eligible attach joins it. Only permanent close or independent
+  ownership cardinality may reject the attach.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
-- Confirm all six child ledgers copy every applicable inherited human rule and
-  distinguish no committed generated artifacts/root-public API changes from
-  permitted emitted internal declaration changes.
+- Confirm the parent prohibits duplicate agents per role and requires every
+  participant closed. Confirm parent and all six child ledgers require the
+  canonical skill check for every implementation/review role and the Human
+  Review Reset's smallest JVM-familiar, replace/delete-wrong, and no-invented-
+  abstraction rules; T-0037a alone also carries the `bounded-context.ts`
+  caution.
 - Confirm T-0037e/f require updates to existing README/TypeDoc behavioral
   contracts and API export checks while adding no public export, signature, or
-  option. Public docs describe only observable `ServerEnvironment.close()`
-  refusal, reuse, ordering, and failure behavior and never name package-internal
+  option. Public docs describe only observable `Server`, `RunningServer`, and
+  `ServerEnvironment` behavior and never name or describe package-internal
   explicit generation stop.
 
 ## Rounds
@@ -226,3 +233,20 @@ Security is deferred to final project readiness.
 - `2026-07-12T05:37:19Z`: Assigned single Round 4 docs fix worker
   `019f54d4-6c0f-7612-96cd-beeca8354501` with the complete batch. Runtime,
   current public docs, generated output, and user-owned scope remain frozen.
+- `2026-07-12T05:42:30Z`: The Round 4 worker authored the complete accepted
+  batch across D-0085/D-0086, architecture, parent/report, all six child briefs,
+  and durable records. Transition-time writes now retain one bounded owner,
+  surviving registration scopes rebind to one fresh generation, T-0037f keeps
+  internal-stop language out of public docs, and every applicable ledger carries
+  the required skill/reset/participant rules. Focused verification is pending;
+  no clean review is claimed.
+- `2026-07-12T05:46:10Z`: The Round 4 worker passed fresh focused stale/ledger/
+  public-leak/race lint, docs/API, format, whitespace, exact twelve-file scope,
+  zero-untracked, child-artifact, and frozen-path checks. TypeDoc retained 205
+  server exports with only the known invalid-`origin` warning. The worker is
+  closed; coordinator verification remains pending and no clean review is
+  claimed.
+- `2026-07-12T05:48:51Z`: Coordinator independently inspected all corrected
+  contracts and repeated docs/API, format, diff, exact-scope, frozen-path,
+  stale-status, ledger, public-leak, and race checks. All passed with the known
+  invalid-`origin` warning only. Fresh all-lane review remains required.

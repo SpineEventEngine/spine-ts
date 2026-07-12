@@ -19,6 +19,11 @@ integration.
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
+- Every implementation and review role must perform and durably record the
+  canonical skill-applicability check from `BUILD_PROTOCOL.md` before its work.
+- Apply the Human Review Reset: prefer the smallest JVM-familiar concepts,
+  replace or delete wrong abstractions instead of preserving them, and invent
+  no abstraction without corresponding Spine JVM evidence.
 - Before server-module implementation, inspect and record the relevant Spine
   JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
 - Run lightweight docs/status lint before review.
@@ -44,7 +49,8 @@ caller-owned shared registration cardinality, registration for a server-owned
 environment exclusivity, registration tokens, startup recovery admission,
 post-persist readiness routing, the atomic no-overlap ownership switch from
 direct immediate exact drain to environment coordination for attached contexts,
-and failed-start rollback. It
+the bounded transition readiness buffer used while that route is being
+installed, and failed-start rollback. It
 assembles startup obligation scopes from T-0037a's built-context descriptors,
 including actual storage factories and enumerated tenants, installs readiness,
 and awaits one finite recovery result before declaring attachment ready.
@@ -81,12 +87,21 @@ It does not yet change `Server.start()` or listener ordering.
   focused concurrency test blocks an already-admitted direct exact drain, begins
   attachment, and proves attachment/startup environment admission remains
   pending until that drain settles. The barrier closes new direct-drain
-  admission before it waits, then installs readiness and admits environment work;
-  every subsequent receive settles from durable persistence plus non-throwing
-  readiness submission only and neither invokes nor awaits exact drain. Before
-  attachment, handoff completion/error behavior still follows exact drain. No
-  handoff exact drain can overlap an environment-owned worker run for the same
-  durable row or attached scope.
+  admission before it waits. Any row persisted after that close but before the
+  readiness route is installed submits readiness to a transition buffer bounded
+  by canonical tenant/configured-scope cardinality; it never falls back to
+  direct drain. Installing the route transfers each buffered scope exactly once
+  into the generation's lossless pending admission before environment/startup
+  admission opens. Every subsequent receive settles from durable persistence
+  plus non-throwing readiness submission only and neither invokes nor awaits
+  exact drain. Before attachment, handoff completion/error behavior still
+  follows exact drain. No durable row loses both owners, and no handoff exact
+  drain overlaps an environment-owned worker run for the same row or scope.
+- A focused race test blocks one already-admitted direct drain and readiness-
+  route installation, persists a supported row after direct-drain admission is
+  closed, and proves that row is buffered without exact drain. After route
+  installation it receives exactly one eventual lifecycle admission, while the
+  older direct drain must settle before startup/environment work is admitted.
 - Startup installs readiness after context assembly, enumerates pre-existing
   supported tenant work using each built context's actual storage, and awaits
   one finite recovery obligation.

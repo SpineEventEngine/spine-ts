@@ -407,20 +407,23 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    reporting.
 4. T-0037d owns environment registration cardinality, startup recovery, the
    no-overlap barrier that closes new direct exact-drain admission, awaits any
-   already-admitted direct exact drain in the attaching scope, installs
-   readiness routing, and only then admits startup/environment work. Subsequent
-   receives use readiness only. It also owns registration-scoped rollback,
-   including invoking T-0037b's primitive and clearing/replacing the empty
-   generation slot after sole failed attachment.
+   already-admitted direct exact drain in the attaching scope, buffers canonical
+   readiness from persistence during route installation within the configured-
+   scope bound, transfers each buffered scope exactly once into the installed
+   route, and only then admits startup/environment work. Subsequent receives use
+   readiness only; no durable row loses both owners. It also owns registration-
+   scoped rollback, including invoking T-0037b's primitive and clearing/
+   replacing the empty generation slot after sole failed attachment.
 5. T-0037e owns ordinary detach and explicit generation stop, invoking that
    existing primitive for explicit stop, ordinary last detach, and permanent
    close through the sole package-internal environment-lifecycle explicit-stop
    entry point, plus fresh-generation races, close refusal, and permanent
    environment close. An otherwise eligible attach arriving after reusable
-   explicit stop begins waits through full retirement and creates or joins
-   exactly one fresh generation; only permanent close or independent ownership
-   cardinality may reject it. Server and handoff code cannot call the primitive
-   directly.
+   explicit stop begins waits through full retirement while every surviving
+   registration, readiness route, and configured/startup scope rebinds to
+   exactly one fresh generation before later writes can strand, then joins that
+   generation; only permanent close or independent ownership cardinality may
+   reject it. Server and handoff code cannot call the primitive directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering.
 
@@ -435,5 +438,7 @@ monitoring, health, topology, adapter, and catch-up policy remain deferred.
 The sequence adds no root/public export, signature, or option and commits no
 generated artifact; package-internal declarations emitted by normal
 documentation/type builds may change with internal implementation. Existing
-README and TypeDoc contracts must nevertheless document the observable startup
-and close behavior when T-0037e/f implement it.
+README and TypeDoc contracts must nevertheless document only observable
+`Server`, `RunningServer`, and `ServerEnvironment` startup/close behavior when
+T-0037e/f implement it; they must not name or describe package-internal explicit
+generation stop.

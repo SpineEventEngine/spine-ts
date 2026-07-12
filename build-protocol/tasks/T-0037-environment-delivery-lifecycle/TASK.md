@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 4 docs fix active
+Status: Round 4 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -18,6 +18,13 @@ timing, public monitor/scheduler APIs, topology, and adapters deferred.
 - Use this isolated feature branch/worktree and required subagents.
 - Split the work into smaller coherent slices when that keeps implementation
   and review packages small.
+- Do not assign duplicate agents to the same implementation or review role;
+  close every participant after its role completes.
+- Every implementation and review role must perform and durably record the
+  canonical skill-applicability check from `BUILD_PROTOCOL.md` before its work.
+- Apply the Human Review Reset: prefer the smallest JVM-familiar concepts,
+  replace or delete wrong abstractions instead of preserving them, and invent
+  no abstraction without corresponding Spine JVM evidence.
 - Read relevant Spine JVM server documentation/source before implementation.
 - Use TDD for runtime behavior.
 - Run lightweight docs/status lint before review.
@@ -66,9 +73,11 @@ reusable coordinator-instance stop/await/retire primitive belong to `b`;
 bounded operational/cause records belong to `c`; attachment/startup and
 failed-start rollback invocation/empty-slot replacement plus the no-overlap
 barrier that awaits already-admitted direct exact drain before environment
-admission and routes later receives through readiness belong to `d`; ordinary
+admission and buffers transition-time persistence until readiness is installed
+belong to `d`; ordinary
 detach, explicit generation stop, ordinary/permanent-close primitive invocation,
-the deterministic wait-through-retirement fresh-generation attach race, and
+surviving-registration rebinding plus the deterministic wait-through-retirement
+fresh-generation attach race, and
 environment close belong to `e`; and network/server ordering belongs to `f`.
 Retry timing and public policy remain
 outside every child. The `d` and `e` callers do not overlap or reopen the
@@ -169,5 +178,7 @@ used for child runtime work.
   one accepted docs batch. The assigned worker has authored the attachment
   exact-drain barrier, deterministic reusable explicit-stop attach race,
   internal-stop public-doc exclusion, and current-status reconciliation.
-  Worker verification passed; coordinator verification and fresh four-lane
-  review remain pending, and no clean review is claimed.
+  Worker and coordinator verification passed. Round 4 then completed all four
+  lanes with accepted findings. The Round 4 fix is authored and passed worker
+  verification; coordinator verification remains pending and no clean review is
+  claimed.

@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 4 docs fix active
+Status: Round 4 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -14,13 +14,20 @@ and review package. D-0086 sequences it without changing its semantics:
 | 1     | T-0037a | Descriptor/storage/tenants/endpoints and synchronous non-throwing per-row readiness         |
 | 2     | T-0037b | Finite starts, tenant-aware lossless merge, dispositions, finally-safe retirement primitive |
 | 3     | T-0037c | Finite canonical parked obligations and one-time cause reporting                            |
-| 4     | T-0037d | Registrations/startup, admitted-drain barrier/readiness switch, failed-start rollback       |
-| 5     | T-0037e | Detach, explicit stop, deterministic fresh-generation race, close/permanent close           |
+| 4     | T-0037d | Registrations/startup, lossless transition readiness barrier, failed-start rollback         |
+| 5     | T-0037e | Detach, explicit stop, surviving-scope rebind/fresh-generation race, permanent close        |
 | 6     | T-0037f | Listener startup and network/context/resource/facility shutdown ordering                    |
 
 Every child is Candidate/not started and depends on its predecessor. Each will
 receive its own branch, work/review records, TDD cycle, focused checks, and four
 review lanes only when started.
+
+T-0037d's transition barrier gives persistence after direct-drain admission
+closes but before readiness routing is installed a bounded canonical-scope
+buffer, then transfers each scope exactly once before startup admission.
+T-0037e's reusable explicit stop rebinds every surviving registration,
+readiness route, and configured/startup scope to exactly one fresh generation;
+an eligible racing attach joins it without old/new overlap.
 
 ## Grounding Facts
 
@@ -48,7 +55,9 @@ The verified Round 1 fix was committed as `3847e1b6`; reconciliation through
 `80ef21e2` formed the Round 2 review boundary. Round 2 fixes were committed as
 `7281ba07`. Round 3 reviewed package `0308bc4a..49b3fb4b`; its accepted docs
 fixes were committed as `97107fae` after worker and coordinator verification.
-Fresh four-lane review remains pending. No clean review is claimed.
+Round 4 review completed with accepted findings. Its docs fix passed worker and
+coordinator verification. Fresh four-lane review remains pending and no clean
+review is claimed.
 
 ## Verification
 
@@ -70,6 +79,7 @@ child-only-brief checks. TypeDoc retained 205 expected server exports and only
 the known invalid-`origin` warning. Fresh review remains pending.
 
 Round 3 reviewed package `0308bc4a..49b3fb4b`. Its accepted four-item docs fix
-is authored and passed worker docs/status/public-leak, docs, format, whitespace,
-and exact-scope verification. Coordinator verification and fresh review remain
-pending, with no clean review claim.
+passed worker and coordinator verification. Round 4 completed all four lanes
+with accepted findings; the Round 4 docs fix is authored and awaits focused
+coordinator verification after its worker checks passed, with no clean review
+claim.

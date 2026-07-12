@@ -3187,15 +3187,20 @@ Decision:
   ownership switch an atomic serialized barrier: it closes admission to new
   direct exact drains, waits for every already-admitted direct exact drain in the
   attaching scope to settle, installs readiness routing, and only then admits
-  startup recovery or other environment-owned work. Attachment and startup
-  admission remain pending while an earlier exact drain is active. Every receive
-  admitted after the switch uses durable persistence plus synchronous
-  non-throwing readiness only and cannot invoke direct exact drain. The direct
-  and environment run owners therefore cannot overlap for an attached context,
-  durable row, or scope. Before the switch, existing exact-drain completion and
-  error behavior remains. After it, the local handoff does not await or surface
-  endpoint delivery outcome; lifecycle settlement/reporting owns that later
-  outcome.
+  startup recovery or other environment-owned work. Once direct-drain admission
+  closes, a supported row persisted before readiness routing is installed
+  submits its canonical scope to a transition buffer bounded by the same current
+  tenant/configured-scope domain as normal coalescing. It cannot fall back to
+  direct drain. Route installation transfers each buffered scope exactly once
+  into the generation's lossless pending admission before opening environment
+  admission. Attachment and startup admission remain pending while an earlier
+  exact drain is active. Every receive admitted after the switch uses durable
+  persistence plus synchronous non-throwing readiness only and cannot invoke
+  direct exact drain. Thus no durable row loses both owners, and direct and
+  environment run owners cannot overlap for an attached context, row, or scope.
+  Before the switch, existing exact-drain completion and error behavior remains.
+  After it, the local handoff does not await or surface endpoint delivery
+  outcome; lifecycle settlement/reporting owns that later outcome.
 - Retryable failures left `TO_DELIVER` remain the responsibility of this same
   owner. `FAILED` records that later reconsideration is needed but does not
   immediately retrigger itself. A later package-internal retry-readiness policy
@@ -3458,6 +3463,19 @@ Decision:
   permanent environment close wins the serialized transition or independent
   ownership cardinality refuses it. No reusable-stop policy may reject it merely
   because retirement is in progress.
+- Reusable explicit generation stop leaves registrations live, so retirement
+  alone cannot complete that transition. Before the lifecycle gate reopens
+  later-write admission, it creates exactly one fresh generation and rebinds
+  every surviving registration, readiness route, and configured/startup
+  obligation scope to it. Durable writes accepted while old-generation
+  admission is closed remain pending and participate in the fresh generation's
+  recovery. An otherwise eligible attach racing the rebinding joins that same
+  generation. No surviving scope may remain bound to the retired generation or
+  outside both owners; no old/new generation overlap is allowed, and only
+  permanent close or independent ownership cardinality may reject the attach.
+  README and TypeDoc describe only observable `Server`, `RunningServer`, and
+  `ServerEnvironment` behavior; they do not name or describe this package-
+  internal explicit-stop operation.
 - Server shutdown order is: stop that server's external network intake and
   sessions; detach its package-internal registration and serialize against
   active delivery work while its contexts and endpoint dependencies remain
@@ -3629,16 +3647,20 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   empty generation slot after sole/first-registration rollback so a
   caller-owned environment remains reusable. T-0037d also owns the atomic
   ownership barrier that closes new direct exact-drain admission, awaits every
-  already-admitted direct exact drain in the attaching scope, installs
-  environment readiness routing, and only then admits startup/environment work,
-  so the two run owners never overlap and later receives use readiness only.
+  already-admitted direct exact drain in the attaching scope, gives persistence
+  during route installation one bounded transition readiness buffer, transfers
+  buffered scopes exactly once into installed environment readiness, and only
+  then admits startup/environment work, so no durable row loses both owners,
+  the two run owners never overlap, and later receives use readiness only.
   T-0037e owns ordinary detach, explicit generation stop,
   invoking the same existing primitive for explicit stop, ordinary last detach,
   and permanent close, including the sole package-internal environment-
   lifecycle explicit-stop entry point; server/handoff code cannot call the
   primitive directly. It also owns fresh-generation race policy: an otherwise
   eligible attach arriving after reusable explicit stop begins waits through
-  retirement and creates or joins exactly one fresh generation, rejecting only
+  retirement; every surviving registration, readiness route, and
+  configured/startup scope rebinds to exactly one fresh generation before later
+  writes can strand; and the attach joins that same generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
   also owns close refusal and permanent environment close. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,
@@ -3673,6 +3695,9 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   process supervision, transport topology/adapters, `CATCH_UP` as a trigger or
   delivery path, legacy `IMPORT_EVENT` support, and changes to T-0034 or T-0036
   remain outside all six children.
+- T-0037e/f may update README and TypeDoc only for observable `Server`,
+  `RunningServer`, and `ServerEnvironment` behavior. Public docs must not name
+  or describe package-internal explicit generation stop.
 
 Consequences:
 

@@ -19,6 +19,11 @@ refusal, and permanent environment/facility close.
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
+- Every implementation and review role must perform and durably record the
+  canonical skill-applicability check from `BUILD_PROTOCOL.md` before its work.
+- Apply the Human Review Reset: prefer the smallest JVM-familiar concepts,
+  replace or delete wrong abstractions instead of preserving them, and invent
+  no abstraction without corresponding Spine JVM evidence.
 - Before server-module implementation, inspect and record the relevant Spine
   JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
 - Run lightweight docs/status lint before review.
@@ -48,6 +53,15 @@ attach/detach/close race policy after reusable caller-owned retirement,
 `ServerEnvironment.close()` live-registration refusal, permanent admission
 close, and ordered owned-facility close after quiescence. It does not implement
 another stop/await/retire path or handle failed-start rollback.
+
+Reusable explicit stop leaves registrations live but closes their old-
+generation readiness admission. After retirement, the lifecycle gate creates
+exactly one fresh generation and rebinds every surviving registration,
+readiness route, and configured/startup obligation scope to that generation
+before reopening later-write admission. Durable writes during the stop remain
+pending and participate in that fresh generation's recovery; no surviving scope
+may remain bound to the retired generation or outside both owners. An eligible
+attach racing this rebinding joins the same fresh generation.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -81,12 +95,21 @@ network or context/resource ordering.
 - Explicit generation stop is distinct from detach and environment close. Under
   the same lifecycle gate it closes generation admission, invokes T-0037b's
   stop/await/consume/retire primitive, leaves registrations and a caller-owned
-  environment reusable. An otherwise eligible attach arriving after explicit
-  stop begins waits through complete stop, active-work settlement, rejection
-  classification, record consumption/reporting, and permanent retirement, then
-  creates or joins exactly one fresh generation without reusing or overlapping
-  the retired instance. It rejects only if permanent environment close wins or
-  independent ownership cardinality refuses the registration.
+  environment reusable. After retirement, every surviving registration,
+  readiness route, and configured/startup scope participates in exactly one
+  fresh generation before later-write admission reopens. An otherwise eligible
+  attach arriving after explicit stop begins waits through complete stop,
+  active-work settlement, rejection classification, record
+  consumption/reporting, permanent retirement, and survivor rebinding, then
+  joins that same fresh generation without reusing or overlapping the retired
+  instance. It rejects only if permanent environment close wins or independent
+  ownership cardinality refuses the registration.
+- A deterministic race test starts reusable explicit stop with existing live
+  registrations, races one otherwise eligible attach, and writes during and
+  after rebinding. It proves no old/new generation overlap, exactly one fresh
+  generation, every survivor and the racing attach bound to it, recovery of the
+  during-stop durable write, and readiness admission for the later write. Only
+  permanent close or ownership-cardinality rejection may reject the attach.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

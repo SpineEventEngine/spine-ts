@@ -18,6 +18,11 @@ duplicate reporting, or premature lifecycle ownership decisions.
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
+- Every implementation and review role must perform and durably record the
+  canonical skill-applicability check from `BUILD_PROTOCOL.md` before its work.
+- Apply the Human Review Reset: prefer the smallest JVM-familiar concepts,
+  replace or delete wrong abstractions instead of preserving them, and invent
+  no abstraction without corresponding Spine JVM evidence.
 - Before server-module implementation, inspect and record the relevant Spine
   JVM `core-jvm/server` notes and source as required by `BUILD_PROTOCOL.md`.
 - Run lightweight docs/status lint before review.
