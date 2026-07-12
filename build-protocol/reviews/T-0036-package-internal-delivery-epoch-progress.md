@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 3 findings accepted; fixes pending
+Status: Round 3 fix worker active
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -157,3 +157,7 @@ Security is deferred to final project readiness.
   operations. One fix worker must retain bounded canonical admitted snapshots,
   preserve CAS/current-state behavior, add operation-count and stale-snapshot
   coverage, fix the status line, verify, commit, and trigger all-lane rereview.
+- `2026-07-12T04:27:00Z`: Assigned Round 3 fix worker
+  `019f5457-20d4-79e0-954b-87db35becd6c` with every accepted finding. Fresh
+  package generation and all four lanes remain pending coordinator verification
+  and commit.
