@@ -125,11 +125,14 @@ export class EnvironmentAttachments {
     return count;
   }
 
+  /** @internal Exact live registration cardinality for lifecycle invariants. */
+  get activeRegistrationCount(): number {
+    return this.#registrations.count;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
-      return Promise.reject(
-        new Error("Environment generation rollback requires an explicit retry."),
-      );
+      return Promise.reject(explicitRetryError());
     }
     let claim: EnvironmentRegistrationClaim;
     try {
@@ -143,13 +146,25 @@ export class EnvironmentAttachments {
       this.#generations.set(claim.generation, generation);
     }
     const attaching = this.#serial.then(() =>
-      this.#attachRegistration(generation, claim, options.descriptors),
+      this.#startQueuedAttachment(generation, claim, options.descriptors),
     );
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
     );
     return attaching;
+  }
+
+  #startQueuedAttachment(
+    generation: DeliveryGeneration,
+    claim: EnvironmentRegistrationClaim,
+    descriptors: readonly ContextDeliveryDescriptor[],
+  ): Promise<EnvironmentAttachmentHandle> {
+    if (this.#failedRollback !== undefined) {
+      this.#registrations.remove(claim.token);
+      return Promise.reject(explicitRetryError());
+    }
+    return this.#attachRegistration(generation, claim, descriptors);
   }
 
   retryFailedStart(): Promise<void> {
@@ -669,7 +684,11 @@ export function startupObligations(
   return obligations;
 }
 
-function throwRejected(records: readonly ParkedDeliveryObligationRecord[], blocked: boolean): void {
+/** @internal Shapes startup rejection without exposing prior shared causes. */
+export function throwRejected(
+  records: readonly ParkedDeliveryObligationRecord[],
+  blocked: boolean,
+): void {
   if (blocked) {
     throw new Error("Startup recovery is blocked by an unresolved shared delivery obligation.");
   }
@@ -682,11 +701,12 @@ function throwRejected(records: readonly ParkedDeliveryObligationRecord[], block
   }
 }
 
-class ReportedFailures {
-  readonly #ownersByReady = new Map<string, string>();
+/** @internal Finite owner-qualified unresolved startup domains. */
+export class ReportedFailures {
+  readonly #scopes = new Set<string>();
 
   get size(): number {
-    return this.#ownersByReady.size;
+    return this.#scopes.size;
   }
 
   record(
@@ -701,23 +721,27 @@ class ReportedFailures {
     for (const scope of scopes) {
       const ownerScope = scopeKey(scope);
       if (unresolved.has(ownerScope)) {
-        this.#ownersByReady.set(readyKey(scope.ready), ownerScope);
+        this.#scopes.add(ownerScope);
       }
     }
   }
 
   overlaps(scopes: readonly DeliveryRunScope[]): boolean {
-    return scopes.some(({ ready }) => this.#ownersByReady.has(readyKey(ready)));
+    return scopes.some((scope) => this.#scopes.has(scopeKey(scope)));
   }
 
   resolve(scopes: readonly DeliveryRunScope[], settlement: DeliveryRunSettlement): void {
     const current = new Set(scopes.map(scopeKey));
     for (const { scope, disposition } of settlement.scopes) {
       if (current.has(scopeKey(scope)) && disposition !== "REJECTED") {
-        this.#ownersByReady.delete(readyKey(scope.ready));
+        this.#scopes.delete(scopeKey(scope));
       }
     }
   }
+}
+
+function explicitRetryError(): Error {
+  return new Error("Environment generation rollback requires an explicit retry.");
 }
 
 function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {

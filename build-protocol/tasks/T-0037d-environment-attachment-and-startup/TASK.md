@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 2 blocking findings assigned
+Status: Slice 3 Round 2 fixes focused verified; Round 3 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -412,6 +412,31 @@ quiescence, concurrency, boundedness, and fresh-cause tests before Round 2.
 
 One Terra Medium owner receives both under TDD before Round 3.
 
+### Slice 3 Round 2 fix outcome
+
+Both findings are implemented under strict TDD. Attachment claims remain
+synchronous, but every serialized operation now rechecks the retained rollback
+before descriptor work. A queued claim is removed without touching descriptor,
+storage, transition, readiness, or worker state; the operation rejects the
+canonical explicit-retry error and cannot replace the earlier rollback. After
+that same rollback succeeds, registration cardinality is zero and the untouched
+queued descriptor can attach once as the fresh sole registration.
+
+Reported unresolved identity is now an exact owner-qualified `scopeKey` set,
+not a readiness-keyed map. Equal ready facts in distinct descriptor/storage
+owners neither inherit nor resolve each other. Repeating an exact owner key
+deduplicates, and only successful settlement for that exact owner key removes
+it. The set remains bounded by configured owner-qualified scope cardinality;
+the 2,048-owner regression retains exactly 2,048 entries.
+
+Focused RED failed 4/27 before production edits. GREEN passes 27/27; the
+seven-file regression passes 188/188; native server loopback passes 21/21;
+affected coverage passes at 96.52% statements, 90.02% branches, 98.27%
+functions, and 96.75% lines. Generated build typecheck, ESLint, cleanup,
+format/diff/public/generated/protected checks are the final handoff gate. No
+public export, later lifecycle, subagent, commit, or full `pnpm verify` is in
+scope.
+
 ### Slice 3 Round 1 fix outcome
 
 The complete five-finding batch is implemented under strict TDD. Shared
@@ -425,12 +450,11 @@ that throw as incomplete stop; a completed stop is never repeated after await
 failure.
 
 `retryFailedStart()` publishes one in-flight promise before advancing rollback,
-so simultaneous callers receive the same promise and resolve together. Reported
-unresolved overlap state is one finite canonical ready-domain map retaining the
-latest owner-qualified scope identity. Repeated failures replace that entry,
-successful exact startup removes it, and historical sibling settlement cannot
-erase a fresh rejection. Existing overlap takes precedence over any fresh
-cause and throws only the exact plain D-0085 blocker.
+so simultaneous callers receive the same promise and resolve together. Round 1
+used a readiness-keyed reported-overlap map with owner identity only in its
+value; Round 2 review found that cross-owner defect and the corrected
+owner-qualified set is recorded above. Existing exact-owner overlap still takes
+precedence over any fresh cause and throws only the exact plain D-0085 blocker.
 
 Focused RED failed 7/26 before production edits. GREEN passes 26/26; the
 seven-file Slice 1/2/3 plus T-0037a/b/c regression passes 187/187; native server

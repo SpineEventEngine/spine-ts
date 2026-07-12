@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 2 blocking findings assigned
+Status: Slice 3 Round 2 fixes focused verified; Round 3 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -468,5 +468,28 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Runtime profiles matched dispatch. Two blocking findings remain: serialized
   queued admission must recheck/clean up against a newly retained rollback, and
   reported-overlap keys must preserve owner identity for equal facts in
-  distinct storage contexts. One Terra Medium owner receives both before Round
-  3.
+  distinct storage contexts. One Terra Medium owner receives both before Round 3.
+- Round 2 fix applicability was verified with `receiving-code-review` and
+  strict TDD before production edits. Deterministic REDs will cover B claimed
+  and queued before A retains unsafe rollback, plus equal readiness under two
+  distinct descriptor/storage owners and exact same-owner resolution.
+- Pre-production RED is 4 failed/23 passed across 27 environment tests, with
+  exact failures for queued descriptor work, cross-owner deduplication,
+  cross-owner resolution, and the absent exact-owner ledger seam.
+- Focused GREEN is 27/27. The queue guard, exact claim undo/cardinality,
+  no-descriptor-work guarantee, owner-qualified set identity, exact-owner
+  dedup/resolution, and retained plain-blocker shaping all pass. Expanded/static
+  verification remains pending.
+- Round 2 fixes are focused verified for Round 3 review. Serialized queued
+  admission now rechecks retained rollback and undoes only its own claim before
+  any descriptor work. Reported failure identity is exact owner-qualified scope
+  identity end to end; equal facts across owners remain isolated, exact repeats
+  deduplicate, and only exact-owner success resolves.
+- Final evidence is environment 27/27, canonical seven files 188/188, native
+  server loopback 21/21, and coverage 96.52% statements, 90.02% branches, 98.27%
+  functions, and 96.75% lines. Generated typecheck, ESLint/cleanup, formatting,
+  diff/public/generated/protected, and Status checks form the handoff gate.
+  Round 3 review remains pending; security stays deferred.
+- `2026-07-13T00:02:00Z`: Coordinator independently repeated 188 focused
+  regressions, generated build typecheck, repository format, and diff hygiene.
+  All pass. The Round 2 fix is ready for a committed Round 3 package.
