@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 3 fixes coordinator-verified; repeat review pending
+Status: Review Round 4 assigned; reviewers fully paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status  |
-| -------------------------- | -------------------------------------- | ------- |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Finding |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Finding |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Clean   |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Finding |
+| Lane                       | Reviewer                               | Status       |
+| -------------------------- | -------------------------------------- | ------------ |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Fully paused |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Fully paused |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Fully paused |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Fully paused |
 
 Security is deferred to final project readiness.
 
@@ -442,3 +442,9 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:12:09Z`: Coordinator verification and lightweight pre-review
   lint passed for the complete Round 3 fix. The batch is ready to commit as a
   fresh literal endpoint for all four repeat lanes.
+- `2026-07-12T11:13:38Z`: Round 4 package is
+  `.superpowers/sdd/review-f7c2ddb1..86438fae.diff`, generated from literal full
+  endpoint `86438fae11b6ca8b54ea52aa7223610b797cf8ad`. The same four closed Round
+  3 reviewers are assigned fully paused; their exact canonical records above
+  remain authoritative, but each must revalidate current inventory, expected
+  manifest, and lock provenance and durably record any delta before review.

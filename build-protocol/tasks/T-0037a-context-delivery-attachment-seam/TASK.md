@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Round 3 fixes coordinator-verified; repeat review pending
+Status: Review Round 4 assigned; reviewers fully paused
 
 Started: `2026-07-12T09:52:53Z`
 
