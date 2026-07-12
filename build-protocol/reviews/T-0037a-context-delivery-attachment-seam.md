@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Active; implementation worker pending
+Status: Implementation worker active; RED pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -40,3 +40,6 @@ Security is deferred to final project readiness.
 
 - `2026-07-12T09:52:53Z`: Created review scaffold. Implementation and pre-review
   docs/status lint remain pending; no reviewer is assigned.
+- `2026-07-12T09:54:30Z`: Assigned sole implementation worker
+  `019f55bf-cc01-7ab3-a07e-47e4b3f35a7b`; editing waits for this assignment
+  commit and must begin with focused RED tests.

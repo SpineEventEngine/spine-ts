@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Active; implementation worker pending
+Status: Implementation worker active; RED pending
 
 Started: `2026-07-12T09:52:53Z`
 
