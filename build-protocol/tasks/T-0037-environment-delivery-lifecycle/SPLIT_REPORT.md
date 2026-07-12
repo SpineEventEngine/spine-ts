@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Committed; required review pending
+Status: Required four-lane review in progress
 
 Baseline: `ab8fc9f4`
 
@@ -9,14 +9,14 @@ Baseline: `ab8fc9f4`
 D-0085's environment lifecycle successor is too broad for one implementation
 and review package. D-0086 sequences it without changing its semantics:
 
-| Order | Child | Exclusive invariant ownership |
-| --- | --- | --- |
-| 1 | T-0037a | Built-context delivery descriptor, actual storage, tenants, endpoints/shards, post-persist readiness |
-| 2 | T-0037b | Serialized/coalesced finite T-0036 starts and per-shard disposition handling |
-| 3 | T-0037c | Finite canonical parked obligations and one-time cause reporting |
-| 4 | T-0037d | Environment registrations, startup recovery, attribution, failed-start rollback |
-| 5 | T-0037e | Detach, stop/retire/reuse, close refusal, permanent environment close |
-| 6 | T-0037f | Listener startup and network/context/resource/facility shutdown ordering |
+| Order | Child   | Exclusive invariant ownership                                                                        |
+| ----- | ------- | ---------------------------------------------------------------------------------------------------- |
+| 1     | T-0037a | Built-context delivery descriptor, actual storage, tenants, endpoints/shards, post-persist readiness |
+| 2     | T-0037b | Serialized/coalesced finite T-0036 starts and per-shard disposition handling                         |
+| 3     | T-0037c | Finite canonical parked obligations and one-time cause reporting                                     |
+| 4     | T-0037d | Environment registrations, startup recovery, attribution, failed-start rollback                      |
+| 5     | T-0037e | Detach, stop/retire/reuse, close refusal, permanent environment close                                |
+| 6     | T-0037f | Listener startup and network/context/resource/facility shutdown ordering                             |
 
 Every child is Candidate/not started and depends on its predecessor. Each will
 receive its own branch, work/review records, TDD cycle, focused checks, and four

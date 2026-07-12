@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Split package committed; required review not started
+Status: Required four-lane review in progress
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | pending  | Pending |
-| Documentation              | pending  | Pending |
-| TypeScript/API docs        | pending  | Pending |
-| Performance/reliability    | pending  | Pending |
+| Lane                       | Reviewer                               | Status      |
+| -------------------------- | -------------------------------------- | ----------- |
+| Code style/maintainability | `019f549e-ae4c-7331-8df1-2b803be3d7b9` | In progress |
+| Documentation              | `019f549e-d1c3-7890-afbd-287223adeee2` | In progress |
+| TypeScript/API docs        | `019f549e-fdfe-7b31-97cf-6027e947720b` | In progress |
+| Performance/reliability    | `019f549f-23a5-7911-86ba-686c659cb690` | In progress |
 
 Security is deferred to final project readiness.
 
@@ -68,3 +68,7 @@ Security is deferred to final project readiness.
 - `2026-07-12T04:35:00Z`: Committed split package as `7ff3d50a` and reconciled
   its active ledger. Fixed-baseline package generation and all four lanes are
   next.
+- `2026-07-12T04:37:00Z`: Generated package
+  `.superpowers/sdd/review-0308bc4a..1057a425.diff` (57,891 bytes) and assigned
+  all four required independent lanes. Prompts explicitly ignore superseded
+  history unless active records still claim it.
