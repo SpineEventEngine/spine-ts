@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 1 assigned; reviewers paused for assignment commit
+Status: Review Round 1 active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -64,3 +64,5 @@ Security is deferred to final project readiness.
   `019f55d1-0747-7b03-8d77-7548fb7cde85`, TypeScript/API docs
   `019f55d1-0e42-7c60-9d0b-abadff892fb8`, and performance/reliability
   `019f55d1-0ac6-7e50-a90e-215fba97162d`.
+- `2026-07-12T10:14:17Z`: Assignment provenance commit `c9bec7ff` completed;
+  all four reviewers started against the immutable package.
