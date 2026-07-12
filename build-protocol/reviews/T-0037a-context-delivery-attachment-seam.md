@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 4 active
+Status: Review Round 4 finding logged; fix assignment pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Active |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Active |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Active |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Active |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Clean   |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Clean   |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Clean   |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Finding |
 
 Security is deferred to final project readiness.
 
@@ -488,3 +488,9 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:18:11Z`: Skill-revalidation commit `39d5a04e` completed; all
   four substantive Round 4 lanes started against the shard-complete immutable
   package and current durable records.
+- `2026-07-12T11:19:42Z`: Round 4 accepted finding: readiness on each persisted
+  row must not rebuild and scan all registered endpoints. Preserve complete
+  configured target/label/shard matching while using cached facts or only the
+  exact target's bounded configured endpoints; add a focused regression that
+  distinguishes the current global `endpoints()` call from the corrected path.
+  The other three lanes were clean. All four lanes repeat after the fix.
