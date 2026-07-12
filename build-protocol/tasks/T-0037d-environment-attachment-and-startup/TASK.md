@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 review clean; Slice 2 implementation assigned
+Status: Slice 2 duplicate-descriptor preflight finding assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -312,6 +312,12 @@ tenant scope assembly, readiness transfer, and one finite startup recovery
 result with truthful attribution. Registration-scoped failed-start rollback
 remains Slice 3 and must not be implemented in this pass.
 
+Slice 2 coordinator pre-commit inspection found that a descriptor repeated in
+one attachment input passes the two-pass freshness check. The first transition
+may install ownership before the duplicate transition rejects. Reject duplicate
+descriptor identities during synchronous generation preflight, before any
+descriptor is marked, tenant scope is enumerated, or readiness transition runs.
+
 ### Slice 1 Round 3 Findings
 
 1. Keep the canonical task status and both derived log status mirrors identical.
@@ -336,3 +342,32 @@ winner is still transitioning, omitted readiness is buffered before any yield,
 neither callback runs synchronously, and only the winner flushes both scopes in
 order and owns later readiness. No production source or Slice 2 behavior
 changed.
+
+## Slice 2 Outcome
+
+Slice 2 adds one package-internal registration/generation owner per
+`ServerEnvironment`. Caller-owned registrations receive distinct tokens and
+share exactly one current generation/coordinator. A server-owned registration
+is exclusive, and every conflict rejects at the synchronous cardinality gate
+before descriptor enumeration, route transition, or startup work admission.
+The successful opaque attachment handle exposes only its token, generation
+identity, finite startup settlement, and bounded parked records for later
+lifecycle slices.
+
+Each attachment crosses every descriptor's actual storage context, recorded
+tenant scopes, supported endpoints, and canonical shards. An internal
+environment-only `allowEmpty` transition handles an initially empty recorded
+multitenant domain while preserving Slice 1's default Promise-channel empty
+validation. The first later durable tenant readiness configures its exact
+tenant/storage worker scope in the same generation before notification.
+
+Descriptor transitions close direct admission and await admitted exact drains.
+Registration route closures buffer readiness until every transition completes,
+then combine buffered and startup scopes into one finite coordinator admission
+before opening later route-only notification. Fulfilled `FAILED`, `PAUSED`, and
+`SKIPPED` remain cause-less parked operational work; rejected attaching scopes
+retain their original cause, while wholly disjoint sibling rejection is neither
+blamed on nor restarted by the attaching registration.
+
+Registration-scoped rollback, detach, generation stop/close, public API,
+`Server.start()` wiring, and listener ordering remain Slice 3 or later work.

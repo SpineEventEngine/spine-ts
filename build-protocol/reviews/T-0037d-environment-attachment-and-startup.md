@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 review clean; Slice 2 implementation assigned
+Status: Slice 2 duplicate-descriptor preflight finding assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -190,3 +190,27 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   concerns found no actionable defect. Slice 1 review is closed. Slice 2
   implementation is assigned to the existing Terra Medium owner; its four-lane
   review remains pending until the bounded slice builds and focused tests pass.
+- Slice 2 resumed under the required canonical skill check with `implement` and
+  strict `test-driven-development` selected; final verification remains
+  reserved. Existing canonical records replace generic planning files, and the
+  explicit no-commit/no-subagent assignment overrides those generic skill
+  steps. Review remains pending a focused private lifecycle package; no Slice 3
+  rollback, public API, or server-listener behavior enters this review scope.
+- Slice 2 is focused verified and ready to freeze for its four-lane review.
+  Review scope is one private environment registration/generation module,
+  minimal descriptor/transition/coordinator access, and focused tests. Behavior
+  evidence covers caller sharing, server exclusivity before mutation, actual
+  storage/tenant/endpoint scope assembly including zero-to-first-tenant growth,
+  direct-drain quiescence, exact-once transition transfer, finite startup,
+  cause-less fulfilled parked outcomes, and rejected-sibling attribution.
+- Fresh focused regressions pass 165/165 and native server loopback regressions
+  pass 21/21. Affected lifecycle coverage is 93.88% statements, 90.20%
+  branches, 92.54% functions, and 94.49% lines. Generated typecheck,
+  lint/cleanup, and format pass. Diff/public/generated/protected scans remain the
+  final pre-handoff check. Slice 3 rollback and all later lifecycle/public
+  integration remain absent; security remains deferred to final readiness.
+- `2026-07-12T21:31:00Z`: Coordinator verification passes, but Slice 2 review is
+  paused for one pre-commit finding: a repeated descriptor in one attachment
+  input can partially transfer readiness ownership before duplicate rejection.
+  One Terra Medium owner must add a focused RED and make duplicate identity a
+  no-mutation preflight failure before the four-lane package is frozen.
