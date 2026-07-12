@@ -8,7 +8,7 @@ import {
   type DeliveryEndpointMessage,
 } from "../../src/delivery/delivery.js";
 import { deliveryAttemptCapacity } from "../../src/delivery/delivery-attempts.js";
-import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { DeliveryLoop, deliveryLoopAccess } from "../../src/delivery/delivery-loop.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { ShardSession, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
@@ -21,7 +21,7 @@ import {
 import { oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 
 describe("DeliveryLoop", () => {
-  it("drains multiple pages and rows appended during delivery", async () => {
+  it("excludes normally ordered callback writes from the admitted epoch", async () => {
     const delivery = createDelivery();
     const loop = new DeliveryLoop({
       delivery,
@@ -41,17 +41,179 @@ describe("DeliveryLoop", () => {
 
     const run = await loop.run();
 
-    expect(seen).toEqual(["signal-1", "signal-2"]);
+    expect(seen).toEqual(["signal-1"]);
     expect(run).toMatchObject({
       status: "IDLE",
-      runs: 3,
-      processed: 2,
-      delivered: 2,
+      processed: 1,
+      delivered: 1,
       failed: 0,
     });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toEqual([]);
+    ).resolves.toMatchObject([{ signalId: "signal-2", status: "TO_DELIVER" }]);
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1, failed: 0 });
+    expect(seen).toEqual(["signal-1", "signal-2"]);
+  });
+
+  it("excludes backdated callback writes from the admitted epoch", async () => {
+    const delivery = createDelivery();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      limit: 1,
+      async onMessage(message) {
+        seen.push(message.signalId);
+        if (message.signalId === "signal-admitted") {
+          await delivery.inbox.receive({
+            inboxId: targetInbox(),
+            signalId: "signal-backdated",
+            label: "UPDATE_SUBSCRIBER",
+            status: "TO_DELIVER",
+            shard: ShardIndex.single(),
+            whenReceived: new Date("2026-07-08T08:00:00.000Z"),
+            version: 0n,
+          });
+        }
+      },
+    });
+
+    await seed(delivery, "signal-admitted", 1n);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      processed: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-admitted"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-backdated", status: "TO_DELIVER" }]);
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1, failed: 0 });
+    expect(seen).toEqual(["signal-admitted", "signal-backdated"]);
+  });
+
+  it("drains a capped unsupported epoch with one query and no point reads", async () => {
+    const faults = deliveryStorageFaults(onInboxQueryNumber(2, onInterPageQuery));
+    const delivery = createDelivery(faults.storageFactory);
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    for (let index = 1; index <= inboxStorageAccess.maxReadLimit; index += 1) {
+      await seed(delivery, `signal-prefix-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    const inboxReadsBeforeRun = faults.inboxReads;
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0 });
+    expect(faults.inboxQueries).toBe(1);
+    expect(faults.inboxReads - inboxReadsBeforeRun).toBe(0);
+    expect(seen).toEqual([]);
+
+    async function onInterPageQuery(): Promise<void> {
+      await seed(delivery, "signal-between-pages", 1_001n);
+    }
+  });
+
+  it("bounds useful work per start and resumes the admitted epoch explicitly", async () => {
+    const delivery = createDelivery();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    await seed(delivery, "signal-1", 1n);
+    await seed(delivery, "signal-2", 2n);
+    await seed(delivery, "signal-3", 3n);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      accepted: 2,
+      delivered: 2,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-1", "signal-2"]);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      runs: 1,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-1", "signal-2", "signal-3"]);
+  });
+
+  it("does not deliver stale admitted rows after durable status and claim changes", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    await seed(delivery, "signal-first", 1n);
+    await seed(delivery, "signal-second", 2n);
+    const deliveredBeforeDrain = await seed(delivery, "signal-now-delivered", 3n);
+    const claimedBeforeDrain = await seed(delivery, "signal-now-claimed", 4n);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      processed: 2,
+      accepted: 2,
+      delivered: 2,
+      failed: 0,
+    });
+    await expect(delivery.inbox.markDelivered(deliveredBeforeDrain)).resolves.toMatchObject({
+      signalId: "signal-now-delivered",
+      status: "DELIVERED",
+    });
+    await expect(
+      inboxStorageAccess.claim(
+        delivery.inbox.storage,
+        claimedBeforeDrain,
+        new ShardSession(
+          "competing-message-owner",
+          shard,
+          "node-b",
+          new Date("2026-07-12T04:29:00.000Z"),
+          new Date("2099-07-12T04:30:00.000Z"),
+        ),
+      ),
+    ).resolves.toMatchObject({ signalId: "signal-now-claimed" });
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      runs: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-first", "signal-second"]);
   });
 
   it("retries a previously failed row on a later run", async () => {
@@ -183,6 +345,54 @@ describe("DeliveryLoop", () => {
     expect(faults.inboxQueries).toBe(1);
   });
 
+  it("accepts an empty package-internal resume cursor", async () => {
+    const delivery = createDelivery();
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { resume: {} },
+      ),
+    ).resolves.toMatchObject({
+      run: { status: "DRAINED", processed: 0, accepted: 0, delivered: 0, failed: 0 },
+    });
+  });
+
+  it.each([
+    ["cursor", null, /resume cursor must be an object/i],
+    ["continuation", { after: null }, /cursor continuation must be an object/i],
+    [
+      "message ID",
+      { after: { messageId: 42, whenReceived: new Date(), version: 1n } },
+      /requires a message id/i,
+    ],
+    [
+      "receive time",
+      { after: { messageId: "message-1", whenReceived: "today", version: 1n } },
+      /requires a valid receive time/i,
+    ],
+    [
+      "version",
+      { after: { messageId: "message-1", whenReceived: new Date(), version: 1 } },
+      /requires a bigint version/i,
+    ],
+  ])("rejects an invalid package-internal resume %s", async (_label, resume, expected) => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { resume: resume as never },
+      ),
+    ).rejects.toThrow(expected);
+    expect(faults.inboxQueries).toBe(0);
+  });
+
   it("rejects oversized resume cursor message IDs before querying inbox storage", async () => {
     const faults = deliveryStorageFaults();
     const delivery = createDelivery(faults.storageFactory);
@@ -274,11 +484,12 @@ describe("DeliveryLoop", () => {
     });
   });
 
-  it("continues after a finite skipped-row scan to reach a supported tail row", async () => {
+  it("continues across finite skipped epochs to reach a supported tail row", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
+    const unsupportedTail = inboxStorageAccess.maxReadLimit + 2;
 
-    for (let index = 1; index <= 1_002; index += 1) {
+    for (let index = 1; index <= unsupportedTail; index += 1) {
       await delivery.inbox.receive({
         inboxId: targetInbox(),
         signalId: `signal-catch-up-${String(index)}`,
@@ -289,10 +500,9 @@ describe("DeliveryLoop", () => {
         version: BigInt(index),
       });
     }
-    await seed(delivery, "signal-supported-tail", 1_003n);
+    await seed(delivery, "signal-supported-tail", BigInt(unsupportedTail + 1));
     const seen: string[] = [];
-
-    const run = await new DeliveryLoop({
+    const loop = new DeliveryLoop({
       delivery,
       shard,
       node: "node-a",
@@ -300,18 +510,23 @@ describe("DeliveryLoop", () => {
       onMessage(message) {
         seen.push(message.signalId);
       },
-    }).run();
+    });
+
+    await expectIdleWithoutDelivery(loop);
+    await expectIdleWithoutDelivery(loop);
+    const run = await loop.run();
 
     expect(seen).toEqual(["signal-supported-tail"]);
-    expect(run).toMatchObject({ status: "IDLE", runs: 3, accepted: 1, delivered: 1, failed: 0 });
+    expect(run).toMatchObject({ status: "IDLE", runs: 1, accepted: 1, delivered: 1, failed: 0 });
   });
 
-  it("returns a resumable status instead of scanning skipped-only drains forever", async () => {
+  it("completes a finite skipped-only admitted epoch", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
     const limit = 1;
+    const admittedMessages = inboxStorageAccess.maxReadLimit;
 
-    for (let index = 1; index <= 2_002; index += 1) {
+    for (let index = 1; index <= admittedMessages; index += 1) {
       await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
     }
 
@@ -324,16 +539,88 @@ describe("DeliveryLoop", () => {
     }).run();
 
     expect(run).toMatchObject({
-      status: "PAUSED",
-      runs: 2,
-      processed: (inboxStorageAccess.maxReadLimit + limit) * 2,
+      status: "IDLE",
+      runs: 1,
+      processed: admittedMessages,
       accepted: 0,
       delivered: 0,
       failed: 0,
     });
   });
 
-  it("resets a paused scan cursor when earlier pending rows disappear before resume", async () => {
+  it("advances the next epoch beyond a capped unsupported prefix", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1_000,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+    const seen: string[] = [];
+    const admissionChunk = inboxStorageAccess.maxReadLimit;
+    const unsupportedPrefixEnd = admissionChunk + 1;
+    const supportedTailVersion = unsupportedPrefixEnd + 1;
+
+    for (let index = 1; index <= unsupportedPrefixEnd; index += 1) {
+      await seed(delivery, `signal-capped-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-after-cap", BigInt(supportedTailVersion));
+
+    await expectIdleWithoutDelivery(loop);
+    await expectIdleWithoutDelivery(loop);
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
+
+    expect(seen).toEqual(["signal-after-cap"]);
+  });
+
+  it("restarts a growing capped admission sweep so later backdated rows stay eligible", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1_000,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+    const admissionChunk = inboxStorageAccess.maxReadLimit;
+    const unsupportedPrefixEnd = admissionChunk + 1;
+    const forwardTailVersion = unsupportedPrefixEnd + 1;
+
+    for (let index = 1; index <= unsupportedPrefixEnd; index += 1) {
+      await seed(delivery, `signal-prefix-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-forward-tail", BigInt(forwardTailVersion));
+
+    await expectIdleWithoutDelivery(loop);
+    await delivery.inbox.receive({
+      inboxId: targetInbox(),
+      signalId: "signal-later-backdated",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T08:00:00.000Z"),
+      version: 0n,
+    });
+    const growingTailEnd = forwardTailVersion + admissionChunk;
+    for (let index = forwardTailVersion + 1; index <= growingTailEnd; index += 1) {
+      await seed(delivery, `signal-growing-tail-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
+
+    expect(seen).toEqual(["signal-later-backdated", "signal-forward-tail"]);
+  });
+
+  it("continues the admission sweep when earlier pending rows disappear", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();
     const seen: string[] = [];
@@ -356,25 +643,26 @@ describe("DeliveryLoop", () => {
     const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
 
     expect(paused).toMatchObject({
-      status: "PAUSED",
-      runs: 2,
-      processed: 2_002,
+      status: "IDLE",
+      runs: 1,
+      processed: inboxStorageAccess.maxReadLimit,
       delivered: 0,
       failed: 0,
     });
     expect(seen).toEqual([]);
 
-    for (const message of pending.slice(0, 1_503)) {
+    for (const message of pending) {
       await expect(delivery.inbox.markDelivered(message)).resolves.toMatchObject({
         id: message.id,
         status: "DELIVERED",
       });
     }
 
+    await expectIdleWithoutDelivery(loop);
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
@@ -422,9 +710,9 @@ describe("DeliveryLoop", () => {
 
     expect(claim?.signalId).toBe("signal-now-supported");
     expect(paused).toMatchObject({
-      status: "PAUSED",
-      runs: 2,
-      processed: 2_002,
+      status: "IDLE",
+      runs: 1,
+      processed: inboxStorageAccess.maxReadLimit,
       delivered: 0,
       failed: 0,
     });
@@ -437,14 +725,14 @@ describe("DeliveryLoop", () => {
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
     expect(seen).toEqual(["signal-now-supported"]);
   });
 
-  it("resets a resumed cursor after tail delivery so a cleared head claim is not starved", async () => {
+  it("advances after reconsidering a cleared head claim", async () => {
     let now = new Date("2026-07-08T09:00:00.000Z");
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -482,7 +770,7 @@ describe("DeliveryLoop", () => {
     }
 
     await expect(loop.run()).resolves.toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 0,
       failed: 0,
     });
@@ -496,13 +784,26 @@ describe("DeliveryLoop", () => {
 
     await expect(loop.run()).resolves.toMatchObject({
       status: "IDLE",
-      delivered: 4,
+      delivered: 1,
       failed: 0,
     });
-    expect(seen.slice(0, 2)).toEqual(["signal-cleared-head", "signal-supported-tail-1002"]);
+    expect(seen).toEqual(["signal-cleared-head"]);
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "PAUSED",
+      delivered: 2,
+      failed: 0,
+    });
+    expect(seen).toEqual([
+      "signal-cleared-head",
+      "signal-supported-tail-1002",
+      "signal-supported-tail-1003",
+    ]);
+
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1, failed: 0 });
   });
 
-  it("drops a stale skipped-only resume cursor so a cleared head claim is reconsidered", async () => {
+  it("restarts a pass so a cleared head claim is reconsidered", async () => {
     let now = new Date("2026-07-08T09:00:00.000Z");
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -543,7 +844,7 @@ describe("DeliveryLoop", () => {
 
     expect(claim?.signalId).toBe("signal-cleared-head");
     expect(paused).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 0,
       failed: 0,
     });
@@ -558,7 +859,7 @@ describe("DeliveryLoop", () => {
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
@@ -570,7 +871,7 @@ describe("DeliveryLoop", () => {
       clearSkippedRows: () => undefined as Promise<void> | void,
     };
     const faults = deliveryStorageFaults(
-      onInboxQueryNumber(4, async () => {
+      onInboxQueryNumber(3, async () => {
         await race.clearSkippedRows();
       }),
     );
@@ -602,6 +903,7 @@ describe("DeliveryLoop", () => {
       }
     };
 
+    await expectIdleWithoutDelivery(loop);
     const run = await loop.run();
 
     expect(run).toMatchObject({
@@ -617,7 +919,7 @@ describe("DeliveryLoop", () => {
       clearSkippedRows: () => undefined as Promise<void> | void,
     };
     const faults = deliveryStorageFaults(
-      onInboxQueryNumber(4, async () => {
+      onInboxQueryNumber(3, async () => {
         await race.clearSkippedRows();
       }),
     );
@@ -652,10 +954,11 @@ describe("DeliveryLoop", () => {
       }
     };
 
+    await expectIdleWithoutDelivery(loop);
     const run = await loop.run();
 
     expect(run).toMatchObject({
-      status: "PAUSED",
+      status: "IDLE",
       delivered: 1,
       failed: 0,
     });
@@ -678,6 +981,121 @@ describe("DeliveryLoop", () => {
       ),
     ).toThrow("Loop drain access requires a Delivery instance.");
   });
+
+  it("rejects loop progress access for non-loop instances", () => {
+    expect(() => deliveryLoopAccess.progress({} as DeliveryLoop)).toThrow(
+      "Delivery loop access requires a DeliveryLoop instance.",
+    );
+  });
+
+  it("rejects a retained epoch with a missing admitted row", async () => {
+    const delivery = createDelivery();
+    const messages: InboxMessage[] = [];
+    messages.length = 1;
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { epoch: { messages, next: 0 } },
+      ),
+    ).rejects.toThrow("Delivery epoch progress is invalid.");
+  });
+
+  it("observes a duplicate retained row only once", async () => {
+    const delivery = createDelivery();
+    const message = await seed(delivery, "signal-duplicate-retained", 1n);
+    const seen: string[] = [];
+
+    const outcome = await deliveryAccess.drain(
+      delivery,
+      ShardIndex.single(),
+      {
+        node: "node-a",
+        onMessage(delivered) {
+          seen.push(delivered.signalId);
+        },
+      },
+      { epoch: { messages: [message, message], next: 0 } },
+    );
+
+    expect(seen).toEqual(["signal-duplicate-retained"]);
+    expect(outcome).toMatchObject({
+      run: { processed: 1, accepted: 1, delivered: 1, failed: 0 },
+      epochProgress: { next: 2, complete: true },
+    });
+  });
+
+  it("rejects a non-pending row in a retained epoch", async () => {
+    const delivery = createDelivery();
+    const pending = await seed(delivery, "signal-stale-retained-status", 1n);
+    const delivered = await delivery.inbox.markDelivered(pending);
+    if (delivered === undefined) {
+      throw new Error("Expected the seeded row to be marked delivered.");
+    }
+
+    await expect(
+      deliveryAccess.drain(
+        delivery,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        { epoch: { messages: [delivered], next: 0 } },
+      ),
+    ).rejects.toThrow('Delivery worker does not support "DELIVERED" message status.');
+  });
+
+  it("rejects invalid progress returned for an admitted epoch", async () => {
+    const delivery = createDelivery();
+    const restore = deliveryAccess.replace(delivery, () =>
+      Promise.resolve({
+        run: {
+          status: "DRAINED",
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        },
+        exhaustedSkippedScan: false,
+        epochProgress: { next: Number.NaN, complete: false },
+      }),
+    );
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage: () => undefined,
+    });
+
+    await expect(loop.run()).rejects.toThrow("Delivery epoch progress is invalid.");
+    restore();
+  });
+
+  it.each([undefined, ""])(
+    "rejects invalid multitenant context during epoch admission: %s",
+    async (tenantId) => {
+      const delivery = new Delivery({
+        context: {
+          name: "Tasks",
+          multitenant: true,
+          tenantId,
+        } as never,
+        storageFactory: new InMemoryStorageFactory(),
+      });
+      const loop = new DeliveryLoop({
+        delivery,
+        shard: ShardIndex.single(),
+        node: "node-a",
+        onMessage: () => undefined,
+      });
+
+      await expect(loop.run()).rejects.toThrow(
+        /Multitenant storage "Tasks\.delivery\.inbox" requires context\.tenantId\./,
+      );
+      expect(deliveryLoopAccess.progress(loop)).toMatchObject({ runs: 0, processed: 0 });
+    },
+  );
 
   it("stop prevents starting a new drain", async () => {
     const delivery = createDelivery();
@@ -710,19 +1128,54 @@ describe("DeliveryLoop", () => {
     ]);
   });
 
-  it("rejects a concurrent run after stop while a drain is active", async () => {
-    const delivery = createDelivery();
-    const barrier = deferred<undefined>();
+  it("stop during epoch admission prevents the first drain", async () => {
+    const admissionStarted = deferred<undefined>();
+    const resumeAdmission = deferred<undefined>();
+    const faults = deliveryStorageFaults(
+      onInboxQueryNumber(1, async () => {
+        admissionStarted.resolve(undefined);
+        await resumeAdmission.promise;
+      }),
+    );
+    const delivery = createDelivery(faults.storageFactory);
+    const seen: string[] = [];
     const loop = new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
       node: "node-a",
-      onMessage: () => barrier.promise,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    await seed(delivery, "signal-admission-stop", 1n);
+    const running = loop.run();
+    await admissionStarted.promise;
+
+    loop.stop();
+    resumeAdmission.resolve(undefined);
+
+    await expect(running).resolves.toMatchObject({ status: "STOPPED", runs: 0, delivered: 0 });
+    expect(seen).toEqual([]);
+  });
+
+  it("rejects a concurrent run after stop while a drain is active", async () => {
+    const delivery = createDelivery();
+    const barrier = deferred<undefined>();
+    const started = deferred<undefined>();
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage() {
+        started.resolve(undefined);
+        return barrier.promise;
+      },
     });
 
     await seed(delivery, "signal-active-stop", 1n);
     const running = loop.run();
-    await Promise.resolve();
+    await started.promise;
 
     loop.stop();
 
@@ -739,21 +1192,25 @@ describe("DeliveryLoop", () => {
   it("close waits for the current drain before resolving", async () => {
     const delivery = createDelivery();
     const barrier = deferred<undefined>();
+    const started = deferred<undefined>();
     const loop = new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
       node: "node-a",
-      onMessage: () => barrier.promise,
+      onMessage() {
+        started.resolve(undefined);
+        return barrier.promise;
+      },
     });
     let closed = false;
 
     await seed(delivery, "signal-slow", 1n);
     const running = loop.run();
+    await started.promise;
     const closing = loop.close().then(() => {
       closed = true;
     });
 
-    await Promise.resolve();
     expect(closed).toBe(false);
 
     barrier.resolve(undefined);
@@ -771,9 +1228,11 @@ describe("DeliveryLoop", () => {
   it("propagates current drain rejection through close without starting another drain", async () => {
     const failure = new Error("storage failed");
     const barrier = deferred<DeliveryDrainOutcome>();
+    const drainStarted = deferred<undefined>();
     const delivery = createDelivery();
     const restore = deliveryAccess.replace(delivery, () => {
       drains += 1;
+      drainStarted.resolve(undefined);
       return barrier.promise;
     });
     let drains = 0;
@@ -786,9 +1245,9 @@ describe("DeliveryLoop", () => {
 
     const running = loop.run();
     const runFailure = running.catch((error: unknown) => error);
+    await drainStarted.promise;
     const closing = loop.close();
     const closeFailure = closing.catch((error: unknown) => error);
-    await Promise.resolve();
 
     barrier.reject(failure);
 
@@ -800,6 +1259,35 @@ describe("DeliveryLoop", () => {
     });
     expect(drains).toBe(1);
     restore();
+  });
+
+  it("resets last safe progress before a new epoch admission rejects", async () => {
+    const admissionFailure = new Error("admission failed");
+    const faults = deliveryStorageFaults(
+      onInboxQueryNumber(2, () => {
+        throw admissionFailure;
+      }),
+    );
+    const delivery = createDelivery(faults.storageFactory);
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage: () => undefined,
+    });
+
+    await seed(delivery, "signal-first-epoch", 1n);
+    await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 1 });
+    expect(deliveryLoopAccess.progress(loop)).toMatchObject({ runs: 1, delivered: 1 });
+
+    await expect(loop.run()).rejects.toThrow();
+    expect(deliveryLoopAccess.progress(loop)).toMatchObject({
+      runs: 0,
+      processed: 0,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
   });
 
   it("stops at the configured failure bound", async () => {
@@ -850,7 +1338,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-retryable-tail"]);
     expect(run).toMatchObject({
       status: "IDLE",
-      runs: 3,
+      runs: 1,
       processed: 2,
       accepted: 1,
       delivered: 2,
@@ -984,6 +1472,10 @@ function createDelivery(storageFactory: StorageFactory = new InMemoryStorageFact
     context: { name: "Tasks", multitenant: false },
     storageFactory,
   });
+}
+
+async function expectIdleWithoutDelivery(loop: DeliveryLoop): Promise<void> {
+  await expect(loop.run()).resolves.toMatchObject({ status: "IDLE", delivered: 0, failed: 0 });
 }
 
 async function seed(

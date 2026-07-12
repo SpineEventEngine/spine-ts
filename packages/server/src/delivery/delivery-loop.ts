@@ -3,10 +3,13 @@ import {
   deliveryAccess,
   type Delivery,
   type DeliveryDrainOutcome,
+  type DeliveryEpochSlice,
   type DeliveryFailure,
   type DeliveryRun,
   type OnDeliveryMessage,
 } from "./delivery.js";
+import { InboxRecords } from "./inbox-records.js";
+import type { InboxMessage, InboxReadContinuation } from "./inbox.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
@@ -17,8 +20,11 @@ export class DeliveryLoop {
   readonly #limit: number | undefined;
   readonly #maxFailures: number;
   readonly #onMessage: OnDeliveryMessage;
+  readonly #admission = new DeliveryAdmissionSweep();
+  #epoch: DeliveryEpoch | undefined;
+  #progress = loopProgress();
   #resume: DeliveryResumeCursor | undefined;
-  readonly #state = { stopped: false };
+  #stopped = false;
   #running: Promise<DeliveryLoopRun> | undefined;
 
   /** Configure a loop for one shard and node. */
@@ -34,18 +40,19 @@ export class DeliveryLoop {
       maxDeliveryLoopFailures,
     );
     this.#onMessage = options.onMessage;
+    deliveryLoopInternals.set(this, { progress: () => this.#progress });
     Object.freeze(this);
   }
 
   /**
-   * Run drains until idle, skipped, stopped, paused after a bounded skipped-only scan streak,
-   * or the failure bound is reached, including a failed exhaustion-time mark.
+   * Run one bounded step through an immutable admitted epoch until idle, skipped,
+   * stopped, paused, or the failure bound is reached.
    */
   run(): Promise<DeliveryLoopRun> {
     if (this.#running !== undefined) {
       throw new Error("DeliveryLoop is already running.");
     }
-    if (this.#state.stopped) {
+    if (this.#isStopped()) {
       return Promise.resolve(loopRun("STOPPED"));
     }
 
@@ -58,7 +65,7 @@ export class DeliveryLoop {
 
   /** Prevent future drain starts without interrupting a current `Delivery.drain()`. */
   stop(): void {
-    this.#state.stopped = true;
+    this.#stopped = true;
   }
 
   /** Call `stop()` and wait for the current drain, if any, to finish. */
@@ -70,41 +77,100 @@ export class DeliveryLoop {
   async #runLoop(): Promise<DeliveryLoopRun> {
     this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
+    const admission = await this.#admitEpoch(summary);
+    if (admission !== undefined) {
+      return admission;
+    }
+
     let resumableScanRuns = 0;
     for (;;) {
-      if (this.#state.stopped) {
-        this.#resume = undefined;
-        return summary.result("STOPPED");
-      }
       const remainingFailures = this.#maxFailures - summary.failed;
-      const limit = this.#drainLimit();
-      const outcome = await this.#drain(limit, remainingFailures);
-      const { run } = outcome;
-      this.#resume = outcome.resumeCursor;
-      summary.add(run);
-      if (run.status === "SKIPPED") {
-        this.#resume = undefined;
-        return summary.result("SKIPPED");
+      const outcome = await this.#drain(this.#drainLimit(), remainingFailures);
+      this.#recordOutcome(summary, outcome);
+      const transition = this.#outcomeTransition(summary, outcome, resumableScanRuns);
+      if (transition.kind === "TERMINAL") {
+        return this.#finish(summary, transition);
       }
-      if (summary.failed >= this.#maxFailures && run.failed > 0) {
-        this.#resume = undefined;
-        return summary.result("FAILED");
-      }
-      if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
-        if (outcome.exhaustedSkippedScan) {
-          resumableScanRuns += 1;
-          if (resumableScanRuns >= maxResumableScanRuns) {
-            this.#resume = undefined;
-            return summary.result("PAUSED");
-          }
-          continue;
-        }
-        resumableScanRuns = 0;
-        this.#resume = undefined;
-        return summary.result("IDLE");
-      }
-      resumableScanRuns = 0;
+      resumableScanRuns = transition.resumableScanRuns;
     }
+  }
+
+  async #admitEpoch(summary: DeliveryLoopSummary): Promise<DeliveryLoopRun | undefined> {
+    if (this.#epoch === undefined) {
+      this.#progress = loopProgress();
+      this.#epoch = await DeliveryEpoch.admit(this.#delivery, this.#shard, this.#admission.after);
+    }
+    return this.#isStopped() ? this.#finish(summary, terminalTransition("STOPPED")) : undefined;
+  }
+
+  #recordOutcome(summary: DeliveryLoopSummary, outcome: DeliveryDrainOutcome): void {
+    this.#resume = outcome.resumeCursor;
+    summary.add(outcome.run);
+    this.#progress = addLoopProgress(this.#progress, outcome.run);
+  }
+
+  #outcomeTransition(
+    summary: DeliveryLoopSummary,
+    outcome: DeliveryDrainOutcome,
+    resumableScanRuns: number,
+  ): LoopTransition {
+    if (this.#isStopped()) {
+      return terminalTransition("STOPPED");
+    }
+    if (outcome.run.status === "SKIPPED") {
+      return terminalTransition("SKIPPED");
+    }
+    if (summary.failed >= this.#maxFailures && outcome.run.failed > 0) {
+      return terminalTransition("FAILED");
+    }
+    return outcome.epochProgress === undefined
+      ? this.#availableTransition(outcome, resumableScanRuns)
+      : this.#epochTransition(outcome, resumableScanRuns);
+  }
+
+  #epochTransition(outcome: DeliveryDrainOutcome, resumableScanRuns: number): LoopTransition {
+    const progress = outcome.epochProgress;
+    if (progress === undefined || this.#epoch === undefined) {
+      throw new Error("Delivery epoch progress is unavailable.");
+    }
+    this.#epoch.advance(progress.next);
+    const nextRuns = resumableScanRuns + 1;
+    if (progress.complete) {
+      return terminalTransition("IDLE", true);
+    }
+    if (nextRuns >= maxResumableScanRuns) {
+      this.#resume = undefined;
+      return terminalTransition("PAUSED");
+    }
+    return continueTransition(nextRuns);
+  }
+
+  #availableTransition(outcome: DeliveryDrainOutcome, resumableScanRuns: number): LoopTransition {
+    const { run } = outcome;
+    if (run.accepted !== 0 || run.delivered !== 0 || run.failed !== 0) {
+      return continueTransition(0);
+    }
+    if (!outcome.exhaustedSkippedScan) {
+      return terminalTransition("IDLE");
+    }
+    const nextRuns = resumableScanRuns + 1;
+    return nextRuns >= maxResumableScanRuns
+      ? terminalTransition("PAUSED")
+      : continueTransition(nextRuns);
+  }
+
+  #finish(summary: DeliveryLoopSummary, transition: TerminalTransition): DeliveryLoopRun {
+    if (transition.status === "PAUSED") {
+      return summary.result(transition.status);
+    }
+    if (transition.completedEpoch && this.#epoch !== undefined) {
+      this.#admission.complete(this.#epoch.nextAdmissionAfter);
+    } else {
+      this.#admission.reset();
+    }
+    this.#epoch = undefined;
+    this.#resume = undefined;
+    return summary.result(transition.status);
   }
 
   #drain(limit: number, remainingFailures: number): Promise<DeliveryDrainOutcome> {
@@ -118,7 +184,10 @@ export class DeliveryLoop {
       },
       {
         maxFailures: remainingFailures,
-        ...(this.#resume === undefined ? {} : { resume: this.#resume }),
+        ...(this.#epoch === undefined ? {} : { epoch: this.#epoch.slice() }),
+        ...(this.#epoch !== undefined || this.#resume === undefined
+          ? {}
+          : { resume: this.#resume }),
       },
     );
   }
@@ -134,11 +203,28 @@ export class DeliveryLoop {
       );
     }
   }
+
+  #isStopped(): boolean {
+    return this.#stopped;
+  }
 }
 
 const maxDeliveryLoopFailures = 1_000;
 const maxResumableScanRuns = 2;
 type DeliveryResumeCursor = DeliveryDrainOutcome["resumeCursor"];
+
+type LoopTransition = ContinueTransition | TerminalTransition;
+
+interface ContinueTransition {
+  readonly kind: "CONTINUE";
+  readonly resumableScanRuns: number;
+}
+
+interface TerminalTransition {
+  readonly kind: "TERMINAL";
+  readonly status: DeliveryLoopStatus;
+  readonly completedEpoch: boolean;
+}
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {
@@ -184,6 +270,38 @@ export interface DeliveryLoopRun {
   readonly failures: readonly DeliveryFailure[];
 }
 
+/** @internal Last safely completed drain evidence for the current admitted epoch. */
+export interface DeliveryLoopProgress {
+  readonly runs: number;
+  readonly processed: number;
+  readonly accepted: number;
+  readonly delivered: number;
+  readonly failed: number;
+  readonly failures: readonly DeliveryFailure[];
+}
+
+/** @internal Loop evidence helpers for package-local worker coordination. */
+export interface DeliveryLoopAccess {
+  progress(loop: DeliveryLoop): DeliveryLoopProgress;
+}
+
+interface DeliveryLoopInternals {
+  readonly progress: () => DeliveryLoopProgress;
+}
+
+const deliveryLoopInternals = new WeakMap<DeliveryLoop, DeliveryLoopInternals>();
+
+/** @internal Loop evidence helpers for package-local worker coordination. */
+export const deliveryLoopAccess: DeliveryLoopAccess = Object.freeze({
+  progress(loop: DeliveryLoop) {
+    const internals = deliveryLoopInternals.get(loop);
+    if (internals === undefined) {
+      throw new Error("Delivery loop access requires a DeliveryLoop instance.");
+    }
+    return internals.progress();
+  },
+});
+
 class DeliveryLoopSummary {
   #runs = 0;
   #processed = 0;
@@ -218,6 +336,98 @@ class DeliveryLoopSummary {
   }
 }
 
+class DeliveryEpoch {
+  readonly #messages: readonly InboxMessage[];
+  readonly #nextAdmissionAfter: InboxReadContinuation | undefined;
+  #next = 0;
+
+  private constructor(
+    messages: readonly InboxMessage[],
+    nextAdmissionAfter: InboxReadContinuation | undefined,
+  ) {
+    this.#messages = Object.freeze(messages.map(epochMessageSnapshot));
+    this.#nextAdmissionAfter = nextAdmissionAfter;
+  }
+
+  static async admit(
+    delivery: Delivery,
+    shard: ShardIndex,
+    initialAfter: InboxReadContinuation | undefined,
+  ): Promise<DeliveryEpoch> {
+    const messages = await delivery.inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: inboxStorageAccess.maxReadLimit,
+      ...(initialAfter === undefined ? {} : { after: initialAfter }),
+    });
+    const last = messages.at(-1);
+    const nextAdmissionAfter =
+      messages.length === inboxStorageAccess.maxReadLimit && last !== undefined
+        ? epochContinuation(last)
+        : undefined;
+
+    return new DeliveryEpoch(messages, nextAdmissionAfter);
+  }
+
+  get nextAdmissionAfter(): InboxReadContinuation | undefined {
+    return this.#nextAdmissionAfter;
+  }
+
+  advance(next: number): void {
+    if (!Number.isSafeInteger(next) || next < this.#next || next > this.#messages.length) {
+      throw new Error("Delivery epoch progress is invalid.");
+    }
+    this.#next = next;
+  }
+
+  slice(): DeliveryEpochSlice {
+    return Object.freeze({ messages: this.#messages, next: this.#next });
+  }
+}
+
+class DeliveryAdmissionSweep {
+  #after: InboxReadContinuation | undefined;
+  #completedChunks = 0n;
+  #chunksPerPass = 1n;
+
+  get after(): InboxReadContinuation | undefined {
+    return this.#after;
+  }
+
+  complete(next: InboxReadContinuation | undefined): void {
+    if (next === undefined) {
+      this.reset();
+      return;
+    }
+
+    // Every pass starts at the head and doubles its chunk reach before the next restart.
+    this.#completedChunks += 1n;
+    if (this.#completedChunks === this.#chunksPerPass) {
+      this.#after = undefined;
+      this.#completedChunks = 0n;
+      this.#chunksPerPass *= 2n;
+      return;
+    }
+    this.#after = next;
+  }
+
+  reset(): void {
+    this.#after = undefined;
+    this.#completedChunks = 0n;
+    this.#chunksPerPass = 1n;
+  }
+}
+
+function continueTransition(resumableScanRuns: number): ContinueTransition {
+  return Object.freeze({ kind: "CONTINUE", resumableScanRuns });
+}
+
+function terminalTransition(
+  status: DeliveryLoopStatus,
+  completedEpoch = false,
+): TerminalTransition {
+  return Object.freeze({ kind: "TERMINAL", status, completedEpoch });
+}
+
 function loopRun(
   status: DeliveryLoopStatus,
   runs = 0,
@@ -235,6 +445,47 @@ function loopRun(
     delivered,
     failed,
     failures: Object.freeze([...failures]),
+  });
+}
+
+function loopProgress(
+  runs = 0,
+  processed = 0,
+  accepted = 0,
+  delivered = 0,
+  failed = 0,
+  failures: readonly DeliveryFailure[] = [],
+): DeliveryLoopProgress {
+  return Object.freeze({
+    runs,
+    processed,
+    accepted,
+    delivered,
+    failed,
+    failures: Object.freeze([...failures]),
+  });
+}
+
+function addLoopProgress(progress: DeliveryLoopProgress, run: DeliveryRun): DeliveryLoopProgress {
+  return loopProgress(
+    progress.runs + 1,
+    progress.processed + run.processed,
+    progress.accepted + run.accepted,
+    progress.delivered + run.delivered,
+    progress.failed + run.failed,
+    [...progress.failures, ...run.failures],
+  );
+}
+
+function epochMessageSnapshot(message: InboxMessage): InboxMessage {
+  return InboxRecords.read(InboxRecords.write(message));
+}
+
+function epochContinuation(message: InboxMessage): InboxReadContinuation {
+  return Object.freeze({
+    messageId: message.id.value,
+    whenReceived: new Date(message.whenReceived.getTime()),
+    version: message.version,
   });
 }
 

@@ -128,6 +128,18 @@ export class Delivery {
     );
 
     try {
+      if (controls.epoch !== undefined) {
+        return await this.#drainAdmittedMessages(
+          scope.inbox,
+          scope.attempts,
+          limit,
+          options.onMessage,
+          lease,
+          active,
+          controls.epoch,
+          maxFailures,
+        );
+      }
       const cursor = this.#resolveDrainCursor(controls.resume);
 
       return await this.#drainAvailableMessages(
@@ -145,6 +157,51 @@ export class Delivery {
       await lease.close();
       await scope.shards.release(session);
     }
+  }
+
+  async #drainAdmittedMessages(
+    inbox: Inbox,
+    attempts: DeliveryAttempts,
+    limit: number,
+    onMessage: OnDeliveryMessage,
+    lease: ShardLeaseKeeper,
+    active: ActiveClaim,
+    epoch: DeliveryEpochSlice,
+    maxFailures: number | undefined,
+  ): Promise<DeliveryDrainOutcome> {
+    const progress = drainProgress();
+    const scanBudget = inboxStorageAccess.maxReadLimit + limit;
+    const initial = epoch.next;
+    let next = initial;
+    let examined = 0;
+
+    while (next < epoch.messages.length && examined < scanBudget) {
+      const message = epoch.messages[next];
+      if (message === undefined) {
+        throw new Error("Delivery epoch progress is invalid.");
+      }
+      next += 1;
+      examined += 1;
+
+      await this.#tryDrainMessage(inbox, attempts, progress, message, onMessage, lease, active);
+      if (progress.accepted >= limit) {
+        break;
+      }
+      if (maxFailures !== undefined && progress.failed >= maxFailures) {
+        break;
+      }
+    }
+
+    const safeNext = progress.failed === 0 ? next : initial;
+    const complete = safeNext >= epoch.messages.length;
+    const run = progress.finish({}).run;
+
+    return Object.freeze({
+      run,
+      exhaustedSkippedScan:
+        !complete && run.accepted === 0 && run.delivered === 0 && run.failed === 0,
+      epochProgress: Object.freeze({ next: safeNext, complete }),
+    });
   }
 
   async #drainAvailableMessages(
@@ -662,6 +719,7 @@ export interface DeliveryDrainOptions {
 interface DeliveryDrainControls {
   readonly resume?: DeliveryDrainCursor;
   readonly maxFailures?: number;
+  readonly epoch?: DeliveryEpochSlice;
 }
 
 /** @internal Framework-only access to loop-private delivery controls. */
@@ -796,6 +854,19 @@ export interface DeliveryDrainOutcome {
   readonly run: DeliveryRun;
   readonly resumeCursor?: DeliveryDrainCursor;
   readonly exhaustedSkippedScan: boolean;
+  readonly epochProgress?: DeliveryEpochProgress;
+}
+
+/** @internal Immutable admitted row membership and opaque loop position. */
+export interface DeliveryEpochSlice {
+  readonly messages: readonly InboxMessage[];
+  readonly next: number;
+}
+
+/** @internal Last safe position reached in one admitted delivery epoch. */
+export interface DeliveryEpochProgress {
+  readonly next: number;
+  readonly complete: boolean;
 }
 
 interface DrainProgress {

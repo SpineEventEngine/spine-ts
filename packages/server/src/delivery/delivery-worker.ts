@@ -1,4 +1,10 @@
-import { DeliveryLoop, type DeliveryLoopRun, type DeliveryLoopStatus } from "./delivery-loop.js";
+import {
+  DeliveryLoop,
+  deliveryLoopAccess,
+  type DeliveryLoopProgress,
+  type DeliveryLoopRun,
+  type DeliveryLoopStatus,
+} from "./delivery-loop.js";
 import type { Delivery, OnDeliveryMessage } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
@@ -9,12 +15,16 @@ import type { ShardIndex } from "./shard-index.js";
  * does not own production supervision, retry policy, or transport topology.
  */
 export class DeliveryWorker {
+  readonly #shards: readonly ShardIndex[];
   readonly #loops: readonly DeliveryLoop[];
-  #running: Promise<DeliveryWorkerRun> | undefined;
+  readonly #states: DeliveryShardState[];
+  #obligation: DeliveryWorkerObligation | undefined;
+  #running: Promise<unknown> | undefined;
 
   /** Configure worker loops for one node over known delivery shards. */
   constructor(options: DeliveryWorkerOptions) {
     const shards = requireShards(options.shards);
+    this.#shards = shards;
 
     this.#loops = Object.freeze(
       shards.map(
@@ -29,6 +39,10 @@ export class DeliveryWorker {
           }),
       ),
     );
+    this.#states = shards.map(() => "READY");
+    deliveryWorkerInternals.set(this, {
+      start: (obligation) => this.#startInternal(obligation),
+    });
     Object.freeze(this);
   }
 
@@ -38,9 +52,14 @@ export class DeliveryWorker {
       throw new Error("DeliveryWorker is already running.");
     }
 
-    const running = settleWorkerRun(this.#loops.map((loop) => loop.run())).finally(() => {
-      this.#running = undefined;
-    });
+    const obligation = Object.freeze({});
+    this.#obligation = obligation;
+    this.#states.fill("READY");
+    const running = compatibilityWorkerRun(this.#settle(this.#allEntries(), obligation)).finally(
+      () => {
+        this.#running = undefined;
+      },
+    );
     this.#running = running;
     return running;
   }
@@ -56,6 +75,59 @@ export class DeliveryWorker {
   async close(): Promise<void> {
     this.stop();
     await this.#running;
+  }
+
+  #startInternal(obligation: DeliveryWorkerObligation): Promise<DeliveryWorkerEvidence> {
+    if (this.#running !== undefined) {
+      throw new Error("DeliveryWorker is already running.");
+    }
+    if (this.#obligation !== obligation) {
+      this.#obligation = obligation;
+      this.#states.fill("READY");
+    }
+
+    const entries = this.#allEntries().filter(({ index }) => {
+      const state = this.#states[index];
+      return state === "READY" || state === "PAUSED" || state === "REJECTED";
+    });
+    const running = this.#settle(entries, obligation).finally(() => {
+      this.#running = undefined;
+    });
+    this.#running = running;
+    return running;
+  }
+
+  async #settle(
+    entries: readonly DeliveryShardEntry[],
+    obligation: DeliveryWorkerObligation,
+  ): Promise<DeliveryWorkerEvidence> {
+    const settled = await Promise.allSettled(entries.map(({ loop }) => loop.run()));
+    const shards = settled.map((result, offset): DeliveryShardEvidence => {
+      const entry = entries[offset];
+      if (entry === undefined) {
+        throw new Error("DeliveryWorker shard settlement is invalid.");
+      }
+      const progress = deliveryLoopAccess.progress(entry.loop);
+      if (result.status === "rejected") {
+        this.#states[entry.index] = "REJECTED";
+        return rejectedShard(entry.shard, obligation, result.reason, progress);
+      }
+
+      this.#states[entry.index] = shardState(result.value.status);
+      return fulfilledShard(entry.shard, obligation, result.value, progress);
+    });
+
+    return Object.freeze({ obligation, shards: Object.freeze(shards) });
+  }
+
+  #allEntries(): readonly DeliveryShardEntry[] {
+    return this.#loops.map((loop, index) => {
+      const shard = this.#shards[index];
+      if (shard === undefined) {
+        throw new Error("DeliveryWorker shard configuration is invalid.");
+      }
+      return { index, shard, loop };
+    });
   }
 }
 
@@ -88,10 +160,58 @@ export interface DeliveryWorkerRun {
   readonly loops: readonly DeliveryLoopRun[];
 }
 
+/** @internal Identity of one package-owned request to run configured delivery shards. */
+export type DeliveryWorkerObligation = object;
+
+/** @internal Ordered fulfilled and rejected evidence for one internal worker invocation. */
+export interface DeliveryWorkerEvidence {
+  readonly obligation: DeliveryWorkerObligation;
+  readonly shards: readonly DeliveryShardEvidence[];
+}
+
+/** @internal Evidence for one configured shard in configured order. */
+export type DeliveryShardEvidence = FulfilledDeliveryShard | RejectedDeliveryShard;
+
+/** @internal Fulfilled loop evidence associated with its shard and obligation. */
+export interface FulfilledDeliveryShard {
+  readonly status: "fulfilled";
+  readonly shard: ShardIndex;
+  readonly obligation: DeliveryWorkerObligation;
+  readonly run: DeliveryLoopRun;
+  readonly progress: DeliveryLoopProgress;
+}
+
+/** @internal Rejected loop evidence preserving its original cause and last safe progress. */
+export interface RejectedDeliveryShard {
+  readonly status: "rejected";
+  readonly shard: ShardIndex;
+  readonly obligation: DeliveryWorkerObligation;
+  readonly cause: unknown;
+  readonly progress: DeliveryLoopProgress;
+}
+
 /** @internal Worker-result helpers for package-local tests and runtime code. */
 export interface DeliveryWorkerAccess {
   status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus;
+  start(
+    worker: DeliveryWorker,
+    obligation: DeliveryWorkerObligation,
+  ): Promise<DeliveryWorkerEvidence>;
 }
+
+interface DeliveryWorkerInternals {
+  readonly start: (obligation: DeliveryWorkerObligation) => Promise<DeliveryWorkerEvidence>;
+}
+
+interface DeliveryShardEntry {
+  readonly index: number;
+  readonly shard: ShardIndex;
+  readonly loop: DeliveryLoop;
+}
+
+type DeliveryShardState = "READY" | "PAUSED" | "REJECTED" | "PARKED" | "COMPLETE" | "STOPPED";
+
+const deliveryWorkerInternals = new WeakMap<DeliveryWorker, DeliveryWorkerInternals>();
 
 function requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
   if (!Array.isArray(shards) || shards.length === 0) {
@@ -113,20 +233,27 @@ export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]) {
     return workerStatus(loops);
   },
+  start(worker: DeliveryWorker, obligation: DeliveryWorkerObligation) {
+    const internals = deliveryWorkerInternals.get(worker);
+    if (internals === undefined) {
+      throw new Error("Delivery worker access requires a DeliveryWorker instance.");
+    }
+    return internals.start(obligation);
+  },
 });
 
-async function settleWorkerRun(
-  loopRuns: readonly Promise<DeliveryLoopRun>[],
+async function compatibilityWorkerRun(
+  evidence: Promise<DeliveryWorkerEvidence>,
 ): Promise<DeliveryWorkerRun> {
-  const settled = await Promise.allSettled(loopRuns);
+  const settled = (await evidence).shards;
   const loops: DeliveryLoopRun[] = [];
   const failures: unknown[] = [];
 
   for (const result of settled) {
     if (result.status === "fulfilled") {
-      loops.push(result.value);
+      loops.push(result.run);
     } else {
-      failures.push(result.reason);
+      failures.push(result.cause);
     }
   }
 
@@ -138,6 +265,38 @@ async function settleWorkerRun(
   }
 
   return workerRun(loops);
+}
+
+function fulfilledShard(
+  shard: ShardIndex,
+  obligation: DeliveryWorkerObligation,
+  run: DeliveryLoopRun,
+  progress: DeliveryLoopProgress,
+): FulfilledDeliveryShard {
+  return Object.freeze({ status: "fulfilled", shard, obligation, run, progress });
+}
+
+function rejectedShard(
+  shard: ShardIndex,
+  obligation: DeliveryWorkerObligation,
+  cause: unknown,
+  progress: DeliveryLoopProgress,
+): RejectedDeliveryShard {
+  return Object.freeze({ status: "rejected", shard, obligation, cause, progress });
+}
+
+function shardState(status: DeliveryLoopStatus): DeliveryShardState {
+  switch (status) {
+    case "PAUSED":
+      return "PAUSED";
+    case "IDLE":
+      return "COMPLETE";
+    case "STOPPED":
+      return "STOPPED";
+    case "FAILED":
+    case "SKIPPED":
+      return "PARKED";
+  }
 }
 
 function workerStatus(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
