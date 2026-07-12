@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Round 2 fix worker assigned; paused for assignment commit
+Status: Round 2 fixes active; RED pending
 
 Started: `2026-07-12T09:52:53Z`
 

@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 2 fix worker assigned; paused for assignment commit
+Status: Round 2 fixes active; RED pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -190,3 +190,6 @@ Security is deferred to final project readiness.
   `019f55eb-913c-7671-8f2e-42d7cddf4fb4` for the complete configured-endpoint
   readiness finding; worker remains paused until assignment provenance
   commits.
+- `2026-07-12T10:44:51Z`: Assignment provenance commit `37023df5` completed;
+  started the worker with focused configured-endpoint RED required before
+  production edits.
