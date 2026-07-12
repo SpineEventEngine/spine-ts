@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Complete; ready to merge
+Status: Complete; merged and post-merge verified
 
 Derived status mirror: the canonical current state is the `Status` header in
 `TASK.md`; timestamped Events are audit detail, not competing authority.

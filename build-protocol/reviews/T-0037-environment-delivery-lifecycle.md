@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Complete; ready to merge
+Status: Complete; merged and post-merge verified
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -831,3 +831,9 @@ Security is deferred to final project readiness.
   tests, coverage (95.14% statements, 90.11% branches), docs/API checks with 205
   server exports and only the known invalid-`origin` warning, proto lint, and
   generated-output cleanliness. T-0037 is complete and ready to merge.
+- `2026-07-12T09:48:54Z`: Merged T-0037 into `main` as `6e3e1930`. Root full
+  `pnpm verify` passed generated/tooling typechecks, lint, cleanup enforcement,
+  format, 60 test files and 1,309 tests, coverage (95.14% statements, 90.11%
+  branches), docs/API checks with 205 server exports and only the known invalid-
+  `origin` warning, proto lint, and generated-output cleanliness. Post-merge
+  verification is complete.

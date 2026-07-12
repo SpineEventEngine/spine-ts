@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Complete; ready to merge
+Status: Complete; merged and post-merge verified
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
