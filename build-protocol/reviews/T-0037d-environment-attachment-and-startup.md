@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 1 architecture resolved; complete fix assigned
+Status: Slice 2 fresh-generation tenant recovery proof assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -239,6 +239,11 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   and a canonical-domain outer readiness gate with no unknown-key retention.
   The complete implementation-ready design is assigned to one Terra Medium
   owner with the full test matrix; Round 2 review remains pending.
+- Round 1 fixes resumed under fully read `receiving-code-review` and strict
+  `test-driven-development`; final verification remains reserved. The complete
+  batch follows the committed owner-qualified scope, durable tenant index, and
+  finite outer-gate resolution exactly. No Slice 3, public lifecycle, subagent,
+  or independent redesign enters this package.
 - The existing owner resumed the finding under fully read
   `receiving-code-review` and strict `test-driven-development`. The fix package
   remains limited to duplicate identity preflight, its focused proof, and
@@ -253,3 +258,26 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   regressions, generated typecheck, ESLint/cleanup, format, diff hygiene,
   public-leak scan, generated/protected scan, and identical status mirrors.
   Four-lane review may resume; no commit or full verification was performed.
+- Slice 2 Round 1 is ready for targeted re-review. Coordinator identity is
+  owner-qualified end to end and serially partitioned by exact descriptor/
+  tenant/storage owner; the environment worker delegates one owner directly
+  without evidence merge. Dynamic multitenant handoffs await descriptor-owned
+  tenant persistence before inbox persistence, batching once. Outer readiness
+  retains canonical configured entries plus one invalid bit across `waiting |
+open | failed`, so thousands of distinct unknown facts fail closed before
+  coordinator work without per-key growth.
+- Deterministic tests cover equal-fact owner isolation, exact worker selection,
+  same-shard sibling attribution and cause identity, concurrent caller
+  serialization, PAUSED/SKIPPED cause-less parking, tenant-before-persistence,
+  finite unknown handling, and zero-to-first admission after open. Seven-file
+  regression is 174/174; affected coverage is 95.68% statements, 90.50%
+  branches, 96.36% functions, and 95.92% lines. Generated typecheck,
+  ESLint/cleanup, format, diff, public-entrypoint, generated/Protobuf/protected,
+  and Status checks pass. Slice 3/public lifecycle/full verify/commit are absent.
+- The affected server suite produced expected sandbox `listen EPERM` failures,
+  then passed 21/21 under native loopback execution.
+- `2026-07-12T22:17:00Z`: Coordinator verification passes but commit/re-review
+  is paused for the architecture resolution's missing fresh-generation tenant
+  test. Ordering plus an older tenant-index test is insufficient by itself; one
+  real same-storage rebuilt descriptor must enumerate and recover the durable
+  dynamic-tenant row without another readiness signal.

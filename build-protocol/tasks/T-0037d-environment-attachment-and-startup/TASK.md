@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 1 architecture resolved; complete fix assigned
+Status: Slice 2 fresh-generation tenant recovery proof assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -358,6 +358,13 @@ owner runtime and notify normally. Split the owner-to-worker adapter into
 complete regression sequence recorded in the work/review logs. Slice 3 remains
 the owner of failed-generation rollback and retained references.
 
+Coordinator pre-commit acceptance requires the resolution's end-to-end tenant
+durability proof, not only compositional tests: persist the first multitenant
+row through a real built descriptor, reconstruct a fresh context/descriptor over
+the same storage, prove `startupScopes()` enumerates that tenant, and prove
+startup recovery replays the durable row without another receive/readiness
+notification. This remains a focused test-first completion of Slice 2.
+
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now
 rejects before `startupScopes()`, `storageContext()`, `transition()`, or the
@@ -418,3 +425,28 @@ blamed on nor restarted by the attaching registration.
 
 Registration-scoped rollback, detach, generation stop/close, public API,
 `Server.start()` wiring, and listener ordering remain Slice 3 or later work.
+
+### Slice 2 Round 1 Fix Evidence
+
+The fix carries a generation-local owner through coordinator configuration,
+pending/settled identity, serial owner partitions, exact worker selection, and
+parked-obligation units. Equal readiness facts in distinct descriptor/storage
+owners execute independently; same-shard rejection keeps its original cause
+and neither blames nor restarts the sibling. The exact worker now lives in
+`environment-delivery-worker.ts`, merge aggregation is removed, and attachment
+assembly, transition, recovery, and evidence recording use named bounded phases.
+
+Process-manager and projection receives await the built descriptor's
+`TenantIndex.keep()` before inbox persistence; process-manager batches keep once
+before any row. Registration readiness is a finite `waiting | open | failed`
+bridge over the preassembled owner-qualified domain. Waiting performs canonical
+replacement only; 4,096 distinct unknown facts set one invalid bit, retain no
+keys, and fail open before coordinator admission. Failed ignores later facts;
+open permits a durable zero-to-first tenant to add its exact runtime before
+notification. Focused evidence also covers concurrent caller serialization,
+exact owner worker selection, PAUSED/SKIPPED cause-less parking, and equal-fact
+cross-context isolation.
+
+The affected server loopback suite produced the expected sandbox `listen
+EPERM`, then passed 21/21 under native execution. Full `pnpm verify` remains the
+final milestone gate and was not run.
