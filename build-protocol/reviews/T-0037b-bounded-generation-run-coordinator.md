@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 3 fixes verified; fresh package pending
+Status: Review Round 4 skill checks pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status   |
-| -------------------------- | -------------------------------------- | -------- |
-| Code style/maintainability | `019f5673-a653-7ba3-965f-9774a41f3de6` | Findings |
-| Documentation              | `019f5673-a70a-72e0-9b6a-5ae5d5ca6d68` | Findings |
-| TypeScript/API docs        | `019f5673-a794-7ee0-ae32-906465a966fb` | Clean    |
-| Performance/reliability    | `019f5673-a824-7563-908f-a6becf670c65` | Findings |
+| Lane                       | Reviewer                               | Status              |
+| -------------------------- | -------------------------------------- | ------------------- |
+| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Skill check pending |
+| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Skill check pending |
+| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Skill check pending |
+| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Skill check pending |
 
 Security is deferred to final project readiness.
 
@@ -266,3 +266,7 @@ Security is deferred to final project readiness.
   focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
   diff hygiene. All three Round 3 fixes are accepted and the worker is closed;
   a fresh literal-endpoint package and all four lanes remain.
+- `2026-07-12T13:39:40Z`: Frozen fix commit `aa29fe9d` and fresh package
+  `.superpowers/sdd/review-40329cad..aa29fe9d.diff` were created. Four new Round
+  4 reviewers above are reserved and paused pending assignment provenance and
+  canonical Phase 1 skill checks.
