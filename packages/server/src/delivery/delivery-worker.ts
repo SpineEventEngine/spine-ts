@@ -226,15 +226,22 @@ export interface RejectedDeliveryShard {
   readonly progress: DeliveryLoopProgress;
 }
 
-/** @internal Worker-result helpers for package-local tests and runtime code. */
+/** @internal Package-internal worker coordination and lifecycle access. */
 export interface DeliveryWorkerAccess {
+  /** Computes aggregate compatibility status from fulfilled loop results. */
   status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus;
+  /** Starts the eligible configured shards for one finite package-owned obligation. */
   start(
     worker: DeliveryWorker,
     obligation: DeliveryWorkerObligation,
     shards?: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
+  /** Observes the current active start through settlement without interrupting it. */
   awaitSettled(worker: DeliveryWorker): Promise<void>;
+  /**
+   * Requires prior `stop()`, then permanently closes public and internal starts.
+   * A later rejection represents cleanup after start admission is already closed.
+   */
   retire(worker: DeliveryWorker): Promise<void>;
 }
 
@@ -272,7 +279,7 @@ function workerRun(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {
   });
 }
 
-/** @internal Worker-result helpers for package-local tests and runtime code. */
+/** @internal Package-internal worker coordination and lifecycle access. */
 export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]) {
     return workerStatus(loops);

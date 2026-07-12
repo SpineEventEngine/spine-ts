@@ -23,8 +23,14 @@ export interface DeliveryRunWorker {
     obligation: DeliveryRunObligation,
     shards: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
+  /** Irreversibly stops loop admission. A throw means stop did not complete and must be retried. */
   stop(): void;
+  /** Waits for active work to settle without interrupting it; rejection means quiescence is unproved. */
   awaitSettled(): Promise<void>;
+  /**
+   * Requires a completed stop and proven settlement. Permanently closes every
+   * worker start entry before settling, even when inert-resource cleanup fails.
+   */
   retire(): Promise<void>;
 }
 
@@ -146,11 +152,14 @@ export class DeliveryRunCoordinator {
   }
 
   #admit(scopes: readonly DeliveryRunScope[]): void {
-    for (const candidate of scopes) {
+    const admitted = scopes.map((candidate) => {
       const configured = this.#configured.get(scopeKey(candidate));
       if (configured === undefined) {
         throw new Error("Delivery run scope is not configured.");
       }
+      return configured;
+    });
+    for (const configured of admitted) {
       this.#pending.set(scopeKey(configured), configured);
     }
   }
@@ -162,6 +171,9 @@ export class DeliveryRunCoordinator {
     const active = this.#drainPending().finally(() => {
       if (this.#active === active) {
         this.#active = undefined;
+        if (this.#accepting && this.#pending.size > 0) {
+          return this.#ensureActive();
+        }
       }
     });
     this.#active = active;
@@ -179,22 +191,35 @@ export class DeliveryRunCoordinator {
   async #runAdmission(scopes: readonly DeliveryRunScope[]): Promise<void> {
     const obligation = runObligation(scopes);
     let shards = scopeShards(scopes);
-    try {
-      while (shards.length > 0) {
-        const evidence = await this.#worker.start(obligation, shards);
-        const rejected = this.#recordEvidence(scopes, evidence);
-        this.#parkPending(rejected);
-        if (!this.#accepting) {
-          return;
-        }
-        shards = pausedShards(evidence);
+    while (shards.length > 0) {
+      let evidence: DeliveryWorkerEvidence;
+      try {
+        evidence = await this.#worker.start(obligation, shards);
+      } catch (cause) {
+        this.#recordStartFailure(scopes, shards, cause);
+        return;
       }
-    } catch (cause) {
-      for (const scope of scopes) {
+      const rejected = this.#recordEvidence(scopes, evidence);
+      this.#parkPending(rejected);
+      if (!this.#accepting) {
+        return;
+      }
+      shards = pausedShards(evidence);
+    }
+  }
+
+  #recordStartFailure(
+    scopes: readonly DeliveryRunScope[],
+    shards: readonly ShardIndex[],
+    cause: unknown,
+  ): void {
+    const attempted = new Set(shards.map((shard) => shard.key()));
+    for (const scope of scopes) {
+      if (attempted.has(scope.shard.key())) {
         this.#settled.set(scopeKey(scope), rejectedSettlement(scope, cause));
       }
-      this.#parkPending(new Set(scopes.map(({ shard }) => shard.key())));
     }
+    this.#parkPending(attempted);
   }
 
   #recordEvidence(
@@ -227,8 +252,12 @@ export class DeliveryRunCoordinator {
   async #advanceRetirement(): Promise<void> {
     if (!this.#stopCalled) {
       this.#accepting = false;
+      try {
+        this.#worker.stop();
+      } catch (cause) {
+        throw new DeliveryRunQuiescenceError(cause);
+      }
       this.#stopCalled = true;
-      this.#worker.stop();
     }
 
     try {
@@ -238,7 +267,6 @@ export class DeliveryRunCoordinator {
       throw new DeliveryRunQuiescenceError(cause);
     }
 
-    this.#replacementSafe = true;
     const failures: unknown[] = [];
     try {
       await this.#onReport?.(this.settlement());
@@ -250,6 +278,7 @@ export class DeliveryRunCoordinator {
     } catch (error) {
       failures.push(error);
     }
+    this.#replacementSafe = true;
     this.#retired = true;
     this.#retirementFinal = true;
     throwFailures(failures);

@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 1 fixes assigned; worker paused
+Status: Review Round 1 fixes verified; fresh package pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -146,3 +146,31 @@ Security is deferred to final project readiness.
 - `2026-07-12T12:31:14Z`: Resumed sole author
   `019f5626-b85c-7da3-8971-98e0ae652b25` as the one complete Round 1 fix worker,
   paused until this assignment provenance commits. No reviewer remains open.
+- `2026-07-12T12:33:31Z`: Assignment provenance `0ae11e39` was confirmed. The
+  sole author technically verified and accepted all six findings under the
+  existing review-reception/TDD skill record. One deterministic RED batch is in
+  progress; production and seam-documentation fixes remain blocked until the
+  behavioral failures are observed.
+- `2026-07-12T12:36:16Z`: RED evidence now covers all five behavioral findings:
+  stranded finalization-window readiness, partial mixed admission, swallowed
+  evidence-processing failure, premature replacement safety, and non-retryable
+  throwing stop. The seam-documentation fix remains paired with behavioral
+  GREEN and requires no separate runtime RED.
+- `2026-07-12T12:38:12Z`: The complete six-finding batch is implemented. Six
+  selected GREEN cases passed, including the pre-existing cleanup-failure
+  postcondition, and the full coordinator file passed 19 tests. Atomic pump
+  handoff, atomic admission, narrow worker-failure conversion, post-retirement-
+  attempt replacement safety, retryable stop, and both lifecycle documentation
+  corrections are ready for the focused completion gate.
+- `2026-07-12T12:38:58Z`: Initial fix-gate runtime/type/format checks passed,
+  while changed-file ESLint found four test-only fixture-style errors. No
+  production or contract failure was observed; focused lint cleanup is active.
+- `2026-07-12T12:40:44Z`: Round 1 fix completion verification passed four
+  focused files and 170 tests, both canonical typechecks, changed-file ESLint
+  and Prettier, lightweight docs/status/public-leak/duplicate-policy/overclaim
+  checks, and `git diff --check`. All six findings are fixed in the exact six-
+  file uncommitted patch; coordinator verification and fresh review remain.
+- `2026-07-12T12:43:07Z`: Independent coordinator verification passed 170
+  focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
+  diff hygiene. All six Round 1 fixes are accepted and the worker is closed.
+  A fresh literal-endpoint package and all four reviewer lanes remain required.

@@ -56,6 +56,31 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.maxConcurrent).toBe(1);
   });
 
+  it("pumps readiness accepted between drain settlement and active finalization", async () => {
+    const scopes = [scope("first", 0, 2), scope("second", 1, 2)];
+    let onStartSettled = () => undefined;
+    const worker = new FakeRunWorker(
+      [
+        (obligation) => workerEvidence(obligation, fulfilled(0, 2, "IDLE")),
+        (obligation) => workerEvidence(obligation, fulfilled(1, 2, "IDLE")),
+      ],
+      [],
+      () => {
+        onStartSettled();
+      },
+    );
+    const coordinator = new DeliveryRunCoordinator({ scopes, worker });
+    onStartSettled = () => {
+      coordinator.notify(entry(scopes, 1));
+    };
+
+    await coordinator.start([entry(scopes, 0)]);
+    await until(() => worker.starts.length === 2);
+
+    expect(entry(worker.starts, 1).obligation.scopes).toEqual([scopes[1]]);
+    expect(worker.maxConcurrent).toBe(1);
+  });
+
   it("continues only PAUSED shards from mixed per-shard evidence", async () => {
     const scopes = Array.from({ length: 5 }, (_, index) =>
       scope(`target-${String(index)}`, index, 5),
@@ -165,6 +190,34 @@ describe("DeliveryRunCoordinator", () => {
     );
   });
 
+  it("validates a mixed admission before mutating pending scopes", async () => {
+    const scopes = [scope("first", 0, 2), scope("second", 1, 2)];
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, fulfilled(1, 2, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes, worker });
+
+    await expect(coordinator.start([entry(scopes, 0), scope("unknown", 0, 2)])).rejects.toThrow(
+      "Delivery run scope is not configured.",
+    );
+    await coordinator.start([entry(scopes, 1)]);
+
+    expect(worker.starts).toHaveLength(1);
+    expect(entry(worker.starts, 0).obligation.scopes).toEqual([scopes[1]]);
+  });
+
+  it("surfaces evidence-processing failures without classifying worker rejection", async () => {
+    const configured = scope("first", 0, 1);
+    const worker = new FakeRunWorker([
+      (obligation) => malformedWorkerEvidence(obligation, configured.shard),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+    await expect(coordinator.start([configured])).rejects.toThrow(TypeError);
+
+    expect(coordinator.settlement().scopes).toEqual([]);
+  });
+
   it("retires in stop, quiescence, report, and cleanup order", async () => {
     const events: string[] = [];
     const worker = new FakeRunWorker([], events);
@@ -201,6 +254,25 @@ describe("DeliveryRunCoordinator", () => {
     await retiring;
 
     expect(events).toEqual(["stop", "await", "report", "retire"]);
+    expect(coordinator.replacementSafe).toBe(true);
+  });
+
+  it("withholds replacement safety while reporting is still pending", async () => {
+    const reporting = deferred<undefined>();
+    const worker = new FakeRunWorker([]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [scope("first", 0, 1)], worker });
+    let reportingStarted = false;
+
+    const retiring = coordinator.retire(() => {
+      reportingStarted = true;
+      return reporting.promise;
+    });
+    await until(() => reportingStarted);
+
+    expect(coordinator.replacementSafe).toBe(false);
+
+    reporting.resolve(undefined);
+    await retiring;
     expect(coordinator.replacementSafe).toBe(true);
   });
 
@@ -275,6 +347,33 @@ describe("DeliveryRunCoordinator", () => {
     expect(events).toEqual(["stop", "await", "await", "report", "retire"]);
     expect(coordinator.replacementSafe).toBe(true);
     expect(coordinator.retired).toBe(true);
+  });
+
+  it("retries a throwing stop before any later retirement phase", async () => {
+    const events: string[] = [];
+    const failure = new Error("stop failed");
+    const worker = new FakeRunWorker([], events);
+    worker.stopFailures.push(failure);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [scope("first", 0, 1)], worker });
+    const onReport = () => {
+      events.push("report");
+      return Promise.resolve();
+    };
+
+    const first = await coordinator.retire(onReport).catch((error: unknown) => error);
+
+    expect(first).toBeInstanceOf(DeliveryRunQuiescenceError);
+    expect((first as DeliveryRunQuiescenceError).cause).toBe(failure);
+    expect(coordinator.replacementSafe).toBe(false);
+    expect(coordinator.retired).toBe(false);
+    expect(events).toEqual(["stop"]);
+
+    await coordinator.retire(onReport);
+
+    expect(events).toEqual(["stop", "stop", "await", "report", "retire"]);
+    expect(worker.stopCalls).toBe(2);
+    expect(worker.retireCalls).toBe(1);
+    expect(coordinator.replacementSafe).toBe(true);
   });
 
   it("makes completed retirement idempotent and closes later admission", async () => {
@@ -360,17 +459,20 @@ class FakeRunWorker implements DeliveryRunWorker {
     readonly shards: readonly ShardIndex[];
   }[] = [];
   readonly awaitFailures: Error[] = [];
+  readonly stopFailures: Error[] = [];
   readonly #results: WorkerResult[];
   readonly #events: string[];
+  #onStartSettled: (() => void) | undefined;
   #active = 0;
   maxConcurrent = 0;
   stopCalls = 0;
   retireCalls = 0;
   retireFailure: Error | undefined;
 
-  constructor(results: WorkerResult[], events: string[] = []) {
+  constructor(results: WorkerResult[], events: string[] = [], onStartSettled?: () => void) {
     this.#results = [...results];
     this.#events = events;
+    this.#onStartSettled = onStartSettled;
   }
 
   start(
@@ -385,14 +487,31 @@ class FakeRunWorker implements DeliveryRunWorker {
       throw new Error("Missing fake worker result.");
     }
     const promise = typeof result === "function" ? Promise.resolve(result(obligation)) : result;
-    return promise.finally(() => {
+    const observed = promise.finally(() => {
       this.#active -= 1;
     });
+    const onStartSettled = this.#onStartSettled;
+    this.#onStartSettled = undefined;
+    if (onStartSettled !== undefined) {
+      void observed.then(
+        () => {
+          queueMicrotask(() => {
+            queueMicrotask(onStartSettled);
+          });
+        },
+        () => undefined,
+      );
+    }
+    return observed;
   }
 
   stop(): void {
     this.stopCalls += 1;
     this.#events.push("stop");
+    const failure = this.stopFailures.shift();
+    if (failure !== undefined) {
+      throw failure;
+    }
   }
 
   awaitSettled(): Promise<void> {
@@ -471,6 +590,24 @@ function workerEvidence(
     obligation,
     shards: Object.freeze(factories.map((factory) => factory(obligation))),
   });
+}
+
+function malformedWorkerEvidence(
+  obligation: DeliveryRunObligation,
+  shard: ShardIndex,
+): DeliveryWorkerEvidence {
+  return Object.freeze({
+    obligation,
+    shards: Object.freeze([
+      Object.freeze({
+        status: "fulfilled",
+        shard,
+        obligation,
+        run: loopRun("IDLE"),
+        progress: Object.freeze({ ...loopProgress(), failures: undefined }),
+      }),
+    ]),
+  }) as unknown as DeliveryWorkerEvidence;
 }
 
 function loopRun(status: DeliveryLoopRun["status"]): DeliveryLoopRun {
