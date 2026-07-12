@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 4 findings accepted; fix pending
+Status: Round 4 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -223,3 +223,6 @@ Security is deferred to final project readiness.
   the bounded-context caution in T-0037a; the parent ledger must state no
   duplicate roles and participant closure; and active undated status prose must
   reflect completed Round 3 verification and Round 4 findings.
+- `2026-07-12T05:37:19Z`: Assigned single Round 4 docs fix worker
+  `019f54d4-6c0f-7612-96cd-beeca8354501` with the complete batch. Runtime,
+  current public docs, generated output, and user-owned scope remain frozen.
