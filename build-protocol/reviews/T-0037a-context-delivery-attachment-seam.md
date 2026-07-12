@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 2 active
+Status: Review Round 2 findings logged; fix assignment pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Active |
-| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Active |
-| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Active |
-| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Active |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f55e3-d605-7f50-b9de-c60de7a2d998` | Finding |
+| Documentation              | `019f55e3-da17-7d41-bf0c-eee08ec3f22d` | Finding |
+| TypeScript/API docs        | `019f55e3-dd92-70d1-9969-5d3ddaa934d2` | Clean   |
+| Performance/reliability    | `019f55e3-e0eb-7591-a421-1e41605fdb1b` | Clean   |
 
 Security is deferred to final project readiness.
 
@@ -139,3 +139,50 @@ Security is deferred to final project readiness.
 - `2026-07-12T10:39:17Z`: Skill-check provenance commit `37c97e55` completed;
   all four substantive Round 2 lanes started against the fixed immutable
   package and current durable records.
+- `2026-07-12T10:42:15Z`: Persisted complete Round 2 phase-1 provenance from the
+  reviewers' returned reports. Every lane checked the exposed session
+  inventory, read `build-protocol/skills/EXPECTED_SKILLS.md`, ran
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+  (47 readable entrypoints), and read `/Users/armiol/.agents/.skill-lock.json`
+  version 3 (47 matching entries) for source/path provenance. No source was
+  unreachable and no package/source inspection occurred during phase 1.
+  - Style fully read `code-review-excellence` from `wshobson/agents` at
+    `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md` and
+    `codebase-design` from `mattpocock/skills` at
+    `/Users/armiol/.agents/skills/codebase-design/SKILL.md`. It skipped
+    `review` (conflicting two-agent flow), `requesting-code-review` and
+    `verification-before-completion` (coordinator duties),
+    `typescript-advanced-types` (dedicated lane), `api-design-principles`
+    (REST/GraphQL), broader backend/architecture skills, test implementation,
+    and security/web audit skills outside this lane.
+  - Documentation fully read all 529 lines of `code-review-excellence` from
+    `wshobson/agents` at
+    `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md`. It skipped
+    `doc-coauthoring` (authoring workflow), `architecture-decision-records` (no
+    ADR work), `review` (conflicting two-agent flow),
+    `requesting-code-review` (coordinator dispatch), and
+    `verification-before-completion` (completion gate).
+  - TypeScript/API docs fully read `typescript-advanced-types` and
+    `code-review-excellence`, both from `wshobson/agents`, at
+    `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md` and
+    `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md`. It skipped
+    `review`, `requesting-code-review`, `verification-before-completion`,
+    REST/GraphQL `api-design-principles`, runtime `nodejs-backend-patterns`, and
+    document/ADR authoring workflows as outside this lane.
+  - Performance/reliability fully read `code-review-excellence`,
+    `nodejs-backend-patterns`, `error-handling-patterns`, and
+    `javascript-testing-patterns` from `wshobson/agents` at their corresponding
+    `/Users/armiol/.agents/skills/<name>/SKILL.md` paths, plus
+    `verification-before-completion` from `obra/superpowers` at
+    `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` and
+    task-relevant backend/async reference sections. It skipped browser-focused
+    `performance`, conflicting `review`, coordinator-owned review/SDD skills,
+    debugging skills absent a discovered failure, the dedicated TypeScript
+    lane, broader CQRS/event-store/projection skills, and security/web skills.
+- `2026-07-12T10:42:15Z`: Round 2 accepted findings:
+  1. Notify readiness only for `TO_DELIVER` rows matching a registered target
+     and a label configured by the same facts that produce descriptor
+     endpoints; add no-readiness checks for scheduled, mismatched-label, and
+     missing-target persisted rows in both handoff families as applicable.
+  2. Preserve this complete reviewer provenance, then repeat all four lanes
+     after the behavioral fix and fresh package.
