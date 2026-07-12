@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 1 findings accepted; fixes pending
+Status: Round 1 fix worker active
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -100,3 +100,7 @@ Security is deferred to final project readiness.
   worker must move admission to one bounded query, cover the race, address the
   accepted cleanups, reconcile logs, verify, commit, and regenerate the package
   before all four lanes rerun.
+- `2026-07-12T02:52:00Z`: Assigned one Round 1 fix worker
+  `019f543b-8e45-7722-98db-eb218dde8937` with every accepted finding. Fresh
+  package generation and all four rereview lanes remain pending its return,
+  coordinator verification, and commit.
