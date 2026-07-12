@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 2 docs fixes verified; fresh review pending
+Status: Round 2 docs fixes committed; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -47,7 +47,7 @@ and must not start a worker or attach an environment registration.
 The verified Round 1 fix was committed as `3847e1b6`; reconciliation through
 `80ef21e2` is the Round 2 review boundary. Review assignment was recorded by
 `9e723afe`, findings by `45f737b4`, and the Round 2 worker assignment at
-`2026-07-12T05:07:00Z`. Round 2 fixes are authored and verified; a fresh
+`2026-07-12T05:07:00Z`. Round 2 fixes were committed as `7281ba07`; a fresh
 four-lane review remains pending, with no clean review claim.
 
 ## Verification
