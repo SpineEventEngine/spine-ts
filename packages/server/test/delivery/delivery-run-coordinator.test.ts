@@ -193,6 +193,45 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.starts).toHaveLength(1);
   });
 
+  it("keeps a synchronous worker start throw fatal", async () => {
+    const failure = new Error("worker lifecycle invariant failed");
+    const configured = scope("first", 0, 1);
+    const worker = new FakeRunWorker([]);
+    worker.startFailure = failure;
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+    await expect(coordinator.start([configured])).rejects.toBe(failure);
+
+    expect(coordinator.settlement().scopes).toEqual([]);
+    await expect(coordinator.start([configured])).rejects.toBe(failure);
+  });
+
+  it("leaves readiness received during the one successor pending for an external start", async () => {
+    const first = deferred<DeliveryWorkerEvidence>();
+    const second = deferred<DeliveryWorkerEvidence>();
+    const third = deferred<DeliveryWorkerEvidence>();
+    const worker = new FakeRunWorker([first.promise, second.promise, third.promise]);
+    const scopes = [scope("first", 0, 3), scope("second", 1, 3), scope("third", 2, 3)];
+    const coordinator = new DeliveryRunCoordinator({ scopes, worker });
+
+    const initial = coordinator.start([entry(scopes, 0)]);
+    coordinator.notify(entry(scopes, 1));
+    first.resolve(workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 3, "IDLE")));
+    await until(() => worker.starts.length === 2);
+
+    coordinator.notify(entry(scopes, 2));
+    second.resolve(workerEvidence(entry(worker.starts, 1).obligation, fulfilled(1, 3, "IDLE")));
+    await initial;
+
+    expect(worker.starts).toHaveLength(2);
+    expect(coordinator.settlement().pending).toEqual([scopes[2]]);
+
+    const later = coordinator.start([entry(scopes, 2)]);
+    await until(() => worker.starts.length === 3);
+    third.resolve(workerEvidence(entry(worker.starts, 2).obligation, fulfilled(2, 3, "IDLE")));
+    await later;
+  });
+
   it("bounds retained settlement by the configured canonical scope domain", async () => {
     const configured = scope("first", 0, 1);
     const worker = new FakeRunWorker(
@@ -632,6 +671,7 @@ class FakeRunWorker implements DeliveryRunWorker {
   stopCalls = 0;
   retireCalls = 0;
   retireFailure: Error | undefined;
+  startFailure: Error | undefined;
 
   constructor(
     results: WorkerResult[],
@@ -651,6 +691,9 @@ class FakeRunWorker implements DeliveryRunWorker {
     obligation: DeliveryRunObligation,
     shards: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence> {
+    if (this.startFailure !== undefined) {
+      throw this.startFailure;
+    }
     this.starts.push({ obligation, shards });
     this.#active += 1;
     this.maxConcurrent = Math.max(this.maxConcurrent, this.#active);

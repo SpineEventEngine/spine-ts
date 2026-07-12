@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Round 5 two-finding fix assigned
+Status: Round 5 two-finding fix implemented; focused verification complete; review pending
 
 Started: `2026-07-12T11:43:52Z`
 
@@ -160,6 +160,28 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - `FAILED`, `SKIPPED`, and rejection do not create readiness or spin.
 - Retry readiness may call this seam later, but delay/backoff/timing is absent.
 - No singleton, threads, repeat callbacks, public monitor, or catch-up station.
+
+## Round 5 Fix Record
+
+- Existing implementation role completed the assigned two-P1 batch with actual
+  profile `gpt-5.6-terra` / `medium`.
+- Skill applicability check: `receiving-code-review`,
+  `test-driven-development`, and `verification-before-completion` were read
+  and applied. The first governed technical acceptance of the two findings;
+  the second required both focused REDs before runtime edits; the third governs
+  the recorded completion evidence.
+- RED: `pnpm vitest run packages/server/test/delivery/delivery-run-coordinator.test.ts`
+  reported exactly the intended failures: a synchronous worker-start throw was
+  settled as `REJECTED`, and successor-time readiness kept the initial start
+  unresolved until test timeout.
+- GREEN: synchronous `DeliveryRunWorker.start()` invocation is outside the
+  promise-rejection handler, so synchronous lifecycle throws fault and reject
+  the coordinator without synthetic settlement. Each active turn consumes no
+  more than its initial admission plus one successor, including the existing
+  late-finalizer handoff; readiness during that successor remains pending for a
+  later external `start()`.
+- No public exports, generated files, worker/loop behavior, or retirement
+  ownership changed. Fresh review remains required before task acceptance.
 
 ## Explicit Exclusions
 

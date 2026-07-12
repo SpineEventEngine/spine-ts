@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Round 5 two-finding fix assigned
+Status: Round 5 two-finding fix implemented; focused verification complete; review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -364,3 +364,27 @@ assigned at the safe stop.
   skips, and no unreachable local source. All four reviewers were closed at the
   human-requested safe stop. Substantive review has not started; resume against
   immutable package `.superpowers/sdd/review-40329cad..066c295d.diff`.
+- `2026-07-12T16:43:53Z`: The existing implementation role completed the exact
+  two-P1 Round 5 fix batch with actual `gpt-5.6-terra` / `medium`. Its
+  applicability check read and applied `receiving-code-review`,
+  `test-driven-development`, and `verification-before-completion`. Both
+  focused REDs were observed before production edits: synchronous start throws
+  were incorrectly settled as `REJECTED`, and readiness during the successor
+  extended the original promise until timeout. GREEN keeps synchronous throws
+  fatal and bounds one active turn to an initial admission plus one successor;
+  readiness received during that successor remains pending for a later external
+  start. Coordinator tests passed 31/31; worker/runtime/loop regression tests
+  passed 182/182; both canonical typechecks, changed-file ESLint/Prettier, and
+  `git diff --check` passed. These fixes await fresh review and are not yet
+  review acceptance.
+- `2026-07-12T16:45:22Z`: Fresh final implementation-role evidence remains
+  green: four delivery regression files/182 tests, both canonical typechecks,
+  changed-file ESLint, Prettier across all five modified files, and
+  `git diff --check`. Status mirrors agree and the diff has no new export or
+  generated artifact. Review remains pending.
+- `2026-07-12T16:48:55Z`: Coordinator-side verification independently passed
+  four focused delivery files and 182 tests, both canonical typechecks,
+  changed-file ESLint/Prettier, and diff hygiene. Lightweight pre-review lint
+  found matching current status mirrors, no public/API or generated leakage,
+  no duplicated policy constant, and no future-policy overclaim. Round 5 will
+  re-review only the concerns affected by these two runtime fixes.

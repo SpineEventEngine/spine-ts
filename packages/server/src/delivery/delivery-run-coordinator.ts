@@ -123,11 +123,12 @@ export class DeliveryRunCoordinator {
     }
   }
 
-  #ensureActive(): Promise<void> {
+  #ensureActive(admissionLimit = 2): Promise<void> {
     if (this.#active !== undefined) {
       return this.#active;
     }
     const gate = Promise.withResolvers<undefined>();
+    let admissions = 0;
     const draining = gate.promise.catch((cause: unknown) => {
       const fault = asError(cause);
       this.#fault ??= fault;
@@ -136,24 +137,36 @@ export class DeliveryRunCoordinator {
     const active = draining.finally(() => {
       if (this.#active === active) {
         this.#active = undefined;
-        if (this.#accepting && this.#fault === undefined && this.#pending.size > 0) {
-          return this.#ensureActive();
+        if (
+          this.#accepting &&
+          this.#fault === undefined &&
+          this.#pending.size > 0 &&
+          admissions < admissionLimit
+        ) {
+          return this.#ensureActive(admissionLimit - admissions);
         }
       }
     });
     this.#active = active;
-    void this.#drainPending().then(() => {
+    void this.#drainPending(admissionLimit).then((completed) => {
+      admissions = completed;
       gate.resolve(undefined);
     }, gate.reject);
     return active;
   }
 
-  async #drainPending(): Promise<void> {
-    while (this.#accepting && this.#pending.size > 0) {
+  async #drainPending(admissionLimit: number): Promise<number> {
+    let completed = 0;
+    for (let admission = 0; admission < admissionLimit; admission += 1) {
+      if (!this.#accepting || this.#pending.size === 0) {
+        return completed;
+      }
       const admitted = Array.from(this.#pending.values());
       this.#pending.clear();
       await this.#runAdmission(admitted);
+      completed += 1;
     }
+    return completed;
   }
 
   async #runAdmission(scopes: readonly DeliveryRunScope[]): Promise<void> {
@@ -161,8 +174,9 @@ export class DeliveryRunCoordinator {
     let shards = scopeShards(scopes);
     while (shards.length > 0) {
       let evidence: DeliveryWorkerEvidence;
+      const started = this.#worker.start(obligation, shards);
       try {
-        evidence = await this.#worker.start(obligation, shards);
+        evidence = await started;
       } catch (cause) {
         this.#recordStartFailure(scopes, shards, cause);
         return;
