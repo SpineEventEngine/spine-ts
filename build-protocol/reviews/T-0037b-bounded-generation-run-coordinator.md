@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 2 fixes verified; fresh package pending
+Status: Review Round 3 skill checks pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status   |
-| -------------------------- | -------------------------------------- | -------- |
-| Code style/maintainability | `019f565c-b21c-7850-af9f-680bc66174da` | Findings |
-| Documentation              | `019f565c-b2bd-7370-ac51-79b5250d23aa` | Findings |
-| TypeScript/API docs        | `019f565c-b338-7141-a356-0d73de9ee3b9` | Findings |
-| Performance/reliability    | `019f565c-b3c9-7ae1-8ff9-dc3690f09308` | Findings |
+| Lane                       | Reviewer                               | Status              |
+| -------------------------- | -------------------------------------- | ------------------- |
+| Code style/maintainability | `019f5673-a653-7ba3-965f-9774a41f3de6` | Skill check pending |
+| Documentation              | `019f5673-a70a-72e0-9b6a-5ae5d5ca6d68` | Skill check pending |
+| TypeScript/API docs        | `019f5673-a794-7ee0-ae32-906465a966fb` | Skill check pending |
+| Performance/reliability    | `019f5673-a824-7563-908f-a6becf670c65` | Skill check pending |
 
 Security is deferred to final project readiness.
 
@@ -224,3 +224,7 @@ Security is deferred to final project readiness.
   focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
   diff hygiene. All five Round 2 fixes and durable chronology are accepted; the
   worker is closed. A fresh literal-endpoint package and all four lanes remain.
+- `2026-07-12T13:10:52Z`: Frozen fix commit `54e03768` and fresh package
+  `.superpowers/sdd/review-40329cad..54e03768.diff` were created. Four new Round
+  3 reviewers above are reserved and paused pending assignment provenance and
+  canonical Phase 1 skill checks.
