@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: TDD implementation assigned
+Status: Slice 1 atomic handoff barrier assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -186,3 +186,37 @@ permanent-close invocation,
 fresh-generation attach/detach/close race policy, environment/facility close,
 retry timing, monitor/action API, topology, or T-0036 redesign belongs here.
 This child invokes but does not reopen T-0037b's retirement primitive.
+
+## Implementation Decomposition
+
+Implementation inspection established that all three inbox handoffs currently perform
+`persist -> readiness notify -> await exact drain` in their own receive path.
+`DeliveryReadiness` permits callback replacement only; it has no lifecycle gate
+to close direct-drain admission, wait for already-admitted exact drains, buffer
+new durable readiness, or atomically install the environment route. There is
+also no existing `ServerEnvironment` attachment/generation/internal-handle
+module. Implementing the entire accepted milestone from that starting point
+requires coordinated, behavior-first changes across every handoff, built
+context descriptor, environment lifecycle, T-0037b coordination access, T-0037c
+attribution/consumption, and focused race/rollback tests.
+
+To keep packages and review waves bounded, the accepted milestone proceeds in
+three sequential TDD implementation slices on this branch:
+
+1. Add and prove the private handoff ownership barrier shared by local,
+   process-manager, and projection inboxes: close direct admission, await
+   admitted drains, bounded readiness buffer, one transfer, then route-only
+   persisted receives.
+2. Add and prove the private `ServerEnvironment` generation/registration
+   lifecycle and attachment handle: caller-owned sharing, server-owned
+   exclusivity, descriptor/storage/tenant startup scope assembly, and finite
+   recovery admission/attribution through T-0037c.
+3. Add and prove registration-scoped failed-start rollback: sibling isolation,
+   D-0085 blocker shaping, sole-generation retirement, reporting/cleanup error
+   safety, quiescence retention, and same-operation retry.
+4. Run the T-0037d focused gate and then the canonical four review lanes. No
+   reviewer is dispatched until the complete milestone reaches its focused gate.
+
+This decomposition is progress, not a project blocker. Slice 1 is assigned to
+the existing Terra Medium implementation context; slices 2 and 3 remain pending
+and must consume rather than reopen earlier slice contracts.
