@@ -81,10 +81,7 @@ export class EnvironmentDeliveryWorker implements DeliveryRunWorker {
         failures.push(result.reason as unknown);
       }
     }
-    throwFailures(
-      failures,
-      "Environment delivery worker retirement failed.",
-    );
+    throwFailures(failures, "Environment delivery worker retirement failed.");
   }
 }
 

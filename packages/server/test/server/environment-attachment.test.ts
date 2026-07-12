@@ -328,6 +328,76 @@ describe("ServerEnvironment attachment", () => {
     expect(directDrains).toBe(0);
   });
 
+  it("fails a stalled-peer attachment closed after bounded unknown routed readiness", async () => {
+    const peerStorage = new InMemoryStorageFactory();
+    const transferredStorage = deliveryStorageFaults();
+    const peer = descriptor("Peer", "type.example.dev/Peer", peerStorage);
+    const transferred = descriptor(
+      "Transferred",
+      "type.example.dev/Transferred",
+      transferredStorage.storageFactory,
+    );
+    const delivery = new Delivery({
+      context: transferred.context,
+      storageFactory: transferredStorage.storageFactory,
+    });
+    await delivery.inbox.receive(message(transferred.ready, "startup-row"));
+    const releasePeer = Promise.withResolvers<undefined>();
+    const admittedPeer = peer.readiness.claim(peer.ready).complete(() => releasePeer.promise);
+    const attaching = serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+      ownership: "caller",
+      descriptors: [peer.value, transferred.value],
+    });
+
+    await until(() => peer.transitions === 1 && transferred.completedTransitions === 1);
+    expect(peer.completedTransitions).toBe(0);
+
+    let exactDrains = 0;
+    const unknown = Array.from({ length: 4_096 }, (_, index) =>
+      transferred.readiness
+        .claim({
+          ...transferred.ready,
+          tenantId: `unknown-${index.toString()}`,
+        })
+        .complete(() => {
+          exactDrains += 1;
+          return Promise.resolve();
+        }),
+    );
+    await Promise.all(unknown);
+
+    expect(transferred.readyCallbacks).toBe(4_096);
+    expect(exactDrains).toBe(0);
+    expect(transferredStorage.inboxQueries).toBe(0);
+    expect(transferred.replayed).toEqual([]);
+
+    releasePeer.resolve(undefined);
+    await admittedPeer;
+    await expect(attaching).rejects.toThrow(
+      "Registration readiness received an unconfigured scope.",
+    );
+    expect(transferredStorage.inboxQueries).toBe(0);
+    expect(transferred.replayed).toEqual([]);
+
+    await delivery.inbox.receive(message(transferred.ready, "after-failure"));
+    await transferred.readiness.claim(transferred.ready).complete(() => {
+      exactDrains += 1;
+      return Promise.resolve();
+    });
+    await Promise.resolve();
+
+    expect(transferred.readyCallbacks).toBe(4_097);
+    expect(exactDrains).toBe(0);
+    expect(transferredStorage.inboxQueries).toBe(0);
+    expect(transferred.replayed).toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      { inboxId: { targetId: "startup-row" } },
+      { inboxId: { targetId: "after-failure" } },
+    ]);
+  });
+
   it("recovers every configured tenant with exact tenant identity and actual storage", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("Tenants", "type.example.dev/Tenants", storageFactory, {
@@ -444,6 +514,7 @@ interface TestDescriptor {
   readonly enumerations: number;
   readonly storageContexts: number;
   readonly transitions: number;
+  readonly completedTransitions: number;
   readonly readyCallbacks: number;
 }
 
@@ -470,11 +541,13 @@ function descriptor(
     enumerations: number;
     storageContexts: number;
     transitions: number;
+    completedTransitions: number;
     readyCallbacks: number;
   } = {
     enumerations: 0,
     storageContexts: 0,
     transitions: 0,
+    completedTransitions: 0,
     readyCallbacks: 0,
   };
   const value: ContextDeliveryDescriptor = Object.freeze({
@@ -497,13 +570,13 @@ function descriptor(
     },
     endpoints: () => Object.freeze([ready]),
     onReady: (onReady: OnDeliveryReady) => readiness.onReady(onReady),
-    transition: (
+    transition: async (
       scopes: readonly DeliveryReady[],
       onReady: OnDeliveryReady,
       transitionOptions?: { readonly allowEmpty?: boolean },
     ) => {
       testDescriptor.transitions += 1;
-      return readiness.transition(
+      await readiness.transition(
         scopes,
         (readyScope) => {
           testDescriptor.readyCallbacks += 1;
@@ -511,6 +584,7 @@ function descriptor(
         },
         transitionOptions,
       );
+      testDescriptor.completedTransitions += 1;
     },
     replay: (next: DeliveryEndpointMessage, tenantId?: string) => {
       replayed.push(next.signalId);
@@ -533,6 +607,9 @@ function descriptor(
     },
     get storageContexts() {
       return testDescriptor.storageContexts;
+    },
+    get completedTransitions() {
+      return testDescriptor.completedTransitions;
     },
     get readyCallbacks() {
       return testDescriptor.readyCallbacks;

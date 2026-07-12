@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 2 stalled-peer integration proof assigned
+Status: Slice 2 Round 2 fix focused verified; Round 3 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -474,3 +474,24 @@ Final focused verification passes 175/175 across the canonical seven files;
 generated typecheck, ESLint/cleanup, format, diff, public-entrypoint,
 generated/Protobuf/protected-file, and identical-Status checks pass. No commit
 or full `pnpm verify` was run.
+
+### Slice 2 Round 2 stalled-peer integration proof
+
+The deterministic `EnvironmentAttachments` race uses two descriptors in one
+attach. One peer waits on an already-admitted exact drain while the other has
+completed route transfer. The transferred route receives 4,096 distinct
+unknown tenant readiness facts; every durable completion resolves with zero
+exact drains, zero coordinator inbox queries, and zero replay. Releasing the
+peer makes attachment reject with `Registration readiness received an
+unconfigured scope.` before startup admission. A later configured durable fact
+is ignored by failed mode, starts no exact drain or worker query, and both rows
+remain `TO_DELIVER`. Together with the direct canonical-map helper, this proves
+finite one-bit unknown handling without per-key product retention. Existing
+production behavior passed, so this closure changes tests and records only.
+
+Final focused verification passes environment 15/15 and the canonical seven
+files 176/176. Generated typecheck, ESLint/cleanup, changed-file Prettier,
+`git diff --check`, public/generated/Protobuf/protected, production-diff, and
+identical-Status scans pass. The repository-wide format check reports one
+committed Round 1 source mismatch in `environment-delivery-worker.ts`; this
+test-only closure intentionally does not create a production formatting delta.
