@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 9 findings recorded; decision fix pending
+Status: Round 9 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -398,3 +398,7 @@ Security is deferred to final project readiness.
   sole-future-hash convention was rejected because package metadata is not a
   durable self-ledger entry. One decision fix worker and fresh review are
   required.
+- `2026-07-12T01:15:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 9 fix worker for
+  the complete retention/failure-disposition/recovery-wording batch. Fresh
+  four-lane review remains pending.
