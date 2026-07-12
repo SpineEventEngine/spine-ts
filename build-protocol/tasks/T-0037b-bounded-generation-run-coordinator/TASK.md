@@ -1,6 +1,15 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Candidate; not started
+Status: Started; baseline verification pending
+
+Started: `2026-07-12T11:43:52Z`
+
+Baseline commit: `40329cad`
+
+Branch: `task/T-0037b-bounded-generation-run-coordinator`
+
+This `Status` header is canonical for T-0037b. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037a complete and integrated; T-0036 package-internal evidence
 is the worker interface consumed by this child.
@@ -15,7 +24,7 @@ per-shard dispositions without assigning registration ownership yet.
 
 - Continue autonomously until this child is complete or a real blocker occurs;
   keep the implementation/review package small and limited to this child.
-- Implement only this child in its own future branch/worktree with one author
+- Implement only this child in its own branch/worktree with one author
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
@@ -87,7 +96,7 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
 - `packages/server/src/delivery/delivery-worker.ts` only for a minimal internal
   access extension proven necessary by the coordinator
 - Focused coordinator tests under `packages/server/test/delivery/`
-- This task's future durable task/work/review records and narrow architecture
+- This task's durable task/work/review records and narrow architecture
   wording
 
 ## TDD Acceptance
