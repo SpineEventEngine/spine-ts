@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Implementation metadata redispatch assigned
+Status: Implementation accepted; independent review pending
 
 Started: `2026-07-12T17:05:11Z`
 
@@ -88,6 +88,55 @@ no public export or later-lifecycle ownership.
 
 ## Pre-implementation Record
 
+- `2026-07-12T17:40:00Z`: Replacement sole implementation owner began
+  independent verification of the preserved unaccepted patch before accepting
+  or editing runtime code. Canonical skill-applicability evidence: the session
+  inventory and user-provided Skills list, repository manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md`, full bounded command
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and readable `/Users/armiol/.agents/.skill-lock.json` were inspected.
+  Fully read selected skills are `test-driven-development`,
+  `verification-before-completion`, `javascript-testing-patterns`,
+  `domain-modeling`, and `codebase-design`. They apply respectively to any
+  correction's RED/GREEN evidence and final claims; focused Vitest behavior
+  tests; D-0085's distinct obligation and reportable-cause terms; and this
+  table's small package-internal seam. `planning-with-files` is N/A because
+  its root plan files exceed exact ownership while these canonical records are
+  durable; `tdd` duplicates the selected TDD workflow; `typescript-advanced-types`
+  and `nodejs-backend-patterns` are N/A to this finite, non-public in-memory
+  table; and worktree/review/subagent skills are N/A because the task already
+  assigns this worktree and prohibits the implementer from spawning subagents. No skill
+  source was unreachable and no library is needed. Project protocol and task
+  scope override skills where they differ. Expected explicit dispatch is
+  `gpt-5.6-terra` / `medium`. The coordinator's runtime role metadata fixes the
+  implementer role to that actual profile; the child could not self-report it.
+- `2026-07-12T17:42:51Z`: Independent focused RED added two behavior tests to
+  the preserved test file. The parked-obligations suite failed as expected:
+  report order followed rejection arrival rather than configured order, and
+  colon-containing registration/obligation values collided in the old encoded
+  key. The minimal correction now orders report selection through configured
+  records (then the one shared record) and uses an unambiguous structured key.
+- `2026-07-12T17:43:46Z`: A second independent RED proved that reclassifying a
+  removed registration left its configuration live, allowing new work for a
+  non-live owner. The correction deletes only that registration's configured
+  obligations after reclassifying any retained record; generation and shared
+  domains remain unchanged.
+- `2026-07-12T17:45:30Z`: Replacement-owner focused gate is GREEN after the
+  two independently observed RED/GREEN corrections. The five parked-table,
+  coordinator, worker, worker-runtime, and loop suites passed 192 tests.
+  `pnpm typecheck` regenerated ignored protobuf output, verified 25 copied
+  proto checksums, and passed generated/build/tooling typechecks. Changed-file
+  ESLint passed; Prettier initially reported the new runtime file and was run
+  to format it, then its changed-file check passed; `git diff --check` and
+  untracked-file whitespace checks passed. Status mirrors agree; scans found
+  no root/package/README reference to the internal module and no generated
+  file in status. No coordinator production source, root/package export,
+  lifecycle/wiring/timing/monitor policy, generated artifact, or human-review
+  file changed. The runtime source inspection command found
+  `/private/tmp/spine-research/core-jvm` but no `Delivery.java` or
+  `DeliveryMonitor.java` below it, so only the local task-relevant JVM notes
+  informed scope. `pnpm verify` was intentionally not run.
+
 - `2026-07-12T17:29:00Z`: Canonical skill-applicability check completed before
   production work. `test-driven-development` applies to every runtime slice;
   `javascript-testing-patterns` applies to focused Vitest behavior tests;
@@ -130,6 +179,12 @@ no public export or later-lifecycle ownership.
   actual child model/reasoning metadata was unavailable. Its uncommitted patch
   is preserved for one replacement explicit Terra Medium implementer to verify
   independently against this canonical task and correct as needed.
+- `2026-07-12T17:49:11Z`: The coordinator accepted replacement implementer
+  `019f576a-bcb4-7873-a350-1bed1f247810` with actual
+  `gpt-5.6-terra` / `medium` from authoritative fixed-role runtime metadata;
+  both explicit dispatch fields matched. Independent verification repeated five
+  delivery suites and 192 tests, all typechecks, changed-file lint/format, and
+  diff hygiene. Independent review remains required.
 
 ## Likely Files
 
