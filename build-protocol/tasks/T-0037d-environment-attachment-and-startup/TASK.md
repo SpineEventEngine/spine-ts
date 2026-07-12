@@ -71,9 +71,11 @@ admission-closed, stopped failed-start rollback without duplicating completed
 admission closure or stop. It must prove quiescence, complete classification,
 eligible consumption/reporting, permanent retirement/cleanup, and safe slot
 clearing exactly once, then permit exactly one later eligible fresh attachment
-without old/new overlap. This is caller-owned failed-start rollback ownership
-only; T-0037f separately owns the server lifecycle operation that invokes this
-seam for a server-owned startup failure.
+without old/new overlap. T-0037d owns this caller-owned failed-start rollback
+state machine and same-operation retry. T-0037f separately owns deferred
+server-level cleanup around this seam for both caller-owned and server-owned
+startup failure, while preserving their different environment and facility
+ownership.
 
 The child exposes an internal attachment handle for future server integration.
 It does not yet change `Server.start()` or listener ordering.

@@ -427,16 +427,20 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    scoped rollback, including invoking T-0037b's primitive and clearing the
    retired empty generation slot through a finally-equivalent path after sole
    failed attachment despite reporting or retirement-cleanup failure. It may
-   replace that slot only when quiescence was established.
+   replace that slot only when quiescence was established. T-0037d owns the
+   caller-owned failed-start rollback state machine and same-operation retry;
+   T-0037f owns the surrounding deferred server cleanup for either environment
+   ownership mode.
 5. T-0037e owns ordinary detach and explicit generation stop, invoking that
    existing primitive for explicit stop, ordinary last detach, and permanent
    close through the sole package-internal environment-lifecycle explicit-stop
    entry point, plus fresh-generation races, close refusal, and permanent
-   environment close. An otherwise eligible attach arriving after reusable
-   explicit stop begins waits through full retirement while every surviving
-   registration, readiness route, and configured/startup scope rebinds to
-   exactly one fresh generation before later writes can strand, then joins that
-   generation. One bounded canonical tenant/configured-scope transition buffer,
+   environment close. Reusable explicit stop constructs the sole fresh candidate
+   itself even when no attach races. An otherwise eligible racing attach waits
+   through full retirement while every surviving registration, readiness route,
+   and configured/startup scope rebinds to exactly one fresh generation before
+   later writes can strand, then joins that transition-owned candidate. One
+   bounded canonical tenant/configured-scope transition buffer,
    or equivalent persistence barrier, owns readiness from old-route close
    through the fresh recovery snapshot and route rebind, then transfers each
    scope losslessly and exactly once into fresh pending admission. Fresh-
@@ -461,7 +465,18 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    quiescence failure retains the unsafe slot. Server and handoff code cannot
    call the primitive directly.
 6. T-0037f owns server listener/startup and network/context/resource/facility
-   shutdown ordering.
+   shutdown ordering. A non-last close retry resumes only departing-registration
+   cleanup and eligible reporting; it never retires the shared generation or
+   clears its slot, and sibling generation identity, readiness, pending work,
+   endpoints, contexts/resources, and facilities remain usable. Last-detach
+   retirement remains a separate path.
+
+The six deterministic same-operation generation-retirement retries stay
+distinct: caller-owned failed-start rollback (T-0037d); ordinary last detach,
+reusable explicit stop, and zero-registration permanent close (T-0037e); and
+server-owned startup cleanup plus caller-owned server cleanup (T-0037f).
+Non-last detach is a separate non-retiring registration-scoped retry and is not
+one of those six.
 
 The first future handoff is T-0037a's package-internal
 `boundedContextAccess` descriptor/readiness seam. It does not start a worker or

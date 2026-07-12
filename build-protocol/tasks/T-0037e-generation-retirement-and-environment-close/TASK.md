@@ -72,11 +72,12 @@ Reusable explicit stop leaves registrations live but closes their old-
 generation readiness admission and installs one bounded canonical tenant/
 configured-scope transition buffer, or equivalent persistence barrier. That
 owner covers write readiness after the old route closes through the fresh
-recovery snapshot and readiness-route rebind. After retirement, the lifecycle
-gate creates exactly one fresh generation, rebinds every surviving registration,
-readiness route, and configured/startup obligation scope to it, and transfers
-each buffered scope losslessly and exactly once into fresh pending admission
-before reopening later-write admission. T-0037b preserves close-admission/stop,
+recovery snapshot and readiness-route rebind. After retirement, the explicit-
+stop transition creates exactly one fresh candidate even when no attach races,
+rebinds every surviving registration, readiness route, and configured/startup
+obligation scope to it, transfers each buffered scope losslessly and exactly
+once into fresh pending admission, publishes the candidate, and only then
+reopens later-write admission. T-0037b preserves close-admission/stop,
 await, classify, consume/report, then permanent-retirement/cleanup order. When
 it returns a replacement-safe stopped/quiescent postcondition with a reporting
 or cleanup error, these post-retirement steps still complete before T-0037e
@@ -98,8 +99,8 @@ never construct a second candidate, complete exact-once survivor/readiness route
 rebind first, then exact-once retained-scope transfer into fresh pending
 admission, publish it, and finally reopen later-write admission. No surviving
 scope may return to the old generation or fall outside the transition owner. An
-eligible attach racing this transition waits to join the same eventual fresh
-generation.
+eligible attach racing this transition waits for and joins the same transition-
+owned fresh candidate.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -124,6 +125,14 @@ network or context/resource ordering.
 - Non-last detach closes that registration's readiness, establishes its active
   work barrier, consumes only its records and newly orphaned generation records,
   and leaves sibling work/readiness/records active.
+- A deterministic non-last detach failure/retry case proves the retry resumes
+  only the departing registration's unfinished cleanup and eligible reporting
+  exactly once after its work barrier, while retaining its endpoint dependencies
+  until safe. It never stops or retires the shared generation or clears its slot.
+  Throughout failure and retry, sibling generation identity, readiness, pending work,
+  endpoints, contexts/resources, and facilities remain intact and usable;
+  newly orphaned generation records follow the existing parked-versus-eligible
+  partition.
 - Last detach closes trigger/notification admission, calls worker stop, awaits
   active work, classifies rejection, reports/consumes eligible records, and
   permanently retires old worker/loops in that exact order by invoking the
@@ -161,12 +170,19 @@ network or context/resource ordering.
   registrations, races one otherwise eligible attach, and pauses after fresh
   recovery captures its durable snapshot but before survivor readiness routes
   rebind. A supported write then persists in a surviving canonical tenant/
-  configured scope. Its readiness enters the bounded transition owner, is
-  transferred losslessly and exactly once into fresh pending admission during
-  rebind, and is eventually admitted without any unrelated readiness trigger.
+  configured scope. Its readiness enters the bounded transition owner. The test
+  first completes survivor/readiness-route rebind, then transfers buffered and
+  retained scopes losslessly and exactly once into fresh pending admission,
+  then publishes the candidate, and only then reopens later-write admission.
+  Per-unit progress remains separately auditable for rebind and transfer, and
+  the write is eventually admitted without any unrelated readiness trigger.
   The test also proves no old/new generation overlap, exactly one fresh
   generation, and every survivor and the racing attach bound to it. Only
   permanent close or ownership-cardinality rejection may reject the attach.
+- A companion explicit-stop test with live registrations and no racing attach
+  proves the stop transition itself constructs the sole fresh candidate,
+  completes rebind, retained-scope transfer, publication, and admission reopen,
+  and leaves every surviving registration usable on that generation.
 - A distinct deterministic reusable-explicit-stop test injects quiescence
   failure before classification. The failed attempt retains the unsafe current
   generation, all live registrations, the transition owner and readiness

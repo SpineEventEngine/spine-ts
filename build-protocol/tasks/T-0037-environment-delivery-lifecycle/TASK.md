@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 14 docs fix worker active
+Status: Round 14 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -66,6 +66,13 @@ verified, merged, and cleaned child tasks:
 5. `T-0037e Generation Retirement And Environment Close`
 6. `T-0037f Server Lifecycle Integration`
 
+The six deterministic same-operation generation-retirement retries retain
+separate owners: caller-owned failed-start rollback in `d`; ordinary last
+detach, reusable explicit stop, and zero-registration permanent close in `e`;
+and server-owned startup cleanup plus caller-owned server cleanup in `f`.
+Non-last detach is a separate non-retiring registration-scoped retry and never
+stops or retires the shared generation or clears its slot.
+
 The invariant map is strict: descriptors and synchronous non-throwing per-
 successful-row readiness belong to `a`; bounded runs, lossless bounded canonical
 tenant/configured-scope coalescing, and the
@@ -74,8 +81,9 @@ bounded operational/cause records belong to `c`; attachment/startup and
 failed-start rollback invocation/empty-slot replacement plus the no-overlap
 barrier that awaits already-admitted direct exact drain before environment
 admission and buffers transition-time persistence until readiness is installed
-belong to `d`; ordinary
-detach, explicit generation stop, ordinary/permanent-close primitive invocation,
+belong to `d`; `d` owns caller-owned failed-start rollback state and retry while
+`f` owns deferred server cleanup around that seam for both environment ownership
+modes. Ordinary detach, explicit generation stop, ordinary/permanent-close primitive invocation,
 the bounded canonical-scope bridge through fresh recovery/route rebind,
 finally-equivalent surviving-registration rebinding before retirement-result
 propagation, plus the deterministic wait-through-retirement fresh-generation

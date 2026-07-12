@@ -62,18 +62,27 @@ error consumption, then close contexts/resources, and finally close an owned
 environment's facilities. It also owns failed-listener and failed-start
 aggregation across these ordered phases.
 
-Cleanup continuation depends on the delivery safety boundary. Once quiescence
-is proven, reporting errors and failures from permanent cleanup of inert
-delivery state do not reactivate delivery, and all later context, resource, and
-facility close attempts continue. If quiescence itself fails, endpoint safety
-is unknown: the registration's unsafe generation slot and every endpoint-
-dependent context, resource, delivery facility, transport, and storage remain
-open for an explicit lifecycle retry. Server cleanup must not close beneath
-possibly active work. The retry resumes the same server lifecycle operation,
-does not duplicate completed admission closure or stop, proves quiescence, and
-then completes classification, eligible record consumption/reporting,
-permanent retirement/cleanup, safe slot clearing, and deferred server cleanup
-exactly once.
+T-0037d owns the caller-owned failed-start rollback state machine and its same-
+operation retry. T-0037f owns the deferred server-level cleanup continuation
+around that seam for both caller-owned and server-owned startup failures, while
+respecting which environment and facilities the server may close.
+
+Cleanup continuation depends on the delivery safety boundary. For a generation-
+ending operation, once quiescence is proven, reporting errors and failures from
+permanent cleanup of inert delivery state do not reactivate delivery, and all
+later context, resource, and facility close attempts continue. If generation
+quiescence itself fails, endpoint safety is unknown: the registration's unsafe
+generation slot and every endpoint-dependent context, resource, delivery
+facility, transport, and storage remain open for an explicit lifecycle retry.
+Server cleanup must not close beneath possibly active work. For a last detach or
+generation-ending startup cleanup, the retry resumes the same server lifecycle
+operation, does not duplicate
+completed admission closure or stop, proves quiescence, and then completes
+classification, eligible record consumption/reporting, permanent retirement/
+cleanup, safe slot clearing, and deferred server cleanup exactly once. A non-
+last detach retry instead retains the departing registration's endpoint
+dependencies and, after its work barrier, resumes only cleanup and eligible
+reporting; it never stops or retires the shared generation or clears its slot.
 
 ## Likely Files
 
@@ -125,13 +134,21 @@ exactly once.
 - Non-last close leaves the shared environment generation and sibling server
   usable. Last close retires the generation; owned-environment close occurs
   only after exclusive detach and context/resource close.
+- A deterministic non-last close failure/retry case proves only the departing
+  registration's cleanup and eligible reporting resume exactly once. The shared
+  generation is never stopped or retired and its slot is never cleared. Sibling
+  generation identity, readiness, pending work, endpoints, contexts/resources,
+  and facilities remain intact and usable throughout failure and retry, while
+  newly orphaned generation records obey the existing parked/eligible
+  partition.
 - Active and earlier parked rejections surface only at their truthful boundary
   and once. After proven quiescence, all remaining close hooks still run after
   reporting or inert cleanup failures; quiescence failure retains unsafe
-  endpoint dependencies for explicit retry. A close-path retry resumes the same
-  operation, proves quiescence, then classifies, consumes/reports, retires/cleans
-  up, clears the safe slot, and resumes remaining server cleanup exactly once,
-  without duplicating admission closure or stop.
+  endpoint dependencies for explicit retry. Only a last-detach or generation-
+  ending close-path retry proves quiescence, then classifies, consumes/reports,
+  retires/cleans up, clears the safe slot, and resumes remaining server cleanup
+  exactly once without duplicating admission closure or stop. Non-last retry
+  follows the registration-scoped rule above.
 - Transport or storage never closes beneath an active delivery run, and a
   `PAUSED` outcome cannot start after stop admission.
 - Existing host/port/baseUrl, idempotent/retryable close, listener failure,

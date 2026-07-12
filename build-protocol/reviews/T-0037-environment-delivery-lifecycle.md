@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 14 docs fix worker active
+Status: Round 14 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5573-79eb-7b60-b670-e9e2c39006a4` | P2    |
-| Documentation              | `019f5573-7a5a-7d32-8b6d-8083ba0bc00b` | P2    |
-| TypeScript/API docs        | `019f5573-7ae5-7f63-87a5-0cb33eeeb49d` | P1/P2 |
-| Performance/reliability    | `019f5573-7b78-7651-8ee1-0f14f2ef7716` | P1    |
+| Code style/maintainability | `019f5573-79eb-7b60-b670-e9e2c39006a4` | P2     |
+| Documentation              | `019f5573-7a5a-7d32-8b6d-8083ba0bc00b` | P2     |
+| TypeScript/API docs        | `019f5573-7ae5-7f63-87a5-0cb33eeeb49d` | P1/P2  |
+| Performance/reliability    | `019f5573-7b78-7651-8ee1-0f14f2ef7716` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -74,14 +74,22 @@ Security is deferred to final project readiness.
   phase or slot clear, and permits no replacement. Retry does not duplicate
   admission closure or stop; it proves quiescence, completes every remaining
   phase and safe slot clearing exactly once, then permits one later eligible
-  fresh attachment without overlap. Keep T-0037f's server-owned operation
-  distinct.
-- Confirm an otherwise eligible attach arriving after reusable explicit stop
-  begins waits through full retirement and creates or joins exactly one fresh
-  generation. Every surviving registration, readiness route, and configured/
-  startup scope rebinds to that generation before later-write admission, and a
-  racing eligible attach joins it. Only permanent close or independent
-  ownership cardinality may reject the attach.
+  fresh attachment without overlap. T-0037d owns that rollback state machine;
+  T-0037f owns deferred server cleanup around it for caller-owned and server-
+  owned startup failure while preserving distinct environment/facility duties.
+- Confirm reusable explicit stop constructs exactly one fresh candidate itself
+  even when no attach races. An otherwise eligible racing attach waits through
+  full retirement and joins that transition-owned candidate. Every surviving
+  registration, readiness route, and configured/startup scope rebinds to that
+  generation before later-write admission, and a racing eligible attach joins
+  it. Only permanent close or independent ownership cardinality may reject the
+  attach.
+- Confirm the six deterministic same-operation generation-retirement retry
+  owners remain distinct: caller-owned failed-start rollback (T-0037d);
+  ordinary last detach, reusable explicit stop, and zero-registration permanent
+  close (T-0037e); and server-owned startup cleanup plus caller-owned server
+  cleanup (T-0037f). Non-last detach is a separate non-retiring registration-
+  scoped retry and is not one of the six.
 - Confirm reusable explicit stop installs one bounded canonical tenant/
   configured-scope readiness owner from old-route close through the fresh
   recovery snapshot and survivor route rebind, then transfers each buffered
@@ -121,6 +129,12 @@ Security is deferred to final project readiness.
   closure, completes every remaining authoritative phase, safe slot clear, and
   each owned-facility close exactly once, then remains permanently closed.
   Refusal while registrations remain live stays a separate case.
+- Confirm non-last detach/close failure retry resumes only the departing
+  registration's cleanup and eligible reporting exactly once. It never stops or
+  retires the shared generation or clears its slot. Sibling generation identity,
+  readiness, pending work, endpoints, contexts/resources, and facilities remain
+  intact and usable, and newly orphaned records preserve the parked/eligible
+  partition throughout failure and retry.
 - Confirm T-0037d clears a stopped, quiescent, permanently retired sole-
   registration empty slot through a finally-equivalent path before propagating
   reporting or cleanup errors. Separate tests prove the inert old instance
@@ -682,3 +696,24 @@ Security is deferred to final project readiness.
   `019f5578-0540-7280-bef3-1a6c2283b117` the complete accepted batch. The
   worker owns documentation only, must preserve the fixed historical ledger,
   and may edit only after this assignment is committed.
+- `2026-07-12T08:38:00Z`: Round 14 documentation fix authored the accepted
+  separate-phase, non-last retry, explicit-stop candidate, T-0037d/T-0037f
+  ownership, and six-retry-owner documentation batch. Coordinator verification
+  remains pending; no clean review is claimed.
+- `2026-07-12T08:48:15Z`: Worker verification passed the targeted Round 14
+  lifecycle contracts, status/event/participant/ledger checks, docs and format
+  gates, whitespace, exact nine-file scope, untracked inspection, and all frozen
+  paths. TypeDoc retained 205 server exports with only the known invalid-
+  `origin` warning. Coordinator verification remains pending; no clean review is
+  claimed.
+- `2026-07-12T08:51:49Z`: Coordinator pre-acceptance inspection confirmed the
+  lifecycle ownership/order contracts and corrected the work-log event count to
+  111, including the worker verification event. Independent coordinator
+  verification remains pending.
+- `2026-07-12T08:52:47Z`: Coordinator closed the worker and independently passed
+  six-owner enumeration, explicit-stop self-creation, non-last sibling
+  preservation, separate rebind/transfer progress, T-0037d/T-0037f ownership,
+  112-event chronology, 72-participant uniqueness, byte-identical 36-entry
+  ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` checks. TypeDoc retained 205 server exports with only the
+  known invalid-`origin` warning. Fresh all-lane review remains required.

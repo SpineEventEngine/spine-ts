@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 14 docs fix worker active
+Status: Round 14 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -22,10 +22,18 @@ Every child is Candidate/not started and depends on its predecessor. Each will
 receive its own branch, work/review records, TDD cycle, focused checks, and four
 review lanes only when started.
 
+The six deterministic same-operation generation-retirement retries are owned
+separately: caller-owned failed-start rollback by T-0037d; ordinary last detach,
+reusable explicit stop, and zero-registration permanent close by T-0037e; and
+server-owned startup cleanup plus caller-owned server cleanup by T-0037f.
+Non-last detach is a separate non-retiring registration-scoped retry; it cannot
+stop or retire the shared generation or clear its slot.
+
 T-0037d's transition barrier gives persistence after direct-drain admission
 closes but before readiness routing is installed a bounded canonical-scope
 buffer, then transfers each scope exactly once before startup admission.
-T-0037e's reusable explicit stop rebinds every surviving registration,
+T-0037e's reusable explicit stop constructs the sole fresh candidate itself even
+when no attach races, then rebinds every surviving registration,
 readiness route, and configured/startup scope to exactly one fresh generation
 before propagating the result of close-admission/stop, await quiescence,
 classify, consume/report, then permanent-retirement/cleanup. The old instance's
@@ -38,7 +46,8 @@ retains bounded scopes for one later external retry without self-looping. Once
 constructed, the sole unpublished candidate remains owned by that transition;
 rebind/transfer failure waits for admitted candidate work to settle, and retry
 resumes that same candidate rather than constructing another. An eligible racing
-attach then joins the same eventual generation without old/new overlap.
+attach waits for and joins that transition-owned generation without old/new
+overlap.
 If reusable explicit stop cannot establish quiescence, it retains the unsafe
 generation, live registrations, transition readiness owner, and endpoint
 dependencies; explicit retry resumes the same stop and completes retirement,

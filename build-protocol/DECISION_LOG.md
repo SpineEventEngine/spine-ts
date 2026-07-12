@@ -3506,24 +3506,30 @@ Decision:
   complete old-generation stop, active-work settlement, rejection
   classification, record consumption/reporting, and permanent retirement. It
   never joins the stopping generation and no fresh worker overlaps the old one.
-  If the environment remains open after retirement, the first waiting attach
-  creates exactly one fresh generation and startup recovery; later eligible
-  attaches join that same fresh generation. Such an attach rejects only if
-  permanent environment close wins the serialized transition or independent
-  ownership cardinality refuses it. No reusable-stop policy may reject it merely
-  because retirement is in progress.
+  After ordinary last detach, no registrations remain; the first later eligible
+  attach creates exactly one fresh generation and startup recovery, and later
+  eligible attaches join it. Reusable explicit stop is different because live
+  registrations remain: that stop transition constructs the sole fresh
+  candidate itself, even when no attach races, then rebinds, transfers,
+  publishes, and reopens admission in the order below. An eligible attach racing
+  explicit stop waits for and joins that transition-owned candidate; it never
+  creates another. Such an attach rejects only if permanent environment close
+  wins the serialized transition or independent ownership cardinality refuses
+  it. No reusable-stop policy may reject it merely because retirement is in
+  progress.
 - Reusable explicit generation stop leaves registrations live, so retirement
   alone cannot complete that transition. Closing old-generation readiness
   installs one bounded canonical tenant/configured-scope transition buffer, or
   an equivalent persistence barrier, that owns readiness for writes from that
   close through the fresh recovery snapshot and readiness-route rebind. After
-  old retirement, the lifecycle creates exactly one fresh generation and
-  rebinds every surviving registration, readiness route, and configured/startup
-  obligation scope to it. It transfers each buffered scope losslessly and
-  exactly once into the fresh generation's pending admission before reopening
-  later-write admission. Thus a write persisted after fresh recovery captures
-  its snapshot but before routes rebind still causes an eventual fresh-
-  generation run without an unrelated trigger. Fresh-generation creation,
+  old retirement, the explicit-stop transition constructs exactly one fresh
+  candidate even without a racing attach. It first completes rebind of every
+  surviving registration, readiness route, and configured/startup obligation
+  scope to that candidate. It then transfers each buffered scope losslessly and
+  exactly once into fresh pending admission, publishes the candidate, and only
+  then reopens later-write admission. Thus a write persisted after fresh
+  recovery captures its snapshot but before routes rebind still causes an
+  eventual fresh-generation run without an unrelated trigger. Fresh-generation creation,
   complete survivor rebind, and buffered-scope transfer normally finish before
   T-0037e propagates an earlier retirement or reporting error once. If fresh
   construction, route rebind, or transfer itself fails, the old generation stays
@@ -3554,8 +3560,16 @@ Decision:
   open; consume only the operational records eligible under that detach's
   ownership scope and aggregate only their still-`unreported` causes; then close
   its contexts and other endpoint resources. A non-last detach leaves the
-  shared generation and live
-  generation-owned records active for remaining registrations. A last detach
+  shared generation and live generation-owned records active for remaining
+  registrations. Failure after its registration-scoped work barrier is
+  established retains the departing registration's endpoint dependencies plus
+  its unfinished cleanup and eligible reporting work for explicit retry. Retry
+  resumes only cleanup and eligible reporting exactly once; it never stops or
+  retires the shared generation, clears its slot, or closes sibling endpoint
+  dependencies, contexts, resources, or facilities. Sibling generation
+  identity, readiness, pending work,
+  endpoints, and facilities remain active throughout; newly orphaned generation
+  records follow the existing parked-versus-eligible partition. A last detach
   additionally quiesces the generation, consumes every remaining operational
   record, and includes every remaining `unreported` cause exactly once. If the
   server owns the environment, its sole registration is
@@ -3565,17 +3579,17 @@ Decision:
   no worker promise is active. An active rejection observed while shutdown
   awaits work is partitioned before aggregation: non-last detach includes only
   the departing registration's records and newly orphaned generation records,
-  while live shared generation and sibling records remain parked. Shutdown
-  continues every remaining close after quiescence and propagates or aggregates
-  all eligible reporting and inert cleanup failures consistently with the
-  existing `RetryableCloseGroup` behavior. If quiescence cannot be established,
-  shutdown instead retains the registration's unsafe generation slot plus its
-  endpoint-dependent contexts, resources, delivery facilities, transport, and
-  storage for explicit retry; it does not close beneath possibly active work.
-  That retry resumes the same shutdown operation without duplicating completed
-  admission closure or stop, proves quiescence, then performs classification,
-  eligible consumption/reporting, permanent retirement/cleanup, slot clearing,
-  and remaining server cleanup exactly once.
+  while live shared generation and sibling records remain parked. For a last
+  detach, shutdown continues every remaining close after quiescence and
+  propagates or aggregates all eligible reporting and inert cleanup failures
+  consistently with the existing `RetryableCloseGroup` behavior. If last-detach
+  quiescence cannot be established, shutdown retains the unsafe generation slot
+  plus its endpoint-dependent contexts, resources, delivery facilities,
+  transport, and storage for explicit retry; it does not close beneath possibly
+  active work. That retry resumes the same last-detach shutdown without
+  duplicating completed admission closure or stop, proves quiescence, then
+  performs classification, eligible consumption/reporting, permanent
+  retirement/cleanup, slot clearing, and remaining server cleanup exactly once.
   When startup failure occurs against a caller-owned environment and rollback
   cannot establish quiescence, the server opens no listener and retains every
   endpoint-dependent context and resource while leaving the caller-owned
@@ -3746,7 +3760,10 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   admission closure or stop, proves quiescence, completes classification,
   eligible consumption/reporting, permanent retirement/cleanup, and slot
   clearing exactly once, then permits one later eligible fresh attachment
-  without overlap. T-0037f's server-owned continuation remains distinct.
+  without overlap. T-0037d owns this caller-owned failed-start rollback state
+  machine and its same-operation retry. T-0037f owns deferred server-level
+  cleanup around that seam for caller-owned and server-owned startup failure,
+  preserving each mode's distinct environment and facility ownership.
   T-0037d also owns the atomic
   ownership barrier that closes new direct exact-drain admission, awaits every
   already-admitted direct exact drain in the attaching scope, gives persistence
@@ -3802,6 +3819,14 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   continuation remains separate. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback
   or coordinator-instance retirement.
+- The six distinct deterministic same-operation generation-retirement retry
+  owners are: caller-owned failed-start rollback in T-0037d; ordinary last
+  detach, reusable explicit stop, and zero-registration permanent close in
+  T-0037e; and server-owned startup cleanup plus caller-owned server cleanup in
+  T-0037f. Each keeps its own slot, dependency, environment, and facility
+  ownership duties. Non-last detach is a separate non-retiring registration-
+  scoped retry: it cannot stop or retire the shared generation or clear its
+  slot.
 - Each child depends on the preceding child and receives its own branch,
   implementation log, review log, TDD cycle, focused verification, and four
   required review lanes when implementation starts. Candidate briefs do not
