@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 2 review active
+Status: Round 2 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54b4-1ad3-7310-8650-848f599a82dc` | Active |
-| Documentation              | `019f54b4-1bfb-7c20-97b5-e5c6ad6cca92` | Active |
-| TypeScript/API docs        | `019f54b4-1b82-7222-8d91-153508c77665` | Active |
-| Performance/reliability    | `019f54b4-1ca2-7d13-a741-fcff85863e6f` | Active |
+| Code style/maintainability | `019f54b4-1ad3-7310-8650-848f599a82dc` | P1/P2  |
+| Documentation              | `019f54b4-1bfb-7c20-97b5-e5c6ad6cca92` | P1/P2  |
+| TypeScript/API docs        | `019f54b4-1b82-7222-8d91-153508c77665` | P1/P2  |
+| Performance/reliability    | `019f54b4-1ca2-7d13-a741-fcff85863e6f` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -121,6 +121,15 @@ Security is deferred to final project readiness.
   and assigned all four Round 2 lanes. Prompts constrain review to active
   claims and changed governing text, explicitly excluding superseded history
   and the deferred final security gate.
+- `2026-07-12T05:05:26Z`: Closed all four Round 2 reviewers and accepted one
+  deduplicated fix batch: assign the immediate exact-drain ownership transition
+  and explicit generation-stop caller; guarantee retirement after a failing
+  record-consumption step while preserving error aggregation; bound pending
+  admissions by current canonical tenant/configured scope rather than trigger
+  count; isolate readiness callback failure; reconcile stale handoff/status
+  text; correct server-owned and current-generation terminology; and document
+  public lifecycle behavior while accurately claiming no export/signature
+  change. One docs fix worker and a fresh all-lane review are required.
 - `2026-07-12T04:44:00Z`: Assigned docs fix worker
   `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
   package generation and all four lanes remain pending its return, coordinator
