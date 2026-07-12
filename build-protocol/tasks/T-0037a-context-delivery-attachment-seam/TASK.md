@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Review Round 1 active
+Status: Review Round 1 findings logged; fix assignment pending
 
 Started: `2026-07-12T09:52:53Z`
 
@@ -8,7 +8,7 @@ Baseline commit: `f7c2ddb1`
 
 Branch: `task/T-0037a-context-delivery-attachment-seam`
 
-This `Status` header is canonical for T-0037a. Its future work/review logs are
+This `Status` header is canonical for T-0037a. Its work/review logs are
 derived mirrors and must match it before review.
 
 Dependency: T-0036 complete; D-0086 accepted. First T-0037 implementation
