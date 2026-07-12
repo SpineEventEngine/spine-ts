@@ -63,7 +63,10 @@ reporting error or inert permanent-cleanup error. A later eligible attach can
 therefore create one fresh generation without reusing or overlapping the old
 instance. If quiescence cannot be established, the slot remains current and
 unsafe, replacement is prohibited, and endpoint-dependent resources remain
-open for an explicit lifecycle retry.
+open for an explicit lifecycle retry. That retry resumes the same stopped,
+admission-closed lifecycle operation without repeating stop, proves quiescence,
+then classifies, consumes/reports eligible records, permanently retires/cleans
+up, and clears the slot exactly once before a later fresh attachment is allowed.
 
 Reusable explicit stop leaves registrations live but closes their old-
 generation readiness admission and installs one bounded canonical tenant/
@@ -83,12 +86,18 @@ rebind, or buffered transfer itself fails, the old generation remains admission-
 closed, stopped, and quiescent after retirement/cleanup was attempted; no partial
 fresh generation is published; later-write admission remains closed; and the
 bounded transition owner retains every not-yet-transferred canonical scope.
-T-0037e preserves and aggregates the transition error, propagates it truthfully,
-and does not self-loop. Only a later external lifecycle/readiness retry may
-complete one fresh generation, exact-once retained-scope transfer and route
-rebind, then reopen admission. No surviving scope may return to the old
-generation or fall outside the transition owner. An eligible attach racing this
-transition waits to join the same eventual fresh generation.
+Construction failure before a candidate exists may construct one on retry. Once
+construction succeeds, the bounded transition owner solely owns that one
+constructed-but-unpublished candidate across route-rebind or transfer failure.
+Admission remains closed, and every bounded candidate startup/recovery unit
+already admitted must settle before the transition error returns, so no
+candidate endpoint invocation continues after propagation. T-0037e preserves
+and aggregates the transition error truthfully and does not self-loop. Only a
+later external lifecycle/readiness retry may resume that same retained candidate,
+never construct a second candidate, complete exact-once retained-scope transfer
+and route rebind, publish it, then reopen admission. No surviving scope may
+return to the old generation or fall outside the transition owner. An eligible
+attach racing this transition waits to join the same eventual fresh generation.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -128,7 +137,12 @@ network or context/resource ordering.
   cleared before that error propagates, then performs a later fresh attach and
   proves exactly one fresh generation with no old/new overlap. A distinct
   quiescence-failure test proves the unsafe current slot is retained and the
-  later attach cannot replace it.
+  later attach cannot replace it. It also retries that same last-detach operation,
+  proves quiescence, performs classification, eligible record consumption/
+  reporting, and permanent retirement/cleanup exactly once, clears the slot only
+  after safety is proven, and then permits exactly one later fresh attach without
+  overlap. The failed attempt consumes/reports/retires nothing and tears down no
+  endpoint dependency; retry does not duplicate admission closure or stop.
 - Explicit generation stop is distinct from detach and environment close. Under
   the same lifecycle gate it closes generation admission, invokes T-0037b's
   stop/await/consume/retire primitive, leaves registrations and a caller-owned
@@ -170,17 +184,24 @@ network or context/resource ordering.
   into fresh pending admission exactly once. The test proves the buffered write
   is admitted by that fresh generation and only then observes the retirement
   error, propagated exactly once.
-- Injected fresh-construction, route-rebind, and buffered-transfer failure cases
+- Separate injected fresh-construction, route-rebind, and buffered-transfer
+  failure cases
   prove the old generation stays admission-closed, stopped, and quiescent after
   retirement/cleanup was attempted; no partial fresh generation becomes current;
   later-write admission remains closed; and the canonical transition owner
   retains a non-empty set bounded by current tenant/configured-scope cardinality.
-  Each operation propagates its transition error exactly once, aggregated with
-  an earlier retirement/reporting error when both exist, and performs no
+  Construction failure proves no candidate exists and one may be constructed on
+  retry. Rebind and transfer failures each inject active bounded candidate work,
+  prove the transition owner retains the same sole candidate identity, await all
+  already-admitted candidate work before propagating so no endpoint invocation
+  continues afterward, and prove no second candidate is constructed. Each
+  operation propagates its transition error exactly once, truthfully aggregated
+  with an earlier retirement/reporting error when both exist, and performs no
   recursive or background retry. A later external lifecycle/readiness request
-  completes exactly one fresh generation, rebinds every survivor and route
-  without owner gap or old/new overlap, transfers each retained scope exactly
-  once, and only then reopens admission.
+  resumes the retained candidate when one exists, completes exactly one fresh
+  generation, rebinds every survivor and route without owner gap or old/new
+  overlap, transfers each retained scope exactly once without repeating a
+  completed rebind or transfer, and only then publishes it and reopens admission.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

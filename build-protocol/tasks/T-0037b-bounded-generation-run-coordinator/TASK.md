@@ -68,7 +68,11 @@ or make the instance reusable; cleanup failure may leak only inert resources.
 The primitive may settle with the combined error only after retirement/cleanup
 is attempted, and that postcondition is safe for a lifecycle owner to clear or
 replace the slot. A distinct inability to establish quiescence prohibits
-replacement. The primitive is idempotent and reusable by later lifecycle
+replacement. An explicit retry resumes that same admission-closed, stopped
+primitive invocation without repeating admission closure or stop. Once the
+retry proves quiescence, it performs classification, the caller-supplied
+eligible record consumption/reporting step, and permanent retirement/cleanup
+exactly once. The primitive is idempotent and reusable by later lifecycle
 owners; it does not own registration removal, record selection, an environment
 generation slot, fresh-generation race policy, or the caller's post-retirement
 slot clearing/survivor rebind.
@@ -124,7 +128,13 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   error propagates.
 - A distinct focused case where active-work settlement cannot establish
   quiescence leaves the slot non-replaceable; it does not claim retirement or
-  endpoint safety. T-0037d/e must not clear or replace that instance.
+  endpoint safety. It performs no classification, operational-record
+  consumption/reporting, permanent retirement/cleanup, or endpoint-dependent
+  teardown. An explicit retry of the same primitive does not duplicate completed
+  admission closure or stop; it proves quiescence, then performs classification,
+  the eligible record consumption/reporting callback, and permanent retirement/
+  cleanup exactly once. T-0037d/e must not clear or replace the instance before
+  that successful retry establishes the replacement-safe postcondition.
 - Existing package-internal/direct `DeliveryWorker.start()` compatibility and
   all T-0036 tests remain unchanged.
 

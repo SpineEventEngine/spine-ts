@@ -407,7 +407,10 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    start, notification, or endpoint invocation despite later reporting or
    cleanup failure; cleanup failure may leak only inert resources. A distinct
    inability to establish quiescence prohibits slot replacement and endpoint-
-   dependent teardown until explicit retry. A reusable lifecycle caller may
+   dependent teardown until explicit retry. That retry resumes the same stopped,
+   admission-closed transition without duplicating completed stop work, proves
+   quiescence, then classifies, consumes/reports, retires/cleans up, and permits
+   safe slot clearing exactly once. A reusable lifecycle caller may
    receive an earlier retirement/reporting error only after completing its
    required slot clearing or fresh-generation transition. A fresh-construction,
    route-rebind, or buffered-transfer error instead propagates while that
@@ -442,11 +445,15 @@ D-0086 maps the future D-0085 lifecycle into six strict slices:
    construction, rebind, or transfer fails, no partial generation is published;
    the old instance remains admission-closed, stopped, and quiescent after
    retirement/cleanup was attempted, and the bounded transition owner retains
-   untransferred scopes while the aggregated transition result propagates. No
-   self-loop occurs; a later external
-   lifecycle/readiness retry alone completes one fresh generation and exact-once
-   transfer/rebind. Only permanent close or independent ownership cardinality
-   may reject the attach. Ordinary last detach clears a stopped,
+   untransferred scopes. Construction failure before a candidate exists may
+   construct one on retry. After construction, the transition owner solely
+   retains that one unpublished candidate across rebind/transfer failure and
+   awaits all already-admitted bounded candidate work before propagating the
+   aggregated error, so no endpoint invocation continues after propagation. No
+   self-loop occurs; a later external lifecycle/readiness retry resumes that same
+   candidate, never constructs another, and completes exact-once transfer/rebind.
+   Only permanent close or independent ownership cardinality may reject the
+   attach. Ordinary last detach clears a stopped,
    proven-quiescent retired current-generation slot through a finally-equivalent
    path before propagating reporting or inert permanent-cleanup errors; a
    quiescence failure retains the unsafe slot. Server and handoff code cannot

@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 11 docs fix worker active
+Status: Round 11 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -202,5 +202,8 @@ used for child runtime work.
   coordinator verification and was committed as `ee6fb396`. Round 10 accepted
   the quiescence-failure endpoint-retention boundary, ordinary last-detach safe
   slot clearing, fresh-transition error qualification, stale split handoff, and
-  work-log chronology findings. The Round 10 docs fix is authored; coordinator
+  work-log chronology findings. The Round 10 worker and coordinator verification
+  passed, and the fix was committed as `724e384d`. Round 11 accepted the retained
+  fresh-candidate ownership, successful quiescence-retry, active-summary, and
+  participant-ordering findings. The Round 11 docs fix is authored; coordinator
   verification and fresh review remain pending, and no clean review is claimed.

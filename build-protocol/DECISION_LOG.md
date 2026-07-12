@@ -3452,8 +3452,15 @@ Decision:
   dependent context, resource, and facility remain retained because endpoint
   safety is not proven. That unsafe state requires an explicit lifecycle retry;
   it cannot clear or replace the slot or close dependencies beneath possibly
-  active work. After permanent `ServerEnvironment.close()`, no generation of
-  that same environment is possible. Recovery then requires a separately
+  active work. The retry resumes the same stop transition: admission closure and
+  stop are not duplicated, already-settled phases are not repeated, and only
+  after quiescence is proven does it classify, consume/report eligible records,
+  permanently retire/clean up exactly once, and clear the slot. It may then
+  resume deferred server cleanup or permit exactly one later fresh attachment
+  without old/new overlap. The initial failed attempt does not classify,
+  consume/report, retire, clear the slot, or tear down endpoint dependencies.
+  After permanent `ServerEnvironment.close()`, no generation of that same
+  environment is possible. Recovery then requires a separately
   created environment/process over storage that remains externally available
   and persistent, if facility ownership and backend lifetime permit; this
   decision makes no recovery promise after environment-owned storage is
@@ -3503,17 +3510,22 @@ Decision:
   construction, route rebind, or transfer itself fails, the old generation stays
   admission-closed, stopped, and quiescent after permanent retirement/cleanup
   was attempted, no partial fresh generation is published, later-write admission
-  stays closed, and the bounded canonical transition owner retains
-  every not-yet-transferred scope. T-0037e preserves and aggregates the
-  transition error with any earlier error, then propagates that result
-  truthfully; it does not self-loop. Only a later external lifecycle/readiness
-  retry may complete exactly one fresh generation, perform exact-once retained-
-  scope transfer and route rebind, and reopen admission. An otherwise eligible
-  attach racing the transition waits for that same eventual generation. The
-  transition owner prevents an ownership gap while the old instance's stopped,
-  quiescent state prevents old/new overlap. No surviving scope may return to the
-  retired generation, and only permanent close or independent ownership
-  cardinality may reject the attach.
+  stays closed, and the bounded canonical transition owner retains every not-yet-
+  transferred scope. Construction failure before a candidate exists retains no
+  candidate and may construct one on retry. Once construction succeeds, that
+  same transition owner is the sole owner of the one constructed-but-unpublished
+  candidate across rebind or transfer failure. Before returning a transition
+  error, it awaits settlement of every bounded candidate startup/recovery unit
+  already admitted, so no candidate endpoint invocation continues after error
+  propagation. T-0037e preserves and truthfully aggregates the transition error
+  with any earlier error; it does not self-loop. Only a later external lifecycle/
+  readiness retry may resume that retained candidate, never construct a second
+  one, complete exact-once route rebind and retained-scope transfer, publish it,
+  and reopen admission. An otherwise eligible attach racing the transition
+  waits for that same eventual generation. The transition owner prevents an
+  ownership gap while old quiescence and candidate settlement prevent old/new
+  overlap. No surviving scope may return to the retired generation, and only
+  permanent close or independent ownership cardinality may reject the attach.
   README and TypeDoc describe only observable `Server`, `RunningServer`, and
   `ServerEnvironment` behavior; they do not name or describe this package-
   internal explicit-stop operation.
@@ -3541,6 +3553,10 @@ Decision:
   shutdown instead retains the registration's unsafe generation slot plus its
   endpoint-dependent contexts, resources, delivery facilities, transport, and
   storage for explicit retry; it does not close beneath possibly active work.
+  That retry resumes the same shutdown operation without duplicating completed
+  admission closure or stop, proves quiescence, then performs classification,
+  eligible consumption/reporting, permanent retirement/cleanup, slot clearing,
+  and remaining server cleanup exactly once.
 - Implement D-0085 in small sequenced successors. The smallest first successor
   is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
   package-internal `DeliveryLoop`/`DeliveryWorker` prerequisites: cap the full
@@ -3713,15 +3729,20 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   generation before any retirement result is propagated or later writes can
   strand; buffered scopes transfer losslessly and exactly once; transition-
   construction/rebind/transfer failure retains the bounded transition owner,
-  publishes no partial generation, keeps admission closed, propagates the
-  aggregated error without self-looping, and permits only a later external retry
-  to finish the same exact-once transition; and the attach joins that same
+  publishes no partial generation, keeps admission closed, and, after candidate
+  construction, retains that same unpublished candidate as its sole owner until
+  admitted candidate work settles. It propagates the aggregated error without
+  self-looping and permits only a later external retry to resume that candidate
+  and finish the same exact-once transition; construction failure before a
+  candidate exists may construct one on retry; and the attach joins that same
   generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
   also owns finally-equivalent clearing of an ordinary last-detach slot after
   proven quiescence despite reporting or inert permanent-cleanup error. It
-  retains the unsafe slot when quiescence fails. T-0037e also owns close refusal
-  and permanent environment close. T-0037f alone
+  retains the unsafe slot when quiescence fails, then an explicit retry resumes
+  the same transition and completes the remaining authoritative phases exactly
+  once after proving quiescence. T-0037e also owns close refusal and permanent
+  environment close. T-0037f alone
   integrates those seams with listener startup, network shutdown, contexts,
   resources, and owned facilities. T-0037d does not own
   ordinary detach or race policy; T-0037e does not reopen failed-start rollback

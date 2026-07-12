@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 11 docs fix worker active
+Status: Round 11 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -34,9 +34,11 @@ bounded canonical-scope bridge owns readiness through the fresh recovery
 snapshot and route rebind, transferring each buffered scope losslessly and
 exactly once before later-write admission. Transition construction/rebind/
 transfer failure publishes no partial generation, keeps admission closed, and
-retains bounded scopes for one later external retry without self-looping; an
-eligible racing attach then joins the same eventual generation without old/new
-overlap.
+retains bounded scopes for one later external retry without self-looping. Once
+constructed, the sole unpublished candidate remains owned by that transition;
+rebind/transfer failure waits for admitted candidate work to settle, and retry
+resumes that same candidate rather than constructing another. An eligible racing
+attach then joins the same eventual generation without old/new overlap.
 
 ## Grounding Facts
 
@@ -82,8 +84,11 @@ failure batch. Its docs fix passed worker and coordinator verification and was
 committed as `ee6fb396`. Round 10 accepted the quiescence-failure endpoint-
 retention boundary, ordinary last-detach safe slot clearing, fresh-transition
 error qualification, this stale handoff correction, and work-log chronology.
-The Round 10 docs fix is authored; coordinator verification and fresh review
-remain pending, and no clean review is claimed.
+The Round 10 worker and coordinator verification passed, and the fix was
+committed as `724e384d`. Round 11 accepted the retained fresh-candidate
+ownership, successful quiescence-retry, active-summary, and participant-ordering
+findings. The Round 11 docs fix is authored; coordinator verification and fresh
+review remain pending, and no clean review is claimed.
 
 ## Verification
 
@@ -118,5 +123,9 @@ Round 8 completed all four lanes with a two-item finding: add the dedicated
 post-consumption permanent-retirement-failure TDD case and correct this stale
 active verification summary. The Round 8 docs fix passed worker and coordinator
 verification. Round 9's connected failure-state docs fix passed worker and
-coordinator verification; fresh review remains pending, and no clean review is
-claimed.
+coordinator verification and was committed as `ee6fb396`. The Round 10 worker
+and coordinator verification passed, and the fix was committed as `724e384d`.
+Round 11 accepted the retained fresh-candidate ownership, successful quiescence-
+retry, active-summary, and participant-ordering findings. The Round 11 docs fix
+is authored; coordinator verification and fresh review remain pending, and no
+clean review is claimed.

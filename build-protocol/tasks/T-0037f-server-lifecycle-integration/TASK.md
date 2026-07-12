@@ -69,7 +69,11 @@ facility close attempts continue. If quiescence itself fails, endpoint safety
 is unknown: the registration's unsafe generation slot and every endpoint-
 dependent context, resource, delivery facility, transport, and storage remain
 open for an explicit lifecycle retry. Server cleanup must not close beneath
-possibly active work.
+possibly active work. The retry resumes the same server lifecycle operation,
+does not duplicate completed admission closure or stop, proves quiescence, and
+then completes classification, eligible record consumption/reporting,
+permanent retirement/cleanup, safe slot clearing, and deferred server cleanup
+exactly once.
 
 ## Likely Files
 
@@ -97,7 +101,12 @@ possibly active work.
   aggregated without skipping those later phases. If quiescence fails, the
   unsafe generation slot and endpoint-dependent contexts/resources/facilities
   are retained for explicit retry instead of being closed beneath possibly
-  active work.
+  active work. A deterministic retry of that same startup-cleanup operation does
+  not duplicate completed admission closure or stop; it proves quiescence, then
+  performs classification, eligible record consumption/reporting, permanent
+  retirement/cleanup, slot clearing, and every remaining context/resource/
+  environment/facility cleanup exactly once. The first attempt consumes,
+  reports, and retires nothing and closes no endpoint dependency.
 - Close order is network intake and sessions; registration detach/quiescence
   while endpoint dependencies remain open; eligible cause aggregation; context
   and resource close; then owned environment facilities.
@@ -107,7 +116,10 @@ possibly active work.
 - Active and earlier parked rejections surface only at their truthful boundary
   and once. After proven quiescence, all remaining close hooks still run after
   reporting or inert cleanup failures; quiescence failure retains unsafe
-  endpoint dependencies for explicit retry.
+  endpoint dependencies for explicit retry. A close-path retry resumes the same
+  operation, proves quiescence, then classifies, consumes/reports, retires/cleans
+  up, clears the safe slot, and resumes remaining server cleanup exactly once,
+  without duplicating admission closure or stop.
 - Transport or storage never closes beneath an active delivery run, and a
   `PAUSED` outcome cannot start after stop admission.
 - Existing host/port/baseUrl, idempotent/retryable close, listener failure,

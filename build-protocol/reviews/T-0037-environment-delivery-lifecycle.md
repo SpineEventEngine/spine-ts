@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 11 docs fix worker active
+Status: Round 11 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -60,7 +60,10 @@ Security is deferred to final project readiness.
   quiescence prevent later start, notification, endpoint invocation, or reuse
   despite reporting or cleanup failure; cleanup may leak only inert resources.
   A distinct inability to establish quiescence prohibits replacement and
-  endpoint-dependent teardown until explicit retry. T-0037d
+  endpoint-dependent teardown until explicit retry. Confirm that retry resumes
+  the same admission-closed/stopped operation without duplicating those phases,
+  then proves quiescence and performs classification, eligible consumption/
+  reporting, and permanent retirement/cleanup exactly once. T-0037d
   invokes the primitive only for failed-start empty-generation
   rollback/replacement, and T-0037e invokes it only for explicit generation
   stop, ordinary last detach, and permanent close plus fresh-generation race
@@ -91,6 +94,9 @@ Security is deferred to final project readiness.
   reporting-error and permanent-cleanup-error tests each perform a later fresh
   attach and prove exactly one fresh generation without old/new overlap. A
   quiescence failure instead retains the unsafe slot and prohibits replacement.
+  Its explicit retry must complete the same lifecycle operation, clear the slot
+  only after proving quiescence and exact-once remaining phases, and permit one
+  later fresh attach without overlap.
 - Confirm T-0037d clears a stopped, quiescent, permanently retired sole-
   registration empty slot through a finally-equivalent path before propagating
   reporting or cleanup errors. Separate tests prove the inert old instance
@@ -100,15 +106,24 @@ Security is deferred to final project readiness.
 - Confirm fresh construction, route rebind, or buffered-transfer failure keeps
   old retirement irreversible, publishes no partial fresh generation, closes
   later-write admission, and retains bounded canonical transition scopes. The
-  transition error is preserved/aggregated and propagated without self-loop;
-  only a later external lifecycle/readiness retry completes one fresh generation,
-  exact-once transfer/rebind, and admission without owner gap or overlap.
+  transition error is preserved/aggregated truthfully and propagated without
+  self-loop. Construction failure before a candidate exists may construct one
+  on retry. After construction, the transition owner solely retains that same
+  unpublished candidate across rebind/transfer failure, waits for active admitted
+  candidate work before propagation, and a later external retry resumes it
+  without constructing a second candidate. Confirm candidate identity, no
+  endpoint invocation after propagation, exact-once rebind/transfer, one fresh
+  generation, and admission without owner gap or old/new overlap.
 - Confirm server-owned startup failure attempts rollback/quiescence without
   listener intake while endpoint dependencies stay open. After proven
   quiescence, reporting or inert permanent-cleanup errors do not skip later
   context/resource/environment/facility cleanup. A quiescence failure retains
   the unsafe generation slot and endpoint-dependent contexts/resources/
   facilities for explicit retry, never closing beneath possibly active work.
+  Confirm retry of the same server lifecycle operation proves quiescence,
+  completes classification, eligible consumption/reporting, permanent
+  retirement/cleanup, slot clearing, and deferred server cleanup exactly once,
+  without duplicating admission closure or stop.
 - Confirm the parent prohibits duplicate agents per role and requires every
   participant closed. Confirm parent and all six child ledgers require the
   canonical skill check for every implementation/review role and the Human
@@ -515,3 +530,30 @@ Security is deferred to final project readiness.
   `019f5549-70a7-7dd1-8c79-6663b5794c07` the complete accepted batch. The
   worker owns documentation only, must preserve the fixed historical package
   ledger, and may begin editing only after this assignment is committed.
+- `2026-07-12T07:47:39Z`: Round 11 docs fix worker authored the complete accepted
+  batch. The active contracts now give the bounded transition owner sole
+  ownership of one constructed-but-unpublished fresh candidate, require admitted
+  candidate work to settle before propagation, resume that candidate on external
+  retry, and cover construction/rebind/transfer identity and exact-once cases.
+  Quiescence-failure obligations now prove a later successful retry through
+  classification, eligible consumption/reporting, retirement/cleanup, safe slot
+  clearing, and deferred cleanup or fresh attach without duplicate stop work.
+  Active summaries and Participants are reconciled. Coordinator verification
+  and fresh review remain pending; no clean review is claimed.
+- `2026-07-12T07:51:59Z`: Round 11 worker verification passed the targeted
+  candidate/retry/quiescence/exact-once and active-status checks, chronological
+  unique Participants and Events checks, the byte-identical 36-entry historical
+  ledger, docs/API and format gates, whitespace, exact nine-file scope, and all
+  frozen-path checks. TypeDoc retained 205 server exports with only the known
+  invalid-`origin` warning. Coordinator verification and fresh review remain
+  pending; no clean review is claimed.
+- `2026-07-12T07:56:53Z`: Coordinator pre-acceptance inspection confirmed the
+  candidate-ownership and exact-once retry contracts and corrected one malformed
+  wrapped command name in the work-log verification record. Independent
+  coordinator verification remains pending.
+- `2026-07-12T07:57:50Z`: Coordinator closed the worker and independently passed
+  candidate-identity/settlement/retry, quiescence/exact-once, active-status,
+  92-event chronology, 57-participant order/uniqueness, byte-identical 36-entry
+  ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` checks. TypeDoc retained 205 server exports with only the
+  known invalid-`origin` warning. Fresh all-lane review remains required.
