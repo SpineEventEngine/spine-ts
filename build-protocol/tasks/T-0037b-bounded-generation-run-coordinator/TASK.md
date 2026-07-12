@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Implementation worker assigned; paused for assignment commit
+Status: Implementation active; RED pending
 
 Started: `2026-07-12T11:43:52Z`
 
