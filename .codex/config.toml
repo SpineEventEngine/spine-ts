@@ -1,0 +1,37 @@
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+
+[features]
+fast_mode = false
+
+[agents]
+max_threads = 4
+max_depth = 1
+
+[agents.requirements_splitter]
+description = "Existing requirements-splitting and milestone architecture role. Use only for architecture-significant work or demonstrated blockers."
+config_file = "agents/requirements-splitter.toml"
+
+[agents.implementer]
+description = "Existing production TypeScript implementation and bounded fix role."
+config_file = "agents/implementer.toml"
+
+[agents.style_maintainability_reviewer]
+description = "Existing code style and maintainability reviewer, scoped to the milestone diff and affected paths."
+config_file = "agents/style-maintainability-reviewer.toml"
+
+[agents.documentation_reviewer]
+description = "Existing documentation completeness reviewer, scoped to changed behavior and current claims."
+config_file = "agents/documentation-reviewer.toml"
+
+[agents.typescript_api_docs_reviewer]
+description = "Existing TypeScript and API documentation reviewer for public contracts, declarations, and compatibility."
+config_file = "agents/typescript-api-docs-reviewer.toml"
+
+[agents.performance_reliability_reviewer]
+description = "Existing performance and reliability reviewer for concurrency, persistence, lifecycle, and bounded-resource behavior."
+config_file = "agents/performance-reliability-reviewer.toml"
+
+[agents.security_reviewer]
+description = "Existing final release-readiness security reviewer; invoke earlier only on explicit human request."
+config_file = "agents/security-reviewer.toml"

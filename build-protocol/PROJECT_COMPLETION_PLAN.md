@@ -167,8 +167,9 @@ The project is complete only when every item below has evidence on final
 
 ### Quality And Release
 
-- Four per-task reviewer lanes are clean: style/maintainability,
-  documentation, TypeScript/API docs, and performance/reliability.
+- Every per-task review concern has a recorded clean result when relevant, or a
+  concrete justified N/A disposition: style/maintainability, documentation,
+  TypeScript/API docs, and performance/reliability.
 - One final project-wide security review is clean or every exception is
   explicit, narrow, durable, and human-accepted.
 - `pnpm --config.verify-deps-before-run=false verify` passes natively.
@@ -208,20 +209,24 @@ stable runtime behavior.
 
 Apply this packet to every implementation or docs task.
 
-### 1. Start
+### 1. Frame And Start
 
 1. Confirm the dependency is integrated on `main` and post-merge verification
    passed.
-2. Read the task brief, current accepted decisions, affected public docs, and
+2. Inspect actual repository state, frame one coherent milestone, and record its
+   functional acceptance criteria and genuinely high-risk assumptions.
+3. Read the task brief, current accepted decisions, affected public docs, and
    relevant Spine JVM server evidence for server-module work.
-3. Perform and record the canonical skill-applicability check.
-4. Create one branch and worktree for exactly one task slice.
-5. Create/update the task, work log, and review log before code/doc edits.
-6. Record baseline SHA, branch, worktree, author agent, and start timestamp.
+4. Invoke the requirements splitter on Sol High only for the selective planning
+   triggers in `BUILD_PROTOCOL.md`; use a short orchestrator outline otherwise.
+5. Perform and record the canonical skill-applicability check.
+6. Create one branch/worktree for the task when write isolation is useful.
+7. Create/update the task, work log, and review log before code/doc edits.
+8. Record baseline SHA, branch, worktree, author agent, and start timestamp.
 
 ### 2. Implement
 
-1. Use one author/fix worker at a time for the complete current finding batch.
+1. Use one Terra Medium author at a time for overlapping production files.
 2. For runtime changes, write deterministic RED tests first, then GREEN code,
    then a small refactor only when needed.
 3. Keep public exports unchanged unless the task explicitly owns a public API.
@@ -229,9 +234,10 @@ Apply this packet to every implementation or docs task.
 5. Commit generated Protobuf and handler-registry output never.
 6. Stop the slice if it begins owning behavior assigned to a later task.
 
-### 3. Inner Verification
+### 3. Mechanical Verification
 
-Run only focused tests and affected checks during implementation/fix loops:
+Use Luna Low/Medium for focused tests, deterministic checks, and failure-log
+classification during implementation/fix loops:
 
 ```bash
 pnpm --config.verify-deps-before-run=false exec vitest run <focused-test-files>
@@ -260,26 +266,30 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 7. Example/doc code passes the end-user API prohibition scan when touched.
 8. Generated output and review-package scratch material are untracked only.
 
-### 5. Review
+### 5. Targeted Review
 
 1. Resolve and record the immutable endpoint with `git rev-parse HEAD`.
 2. Generate the review package with literal baseline and endpoint SHAs. Never
    pass moving `HEAD` as the endpoint.
-3. Spawn exactly four independent lanes:
+3. Record a relevance disposition for all four existing concerns:
    style/maintainability, documentation, TypeScript/API docs, and
-   performance/reliability.
+   performance/reliability. Spawn only relevant lanes, each bounded to its
+   concern, the milestone diff, and affected execution paths. A skipped lane
+   requires a concrete N/A reason.
 4. Prompts must state exact task scope, accepted exclusions, public boundary,
    review package, and the historical-text rule.
 5. Close every reviewer immediately after collecting its result.
-6. If there are findings, record the complete accepted batch first, assign one
-   fix worker, verify locally, commit, regenerate the package, and repeat all
-   four lanes.
+6. If there are findings, record the complete accepted batch first and return
+   it to the existing implementation context when available. Use one fresh fix
+   worker only when that context cannot continue. Verify locally, commit,
+   regenerate the package, and rerun the affected lanes; rerun another lane only
+   when the fix changed its concern.
 7. Do not run a per-task security lane.
 
 ### 6. Accept And Integrate
 
 1. Run the task's focused suite plus final task `pnpm verify` only after all
-   lanes are clean.
+   relevant lanes are clean and every concern has a recorded disposition.
 2. Record exact verification evidence and mark task/log/review mirrors complete.
 3. Commit closure records.
 4. Merge into root `main` without staging unrelated files.
@@ -568,9 +578,10 @@ process manager, projection, query, subscription, validation, lifecycle,
 storage, local IPC, delivery, generated registry, default route, custom route,
 wire shape, and type URL.
 
-**Gate:** four clean reviewer lanes over the matrix and any audit-only status
-changes. If code defects are found, complete and integrate their tiny T-0038
-children, rerun the matrix, then close T-0038.
+**Gate:** clean results for every relevant review concern and justified N/A
+dispositions for the rest over the matrix and any audit-only status changes. If
+code defects are found, complete and integrate their tiny T-0038 children,
+rerun the matrix, then close T-0038.
 
 ### T-0039a: Canonical Specification And Status Reconciliation
 
@@ -590,8 +601,8 @@ rewrite public user guidance in this slice.
 - preserve explicit future/out-of-scope policy;
 - avoid mass-editing historical event entries.
 
-**Gate:** docs/status lint, links, formatting/diff, four clean reviewer lanes,
-and exact changed-file scope.
+**Gate:** docs/status lint, links, formatting/diff, clean relevant review
+concerns with justified N/A dispositions, and exact changed-file scope.
 
 ### T-0039b: Package READMEs And API Reference
 
@@ -614,7 +625,8 @@ transport,testing}/README.md`; `docs/api/README.md`; public TSDoc; TypeDoc.
 - links and command snippets are valid.
 
 **Gate:** generated typecheck, `docs:check`, API export tests, README snippet
-checks where available, format/diff, and four clean reviewer lanes.
+checks where available, format/diff, and clean relevant review concerns with
+justified N/A dispositions.
 
 ### T-0039c: Framework User Guide Closure
 
@@ -642,7 +654,8 @@ decorators, no `@Apply`, no manual transactions, no internal IDs, no default
 target extraction, no handler materialization, no internal lifecycle APIs.
 
 **Gate:** compile or test all practical snippets, end-user API scan, docs check,
-links, format/diff, and four clean reviewer lanes.
+links, format/diff, and clean relevant review concerns with justified N/A
+dispositions.
 
 ## Example Closure Packets
 
@@ -676,7 +689,8 @@ review/integrate it, then resume T-0040a. Never import `packages/**/src`
 internals from committed example application code.
 
 **Gate:** child-process/IPC focused test natively, transport/runtime regressions,
-typecheck/lint/format/diff, generated cleanliness, and four clean reviewers.
+typecheck/lint/format/diff, generated cleanliness, and clean relevant review
+concerns with justified N/A dispositions.
 
 ### T-0040b: To-Do Black-Box Acceptance
 
@@ -705,8 +719,8 @@ handlers, schema-bearing decorators, aggregate `@Apply`, transaction controls,
 `EventIdSchema`, default-route extraction helpers, and handler materializers.
 
 **Gate:** example build and focused suite, native loopback/IPC run, public API
-scan, generated clean check, coverage, format/diff, four clean reviewers, then
-final task verify.
+scan, generated clean check, coverage, format/diff, clean relevant review
+concerns with justified N/A dispositions, then final task verify.
 
 ### T-0040c: To-Do README And User Guide Closure
 
@@ -722,7 +736,8 @@ to framework guidance.
 
 **Verification:** run every documented command from a clean generated state;
 execute the client smoke against a real server; check links and imports; ensure
-no future production policy is claimed; run docs/status lint and four reviewers.
+no future production policy is claimed; run docs/status lint and every relevant
+review concern, recording justified N/A dispositions for the rest.
 
 ## Security And Release Packets
 
@@ -831,7 +846,9 @@ Use parallelism only where outputs do not block or overwrite each other:
 - During each runtime implementation, a sidecar researcher may inspect JVM
   evidence while the coordinator prepares deterministic RED tests, but only one
   author edits the task worktree.
-- Four reviewer lanes run concurrently after local pre-review lint.
+- Relevant reviewer lanes run concurrently after local pre-review lint; every
+  canonical concern still receives a durable clean or justified N/A
+  disposition.
 - After T-0037f, docs inventory, example acceptance inventory, and security
   threat-model preparation may run concurrently as read-only work.
 - T-0039 and T-0040 edits do not run concurrently because example documentation
