@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 recovery fix committed; Round 3 targeted re-review in progress
+Status: Slice 1 Round 3 findings assigned for focused fix
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -303,3 +303,11 @@ The later-slice interface remains the package-internal descriptor
 rollback, public API/export, listener, lifecycle policy, or generated artifact
 was added. Slice 2 must not consume the barrier until targeted recovery
 re-review accepts this corrected package.
+
+### Slice 1 Round 3 Findings
+
+1. Keep the canonical task status and both derived log status mirrors identical.
+2. Add a focused concurrent-retry regression proving that two simultaneous
+   retries from the finite failed checkpoint produce exactly one accepted
+   transition/route, while the loser rejects without resetting state or
+   replacing the winning callback.

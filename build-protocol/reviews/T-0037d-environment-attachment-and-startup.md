@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 recovery fix focused verified; targeted re-review pending
+Status: Slice 1 Round 3 findings assigned for focused fix
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -113,3 +113,11 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   concern in the Slice 1 recovery delta and must ignore superseded historical
   text unless an active task/log or changed documentation claims it. Security
   remains deferred to final project readiness.
+- `2026-07-12T20:45:00Z`: Round 3 is complete and every reviewer is closed.
+  Runtime fixed-role metadata confirms style/API/reliability ran as Terra High
+  and documentation as Luna Medium, matching dispatch. Style and documentation
+  are clean. The complete deduplicated finding batch is: synchronize both
+  derived status headers with the canonical task status, and prove simultaneous
+  failed-checkpoint retries permit exactly one transition/route without state
+  reset or callback replacement by the rejected competitor. One Terra Medium
+  owner receives both; Slice 2 remains pending clean Slice 1 re-review.
