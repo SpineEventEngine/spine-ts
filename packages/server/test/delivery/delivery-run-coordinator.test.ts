@@ -340,6 +340,37 @@ describe("DeliveryRunCoordinator", () => {
     expect(coordinator.retired).toBe(true);
   });
 
+  it("publishes retirement before a synchronous stop callback can reenter", async () => {
+    const events: string[] = [];
+    let reentered = false;
+    let reentrant: Promise<void> | undefined;
+    const onReport = () => {
+      events.push("report");
+      return Promise.resolve();
+    };
+    const worker = new FakeRunWorker([], events, undefined, undefined, () => {
+      if (!reentered) {
+        reentered = true;
+        reentrant = coordinator.retire(onReport);
+      }
+    });
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [scope("first", 0, 1)],
+      worker,
+    });
+
+    const retiring = coordinator.retire(onReport);
+    if (reentrant === undefined) {
+      throw new Error("Synchronous stop callback did not reenter retirement.");
+    }
+    await Promise.all([retiring, reentrant]);
+
+    expect(events).toEqual(["stop", "await", "report", "retire"]);
+    expect(worker.stopCalls).toBe(1);
+    expect(worker.retireCalls).toBe(1);
+    expect(reentrant).toBe(retiring);
+  });
+
   it("stops before awaiting an active start and reports only after it settles", async () => {
     const active = deferred<DeliveryWorkerEvidence>();
     const events: string[] = [];
@@ -595,6 +626,7 @@ class FakeRunWorker implements DeliveryRunWorker {
   readonly #events: string[];
   #onStartSettled: (() => void) | undefined;
   readonly #onStart: (() => void) | undefined;
+  readonly #onStop: (() => void) | undefined;
   #active = 0;
   maxConcurrent = 0;
   stopCalls = 0;
@@ -606,11 +638,13 @@ class FakeRunWorker implements DeliveryRunWorker {
     events: string[] = [],
     onStartSettled?: () => void,
     onStart?: () => void,
+    onStop?: () => void,
   ) {
     this.#results = [...results];
     this.#events = events;
     this.#onStartSettled = onStartSettled;
     this.#onStart = onStart;
+    this.#onStop = onStop;
   }
 
   start(
@@ -647,6 +681,7 @@ class FakeRunWorker implements DeliveryRunWorker {
   stop(): void {
     this.stopCalls += 1;
     this.#events.push("stop");
+    this.#onStop?.();
     const failure = this.stopFailures.shift();
     if (failure !== undefined) {
       throw failure;

@@ -239,8 +239,9 @@ export interface DeliveryWorkerAccess {
   /** Observes the current active start through settlement without interrupting it. */
   awaitSettled(worker: DeliveryWorker): Promise<void>;
   /**
-   * Requires prior `stop()`, then permanently closes public and internal starts.
-   * A later rejection represents cleanup after start admission is already closed.
+   * Requires a successful prior `stop()`, then permanently closes public and
+   * internal starts and awaits active settlement. Prior active rejection is
+   * treated as settled; no fallible resource cleanup follows closure.
    */
   retire(worker: DeliveryWorker): Promise<void>;
 }

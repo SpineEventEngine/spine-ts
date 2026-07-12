@@ -93,13 +93,20 @@ export class DeliveryRunCoordinator {
       return this.#retirement;
     }
 
-    const retirement = this.#advanceRetirement().catch((error: unknown) => {
-      if (!this.#finalized) {
-        this.#retirement = undefined;
-      }
-      throw error;
-    });
+    const gate = Promise.withResolvers<undefined>();
+    const retirement = gate.promise;
     this.#retirement = retirement;
+    void this.#advanceRetirement().then(
+      () => {
+        gate.resolve(undefined);
+      },
+      (error: unknown) => {
+        if (!this.#finalized) {
+          this.#retirement = undefined;
+        }
+        gate.reject(error);
+      },
+    );
     return retirement;
   }
 
