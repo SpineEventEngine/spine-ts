@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 2 findings logged; fix assignment pending
+Status: Round 2 fix worker assigned; paused for assignment commit
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -186,3 +186,7 @@ Security is deferred to final project readiness.
      missing-target persisted rows in both handoff families as applicable.
   2. Preserve this complete reviewer provenance, then repeat all four lanes
      after the behavioral fix and fresh package.
+- `2026-07-12T10:44:08Z`: Assigned sole fix worker
+  `019f55eb-913c-7671-8f2e-42d7cddf4fb4` for the complete configured-endpoint
+  readiness finding; worker remains paused until assignment provenance
+  commits.
