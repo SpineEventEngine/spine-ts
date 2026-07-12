@@ -437,8 +437,10 @@ global storage-factory copying. Retry timing and all public scheduler,
 monitoring, health, topology, adapter, and catch-up policy remain deferred.
 The sequence adds no root/public export, signature, or option and commits no
 generated artifact; package-internal declarations emitted by normal
-documentation/type builds may change with internal implementation. Existing
-README and TypeDoc contracts must nevertheless document only observable
-`Server`, `RunningServer`, and `ServerEnvironment` startup/close behavior when
-T-0037e/f implement it; they must not name or describe package-internal explicit
-generation stop.
+documentation/type builds may change with internal implementation. T-0037e
+updates existing README/TypeDoc only for behavior independently observable at
+its merge point, such as existing `ServerEnvironment.close()` behavior if
+publicly reachable without server detach. T-0037f alone documents caller-owned
+environment reuse after server detach and the full observable `Server`,
+`RunningServer`, and `ServerEnvironment` startup/close lifecycle. Neither child
+names or describes package-internal explicit generation stop in public docs.

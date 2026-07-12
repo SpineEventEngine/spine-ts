@@ -3695,8 +3695,11 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   process supervision, transport topology/adapters, `CATCH_UP` as a trigger or
   delivery path, legacy `IMPORT_EVENT` support, and changes to T-0034 or T-0036
   remain outside all six children.
-- T-0037e/f may update README and TypeDoc only for observable `Server`,
-  `RunningServer`, and `ServerEnvironment` behavior. Public docs must not name
+- T-0037e may update README/TypeDoc only for behavior independently observable
+  at its merge point, such as existing `ServerEnvironment.close()` behavior if
+  publicly reachable without server detach. T-0037f alone documents caller-
+  owned environment reuse after server detach and the full observable `Server`,
+  `RunningServer`, and `ServerEnvironment` lifecycle. Public docs must not name
   or describe package-internal explicit generation stop.
 
 Consequences:

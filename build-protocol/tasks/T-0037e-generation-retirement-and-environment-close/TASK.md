@@ -37,9 +37,12 @@ refusal, and permanent environment/facility close.
 - Serialize attach, detach, generation stop, and environment close through the
   same package-internal lifecycle gate from T-0037d.
 - Commit no generated artifacts and add no root/public export, signature, or
-  option; emitted internal declarations may change. Update the existing README
-  and TypeDoc lifecycle contracts for observable close behavior and run API
-  export checks.
+  option; emitted internal declarations may change. Run API export checks.
+  Update existing README/TypeDoc only for behavior independently observable at
+  this child's merge point, such as `ServerEnvironment.close()` behavior when
+  publicly reachable without server detach. T-0037f alone documents caller-
+  owned environment reuse after server detach and the full `Server`/
+  `RunningServer` lifecycle.
 - Keep generated Protobuf output out of VCS and do not touch the user-owned
   `human-review-1-jul.md`.
 
@@ -124,12 +127,13 @@ network or context/resource ordering.
   facilities without closing them beneath active work.
 - Eligible unreported causes aggregate once through existing retryable-close
   behavior; reported unresolved causes are consumed without resurfacing.
-- Existing public README/TypeDoc contracts describe only observable
-  `ServerEnvironment.close()` live-registration refusal, caller-owned environment
-  reuse after server detach, and close ordering/failure behavior. They do not
-  name, describe, or expose package-internal explicit generation stop; focused
-  public-leak and API export checks stay green with no new public export,
-  signature, or option.
+- API export and public-leak checks stay green with no new public export,
+  signature, or option. Existing README/TypeDoc contracts are updated only for
+  `ServerEnvironment.close()` behavior independently observable when this child
+  merges, if any, and do not name, describe, or expose package-internal explicit
+  generation stop. They do not yet describe caller-owned environment reuse
+  after server detach or the full `Server`/`RunningServer` lifecycle; T-0037f
+  owns that documentation.
 
 ## D-0085 Invariants
 

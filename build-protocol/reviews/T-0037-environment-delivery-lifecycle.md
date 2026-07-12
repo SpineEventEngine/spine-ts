@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 6 docs fix active
+Status: Round 6 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -74,11 +74,12 @@ Security is deferred to final project readiness.
   Review Reset's smallest JVM-familiar, replace/delete-wrong, and no-invented-
   abstraction rules; T-0037a alone also carries the `bounded-context.ts`
   caution.
-- Confirm T-0037e/f require updates to existing README/TypeDoc behavioral
-  contracts and API export checks while adding no public export, signature, or
-  option. Public docs describe only observable `Server`, `RunningServer`, and
-  `ServerEnvironment` behavior and never name or describe package-internal
-  explicit generation stop.
+- Confirm T-0037e requires API export checks and updates existing README/TypeDoc
+  only for behavior independently observable at its merge point. T-0037f alone
+  documents caller-owned environment reuse after server detach and the full
+  observable `Server`, `RunningServer`, and `ServerEnvironment` lifecycle. Both
+  add no public export, signature, or option, and public docs never name or
+  describe package-internal explicit generation stop.
 
 ## Rounds
 
@@ -288,3 +289,19 @@ Security is deferred to final project readiness.
   `019f54ef-d260-7fe3-b3e8-91419aada781` with public-behavior documentation
   sequencing, current-status reconciliation, and exact commit-ledger coverage.
   All substantive runtime scope remains frozen.
+- `2026-07-12T06:08:43Z`: Round 6 docs fix worker authored the accepted batch.
+  T-0037e now limits public docs to behavior observable at its own merge point;
+  T-0037f exclusively owns server-detach reuse and full server lifecycle docs.
+  Active Round 5 status and the complete commit ledger are reconciled. Worker
+  verification and coordinator verification remain pending; no clean review is
+  claimed.
+- `2026-07-12T06:13:21Z`: Round 6 worker verification passed exact stale-status,
+  chronological commit-ledger, docs/API, format, diff, tracked/untracked scope,
+  and frozen-path checks. TypeDoc retained 205 expected server exports with only
+  the known invalid-`origin` warning. Coordinator verification remains pending;
+  no clean review is claimed.
+- `2026-07-12T06:16:08Z`: Coordinator closed the worker, inspected public docs
+  ownership, and independently repeated stale-status, chronological ledger,
+  docs/API, format, diff, exact-scope, untracked, and frozen-path checks. All
+  passed with only the known invalid-`origin` warning. Fresh all-lane review is
+  required.

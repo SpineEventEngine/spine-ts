@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 6 docs fix active
+Status: Round 6 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -183,5 +183,7 @@ used for child runtime work.
   verification, was committed as `98b4a284`, and was reconciled through
   `1b127f87`. Round 5 completed all four lanes with one stale-status finding in
   the active parent summaries. That finding's docs fix passed worker and
-  coordinator verification; fresh review remains pending and no clean review
-  is claimed.
+  coordinator verification, was committed as `96c27f11`, and was reconciled
+  through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs
+  findings. Their fix passed worker and coordinator verification; fresh review
+  remains pending and no clean review is claimed.

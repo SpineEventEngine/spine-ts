@@ -37,8 +37,8 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
   coordinator, or parked-record logic in server code.
 - Commit no generated artifacts and add no root/public export, signature, or
   option; emitted internal declarations may change. Update existing README and
-  TypeDoc lifecycle contracts for observable startup/close behavior and run API
-  export checks.
+  TypeDoc lifecycle contracts for caller-owned environment reuse after server
+  detach and the full observable startup/close lifecycle; run API export checks.
 - README and TypeDoc must describe only observable `Server`, `RunningServer`,
   and `ServerEnvironment` behavior; they must not name or describe the package-
   internal explicit generation-stop operation.
@@ -100,7 +100,9 @@ aggregation across these ordered phases.
 - Existing host/port/baseUrl, idempotent/retryable close, listener failure,
   context build failure, and shared/owned environment behavior remain covered.
 - Existing README/TypeDoc contracts describe startup recovery rejection,
-  failed-start cleanup aggregation, and running-server close order/errors
+  failed-start cleanup aggregation, running-server close order/errors, and
+  caller-owned environment reuse after server detach across the observable
+  `Server`, `RunningServer`, and `ServerEnvironment` lifecycle. They do so
   without naming or describing package-internal explicit generation stop and
   without adding a public export, signature, or option; focused public-leak and
   API export checks remain green.

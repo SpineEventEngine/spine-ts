@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 6 docs fix active
+Status: Round 6 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -58,8 +58,11 @@ fixes were committed as `97107fae` after worker and coordinator verification.
 Round 4 review completed with accepted findings. Its docs fix passed worker and
 coordinator verification, was committed as `98b4a284`, and was reconciled
 through `1b127f87`. Round 5 completed all four lanes with one stale-status
-finding in the active parent summaries. That finding's docs fix is authored and
-awaits focused verification; no clean review is claimed.
+finding in the active parent summaries. That finding's docs fix passed worker
+and coordinator verification, was committed as `96c27f11`, and was reconciled
+through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs
+findings. Their fix passed worker and coordinator verification; fresh review
+remains pending and no clean review is claimed.
 
 ## Verification
 
@@ -86,4 +89,7 @@ with accepted findings; its fix passed worker and coordinator verification,
 was committed as `98b4a284`, and was reconciled through `1b127f87`. Round 5
 completed all four lanes with one stale-status finding in the active parent
 summaries. That finding's docs fix passed worker and coordinator verification;
-fresh review remains pending and no clean review is claimed.
+it was committed as `96c27f11` and reconciled through `a8c2f3c5`. Round 6
+completed all four lanes with accepted docs findings. Their fix passed worker
+and coordinator verification; fresh review remains pending and no clean review
+is claimed.
