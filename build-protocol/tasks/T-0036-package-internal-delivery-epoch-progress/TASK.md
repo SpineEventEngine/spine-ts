@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 2 docs/status fixes complete; rereview pending
+Status: Round 2 docs/status fixes committed; rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -186,6 +186,8 @@ membership.
   known invalid-`origin` warning. No rereview is claimed. A docs/status fix
   commit, fresh review package, all-lane rereview, and the final gate/merge
   remain.
+- PASS: Round 2 docs/status fixes committed as `40793085`; package-boundary
+  reconciliation is the sole future hash under the ledger convention.
 
 ## Implementation Result
 

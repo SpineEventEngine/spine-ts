@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 2 docs/status fixes complete; rereview pending
+Status: Round 2 docs/status fixes committed; rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -143,3 +143,6 @@ Security is deferred to final project readiness.
   lint, docs, formatting, and whitespace checks passed with only the known
   invalid-`origin` docs warning. A fresh package and all four independent lanes
   must rerun; no clean rereview is claimed by this pass.
+- `2026-07-12T04:18:00Z`: Committed the narrow docs/status fix as `40793085`
+  and reconciled the fixed-baseline ledger. Fresh package generation and all
+  four independent lanes remain.

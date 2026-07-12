@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 2 docs/status fixes complete; rereview pending
+Status: Round 2 docs/status fixes committed; rereview pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -116,13 +116,13 @@ Baseline: `67da0b1c`
   warning was emitted.
 - PASS: `pnpm format:check` and `git diff --check`.
 - PASS: Round 2 docs/status pass corrected the active closing summary and
-  reconciled the known work-log commits through `192b3d3b` without changing
+  reconciled the known work-log commits through `40793085` without changing
   runtime, tests, or architecture semantics. Lightweight docs/status lint,
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check` passed; docs
   emitted only the known invalid-`origin` warning. No rereview is claimed.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
 
-The Round 1 fixes, coordinator verification, fix commit, and Round 2 package
-generation are complete. Only the Round 2 docs/status fix commit, a fresh
-review package and all-lane rereview, and the final task gate/merge remain. No
-rereview is claimed by this docs/status pass.
+The Round 1 fixes, coordinator verification, Round 2 package, and docs/status
+fix commit are complete. Only a fresh review package and all-lane rereview plus
+the final task gate/merge remain. No rereview is claimed by this docs/status
+pass.
