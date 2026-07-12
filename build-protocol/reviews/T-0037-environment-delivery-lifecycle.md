@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 6 findings accepted; fix pending
+Status: Round 6 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -284,3 +284,7 @@ Security is deferred to final project readiness.
   and complete the commit ledger with reconciliation and current review commits.
   All runtime ownership, race, reliability, ledger-rule, and public-leak checks
   are otherwise clean.
+- `2026-07-12T06:07:19Z`: Assigned single Round 6 docs fix worker
+  `019f54ef-d260-7fe3-b3e8-91419aada781` with public-behavior documentation
+  sequencing, current-status reconciliation, and exact commit-ledger coverage.
+  All substantive runtime scope remains frozen.
