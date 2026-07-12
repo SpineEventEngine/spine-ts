@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 1 four-lane review in progress
+Status: Slice 3 Round 1 blocking findings assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -380,6 +380,25 @@ safety, and same-operation retry after quiescence failure. It consumes the
 existing T-0037b retirement primitive and T-0037c records without reopening
 their contracts. Ordinary detach/stop/close and server lifecycle integration
 remain later tasks.
+
+### Slice 3 Round 1 Findings
+
+1. Shared registration rollback must stop selected owners and prove quiescence
+   before classifying/consuming/reporting, then retire; quiescence failure must
+   retain registration/generation state and report nothing.
+2. Selected-owner stop/await failure must not discard registration state or
+   endpoint dependencies. Preserve a retryable failed rollback and complete
+   remaining phases exactly once.
+3. Coalesce simultaneous `retryFailedStart()` calls around one memoized rollback
+   operation; successful duplicate retries must not re-enter slot clearing.
+4. Bound unresolved reported-overlap memory by configured scope/owner domain;
+   merge/deduplicate repeated failures and remove resolved state.
+5. Once an already-reported unresolved overlap blocks startup, throw only the
+   exact plain D-0085 blocker even if the same attempt also observes a fresh
+   rejection; do not aggregate or chain the original/fresh cause.
+
+One Terra Medium owner receives the complete batch with deterministic phase,
+quiescence, concurrency, boundedness, and fresh-cause tests before Round 2.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now

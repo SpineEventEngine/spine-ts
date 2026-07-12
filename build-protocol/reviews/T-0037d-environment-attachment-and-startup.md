@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 1 four-lane review in progress
+Status: Slice 3 Round 1 blocking findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -427,3 +427,9 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected profiles: style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-12T23:31:00Z`: Round 1 is complete and all reviewers are closed.
+  Runtime profiles matched explicit dispatch. Five blocking rollback findings
+  remain: shared quiescence-before-report ordering, retry-state retention on
+  selected-owner failure, concurrent retry coalescing, bounded reported-overlap
+  state, and unconditional plain D-0085 blocker shaping. One Terra Medium owner
+  receives the complete batch; Round 2 remains pending.
