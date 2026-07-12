@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 2 re-review assigned
+Status: Slice 1 Round 2 two-finding fix assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -252,6 +252,17 @@ batch before Slice 1 re-review:
   changed-file ESLint/Prettier, and diff hygiene. The complete seven-finding
   fix is accepted for re-review; the exceptional unknown-scope retention remains
   an explicit boundedness/ownership review target before Slice 2.
+
+### Slice 1 Round 2 Findings
+
+1. Publish a shared one-shot completion gate before invoking `onDrain`, so
+   synchronous reentrant `complete()` or `abandon()` cannot duplicate a drain or
+   release transition ownership early.
+2. Remove the unbounded exceptional unknown-scope map. The barrier must remain
+   lossless and finite by construction even when transition scope input is
+   stale or incomplete; it may fail the ownership transition closed and rely on
+   durable recovery, but it must not silently drop work, grow per unknown scope,
+   or claim successful transfer.
 
 ## Slice 1 Outcome
 

@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 2 re-review assigned
+Status: Slice 1 Round 2 two-finding fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -71,3 +71,8 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   Expected profiles are style Terra High, docs Luna Medium, TypeScript/API docs
   Terra High, and reliability Terra High. All lanes remain relevant; security
   is deferred.
+- `2026-07-12T19:14:34Z`: Round 2 is complete and every reviewer is closed.
+  Documentation is clean. Two unique blocking findings remain: synchronous
+  reentrant completion/abandon can bypass one-shot drain ownership, and the
+  exceptional unknown-scope map violates the finite transition-buffer contract.
+  One Terra Medium fix owner receives both before another targeted re-review.
