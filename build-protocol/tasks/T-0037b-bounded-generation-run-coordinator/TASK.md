@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Safe stop; Round 5 substantive review pending
+Status: Round 5 retuned review wave 1 assigned
 
 Started: `2026-07-12T11:43:52Z`
 

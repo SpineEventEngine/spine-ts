@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Safe stop; Round 5 substantive review pending
+Status: Round 5 retuned review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,14 +11,20 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status                       |
-| -------------------------- | -------------------------------------- | ---------------------------- |
-| Code style/maintainability | `019f56a1-9e10-7b91-860d-60ad169eb762` | Skill check complete; closed |
-| Documentation              | `019f56a1-9e7f-79f1-b392-d0f6f02f255f` | Skill check complete; closed |
-| TypeScript/API docs        | `019f56a1-9efb-74d0-a23d-8b4db7b8ebf6` | Skill check complete; closed |
-| Performance/reliability    | `019f56a1-9f91-76f3-8437-c52e54a8f0b2` | Skill check complete; closed |
+| Lane                       | Expected model/reasoning  | Wave | Status                 |
+| -------------------------- | ------------------------- | ---- | ---------------------- |
+| Code style/maintainability | `gpt-5.6-terra` / `high`  | 1    | Assigned               |
+| Documentation              | `gpt-5.6-luna` / `medium` | 1    | Assigned               |
+| TypeScript/API docs        | `gpt-5.6-terra` / `high`  | 1    | Assigned               |
+| Performance/reliability    | `gpt-5.6-terra` / `high`  | 2    | Sequenced after wave 1 |
 
 Security is deferred to final project readiness.
+
+The four pre-retune Round 5 skill-check agents are closed and are retained only
+in historical events below. Fresh substantive reviewers must report expected
+and actual model/reasoning plus the canonical skill check. Wave 1 uses three
+children with the parent; wave 2 runs only after wave 1 agents close. The
+complete four-lane result is aggregated before any fix assignment.
 
 ## Review Criteria
 
