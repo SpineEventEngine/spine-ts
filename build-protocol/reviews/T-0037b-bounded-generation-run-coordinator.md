@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 4 skill checks pending
+Status: Review Round 4 active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status              |
-| -------------------------- | -------------------------------------- | ------------------- |
-| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Skill check pending |
-| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Skill check pending |
-| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Skill check pending |
-| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Skill check pending |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Ready  |
+| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Ready  |
+| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Ready  |
+| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Ready  |
 
 Security is deferred to final project readiness.
 
@@ -270,3 +270,9 @@ Security is deferred to final project readiness.
   `.superpowers/sdd/review-40329cad..aa29fe9d.diff` were created. Four new Round
   4 reviewers above are reserved and paused pending assignment provenance and
   canonical Phase 1 skill checks.
+- `2026-07-12T13:44:25Z`: All four Round 4 canonical skill checks completed
+  without package inspection or edits. Each reconciled 47 readable entrypoints,
+  47 lock-v3 records, and all 8 expected skills; fully read lane-relevant
+  review/design/types/error skills; and explicitly skipped duplicate,
+  authoring, web/security, debugging, and implementation workflows outside its
+  lane. No required local source was unreachable.
