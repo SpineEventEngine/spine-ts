@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Requirements splitter active
+Status: Six-slice decomposition accepted; durable split package pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -48,7 +48,31 @@ recommend the smallest coherent implementation sequence and identify whether
 T-0037 itself should become multiple independently reviewed child slices before
 runtime code changes.
 
+## Accepted Decomposition
+
+T-0037 is too large for one implementation/review package. It is a sequencing
+parent only. Runtime work proceeds through six separately branched, reviewed,
+verified, merged, and cleaned child tasks:
+
+1. `T-0037a Context Delivery Attachment Seam`
+2. `T-0037b Bounded Generation Run Coordinator`
+3. `T-0037c Parked Delivery Obligations`
+4. `T-0037d Environment Attachment And Startup`
+5. `T-0037e Detach, Generation Retirement, And Environment Close`
+6. `T-0037f Server Lifecycle Integration`
+
+The invariant map is strict: context descriptors/readiness belong to `a`,
+bounded/coalesced worker execution to `b`, bounded operational/cause records to
+`c`, attachment/startup/rollback to `d`, retirement/reuse/environment close to
+`e`, and network/server ordering to `f`. Retry timing and public policy remain
+outside every child.
+
+`T-0037a` lands first and exposes one package-internal `boundedContextAccess`
+descriptor/readiness seam. It must not reopen T-0036 internals or start an
+environment worker.
+
 ## Verification
 
-- Requirements splitter `019f548a-4e89-7183-867e-c52d97bd6b0b` assigned;
-  coordinator validation pending its return.
+- PASS: Requirements splitter `019f548a-4e89-7183-867e-c52d97bd6b0b`
+  completed read-only and was closed. Coordinator accepted the six-slice
+  sequence and `T-0037a` as the first independent child.
