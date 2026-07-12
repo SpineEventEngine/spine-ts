@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 4 fix active; RED pending
+Status: Round 4 fix coordinator-verified; repeat review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -500,3 +500,26 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:21:42Z`: Assignment provenance commit `e65ddf31` completed;
   started the worker with focused global-endpoint-call RED required before
   production changes.
+- `2026-07-12T11:22:00Z`: Before test or production edits, the Round 4 fix
+  worker completed and recorded its canonical skill check in the work log. It
+  selected and fully read `receiving-code-review`,
+  `test-driven-development`, `javascript-testing-patterns`, and
+  `verification-before-completion`; checked the expected manifest, complete
+  47-entry installed inventory, and version-3 47-record lock with no dismissed
+  or unreachable source; and recorded individual reasons for skipping
+  relevant-looking skills. Focused RED remains pending.
+- `2026-07-12T11:22:23Z`: Focused RED failed for the intended current behavior:
+  successful process-manager `receiveAll` called the global `endpoints()` path
+  twice and successful projection `receive` called it once. Both regressions
+  preserve and assert the exact tenant, target, label, and shard readiness
+  identity. Production remained unchanged; GREEN is now active.
+- `2026-07-12T11:23:43Z`: The sole Round 4 fix worker completed the accepted
+  performance fix without committing. Registration now caches frozen endpoint
+  facts per exact target; descriptor snapshots remain fresh and frozen, while
+  readiness no longer rebuilds or scans unrelated endpoint facts. RED/GREEN,
+  95 focused tests, 144 compatibility tests, both typechecks, ESLint, Prettier,
+  lightweight docs/status lint, and `git diff --check` passed. Coordinator
+  verification and all four repeat lanes remain pending.
+- `2026-07-12T11:27:24Z`: Coordinator verification and lightweight pre-review
+  lint passed for the complete Round 4 fix. The batch is ready to commit as a
+  fresh literal endpoint for all four repeat lanes.

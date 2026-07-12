@@ -18,6 +18,7 @@ const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProjectionInboxTarget>();
+  readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
@@ -33,18 +34,20 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   register(target: ProjectionInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
-  }
-
-  endpoints(): readonly DeliveryEndpoint[] {
-    return Object.freeze(
-      [...this.#targets.values()].map((target) =>
+    this.#endpoints.set(
+      target.targetTypeUrl,
+      Object.freeze([
         deliveryEndpoint({
           label: projectionLabels[0],
           inboxId: { targetTypeUrl: target.targetTypeUrl },
           shard: ShardIndex.single(),
         }),
-      ),
+      ]),
     );
+  }
+
+  endpoints(): readonly DeliveryEndpoint[] {
+    return Object.freeze([...this.#endpoints.values()].flat());
   }
 
   /** Replay one already-durable inbox row through registered projection targets. */
@@ -82,7 +85,10 @@ export class LocalProjectionInbox implements ProjectionInbox {
     });
 
     if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(written.message, this.endpoints());
+      const endpoint = configuredDeliveryEndpoint(
+        written.message,
+        this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
+      );
       if (endpoint !== undefined) {
         this.#readiness.notify(endpoint, deliveryTenantId);
       }

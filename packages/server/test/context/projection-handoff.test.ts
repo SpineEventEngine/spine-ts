@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
@@ -10,6 +10,43 @@ import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("matches receive readiness without rebuilding the global endpoint snapshot", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const ready: unknown[] = [];
+    const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      replay: () => Promise.resolve(),
+    });
+    const endpoints = vi.spyOn(inbox, "endpoints");
+
+    await inbox.receive(
+      delivery,
+      {
+        inboxId: { targetId: "projection-ready", targetTypeUrl },
+        signalId: "event-ready",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      },
+      "tenant-a",
+    );
+
+    expect(endpoints).not.toHaveBeenCalled();
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+  });
+
   it("preserves exact-drain failure when the readiness observer also throws", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

@@ -106,6 +106,50 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
+  it("matches batch readiness without rebuilding the global endpoint snapshot", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.resolve(),
+    });
+    const endpoints = vi.spyOn(inbox, "endpoints");
+
+    await inbox.receiveAll(
+      delivery,
+      ["first", "second"].map((targetId) => ({
+        inboxId: { targetId, targetTypeUrl },
+        signalId: `command-${targetId}`,
+        label: "HANDLE_COMMAND" as const,
+        status: "TO_DELIVER" as const,
+        shard: ShardIndex.single(),
+      })),
+      "tenant-a",
+    );
+
+    expect(endpoints).not.toHaveBeenCalled();
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+  });
+
   it("isolates readiness observer failure from every batch write and exact drain", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
