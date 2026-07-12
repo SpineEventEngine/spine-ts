@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Round 1 independent review assigned
+Status: Round 1 seven-finding TDD fix assigned
 
 Started: `2026-07-12T17:05:11Z`
 
@@ -185,6 +185,31 @@ no public export or later-lifecycle ownership.
   both explicit dispatch fields matched. Independent verification repeated five
   delivery suites and 192 tests, all typechecks, changed-file lint/format, and
   diff hygiene. Independent review remains required.
+
+## Round 1 Findings
+
+One Terra Medium fix owner must prove and resolve this complete deduplicated
+batch before a fresh relevant review wave:
+
+1. Select the representative for repeated same-record rejection by configured
+   unit order, not arrival order, for normal and shared records.
+2. When exact successful re-evaluation consumes the representative's unit,
+   discard that cause rather than later reporting a cause for resolved work.
+3. Reclassify owner removal atomically across plural canonical generation
+   destinations; failure must lose neither records nor owner configuration.
+4. Validate caller-supplied occurrence increments as positive safe integers
+   before any mutation, so saturation never produces `NaN` or fractions.
+5. Preserve and report `undefined` as a legitimate rejected cause using cause
+   presence separate from the cause value, for normal and shared records.
+6. Implement the accepted exact selected-reporting/consumption contract rather
+   than reporting every record unconditionally; unselected unresolved records
+   and causes must remain untouched.
+7. A fulfilled `FAILED` re-evaluation must consume prior rejected state for the
+   exact units before retaining cause-less operational work.
+
+Findings 1-5 were independently confirmed across the four specialist lanes;
+6-7 are coordinator task-contract findings from the accepted Exact Ownership
+and TDD Acceptance text. No public or later-lifecycle expansion is authorized.
 
 ## Likely Files
 

@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Round 1 independent review assigned
+Status: Round 1 seven-finding TDD fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -107,3 +107,13 @@ an applicable review or a concrete N/A disposition under
   performance/reliability at expected Terra High. All four concerns are
   relevant to the new internal state model, declarations, architecture wording,
   and boundedness semantics. Security remains deferred.
+- `2026-07-12T17:56:54Z`: Round 1 is complete and every reviewer is closed.
+  Runtime fixed-role metadata confirms actual profiles matched dispatch: style
+  Terra High, docs Luna Medium, TypeScript/API docs Terra High, and reliability
+  Terra High. Seven unique accepted findings remain after deduplication:
+  same-record cause ordering; cause cleanup after partial success; atomic
+  plural-destination owner removal; safe occurrence validation; explicit
+  presence for `undefined` causes; exact selected reporting/consumption; and
+  fulfilled-`FAILED` replacement of prior rejected state. The last two are
+  coordinator-confirmed direct task-contract gaps. One Terra Medium fix owner
+  receives the complete batch before any re-review.
