@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 9 findings accepted; fix pending
+Status: Round 9 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -402,3 +402,7 @@ Security is deferred to final project readiness.
   and T-0037e must retain bounded transition state with closed admission and
   retry/aggregation semantics when fresh construction/rebind/transfer itself
   fails. The TypeScript/API lane and all unrelated contracts are clean.
+- `2026-07-12T06:58:36Z`: Assigned single Round 9 docs fix worker
+  `019f551e-c16e-79b0-b0e3-c73be3b2cda0` with the complete fail-closed
+  retirement, rollback-slot, non-empty buffer, and retryable transition-failure
+  batch. Runtime/public/generated scope remains frozen.
