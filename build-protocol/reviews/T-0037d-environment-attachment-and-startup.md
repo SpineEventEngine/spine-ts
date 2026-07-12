@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 3 findings under bounded architecture resolution
+Status: Slice 3 Round 3 architecture resolved; fixes assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -503,3 +503,17 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   rollback reclassification after queued-claim cleanup and an unreachable,
   unbounded ephemeral-owner overlap ledger. One bounded Sol High requirements
   resolution is assigned before the Terra fix owner resumes.
+- `2026-07-12T23:16:55Z`: The architecture resolution completed and the agent
+  was closed. Explicit dispatch and runtime metadata match the existing
+  requirements-splitter profile `gpt-5.6-sol` / `high`. It confirmed both
+  findings and selected only private, generation-local changes.
+- Accepted review disposition: retry-time cardinality promotes a retained
+  registration rollback monotonically to whole-generation retirement after all
+  earlier queued claims drain; whole-worker stop deduplicates already-stopped
+  owners. Reported overlap uses factory-object identity plus structural storage
+  context and readiness key, separate from ephemeral worker-owner routing.
+- Round 3 fixes are assigned to the existing implementer with expected and
+  explicit `gpt-5.6-terra` / `medium`. The re-review package must include
+  deterministic fresh-generation promotion, same-storage replacement D-0085
+  block/resolution, and distinct-storage isolation. Security remains deferred
+  to final project readiness.

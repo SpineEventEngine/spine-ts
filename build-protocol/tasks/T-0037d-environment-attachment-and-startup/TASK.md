@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 3 findings under bounded architecture resolution
+Status: Slice 3 Round 3 architecture resolved; fixes assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -428,6 +428,33 @@ One Terra Medium owner receives both under TDD before Round 3.
 This is a demonstrated architecture ambiguity between stable overlap semantics
 and storage-owner isolation. The existing requirements splitter receives one
 read-only `gpt-5.6-sol` / `high` resolution before the Terra owner resumes.
+
+The bounded architecture resolution completed with matching runtime metadata:
+existing `requirements_splitter`, explicit `gpt-5.6-sol` / `high`. Rollback
+classification becomes a monotonic private `registration | generation` mode.
+After earlier queued admissions have drained and removed their claims, explicit
+retry recomputes cardinality immediately before irreversible rollback phases;
+zero claims promotes the operation to whole-generation retirement and safe slot
+clearing. Promotion never reverses. Generation-wide stop must skip exact owners
+already stopped by an earlier registration-scoped attempt, while quiescence
+remains retryable.
+
+Reported overlap keeps ephemeral owner keys for exact worker/coordinator routing
+and adds a separate generation-local identity: `StorageFactory` object identity
+plus structural `StorageContext`, completed by the canonical readiness key. A
+replacement descriptor using the same factory object, context, and readiness
+facts can therefore inherit or resolve D-0085 state; a different factory object
+remains isolated. This identity is private, non-serialized, and bounded by the
+generation's stable storage-context/readiness cardinality. Cross-factory
+recognition is excluded because the current storage contract exposes no durable
+factory identity.
+
+One existing Terra Medium implementation owner receives both ordered changes
+under strict TDD. Required evidence covers shared-to-sole promotion with one
+fresh generation/worker and exact stop/await/report/retire chronology, plus
+attachment-path same-storage D-0085 blocking/resolution and distinct-storage
+isolation. No public contract, descriptor contract, later detach/close policy,
+listener wiring, or cross-generation persistence is added.
 
 ### Slice 3 Round 2 fix outcome
 
