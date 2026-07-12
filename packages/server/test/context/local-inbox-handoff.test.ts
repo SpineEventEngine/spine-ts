@@ -123,6 +123,60 @@ describe("DeliveryReadiness", () => {
     expect(drains).toBe(1);
   });
 
+  it("publishes shared completion before synchronous complete reentry", async () => {
+    const scope = ready();
+    const readiness = new DeliveryReadiness();
+    const handoff = readiness.claim(scope);
+    const release = Promise.withResolvers<undefined>();
+    let drains = 0;
+    let reentrant: Promise<void> | undefined;
+
+    const original = handoff.complete(() => {
+      drains += 1;
+      reentrant = handoff.complete(() => {
+        drains += 1;
+        return Promise.resolve();
+      });
+      return release.promise;
+    });
+    const transferring = readiness.transition([scope], () => undefined);
+    let transferred = false;
+    void transferring.then(() => {
+      transferred = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(drains).toBe(1);
+    expect(reentrant).toBe(original);
+    expect(transferred).toBe(false);
+    release.resolve(undefined);
+    await Promise.all([original, transferring]);
+  });
+
+  it("does not release the shared completion gate on synchronous abandon", async () => {
+    const scope = ready();
+    const readiness = new DeliveryReadiness();
+    const handoff = readiness.claim(scope);
+    const release = Promise.withResolvers<undefined>();
+
+    const draining = handoff.complete(() => {
+      handoff.abandon();
+      return release.promise;
+    });
+    const transferring = readiness.transition([scope], () => undefined);
+    let transferred = false;
+    void transferring.then(() => {
+      transferred = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(transferred).toBe(false);
+    release.resolve(undefined);
+    await Promise.all([draining, transferring]);
+  });
+
   it("does not start direct completion after abandon", async () => {
     const readiness = new DeliveryReadiness();
     const handoff = readiness.claim(ready());
@@ -149,6 +203,84 @@ describe("DeliveryReadiness", () => {
 
     expect(routed).toEqual([scope]);
     expect(replaced).toEqual([]);
+  });
+
+  it("fails a stalled transition finitely for arbitrary unconfigured scopes", async () => {
+    const scope = ready();
+    const readiness = new DeliveryReadiness();
+    const release = Promise.withResolvers<undefined>();
+    const draining = readiness.claim(scope).complete(() => release.promise);
+    const routed: DeliveryReady[] = [];
+    const transition = readiness.transition([scope], (next) => routed.push(next));
+    let directDrains = 1;
+
+    for (let index = 0; index < 2_048; index += 1) {
+      await readiness
+        .claim({ ...scope, targetTypeUrl: `type.example.dev/Unknown.${String(index)}` })
+        .complete(() => {
+          directDrains += 1;
+          return Promise.resolve();
+        });
+    }
+    expect(routed).toEqual([]);
+    expect(directDrains).toBe(1);
+
+    release.resolve(undefined);
+    await draining;
+    await expect(transition).rejects.toThrow(
+      "Delivery readiness transition received an unconfigured scope.",
+    );
+    expect(routed).toEqual([]);
+
+    await readiness
+      .claim({ ...scope, targetTypeUrl: "type.example.dev/Unknown.Late" })
+      .complete(() => {
+        directDrains += 1;
+        return Promise.resolve();
+      });
+    expect(directDrains).toBe(1);
+  });
+
+  it("retries a failed transition with a refreshed complete scope set", async () => {
+    const configured = ready();
+    const omitted = { ...configured, targetTypeUrl: "type.example.dev/Recovered" };
+    const readiness = new DeliveryReadiness();
+    const release = Promise.withResolvers<undefined>();
+    const draining = readiness.claim(configured).complete(() => release.promise);
+    const routed: DeliveryReady[] = [];
+    const stale = readiness.transition([configured], (next) => routed.push(next));
+    let directDrains = 1;
+
+    await readiness.claim(omitted).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    release.resolve(undefined);
+    await draining;
+    await expect(stale).rejects.toThrow(
+      "Delivery readiness transition received an unconfigured scope.",
+    );
+    expect(routed).toEqual([]);
+
+    await readiness.claim(omitted).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    expect(routed).toEqual([]);
+
+    const retry = readiness.transition([configured, omitted], (next) => routed.push(next));
+    await readiness.claim(configured).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    await readiness.claim(omitted).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    await retry;
+
+    expect(directDrains).toBe(1);
+    expect(routed).toEqual([configured, omitted]);
   });
 });
 

@@ -24,10 +24,10 @@ export type OnDeliveryReady = (ready: DeliveryReady) => unknown;
 export class DeliveryReadiness {
   #onReady: OnDeliveryReady;
   readonly #active = new Set<Promise<void>>();
-  #mode: "direct" | "transition" | "routed" = "direct";
+  #mode: "direct" | "transition" | "routed" | "failed" = "direct";
   #configured = new Map<string, DeliveryReady>();
   #buffered = new Map<string, DeliveryReady>();
-  #unconfigured = new Map<string, DeliveryReady>();
+  #invalidTransition = false;
 
   constructor(onReady: OnDeliveryReady = () => undefined) {
     this.#onReady = onReady;
@@ -56,9 +56,12 @@ export class DeliveryReadiness {
     if (ready !== undefined) {
       if (this.#mode === "transition") {
         const key = readyKey(ready);
-        const owner = this.#configured.has(key) ? this.#buffered : this.#unconfigured;
-        owner.set(key, cloneReady(ready));
-      } else {
+        if (this.#configured.has(key)) {
+          this.#buffered.set(key, cloneReady(ready));
+        } else {
+          this.#invalidTransition = true;
+        }
+      } else if (this.#mode === "routed") {
         this.#notify(ready);
       }
     }
@@ -66,7 +69,7 @@ export class DeliveryReadiness {
   }
 
   transition(scopes: readonly DeliveryReady[], onReady: OnDeliveryReady): Promise<void> {
-    if (this.#mode !== "direct") {
+    if (this.#mode !== "direct" && this.#mode !== "failed") {
       return Promise.reject(new Error("Delivery readiness ownership is already transferred."));
     }
     let configured: Map<string, DeliveryReady>;
@@ -78,19 +81,22 @@ export class DeliveryReadiness {
       });
     }
     this.#configured = configured;
+    this.#buffered.clear();
+    this.#invalidTransition = false;
     this.#mode = "transition";
     const admitted = [...this.#active];
     return Promise.allSettled(admitted).then(() => {
+      if (this.#invalidTransition) {
+        this.#buffered.clear();
+        this.#mode = "failed";
+        throw new Error("Delivery readiness transition received an unconfigured scope.");
+      }
       this.#onReady = onReady;
       this.#mode = "routed";
       for (const ready of this.#buffered.values()) {
         this.#notify(ready);
       }
-      for (const ready of this.#unconfigured.values()) {
-        this.#notify(ready);
-      }
       this.#buffered.clear();
-      this.#unconfigured.clear();
     });
   }
 
@@ -111,14 +117,16 @@ export class DeliveryReadiness {
         if (abandoned) {
           return settled;
         }
-        try {
-          completion = Promise.resolve(onDrain());
-        } catch (error) {
-          completion = Promise.resolve().then(() => {
-            throw error;
-          });
-        }
+        const shared = Promise.withResolvers<undefined>();
+        completion = shared.promise;
         void completion.then(finish, finish);
+        try {
+          void Promise.resolve(onDrain()).then(() => {
+            shared.resolve(undefined);
+          }, shared.reject);
+        } catch (error) {
+          shared.reject(error);
+        }
         return completion;
       },
       abandon: () => {

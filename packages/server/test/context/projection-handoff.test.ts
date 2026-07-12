@@ -59,14 +59,50 @@ describe("LocalProjectionInbox", () => {
     expect(routed).toEqual([]);
 
     releaseReplay.resolve(undefined);
-    await Promise.all([admitted, transition]);
-    expect(routed).toHaveLength(1);
+    await admitted;
+    await expect(transition).rejects.toThrow(
+      "Delivery readiness transition received an unconfigured scope.",
+    );
+    expect(routed).toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ inboxId: { targetId: "buffered" } }]);
 
     await expect(
       inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), "tenant-a"),
     ).resolves.toBeDefined();
     expect(replayed).toEqual(["admitted"]);
-    expect(routed).toHaveLength(2);
+    expect(routed).toEqual([]);
+
+    await expect(
+      readiness.transition(
+        [
+          {
+            tenantId: "tenant-a",
+            label: "UPDATE_SUBSCRIBER",
+            targetTypeUrl,
+            shard: ShardIndex.single(),
+          },
+        ],
+        (scope) => routed.push(scope),
+      ),
+    ).resolves.toBeUndefined();
+    expect(routed).toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      { inboxId: { targetId: "buffered" } },
+      { inboxId: { targetId: "routed" } },
+    ]);
+
+    const recovery = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "startup-recovery",
+      onMessage: (message) => inbox.replay(message, "tenant-a"),
+    }).run();
+    expect(recovery.delivered).toBe(2);
+    expect(replayed).toEqual(["admitted", "buffered", "routed"]);
   });
 
   it("matches receive readiness without rebuilding the global endpoint snapshot", async () => {

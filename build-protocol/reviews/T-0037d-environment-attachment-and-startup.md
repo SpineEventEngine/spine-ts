@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 coordinator recovery fix assigned
+Status: Slice 1 recovery fix focused verified; targeted re-review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -90,3 +90,18 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   recovery defect: finite unknown-scope failure permanently disables transition
   retry and later readiness ownership. Re-review is paused until focused TDD
   proves retry with a refreshed complete domain and no intermediate route.
+- Recovery fix resumed under `receiving-code-review` and strict TDD. The active
+  permanent-failed recovery claim is withdrawn. Re-review remains paused until
+  focused retry evidence proves recoverability without reopening direct
+  admission or retaining unknown keys.
+- Recovery defect is fixed and focused verified for targeted re-review. RED was
+  2 expected failures/23 passes; GREEN is 25/25 focused and 155/155 in the
+  six-file regression set. Failed mode is now a finite retry checkpoint, not a
+  permanent terminal: refreshed transition resets attempt-local state without
+  direct admission, intermediate route publication, or per-key unknown storage.
+  Real durable rows remain pending until startup-style recovery. No reviewer has
+  yet accepted this package.
+- `2026-07-12T20:33:00Z`: Coordinator independently repeated 155 focused
+  regression tests, generated build typecheck, changed-file lint/format, and
+  diff hygiene. All pass. Round 3 review remains pending against the committed
+  recovery delta; security remains deferred to final project readiness.

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 coordinator recovery fix assigned
+Status: Slice 1 recovery fix focused verified; targeted re-review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -284,9 +284,14 @@ Configured transition readiness remains deduplicated and bounded by the
 configured canonical scope map. An omitted key sets one finite invalid-transition
 flag; no unknown key is retained. Durable receives continue to resolve without
 direct drain, then the transition waits admitted drains, clears configured
-readiness, rejects without installing/reporting a route, and remains failed
-closed for later durable retry/recovery. Slice 2 must assemble the complete
-canonical scope domain before invoking transition.
+readiness, and rejects without installing/reporting a route. The claim that
+permanent `failed` mode supports later retry/recovery is replaced by a finite
+recoverable checkpoint: a failed attempt may start one refreshed transition,
+which resets attempt-local configured/buffered/invalid state without reopening
+direct admission. Readiness observed between attempts remains durable and is
+recovered by the later startup scan; no route is installed until the refreshed
+transition succeeds. Slice 2 must assemble the complete canonical scope domain
+before invoking transition.
 
 Direct completion publishes and memoizes one shared Promise before invoking
 `onDrain`. Synchronous reentrant `complete()` returns that Promise without a
@@ -296,5 +301,5 @@ gate settles only with the original drain.
 The later-slice interface remains the package-internal descriptor
 `transition(scopes, onReady)` method. No registration, generation, startup,
 rollback, public API/export, listener, lifecycle policy, or generated artifact
-was added. Slice 2 must not consume the barrier until targeted Round 2 re-review
-accepts this corrected package.
+was added. Slice 2 must not consume the barrier until targeted recovery
+re-review accepts this corrected package.
