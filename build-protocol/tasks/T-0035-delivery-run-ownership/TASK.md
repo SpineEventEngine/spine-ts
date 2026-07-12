@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 6 decision fix in progress
+Status: Round 6 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -138,6 +138,19 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   shard/obligation scope: uniquely attributable records are registration-owned,
   while shared or unassignable records are generation-owned without blaming the
   triggering or unrelated registration.
+- T-0036 preserves package-internal rejected-shard identity, each cause and its
+  associated obligation scope, plus fulfilled sibling progress. T-0037 consumes
+  that evidence for lifecycle ownership and does not reopen worker/loop
+  internals.
+- An attaching startup obligation queued behind a disjoint sibling rejection is
+  admitted exactly once for only its unaffected scope after rejection
+  observation, without retrying rejected scope or spinning, and startup settles
+  from that run. Overlapping rejection fails startup under existing rules.
+- Parked operational obligation/scope is distinct from cause reporting state.
+  Each eligible cause is atomically marked reported when propagated and is not
+  surfaced again; unresolved work remains parked until matching success or
+  lifecycle consumption. Multiple/combined causes retain independent truthful
+  scope where possible.
 - A later fulfilled start supersedes only records for obligation units it
   actually re-evaluates without rejection; omitted/stopped/unrelated work does
   not clear parked errors.
@@ -157,7 +170,9 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   close. Live registrations cause a non-permanent close rejection before
   admission or facilities change; at zero attachments, close becomes permanent
   and follows the accepted quiescence/error/facility order. An owning server
-  detaches its sole registration before closing its environment.
+  detaches its sole registration internally before closing its environment.
+  Callers close and await attached `RunningServer` instances through public
+  `close()`, then retry environment close; there is no public detach operation.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -222,13 +237,17 @@ cursor, epoch, or shard-control result becomes public.
 Startup worker rejection fails server start before network intake and joins
 failed-start cleanup. Notification/retry-triggered rejection is observed
 immediately, never becomes unhandled, parks the admitted/coalesced obligation,
-and resumes only after a later external readiness trigger. Each parked record
-is registration-owned when uniquely attributable or generation-owned when it
-spans shared/unassignable scope; trigger submission alone never assigns blame.
-A later fulfilled start supersedes only the same obligation units it actually
-re-evaluates without rejection. Shutdown continues remaining closes and
-propagates/aggregates active and parked errors through the existing close-error
-model.
+and normally resumes only after a later external readiness trigger. A disjoint
+attaching startup scope already queued behind sibling rejection is the narrow
+exception: it receives exactly one unaffected bounded admission and settles,
+without rerunning rejected scope. Each parked operational obligation is
+registration-owned when uniquely attributable or generation-owned when it spans
+shared/unassignable scope; trigger submission alone never assigns blame. Cause
+reporting state is separate, so propagation marks a cause reported once while
+unresolved work can remain parked. A later fulfilled start supersedes only the
+same obligation units it actually re-evaluates without rejection. Shutdown
+continues remaining closes and aggregates only still-unreported eligible causes
+while handling every unresolved obligation.
 
 One environment seam accepts package-internal server attachment tokens. A
 non-last detach cannot disable the remaining servers. Failed startup atomically
@@ -248,7 +267,10 @@ environments may host multiple registrations; a server-owned registration is
 exclusive and rejects another attachment before admission. Environment close
 rejects non-permanently while registrations remain, serialized against
 attach/detach/close, and changes admission/facilities only after observing zero
-attachments. An owning server detaches its sole registration before close.
+attachments. Callers close each attached `RunningServer` via public `close()`;
+server shutdown detaches internally, after which environment close may be
+retried. An owning server internally detaches its sole registration before
+close.
 
 Last detach permanently stops that generation's worker and loops. A reusable
 caller-owned environment remains open, but later attachment constructs a fresh
@@ -260,18 +282,20 @@ option is added.
 The smallest first successor is
 `T-0036 Package-Internal Delivery Epoch Progress`. It implements only the
 package-internal finite epoch bound, per-shard identity and disposition, opaque
-continuation, selective paused-shard starts, and fulfilled sibling progress
-when another shard rejects. It remains explicitly invoked and adds no public
-cursor, epoch, result, or lifecycle API. T-0036 excludes
+continuation, selective paused-shard starts, fulfilled sibling progress, and
+rejected-shard identity with cause/obligation association. It remains explicitly
+invoked and adds no public cursor, epoch, result, or lifecycle API. T-0036
+excludes
 `ServerEnvironment` attachment, startup recovery, post-persist notification,
 coalescing, parked lifecycle errors, and shutdown wiring.
 
 A separate later successor, expected as `T-0037` (Environment Delivery
-Lifecycle), consumes T-0036 and wires the single environment seam,
+Lifecycle), consumes T-0036's fulfilled/rejected-shard evidence without
+reopening worker internals and wires the single environment seam,
 attachments/generations, startup recovery, local notification, coalescing,
-parked rejection handling, and stop/shutdown. T-0037 still excludes retry
-timing, backoff, jitter, timer values, and public retry policy. No T-0036 or
-T-0037 task file is created by this decision-only task.
+parked obligation/cause-reporting handling, and stop/shutdown. T-0037 still
+excludes retry timing, backoff, jitter, timer values, and public retry policy. No
+T-0036 or T-0037 task file is created by this decision-only task.
 
 Both successors exclude public monitor/action or scheduler APIs, supervision,
 topology, adapters, and catch-up.
@@ -386,6 +410,21 @@ active delivery scheduler.
 - PASS: Complete chronology, `git diff --check`, aligned status, exact four-file
   scope, zero-untracked, and successor-task-file absence checks.
 - NOT RUN: full `pnpm verify` in Round 5, per explicit task direction.
+- PASS: Round 6 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted T-0036 rejected-shard/cause/obligation evidence, T-0037
+  consume-without-reopening boundary, public `RunningServer.close()` wording,
+  disjoint startup one-admission termination, overlapping startup failure,
+  operational-obligation/cause-reporting separation, one-time atomic reporting,
+  matching-success consumption, multiple/combined causes, retry deferral,
+  T-0034, `CATCH_UP`, and `IMPORT_EVENT` assertions.
+- PASS: Complete chronology, `git diff --check`, aligned status, exact four-file
+  scope, zero-untracked, and successor-task-file absence checks.
+- NOT RUN: full `pnpm verify` in Round 6, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 6 generated build,
+  docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
+  rejected-shard evidence boundary, disjoint-startup termination, cause-report
+  state, public close wording, compatibility, and public-API leakage checks.
 - PASS: Coordinator independently repeated the Round 5 generated build,
   docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
   detach-time rejection partitioning, ownership exclusivity, serialized close

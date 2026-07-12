@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 6 decision fix in progress
+Status: Round 6 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -289,3 +289,23 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 6 fix worker for
   the complete successor-evidence, close-wording, startup-termination, and
   cause-reporting batch. Fresh four-lane review remains pending.
+- `2026-07-12T00:30:52Z`: Fix worker re-read `receiving-code-review` and
+  verified all four findings against D-0085. The revised decision assigns
+  rejected-shard cause/obligation evidence to internal-only T-0036 and consumes
+  it in T-0037, uses only public `RunningServer.close()` caller wording, admits
+  one disjoint unaffected startup scope after sibling rejection, and separates
+  unresolved operational scope from atomic one-time cause reporting, including
+  multiple/combined causes. Author verification is pending; fresh review remains
+  coordinator-owned.
+- `2026-07-12T00:34:03Z`: Round 6 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  successor-evidence/public-close/startup-termination/cause-reporting and
+  preserved-policy assertions, chronology lint, whitespace, exact four-file
+  scope, aligned status, zero-untracked, and no-successor-task-file checks. Full
+  `pnpm verify` was not run. The author remains active for coordinator closure;
+  fresh four-lane review remains pending coordinator dispatch.
+- `2026-07-12T00:38:00Z`: Coordinator closed the Round 6 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 62-event chronology, rejected-shard evidence placement,
+  disjoint-startup termination, cause-reporting state, public close wording,
+  compatibility, and public-API leakage checks. Fresh review is next.
