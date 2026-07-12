@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 4 decision fix in progress
+Status: Round 4 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -134,6 +134,18 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   assigns its rejection/cleanup errors to that failed start, and preserves
   sibling registrations, progress, readiness, and parked errors. First/sole and
   server-owned cases remain explicit and coherent.
+- Every rejected start partitions parked errors by package-internal
+  shard/obligation scope: uniquely attributable records are registration-owned,
+  while shared or unassignable records are generation-owned without blaming the
+  triggering or unrelated registration.
+- A later fulfilled start supersedes only records for obligation units it
+  actually re-evaluates without rejection; omitted/stopped/unrelated work does
+  not clear parked errors.
+- Ordinary non-last detach surfaces and consumes its registration-owned errors
+  before endpoint dependencies close, retains genuine sibling/shared records,
+  and surfaces an orphaned generation-owned record only as a generation
+  lifecycle failure. Last detach and environment close consume all remaining
+  records through their truthful owner scopes.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -198,19 +210,24 @@ cursor, epoch, or shard-control result becomes public.
 Startup worker rejection fails server start before network intake and joins
 failed-start cleanup. Notification/retry-triggered rejection is observed
 immediately, never becomes unhandled, parks the admitted/coalesced obligation,
-and resumes only after a later external readiness trigger. The rejection stays
-package-internal until a later externally triggered fulfilled run supersedes it
-or shutdown surfaces it, even if no worker is then active. Shutdown continues
-remaining closes and propagates/aggregates active and parked errors through the
-existing close-error model.
+and resumes only after a later external readiness trigger. Each parked record
+is registration-owned when uniquely attributable or generation-owned when it
+spans shared/unassignable scope; trigger submission alone never assigns blame.
+A later fulfilled start supersedes only the same obligation units it actually
+re-evaluates without rejection. Shutdown continues remaining closes and
+propagates/aggregates active and parked errors through the existing close-error
+model.
 
 One environment seam accepts package-internal server attachment tokens. A
 non-last detach cannot disable the remaining servers. Failed startup atomically
 removes only its registration, blocks and awaits work that can still use its
 endpoint dependencies before closing them, assigns attributed rejection and
-cleanup errors to that failed start, and preserves sibling progress, readiness,
-and parked errors. Removing the first/sole registration quiesces the now-empty
-generation; an owned environment then closes permanently.
+cleanup errors to that failed start, retains shared generation errors while
+their sibling obligations remain, and preserves sibling progress/readiness.
+Ordinary detach similarly consumes registration-owned errors before dependency
+close, retains genuine shared/sibling errors, and surfaces an orphaned shared
+error only as generation-owned. Removing the first/sole registration quiesces
+the now-empty generation; an owned environment then closes permanently.
 
 Last detach permanently stops that generation's worker and loops. A reusable
 caller-owned environment remains open, but later attachment constructs a fresh
@@ -327,6 +344,21 @@ active delivery scheduler.
   zero-untracked, exact four-file scope, and successor-task-file absence checks
   passed. `RUNTIME_ARCHITECTURE.md` required no edit.
 - NOT RUN: full `pnpm verify` in Round 3, per explicit task direction.
+- PASS: Round 4 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted registration/generation parked-error ownership, shared-shard
+  non-attribution, obligation-scoped supersession, ordinary detach consumption,
+  orphaned generation-error handling, failed-start rollback, last-detach/
+  environment-close, T-0036/T-0037 boundary, retry deferral, T-0034,
+  `CATCH_UP`, and `IMPORT_EVENT` assertions.
+- PASS: Complete work-log chronology, `git diff --check`, aligned status, exact
+  four-file scope, zero-untracked, and successor-task-file absence checks.
+- NOT RUN: full `pnpm verify` in Round 4, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 4 generated build,
+  docs/API, formatting, whitespace, exact scope, zero-untracked,
+  successor-task-file absence, 48-event chronology, ownership, attribution,
+  matching-scope supersession, detach/orphan handling, shutdown, compatibility,
+  and public-API leakage checks.
 - PASS: Coordinator independently repeated the Round 3 generated build,
   docs/API, formatting, whitespace, exact four-file scope, zero-untracked,
   no-successor-task-file, 41-event chronology, fresh-generation, rollback,

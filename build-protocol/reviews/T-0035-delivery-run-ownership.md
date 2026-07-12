@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 4 decision fix in progress
+Status: Round 4 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -212,3 +212,23 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 4 fix worker for
   the complete parked-error ownership/supersession/detach batch. Fresh
   four-lane review remains pending after verification.
+- `2026-07-11T23:59:37Z`: Fix worker re-read `receiving-code-review` and
+  verified the P1 against D-0085's generation-wide parked rejection and
+  unscoped supersession wording. The revised decision partitions every rejected
+  start into registration- or generation-owned obligation scopes, limits
+  supersession to successfully re-evaluated matching scope, and defines
+  ordinary detach, failed-start rollback, last-detach, and environment-close
+  transfer/consumption rules without blaming unrelated registrations. Author
+  verification is pending; fresh review remains coordinator-owned.
+- `2026-07-12T00:02:35Z`: Round 4 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  ownership/supersession/detach/rollback/shutdown and preserved-policy checks,
+  chronological-history lint, whitespace, exact four-file scope, aligned
+  status, zero-untracked, and no-successor-task-file checks. Full `pnpm verify`
+  was not run. The author remains active for coordinator closure; fresh
+  four-lane review remains pending coordinator dispatch.
+- `2026-07-12T00:06:00Z`: Coordinator closed the Round 4 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 48-event chronology, parked-error ownership/attribution,
+  matching-scope supersession, detach/orphan handling, shutdown, compatibility,
+  and public-API leakage checks. Fresh four-lane review is next.

@@ -3209,12 +3209,29 @@ Decision:
   preserves the admitted epoch, its last safe opaque progress, and any
   coalesced request. It does not immediately restart. A later external
   startup/new-work/retry-ready trigger resumes that retained obligation, so a
-  persistent fault cannot create an immediate rejection spin. The rejection
-  itself remains stored inside the current environment generation until a later
-  externally triggered worker start fulfills and its per-shard dispositions
-  supersede it, or until generation/environment shutdown surfaces it. A parked
-  rejection is not lost merely because no worker promise remains active. No
-  public monitor, health, or error-reporting API is implied.
+  persistent fault cannot create an immediate rejection spin. No public
+  monitor, health, or error-reporting API is implied.
+- Every rejected start is partitioned into package-internal parked-error records
+  carrying the cause, retained shard/obligation scope, and exactly one owner. A
+  record is registration-owned only when every failed operation and retained
+  obligation in that record is uniquely attributable to the same registration.
+  The registration that submitted or awaited the trigger is not attribution by
+  itself. A record is generation-owned when its failure spans registrations,
+  arises from a shared shard whose causal obligations cannot be partitioned, or
+  otherwise cannot be uniquely attributed. Unrelated uniquely attributable
+  causes become separate registration-owned records; they are never folded into
+  another registration's failure merely because one worker promise rejected.
+  A parked record remains stored even when no worker promise is active.
+- A later externally triggered fulfilled start supersedes a parked record only
+  for the same shard/obligation units that the start actually re-evaluates and
+  returns package-internal non-rejected dispositions for. Omitted shards,
+  `STOPPED` work that was not re-evaluated, and fulfillment for another
+  registration or generation scope do not clear the record. A partially
+  overlapping fulfilled start may consume separately recorded matching units,
+  but cannot clear a broader registration- or generation-owned record until
+  every unit in that record's remaining scope has been successfully
+  re-evaluated. The newer per-shard dispositions then govern those units; no
+  unrelated parked error is superseded.
 - Servers attach to the one environment seam through package-internal
   registrations, reference counting, or equivalent generation tokens. Each
   attachment registers its endpoint dependencies and associated shard/work
@@ -3222,30 +3239,48 @@ Decision:
   that server opens network intake. Additional servers reuse the same
   generation and do not create another delivery owner. Detaching one server
   stops readiness from that registration and serializes against active work
-  before its contexts close, but leaves other registrations and their queued
-  readiness usable.
+  before its contexts close. After that barrier and before those dependencies
+  close, ordinary detach surfaces and consumes every parked error owned by that
+  registration through the server-close aggregate. It retains sibling-owned
+  errors and all sibling progress/readiness. A generation-owned error whose
+  remaining scope still includes any live shared or sibling obligation stays
+  generation-owned and parked; it is not relabeled as the departing
+  registration's error. If removing the registration leaves a generation-owned
+  record with no live obligation, detach surfaces and consumes that record as a
+  generation lifecycle failure, without falsely attributing it to the departing
+  registration.
 - Failed startup atomically closes trigger/notification admission for only the
   attaching registration and removes that registration from the generation.
   The seam then prevents new work for its associated obligations and awaits
   every active worker/loop operation that can still invoke that registration's
   endpoint dependencies before those contexts close. Work unrelated to those
-  dependencies need not be stopped. Package-internal per-shard identity assigns
-  the failed registration's worker rejection and rollback cleanup failures to
-  that server's failed-start aggregate. Fulfilled progress, parked rejection,
-  coalesced readiness, and pending epoch obligations belonging to unaffected
-  registrations remain owned by the shared generation; rollback neither
-  discards them nor adds the failed registration's error to them. If removing
-  the failed registration leaves other registrations, their generation remains
-  open and continues from its retained progress/readiness. If it was the first
-  or sole registration, rollback becomes a last detach and quiesces that empty
-  generation. A caller-owned environment remains reusable through a later fresh
-  generation. A server-owned environment additionally closes permanently after
-  quiescence, aggregating its attributed startup rejection with registration,
-  context, generation, and environment cleanup failures consistently with the
-  existing failed-start close model.
+  dependencies need not be stopped. The general ownership rule assigns and
+  consumes the failed registration's uniquely attributable rejection and
+  rollback cleanup failures in that server's failed-start aggregate. A
+  sibling-only parked error does not fail or contaminate this registration's
+  startup. A generation-owned error that overlaps the attaching registration's
+  recovery scope prevents that startup from claiming recovery success. The
+  failed-start result identifies the shared generation cause without
+  transferring ownership or consuming the underlying parked record while live
+  sibling/shared obligations remain. Rollback removes the failed registration's
+  obligation units from that shared record: if live sibling/shared units remain,
+  the record stays generation-owned and parked; if none remain, failed-start
+  cleanup surfaces and consumes it as a generation lifecycle failure. Fulfilled
+  progress, registration-owned sibling errors, coalesced readiness, and pending
+  epoch obligations belonging to unaffected registrations remain intact. If
+  removing the failed registration leaves other registrations, their generation
+  remains open and continues from its retained progress/readiness. If it was the
+  first or sole registration, rollback becomes a last detach and quiesces that
+  empty generation. A caller-owned environment remains reusable through a later
+  fresh generation. A server-owned environment additionally closes permanently
+  after quiescence, aggregating registration-owned startup/cleanup errors and
+  generation-owned lifecycle errors consistently with the existing failed-start
+  close model.
 - The last server detach closes that generation's trigger admission and local
-  notification, awaits active work, and surfaces any generation-owned parked
-  rejection while continuing remaining server closes. The generation's
+  notification and awaits active work. It surfaces and consumes all remaining
+  registration-owned records through their registrations' close aggregates,
+  then surfaces and consumes every generation-owned record as a generation
+  lifecycle failure while continuing remaining server closes. The generation's
   `DeliveryWorker` and constituent `DeliveryLoop` instances are then stopped
   permanently and are never restarted or reused. For a caller-owned
   environment, last detach does not close the environment or its facilities
@@ -3254,11 +3289,12 @@ Decision:
   performs startup recovery for durable pending work. `ServerEnvironment.close()`
   is different: it permanently rejects later attachments and triggers,
   quiesces and awaits all remaining lifecycle work, permanently stops the
-  current generation's worker/loops, includes any active or parked rejection in
-  the close aggregate, and then closes owned facilities. It cannot create a
-  later generation. A server-owned environment still closes with its owning
-  server after the sole attachment quiesces. No public attachment or lifecycle
-  option is introduced.
+  current generation's worker/loops, surfaces and consumes every remaining
+  registration- and generation-owned parked record exactly once in the close
+  aggregate, and then closes owned facilities. It cannot create a later
+  generation. A server-owned environment still closes with its owning server
+  after the sole attachment quiesces. No public attachment or lifecycle option
+  is introduced.
 - Generation stop, last detach, and environment close shut trigger admission
   and local notification first, call the worker stop path so no later drain
   starts in that generation, and await already-active work. The current drain
@@ -3345,6 +3381,10 @@ Consequences:
   ownership, so endpoint dependencies remain open until their active work
   settles while sibling registrations retain their progress, readiness, and
   lifecycle errors.
+- Parked rejections have explicit registration or generation ownership and
+  obligation-scoped supersession, so detach and shutdown surface each cause at
+  the narrowest truthful lifecycle boundary without clearing or blaming
+  unrelated work.
 - The implementation order keeps the internal bounded-progress contract small
   and independently reviewable before environment lifecycle wiring consumes it;
   neither successor absorbs retry timing or public policy.
