@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 13 findings accepted; fix pending
+Status: Round 13 docs fix worker active
 
 Baseline: `ab8fc9f4`
 

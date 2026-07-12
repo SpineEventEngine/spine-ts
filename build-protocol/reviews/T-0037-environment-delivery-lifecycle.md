@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 13 findings accepted; fix pending
+Status: Round 13 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -619,3 +619,7 @@ Security is deferred to final project readiness.
   zero-registration permanent close; and T-0037f must carry caller-owned failed-
   start retry through deferred server cleanup while leaving the environment open
   and reusable. The API lane and all other checks were clean.
+- `2026-07-12T08:22:25Z`: Assigned single Round 13 documentation fix worker
+  `019f556b-7c6f-71e2-ac25-7617fd83b0de` the complete accepted batch. The
+  worker owns documentation only, must preserve the fixed historical ledger,
+  and may edit only after this assignment is committed.
