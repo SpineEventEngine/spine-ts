@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 4 four-lane rereview in progress
+Status: Required review clean; final verification pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -143,6 +143,5 @@ Baseline: `67da0b1c`
   passed, and changed-file ESLint passed.
 - NOT RUN: full `pnpm verify`, per explicit task direction.
 
-The Round 4 package is generated and all four lanes are in progress. Only clean
-rereview closure plus the final task gate/merge remain; no clean result is
-claimed while reviewers are active.
+Round 4 is clean across all required lanes. Only the final task gate and merge
+remain.

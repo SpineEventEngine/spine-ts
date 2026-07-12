@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 4 four-lane rereview in progress
+Status: Required review clean; final verification pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -220,6 +220,10 @@ membership.
   private array-identity contract was added.
 - PASS: Round 3 fixes committed as `e6c92128`; package-boundary reconciliation
   is the sole future hash under the ledger convention.
+- PASS: Round 4 code style/maintainability, documentation, TypeScript/API docs,
+  and performance/reliability all returned clean. The API lane confirmed 205
+  expected server exports and no root/subpath leakage; reliability passed 2
+  focused files / 55 tests. Final full verification remains.
 - PASS: At `2026-07-12T04:42:00Z`, the coordinator independently passed the
   four-file / 260-test suite, generated build, changed-file ESLint,
   `docs:check`, `format:check`, and `git diff --check` after the one-time
