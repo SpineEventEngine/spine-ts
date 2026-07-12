@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 1 fixes coordinator-verified; re-review pending
+Status: Slice 1 Round 2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -66,3 +66,8 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   tests, all typechecks, changed-file lint/format, and diff hygiene. The fix is
   ready for all four re-review lanes, including explicit reliability review of
   unknown-scope retention and the Slice 2 complete-domain dependency.
+- `2026-07-12T19:08:53Z`: Round 2 reviews fix package
+  `.superpowers/sdd/review-89fb5495..e798d6e7.diff` (one commit, 34,480 bytes).
+  Expected profiles are style Terra High, docs Luna Medium, TypeScript/API docs
+  Terra High, and reliability Terra High. All lanes remain relevant; security
+  is deferred.

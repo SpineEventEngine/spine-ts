@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 1 fixes coordinator-verified; re-review pending
+Status: Slice 1 Round 2 re-review assigned
 
 Started: `2026-07-12T18:25:27Z`
 
