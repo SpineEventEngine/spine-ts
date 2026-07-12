@@ -308,7 +308,9 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 5. Run post-merge focused verification and full `pnpm verify` where required by
    the task protocol.
 6. Record post-merge evidence on `main`.
-7. Remove the completed worktree only when Git reports it clean.
+7. Push the completed task branch, updated `main`, and task tags to `origin`;
+   record the remote refs.
+8. Remove the completed worktree only when Git reports it clean.
 
 ## Runtime Execution Packets
 
