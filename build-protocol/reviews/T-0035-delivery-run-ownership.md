@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 6 findings recorded; decision fix pending
+Status: Round 6 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -285,3 +285,7 @@ Security is deferred to final project readiness.
   unaffected startup admission after disjoint sibling rejection; and separate
   parked-cause reporting state from retained operational obligation so shared
   causes surface once. One decision fix worker and fresh review are required.
+- `2026-07-12T00:26:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 6 fix worker for
+  the complete successor-evidence, close-wording, startup-termination, and
+  cause-reporting batch. Fresh four-lane review remains pending.
