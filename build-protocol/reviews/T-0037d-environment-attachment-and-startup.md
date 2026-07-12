@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 1 findings under bounded architecture resolution
+Status: Slice 2 Round 1 architecture resolved; complete fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -232,6 +232,13 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   acceptance regressions (concurrent sharing, overlapping rejection, PAUSED/
   SKIPPED), and one maintainability split/extraction. A bounded Sol High
   requirements resolution is assigned before one Terra Medium fix owner.
+- `2026-07-12T21:57:00Z`: The bounded Sol High requirements resolution is
+  complete and its agent is closed. It validates all findings and selects one
+  private owner-qualified scope carried through coordinator, worker, settlement,
+  and obligation identity; durable tenant recording before inbox persistence;
+  and a canonical-domain outer readiness gate with no unknown-key retention.
+  The complete implementation-ready design is assigned to one Terra Medium
+  owner with the full test matrix; Round 2 review remains pending.
 - The existing owner resumed the finding under fully read
   `receiving-code-review` and strict `test-driven-development`. The fix package
   remains limited to duplicate identity preflight, its focused proof, and

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 1 findings under bounded architecture resolution
+Status: Slice 2 Round 1 architecture resolved; complete fix assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -341,6 +341,22 @@ assigned one bounded read-only resolution with explicit `gpt-5.6-sol` / `high`;
 it must propose the smallest internal fix using existing roles and no public or
 Slice 3 lifecycle surface. The Terra Medium implementation owner remains paused
 until that resolution returns.
+
+The Sol High resolution accepted every premise and selected a private,
+generation-local owner-qualified run scope: `{ owner: { key }, ready }`, where
+one owner identifies exactly one descriptor/tenant/actual-storage runtime.
+Coordinator keys, pending/settled maps, worker selection, and obligation units
+must include the owner key; the coordinator partitions a union by owner and
+runs each owner group serially through one coordinator. Dynamic multitenant
+receive must await the existing descriptor-owned `TenantIndex.keep()` before
+inbox persistence/readiness. Outer readiness is a finite `waiting | open |
+failed` gate over the preassembled canonical domain: canonical keys deduplicate,
+unknown keys set one bit and are not retained, and invalid open rejects before
+coordinator work. After open, a durable first tenant may create/configure its
+owner runtime and notify normally. Split the owner-to-worker adapter into
+`environment-delivery-worker.ts` and extract named attachment phases; add the
+complete regression sequence recorded in the work/review logs. Slice 3 remains
+the owner of failed-generation rollback and retained references.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now
