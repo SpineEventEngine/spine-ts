@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 9 decision fix in progress
+Status: Round 9 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -402,3 +402,23 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 9 fix worker for
   the complete retention/failure-disposition/recovery-wording batch. Fresh
   four-lane review remains pending.
+- `2026-07-12T01:18:51Z`: Fix worker re-read `receiving-code-review` and
+  verified the three accepted findings. The revised decision bounds canonical
+  parked records/cause retention, makes fulfilled `FAILED` explicitly
+  non-rejected and non-reportable by lifecycle, and qualifies recovery by
+  reusable versus permanently closed environment/storage lifetime. The Round 9
+  P3 self-hash comment remains rejected and the ledger convention is unchanged.
+  Author verification is pending; fresh review remains coordinator-owned.
+- `2026-07-12T01:23:09Z`: Round 9 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  bounded-retention/fulfilled-`FAILED`/recovery and preserved-policy checks,
+  rejected-P3 convention assertions, chronology lint, whitespace, exact
+  four-file scope, aligned status, zero-untracked, and no-successor-task-file
+  checks. Architecture required no edit. Full `pnpm verify` was not run. The
+  author remains active for coordinator closure; fresh four-lane review remains
+  pending coordinator dispatch.
+- `2026-07-12T01:28:00Z`: Coordinator closed the Round 9 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 83-event chronology, bounded retention, fulfilled-`FAILED`
+  disposition, recovery limits, self-hash convention, compatibility, and
+  public-API leakage checks. Fresh four-lane review is next.

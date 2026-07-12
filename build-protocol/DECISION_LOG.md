@@ -3160,8 +3160,9 @@ Decision:
   fails before network intake opens. Startup cleanup follows the
   registration-scoped rollback rules below rather than closing a shared
   environment wholesale. Its attributed worker rejection and cleanup failures
-  propagate or aggregate through the existing failed-start error model, while
-  durable rows remain available to later startup recovery.
+  propagate or aggregate through the existing failed-start error model. Cleanup
+  does not claim or delete durable pending rows; their later recoverability
+  follows the environment/storage lifetime rules below.
 - After a newly supported inbox row is durably persisted, the local write path
   notifies the same package-internal seam. Notification carries readiness only;
   it does not carry a timer, backoff value, monitor action, payload, or retry
@@ -3183,6 +3184,16 @@ Decision:
   `STOPPED` shard does not continue in the stopping generation. Therefore a
   worker result containing both `FAILED` and `PAUSED` continues only the paused
   shard, even though its aggregate status is `FAILED`.
+- A fulfilled `DeliveryLoopRun` whose status is `FAILED` is an observed,
+  non-rejected worker outcome. The lifecycle seam parks that shard for a later
+  external startup/new-work/retry-ready trigger and relies on durable row and
+  attempt history for diagnostics. It does not create a canonical parked
+  rejection record, retain a cause object as lifecycle error state, fail server
+  startup, or surface an error at detach/close merely because the fulfilled
+  status is `FAILED`. After observing the bounded result, the lifecycle retains
+  only the parked shard disposition/readiness obligation, not the result as an
+  error. Startup recovery may therefore settle after observing `FAILED`, without
+  claiming that the durable pending row completed.
 - After a normally fulfilled worker start, an already-coalesced external
   readiness request remains eligible to be admitted according to those
   per-shard dispositions. Rejection is the exception: the rejected
@@ -3225,28 +3236,44 @@ Decision:
   persistent fault cannot create an immediate rejection spin; the only
   no-new-trigger path is the disjoint, already-admitted startup scope defined
   above. No public monitor, health, or error-reporting API is implied.
-- Every rejected start creates package-internal parked operational obligations
-  and associated cause-reporting entries; unresolved work state is distinct
-  from whether a cause has already been reported. Each obligation retains its
-  shard/scope and exactly one registration or generation owner. Each cause entry
-  retains the rejected-shard evidence, implicated obligation units, the same
-  truthful owner classification, and an `unreported` or `reported` state. An
-  obligation/cause association is registration-owned only when every failed
-  operation and retained unit is uniquely attributable to the same
-  registration. The registration that submitted or awaited the trigger is not
-  attribution by itself. It is generation-owned when failure spans
-  registrations, arises from a shared shard whose causal obligations cannot be
-  partitioned, or otherwise cannot be uniquely attributed. These records remain
-  stored even when no worker promise is active.
-- Multiple independently attributable causes from one rejected start become
-  separate cause entries and may have different owners/scopes. An aggregate is
-  assembled only from the entries eligible at the current lifecycle boundary;
-  reporting it atomically marks exactly those included entries `reported`. An
-  inseparable combined cause remains one generation-owned entry over the union
-  of its implicated obligation scope. One obligation may reference multiple
-  cause entries, and each cause is reported at most once. Unrelated causes are
-  never folded into another registration's failure merely because one worker
-  promise rejected.
+- Rejected starts use a finite package-internal canonical parked-record table;
+  unresolved operational state remains distinct from cause reporting. Keys are
+  only truthful owner plus canonical configured shard/obligation scope:
+  registration-owned records are bounded by live registrations and their
+  configured shards, generation-owned shard records are bounded by configured
+  shards, and there is at most one additional generation-spanning shared record
+  for an inseparable cause. The lifecycle never creates keys for arbitrary row,
+  attempt, message, cause-combination, or scope subsets. Thus record count is
+  bounded by live registration/configured-shard cardinality plus the one shared
+  record, not by rejection count.
+- Each canonical record retains one unresolved operational obligation state,
+  at most one representative cause object with `unreported` or `reported`
+  state, a bounded `reportedSinceResolution` flag, and a saturating nonnegative
+  safe-integer occurrence count. A repeated rejection of an already-unresolved
+  canonical key coalesces into that record, advances the count only up to
+  `Number.MAX_SAFE_INTEGER`, and never appends cause objects or scope entries.
+  While its representative is `unreported`, the deterministic first
+  representative remains. After that representative is reported, a later
+  rejection replaces it with exactly one new `unreported` representative in the
+  same record and keeps the bounded reported flag; it does not preserve an error
+  object history.
+- Independently attributable causes from one rejected start canonicalize into
+  their finite truthful owner/shard records and may therefore have different
+  owners. Multiple causes targeting the same key use configured shard order and
+  settled-cause order to choose the first representative deterministically and
+  coalesce the rest into the saturating count. An inseparable combined cause
+  coalesces into the sole generation-spanning shared record. Reclassification
+  after registration removal moves/coalesces state into the canonical
+  destination record, saturating its count and retaining at most one
+  deterministic unreported representative; it never creates a scope-subset key
+  or another cause collection.
+- An aggregate is assembled only from representative causes eligible at the
+  current lifecycle boundary; reporting it atomically marks exactly those
+  representatives `reported` and sets their bounded reported flag. Each
+  representative is surfaced at most once. A later rejection may install one
+  new representative as above, but an already-reported cause object is never
+  appended, chained, or surfaced again. Unrelated causes are never folded into
+  another registration's failure merely because one worker promise rejected.
 - A later externally triggered fulfilled start supersedes a parked record only
   for the same shard/obligation units that the start actually re-evaluates and
   returns package-internal non-rejected dispositions for. Omitted shards,
@@ -3259,7 +3286,8 @@ Decision:
   unrelated parked error is superseded. Successful matching re-evaluation
   consumes the resolved operational obligation and its parked record, including
   any associated reported or unreported cause state; a resolved unreported
-  cause need not be surfaced.
+  cause need not be surfaced. Consuming the record also discards its bounded
+  occurrence/reporting scalars and sole representative cause reference.
 - Detach, failed-start cleanup, last detach, and environment close still handle
   every eligible unresolved operational obligation even when its cause was
   reported earlier. They aggregate only eligible `unreported` causes and
@@ -3375,7 +3403,14 @@ Decision:
   eligible at this boundary and report only still-`unreported` causes; then
   permanently retire the old worker, loops, and generation. Stop always precedes
   await and record consumption. A durable write racing after admission closes
-  remains pending for a later generation's startup recovery.
+  remains pending. After reusable last detach or explicit generation stop while
+  the same caller-owned environment remains open, a later generation of that
+  environment can recover it. After permanent `ServerEnvironment.close()`, no
+  generation of that same environment is possible. Recovery then requires a
+  separately created environment/process over storage that remains externally
+  available and persistent, if facility ownership and backend lifetime permit;
+  this decision makes no recovery promise after environment-owned storage is
+  permanently closed.
 - Attach, detach, generation stop, and environment close use the same
   package-internal lifecycle gate. If attach linearizes before last detach marks
   the generation stopping, it becomes another live registration and last detach
@@ -3471,6 +3506,12 @@ Consequences:
   epoch.
 - Worker rejections have defined startup, notification, retained-progress, and
   shutdown behavior without creating a public observation surface.
+- Canonical owner/shard records, one representative cause, and saturating
+  scalars bound package-internal parked-rejection memory independently of repeat
+  rejection count.
+- Fulfilled `FAILED` is observed as a bounded shard disposition and parked for
+  external retry readiness without becoming lifecycle cause-reporting state or
+  a startup/close error.
 - Mixed per-shard outcomes no longer make the aggregate priority accidentally
   rerun failed/skipped shards or abandon paused-shard progress.
 - Shared caller-owned environments can outlive one server attachment and later
@@ -3494,6 +3535,9 @@ Consequences:
   refusal prevent another server or direct environment close from shutting down
   facilities beneath an admitted registration, without adding public lifecycle
   configuration.
+- Recovery wording distinguishes reusable generation retirement from permanent
+  environment/facility close and does not promise access after owned storage
+  lifetime ends.
 - The implementation order keeps the internal bounded-progress contract small
   and independently reviewable before environment lifecycle wiring consumes it;
   neither successor absorbs retry timing or public policy.

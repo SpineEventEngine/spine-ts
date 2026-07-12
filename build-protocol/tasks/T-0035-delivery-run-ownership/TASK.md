@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 9 decision fix in progress
+Status: Round 9 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -144,6 +144,15 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   shard/obligation scope: uniquely attributable records are registration-owned,
   while shared or unassignable records are generation-owned without blaming the
   triggering or unrelated registration.
+- Parked rejection state is finite: canonical records are keyed only by truthful
+  owner and configured shard/obligation scope, bounded by live registrations and
+  configured shards, with at most one generation-spanning shared record.
+  Repeated rejection coalesces without appending causes; each record keeps at
+  most one representative cause plus bounded/saturating scalar state.
+- A fulfilled `DeliveryLoopRun` with `FAILED` is observed and its shard parks for
+  later external retry readiness, but it creates no lifecycle cause record,
+  fails no startup, and surfaces nothing at detach/close merely from that
+  status. Startup may settle after observing the bounded result.
 - T-0036 preserves package-internal rejected-shard identity, each cause and its
   associated obligation scope, plus fulfilled sibling progress. T-0037 consumes
   that evidence for lifecycle ownership and does not reopen worker/loop
@@ -192,6 +201,11 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   non-empty blocker `Error`. The blocker has no exported type/code/cause/original
   reference, belongs to and is consumed by that failed startup, and never causes
   the original reported cause to surface again.
+- Reusable last detach/explicit generation stop may leave durable work for a
+  later generation of the same open caller-owned environment. Permanent
+  environment close permits no same-environment generation; later recovery
+  requires a separate environment/process and still-persistent externally
+  available storage, and is not promised after owned storage closes.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -268,6 +282,19 @@ same obligation units it actually re-evaluates without rejection. Shutdown
 continues remaining closes and aggregates only still-unreported eligible causes
 while handling every unresolved obligation.
 
+Lifecycle rejection memory is bounded by a canonical owner/configured-shard
+table plus at most one inseparable generation-spanning record. Repeated faults
+coalesce into the same unresolved record, retain no cause history, and use only
+one representative cause plus bounded reporting/occurrence scalars. A new
+rejection after reporting may install one new unreported representative, which
+retains the established at-most-once reporting semantics without growing the
+record set.
+
+A fulfilled worker result with shard status `FAILED` is not rejection evidence.
+The shard parks for external retry readiness and durable row/attempt state
+remains diagnostic, but lifecycle retains no cause-report error, startup may
+settle, and detach/close does not surface that fulfilled result as an error.
+
 One environment seam accepts package-internal server attachment tokens. A
 non-last detach cannot disable the remaining servers. Failed startup atomically
 removes only its registration, blocks and awaits work that can still use its
@@ -308,8 +335,11 @@ Last detach permanently stops that generation's worker and loops. A reusable
 caller-owned environment remains open, but later attachment constructs a fresh
 internal worker/loop generation and performs startup recovery rather than
 reviving stopped instances. Environment close permanently refuses attachments
-and triggers and aggregates all remaining lifecycle work. No public lifecycle
-option is added.
+and triggers and aggregates all remaining lifecycle work. After permanent close
+there is no later generation of that environment; recovery requires a separately
+created environment/process over externally persistent storage whose ownership
+and backend lifetime kept it available. No recovery is promised after
+environment-owned storage closes, and no public lifecycle option is added.
 
 The smallest first successor is
 `T-0036 Package-Internal Delivery Epoch Progress`. It implements only the
@@ -482,6 +512,24 @@ active delivery scheduler.
   `git diff --check`, aligned status, exact architecture-plus-three-record scope,
   zero-untracked, and successor-task-file absence checks.
 - NOT RUN: full `pnpm verify` in Round 8, per explicit task direction.
+- PASS: Round 9 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted finite canonical owner/shard record-space, one shared record,
+  one representative cause, repeated-rejection coalescing, no cause history,
+  saturating occurrence count, replacement after reporting, truthful
+  reclassification, and at-most-once reporting assertions.
+- PASS: Fulfilled-`FAILED` non-rejection/startup-settlement/no-lifecycle-error
+  assertions; reusable-versus-permanent-close/storage-lifetime recovery checks;
+  preserved T-0036/T-0037, retry, T-0034, `CATCH_UP`, and `IMPORT_EVENT`
+  boundaries; and rejected P3 self-hash convention checks.
+- PASS: Complete chronology, `git diff --check`, aligned status, exact four-file
+  scope, zero-untracked, and successor-task-file absence checks. Architecture
+  required no edit.
+- NOT RUN: full `pnpm verify` in Round 9, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 9 generated build,
+  docs/API, formatting, whitespace, exact scope, chronology, bounded retention,
+  fulfilled-`FAILED` disposition, recovery limits, convention preservation,
+  compatibility, and public-API leakage checks.
 - PASS: Coordinator independently repeated the Round 8 generated build,
   docs/API, formatting, source/current-future architecture assertions,
   whitespace, exact scope, chronology, zero-untracked, compatibility, and
