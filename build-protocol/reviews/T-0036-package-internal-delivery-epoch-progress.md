@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Coverage gate passed; fresh package and all-lane rereview pending
+Status: Coverage fix committed; final all-lane rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -199,6 +199,9 @@ Security is deferred to final project readiness.
 - `2026-07-12T04:57:00Z`: Assigned coverage worker
   `019f546d-37cf-7333-a2c3-c477800d34ed` with the test-only threshold batch.
   Fresh package and all four lanes remain required after the fix commit.
+- `2026-07-12T05:14:00Z`: Coverage worker closed and test-only fix committed as
+  `a724d8ea`. Native verify passed at 60 files / 1,309 tests and 90.11% branch
+  coverage. Fresh package generation and all four final lanes remain.
 - `2026-07-12T05:10:00Z`: Coverage worker completed the uncommitted test-only
   batch. Focused coverage passed 2 files / 71 tests with 258/375 selected-source
   branches; `delivery-loop.ts` reached 91.75% and `delivery-worker.ts` reached

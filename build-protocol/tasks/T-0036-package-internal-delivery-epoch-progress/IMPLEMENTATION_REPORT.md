@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Coverage gate passed; fresh package and rereview pending
+Status: Coverage fix committed; final rereview pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -150,7 +150,6 @@ Baseline: `67da0b1c`
   (6,898/7,249). Before this cycle global branches were 89.73%
   (3,576/3,985).
 
-The coverage gate now passes. Because tracked tests changed after Round 4, the
-coordinator must commit the test-only batch, generate a fresh fixed-baseline
-package, and rerun all four review lanes before merge. This worker claims no
-clean rereview.
+The coverage fix is committed and the gate passes. A fresh fixed-baseline
+package and all four final review lanes remain before the repeated final gate
+and merge.

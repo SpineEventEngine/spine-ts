@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Coverage gate passed; fresh package and rereview pending
+Status: Coverage fix committed; final rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -229,6 +229,8 @@ membership.
   coverage ran all 1,293 tests successfully but failed the global branch
   threshold: 89.73% actual versus 90% required. Add focused coverage for new
   epoch branches, rerun review lanes, and repeat the full native gate.
+- PASS: Test-only coverage fix committed as `a724d8ea`; global branches now
+  pass at 90.11%. Package-boundary reconciliation is the sole future hash.
 - PASS: Final test-only coverage cycle added retained-epoch validation and
   duplicate/stale-row behavior, package-internal cursor/access/concurrent-start
   errors, invalid admission/progress handling, and new-obligation shard
