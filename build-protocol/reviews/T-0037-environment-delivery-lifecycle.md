@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 10 findings accepted; fix pending
+Status: Round 10 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -475,3 +475,7 @@ Security is deferred to final project readiness.
   architecture must distinguish retirement/reporting failure from fresh-
   transition failure; and the split handoff status must be current. All other
   contracts are clean.
+- `2026-07-12T07:28:48Z`: Assigned single Round 10 documentation fix worker
+  `019f553a-7491-7893-9ade-d4d6c820ff89` the complete accepted batch. The
+  worker owns documentation only, must preserve the fixed historical package
+  ledger, and may begin editing only after this assignment is committed.
