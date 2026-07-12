@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 4 active
+Status: Review Round 4 fixes pending assignment
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status |
-| -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Ready  |
-| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Ready  |
-| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Ready  |
-| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Ready  |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Clean    |
+| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Findings |
+| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Findings |
+| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Findings |
 
 Security is deferred to final project readiness.
 
@@ -276,3 +276,8 @@ Security is deferred to final project readiness.
   review/design/types/error skills; and explicitly skipped duplicate,
   authoring, web/security, debugging, and implementation workflows outside its
   lane. No required local source was unreachable.
+- `2026-07-12T13:51:08Z`: Round 4 completed and every reviewer was closed. Style
+  is clean. Two findings remain after deduplication: synchronous stop-side
+  retirement reentry before the shared promise is published, and inaccurate
+  concrete worker-retirement rejection documentation. One TDD fix worker must
+  receive the complete list before all four lanes rerun.
