@@ -129,6 +129,14 @@ network or context/resource ordering.
   transition readiness through its finally-equivalent path before propagating
   the original error exactly once. A later supported write then emits readiness
   and runs in the fresh generation without another stop or recovery trigger.
+- A distinct retirement-failure test injects failure from permanent retirement
+  after old-generation stop, active-work settlement, and operational-record
+  consumption have completed. T-0037e still creates exactly one fresh
+  generation; rebinds every surviving registration, readiness route, and
+  configured/startup scope to it; and transfers every buffered canonical scope
+  into fresh pending admission exactly once. The test proves later readiness is
+  admitted by that fresh generation and only then observes the retirement error,
+  propagated exactly once.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

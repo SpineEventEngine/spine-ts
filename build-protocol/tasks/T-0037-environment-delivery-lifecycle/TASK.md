@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 8 docs fix active
+Status: Round 8 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -190,5 +190,8 @@ used for child runtime work.
   findings and its verified fix formed reviewed package
   `0308bc4a..045aa86c`. Round 7 accepted the reusable-stop readiness bridge,
   finally-equivalent survivor rebind, and fixed-package ledger findings. The
-  Round 7 fix passed worker and coordinator verification; fresh review remains
-  pending, and no clean review is claimed.
+  Round 7 fix passed worker and coordinator verification and was committed as
+  `628224d4`. Round 8 completed all four lanes with the dedicated retirement-
+  failure TDD and stale split-report summary as its two-item finding. That docs
+  fix passed worker and coordinator verification; fresh review remains pending,
+  and no clean review is claimed.

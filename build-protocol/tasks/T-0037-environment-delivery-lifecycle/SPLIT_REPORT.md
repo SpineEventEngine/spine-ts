@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 8 docs fix active
+Status: Round 8 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -68,7 +68,10 @@ through `a8c2f3c5`. Round 6 completed all four lanes with accepted docs findings
 and its verified fix formed reviewed package `0308bc4a..045aa86c`. Round 7
 accepted the reusable-stop readiness bridge, finally-equivalent survivor
 rebind, and fixed-package ledger findings. The Round 7 fix passed worker and
-coordinator verification; fresh review remains pending, and no clean review is
+coordinator verification and was committed as `628224d4`. Round 8 completed all
+four lanes with the dedicated retirement-failure TDD and this stale active-
+summary correction as its two-item finding; that docs fix passed worker and
+coordinator verification. Fresh review remains pending and no clean review is
 claimed.
 
 ## Verification
@@ -98,6 +101,9 @@ completed all four lanes with one stale-status finding in the active parent
 summaries. That finding's docs fix passed worker and coordinator verification;
 it was committed as `96c27f11` and reconciled through `a8c2f3c5`. Round 6
 completed all four lanes with accepted docs findings and its verified fix formed
-reviewed package `0308bc4a..045aa86c`. Round 7 accepted findings; its docs fix is
-authored, coordinator verification and fresh review remain pending, and no clean
-review is claimed.
+reviewed package `0308bc4a..045aa86c`. Round 7 accepted findings; its docs fix
+passed worker and coordinator verification and was committed as `628224d4`.
+Round 8 completed all four lanes with a two-item finding: add the dedicated
+post-consumption permanent-retirement-failure TDD case and correct this stale
+active verification summary. The Round 8 docs fix passed worker and coordinator
+verification; fresh review remains pending, and no clean review is claimed.

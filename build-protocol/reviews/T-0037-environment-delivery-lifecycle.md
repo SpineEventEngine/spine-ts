@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 8 docs fix active
+Status: Round 8 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -74,8 +74,10 @@ Security is deferred to final project readiness.
 - Confirm T-0037b may settle with a combined error only after retirement, while
   T-0037e creates the fresh generation and rebinds every surviving registration,
   readiness route, and configured/startup scope through a finally-equivalent
-  path before propagating that result. A reporting-rejection test proves later
-  readiness works and the original error propagates exactly once.
+  path before propagating that result. Distinct reporting-rejection and post-
+  consumption permanent-retirement-failure tests each prove exact-once buffered
+  canonical-scope transfer, later readiness admission, and exact-once error
+  propagation only after complete survivor rebinding.
 - Confirm server-owned startup failure attempts rollback/quiescence,
   context/resource cleanup, and permanent environment/facility close in D-0085
   order without listener intake, aggregating failures without skipped cleanup.
@@ -368,3 +370,23 @@ Security is deferred to final project readiness.
 - `2026-07-12T06:41:42Z`: Assigned single Round 8 docs fix worker
   `019f550f-5342-7af0-b0d5-0e50f9450c6c` with the retirement-failure TDD and
   stale split-report batch. Runtime/public/generated scope remains frozen.
+- `2026-07-12T06:44:25Z`: Round 8 worker authored the complete two-item docs
+  fix. T-0037e now has a dedicated post-consumption permanent-retirement-
+  failure TDD case distinct from reporting rejection, and every active summary
+  records completed Round 7 worker/coordinator verification, fix commit
+  `628224d4`, and the completed Round 8 findings. D-0085, D-0086, architecture,
+  and the historical ledger through `045aa86c` remain unchanged. Worker
+  verification is next; coordinator verification remains pending.
+- `2026-07-12T06:46:45Z`: Round 8 worker verification passed targeted distinct-
+  retirement-failure/survivor-rebind wording lint, active stale-status lint,
+  exact one-to-one comparison of all 36 historical fixed-package commits,
+  `pnpm docs:check`, `pnpm format:check`, `git diff --check`, exact five-file
+  tracked scope, zero-untracked, and frozen runtime/test/example/generated/
+  public-doc/user-file checks. TypeDoc retained 205 server exports with zero
+  errors and only the known invalid-`origin` warning. Coordinator verification
+  remains pending; no clean review is claimed.
+- `2026-07-12T06:50:51Z`: Coordinator closed the worker and repeated targeted
+  retirement-failure/status lint, the exact historical ledger check, docs/API,
+  format, diff, exact-scope, untracked, and frozen-path checks. All passed with
+  only the known invalid-`origin` warning. Fresh all-lane review remains
+  required.
