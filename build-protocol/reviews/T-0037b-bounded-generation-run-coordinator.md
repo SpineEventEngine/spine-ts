@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 2 fixes pending assignment
+Status: Review Round 2 fixes assigned; worker paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -191,3 +191,6 @@ Security is deferred to final project readiness.
   is not first; and task retry wording wrongly forbids retrying a stop that did
   not complete. One TDD fix worker must receive the complete list before a
   fresh four-lane review.
+- `2026-07-12T12:56:48Z`: Resumed sole author
+  `019f5626-b85c-7da3-8971-98e0ae652b25` as the one Round 2 fix worker, paused
+  until this assignment provenance commits. No reviewer remains open.
