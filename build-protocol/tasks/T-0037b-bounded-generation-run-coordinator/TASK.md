@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Baseline verified; implementation assignment pending
+Status: Implementation worker assigned; paused for assignment commit
 
 Started: `2026-07-12T11:43:52Z`
 

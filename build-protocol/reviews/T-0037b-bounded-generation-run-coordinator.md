@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Baseline verified; implementation assignment pending
+Status: Implementation worker assigned; paused for assignment commit
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -47,3 +47,6 @@ Security is deferred to final project readiness.
 - `2026-07-12T11:46:15Z`: Fresh-worktree generated build and focused T-0036
   compatibility baseline passed 3 files and 150 tests. Sole implementation
   author assignment is pending.
+- `2026-07-12T11:47:42Z`: Assigned sole implementation worker
+  `019f5626-b85c-7da3-8971-98e0ae652b25`, paused until assignment provenance
+  commits. No implementation or RED is claimed.
