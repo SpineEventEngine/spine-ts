@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 5 clean; final verification passed
+Status: Round 5 clean; merged and post-merge verified
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -214,6 +214,9 @@ Security is deferred to final project readiness.
   review-closing commit: 60 files / 1,309 tests in ordinary and coverage runs,
   90.11% branch coverage, and all non-test gates clean. Required review and
   verification are complete; merge is authorized.
+- `2026-07-12T05:28:00Z`: Merged as `d00f9c7c`; post-merge native full verify
+  passed 60 files / 1,309 tests in both runs with 90.11% branch coverage and all
+  non-test gates clean. T-0036 review/integration is closed.
 - `2026-07-12T05:10:00Z`: Coverage worker completed the uncommitted test-only
   batch. Focused coverage passed 2 files / 71 tests with 258/375 selected-source
   branches; `delivery-loop.ts` reached 91.75% and `delivery-worker.ts` reached

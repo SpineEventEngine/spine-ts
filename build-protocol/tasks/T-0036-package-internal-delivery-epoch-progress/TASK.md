@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Complete; final review and verification passed
+Status: Complete; merged to `main` and post-merge verified
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -239,6 +239,10 @@ membership.
   and coverage runs each passed 60 files / 1,309 tests; coverage is 95.14%
   statements, 90.11% branches, 98.20% functions, and 95.15% lines. Typecheck,
   lint, cleanup, formatting, docs/API, Proto, and generated-clean gates passed.
+- PASS: Merged via `d00f9c7c` and repeated native full verification on `main`:
+  60 files / 1,309 tests in ordinary and coverage runs, 90.11% branches, and
+  every non-test gate passed. Only the known invalid-`origin` docs warning
+  remains.
 - PASS: Final test-only coverage cycle added retained-epoch validation and
   duplicate/stale-row behavior, package-internal cursor/access/concurrent-start
   errors, invalid admission/progress handling, and new-obligation shard

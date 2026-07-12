@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Complete; final review and verification passed
+Status: Complete; merged to `main` and post-merge verified
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
@@ -150,5 +150,5 @@ Baseline: `67da0b1c`
   (6,898/7,249). Before this cycle global branches were 89.73%
   (3,576/3,985).
 
-Round 5 is clean and final native verification passes all gates. T-0036 is ready
-to merge.
+Round 5 is clean. Final and post-merge native verification pass all gates, and
+T-0036 is integrated into `main` as `d00f9c7c`.
