@@ -1,6 +1,6 @@
 # T-0036 Implementation Report
 
-Status: Round 1 fixes coordinator-verified; commit and rereview pending
+Status: Round 1 fixes committed; rereview pending
 
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 

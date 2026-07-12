@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 1 fixes coordinator-verified; commit and rereview pending
+Status: Round 1 fixes committed; rereview pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -169,6 +169,8 @@ membership.
 - PASS: Round 1 fix coordinator gate: 4 delivery files / 259 tests, generated
   build, changed-file ESLint, `docs:check`, `format:check`, and
   `git diff --check`. Only the known invalid-`origin` TypeDoc warning remains.
+- PASS: Round 1 fixes committed as `474bfd78`; the rereview-package status
+  reconciliation is the sole future hash under the commit-ledger convention.
 
 ## Implementation Result
 

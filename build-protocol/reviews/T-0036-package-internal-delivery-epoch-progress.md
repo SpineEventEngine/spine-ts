@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 1 fixes coordinator-verified; commit and rereview pending
+Status: Round 1 fixes committed; rereview pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -122,3 +122,6 @@ Security is deferred to final project readiness.
   formatting, and whitespace; all passed with only the known TypeDoc source-link
   warning. Lightweight status/API/policy lint passed. Fix commit, fresh package,
   and all four rereview lanes remain.
+- `2026-07-12T04:03:00Z`: Committed Round 1 fixes as `474bfd78` and reconciled
+  the active commit ledger. Fresh package generation and all four independent
+  rereview lanes are next.
