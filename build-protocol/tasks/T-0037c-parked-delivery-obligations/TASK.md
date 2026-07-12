@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Round 1 seven-finding TDD fix assigned
+Status: Round 1 fixes verified; targeted re-review pending
 
 Started: `2026-07-12T17:05:11Z`
 
@@ -210,6 +210,41 @@ batch before a fresh relevant review wave:
 Findings 1-5 were independently confirmed across the four specialist lanes;
 6-7 are coordinator task-contract findings from the accepted Exact Ownership
 and TDD Acceptance text. No public or later-lifecycle expansion is authorized.
+
+- `2026-07-12T17:58:00Z`: The sole Round 1 fix owner read the complete
+  authoritative seven-finding batch and matching work/review records before
+  edits. `receiving-code-review` applies to technical verification of the
+  fixed batch; `test-driven-development` applies to seven focused RED cases
+  before production correction; and `verification-before-completion` applies
+  to the focused gate. Each finding is technically reproducible from the
+  current table: arrival wins within one record; partial fulfillment retains
+  its representative; owner removal mutates before destination failure and
+  selects only one destination; occurrence input is not validated; cause
+  value doubles as presence; `report()` cannot select; and fulfilled `FAILED`
+  does not supersede rejected state. No coordinator production edit or public
+  interface is justified. Expected fixed runtime role remains
+  `gpt-5.6-terra` / `medium`.
+- `2026-07-12T18:00:40Z`: Complete-batch RED evidence: the parked-obligations
+  suite ran 23 tests with 13 expected failures spanning every accepted finding.
+  Failures showed arrival-selected normal/shared causes, reporting after exact
+  representative consumption, non-atomic/single-destination reclassification,
+  six invalid occurrence values accepted, absent explicit presence for two
+  `undefined` causes, unconditional reporting of an unselected record, and
+  fulfilled `FAILED` retaining the prior cause/count. Only after this RED was
+  observed was the bounded table implementation changed.
+- `2026-07-12T18:04:19Z`: Complete-batch GREEN and focused regression evidence:
+  the parked table plus coordinator, worker, worker-runtime, and loop suites
+  passed 5 files / 205 tests. `pnpm typecheck` regenerated ignored protobuf
+  output, verified all 25 copied proto checksums, and passed generated/build
+  plus tooling typechecks. The fix remains package-internal and limited to the
+  parked table/test and T-0037c records: no coordinator production edit,
+  lifecycle wiring/policy, public export, generated artifact, or human-review
+  edit. Full `pnpm verify` remains reserved for final acceptance. Expected fixed
+  runtime role remains `gpt-5.6-terra` / `medium`.
+- `2026-07-12T18:06:28Z`: Independent coordinator verification repeated the
+  five delivery suites and 205 tests, generated/build/tooling typechecks,
+  changed-file ESLint/Prettier, and `git diff --check`. The complete fix batch
+  is accepted for a fresh targeted review package.
 
 ## Likely Files
 

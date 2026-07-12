@@ -28,7 +28,7 @@ export class ParkedDeliveryObligations {
       throw new Error("Parked delivery obligations require a generation obligation.");
     }
     this.#shared = Object.freeze({
-      key: "shared",
+      key: recordKey(sharedOwner, "shared"),
       owner: sharedOwner,
       obligation: "shared",
       units: Object.freeze(units),
@@ -42,77 +42,51 @@ export class ParkedDeliveryObligations {
     cause: unknown,
     occurrences = 1,
   ): void {
+    requireOccurrences(occurrences);
     const configured = this.#configuredObligation(owner, obligation, units);
     const record = this.#record(configured, units);
     record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    if (record.cause === undefined || record.reported) {
-      record.cause = cause;
-      record.causeUnit = firstUnit(units, configured.units);
-      record.reported = false;
-    }
+    selectCause(record, cause, firstUnit(units, configured.units), configured.units);
   }
 
   parkFulfilledFailed(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
+    this.#fulfill(configured, units);
     this.#record(configured, units);
   }
 
   parkShared(units: readonly string[], cause: unknown, occurrences = 1): void {
-    if (!isConfiguredSubset(units, this.#shared.units)) {
-      throw new Error("Parked delivery shared obligation is not configured.");
-    }
-    const record = this.#record(this.#shared, units);
+    requireOccurrences(occurrences);
+    const configured = this.#configuredObligation(sharedOwner, "shared", units);
+    const record = this.#record(configured, units);
     record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    if (record.cause === undefined || record.reported) {
-      record.cause = cause;
-      record.causeUnit = firstUnit(units, this.#shared.units);
-      record.reported = false;
-    }
+    selectCause(record, cause, firstUnit(units, configured.units), configured.units);
   }
 
-  report(): readonly unknown[] {
+  report(selections: readonly ParkedDeliveryObligationSelection[]): readonly unknown[] {
+    const selected = this.#selectedUnits(selections);
     const causes: unknown[] = [];
     for (const configured of this.#configured.values()) {
-      const record = this.#records.get(configured.key);
-      if (record === undefined) {
-        continue;
-      }
-      if (record.cause !== undefined && !record.reported) {
-        causes.push(record.cause);
-        record.reported = true;
-        record.reportedSinceResolution = true;
-      }
+      this.#reportRecord(configured, selected.get(configured.key), causes);
     }
-    const shared = this.#records.get(this.#shared.key);
-    if (shared?.cause !== undefined && !shared.reported) {
-      causes.push(shared.cause);
-      shared.reported = true;
-      shared.reportedSinceResolution = true;
-    }
+    this.#reportRecord(this.#shared, selected.get(this.#shared.key), causes);
     return Object.freeze(causes);
   }
 
   fulfilled(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
-    const record = this.#records.get(configured.key);
-    if (record === undefined) {
-      return;
-    }
-    const resolved = new Set(units);
-    record.units = record.units.filter((unit) => !resolved.has(unit));
-    if (record.units.length === 0) {
-      this.#records.delete(configured.key);
-    }
+    this.#fulfill(configured, units);
   }
 
   removeRegistration(token: string): void {
-    for (const [key, record] of this.#records) {
-      if (record.owner.kind !== "registration" || record.owner.token !== token) {
-        continue;
+    const plan = this.#reclassificationPlan(token);
+    for (const { sourceKey } of plan) {
+      this.#records.delete(sourceKey);
+    }
+    for (const { destinations } of plan) {
+      for (const { configured, source } of destinations) {
+        this.#coalesce(configured, source);
       }
-      this.#records.delete(key);
-      const destination = this.#generationDestination(record.units);
-      this.#coalesce(destination, record);
     }
     for (const [key, configured] of this.#configured) {
       if (configured.owner.kind === "registration" && configured.owner.token === token) {
@@ -160,12 +134,7 @@ export class ParkedDeliveryObligations {
   #record(configured: ConfiguredObligation, units: readonly string[]): MutableRecord {
     const existing = this.#records.get(configured.key);
     if (existing !== undefined) {
-      for (const unit of units) {
-        if (!existing.units.includes(unit)) {
-          existing.units.push(unit);
-        }
-      }
-      existing.units = orderUnits(existing.units, configured.units);
+      existing.units = orderUnits([...existing.units, ...units], configured.units);
       return existing;
     }
     const record: MutableRecord = {
@@ -174,6 +143,8 @@ export class ParkedDeliveryObligations {
       obligation: configured.obligation,
       units: orderUnits(units, configured.units),
       occurrences: 0,
+      cause: undefined,
+      causePresent: false,
       causeUnit: "",
       reportedSinceResolution: false,
       reported: false,
@@ -182,13 +153,91 @@ export class ParkedDeliveryObligations {
     return record;
   }
 
-  #generationDestination(units: readonly string[]): ConfiguredObligation {
-    for (const configured of this.#configured.values()) {
-      if (configured.owner.kind === "generation" && isConfiguredSubset(units, configured.units)) {
-        return configured;
-      }
+  #fulfill(configured: ConfiguredObligation, units: readonly string[]): void {
+    const record = this.#records.get(configured.key);
+    if (record === undefined) {
+      return;
     }
-    throw new Error("Removed registration obligation has no configured generation destination.");
+    const resolved = new Set(units);
+    record.units = record.units.filter((unit) => !resolved.has(unit));
+    if (record.causePresent && resolved.has(record.causeUnit)) {
+      clearCause(record);
+    }
+    if (record.units.length === 0) {
+      this.#records.delete(configured.key);
+    }
+  }
+
+  #selectedUnits(
+    selections: readonly ParkedDeliveryObligationSelection[],
+  ): ReadonlyMap<string, ReadonlySet<string>> {
+    const selected = new Map<string, Set<string>>();
+    for (const selection of selections) {
+      const configured = this.#configuredObligation(
+        selection.owner,
+        selection.obligation,
+        selection.units,
+      );
+      const units = selected.get(configured.key) ?? new Set<string>();
+      for (const unit of selection.units) {
+        units.add(unit);
+      }
+      selected.set(configured.key, units);
+    }
+    return selected;
+  }
+
+  #reportRecord(
+    configured: ConfiguredObligation,
+    selected: ReadonlySet<string> | undefined,
+    causes: unknown[],
+  ): void {
+    const record = this.#records.get(configured.key);
+    if (
+      record === undefined ||
+      selected === undefined ||
+      !record.causePresent ||
+      record.reported ||
+      !selected.has(record.causeUnit)
+    ) {
+      return;
+    }
+    causes.push(record.cause);
+    record.reported = true;
+    record.reportedSinceResolution = true;
+  }
+
+  #reclassificationPlan(token: string): readonly Reclassification[] {
+    const plan: Reclassification[] = [];
+    for (const [sourceKey, source] of this.#records) {
+      if (source.owner.kind !== "registration" || source.owner.token !== token) {
+        continue;
+      }
+      plan.push({ sourceKey, destinations: this.#generationDestinations(source) });
+    }
+    return plan;
+  }
+
+  #generationDestinations(source: MutableRecord): readonly ReclassificationDestination[] {
+    const generation = Array.from(this.#configured.values()).filter(
+      (configured) => configured.owner.kind === "generation",
+    );
+    const grouped = new Map<string, string[]>();
+    for (const unit of source.units) {
+      const destination = generation.find((configured) => configured.units.includes(unit));
+      if (destination === undefined) {
+        throw new Error(
+          "Removed registration obligation has no configured generation destination.",
+        );
+      }
+      const units = grouped.get(destination.key) ?? [];
+      units.push(unit);
+      grouped.set(destination.key, units);
+    }
+    return generation.flatMap((configured) => {
+      const units = grouped.get(configured.key);
+      return units === undefined ? [] : [{ configured, source: reclassifiedSource(source, units) }];
+    });
   }
 
   #coalesce(destination: ConfiguredObligation, source: MutableRecord): void {
@@ -199,6 +248,7 @@ export class ParkedDeliveryObligations {
       return;
     }
     target.cause = source.cause;
+    target.causePresent = true;
     target.causeUnit = source.causeUnit;
     target.reported = source.reported;
   }
@@ -225,12 +275,20 @@ export interface ParkedDeliveryObligationOptions {
   readonly generation: readonly ParkedConfiguredObligation[];
 }
 
+/** @internal Exact package-local record units eligible for reporting. */
+export interface ParkedDeliveryObligationSelection {
+  readonly owner: ParkedOwner;
+  readonly obligation: string;
+  readonly units: readonly string[];
+}
+
 /** @internal Immutable inspection result for package-local lifecycle consumers. */
 export interface ParkedDeliveryObligationRecord {
   readonly owner: ParkedOwner;
   readonly obligation: string;
   readonly units: readonly string[];
-  readonly cause?: unknown;
+  readonly cause: unknown;
+  readonly hasCause: boolean;
   readonly occurrences: number;
   readonly reportedSinceResolution: boolean;
 }
@@ -245,10 +303,21 @@ interface ConfiguredObligation {
 interface MutableRecord extends ConfiguredObligation {
   units: string[];
   occurrences: number;
-  cause?: unknown;
+  cause: unknown;
+  causePresent: boolean;
   causeUnit: string;
   reported: boolean;
   reportedSinceResolution: boolean;
+}
+
+interface Reclassification {
+  readonly sourceKey: string;
+  readonly destinations: readonly ReclassificationDestination[];
+}
+
+interface ReclassificationDestination {
+  readonly configured: ConfiguredObligation;
+  readonly source: MutableRecord;
 }
 
 const generationOwner = Object.freeze({ kind: "generation" } as const);
@@ -283,16 +352,44 @@ function firstUnit(units: readonly string[], configured: readonly string[]): str
   return first;
 }
 
+function selectCause(
+  record: MutableRecord,
+  cause: unknown,
+  causeUnit: string,
+  configured: readonly string[],
+): void {
+  if (
+    !record.causePresent ||
+    record.reported ||
+    configured.indexOf(causeUnit) < configured.indexOf(record.causeUnit)
+  ) {
+    record.cause = cause;
+    record.causePresent = true;
+    record.causeUnit = causeUnit;
+    record.reported = false;
+  }
+}
+
+function clearCause(record: MutableRecord): void {
+  record.cause = undefined;
+  record.causePresent = false;
+  record.causeUnit = "";
+  record.reported = false;
+}
+
 function shouldReplaceCause(
   target: MutableRecord,
   source: MutableRecord,
   configured: readonly string[],
 ): boolean {
-  if (source.cause === undefined) {
+  if (!source.causePresent) {
     return false;
   }
-  if (target.cause === undefined || target.reported) {
-    return !source.reported || target.cause === undefined;
+  if (!target.causePresent) {
+    return true;
+  }
+  if (target.reported) {
+    return !source.reported;
   }
   if (source.reported) {
     return false;
@@ -300,10 +397,25 @@ function shouldReplaceCause(
   return configured.indexOf(source.causeUnit) < configured.indexOf(target.causeUnit);
 }
 
-function saturatingAdd(current: number, increment: number): number {
-  if (increment <= 0) {
-    return current;
+function reclassifiedSource(source: MutableRecord, units: readonly string[]): MutableRecord {
+  const hasCause = source.causePresent && units.includes(source.causeUnit);
+  return {
+    ...source,
+    units: [...units],
+    cause: hasCause ? source.cause : undefined,
+    causePresent: hasCause,
+    causeUnit: hasCause ? source.causeUnit : "",
+    reported: hasCause && source.reported,
+  };
+}
+
+function requireOccurrences(increment: number): void {
+  if (!Number.isSafeInteger(increment) || increment <= 0) {
+    throw new Error("Parked delivery occurrence increment must be a positive safe integer.");
   }
+}
+
+function saturatingAdd(current: number, increment: number): number {
   return current >= Number.MAX_SAFE_INTEGER - increment
     ? Number.MAX_SAFE_INTEGER
     : current + increment;
@@ -315,6 +427,7 @@ function snapshot(record: MutableRecord): ParkedDeliveryObligationRecord {
     obligation: record.obligation,
     units: Object.freeze([...record.units]),
     cause: record.cause,
+    hasCause: record.causePresent,
     occurrences: record.occurrences,
     reportedSinceResolution: record.reportedSinceResolution,
   });

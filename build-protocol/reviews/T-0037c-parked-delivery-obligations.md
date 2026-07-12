@@ -1,6 +1,6 @@
 # T-0037c Review Log
 
-Status: Round 1 seven-finding TDD fix assigned
+Status: Round 1 fixes verified; targeted re-review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037c-parked-delivery-obligations/TASK.md`.
@@ -117,3 +117,24 @@ an applicable review or a concrete N/A disposition under
   fulfilled-`FAILED` replacement of prior rejected state. The last two are
   coordinator-confirmed direct task-contract gaps. One Terra Medium fix owner
   receives the complete batch before any re-review.
+- `2026-07-12T17:58:00Z`: The Round 1 fix owner verified all seven accepted
+  findings against current code before editing. Review-reception, TDD, and
+  completion-verification skills govern this fix pass. The complete batch will
+  receive focused RED/GREEN evidence; no subset was selected and no coordinator
+  production or public/lifecycle expansion is warranted. Expected fixed role
+  remains `gpt-5.6-terra` / `medium`.
+- `2026-07-12T18:00:40Z`: Complete Round 1 RED was observed: 13 failures in 23
+  parked-table tests covered every one of the seven authoritative findings.
+  The fix owner then changed only the internal parked table and its focused
+  tests; GREEN and regression evidence remain pending.
+- `2026-07-12T18:04:19Z`: All seven Round 1 findings are addressed with
+  behavior-focused RED/GREEN evidence. The parked suite passed 23 tests and the
+  five-suite delivery regression passed 205 tests; generated/build/tooling
+  typechecks passed. Changed runtime behavior is confined to the package-local
+  parked table. Fresh specialist re-review remains the next coordinator-owned
+  step; security remains deferred to final release readiness. Full
+  `pnpm verify` remains final-gate only. Expected fixed role remains
+  `gpt-5.6-terra` / `medium`.
+- `2026-07-12T18:06:28Z`: Coordinator verification independently repeated 205
+  focused regression tests, all typechecks, changed-file lint/format, and diff
+  hygiene. The seven-finding fix batch is accepted for targeted re-review.
