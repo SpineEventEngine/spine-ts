@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Review Round 4 fixes verified; fresh package pending
+Status: Review Round 5 skill checks pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status   |
-| -------------------------- | -------------------------------------- | -------- |
-| Code style/maintainability | `019f568d-f6ca-7612-9f44-98da46a77c58` | Clean    |
-| Documentation              | `019f568d-f73f-7e82-bfa9-58250d1d1348` | Findings |
-| TypeScript/API docs        | `019f568d-f7ca-7091-945c-900c6b88bb0e` | Findings |
-| Performance/reliability    | `019f568d-f879-74c2-b0ca-1b5dbe6d2fbb` | Findings |
+| Lane                       | Reviewer                               | Status              |
+| -------------------------- | -------------------------------------- | ------------------- |
+| Code style/maintainability | `019f56a1-9e10-7b91-860d-60ad169eb762` | Skill check pending |
+| Documentation              | `019f56a1-9e7f-79f1-b392-d0f6f02f255f` | Skill check pending |
+| TypeScript/API docs        | `019f56a1-9efb-74d0-a23d-8b4db7b8ebf6` | Skill check pending |
+| Performance/reliability    | `019f56a1-9f91-76f3-8437-c52e54a8f0b2` | Skill check pending |
 
 Security is deferred to final project readiness.
 
@@ -309,3 +309,7 @@ Security is deferred to final project readiness.
   focused tests, both canonical typechecks, changed-file ESLint/Prettier, and
   diff hygiene. Both Round 4 fixes are accepted and the worker is closed; a
   fresh literal-endpoint package and all four lanes remain.
+- `2026-07-12T14:01:06Z`: Frozen fix commit `066c295d` and fresh package
+  `.superpowers/sdd/review-40329cad..066c295d.diff` were created. Four new Round
+  5 reviewers above are reserved and paused pending assignment provenance and
+  canonical Phase 1 skill checks.
