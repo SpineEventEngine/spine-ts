@@ -1,8 +1,24 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Candidate; not started
+Status: TDD implementation assigned
+
+Started: `2026-07-12T18:25:27Z`
+
+Baseline commit: `d4cd3c4a`
+
+Branch: `task/T-0037d-environment-attachment-startup`
+
+This `Status` header is canonical for T-0037d. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037c complete and integrated.
+
+The existing accepted task and completion-plan records are the completed deep
+architecture plan for this concurrency/ownership milestone. A new requirements
+split would only re-plan that accepted design, so no Sol planning pass is
+invoked. One existing implementer is assigned the complete coherent milestone
+with expected explicit `gpt-5.6-terra` / `medium`, sole write ownership, TDD,
+and no subagents.
 
 ## Objective
 
