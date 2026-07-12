@@ -5,7 +5,9 @@ import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../reposito
 import {
   configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
+  type DeliveryHandoff,
   deliveryEndpoint,
+  deliveryReady,
   type DeliveryEndpoint,
   DeliveryReadiness,
   drainLocalInboxMessage,
@@ -96,10 +98,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    const message = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
+    const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
-    await this.#drainInboxRow(delivery, message, deliveryTenantId);
-    return message;
+    await written.handoff.complete(() =>
+      this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+    );
+    return written.message;
   }
 
   async #receiveAndDrainAll(
@@ -113,7 +117,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     try {
       for (const row of rows) {
         if (row.owner !== undefined) {
-          row.owner.message = await this.#writeInboxRow(
+          row.owner.written = await this.#writeInboxRow(
             delivery,
             row.input,
             whenReceived,
@@ -126,10 +130,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
           await row.promise;
           continue;
         }
-        const message = writtenMessage(row.owner);
+        const written = requireWritten(row.owner);
 
-        await this.#drainInboxRow(delivery, message, deliveryTenantId);
-        resolveRow(row.owner, message);
+        await written.handoff.complete(() =>
+          this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+        );
+        resolveRow(row.owner, written.message);
       }
       return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
     } catch (error) {
@@ -145,7 +151,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     whenReceived: Date,
     deliveryTenantId?: string,
-  ): Promise<InboxMessage> {
+  ): Promise<InboxWrite> {
     const written = await delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,
@@ -158,17 +164,20 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
 
-    if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(
-        written.message,
-        this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
-      );
-      if (endpoint !== undefined) {
-        this.#readiness.notify(endpoint, deliveryTenantId);
-      }
-    }
+    const endpoint =
+      written.outcome === "WRITTEN"
+        ? configuredDeliveryEndpoint(
+            written.message,
+            this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
+          )
+        : undefined;
 
-    return written.message;
+    return {
+      message: written.message,
+      handoff: this.#readiness.claim(
+        endpoint === undefined ? undefined : deliveryReady(endpoint, deliveryTenantId),
+      ),
+    };
   }
 
   async #drainInboxRow(
@@ -245,7 +254,12 @@ interface InboxDeferred {
   readonly resolve: (message: InboxMessage) => void;
   readonly reject: (reason: unknown) => void;
   settled: boolean;
-  message?: InboxMessage;
+  written?: InboxWrite;
+}
+
+interface InboxWrite {
+  readonly message: InboxMessage;
+  readonly handoff: DeliveryHandoff;
 }
 
 interface BatchRow {
@@ -267,12 +281,12 @@ function createInboxDeferred(): InboxDeferred {
   return { promise, resolve, reject, settled: false };
 }
 
-function writtenMessage(owner: InboxDeferred): InboxMessage {
-  if (owner.message === undefined) {
+function requireWritten(owner: InboxDeferred): InboxWrite {
+  if (owner.written === undefined) {
     throw new Error("Process-manager inbox batch row was not written before drain.");
   }
 
-  return owner.message;
+  return owner.written;
 }
 
 function resolveRow(owner: InboxDeferred, message: InboxMessage): void {
@@ -283,6 +297,7 @@ function resolveRow(owner: InboxDeferred, message: InboxMessage): void {
 function rejectRows(rows: readonly BatchRow[], reason: unknown): void {
   for (const row of rows) {
     if (row.owner !== undefined && !row.owner.settled) {
+      row.owner.written?.handoff.abandon();
       row.owner.settled = true;
       row.owner.reject(reason);
     }

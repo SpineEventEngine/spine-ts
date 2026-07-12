@@ -6,6 +6,7 @@ import {
   configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
   deliveryEndpoint,
+  deliveryReady,
   type DeliveryEndpoint,
   DeliveryReadiness,
   drainLocalInboxMessage,
@@ -84,26 +85,29 @@ export class LocalProjectionInbox implements ProjectionInbox {
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
 
-    if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(
-        written.message,
-        this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
-      );
-      if (endpoint !== undefined) {
-        this.#readiness.notify(endpoint, deliveryTenantId);
-      }
-    }
+    const endpoint =
+      written.outcome === "WRITTEN"
+        ? configuredDeliveryEndpoint(
+            written.message,
+            this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
+          )
+        : undefined;
 
-    await drainLocalInboxMessage({
-      delivery,
-      received: written.message,
-      node: this.#contextName,
-      onReplay: (message) => this.#replay(message, deliveryTenantId),
-      replayFailureMessage: "Projection inbox replay failed.",
-      skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
-      unfinishedMessage:
-        "Projection inbox delivery did not reach the target row before the local drain finished.",
-    });
+    await this.#readiness
+      .claim(endpoint === undefined ? undefined : deliveryReady(endpoint, deliveryTenantId))
+      .complete(() =>
+        drainLocalInboxMessage({
+          delivery,
+          received: written.message,
+          node: this.#contextName,
+          onReplay: (message) => this.#replay(message, deliveryTenantId),
+          replayFailureMessage: "Projection inbox replay failed.",
+          skippedMessage:
+            "Projection inbox delivery was skipped before the target row was delivered.",
+          unfinishedMessage:
+            "Projection inbox delivery did not reach the target row before the local drain finished.",
+        }),
+      );
     return written.message;
   }
 

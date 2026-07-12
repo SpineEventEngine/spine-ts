@@ -81,6 +81,7 @@ interface InternalDeliveryDescriptor {
   startupScopes(): Promise<readonly InternalDeliveryScope[]>;
   endpoints(): readonly InternalDeliveryEndpoint[];
   onReady(onReady: (ready: unknown) => void): () => void;
+  transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
 }
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -210,6 +211,14 @@ function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDe
 }
 
 describe("BoundedContext assembly", () => {
+  it("exposes the private delivery ownership transition through its descriptor", () => {
+    const context = BoundedContext.singleTenant("Tasks").build();
+
+    expect(() => internalDeliveryDescriptor(context).transition([], () => undefined)).toThrow(
+      "Delivery readiness transition requires configured scopes.",
+    );
+  });
+
   it("rejects empty or blank context names", () => {
     expect(() => BoundedContext.singleTenant("\t\n")).toThrow(BoundedContextNameError);
     expect(() => BoundedContext.multitenant("")).toThrow(BoundedContextNameError);

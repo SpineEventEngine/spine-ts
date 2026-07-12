@@ -7,12 +7,72 @@ import { describe, expect, it, vi } from "vitest";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
+import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("buffers persisted rows while direct drain ownership transfers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalProcessManagerInbox("Tasks", readiness);
+    const replayStarted = Promise.withResolvers<undefined>();
+    const releaseReplay = Promise.withResolvers<undefined>();
+    const replayed: string[] = [];
+    const routed: unknown[] = [];
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      async replay(message) {
+        replayed.push(message.inboxId.targetId);
+        if (message.inboxId.targetId === "admitted") {
+          replayStarted.resolve(undefined);
+          await releaseReplay.promise;
+        }
+      },
+    });
+
+    const admitted = inbox.receive(delivery, processInput(targetTypeUrl, "admitted"), "tenant-a");
+    await replayStarted.promise;
+    const transition = readiness.transition(
+      [
+        {
+          tenantId: "tenant-a",
+          label: "HANDLE_COMMAND",
+          targetTypeUrl,
+          shard: ShardIndex.single(),
+        },
+      ],
+      (scope) => routed.push(scope),
+    );
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["buffered-a", "buffered-b"].map((targetId) => processInput(targetTypeUrl, targetId)),
+        "tenant-a",
+      ),
+    ).resolves.toHaveLength(2);
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toEqual([]);
+
+    releaseReplay.resolve(undefined);
+    await Promise.all([admitted, transition]);
+    expect(routed).toHaveLength(1);
+
+    await expect(
+      inbox.receive(delivery, processInput(targetTypeUrl, "routed"), "tenant-a"),
+    ).resolves.toBeDefined();
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toHaveLength(2);
+  });
+
   it("emits readiness after persistence before exact drain settles", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
@@ -1243,6 +1303,16 @@ describe("LocalProcessManagerInbox", () => {
     expect(ready).toEqual([]);
   });
 });
+
+function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
+  return {
+    inboxId: { targetId, targetTypeUrl },
+    signalId: `signal-${targetId}`,
+    label: "HANDLE_COMMAND",
+    status: "TO_DELIVER",
+    shard: ShardIndex.single(),
+  };
+}
 
 interface ForeignDeferred {
   readonly promise: Promise<never>;

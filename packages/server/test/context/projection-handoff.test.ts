@@ -7,9 +7,68 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../../src/repository/repository.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
+import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("routes persisted rows without exact drain after ownership transfer", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalProjectionInbox("Tasks", readiness);
+    const replayStarted = Promise.withResolvers<undefined>();
+    const releaseReplay = Promise.withResolvers<undefined>();
+    const replayed: string[] = [];
+    const routed: unknown[] = [];
+    inbox.register({
+      targetTypeUrl,
+      async replay(message) {
+        replayed.push(message.inboxId.targetId);
+        if (message.inboxId.targetId === "admitted") {
+          replayStarted.resolve(undefined);
+          await releaseReplay.promise;
+        }
+      },
+    });
+
+    const admitted = inbox.receive(
+      delivery,
+      projectionInput(targetTypeUrl, "admitted"),
+      "tenant-a",
+    );
+    await replayStarted.promise;
+    const transition = readiness.transition(
+      [
+        {
+          tenantId: "tenant-a",
+          label: "UPDATE_SUBSCRIBER",
+          targetTypeUrl,
+          shard: ShardIndex.single(),
+        },
+      ],
+      (scope) => routed.push(scope),
+    );
+
+    await expect(
+      inbox.receive(delivery, projectionInput(targetTypeUrl, "buffered"), "tenant-a"),
+    ).resolves.toBeDefined();
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toEqual([]);
+
+    releaseReplay.resolve(undefined);
+    await Promise.all([admitted, transition]);
+    expect(routed).toHaveLength(1);
+
+    await expect(
+      inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), "tenant-a"),
+    ).resolves.toBeDefined();
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toHaveLength(2);
+  });
+
   it("matches receive readiness without rebuilding the global endpoint snapshot", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -580,6 +639,16 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 });
+
+function projectionInput(targetTypeUrl: string, targetId: string) {
+  return {
+    inboxId: { targetId, targetTypeUrl },
+    signalId: `event-${targetId}`,
+    label: "UPDATE_SUBSCRIBER" as const,
+    status: "TO_DELIVER" as const,
+    shard: ShardIndex.single(),
+  };
+}
 
 type ProjectionReceiveInput = Parameters<ProjectionInbox["receive"]>[1];
 function asRuntimeInvalidProjectionInput(input: unknown): ProjectionReceiveInput {

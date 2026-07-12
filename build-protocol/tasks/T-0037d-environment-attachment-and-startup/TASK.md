@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 atomic handoff barrier assigned
+Status: Slice 1 implemented and coordinator-verified; review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -214,9 +214,31 @@ three sequential TDD implementation slices on this branch:
 3. Add and prove registration-scoped failed-start rollback: sibling isolation,
    D-0085 blocker shaping, sole-generation retirement, reporting/cleanup error
    safety, quiescence retention, and same-operation retry.
-4. Run the T-0037d focused gate and then the canonical four review lanes. No
-   reviewer is dispatched until the complete milestone reaches its focused gate.
+4. Freeze and run the canonical four review lanes after each slice, then run the
+   complete T-0037d focused gate and final review closure after Slice 3.
 
 This decomposition is progress, not a project blocker. Slice 1 is assigned to
 the existing Terra Medium implementation context; slices 2 and 3 remain pending
 and must consume rather than reopen earlier slice contracts.
+
+- `2026-07-12T18:49:21Z`: Independent coordinator verification repeated six
+  focused files and 145 tests, all generated/build/tooling typechecks,
+  changed-file ESLint/Prettier, and diff hygiene. Slice 1 is ready to freeze for
+  its own four-lane review before Slice 2 consumes the barrier.
+
+## Slice 1 Outcome
+
+Implemented one package-internal `DeliveryReadiness` ownership barrier shared
+by process-manager single/batch receives and projection receives. A durable
+write claims either direct-drain or transition/route ownership synchronously:
+transition closes new direct admission, waits every prior claim, deduplicates
+buffered canonical scopes within the configured-scope map, installs the route,
+and transfers buffered scopes once. Routed receives submit non-throwing
+readiness and never invoke or await exact drain. Existing direct completion,
+failure, duplicate, batch, and observer behavior remains covered.
+
+The only later-slice interface is the package-internal descriptor
+`transition(scopes, onReady)` method. No registration, generation, startup,
+rollback, public API/export, listener, lifecycle policy, or generated artifact
+was added. Slice 2 may consume this frozen barrier without reopening its
+ownership semantics.

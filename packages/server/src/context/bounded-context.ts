@@ -156,6 +156,7 @@ export interface ContextDeliveryDescriptor {
   startupScopes(): Promise<readonly DeliveryTenantScope[]>;
   endpoints(): readonly DeliveryEndpoint[];
   onReady(onReady: OnDeliveryReady): () => void;
+  transition(scopes: readonly DeliveryReady[], onReady: OnDeliveryReady): Promise<void>;
 }
 
 interface RegistrationSnapshot {
@@ -1454,6 +1455,9 @@ function createDeliveryDescriptor(
     },
     onReady(onReady: (ready: DeliveryReady) => void): () => void {
       return readiness.onReady(onReady);
+    },
+    transition(scopes: readonly DeliveryReady[], onReady: OnDeliveryReady): Promise<void> {
+      return readiness.transition(scopes, onReady);
     },
   });
 }
