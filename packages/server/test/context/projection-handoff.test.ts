@@ -10,6 +10,41 @@ import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("preserves exact-drain failure when the readiness observer also throws", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const drainFailure = new Error("projection replay failed");
+    let notifications = 0;
+    const inbox = new LocalProjectionInbox("Tasks", () => {
+      notifications += 1;
+      throw new Error("observer failed");
+    });
+    inbox.register({
+      targetTypeUrl,
+      replay() {
+        return Promise.reject(drainFailure);
+      },
+    });
+
+    const result = await inbox
+      .receive(delivery, {
+        inboxId: { targetId: "projection-ready", targetTypeUrl },
+        signalId: "event-ready",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(result).toBe(drainFailure);
+    expect(notifications).toBe(1);
+  });
   it("narrows replay targets to pending subscriber updates", () => {
     type ReplayMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
 

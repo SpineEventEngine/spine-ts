@@ -1,24 +1,47 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
+import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
   coordinateLocalInboxHandoff,
+  deliveryEndpoint,
+  type DeliveryEndpoint,
+  DeliveryReadiness,
   drainLocalInboxMessage,
   localInboxHandoffKey,
+  type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProjectionInboxTarget>();
+  readonly #readiness: DeliveryReadiness;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
-  constructor(contextName: string) {
+  constructor(
+    contextName: string,
+    readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
+  ) {
     this.#contextName = contextName;
+    this.#readiness =
+      readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
   }
 
   register(target: ProjectionInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
+  }
+
+  endpoints(): readonly DeliveryEndpoint[] {
+    return Object.freeze(
+      [...this.#targets.values()].map((target) =>
+        deliveryEndpoint({
+          label: "UPDATE_SUBSCRIBER",
+          inboxId: { targetTypeUrl: target.targetTypeUrl },
+          shard: ShardIndex.single(),
+        }),
+      ),
+    );
   }
 
   /** Replay one already-durable inbox row through registered projection targets. */
@@ -54,6 +77,17 @@ export class LocalProjectionInbox implements ProjectionInbox {
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
+
+    if (written.outcome === "WRITTEN") {
+      this.#readiness.notify(
+        deliveryEndpoint({
+          label: input.label,
+          inboxId: written.message.inboxId,
+          shard: written.message.shard,
+        }),
+        deliveryTenantId,
+      );
+    }
 
     await drainLocalInboxMessage({
       delivery,

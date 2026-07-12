@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
@@ -11,6 +11,199 @@ import { LocalProcessManagerInbox } from "../../src/context/process-manager-hand
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 
 describe("LocalProcessManagerInbox", () => {
+  it("emits readiness after persistence before exact drain settles", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+
+    inbox.register({
+      targetTypeUrl,
+      async replay() {
+        startReplay();
+        await replayReleased;
+      },
+    });
+
+    const receive = inbox.receive(
+      delivery,
+      {
+        inboxId: { targetId: "pm-ready", targetTypeUrl },
+        signalId: "signal-ready",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+      },
+      "tenant-a",
+    );
+    await replayStarted;
+
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "HANDLE_COMMAND",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+
+    releaseReplay();
+    await receive;
+  });
+
+  it("emits for each persisted batch row before a later persistence rejection", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inputs = ["first", "second", "unattempted"].map((targetId) => ({
+      inboxId: { targetId, targetTypeUrl },
+      signalId: "event-partial",
+      label: "REACT_UPON_EVENT" as const,
+      status: "TO_DELIVER" as const,
+      shard: ShardIndex.single(),
+    }));
+    const firstInput = inputs[0];
+    if (firstInput === undefined) {
+      throw new Error("Expected a first partial-batch input.");
+    }
+    const receive = vi
+      .fn()
+      .mockResolvedValueOnce(writtenResult(firstInput, 1n))
+      .mockRejectedValueOnce(new Error("second write rejected"));
+    const delivery = { inbox: { receive } } as unknown as Delivery;
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+
+    await expect(inbox.receiveAll(delivery, inputs, "tenant-a")).rejects.toThrow(
+      "second write rejected",
+    );
+
+    expect(receive).toHaveBeenCalledTimes(2);
+    expect(ready).toEqual([
+      {
+        tenantId: "tenant-a",
+        label: "REACT_UPON_EVENT",
+        targetTypeUrl,
+        shard: { index: 0, ofTotal: 1 },
+      },
+    ]);
+  });
+
+  it("isolates readiness observer failure from every batch write and exact drain", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const seen: string[] = [];
+    let notifications = 0;
+    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+      notifications += 1;
+      throw new Error("observer failed");
+    });
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message.inboxId.targetId);
+        return Promise.resolve();
+      },
+    });
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => ({
+          inboxId: { targetId, targetTypeUrl },
+          signalId: "event-observer-failure",
+          label: "REACT_UPON_EVENT" as const,
+          status: "TO_DELIVER" as const,
+          shard: ShardIndex.single(),
+        })),
+      ),
+    ).resolves.toHaveLength(2);
+    expect(notifications).toBe(2);
+    expect(seen).toEqual(["first", "second"]);
+  });
+
+  it("emits no readiness for a rejected write or a duplicate without new persistence", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const rejectedDelivery = {
+      inbox: { receive: () => Promise.reject(new Error("write rejected")) },
+    } as unknown as Delivery;
+    const input = {
+      inboxId: { targetId: "pm-dedup", targetTypeUrl },
+      signalId: "signal-dedup",
+      label: "HANDLE_COMMAND" as const,
+      status: "TO_DELIVER" as const,
+      shard: ShardIndex.single(),
+    };
+
+    await expect(inbox.receive(rejectedDelivery, input)).rejects.toThrow("write rejected");
+    expect(ready).toEqual([]);
+
+    const duplicate = writtenResult(input, 1n).message;
+    const duplicateDelivery = {
+      inbox: {
+        receive: () => Promise.resolve({ outcome: "DUPLICATE", message: duplicate }),
+        readMessage: () => Promise.resolve({ ...duplicate, status: "DELIVERED" }),
+      },
+      drainMessage: () =>
+        Promise.resolve({
+          status: "DRAINED",
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        }),
+    } as unknown as Delivery;
+
+    await inbox.receive(duplicateDelivery, input);
+
+    expect(ready).toEqual([]);
+  });
+
+  it("emits for all persisted batch rows before a later exact drain rejection", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const drainFailure = new Error("batch replay failed");
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({ targetTypeUrl, replay: () => Promise.reject(drainFailure) });
+
+    const result = await inbox
+      .receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => ({
+          inboxId: { targetId, targetTypeUrl },
+          signalId: "event-drain-failure",
+          label: "REACT_UPON_EVENT" as const,
+          status: "TO_DELIVER" as const,
+          shard: ShardIndex.single(),
+        })),
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(result).toBe(drainFailure);
+    expect(ready).toHaveLength(2);
+  });
   it("replays existing durable command and event rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -863,4 +1056,16 @@ function pause(milliseconds: number): Promise<void> {
 
 function corruptedInput(input: unknown): ReceiveInput {
   return input as ReceiveInput;
+}
+
+function writtenResult(input: ReceiveInput, version: bigint) {
+  return {
+    outcome: "WRITTEN" as const,
+    message: {
+      ...input,
+      id: { value: `row-${String(version)}`, shard: input.shard },
+      whenReceived: new Date("2026-07-12T09:00:00.000Z"),
+      version,
+    },
+  };
 }
