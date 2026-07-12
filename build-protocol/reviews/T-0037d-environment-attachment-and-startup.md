@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 3 fix focused verified; targeted re-review pending
+Status: Slice 1 Round 4 targeted re-review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -135,6 +135,12 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   regressions, generated build typecheck, changed-file lint/format, diff
   hygiene, and status-mirror comparison. All pass. Targeted re-review remains
   pending against the committed test-only fix.
+- `2026-07-12T20:44:00Z`: Round 4 package is
+  `.superpowers/sdd/review-1452c54c..59acaa82.diff` (one commit, 12,925 bytes).
+  Expected fixed-role profiles are style Terra High, documentation Luna Medium,
+  TypeScript/API docs Terra High, and reliability Terra High. The lanes are
+  bounded to the test-only concurrent-retry closure and current status claims;
+  security remains deferred.
 - Round 3 focused package is ready for targeted re-review. Six-file regressions
   pass 156/156; coverage clears all 90% thresholds; generated typecheck,
   lint/cleanup, format, diff, public-leak, and generated/protected-file scans are
