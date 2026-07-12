@@ -1,6 +1,9 @@
 # T-0037 Review Log
 
-Status: Round 15 split fix worker active
+Status: Round 15 split fixes verified; fresh review pending
+
+Derived status mirror: the canonical current state is the `Status` header in
+the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +13,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5588-77fb-74f0-8ae4-c48a0d43b0b2` | P1/P2 |
-| Documentation              | `019f5588-7899-7292-94f5-532d586f0f21` | Clean |
-| TypeScript/API docs        | `019f5588-7920-7ef3-8cb1-f1e5025b6064` | P1    |
-| Performance/reliability    | `019f5588-79bd-7520-a553-d5a7f15eb456` | Clean |
+| Code style/maintainability | `019f5588-77fb-74f0-8ae4-c48a0d43b0b2` | P1/P2  |
+| Documentation              | `019f5588-7899-7292-94f5-532d586f0f21` | Clean  |
+| TypeScript/API docs        | `019f5588-7920-7ef3-8cb1-f1e5025b6064` | P1     |
+| Performance/reliability    | `019f5588-79bd-7520-a553-d5a7f15eb456` | Clean  |
 
 Security is deferred to final project readiness.
 
@@ -21,8 +24,10 @@ Security is deferred to final project readiness.
 
 - Confirm D-0086 changes sequencing only and preserves every active D-0085
   lifecycle invariant.
-- Confirm all six child briefs are Candidate/not started, ordered by dependency,
+- Confirm all eight active child briefs are Candidate/not started, ordered by dependency,
   independently reviewable, and assign each invariant to exactly one child.
+- Confirm the former T-0037e is a concise superseded split-parent/audit record
+  with no active implementation requirements and T-0037f depends on T-0037e3.
 - Confirm every child states objective, exact ownership, likely files, TDD
   acceptance, inherited D-0085 invariants, and explicit exclusions.
 - Confirm current code facts are phrased as current facts, especially optional-
@@ -64,10 +69,10 @@ Security is deferred to final project readiness.
   the same admission-closed/stopped operation without duplicating those phases,
   then proves quiescence and performs classification, eligible consumption/
   reporting, and permanent retirement/cleanup exactly once. T-0037d
-  invokes the primitive only for failed-start empty-generation
-  rollback/replacement, and T-0037e invokes it only for explicit generation
-  stop, ordinary last detach, and permanent close plus fresh-generation race
-  policy.
+  invokes the primitive only for failed-start empty-generation rollback and
+  replacement. T-0037e1 invokes it for ordinary last detach, T-0037e2 for the
+  sole reusable explicit-stop path, and T-0037e3 for zero-registration
+  permanent close.
 - Confirm T-0037d independently tests explicit retry of the same caller-owned
   failed-start rollback after quiescence failure. The first attempt retains the
   unsafe sole slot and endpoint dependencies, performs no later authoritative
@@ -77,34 +82,37 @@ Security is deferred to final project readiness.
   fresh attachment without overlap. T-0037d owns that rollback state machine;
   T-0037f owns deferred server cleanup around it for caller-owned and server-
   owned startup failure while preserving distinct environment/facility duties.
-- Confirm reusable explicit stop constructs exactly one fresh candidate itself
-  even when no attach races. An otherwise eligible racing attach waits through
+- Confirm T-0037e2 reusable explicit stop constructs exactly one fresh
+  candidate itself even when no attach races. An otherwise eligible racing attach waits through
   full retirement and joins that transition-owned candidate. Every surviving
-  registration, readiness route, and configured/startup scope rebinds to that
-  generation before later-write admission, and a racing eligible attach joins
-  it. Only permanent close or independent ownership cardinality may reject the
-  attach.
+  registration and readiness route rebinds to that generation. Every
+  configured/startup/buffered/retained canonical scope transfers exactly once
+  into fresh pending admission; scopes are never rebound. Candidate publication
+  and admission reopen follow those two phases before a racing eligible attach
+  joins. Only permanent close or independent ownership cardinality may reject.
 - Confirm the six deterministic same-operation generation-retirement retry
   owners remain distinct: caller-owned failed-start rollback (T-0037d);
-  ordinary last detach, reusable explicit stop, and zero-registration permanent
-  close (T-0037e); and server-owned startup cleanup plus caller-owned server
-  cleanup (T-0037f). Non-last detach is a separate non-retiring registration-
+  ordinary last detach (T-0037e1), reusable explicit stop (T-0037e2), and zero-
+  registration permanent close (T-0037e3); and server-owned startup cleanup
+  plus caller-owned server cleanup (T-0037f). Non-last detach is a separate non-retiring registration-
   scoped retry and is not one of the six.
-- Confirm reusable explicit stop installs one bounded canonical tenant/
+- Confirm T-0037e2 reusable explicit stop installs one bounded canonical tenant/
   configured-scope readiness owner from old-route close through the fresh
-  recovery snapshot and survivor route rebind, then transfers each buffered
-  scope losslessly and exactly once into fresh pending admission before later-
-  write admission. The TDD interleaving persists a write after the snapshot but
+  recovery snapshot and survivor route rebind, then transfers every configured,
+  startup, buffered, and retained scope losslessly and exactly once into fresh
+  pending admission before publication and later-write admission reopen. The
+  TDD interleaving persists a write after the snapshot but
   before rebind and proves eventual admission without an unrelated trigger.
 - Confirm T-0037b may settle with a combined error only after retirement, while
-  T-0037e creates the fresh generation and rebinds every surviving registration,
-  readiness route, and configured/startup scope through a finally-equivalent
-  path before propagating that result. Distinct reporting-rejection and post-
-  consumption permanent-retirement-failure tests each persist a canonical-scope
+  T-0037e2 creates the fresh generation, rebinds every surviving registration
+  and readiness route, transfers all configured/startup/buffered/retained
+  canonical scopes, publishes the candidate, and reopens admission through a
+  finally-equivalent path before propagating that result. Distinct reporting-
+  rejection and post-consumption permanent-retirement-failure tests each persist a canonical-scope
   write after the fresh snapshot but before route rebind, prove the bounded
   buffer is non-empty, then prove exact-once transfer/admission and exact-once
   error propagation only after complete survivor rebinding.
-- Confirm ordinary last detach clears its stopped, proven-quiescent,
+- Confirm T-0037e1 ordinary last detach clears its stopped, proven-quiescent,
   permanently retired current-generation slot through a finally-equivalent path
   before propagating reporting or inert permanent-cleanup errors. Separate
   reporting-error and permanent-cleanup-error tests each perform a later fresh
@@ -113,23 +121,24 @@ Security is deferred to final project readiness.
   Its explicit retry must complete the same lifecycle operation, clear the slot
   only after proving quiescence and exact-once remaining phases, and permit one
   later fresh attach without overlap.
-- Confirm reusable explicit stop has a separate deterministic quiescence-
+- Confirm T-0037e2 reusable explicit stop has a separate deterministic quiescence-
   failure retry case. The first attempt retains the unsafe current generation,
   live registrations, transition readiness owner/buffer, and endpoint
   dependencies and performs no later authoritative or fresh-transition phase.
   Retry resumes the same admission-closed/stopped operation without duplicate
   phases, proves quiescence, completes retirement exactly once, then performs
-  exact-once survivor/readiness-route rebind, retained-scope transfer into fresh
-  pending admission, publication, and admission reopen with one generation and
+  exact-once survivor/readiness-route rebind, transfer of all configured/startup/
+  buffered/retained canonical scopes into fresh pending admission, publication,
+  and admission reopen with one generation and
   no overlap.
-- Confirm zero-registration permanent close separately retries quiescence
+- Confirm T-0037e3 zero-registration permanent close separately retries quiescence
   failure. The failed attempt retains the unsafe slot and dependencies, tears
   down no facility, keeps permanent close in progress, and prohibits attach or
   replacement. Retry resumes the same close without duplicate stop/admission
   closure, completes every remaining authoritative phase, safe slot clear, and
   each owned-facility close exactly once, then remains permanently closed.
   Refusal while registrations remain live stays a separate case.
-- Confirm non-last detach/close failure retry resumes only the departing
+- Confirm T-0037e1 non-last detach/close failure retry resumes only the departing
   registration's cleanup and eligible reporting exactly once. It never stops or
   retires the shared generation or clears its slot. Sibling generation identity,
   readiness, pending work, endpoints, contexts/resources, and facilities remain
@@ -141,7 +150,7 @@ Security is deferred to final project readiness.
   cannot start, accept notification, or invoke endpoints and permit one later
   fresh attachment without overlap; a quiescence failure instead retains the
   slot and prohibits replacement.
-- Confirm fresh construction, route rebind, or buffered-transfer failure keeps
+- Confirm fresh construction, route rebind, or canonical-scope-transfer failure keeps
   old retirement irreversible, publishes no partial fresh generation, closes
   later-write admission, and retains bounded canonical transition scopes. The
   transition error is preserved/aggregated truthfully and propagated without
@@ -150,8 +159,9 @@ Security is deferred to final project readiness.
   unpublished candidate across rebind/transfer failure, waits for active admitted
   candidate work before propagation, and a later external retry resumes it
   without constructing a second candidate. Confirm candidate identity, no
-  endpoint invocation after propagation, route rebind before buffered transfer,
-  then publication before later-write admission. Rebind and transfer tests use
+  endpoint invocation after propagation, registration/readiness-route rebind
+  before all configured/startup/buffered/retained canonical-scope transfer, then
+  publication before later-write admission reopen. Rebind and transfer tests use
   multiple survivors/routes/scopes, fail after at least one unit completes and
   one remains, persist per-unit progress, and prove retry of the same candidate
   does not repeat completed units. Confirm one fresh generation and admission
@@ -176,12 +186,12 @@ Security is deferred to final project readiness.
   environment or facilities. Confirm one later eligible fresh attachment/server
   reuses that environment with one generation and no overlap.
 - Confirm the parent prohibits duplicate agents per role and requires every
-  participant closed. Confirm parent and all six child ledgers require the
+  participant closed. Confirm parent and all eight active child ledgers require the
   canonical skill check for every implementation/review role and the Human
   Review Reset's smallest JVM-familiar, replace/delete-wrong, and no-invented-
   abstraction rules; T-0037a alone also carries the `bounded-context.ts`
   caution.
-- Confirm T-0037e requires API export checks and updates existing README/TypeDoc
+- Confirm T-0037e3 requires API export checks and updates existing README/TypeDoc
   only for behavior independently observable at its merge point. T-0037f alone
   documents caller-owned environment reuse after server detach and the full
   observable `Server`, `RunningServer`, and `ServerEnvironment` lifecycle. Both
@@ -195,6 +205,10 @@ Security is deferred to final project readiness.
 - Confirm review-package generation first resolves the endpoint with
   `git rev-parse HEAD` and passes that literal commit SHA to the script. A fixed
   package header must never identify its endpoint as the moving name `HEAD`.
+- Confirm the parent T-0037 TASK `Status` is the sole canonical current-state
+  source. Work/review/report headers are explicit derived mirrors, Events are
+  audit detail, and pre-review lint compares every parent mirror to the parent.
+  Once a child starts, its own TASK status is canonical for that child's mirrors.
 
 ## Rounds
 
@@ -733,3 +747,25 @@ Security is deferred to final project readiness.
   `019f558e-0791-7491-92b2-dca092214c68` the complete accepted batch. The
   worker owns the child-brief split and connected active docs only, must preserve
   historical evidence, and may edit only after this assignment is committed.
+- `2026-07-12T09:07:08Z`: Round 15 split fix authored the accepted eight-child
+  decomposition, distinct route-rebind and all-scope-transfer phases, complete
+  error-path publish/reopen order, and canonical-parent/derived-mirror status
+  contract. Coordinator verification remains pending; no clean review is
+  claimed.
+- `2026-07-12T09:11:35Z`: Worker verification passed targeted child/dependency,
+  ownership/phase/error-path, canonical-status, event/participant/ledger,
+  docs/format/whitespace, exact-scope/untracked, and frozen-path checks. TypeDoc
+  retained 205 server exports with only the known invalid-`origin` warning.
+  Coordinator verification remains pending; no clean review is claimed.
+- `2026-07-12T09:14:34Z`: Coordinator pre-acceptance inspection confirmed the
+  eight-child split and corrected status authority: the parent TASK is canonical
+  only for this sequencing parent, while each future child TASK becomes
+  canonical for its own work/review mirrors. Independent coordinator
+  verification remains pending.
+- `2026-07-12T09:16:43Z`: Coordinator closed the worker and independently passed
+  eight-child count/dependency, e1/e2/e3 ownership, route-versus-scope phases,
+  complete error-path publication/reopen, parent/child status authority,
+  119-event chronology, 77-participant uniqueness, byte-identical 36-entry
+  ledger, exact 11-file scope/frozen-path, `pnpm docs:check`,
+  `pnpm format:check`, and `git diff --check` checks. TypeDoc retained 205 server
+  exports with only the known invalid-`origin` warning. Fresh review is required.

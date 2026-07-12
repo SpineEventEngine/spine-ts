@@ -3467,8 +3467,9 @@ Decision:
   generation transition. Explicit retry resumes the same admission-closed,
   stopped operation without repeating admission closure or stop, proves
   quiescence, completes each remaining authoritative retirement phase exactly
-  once, and then performs survivor/readiness-route rebind, retained-scope
-  transfer into fresh pending admission, candidate publication, and later-write
+  once, and then performs survivor/readiness-route rebind, transfer of every
+  configured/startup/buffered/retained canonical scope into fresh pending
+  admission, candidate publication, and later-write
   admission reopen exactly once, with one generation and no overlap. For a
   zero-registration permanent close, the failed attempt retains the unsafe slot
   and endpoint dependencies, performs no later retirement or facility teardown,
@@ -3510,7 +3511,8 @@ Decision:
   attach creates exactly one fresh generation and startup recovery, and later
   eligible attaches join it. Reusable explicit stop is different because live
   registrations remain: that stop transition constructs the sole fresh
-  candidate itself, even when no attach races, then rebinds, transfers,
+  candidate itself, even when no attach races, then rebinds routes, transfers
+  canonical scopes,
   publishes, and reopens admission in the order below. An eligible attach racing
   explicit stop waits for and joins that transition-owned candidate; it never
   creates another. Such an attach rejects only if permanent environment close
@@ -3524,14 +3526,17 @@ Decision:
   close through the fresh recovery snapshot and readiness-route rebind. After
   old retirement, the explicit-stop transition constructs exactly one fresh
   candidate even without a racing attach. It first completes rebind of every
-  surviving registration, readiness route, and configured/startup obligation
-  scope to that candidate. It then transfers each buffered scope losslessly and
-  exactly once into fresh pending admission, publishes the candidate, and only
+  surviving registration and readiness route to that candidate, retaining
+  per-unit route progress. It then transfers every configured, startup,
+  buffered, and retained canonical scope losslessly and exactly once into fresh
+  pending admission with separate per-unit transfer progress, publishes the candidate, and only
   then reopens later-write admission. Thus a write persisted after fresh
   recovery captures its snapshot but before routes rebind still causes an
   eventual fresh-generation run without an unrelated trigger. Fresh-generation creation,
-  complete survivor rebind, and buffered-scope transfer normally finish before
-  T-0037e propagates an earlier retirement or reporting error once. If fresh
+  complete route rebind, all-scope transfer, candidate publication, and
+  admission reopen normally finish before T-0037e2 propagates an earlier
+  retirement or reporting error once. Configured/startup/buffered/retained
+  scopes are transferred and are never route-rebound. If fresh
   construction, route rebind, or transfer itself fails, the old generation stays
   admission-closed, stopped, and quiescent after permanent retirement/cleanup
   was attempted, no partial fresh generation is published, later-write admission
@@ -3542,10 +3547,11 @@ Decision:
   candidate across rebind or transfer failure. Before returning a transition
   error, it awaits settlement of every bounded candidate startup/recovery unit
   already admitted, so no candidate endpoint invocation continues after error
-  propagation. T-0037e preserves and truthfully aggregates the transition error
+  propagation. T-0037e2 preserves and truthfully aggregates the transition error
   with any earlier error; it does not self-loop. Only a later external lifecycle/
   readiness retry may resume that retained candidate, never construct a second
-  one, complete exact-once route rebind and retained-scope transfer, publish it,
+  one, complete exact-once registration/readiness-route rebind and all canonical-
+  scope transfer, publish it,
   and reopen admission. An otherwise eligible attach racing the transition
   waits for that same eventual generation. The transition owner prevents an
   ownership gap while old quiescence and candidate settlement prevent old/new
@@ -3701,7 +3707,7 @@ Consequences:
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.
 
-## D-0086: Sequence Environment Delivery Lifecycle In Six Children
+## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
 
 Status: Accepted
 
@@ -3732,11 +3738,13 @@ unchanged and explicitly invoked.
 
 Decision:
 
-- Split D-0085's T-0037 successor into six ordered implementation children:
+- Split D-0085's T-0037 successor into eight ordered implementation children:
   `T-0037a Context Delivery Attachment Seam`, `T-0037b Bounded Generation Run
 Coordinator`, `T-0037c Parked Delivery Obligations`, `T-0037d Environment
-Attachment And Startup`, `T-0037e Generation Retirement And Environment
-Close`, and `T-0037f Server Lifecycle Integration`.
+Attachment And Startup`, `T-0037e1 Registration Detach Lifecycle`, `T-0037e2
+Reusable Generation Stop`, `T-0037e3 Permanent Environment Close`, and
+  `T-0037f Server Lifecycle Integration`. The former T-0037e brief is a
+  superseded split-parent audit record and must not be implemented.
 - The invariant map is exclusive. T-0037a owns package-internal built-context
   delivery descriptors, actual storage-factory access, startup tenant
   enumeration, endpoint/shard attachment facts, and per-successful-row
@@ -3771,64 +3779,51 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   buffered scopes exactly once into installed environment readiness, and only
   then admits startup/environment work, so no durable row loses both owners,
   the two run owners never overlap, and later receives use readiness only.
-  T-0037e owns ordinary detach, explicit generation stop,
-  invoking the same existing primitive for explicit stop, ordinary last detach,
-  and permanent close, including the sole package-internal environment-
-  lifecycle explicit-stop entry point; server/handoff code cannot call the
-  primitive directly. It also owns fresh-generation race policy: an otherwise
-  eligible attach arriving after reusable explicit stop begins waits through
-  retirement; one bounded canonical-scope transition owner covers writes
-  through fresh recovery and route rebind; every surviving registration,
-  readiness route, and configured/startup scope rebinds to exactly one fresh
-  generation before buffered scopes transfer losslessly and exactly once into
-  fresh pending admission; only then is the candidate published and later-write
-  admission reopened, before any earlier retirement result is propagated;
-  transition-
-  construction/rebind/transfer failure retains the bounded transition owner,
-  publishes no partial generation, keeps admission closed, and, after candidate
-  construction, retains that same unpublished candidate as its sole owner until
-  admitted candidate work settles. It propagates the aggregated error without
-  self-looping and permits only a later external retry to resume that candidate
-  and finish the same exact-once transition; construction failure before a
-  candidate exists may construct one on retry; and the attach joins that same
-  generation, rejecting only
-  after permanent close or independent ownership-cardinality refusal. T-0037e
-  tests route-rebind and transfer failures after non-empty per-unit progress
-  across multiple survivors/routes/scopes, retains completed-unit progress in
-  the transition owner, and resumes the same candidate without repeating those
-  units or creating an owner gap or old/new overlap. T-0037e
-  also owns finally-equivalent clearing of an ordinary last-detach slot after
-  proven quiescence despite reporting or inert permanent-cleanup error. It
-  retains the unsafe slot when quiescence fails, then an explicit retry resumes
-  the same transition and completes the remaining authoritative phases exactly
-  once after proving quiescence. T-0037e also owns close refusal and permanent
-  environment close. Its deterministic failure coverage also retries the same
-  reusable explicit-stop operation after quiescence failure while retaining
-  live registrations, transition readiness ownership, and endpoint
-  dependencies, then completes retirement and the ordered rebind, transfer,
-  publication, and admission-reopen transition exactly once. Separately, it
-  retries the same zero-registration permanent close after quiescence failure,
-  retaining the unsafe slot and facilities until quiescence is proven, then
-  completing retirement, safe slot clearing, and owned-facility teardown
-  exactly once while remaining permanently closed. T-0037f alone
-  integrates those seams with listener startup, network shutdown, contexts,
+  T-0037e1 owns registration detach. Non-last detach and retry remain
+  registration-scoped and non-retiring. Ordinary last detach invokes T-0037b's
+  existing primitive, clears a proven-quiescent retired slot through a finally-
+  equivalent path despite reporting or inert cleanup error, retains an unsafe
+  slot when quiescence fails, and retries that same operation before one later
+  first attach may create a fresh generation. It also owns detach/attach races.
+  T-0037e2 owns the sole package-internal reusable explicit-stop entry point;
+  server/handoff code cannot call the primitive directly. It creates the sole
+  transition-owned fresh candidate even without a racing attach. Its four
+  distinct ordered phases are: (1) rebind surviving registrations and readiness
+  routes with per-unit checkpoints; (2) transfer configured, startup, buffered,
+  and retained canonical scopes exactly once into fresh pending admission with
+  separate per-unit checkpoints; (3) publish the candidate; and (4) reopen
+  later-write admission. Canonical scopes are transferred, never rebound. One
+  bounded transition owner covers writes through fresh recovery and both first
+  phases. Construction/rebind/transfer failure publishes no candidate, keeps
+  admission closed, retains bounded state, and permits only later external retry.
+  After construction, retry resumes the same candidate and completed per-unit
+  progress after admitted candidate work settles; it never constructs another
+  candidate or self-loops. A racing eligible attach waits and joins that
+  candidate. Reporting-failure and post-consumption retirement-failure tests
+  must each complete rebind, all-scope transfer, publication, and admission
+  reopen before propagating the original error exactly once. T-0037e3 owns live-
+  registration close refusal and zero-registration permanent close. It retains
+  an unsafe slot and every facility when quiescence fails, retries that same
+  close without repeating completed phases, then safely clears the slot and
+  tears down every owned facility exactly once while remaining closed. T-0037f
+  alone integrates those seams with listener startup, network shutdown, contexts,
   resources, and owned facilities. For caller-owned failed startup, T-0037f
   resumes T-0037d's retained rollback through quiescence and exact-once deferred
   server cleanup while leaving the shared environment open and proving one
   later eligible fresh server attachment without overlap; server-owned
   continuation remains separate. T-0037d does not own
-  ordinary detach or race policy; T-0037e does not reopen failed-start rollback
-  or coordinator-instance retirement.
+  ordinary detach or race policy; T-0037e1/e2/e3 do not reopen failed-start
+  rollback or coordinator-instance retirement.
 - The six distinct deterministic same-operation generation-retirement retry
   owners are: caller-owned failed-start rollback in T-0037d; ordinary last
-  detach, reusable explicit stop, and zero-registration permanent close in
-  T-0037e; and server-owned startup cleanup plus caller-owned server cleanup in
-  T-0037f. Each keeps its own slot, dependency, environment, and facility
-  ownership duties. Non-last detach is a separate non-retiring registration-
-  scoped retry: it cannot stop or retire the shared generation or clear its
-  slot.
-- Each child depends on the preceding child and receives its own branch,
-  implementation log, review log, TDD cycle, focused verification, and four
+  detach in T-0037e1; reusable explicit stop in T-0037e2; zero-registration
+  permanent close in T-0037e3; and server-owned startup cleanup plus caller-
+  owned server cleanup in T-0037f. Each keeps its own slot, dependency,
+  environment, and facility ownership duties. Non-last detach is a separate
+  non-retiring registration-scoped retry in T-0037e1: it cannot stop or retire
+  the shared generation or clear its slot.
+- Each active child depends on the preceding active child and receives its own
+  branch, implementation log, review log, TDD cycle, focused verification, and four
   required review lanes when implementation starts. Candidate briefs do not
   create those unstarted artifacts. T-0037 remains a sequencing parent and
   changes no runtime behavior itself.
@@ -3836,7 +3831,7 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   `boundedContextAccess` descriptor/readiness seam grounded in built-context
   state. It does not start a worker, attach an environment registration, or
   replace the current exact-drain behavior before T-0037d owns the transition.
-- Every child preserves D-0085 rather than redesigning it: one environment
+- Every active child preserves D-0085 rather than redesigning it: one environment
   owner; finite one-shot T-0036 runs; readiness after every successful
   individual row persistence and never a rejected write; one lossless pending
   canonical-scope union bounded by current canonical tenant/configured scope
@@ -3855,8 +3850,8 @@ Close`, and `T-0037f Server Lifecycle Integration`.
 - Retry delay/backoff/jitter/timers, public monitor/scheduler/health surfaces,
   process supervision, transport topology/adapters, `CATCH_UP` as a trigger or
   delivery path, legacy `IMPORT_EVENT` support, and changes to T-0034 or T-0036
-  remain outside all six children.
-- T-0037e may update README/TypeDoc only for behavior independently observable
+  remain outside all eight children.
+- T-0037e3 may update README/TypeDoc only for behavior independently observable
   at its merge point, such as existing `ServerEnvironment.close()` behavior if
   publicly reachable without server detach. T-0037f alone documents caller-
   owned environment reuse after server detach and the full observable `Server`,

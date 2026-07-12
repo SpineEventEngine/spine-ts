@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 15 split fix worker active
+Status: Round 15 split fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -51,24 +51,31 @@ timing, public monitor/scheduler APIs, topology, and adapters deferred.
 
 A read-only requirements split examined D-0085 and current server, environment,
 context-handoff, and T-0036 internal seams. It found that T-0037 must become six
-independently reviewed child slices before runtime code changes.
+independently reviewed child slices before runtime code changes. Round 15 split
+the oversized fifth slice into three, producing eight active children.
 
 ## Accepted Decomposition
 
 T-0037 is too large for one implementation/review package. It is a sequencing
-parent only. Runtime work proceeds through six separately branched, reviewed,
+parent only. Runtime work proceeds through eight separately branched, reviewed,
 verified, merged, and cleaned child tasks:
 
 1. `T-0037a Context Delivery Attachment Seam`
 2. `T-0037b Bounded Generation Run Coordinator`
 3. `T-0037c Parked Delivery Obligations`
 4. `T-0037d Environment Attachment And Startup`
-5. `T-0037e Generation Retirement And Environment Close`
-6. `T-0037f Server Lifecycle Integration`
+5. `T-0037e1 Registration Detach Lifecycle`
+6. `T-0037e2 Reusable Generation Stop`
+7. `T-0037e3 Permanent Environment Close`
+8. `T-0037f Server Lifecycle Integration`
+
+The former `T-0037e Generation Retirement And Environment Close` brief is a
+superseded split-parent audit record and must not be implemented.
 
 The six deterministic same-operation generation-retirement retries retain
 separate owners: caller-owned failed-start rollback in `d`; ordinary last
-detach, reusable explicit stop, and zero-registration permanent close in `e`;
+detach in `e1`, reusable explicit stop in `e2`, and zero-registration permanent
+close in `e3`;
 and server-owned startup cleanup plus caller-owned server cleanup in `f`.
 Non-last detach is a separate non-retiring registration-scoped retry and never
 stops or retires the shared generation or clears its slot.
@@ -83,20 +90,20 @@ barrier that awaits already-admitted direct exact drain before environment
 admission and buffers transition-time persistence until readiness is installed
 belong to `d`; `d` owns caller-owned failed-start rollback state and retry while
 `f` owns deferred server cleanup around that seam for both environment ownership
-modes. Ordinary detach, explicit generation stop, ordinary/permanent-close primitive invocation,
-the bounded canonical-scope bridge through fresh recovery/route rebind,
-finally-equivalent surviving-registration rebinding before retirement-result
-propagation, plus the deterministic wait-through-retirement fresh-generation
-attach race, and environment close belong to `e`. Its explicit-stop and zero-
-registration-close quiescence-failure cases retain unsafe ownership and resume
-the same operation without repeating completed phases; the reusable path then
-performs rebind, retained-scope transfer, publication, and admission reopen in
-that order, while permanent close clears the safe slot and closes facilities
-exactly once. Network/server ordering belongs to `f`, including retry of T-0037d
+modes. Registration-scoped non-last detach/retry, ordinary last-detach
+retirement/retry, safe slot clearing, later first-attach fresh generation, and
+detach/attach races belong to `e1`. Reusable explicit stop belongs to `e2`; its
+four phases are registration/readiness-route rebind, transfer of every
+configured/startup/buffered/retained canonical scope into fresh pending
+admission, candidate publication, then admission reopen, with separate per-unit
+rebind and transfer checkpoints. Canonical scopes are transferred, never
+rebound. Live-registration refusal, zero-registration permanent close/retry,
+safe slot clear, close/attach race, and owned-facility teardown belong to `e3`.
+Network/server ordering belongs to `f`, including retry of T-0037d
 caller-owned failed-start rollback through deferred server cleanup while the
 shared environment stays open and proves one later fresh server attachment.
 Retry timing and public policy remain
-outside every child. The `d` and `e` callers do not overlap or reopen the
+outside every child. The `d`, `e1`, `e2`, and `e3` callers do not overlap or reopen the
 finally-safe primitive. That primitive preserves close-admission/stop, await
 quiescence, classify, consume/report, then permanent-retirement/cleanup order;
 its fail-closed replacement postcondition comes from stopped state and proven
@@ -150,8 +157,13 @@ used for child runtime work.
 Before generating each review package, resolve the endpoint commit with
 `git rev-parse HEAD`, record that immutable SHA, and pass the literal SHA as the
 review-package script's endpoint argument. Never pass the moving name `HEAD` to
-the script. Current orchestration is defined only by this file's `Status` header
-and the latest timestamped Events in the work/review logs.
+the script. This file's `Status` header is the sole canonical current
+orchestration state for this T-0037 sequencing parent. The parent work log,
+review log, and split report carry derived mirrors for readability; their
+timestamped Events are audit detail, not a competing current-state authority.
+Pre-review lint must compare every parent mirror to this canonical value. When
+an implementation child starts, that child's own `TASK.md` status becomes
+canonical for its child work/review mirrors.
 
 ## Historical Verification Through Round 11 (`34f8f5e4`)
 

@@ -2,7 +2,7 @@
 
 Status: Candidate; not started
 
-Dependency: T-0037e complete and integrated. Final T-0037 implementation child.
+Dependency: T-0037e3 complete and integrated. Final T-0037 implementation child.
 
 ## Objective
 
@@ -33,7 +33,7 @@ delivery quiescence precedes context, resource, transport, and storage teardown.
 - Treat superseded history as non-actionable unless an active record claims it.
 - Preserve the existing public `Server`, `RunningServer`, and
   `ServerEnvironment` surface.
-- Use T-0037d/e attachment and detach handles; do not reproduce environment,
+- Use T-0037d/e1/e2/e3 attachment and lifecycle handles; do not reproduce environment,
   coordinator, or parked-record logic in server code.
 - Commit no generated artifacts and add no root/public export, signature, or
   option; emitted internal declarations may change. Update existing README and
@@ -89,7 +89,7 @@ reporting; it never stops or retires the shared generation or clears its slot.
 - `packages/server/src/server/server.ts`
 - `packages/server/src/server/retryable-close.ts` only for narrowly required
   ordered aggregation support
-- Package-internal T-0037d/e access modules only for integration adjustments
+- Package-internal T-0037d/e1/e2/e3 access modules only for integration adjustments
 - Focused server startup, failed-start, shutdown, sharing, and race tests
 - This task's future durable task/work/review records and final current
   architecture reconciliation

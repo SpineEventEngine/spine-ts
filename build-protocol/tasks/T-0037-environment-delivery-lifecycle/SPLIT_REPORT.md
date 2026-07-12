@@ -1,6 +1,9 @@
 # T-0037 Split Report
 
-Status: Round 15 split fix worker active
+Status: Round 15 split fixes verified; fresh review pending
+
+Derived status mirror: the canonical current state is the `Status` header in
+`TASK.md`; timestamped Events are audit detail, not competing authority.
 
 Baseline: `ab8fc9f4`
 
@@ -9,22 +12,27 @@ Baseline: `ab8fc9f4`
 D-0085's environment lifecycle successor is too broad for one implementation
 and review package. D-0086 sequences it without changing its semantics:
 
-| Order | Child   | Exclusive invariant ownership                                                               |
-| ----- | ------- | ------------------------------------------------------------------------------------------- |
-| 1     | T-0037a | Descriptor/storage/tenants/endpoints and synchronous non-throwing per-row readiness         |
-| 2     | T-0037b | Finite starts, tenant-aware lossless merge, dispositions, finally-safe retirement primitive |
-| 3     | T-0037c | Finite canonical parked obligations and one-time cause reporting                            |
-| 4     | T-0037d | Registrations/startup, lossless transition readiness barrier, failed-start rollback         |
-| 5     | T-0037e | Detach, explicit stop, surviving-scope rebind/fresh-generation race, permanent close        |
-| 6     | T-0037f | Listener startup and network/context/resource/facility shutdown ordering                    |
+| Order | Child    | Exclusive invariant ownership                                                               |
+| ----- | -------- | ------------------------------------------------------------------------------------------- |
+| 1     | T-0037a  | Descriptor/storage/tenants/endpoints and synchronous non-throwing per-row readiness         |
+| 2     | T-0037b  | Finite starts, tenant-aware lossless merge, dispositions, finally-safe retirement primitive |
+| 3     | T-0037c  | Finite canonical parked obligations and one-time cause reporting                            |
+| 4     | T-0037d  | Registrations/startup, lossless transition readiness barrier, failed-start rollback         |
+| 5     | T-0037e1 | Registration detach, last-detach retirement/retry, later fresh attach                       |
+| 6     | T-0037e2 | Reusable stop, route rebind, scope transfer, publication, admission reopen                  |
+| 7     | T-0037e3 | Live-registration refusal, permanent close/retry, slot clear, facility teardown             |
+| 8     | T-0037f  | Listener startup and network/context/resource/facility shutdown ordering                    |
 
-Every child is Candidate/not started and depends on its predecessor. Each will
+Every active child is Candidate/not started and depends on its predecessor. The
+former T-0037e is a superseded split-parent audit record and must not be
+implemented. Each active child will
 receive its own branch, work/review records, TDD cycle, focused checks, and four
 review lanes only when started.
 
 The six deterministic same-operation generation-retirement retries are owned
-separately: caller-owned failed-start rollback by T-0037d; ordinary last detach,
-reusable explicit stop, and zero-registration permanent close by T-0037e; and
+separately: caller-owned failed-start rollback by T-0037d; ordinary last detach
+by T-0037e1; reusable explicit stop by T-0037e2; zero-registration permanent
+close by T-0037e3; and
 server-owned startup cleanup plus caller-owned server cleanup by T-0037f.
 Non-last detach is a separate non-retiring registration-scoped retry; it cannot
 stop or retire the shared generation or clear its slot.
@@ -32,15 +40,18 @@ stop or retire the shared generation or clear its slot.
 T-0037d's transition barrier gives persistence after direct-drain admission
 closes but before readiness routing is installed a bounded canonical-scope
 buffer, then transfers each scope exactly once before startup admission.
-T-0037e's reusable explicit stop constructs the sole fresh candidate itself even
-when no attach races, then rebinds every surviving registration,
-readiness route, and configured/startup scope to exactly one fresh generation
-before propagating the result of close-admission/stop, await quiescence,
+T-0037e2's reusable explicit stop constructs the sole fresh candidate itself even
+when no attach races, then rebinds every surviving registration and readiness
+route to exactly one fresh generation. It transfers every configured, startup,
+buffered, and retained canonical scope exactly once into fresh pending admission,
+publishes the candidate, and reopens admission before propagating the result of
+close-admission/stop, await quiescence,
 classify, consume/report, then permanent-retirement/cleanup. The old instance's
 stopped and quiescent state is fail-closed even if reporting or cleanup fails. A
 bounded canonical-scope bridge owns readiness through the fresh recovery
-snapshot and route rebind, transferring each buffered scope losslessly and
-exactly once before later-write admission. Transition construction/rebind/
+snapshot and route rebind, transferring all canonical scopes losslessly and
+exactly once before publication and later-write admission. Rebind and transfer
+use distinct per-unit checkpoints. Transition construction/rebind/
 transfer failure publishes no partial generation, keeps admission closed, and
 retains bounded scopes for one later external retry without self-looping. Once
 constructed, the sole unpublished candidate remains owned by that transition;
@@ -52,7 +63,8 @@ If reusable explicit stop cannot establish quiescence, it retains the unsafe
 generation, live registrations, transition readiness owner, and endpoint
 dependencies; explicit retry resumes the same stop and completes retirement,
 rebind, retained-scope transfer, publication, and admission reopen exactly once.
-If zero-registration permanent close cannot establish quiescence, it retains
+T-0037e1 separately owns non-last and ordinary last detach. If T-0037e3 zero-
+registration permanent close cannot establish quiescence, it retains
 the unsafe slot and facilities with close still in progress; retry completes
 retirement, safe slot clearing, and owned-facility teardown exactly once and
 remains permanently closed. T-0037f separately resumes a caller-owned failed-
@@ -151,6 +163,6 @@ retry, active-summary, and participant-ordering findings. The Round 11 docs fix
 later passed worker and coordinator verification and was committed as
 `34f8f5e4`.
 
-For current orchestration, use this report's `Status` header and the latest
-timestamped Events in the T-0037 work/review logs. Historical summaries above
-never state current pending work.
+For current orchestration, use the parent T-0037 `TASK.md` `Status` header. This
+report's header is only its derived mirror; timestamped work/review Events are
+audit detail. Historical summaries above never state current pending work.
