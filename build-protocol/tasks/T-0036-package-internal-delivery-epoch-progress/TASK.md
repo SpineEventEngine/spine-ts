@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 3 four-lane rereview in progress
+Status: Round 3 findings accepted; fixes pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -188,6 +188,13 @@ membership.
   remain.
 - PASS: Round 2 docs/status fixes committed as `40793085`; package-boundary
   reconciliation is the sole future hash under the ledger convention.
+- REVIEW: Round 3 code style and TypeScript/API docs returned clean.
+  Documentation found one stale implementation-report remaining-work line.
+  Performance/reliability found a P1 adapter-cost issue: admitted rows are read
+  once for membership and then reread sequentially by ID, producing up to 1,001
+  storage operations for one 1,000-row epoch. Retain bounded canonical admitted
+  row snapshots while claim CAS preserves current-state safety, add operation-
+  count coverage, correct status, and rerun all lanes.
 
 ## Implementation Result
 

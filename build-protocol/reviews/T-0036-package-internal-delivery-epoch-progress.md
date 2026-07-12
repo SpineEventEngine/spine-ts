@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 3 four-lane rereview in progress
+Status: Round 3 findings accepted; fixes pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status      |
-| -------------------------- | -------------------------------------- | ----------- |
-| Code style/maintainability | `019f5452-cad2-79d0-a416-3a0376ccbdf9` | In progress |
-| Documentation              | `019f5452-ee1e-7113-a05d-941fb92315cd` | In progress |
-| TypeScript/API docs        | `019f5453-0d87-7813-8c26-a55e107b2319` | In progress |
-| Performance/reliability    | `019f5453-2eda-76b2-aad5-8407e2b04601` | In progress |
+| Lane                       | Reviewer                               | Status  |
+| -------------------------- | -------------------------------------- | ------- |
+| Code style/maintainability | `019f5452-cad2-79d0-a416-3a0376ccbdf9` | Clean   |
+| Documentation              | `019f5452-ee1e-7113-a05d-941fb92315cd` | Finding |
+| TypeScript/API docs        | `019f5453-0d87-7813-8c26-a55e107b2319` | Clean   |
+| Performance/reliability    | `019f5453-2eda-76b2-aad5-8407e2b04601` | P1      |
 
 Security is deferred to final project readiness.
 
@@ -150,3 +150,10 @@ Security is deferred to final project readiness.
   `.superpowers/sdd/review-67da0b1c..32827343.diff` (123,511 bytes) and assigned
   all four Round 3 lanes. Prompts exclude the expected post-package assignment
   commit from ledger findings and otherwise require current-state-only review.
+- `2026-07-12T04:25:00Z`: Closed all Round 3 lanes. Code style and
+  TypeScript/API docs are clean. Documentation found one current remaining-work
+  status sentence. Performance/reliability found a P1 sequential-reread cost:
+  a capped epoch performs one admission query plus up to 1,000 `readMessage()`
+  operations. One fix worker must retain bounded canonical admitted snapshots,
+  preserve CAS/current-state behavior, add operation-count and stale-snapshot
+  coverage, fix the status line, verify, commit, and trigger all-lane rereview.
