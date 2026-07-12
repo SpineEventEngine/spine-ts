@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Review Round 5 skill checks pending
+Status: Safe stop; Round 5 substantive review pending
 
 Started: `2026-07-12T11:43:52Z`
 
