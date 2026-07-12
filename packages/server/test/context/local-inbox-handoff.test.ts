@@ -282,6 +282,47 @@ describe("DeliveryReadiness", () => {
     expect(directDrains).toBe(1);
     expect(routed).toEqual([configured, omitted]);
   });
+
+  it("accepts one simultaneous failed-checkpoint retry without loser mutation", async () => {
+    const configured = ready();
+    const omitted = { ...configured, targetTypeUrl: "type.example.dev/Recovered" };
+    const readiness = new DeliveryReadiness();
+    const staleRoute: DeliveryReady[] = [];
+    const stale = readiness.transition([configured], (next) => staleRoute.push(next));
+    await readiness.claim(omitted).complete(() => Promise.resolve());
+    await expect(stale).rejects.toThrow(
+      "Delivery readiness transition received an unconfigured scope.",
+    );
+
+    const winnerRoute: DeliveryReady[] = [];
+    const loserRoute: DeliveryReady[] = [];
+    let directDrains = 0;
+    const winner = readiness.transition([configured, omitted], (next) => winnerRoute.push(next));
+    await readiness.claim(configured).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    const loser = readiness.transition([omitted], (next) => loserRoute.push(next));
+    await readiness.claim(omitted).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+
+    await expect(loser).rejects.toThrow("Delivery readiness ownership is already transferred.");
+    await winner;
+    expect(staleRoute).toEqual([]);
+    expect(winnerRoute).toEqual([configured, omitted]);
+    expect(loserRoute).toEqual([]);
+    expect(directDrains).toBe(0);
+
+    await readiness.claim(omitted).complete(() => {
+      directDrains += 1;
+      return Promise.resolve();
+    });
+    expect(winnerRoute).toEqual([configured, omitted, omitted]);
+    expect(loserRoute).toEqual([]);
+    expect(directDrains).toBe(0);
+  });
 });
 
 function ready(tenantId?: string): DeliveryReady {

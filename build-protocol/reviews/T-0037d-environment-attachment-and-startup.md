@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 3 findings assigned for focused fix
+Status: Slice 1 Round 3 fix focused verified; targeted re-review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -121,3 +121,22 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   failed-checkpoint retries permit exactly one transition/route without state
   reset or callback replacement by the rejected competitor. One Terra Medium
   owner receives both; Slice 2 remains pending clean Slice 1 re-review.
+- Round 3 fix resumed with identical status mirrors preserved. The implementer
+  recorded the canonical skill check and selected receiving-review plus strict
+  TDD. The fix package is limited to one simultaneous-retry regression unless
+  that RED exposes a production defect; no reviewer or Slice 2 work starts in
+  this context.
+- The simultaneous-retry regression passed on first execution (26/26 focused),
+  so Round 3 requires no production fix. This is test-only evidence that one
+  retry wins synchronously and the rejected competitor cannot clear readiness
+  or replace the winning route. Mechanical/regression gates remain pending
+  before handoff.
+- `2026-07-12T20:42:00Z`: Coordinator independently repeated 156 focused
+  regressions, generated build typecheck, changed-file lint/format, diff
+  hygiene, and status-mirror comparison. All pass. Targeted re-review remains
+  pending against the committed test-only fix.
+- Round 3 focused package is ready for targeted re-review. Six-file regressions
+  pass 156/156; coverage clears all 90% thresholds; generated typecheck,
+  lint/cleanup, format, diff, public-leak, and generated/protected-file scans are
+  clean. This round changes one test plus canonical records and contains no
+  production delta. Reviewer acceptance remains pending.

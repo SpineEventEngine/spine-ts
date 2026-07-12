@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 3 findings assigned for focused fix
+Status: Slice 1 Round 3 fix focused verified; targeted re-review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -311,3 +311,10 @@ re-review accepts this corrected package.
    retries from the finite failed checkpoint produce exactly one accepted
    transition/route, while the loser rejects without resetting state or
    replacing the winning callback.
+
+Round 3 is a test-only correctness closure. The simultaneous-retry regression
+passed on first execution: transition mode is published synchronously, so one
+retry wins, the competitor rejects with the canonical already-transferred
+message, winner-buffered readiness transfers once, only the winner route is
+installed, and subsequent readiness remains winner-owned without direct drain.
+No production source or Slice 2 behavior changed.
