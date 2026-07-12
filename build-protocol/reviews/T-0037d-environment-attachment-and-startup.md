@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 4 four-lane review in progress
+Status: Slice 2 Round 4 fail-closed wording correction assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -372,3 +372,7 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected profiles: style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-12T22:53:00Z`: Round 4 is complete and every reviewer is closed.
+  Runtime profiles matched dispatch. One wording finding remains: replace the
+  active task phrase “fail open” with “fail closed on open before coordinator
+  admission.” One Terra Medium record owner is assigned before Round 5.

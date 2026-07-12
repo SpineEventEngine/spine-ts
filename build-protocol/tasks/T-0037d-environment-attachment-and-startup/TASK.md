@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 4 four-lane review in progress
+Status: Slice 2 Round 4 fail-closed wording correction assigned
 
 Started: `2026-07-12T18:25:27Z`
 
