@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 3 review active
+Status: Round 3 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54c2-3cd7-7c82-b55e-421c6ab9e635` | Active |
-| Documentation              | `019f54c2-3d46-7111-a97b-9ee8b2bc1394` | Active |
-| TypeScript/API docs        | `019f54c2-3dcc-7f11-a9be-118128bbef3a` | Active |
-| Performance/reliability    | `019f54c2-3e53-7ad1-8f16-485575a5e38a` | Active |
+| Code style/maintainability | `019f54c2-3cd7-7c82-b55e-421c6ab9e635` | P1/P2  |
+| Documentation              | `019f54c2-3d46-7111-a97b-9ee8b2bc1394` | P1/P2  |
+| TypeScript/API docs        | `019f54c2-3dcc-7f11-a9be-118128bbef3a` | P2     |
+| Performance/reliability    | `019f54c2-3e53-7ad1-8f16-485575a5e38a` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -172,3 +172,10 @@ Security is deferred to final project readiness.
   and assigned all four Round 3 lanes. Prompts target the corrected ownership
   and failure contracts and ignore superseded history unless active records
   still claim it.
+- `2026-07-12T05:21:21Z`: Closed all four Round 3 lanes. Accepted one narrow
+  four-item batch: T-0037d must test an already-admitted exact drain as an
+  attachment barrier; T-0037e must make eligible attaches wait through reusable
+  explicit stop and create/join exactly one fresh generation; public docs must
+  omit the package-internal explicit-stop operation; and undated parent/work
+  prose must describe the active Round 3 state. One docs fix worker and fresh
+  all-lane review remain required.

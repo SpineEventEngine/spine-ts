@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 3 review active
+Status: Round 3 findings accepted; fix pending
 
 Baseline: `ab8fc9f4`
 
