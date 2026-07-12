@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 5 review active
+Status: Round 5 stale-status finding accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54e1-4811-76e0-99de-6ea06f1f1c53` | Active |
-| Documentation              | `019f54e1-48ab-77a3-90de-ca923caf0ae3` | Active |
-| TypeScript/API docs        | `019f54e1-492e-76c1-a63a-25682a1cfc0e` | Active |
-| Performance/reliability    | `019f54e1-49c9-7390-afd4-d9b03fa97af2` | Active |
+| Code style/maintainability | `019f54e1-4811-76e0-99de-6ea06f1f1c53` | P1     |
+| Documentation              | `019f54e1-48ab-77a3-90de-ca923caf0ae3` | P2     |
+| TypeScript/API docs        | `019f54e1-492e-76c1-a63a-25682a1cfc0e` | P1     |
+| Performance/reliability    | `019f54e1-49c9-7390-afd4-d9b03fa97af2` | P2     |
 
 Security is deferred to final project readiness.
 
@@ -256,3 +256,8 @@ Security is deferred to final project readiness.
 - `2026-07-12T05:51:25Z`: Generated fixed-baseline package
   `.superpowers/sdd/review-0308bc4a..1b127f87.diff` (26 commits, 129,751 bytes)
   and assigned all four Round 5 lanes as the final clean check.
+- `2026-07-12T05:53:58Z`: Closed all four Round 5 lanes. Every lane converged
+  on one deduplicated finding: current undated verification summaries in the
+  parent task and split report still say Round 4 coordinator verification is
+  pending. No runtime, ownership, API, reliability, ledger, or public-doc
+  finding remains. One docs fix worker and fresh all-lane review are required.
