@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 1 four-lane review in progress
+Status: Slice 2 Round 1 findings under bounded architecture resolution
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -317,6 +317,30 @@ one attachment input passes the two-pass freshness check. The first transition
 may install ownership before the duplicate transition rejects. Reject duplicate
 descriptor identities during synchronous generation preflight, before any
 descriptor is marked, tenant scope is enumerated, or readiness transition runs.
+
+### Slice 2 Round 1 Findings
+
+1. Preserve descriptor/storage-context identity in generation coordination so
+   equal endpoint/tenant/shard facts in distinct contexts never collapse,
+   cross-run, or share rejection attribution.
+2. Persist each dynamically observed multitenant tenant through the owning
+   descriptor before readiness admission, so a fresh generation can enumerate
+   and recover its durable rows without another notification.
+3. Bound the outer registration readiness transition by the assembled canonical
+   scope domain. A scope outside that domain while peer transitions are stalled
+   must fail closed without per-scope retention.
+4. Add deterministic tests for concurrent caller attachments serialized by the
+   lifecycle gate, overlapping rejection preserving its cause, and fulfilled
+   `PAUSED`/`SKIPPED` cause-less parked outcomes.
+5. Split the worker/evidence adapter from the 541-line attachment owner and
+   extract named attachment phases so lifecycle ownership remains reviewable.
+
+These cross-context identity and transition-boundedness findings demonstrate a
+high-risk architecture ambiguity. The existing requirements splitter is
+assigned one bounded read-only resolution with explicit `gpt-5.6-sol` / `high`;
+it must propose the smallest internal fix using existing roles and no public or
+Slice 3 lifecycle surface. The Terra Medium implementation owner remains paused
+until that resolution returns.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now

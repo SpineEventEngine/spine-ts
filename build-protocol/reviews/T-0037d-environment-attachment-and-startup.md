@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 1 four-lane review in progress
+Status: Slice 2 Round 1 findings under bounded architecture resolution
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -224,6 +224,14 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   Medium, TypeScript/API docs Terra High, and reliability Terra High. Review is
   limited to current Slice 2 behavior/claims; superseded history is
   non-actionable and security remains deferred.
+- `2026-07-12T21:47:00Z`: Round 1 is complete and every reviewer is closed.
+  Runtime fixed-role metadata confirms style/API/reliability Terra High and
+  documentation Luna Medium, matching dispatch. API is clean. Seven accepted
+  items deduplicate to three reliability defects (cross-context scope collapse,
+  missing dynamic-tenant persistence, unbounded outer readiness), three focused
+  acceptance regressions (concurrent sharing, overlapping rejection, PAUSED/
+  SKIPPED), and one maintainability split/extraction. A bounded Sol High
+  requirements resolution is assigned before one Terra Medium fix owner.
 - The existing owner resumed the finding under fully read
   `receiving-code-review` and strict `test-driven-development`. The fix package
   remains limited to duplicate identity preflight, its focused proof, and
