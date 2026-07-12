@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 2 findings accepted; fix pending
+Status: Round 2 docs fix active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -130,6 +130,10 @@ Security is deferred to final project readiness.
   text; correct server-owned and current-generation terminology; and document
   public lifecycle behavior while accurately claiming no export/signature
   change. One docs fix worker and a fresh all-lane review are required.
+- `2026-07-12T05:07:00Z`: Assigned single Round 2 docs fix worker
+  `019f54b8-abb6-78d1-9d4a-a60a24f18ebc` with the complete eight-item batch.
+  Runtime, tests, examples, current public docs, generated output, and the
+  user-owned file remain frozen. No fix or clean-review result is claimed.
 - `2026-07-12T04:44:00Z`: Assigned docs fix worker
   `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
   package generation and all four lanes remain pending its return, coordinator
