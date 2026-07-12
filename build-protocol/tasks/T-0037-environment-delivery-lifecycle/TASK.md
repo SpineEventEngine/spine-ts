@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Durable split author active
+Status: Split package coordinator-verified; required review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -40,13 +40,11 @@ timing, public monitor/scheduler APIs, topology, and adapters deferred.
   process supervision, topology, adapters, catch-up delivery, and legacy
   `IMPORT_EVENT` support remain excluded.
 
-## First Required Step
+## Completed Requirements Split
 
-Run a read-only requirements split against D-0085 and current server,
-environment, context-handoff, and T-0036 internal seams. The splitter must
-recommend the smallest coherent implementation sequence and identify whether
-T-0037 itself should become multiple independently reviewed child slices before
-runtime code changes.
+A read-only requirements split examined D-0085 and current server, environment,
+context-handoff, and T-0036 internal seams. It found that T-0037 must become six
+independently reviewed child slices before runtime code changes.
 
 ## Accepted Decomposition
 
@@ -58,7 +56,7 @@ verified, merged, and cleaned child tasks:
 2. `T-0037b Bounded Generation Run Coordinator`
 3. `T-0037c Parked Delivery Obligations`
 4. `T-0037d Environment Attachment And Startup`
-5. `T-0037e Detach, Generation Retirement, And Environment Close`
+5. `T-0037e Generation Retirement And Environment Close`
 6. `T-0037f Server Lifecycle Integration`
 
 The invariant map is strict: context descriptors/readiness belong to `a`,
@@ -67,12 +65,65 @@ bounded/coalesced worker execution to `b`, bounded operational/cause records to
 `e`, and network/server ordering to `f`. Retry timing and public policy remain
 outside every child.
 
+Each child depends on its predecessor and is Candidate/not started. No child
+branch, work log, review log, or implementation claim exists. D-0086 records
+this as sequencing of D-0085, not a lifecycle redesign.
+
+## Current Code Facts
+
+- `ServerEnvironment.delivery` is only an optional closeable and has no run,
+  registration, notification, generation, or scheduling behavior.
+- The three built-context repository handoffs create short-lived,
+  tenant-specific `Delivery` instances, durably receive inbox work, and
+  immediately exact-drain the received row.
+- `TenantIndex.all()` can enumerate recorded multitenant tenants, but no startup
+  path currently enumerates them for delivery recovery.
+- `boundedContextAccess.storageFactory(context)` returns the factory actually
+  retained by the built context, including a builder-specific factory rather
+  than necessarily the environment default.
+- `RunningHttp2Server.close()` stops network intake/sessions and then closes a
+  flat group of contexts, resources, and optionally the environment. It has no
+  delivery detach barrier.
+- T-0036's finite epoch, selective per-shard invocation, and fulfilled/rejected
+  evidence remain implemented and unchanged; no run starts automatically.
+
+## JVM Evidence Boundary
+
+Spine JVM evidence is used only for environment-level delivery ownership and
+readiness after local durable persistence. T-0037 explicitly rejects copying a
+process singleton, per-message threads, immediate repeat callbacks, public
+`DeliveryMonitor` actions, a catch-up station, or global storage-factory
+copying into built contexts.
+
 `T-0037a` lands first and exposes one package-internal `boundedContextAccess`
 descriptor/readiness seam. It must not reopen T-0036 internals or start an
 environment worker.
+
+## First-Child Handoff
+
+Start only `T-0037a` after this parent split package passes its required review
+and is integrated. Give that child its own branch/worktree and durable
+implementation/review records at start time. Its author must first write RED
+tests around the built-context descriptor, actual storage factory, tenant
+enumeration, and post-persist readiness ordering. The parent branch must not be
+used for child runtime work.
 
 ## Verification
 
 - PASS: Requirements splitter `019f548a-4e89-7183-867e-c52d97bd6b0b`
   completed read-only and was closed. Coordinator accepted the six-slice
   sequence and `T-0037a` as the first independent child.
+- PASS: `pnpm format:check` and `git diff --check` passed. The first
+  `pnpm docs:check` exposed only absent fresh-worktree package declarations;
+  `pnpm typecheck:build:generated` rebuilt ignored declarations and the fresh
+  docs rerun passed with zero errors and the known invalid-`origin` warning.
+- PASS: Exact scope is the decision log, runtime architecture, parent
+  task/report/work/review records, and six child `TASK.md` files. Each child
+  directory contains only its brief; no runtime, tests, examples, generated,
+  public API docs, child work logs, or child review logs changed.
+- PENDING: Four required review lanes. No implementation or review completion
+  is claimed.
+- PASS: Coordinator repeated `docs:check`, `format:check`, `git diff --check`,
+  and exact scope/untracked inspection. Docs emitted only the known invalid-
+  `origin` warning and retained 205 expected server exports. Lightweight status
+  lint corrected completed-step and no-commit attribution wording.

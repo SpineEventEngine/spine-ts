@@ -33,8 +33,12 @@ complete server/runtime environment. It introduced a Node HTTP/2 listener over
 scheduling, or ZeroMQ-specific public API. Current source now also has a small
 explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
 facilities, and close ownership. Its optional closeable delivery facility is
-not an active delivery scheduler. D-0085 assigns a package-internal
-environment-owned bounded-run lifecycle to a successor implementation.
+not an active delivery scheduler. Current server close still stops network
+intake/sessions and then closes one flat group of contexts, resources, and an
+optionally owned environment; there is no delivery-registration barrier yet.
+D-0085 assigns a package-internal environment-owned bounded-run lifecycle to
+future implementation, and D-0086 sequences it through six ordered children
+without claiming that lifecycle is current behavior.
 
 ## Read-Side and Write-Side Segregation
 
@@ -373,3 +377,38 @@ applier/import delivery. `IMPORT_EVENT` is no longer a supported public
 delivery label for new inbox writes; stored/wire legacy rows using it are
 recognized only as deprecated compatibility data and fail closed before
 delivery.
+
+## Environment Delivery Lifecycle Sequence
+
+Current built-context handoffs construct short-lived tenant-specific
+`Delivery` instances, persist supported inbox work, and immediately exact-drain
+that row. Built contexts retain the storage factory actually used to build them
+behind `boundedContextAccess`; a builder-specific factory can differ from the
+environment default. The tenant index can enumerate recorded multitenant
+tenants, but server startup does not currently enumerate those scopes for
+recovery. T-0036's finite epochs and ordered fulfilled/rejected per-shard
+evidence remain package-internal, explicitly invoked, and unchanged.
+
+D-0086 maps the future D-0085 lifecycle into six strict slices:
+
+1. T-0037a owns context delivery descriptors, actual storage, tenant startup
+   scopes, endpoint/shard facts, and post-persist readiness.
+2. T-0037b owns serialized/coalesced finite generation runs and per-shard
+   interpretation of T-0036 evidence.
+3. T-0037c owns bounded canonical operational obligations and one-time cause
+   reporting.
+4. T-0037d owns environment registration cardinality, startup recovery, and
+   registration-scoped rollback.
+5. T-0037e owns detach, generation stop/retirement/reuse, close refusal, and
+   permanent environment close.
+6. T-0037f owns server listener/startup and network/context/resource/facility
+   shutdown ordering.
+
+The first future handoff is T-0037a's package-internal
+`boundedContextAccess` descriptor/readiness seam. It does not start a worker or
+change environment ownership by itself. JVM evidence supports only placing
+delivery ownership at environment level and submitting readiness after durable
+local persistence. The TS sequence rejects JVM singleton state, per-message
+threads, repeat callbacks, public monitor actions, catch-up stations, and
+global storage-factory copying. Retry timing and all public scheduler,
+monitoring, health, topology, adapter, and catch-up policy remain deferred.

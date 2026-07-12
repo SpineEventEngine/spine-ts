@@ -3543,3 +3543,87 @@ Consequences:
   neither successor absorbs retry timing or public policy.
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.
+
+## D-0086: Sequence Environment Delivery Lifecycle In Six Children
+
+Status: Accepted
+
+Date: 2026-07-12
+
+Task: `T-0037`
+
+Context: D-0085 deliberately combined the complete environment-owned delivery
+lifecycle so ownership, readiness, rejection handling, registration rollback,
+generation retirement, and shutdown ordering would have one coherent semantic
+contract. T-0036 has implemented and verified only D-0085's package-internal
+finite-epoch and per-shard evidence prerequisite. The remaining successor is
+too large for one careful implementation and four-lane review package: it
+crosses context handoff, delivery coordination, bounded operational records,
+environment registration, generation close, and server network lifecycle.
+
+Current code facts constrain the sequence. `ServerEnvironment.delivery` is
+only an optional closeable facility. Repository handoffs construct short-lived,
+tenant-specific `Delivery` instances after persistence and immediately
+exact-drain the received row. Built contexts retain the storage factory they
+actually used behind `boundedContextAccess`, including a builder-selected
+factory that differs from the environment default. `TenantIndex.all()` can
+enumerate a multitenant context's recorded tenants, but startup does not use it
+to assemble delivery work. `RunningHttp2Server.close()` currently stops network
+intake and then closes one flat ordered closeable group; it has no delivery
+registration barrier. T-0036 evidence and its verified behavior remain
+unchanged and explicitly invoked.
+
+Decision:
+
+- Split D-0085's T-0037 successor into six ordered implementation children:
+  `T-0037a Context Delivery Attachment Seam`, `T-0037b Bounded Generation Run
+Coordinator`, `T-0037c Parked Delivery Obligations`, `T-0037d Environment
+Attachment And Startup`, `T-0037e Generation Retirement And Environment
+Close`, and `T-0037f Server Lifecycle Integration`.
+- The invariant map is exclusive. T-0037a owns package-internal built-context
+  delivery descriptors, actual storage-factory access, startup tenant
+  enumeration, endpoint/shard attachment facts, and post-persist readiness
+  emission. T-0037b owns serialized/coalesced bounded generation runs and
+  T-0036 evidence interpretation. T-0037c owns finite canonical operational
+  obligation and cause-reporting records. T-0037d owns environment
+  registration cardinality, attachment, startup recovery, and failed-start
+  rollback. T-0037e owns detach, generation stop/retirement/reuse, close
+  refusal, and permanent environment close. T-0037f alone integrates those
+  seams with listener startup, network shutdown, contexts, resources, and
+  owned facilities.
+- Each child depends on the preceding child and receives its own branch,
+  implementation log, review log, TDD cycle, focused verification, and four
+  required review lanes when implementation starts. Candidate briefs do not
+  create those unstarted artifacts. T-0037 remains a sequencing parent and
+  changes no runtime behavior itself.
+- T-0037a is the first handoff. It must expose one small package-internal
+  `boundedContextAccess` descriptor/readiness seam grounded in built-context
+  state. It does not start a worker, attach an environment registration, or
+  replace the current exact-drain behavior before a later child owns the
+  transition.
+- Every child preserves D-0085 rather than redesigning it: one environment
+  owner; finite one-shot T-0036 runs; readiness only after durable persistence;
+  per-shard rather than aggregate scheduling; no spin from fulfilled
+  `FAILED`/`SKIPPED` or rejected starts; bounded parked state; ownership-scoped
+  startup/cleanup; stop-before-await-before-consume retirement; and network,
+  endpoint, transport, and storage close ordering.
+- JVM evidence is adopted narrowly: delivery ownership belongs at environment
+  level and local post-persist notification may submit readiness. The TS
+  implementation must not copy a process singleton, per-message threads,
+  repeat callbacks, public `DeliveryMonitor` actions, a catch-up station, or
+  global storage-factory copying.
+- Retry delay/backoff/jitter/timers, public monitor/scheduler/health surfaces,
+  process supervision, transport topology/adapters, `CATCH_UP` as a trigger or
+  delivery path, legacy `IMPORT_EVENT` support, and changes to T-0034 or T-0036
+  remain outside all six children.
+
+Consequences:
+
+- Review packages align with one ownership seam apiece while the complete
+  D-0085 lifecycle remains ordered and traceable.
+- The first child can prove context delivery facts and durable-write readiness
+  without prematurely creating a second lifecycle owner.
+- Later children consume stable predecessors instead of reopening loop/worker
+  internals or combining server integration with obligation bookkeeping.
+- This decision changes sequencing and durable documentation only. It does not
+  claim any T-0037 child behavior is implemented.
