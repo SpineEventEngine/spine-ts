@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Architecture boundary planning assigned
+Status: Architecture metadata redispatch assigned
 
 Started: `2026-07-12T17:05:11Z`
 
