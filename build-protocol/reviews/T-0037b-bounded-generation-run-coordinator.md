@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Round 5 wave 2 and style provenance retry assigned
+Status: Safe stop; Round 5 two-finding fix pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037b-bounded-generation-run-coordinator`
 
 ## Required Review Lanes
 
-| Lane                       | Expected model/reasoning  | Wave    | Status                                                                |
-| -------------------------- | ------------------------- | ------- | --------------------------------------------------------------------- |
-| Code style/maintainability | `gpt-5.6-terra` / `high`  | 2 retry | Prior CLEAN invalid: actual metadata unavailable; redispatch assigned |
-| Documentation              | `gpt-5.6-luna` / `medium` | 1       | CLEAN; actual profile matched; closed                                 |
-| TypeScript/API docs        | `gpt-5.6-terra` / `high`  | 1       | CLEAN; actual profile matched; closed                                 |
-| Performance/reliability    | `gpt-5.6-terra` / `high`  | 2       | Assigned                                                              |
+| Lane                       | Expected model/reasoning  | Wave    | Status                                 |
+| -------------------------- | ------------------------- | ------- | -------------------------------------- |
+| Code style/maintainability | `gpt-5.6-terra` / `high`  | 2 retry | One P1 finding; actual matched; closed |
+| Documentation              | `gpt-5.6-luna` / `medium` | 1       | CLEAN; actual profile matched; closed  |
+| TypeScript/API docs        | `gpt-5.6-terra` / `high`  | 1       | CLEAN; actual profile matched; closed  |
+| Performance/reliability    | `gpt-5.6-terra` / `high`  | 2       | One P1 finding; actual matched; closed |
 
 Security is deferred to final project readiness.
 
@@ -25,6 +25,34 @@ in historical events below. Fresh substantive reviewers must report expected
 and actual model/reasoning plus the canonical skill check. Wave 1 uses three
 children with the parent; wave 2 runs only after wave 1 agents close. The
 complete four-lane result is aggregated before any fix assignment.
+
+## Round 5 Complete Wave
+
+- Documentation: CLEAN, reviewer
+  `019f570c-7b8f-7cf3-92ef-7bf66841aeef`, actual `gpt-5.6-luna` / `medium`,
+  closed.
+- TypeScript/API docs: CLEAN, reviewer
+  `019f570c-7c99-7f92-9749-9fe3e93969bb`, actual `gpt-5.6-terra` / `high`,
+  closed.
+- Initial style result was CLEAN but invalid because actual runtime model
+  metadata was unavailable; reviewer
+  `019f570c-7a9d-70c3-8f4a-77192001c7e0` is closed and its result is not used.
+- Style retry: `P1` at `delivery-run-coordinator.ts:165`. Invoke
+  `worker.start()` outside the promise-rejection catch so synchronous lifecycle
+  invariant throws remain fatal instead of becoming ordinary `REJECTED`
+  settlements. Add focused regression coverage. Reviewer
+  `019f5711-c449-72b1-acc4-e9952bb79d75`, actual `gpt-5.6-terra` / `high`,
+  closed.
+- Performance/reliability: `P1` at `delivery-run-coordinator.ts:151`. The active
+  drain can admit more than the allowed one successor when readiness arrives
+  during the deferred admission, allowing continuous readiness to keep the
+  original `start()` unresolved. Cap one active turn to one successor and add a
+  regression for readiness during that successor. Reviewer
+  `019f5711-c4f2-7bd2-aeb5-478a60f76f09`, actual `gpt-5.6-terra` / `high`,
+  closed.
+
+The complete accepted batch contains exactly these two findings. No fixer is
+assigned at the safe stop.
 
 ## Review Criteria
 

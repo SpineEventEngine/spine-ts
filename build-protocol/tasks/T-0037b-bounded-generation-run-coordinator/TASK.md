@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Round 5 wave 2 and style provenance retry assigned
+Status: Safe stop; Round 5 two-finding fix pending
 
 Started: `2026-07-12T11:43:52Z`
 
