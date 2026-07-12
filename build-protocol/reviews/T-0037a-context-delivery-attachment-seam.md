@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 3 skill checks complete; substantive review paused
+Status: Review Round 3 active
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status                       |
-| -------------------------- | -------------------------------------- | ---------------------------- |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Skill check complete; paused |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Skill check complete; paused |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Skill check complete; paused |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Skill check complete; paused |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Active |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Active |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Active |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Active |
 
 Security is deferred to final project readiness.
 
@@ -314,3 +314,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T10:58:36Z`: All four phase-1 reports completed. Their complete
   canonical evidence is preserved in `Round 3 Skill Checks`; substantive review
   remains paused until this record commits.
+- `2026-07-12T11:00:49Z`: Complete skill-provenance commit `6a0ba0dd` finished;
+  all four substantive Round 3 lanes started against the fixed immutable
+  package and current durable records.

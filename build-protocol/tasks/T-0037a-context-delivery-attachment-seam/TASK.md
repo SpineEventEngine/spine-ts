@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Review Round 3 skill checks complete; substantive review paused
+Status: Review Round 3 active
 
 Started: `2026-07-12T09:52:53Z`
 
