@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 4 fail-closed wording correction assigned
+Status: Slice 2 Round 4 wording verified; Round 5 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -376,3 +376,10 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Runtime profiles matched dispatch. One wording finding remains: replace the
   active task phrase “fail open” with “fail closed on open before coordinator
   admission.” One Terra Medium record owner is assigned before Round 5.
+- The active TASK outcome now says unknown facts “fail closed on `open()`
+  before coordinator admission.” The prior wording remains only in the
+  historical finding immediately above. Record-only Prettier, identical-Status,
+  no-source/test-diff, and `git diff --check` checks pass.
+- `2026-07-12T22:56:00Z`: Coordinator record verification passes; current
+  fail-closed wording is correct and the old phrase remains chronology only.
+  Round 5 is pending.

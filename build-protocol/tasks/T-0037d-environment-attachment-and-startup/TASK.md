@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 4 fail-closed wording correction assigned
+Status: Slice 2 Round 4 wording verified; Round 5 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -448,11 +448,11 @@ Process-manager and projection receives await the built descriptor's
 before any row. Registration readiness is a finite `waiting | open | failed`
 bridge over the preassembled owner-qualified domain. Waiting performs canonical
 replacement only; 4,096 distinct unknown facts set one invalid bit, retain no
-keys, and fail open before coordinator admission. Failed ignores later facts;
-open permits a durable zero-to-first tenant to add its exact runtime before
-notification. Focused evidence also covers concurrent caller serialization,
-exact owner worker selection, PAUSED/SKIPPED cause-less parking, and equal-fact
-cross-context isolation.
+keys, and fail closed on `open()` before coordinator admission. Failed ignores
+later facts; open permits a durable zero-to-first tenant to add its exact
+runtime before notification. Focused evidence also covers concurrent caller
+serialization, exact owner worker selection, PAUSED/SKIPPED cause-less parking,
+and equal-fact cross-context isolation.
 
 The affected server loopback suite produced the expected sandbox `listen
 EPERM`, then passed 21/21 under native execution. Full `pnpm verify` remains the
@@ -505,3 +505,8 @@ Round 3 record-only verification confirms the current diff contains exactly
 the three canonical records and no source/test/package/Protobuf file. Targeted
 docs/status overclaim lint, record Prettier, and `git diff --check` pass; all
 three Status headers remain identical.
+
+Round 4 record verification corrected the sole active polarity typo above.
+Task/work/review scanning found no other active inaccurate occurrence; reviewer
+finding chronology remains unchanged. Record Prettier and `git diff --check`
+pass with identical Status mirrors and no source/test diff.
