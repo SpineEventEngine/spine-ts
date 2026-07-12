@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 4 targeted re-review in progress
+Status: Slice 1 Round 4 concurrent-test finding assigned for focused fix
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -311,6 +311,14 @@ re-review accepts this corrected package.
    retries from the finite failed checkpoint produce exactly one accepted
    transition/route, while the loser rejects without resetting state or
    replacing the winning callback.
+
+### Slice 1 Round 4 Finding
+
+The retry competitor must start synchronously while the winner remains in
+`transition` mode. The current test yields first and therefore proves only
+post-transfer route immutability. Buffer the winner's readiness, start the loser,
+and buffer the remaining readiness before any `await`; then prove neither route
+ran early and only the winner flushes the complete buffered set.
 
 Round 3 is a test-only correctness closure. The simultaneous-retry regression
 passed on first execution: transition mode is published synchronously, so one

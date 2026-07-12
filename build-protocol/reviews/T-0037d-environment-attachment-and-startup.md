@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 4 targeted re-review in progress
+Status: Slice 1 Round 4 concurrent-test finding assigned for focused fix
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -141,8 +141,16 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   TypeScript/API docs Terra High, and reliability Terra High. The lanes are
   bounded to the test-only concurrent-retry closure and current status claims;
   security remains deferred.
-- Round 3 focused package is ready for targeted re-review. Six-file regressions
+- Round 4 focused package is ready for targeted re-review. Six-file regressions
   pass 156/156; coverage clears all 90% thresholds; generated typecheck,
   lint/cleanup, format, diff, public-leak, and generated/protected-file scans are
   clean. This round changes one test plus canonical records and contains no
   production delta. Reviewer acceptance remains pending.
+- `2026-07-12T20:51:00Z`: Round 4 is complete and every reviewer is closed.
+  Runtime fixed-role metadata confirms style/API/reliability used Terra High and
+  documentation used Luna Medium, matching explicit dispatch. The lanes
+  deduplicate to one blocking issue: the test yields before starting the loser,
+  allowing the winner to install its route, so it does not prove a competing
+  retry cannot reset buffered transition state or replace the pending callback.
+  The active Round 3 package-label typo is included in the same Terra Medium
+  fix batch. Slice 2 remains pending clean Slice 1 closure.
