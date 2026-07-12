@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 5 docs fix active
+Status: Round 5 docs fix verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -55,9 +55,11 @@ The verified Round 1 fix was committed as `3847e1b6`; reconciliation through
 `80ef21e2` formed the Round 2 review boundary. Round 2 fixes were committed as
 `7281ba07`. Round 3 reviewed package `0308bc4a..49b3fb4b`; its accepted docs
 fixes were committed as `97107fae` after worker and coordinator verification.
-Round 4 review completed with accepted findings. Its verified docs fix was
-committed as `98b4a284`. Fresh four-lane review remains pending and no clean
-review is claimed.
+Round 4 review completed with accepted findings. Its docs fix passed worker and
+coordinator verification, was committed as `98b4a284`, and was reconciled
+through `1b127f87`. Round 5 completed all four lanes with one stale-status
+finding in the active parent summaries. That finding's docs fix is authored and
+awaits focused verification; no clean review is claimed.
 
 ## Verification
 
@@ -80,6 +82,8 @@ the known invalid-`origin` warning. Fresh review remains pending.
 
 Round 3 reviewed package `0308bc4a..49b3fb4b`. Its accepted four-item docs fix
 passed worker and coordinator verification. Round 4 completed all four lanes
-with accepted findings; the Round 4 docs fix is authored and awaits focused
-coordinator verification after its worker checks passed, with no clean review
-claim.
+with accepted findings; its fix passed worker and coordinator verification,
+was committed as `98b4a284`, and was reconciled through `1b127f87`. Round 5
+completed all four lanes with one stale-status finding in the active parent
+summaries. That finding's docs fix passed worker and coordinator verification;
+fresh review remains pending and no clean review is claimed.
