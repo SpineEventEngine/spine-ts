@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 4 findings assigned
+Status: Slice 3 Round 4 fixes focused verified; Round 5 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -568,3 +568,29 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   evidence is scoped coordinator owner removal after quiescence, sibling
   preservation, bounded repeated-failure owner/configured/settled state, and
   truthful current records. Round 5 and security remain pending.
+- Round 4 fix applicability was rechecked under fully read
+  `receiving-code-review` and strict TDD. The coordinator retention defect and
+  both active record defects are confirmed. Focused REDs precede the private
+  scoped-removal implementation and documentation corrections.
+- Pre-production RED is 6 failed/58 passed across the focused coordinator and
+  environment suites: two absent scoped-removal races plus four bounded-owner/
+  unsafe/cleanup integration assertions fail exactly as reviewed.
+- Focused GREEN is 64/64. Direct active/pending coordinator races preserve
+  siblings while reclaiming selected state; environment integration proves
+  bounded repeated failures, no historical settlement scanning, unsafe retry
+  retention, inert-cleanup reclamation, and unchanged D-0085 behavior.
+- Round 4 fixes are focused verified for Round 5 review. The canonical
+  seven-file regression passes 192/192 and coverage passes at 96.58%
+  statements, 90.00% branches, 98.02% functions, and 96.90% lines. Scoped
+  reclamation is package-internal, ordered after quiescence/retirement attempt,
+  preserves siblings, and remains absent on unsafe stop/await failure.
+- Active progress and historical handoff commit wording are corrected. Final
+  generated/lint/cleanup, format/diff/status/public/generated/protected checks
+  pass with no public/generated/protected finding and identical statuses. Round
+  5 review remains pending; security stays deferred.
+- `2026-07-12T23:59:31Z`: The implementer completed and was closed with actual
+  runtime metadata matching explicit `gpt-5.6-terra` / `medium`. Coordinator
+  inspection accepts the scoped-removal ordering and independently repeats the
+  canonical regression (192/192), generated/type/lint/cleanup, format, diff,
+  and status gates; native server lifecycle passes 21/21. The fix is ready for
+  a committed Round 5 package. Full verify and final security remain deferred.

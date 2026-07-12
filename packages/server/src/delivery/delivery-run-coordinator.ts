@@ -50,6 +50,11 @@ export class DeliveryRunCoordinator {
     return this.#finalized;
   }
 
+  /** @internal Current generation-local canonical scope cardinality. */
+  get configuredScopeCount(): number {
+    return this.#configured.size;
+  }
+
   start(scopes: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
     if (!this.#accepting) {
       return Promise.reject(new Error("Delivery run coordinator admission is closed."));
@@ -75,6 +80,24 @@ export class DeliveryRunCoordinator {
       void this.#ensureActive().catch(() => undefined);
     } catch {
       // Readiness notification cannot alter a completed durable write.
+    }
+  }
+
+  /** @internal Reclaim quiesced, permanently retired owner state without disturbing siblings. */
+  async removeOwners(ownerKeys: readonly string[]): Promise<void> {
+    const owners = new Set(ownerKeys);
+    this.#removePendingOwners(owners);
+    await this.#active?.catch(() => undefined);
+    this.#removePendingOwners(owners);
+    for (const [key, scope] of this.#configured) {
+      if (owners.has(scope.owner.key)) {
+        this.#configured.delete(key);
+      }
+    }
+    for (const [key, settlement] of this.#settled) {
+      if (owners.has(settlement.scope.owner.key)) {
+        this.#settled.delete(key);
+      }
     }
   }
 
@@ -253,6 +276,14 @@ export class DeliveryRunCoordinator {
   #parkPending(rejected: ReadonlySet<string>): void {
     for (const [key, scope] of this.#pending) {
       if (rejected.has(ownerShardKey(scope.owner, scope.ready.shard.key()))) {
+        this.#pending.delete(key);
+      }
+    }
+  }
+
+  #removePendingOwners(owners: ReadonlySet<string>): void {
+    for (const [key, scope] of this.#pending) {
+      if (owners.has(scope.owner.key)) {
         this.#pending.delete(key);
       }
     }

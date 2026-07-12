@@ -132,6 +132,15 @@ export class EnvironmentAttachments {
     return this.#registrations.count;
   }
 
+  /** @internal Current configured ephemeral owner cardinality across the live generation. */
+  get configuredOwnerCount(): number {
+    let count = 0;
+    for (const generation of this.#generations.values()) {
+      count += generation.configuredOwnerCount;
+    }
+    return count;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
       return Promise.reject(explicitRetryError());
@@ -323,6 +332,10 @@ class DeliveryGeneration {
     return this.#reportedFailures.size;
   }
 
+  get configuredOwnerCount(): number {
+    return this.#configuredOwners.size;
+  }
+
   hasRegistration(token: string): boolean {
     return this.#registrations.has(token);
   }
@@ -374,7 +387,19 @@ class DeliveryGeneration {
     } catch (error) {
       failures.push(error);
     }
-    this.#forgetScopes(state.scopes);
+    let reclaimed = false;
+    try {
+      await this.#coordinator?.removeOwners(state.ownerKeys);
+      reclaimed = true;
+    } catch (error) {
+      failures.push(error);
+    }
+    if (reclaimed) {
+      for (const ownerKey of state.ownerKeys) {
+        this.#configuredOwners.delete(ownerKey);
+      }
+      this.#forgetScopes(state.scopes);
+    }
     this.#registrations.delete(token);
     throwFailures(failures, "Environment registration rollback failed.");
   }

@@ -67,6 +67,69 @@ describe("DeliveryRunCoordinator", () => {
     expect(entry(worker.starts, 1).obligation.scopes).toEqual([second]);
   });
 
+  it("removes one active owner's configured and settled scopes while preserving its sibling", async () => {
+    const selectedRun = deferred<DeliveryWorkerEvidence>();
+    const siblingRun = deferred<DeliveryWorkerEvidence>();
+    const siblingAgain = deferred<DeliveryWorkerEvidence>();
+    const selected = ownedScope("selected-owner", "selected", 0, 1);
+    const sibling = ownedScope("sibling-owner", "sibling", 0, 1);
+    const worker = new FakeRunWorker([
+      selectedRun.promise,
+      siblingRun.promise,
+      siblingAgain.promise,
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [selected, sibling], worker });
+    const removing = Promise.resolve().then(() => coordinator.removeOwners([selected.owner.key]));
+    const initial = coordinator.start([selected, sibling]);
+    await until(() => worker.starts.length === 1);
+    selectedRun.resolve(
+      workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 1, "IDLE")),
+    );
+    await until(() => worker.starts.length === 2);
+    siblingRun.resolve(workerEvidence(entry(worker.starts, 1).obligation, fulfilled(0, 1, "IDLE")));
+
+    await initial;
+    await removing;
+    expect(coordinator.settlement().scopes).toEqual([
+      expect.objectContaining({ scope: sibling, disposition: "IDLE" }),
+    ]);
+    expect(coordinator.configuredScopeCount).toBe(1);
+    await expect(coordinator.start([selected])).rejects.toThrow(
+      "Delivery run scope is not configured.",
+    );
+
+    const later = coordinator.start([sibling]);
+    await until(() => worker.starts.length === 3);
+    siblingAgain.resolve(
+      workerEvidence(entry(worker.starts, 2).obligation, fulfilled(0, 1, "IDLE")),
+    );
+    await later;
+  });
+
+  it("removes selected pending readiness without disturbing active sibling work", async () => {
+    const siblingRun = deferred<DeliveryWorkerEvidence>();
+    const selected = ownedScope("pending-owner", "pending", 0, 1);
+    const sibling = ownedScope("active-sibling", "active", 0, 1);
+    const worker = new FakeRunWorker([
+      siblingRun.promise,
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [selected, sibling], worker });
+    const active = coordinator.start([sibling]);
+    coordinator.notify(selected);
+    const removing = Promise.resolve().then(() => coordinator.removeOwners([selected.owner.key]));
+    siblingRun.resolve(workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 1, "IDLE")));
+
+    await active;
+    await removing;
+    expect(worker.starts).toHaveLength(1);
+    expect(coordinator.settlement()).toEqual({
+      scopes: [expect.objectContaining({ scope: sibling, disposition: "IDLE" })],
+      pending: [],
+    });
+    expect(coordinator.configuredScopeCount).toBe(1);
+  });
+
   it("serializes starts and losslessly merges repeated disjoint readiness", async () => {
     const first = deferred<DeliveryWorkerEvidence>();
     const second = deferred<DeliveryWorkerEvidence>();

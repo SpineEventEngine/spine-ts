@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 4 findings assigned
+Status: Slice 3 Round 4 fixes focused verified; Round 5 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -473,6 +473,33 @@ Style and reliability reported the same owner-retention defect; documentation
 reported the two record defects. TypeScript/API docs is clean. One existing
 Terra Medium owner receives the deduplicated batch under TDD before Round 5.
 
+### Slice 3 Round 4 fix outcome
+
+The failed shared-registration owner is now reclaimed after readiness failure,
+selected stop/quiescence, reporting, and permanent owner retirement attempt.
+The smallest package-internal coordinator operation removes selected pending
+work, waits any active admission, then removes only selected configured and
+settled scopes. Sibling pending/configured/settled state and later admission
+remain usable. Environment rollback removes `#configuredOwners` and ephemeral
+overlap translation only after coordinator reclamation succeeds.
+
+Unsafe stop or quiescence failure reaches no reclamation and remains retryable.
+An inert permanent-owner cleanup failure still performs coordinator/owner/
+translation reclamation, preserves the stable unresolved record, and rejects
+the aggregate cleanup result; a matching replacement continues to receive the
+plain D-0085 blocker. Across 2,048 repeated same-domain shared failures, the
+stable ledger remains one, configured failed-owner/coordinator retention remains
+bounded to the sibling, and later startup settlement returns no historical
+failed scopes.
+
+Focused RED failed 6/64 before production edits. GREEN passes coordinator plus
+environment 64/64 and the canonical seven files 192/192. Affected coverage is
+96.58% statements, 90.00% branches, 98.02% functions, and 96.90% lines.
+Generated build/typecheck, lint/cleanup, format/diff/status/public/generated/
+protected scans are the final handoff gate. Any “no commit” statement in prior
+outcomes means no implementer-authored commit existed at that handoff; later
+coordinator-created frozen review commits remain recorded in chronology.
+
 ### Slice 3 Round 3 fix outcome
 
 Both accepted private changes are implemented under strict TDD. Failed rollback
@@ -657,8 +684,9 @@ behavior passed this acceptance proof without modification.
 
 Final focused verification passes 175/175 across the canonical seven files;
 generated typecheck, ESLint/cleanup, format, diff, public-entrypoint,
-generated/Protobuf/protected-file, and identical-Status checks pass. No commit
-or full `pnpm verify` was run.
+generated/Protobuf/protected-file, and identical-Status checks pass. No
+implementer-authored commit existed at that handoff; coordinator packaging
+occurred later. Full `pnpm verify` was not run.
 
 ### Slice 2 Round 2 stalled-peer integration proof
 

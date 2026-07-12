@@ -737,6 +737,7 @@ describe("failed attachment rollback", () => {
       ).rejects.toBeInstanceOf(AggregateError);
       expect(reported).toEqual([]);
       expect(worker.retiredOwners).toEqual([]);
+      expect(configuredOwnerCount(attachments)).toBe(2);
       expect(events).not.toContain("report");
       await expect(
         attachments.attach({ ownership: "caller", descriptors: [replacement.value] }),
@@ -747,6 +748,7 @@ describe("failed attachment rollback", () => {
       expect(worker.awaitOwnerCalls).toBe(failureKind === "stop" ? 1 : 2);
       expect(reported).toHaveLength(1);
       expect(worker.retiredOwners).toEqual([["environment-owner-2"]]);
+      expect(configuredOwnerCount(attachments)).toBe(1);
 
       worker.enqueue("IDLE");
       await expect(
@@ -1018,6 +1020,77 @@ describe("failed attachment rollback", () => {
     }
 
     expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+
+    const recovered = descriptor("BoundedFailure", sharedType, sharedFactory);
+    worker.enqueue("IDLE");
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [recovered.value],
+    });
+    expect(handle.startup.scopes.map(({ scope }) => scope.ready.targetTypeUrl)).toEqual([
+      sibling.ready.targetTypeUrl,
+      recovered.ready.targetTypeUrl,
+    ]);
+    expect(handle.startup.pending).toEqual([]);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(0);
+    expect(configuredOwnerCount(attachments)).toBe(2);
+  });
+
+  it("reclaims failed owner state after inert selected-worker retirement cleanup failure", async () => {
+    const events: string[] = [];
+    const worker = new LifecycleWorker(events);
+    const cleanupFailure = new Error("selected owner cleanup failed");
+    worker.retireOwnerFailures.push(cleanupFailure);
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report: () => {
+        events.push("report");
+        return Promise.resolve();
+      },
+    });
+    const sharedFactory = new InMemoryStorageFactory();
+    const sibling = descriptor(
+      "CleanupSibling",
+      "type.example.dev/CleanupSibling",
+      new InMemoryStorageFactory(),
+    );
+    const failed = descriptor(
+      "CleanupStableContext",
+      "type.example.dev/CleanupStableFailure",
+      sharedFactory,
+    );
+    const blocked = descriptor(
+      "CleanupStableContext",
+      "type.example.dev/CleanupStableFailure",
+      sharedFactory,
+    );
+    const startFailure = new Error("cleanup-path startup failed");
+    worker.enqueue("IDLE", { rejected: startFailure });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toMatchObject({ errors: [startFailure, cleanupFailure] });
+    expect(events).toEqual([
+      "start",
+      "start",
+      "stopOwners",
+      "awaitOwners",
+      "report",
+      "retireOwners",
+    ]);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+
+    worker.enqueue({ rejected: new Error("fresh cleanup-path rejection") });
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [blocked.value] }),
+    ).rejects.toEqual(
+      new Error("Startup recovery is blocked by an unresolved shared delivery obligation."),
+    );
+    expect(configuredOwnerCount(attachments)).toBe(1);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
   });
 
   it("does not inherit or resolve stable failure state across distinct factory objects", async () => {
@@ -1109,6 +1182,11 @@ function unresolvedReportedDomainCount(attachments: EnvironmentAttachments): num
 function activeRegistrationCount(attachments: EnvironmentAttachments): number {
   return (attachments as EnvironmentAttachments & { readonly activeRegistrationCount: number })
     .activeRegistrationCount;
+}
+
+function configuredOwnerCount(attachments: EnvironmentAttachments): number {
+  return (attachments as EnvironmentAttachments & { readonly configuredOwnerCount: number })
+    .configuredOwnerCount;
 }
 
 interface TestDescriptor {
@@ -1250,6 +1328,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly retireFailures: Error[] = [];
   readonly stopOwnerFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
+  readonly retireOwnerFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
   readonly addedOwners: string[] = [];
   starts = 0;
@@ -1352,7 +1431,8 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   retireOwners(ownerKeys: readonly string[]): Promise<void> {
     this.#events.push("retireOwners");
     this.retiredOwners.push([...ownerKeys]);
-    return Promise.resolve();
+    const failure = this.retireOwnerFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
 }
 
