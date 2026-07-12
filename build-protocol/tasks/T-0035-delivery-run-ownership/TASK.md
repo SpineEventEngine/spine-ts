@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 5 decision fix in progress
+Status: Round 5 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -146,6 +146,18 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   and surfaces an orphaned generation-owned record only as a generation
   lifecycle failure. Last detach and environment close consume all remaining
   records through their truthful owner scopes.
+- An active rejection encountered during detach is partitioned before
+  aggregation. Non-last detach includes only departing-registration records and
+  generation records made orphaned by removal; live shared/sibling records stay
+  parked. Last detach and environment close include all remaining records once.
+- A server-owned environment registration is package-internally exclusive to
+  its owning server and rejects any second attachment before registration or
+  work admission. Caller-owned environments may accept multiple registrations.
+- Environment close serializes its attachment-count check with attach/detach/
+  close. Live registrations cause a non-permanent close rejection before
+  admission or facilities change; at zero attachments, close becomes permanent
+  and follows the accepted quiescence/error/facility order. An owning server
+  detaches its sole registration before closing its environment.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -228,6 +240,15 @@ Ordinary detach similarly consumes registration-owned errors before dependency
 close, retains genuine shared/sibling errors, and surfaces an orphaned shared
 error only as generation-owned. Removing the first/sole registration quiesces
 the now-empty generation; an owned environment then closes permanently.
+
+Detach-time active rejection is partitioned before inclusion: ordinary
+non-last detach consumes only departing-registration and newly orphaned
+generation records, retaining live shared/sibling records. Caller-owned
+environments may host multiple registrations; a server-owned registration is
+exclusive and rejects another attachment before admission. Environment close
+rejects non-permanently while registrations remain, serialized against
+attach/detach/close, and changes admission/facilities only after observing zero
+attachments. An owning server detaches its sole registration before close.
 
 Last detach permanently stops that generation's worker and loops. A reusable
 caller-owned environment remains open, but later attachment constructs a fresh
@@ -354,6 +375,21 @@ active delivery scheduler.
 - PASS: Complete work-log chronology, `git diff --check`, aligned status, exact
   four-file scope, zero-untracked, and successor-task-file absence checks.
 - NOT RUN: full `pnpm verify` in Round 4, per explicit task direction.
+- PASS: Round 5 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted detach-time rejection partitioning, non-last/last detach
+  inclusion, live shared-record retention, server-owned exclusivity,
+  caller-owned sharing, serialized live-attachment close refusal, close-race
+  ordering, zero-attachment permanent close, owning-server detach-first,
+  T-0036/T-0037 boundary, retry deferral, T-0034, `CATCH_UP`, and `IMPORT_EVENT`
+  assertions.
+- PASS: Complete chronology, `git diff --check`, aligned status, exact four-file
+  scope, zero-untracked, and successor-task-file absence checks.
+- NOT RUN: full `pnpm verify` in Round 5, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 5 generated build,
+  docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
+  detach-time rejection partitioning, ownership exclusivity, serialized close
+  refusal/races, zero-attachment close, compatibility, and public-API checks.
 - PASS: Coordinator independently repeated the Round 4 generated build,
   docs/API, formatting, whitespace, exact scope, zero-untracked,
   successor-task-file absence, 48-event chronology, ownership, attribution,

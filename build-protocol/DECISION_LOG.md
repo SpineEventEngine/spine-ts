@@ -3236,19 +3236,27 @@ Decision:
   registrations, reference counting, or equivalent generation tokens. Each
   attachment registers its endpoint dependencies and associated shard/work
   obligations, then submits startup recovery through the shared seam before
-  that server opens network intake. Additional servers reuse the same
-  generation and do not create another delivery owner. Detaching one server
-  stops readiness from that registration and serializes against active work
-  before its contexts close. After that barrier and before those dependencies
-  close, ordinary detach surfaces and consumes every parked error owned by that
-  registration through the server-close aggregate. It retains sibling-owned
-  errors and all sibling progress/readiness. A generation-owned error whose
-  remaining scope still includes any live shared or sibling obligation stays
-  generation-owned and parked; it is not relabeled as the departing
-  registration's error. If removing the registration leaves a generation-owned
-  record with no live obligation, detach surfaces and consumes that record as a
-  generation lifecycle failure, without falsely attributing it to the departing
-  registration.
+  that server opens network intake. A caller-owned environment may accept
+  multiple registrations; additional servers reuse the same generation and do
+  not create another delivery owner. A server-owned environment registration is
+  package-internally exclusive to its owning server. Claiming ownership when
+  another registration is live, or attaching a second server while the owning
+  registration is live, rejects before registration, startup recovery, trigger
+  admission, or any other delivery work is admitted. This exclusivity follows
+  the existing server/environment ownership relation and adds no public option.
+- Detaching one server stops readiness from that registration and serializes
+  against active work before its contexts close. Every active-run rejection
+  observed while establishing that barrier is first partitioned by the same
+  registration/generation shard-obligation ownership rule as any other rejected
+  start. After the barrier and before those dependencies close, ordinary
+  non-last detach surfaces and consumes only records owned by the departing
+  registration plus generation-owned records made orphaned by removing it.
+  Sibling-owned errors and sibling progress/readiness remain intact. A
+  generation-owned record whose remaining scope still includes any live shared
+  or sibling obligation stays generation-owned and parked and is not included
+  in that server's close aggregate. It is never relabeled as the departing
+  registration's error. Last detach and environment close surface and consume
+  all remaining records exactly once under the rules below.
 - Failed startup atomically closes trigger/notification admission for only the
   attaching registration and removes that registration from the generation.
   The seam then prevents new work for its associated obligations and awaits
@@ -3287,14 +3295,25 @@ Decision:
   permanently; a later attachment allocates a fresh package-internal generation
   with newly constructed worker/loop instances, reinstalls notification, and
   performs startup recovery for durable pending work. `ServerEnvironment.close()`
-  is different: it permanently rejects later attachments and triggers,
-  quiesces and awaits all remaining lifecycle work, permanently stops the
-  current generation's worker/loops, surfaces and consumes every remaining
-  registration- and generation-owned parked record exactly once in the close
-  aggregate, and then closes owned facilities. It cannot create a later
-  generation. A server-owned environment still closes with its owning server
-  after the sole attachment quiesces. No public attachment or lifecycle option
-  is introduced.
+  first performs a package-internal live-registration check serialized with
+  attach, detach, and close. If any registration is live, close rejects before
+  permanently closing admission, stopping a worker, consuming parked errors, or
+  shutting down a facility; the environment and every registration remain
+  usable, and the caller must stop and detach the servers before retrying close.
+  This refusal uses the existing close rejection channel and adds no public
+  close API or option. The serialization gives races one order: if attach wins,
+  close observes the live registration and rejects; if the zero-attachment
+  close transition wins, concurrent or later attach rejects; if detach has not
+  completed, close rejects and may be retried after detach.
+- Once the serialized close transition observes zero registrations, it
+  permanently rejects later attachments and triggers, quiesces and awaits all
+  remaining lifecycle work, permanently stops the current generation's
+  worker/loops, surfaces and consumes every remaining registration- and
+  generation-owned parked record exactly once in the close aggregate, and then
+  closes owned facilities. It cannot create a later generation. A server-owned
+  server close always detaches its sole exclusive registration before invoking
+  environment close; the environment then closes with its owning server. No
+  public attachment or lifecycle option is introduced.
 - Generation stop, last detach, and environment close shut trigger admission
   and local notification first, call the worker stop path so no later drain
   starts in that generation, and await already-active work. The current drain
@@ -3303,16 +3322,21 @@ Decision:
 - Server shutdown order is: stop that server's external network intake and
   sessions; detach its package-internal registration and serialize against
   active delivery work while its contexts and endpoint dependencies remain
-  open; then close its contexts and other endpoint resources. A non-last detach
-  leaves the shared generation active for remaining registrations. A last
-  detach additionally quiesces the generation as above. If the server owns the
-  environment, environment delivery facilities, transport, and storage close
+  open; surface and consume only the parked records eligible under that
+  detach's ownership scope; then close its contexts and other endpoint
+  resources. A non-last detach leaves the shared generation and live
+  generation-owned records active for remaining registrations. A last detach
+  additionally quiesces the generation and includes all remaining records
+  exactly once. If the server owns the environment, its sole registration is
+  detached first; environment delivery facilities, transport, and storage close
   only after that quiescence and context/resource close. A shutdown that ends
   the generation or environment includes an earlier parked rejection even when
-  no worker promise is active. If active work rejects while being awaited,
-  shutdown parks and includes that failure too. It continues every remaining
-  close and propagates or aggregates all close failures consistently with the
-  existing `RetryableCloseGroup` behavior.
+  no worker promise is active. An active rejection observed while shutdown
+  awaits work is partitioned before aggregation: non-last detach includes only
+  the departing registration's records and newly orphaned generation records,
+  while live shared generation and sibling records remain parked. Shutdown
+  continues every remaining close and propagates or aggregates all eligible
+  close failures consistently with the existing `RetryableCloseGroup` behavior.
   Transport or storage must never close beneath an active run.
 - Implement D-0085 in small sequenced successors. The smallest first successor
   is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
@@ -3385,6 +3409,10 @@ Consequences:
   obligation-scoped supersession, so detach and shutdown surface each cause at
   the narrowest truthful lifecycle boundary without clearing or blaming
   unrelated work.
+- Server-owned registration exclusivity and serialized live-attachment close
+  refusal prevent another server or direct environment close from shutting down
+  facilities beneath an admitted registration, without adding public lifecycle
+  configuration.
 - The implementation order keeps the internal bounded-progress contract small
   and independently reviewable before environment lifecycle wiring consumes it;
   neither successor absorbs retry timing or public policy.

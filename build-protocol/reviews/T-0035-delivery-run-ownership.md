@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 5 decision fix in progress
+Status: Round 5 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -251,3 +251,22 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 5 fix worker for
   the complete active-rejection and close-authority batch. Fresh four-lane
   review remains pending after verification.
+- `2026-07-12T00:13:18Z`: Fix worker re-read `receiving-code-review` and
+  verified both P1 findings against D-0085 plus current server ownership/close
+  shape. The revised decision classifies active rejection before non-last
+  detach aggregation, makes server-owned registration exclusive before work
+  admission, and serializes non-permanent live-attachment close refusal against
+  attach/detach/close before permanent zero-attachment shutdown. Author
+  verification is pending; fresh review remains coordinator-owned.
+- `2026-07-12T00:17:49Z`: Round 5 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  active-rejection/exclusive-ownership/live-close/race-ordering and preserved-
+  policy assertions, chronology lint, whitespace, exact four-file scope,
+  aligned status, zero-untracked, and no-successor-task-file checks. Full
+  `pnpm verify` was not run. The author remains active for coordinator closure;
+  fresh four-lane review remains pending coordinator dispatch.
+- `2026-07-12T00:20:00Z`: Coordinator closed the Round 5 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 55-event chronology, active-rejection partitioning,
+  registration cardinality, live-close refusal/races, zero-attachment close,
+  compatibility, and public-API leakage checks. Fresh four-lane review is next.
