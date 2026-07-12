@@ -82,10 +82,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     });
 
     if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(
-        written.message,
-        this.#targets.has(written.message.inboxId.targetTypeUrl) ? projectionLabels : undefined,
-      );
+      const endpoint = configuredDeliveryEndpoint(written.message, this.endpoints());
       if (endpoint !== undefined) {
         this.#readiness.notify(endpoint, deliveryTenantId);
       }

@@ -194,14 +194,15 @@ export function deliveryEndpoint(input: {
 
 export function configuredDeliveryEndpoint(
   message: InboxMessage,
-  labels: readonly SupportedDeliveryLabel[] | undefined,
+  endpoints: readonly DeliveryEndpoint[],
 ): DeliveryEndpoint | undefined {
   if (message.status !== "TO_DELIVER") {
     return undefined;
   }
-  const label = labels?.find((candidate) => candidate === message.label);
-
-  return label === undefined
-    ? undefined
-    : deliveryEndpoint({ label, inboxId: message.inboxId, shard: message.shard });
+  return endpoints.find(
+    (endpoint) =>
+      endpoint.targetTypeUrl === message.inboxId.targetTypeUrl &&
+      endpoint.label === message.label &&
+      endpoint.shard.key() === message.shard.key(),
+  );
 }

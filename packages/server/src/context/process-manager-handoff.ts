@@ -156,10 +156,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     });
 
     if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(
-        written.message,
-        this.#targets.get(written.message.inboxId.targetTypeUrl)?.labels,
-      );
+      const endpoint = configuredDeliveryEndpoint(written.message, this.endpoints());
       if (endpoint !== undefined) {
         this.#readiness.notify(endpoint, deliveryTenantId);
       }

@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 3 fixes active; RED pending
+Status: Round 3 fixes coordinator-verified; repeat review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -44,14 +44,45 @@ Style/maintainability reviewer `019f55f6-f8d3-7630-9ecf-88e97b009e3e`:
   `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md` and all 114
   lines of `codebase-design` from `mattpocock/skills` at
   `/Users/armiol/.agents/skills/codebase-design/SKILL.md`.
-- Skipped `review` (would launch duplicate subreviews),
-  `requesting-code-review` (coordinator dispatch), `receiving-code-review`
-  (finding recipient), broad web/security `best-practices`, the dedicated
-  TypeScript and performance lanes, Express/Fastify-oriented
-  `nodejs-backend-patterns`, broad architecture/API/domain skills, test
-  implementation skills, monorepo management, completion/SDD/worktree
-  coordinator skills, and implementation/TDD skills because this lane is
-  read-only and narrowly maintainability-focused.
+- Skipped `review` because it would launch duplicate subreviews.
+- Skipped `requesting-code-review` because reviewer dispatch belongs to the
+  coordinator.
+- Skipped `receiving-code-review` because this lane produces rather than
+  receives findings.
+- Skipped `best-practices` because its broad web/security audit exceeds this
+  maintainability lane.
+- Skipped `typescript-advanced-types` because a dedicated lane reviews the
+  TypeScript surface.
+- Skipped `performance` because a dedicated lane reviews runtime performance.
+- Skipped `nodejs-backend-patterns` because its Express/Fastify service-runtime
+  focus does not fit this internal library seam.
+- Skipped `architecture-patterns` because no architecture migration belongs to
+  this lane.
+- Skipped `api-design-principles` because no REST or GraphQL design belongs to
+  this lane.
+- Skipped `domain-modeling` because no domain-language design belongs to this
+  lane.
+- Skipped `javascript-testing-patterns` because this reviewer does not write
+  tests.
+- Skipped `monorepo-management` because workspace topology is unchanged.
+- Skipped `verification-before-completion` because completion verification
+  belongs to the coordinator.
+- Skipped `subagent-driven-development` because reviewer orchestration belongs
+  to the coordinator.
+- Skipped `using-git-worktrees` because worktree management belongs to the
+  coordinator.
+- Skipped `implement` because this lane is read-only.
+- Skipped `tdd` because this lane performs no test-first cycle.
+- Skipped `test-driven-development` because this lane performs no test-first
+  cycle.
+- Skipped `security-best-practices` because security review is deferred to final
+  project readiness.
+- Skipped `security-threat-model` because threat modeling is outside this lane
+  and deferred to final project readiness.
+- Skipped `stride-analysis-patterns` because security analysis is deferred to
+  final project readiness.
+- Skipped `threat-mitigation-mapping` because security mitigation review is
+  deferred to final project readiness.
 
 Documentation reviewer `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5`:
 
@@ -63,12 +94,18 @@ Documentation reviewer `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5`:
   `verification-before-completion`, `doc-coauthoring`,
   `architecture-decision-records`, `review`, `requesting-code-review`, and
   `receiving-code-review` entries.
-- Skipped `doc-coauthoring` (interactive authoring),
-  `architecture-decision-records` (no ADR work), `review` (duplicate subreview
-  orchestration), request/receive review skills (other roles), `.docx`
-  `documents:documents`, product-specific `openai-docs`, and broad
-  web/security `best-practices` because this is an immutable repository-record
-  review.
+- Skipped `doc-coauthoring` because this is verification of immutable records,
+  not an interactive authoring session.
+- Skipped `architecture-decision-records` because no ADR is added or changed.
+- Skipped `review` because it would launch duplicate subreviews.
+- Skipped `requesting-code-review` because reviewer dispatch belongs to the
+  coordinator.
+- Skipped `receiving-code-review` because this lane produces rather than
+  receives findings.
+- Skipped `documents:documents` because no `.docx` artifact is involved.
+- Skipped `openai-docs` because no OpenAI product documentation is involved.
+- Skipped `best-practices` because its broad web/security audit exceeds this
+  repository-record documentation lane.
 
 TypeScript/API docs reviewer `019f55f6-ff64-7e93-bd56-958adb44661a`:
 
@@ -79,29 +116,81 @@ TypeScript/API docs reviewer `019f55f6-ff64-7e93-bd56-958adb44661a`:
   The lock records their source URL as `https://github.com/wshobson/agents.git`
   and their provenance paths under `plugins/developer-essentials/skills/` and
   `plugins/javascript-typescript/skills/` respectively.
-- Skipped REST/GraphQL `api-design-principles`, duplicate-review `review`,
-  coordinator `requesting-code-review`, completion-gate
-  `verification-before-completion`, authoring `doc-coauthoring`, runtime
-  `nodejs-backend-patterns`, broad web `best-practices`, deferred security,
-  maintainability-lane `codebase-design`, and finding-recipient
-  `receiving-code-review` because this lane owns only TypeScript declarations,
-  exports, leakage, and JSDoc.
+- Skipped `api-design-principles` because no REST or GraphQL interface changes.
+- Skipped `review` because it would launch duplicate subreviews.
+- Skipped `requesting-code-review` because reviewer dispatch belongs to the
+  coordinator.
+- Skipped `verification-before-completion` because final gates belong to the
+  coordinator.
+- Skipped `doc-coauthoring` because this lane verifies rather than authors API
+  documentation.
+- Skipped `nodejs-backend-patterns` because no service runtime is changed.
+- Skipped `best-practices` because its broad web audit is outside this lane.
+- Skipped `security-best-practices` because security review is deferred to final
+  project readiness by protocol.
+- Skipped `codebase-design` because the maintainability lane owns module-shape
+  review.
+- Skipped `receiving-code-review` because this lane produces rather than
+  receives findings.
 
 Performance/reliability reviewer `019f55f7-02da-75a3-8f01-a9f79466affc`:
 
-- Fully read `code-review-excellence`, `nodejs-backend-patterns`,
-  `error-handling-patterns`, and `javascript-testing-patterns`, all from
-  `wshobson/agents`, at their exact
-  `/Users/armiol/.agents/skills/<name>/SKILL.md` entrypoints (1,232 total lines).
+- Fully read `code-review-excellence` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/code-review-excellence/SKILL.md`,
+  `nodejs-backend-patterns` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md`,
+  `error-handling-patterns` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/error-handling-patterns/SKILL.md`, and
+  `javascript-testing-patterns` from `wshobson/agents` at
+  `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md` (1,232
+  total lines).
 - Its lock queries enumerated all records and selected names matching
   `code-review`, `nodejs-backend`, `javascript-testing`, `error-handling`,
   `performance`, and `requesting-code-review`.
-- Skipped browser-focused `performance`, request/receive/duplicate-review and
-  SDD coordinator skills, completion-gate `verification-before-completion`,
-  dedicated TypeScript/maintainability lanes, debugging absent a discovered
-  failure, implementation/TDD skills, broad web/security skills, broader
-  event-store/CQRS/projection architecture, monorepo management, and worktree
-  setup because this lane is read-only and runtime-reliability focused.
+- Skipped `performance` because it targets browser page performance rather than
+  this Node.js delivery seam.
+- Skipped `requesting-code-review` because reviewer dispatch belongs to the
+  coordinator.
+- Skipped `receiving-code-review` because this lane produces rather than
+  receives findings.
+- Skipped `review` because it would launch duplicate subreviews.
+- Skipped `subagent-driven-development` because reviewer orchestration belongs
+  to the coordinator.
+- Skipped `verification-before-completion` because final completion gates belong
+  to the coordinator.
+- Skipped `typescript-advanced-types` because a dedicated lane reviews the
+  TypeScript surface.
+- Skipped `codebase-design` because a dedicated lane reviews maintainability.
+- Skipped `systematic-debugging` because phase 1 had not discovered a runtime
+  failure to diagnose.
+- Skipped `debugging-strategies` because phase 1 had not discovered a runtime
+  failure to diagnose.
+- Skipped `implement` because this lane is read-only.
+- Skipped `tdd` because this lane performs no test-first cycle.
+- Skipped `test-driven-development` because this lane performs no test-first
+  cycle.
+- Skipped `best-practices` because its broad web quality and security audit is
+  outside this runtime lane.
+- Skipped `web-quality-audit` because browser page quality is outside this
+  runtime lane.
+- Skipped `accessibility` because browser accessibility is outside this runtime
+  lane.
+- Skipped `security-best-practices` because security review is deferred to final
+  project readiness.
+- Skipped `security-threat-model` because threat modeling is outside this lane
+  and deferred to final project readiness.
+- Skipped `stride-analysis-patterns` because security analysis is deferred to
+  final project readiness.
+- Skipped `threat-mitigation-mapping` because security mitigation review is
+  deferred to final project readiness.
+- Skipped `event-store-design` because no event-store architecture is being
+  designed.
+- Skipped `cqrs-implementation` because no CQRS architecture is being designed.
+- Skipped `projection-patterns` because no projection architecture is being
+  designed.
+- Skipped `monorepo-management` because workspace topology is unchanged.
+- Skipped `using-git-worktrees` because worktree setup belongs to the
+  coordinator and the assigned worktree already existed.
 
 ## Review Criteria
 
@@ -335,3 +424,21 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
 - `2026-07-12T11:05:37Z`: Assignment provenance commit `816b18f3` completed;
   started the worker with focused non-single-shard RED required before
   production changes.
+- `2026-07-12T11:05:37Z`: The worker's exact pre-edit skill-applicability check
+  is recorded in the work log. No test or production file had changed; focused
+  configured-shard RED remains the next required boundary.
+- `2026-07-12T11:06:20Z`: Focused RED produced the two intended premature-
+  readiness failures for persisted valid shard `0/2`; persistence and the
+  original exact-drain errors remained correct. Production work may enter
+  GREEN with the complete configured endpoint identity now isolated.
+- `2026-07-12T11:09:39Z`: The sole fix worker completed both accepted findings
+  without committing. Complete target/label/shard matching now derives from the
+  descriptor endpoint facts, the two focused regressions are green, and Round
+  3 skill provenance contains literal selected paths plus one named reason per
+  skipped skill. Focused and compatibility tests, both typechecks, changed
+  lint/format, lightweight docs/status lint, and diff integrity passed.
+  Coordinator verification, fix commit, fresh immutable package, and all four
+  repeat review lanes remain pending.
+- `2026-07-12T11:12:09Z`: Coordinator verification and lightweight pre-review
+  lint passed for the complete Round 3 fix. The batch is ready to commit as a
+  fresh literal endpoint for all four repeat lanes.

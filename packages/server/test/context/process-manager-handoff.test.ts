@@ -1130,6 +1130,41 @@ describe("LocalProcessManagerInbox", () => {
     expect(ready).toEqual([]);
   });
 
+  it("emits no readiness for a persisted shard outside the configured endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const shard = new ShardIndex(0, 2);
+    const replayFailure = new Error("non-configured shard should preserve drain failure");
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.reject(replayFailure),
+    });
+
+    await expect(
+      inbox.receive(delivery, {
+        inboxId: { targetId: "pm-shard-mismatch", targetTypeUrl },
+        signalId: "command-shard-mismatch",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard,
+      }),
+    ).rejects.toBe(replayFailure);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      {
+        signalId: "command-shard-mismatch",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      },
+    ]);
+    expect(ready).toEqual([]);
+  });
+
   it("rejects when no process-manager command target is registered", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

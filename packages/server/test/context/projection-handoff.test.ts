@@ -421,6 +421,40 @@ describe("LocalProjectionInbox", () => {
     expect(ready).toEqual([]);
   });
 
+  it("emits no readiness for a persisted shard outside the configured endpoint", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const ready: unknown[] = [];
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const shard = new ShardIndex(0, 2);
+    const replayFailure = new Error("non-configured shard should preserve drain failure");
+    const inbox = new LocalProjectionInbox("Tasks", (scope) => ready.push(scope));
+    inbox.register({
+      targetTypeUrl,
+      replay: () => Promise.reject(replayFailure),
+    });
+
+    await expect(
+      inbox.receive(delivery, {
+        inboxId: { targetId: "projection-shard-mismatch", targetTypeUrl },
+        signalId: "event-shard-mismatch",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+        shard,
+      }),
+    ).rejects.toBe(replayFailure);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      {
+        signalId: "event-shard-mismatch",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+      },
+    ]);
+    expect(ready).toEqual([]);
+  });
+
   it("delivers only the received row when unrelated backlog is pending first", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
