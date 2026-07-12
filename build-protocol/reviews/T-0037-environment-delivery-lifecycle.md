@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 1 docs fixes committed; fresh review pending
+Status: Round 2 review active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status   |
-| -------------------------- | -------------------------------------- | -------- |
-| Code style/maintainability | `019f549e-ae4c-7331-8df1-2b803be3d7b9` | P1       |
-| Documentation              | `019f549e-d1c3-7890-afbd-287223adeee2` | Findings |
-| TypeScript/API docs        | `019f549e-fdfe-7b31-97cf-6027e947720b` | Findings |
-| Performance/reliability    | `019f549f-23a5-7911-86ba-686c659cb690` | P1       |
+| Lane                       | Reviewer                               | Status |
+| -------------------------- | -------------------------------------- | ------ |
+| Code style/maintainability | `019f54b4-1ad3-7310-8650-848f599a82dc` | Active |
+| Documentation              | `019f54b4-1bfb-7c20-97b5-e5c6ad6cca92` | Active |
+| TypeScript/API docs        | `019f54b4-1b82-7222-8d91-153508c77665` | Active |
+| Performance/reliability    | `019f54b4-1ca2-7d13-a741-fcff85863e6f` | Active |
 
 Security is deferred to final project readiness.
 
@@ -116,6 +116,11 @@ Security is deferred to final project readiness.
 - `2026-07-12T05:00:49Z`: Commit `3847e1b6` recorded the complete verified
   Round 1 docs fixes. No fresh lane has been assigned or run and no clean
   review is claimed.
+- `2026-07-12T05:02:03Z`: Generated fixed-baseline package
+  `.superpowers/sdd/review-0308bc4a..80ef21e2.diff` (11 commits, 83,623 bytes)
+  and assigned all four Round 2 lanes. Prompts constrain review to active
+  claims and changed governing text, explicitly excluding superseded history
+  and the deferred final security gate.
 - `2026-07-12T04:44:00Z`: Assigned docs fix worker
   `019f54a5-14ba-7bc3-b551-45dda8d32727` with every accepted finding. Fresh
   package generation and all four lanes remain pending its return, coordinator
