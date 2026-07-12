@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 7 findings recorded; decision fix pending
+Status: Round 7 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -323,3 +323,7 @@ Security is deferred to final project readiness.
   old-generation quiescence, and a package-internal non-causal startup blocker
   when the overlapping original cause was already reported. One decision fix
   worker and fresh review are required.
+- `2026-07-12T00:46:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 7 fix worker for
+  the complete ordering, generation-transition, and startup-blocker batch.
+  Fresh four-lane review remains pending.
