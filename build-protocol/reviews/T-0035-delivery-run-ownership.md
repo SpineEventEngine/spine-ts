@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 7 decision fix in progress
+Status: Round 7 decision fix coordinator-verified; re-review pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -327,3 +327,23 @@ Security is deferred to final project readiness.
   `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 7 fix worker for
   the complete ordering, generation-transition, and startup-blocker batch.
   Fresh four-lane review remains pending.
+- `2026-07-12T00:47:00Z`: Fix worker re-read `receiving-code-review` and
+  verified the contradictory last-detach ordering, missing attach/retirement
+  serialization, and empty already-reported startup-failure path. The revised
+  decision defines one stop-before-await generation sequence, lifecycle-gated
+  attach waiting/fresh-generation/close-win behavior, and one fresh non-exported
+  non-causal blocker `Error` consumed by the failed startup without resurfacing
+  the original cause. Author verification is pending; fresh review remains
+  coordinator-owned.
+- `2026-07-12T00:48:35Z`: Round 7 author verification passed generated build,
+  docs/API with only the known invalid-`origin` warning, formatting, targeted
+  stop-order/generation-gate/startup-blocker and preserved-policy checks,
+  chronology lint, whitespace, exact four-file scope, aligned status,
+  zero-untracked, and no-successor-task-file checks. Full `pnpm verify` was not
+  run. The author remains active for coordinator closure; fresh four-lane review
+  remains pending coordinator dispatch.
+- `2026-07-12T00:52:00Z`: Coordinator closed the Round 7 fix author and
+  independently passed generated build, docs/API, formatting, whitespace,
+  scope, status, 69-event chronology, stop order, attach/last-detach race,
+  fresh-generation, internal blocker, compatibility, and public-API leakage
+  checks. Fresh four-lane review is next.

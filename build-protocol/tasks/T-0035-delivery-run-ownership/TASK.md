@@ -1,6 +1,6 @@
 # T-0035: Delivery Run Trigger And Lifecycle Ownership Decision
 
-Status: Round 7 decision fix in progress
+Status: Round 7 decision fix coordinator-verified; re-review pending
 Started: `2026-07-11T22:40:30Z`
 Baseline commit: `9200dcce`
 Branch: `task/T-0035-delivery-run-ownership`
@@ -173,6 +173,19 @@ creation, recursive repeat, or the public monitor surface into TypeScript.
   detaches its sole registration internally before closing its environment.
   Callers close and await attached `RunningServer` instances through public
   `close()`, then retry environment close; there is no public detach operation.
+- Last detach and every generation stop use one order: atomically close trigger
+  admission/notification, call worker stop, await active work, classify
+  rejection, consume/report eligible records/causes, then permanently retire the
+  old generation. Stop precedes await so `PAUSED` cannot start another run.
+- Attach serializes through the same lifecycle gate. An attach after last detach
+  begins waits for complete old-generation quiescence/record consumption/
+  retirement, then creates or joins exactly one fresh generation only if the
+  environment remains open; it never joins or overlaps the stopping generation.
+- Startup overlapping an unresolved generation obligation whose original cause
+  is already reported fails with exactly one fresh package-internal plain
+  non-empty blocker `Error`. The blocker has no exported type/code/cause/original
+  reference, belongs to and is consumed by that failed startup, and never causes
+  the original reported cause to surface again.
 - Stop prevents new runs and defines whether/how an active run is awaited.
 - Shutdown ordering is explicit and does not close transport/storage beneath an
   active run.
@@ -271,6 +284,19 @@ attachments. Callers close each attached `RunningServer` via public `close()`;
 server shutdown detaches internally, after which environment close may be
 retried. An owning server internally detaches its sole registration before
 close.
+
+Last detach atomically closes admission/notification, stops the worker before
+awaiting active work, classifies any rejection, handles eligible
+obligations/causes, and permanently retires the generation. Attach uses the same
+gate: after stopping begins it waits through complete retirement, then creates
+exactly one fresh generation only if environment close has not won. No worker
+generations overlap.
+
+When overlapping startup is blocked only by an already-reported shared cause,
+the existing failed-start channel receives one fresh internal plain `Error` with
+a fixed non-empty message and no link to the original. The blocker is consumed
+by that failed startup; the original remains reported and its unresolved
+obligation remains parked without duplicate surfacing.
 
 Last detach permanently stops that generation's worker and loops. A reusable
 caller-owned environment remains open, but later attachment constructs a fresh
@@ -421,6 +447,21 @@ active delivery scheduler.
 - PASS: Complete chronology, `git diff --check`, aligned status, exact four-file
   scope, zero-untracked, and successor-task-file absence checks.
 - NOT RUN: full `pnpm verify` in Round 6, per explicit task direction.
+- PASS: Round 7 `typecheck:build:generated`, fresh `docs:check` with zero errors
+  and only the known invalid-`origin` warning, and `format:check`.
+- PASS: Targeted atomic admission/notification closure, worker-stop-before-
+  await, PAUSED continuation prevention, active-rejection classification,
+  record/cause handling, permanent generation retirement, attach/last-detach/
+  environment-close gate ordering, one fresh non-overlapping generation, and
+  deterministic non-causal startup-blocker assertions.
+- PASS: T-0036/T-0037 boundary, retry deferral, T-0034, `CATCH_UP`,
+  `IMPORT_EVENT`, complete chronology, `git diff --check`, aligned status, exact
+  four-file scope, zero-untracked, and successor-task-file absence checks.
+- NOT RUN: full `pnpm verify` in Round 7, per explicit task direction.
+- PASS: Coordinator independently repeated the Round 7 generated build,
+  docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
+  stop order, lifecycle-gate race, fresh-generation, internal blocker,
+  compatibility, and public-API leakage checks.
 - PASS: Coordinator independently repeated the Round 6 generated build,
   docs/API, formatting, whitespace, exact scope, zero-untracked, chronology,
   rejected-shard evidence boundary, disjoint-startup termination, cause-report

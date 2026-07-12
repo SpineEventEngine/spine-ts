@@ -3308,36 +3308,41 @@ Decision:
   failed-start result aggregates each eligible `unreported` overlapping cause
   and atomically marks the original cause entry `reported`, without transferring
   ownership or consuming unresolved shared obligation/scope while live
-  sibling/shared units remain. If an overlapping cause was already reported,
-  startup still fails as blocked by that unresolved generation obligation but
-  does not propagate the original cause again. Rollback removes the failed
-  registration's obligation units from the shared operational record: if live
-  sibling/shared units remain, the obligation and cause-reporting state stay
-  generation-owned and parked; if none remain, failed-start cleanup consumes the
-  obligation and record, surfacing only causes still `unreported`. Fulfilled
-  progress, registration-owned sibling errors, coalesced readiness, and pending
-  epoch obligations belonging to unaffected registrations remain intact. If
-  removing the failed registration leaves other registrations, their generation
-  remains open and continues from its retained progress/readiness. If it was the
-  first or sole registration, rollback becomes a last detach and quiesces that
-  empty generation. A caller-owned environment remains reusable through a later
-  fresh generation. A server-owned environment additionally closes permanently
-  after quiescence, aggregating only still-unreported registration/startup/
-  cleanup and generation causes consistently with the existing failed-start
-  close model.
-- The last server detach closes that generation's trigger admission and local
-  notification and awaits active work. It consumes all remaining
-  registration-owned operational records through their registrations' close
-  paths, then consumes every generation-owned operational record while
-  continuing remaining server closes. The close aggregates include and mark
-  `reported` only causes still `unreported`; causes reported at startup or an
-  earlier truthful boundary are omitted. The generation's
-  `DeliveryWorker` and constituent `DeliveryLoop` instances are then stopped
-  permanently and are never restarted or reused. For a caller-owned
-  environment, last detach does not close the environment or its facilities
-  permanently; a later attachment allocates a fresh package-internal generation
-  with newly constructed worker/loop instances, reinstalls notification, and
-  performs startup recovery for durable pending work. `ServerEnvironment.close()`
+  sibling/shared units remain. If one or more overlapping generation causes
+  were already `reported`, startup rejects through the existing failed-start
+  channel with exactly one fresh package-internal plain `Error` for that failed
+  startup. Its fixed non-empty message is
+  `Startup recovery is blocked by an unresolved shared delivery obligation.`
+  The blocker has no custom type, code, exported declaration, `cause`, original
+  error reference, wrapped/chained error, or original-cause detail. It is
+  attributed to this startup registration, included and consumed in this
+  failed-start result, and is never parked. The original generation cause stays
+  `reported`, its unresolved operational scope stays parked, and no later
+  boundary surfaces that original cause again. If the same failed startup also
+  has unreported overlapping causes, those causes and the one blocker are
+  aggregated together without duplicating any original cause. Rollback removes
+  the failed registration's obligation units from the shared operational
+  record: if live sibling/shared units remain, the obligation and cause-reporting
+  state stay generation-owned and parked; if none remain, failed-start cleanup
+  consumes the obligation and record, surfacing only causes still `unreported`.
+  Fulfilled progress, registration-owned sibling errors, coalesced readiness,
+  and pending epoch obligations belonging to unaffected registrations remain
+  intact. If removing the failed registration leaves other registrations, their
+  generation remains open and continues from its retained progress/readiness.
+  If it was the first or sole registration, rollback becomes a last detach and
+  quiesces that empty generation. A caller-owned environment remains reusable
+  through a later fresh generation. A server-owned environment additionally
+  closes permanently after quiescence, aggregating only still-unreported
+  registration/startup/cleanup and generation causes consistently with the
+  existing failed-start close model.
+- The last server detach begins the authoritative generation-stop sequence
+  below under the package-internal lifecycle gate. After that sequence consumes
+  eligible operational records, reports still-`unreported` causes, and
+  permanently retires the old generation, a caller-owned environment remains
+  open without reusing its stopped worker/loops. A later attachment may create a
+  fresh package-internal generation with newly constructed worker/loop
+  instances, reinstall notification, and perform startup recovery for durable
+  pending work. `ServerEnvironment.close()`
   first performs a package-internal live-registration check serialized with
   attach, detach, and close. If any registration is live, close rejects before
   permanently closing admission, stopping a worker, consuming parked errors, or
@@ -3353,20 +3358,36 @@ Decision:
   environment close rejects and may be retried after that `RunningServer.close()`
   settles.
 - Once the serialized close transition observes zero registrations, it
-  permanently rejects later attachments and triggers, quiesces and awaits all
-  remaining lifecycle work, permanently stops the current generation's
-  worker/loops, consumes every remaining registration- and generation-owned
-  operational record, includes each still-`unreported` cause exactly once in
-  the close aggregate, and then closes owned facilities. It cannot create a
-  later generation. When a server owns its environment, server close always
-  detaches its sole exclusive registration before invoking environment close;
-  the environment then closes with its owning server. No public attachment or
-  lifecycle option is introduced.
-- Generation stop, last detach, and environment close shut trigger admission
-  and local notification first, call the worker stop path so no later drain
-  starts in that generation, and await already-active work. The current drain
-  is not forcibly interrupted. A durable write that races after generation
-  admission closes remains pending for a later generation's startup recovery.
+  permanently rejects later attachments and triggers, then applies the same
+  authoritative generation-stop sequence to any current generation. After
+  retirement, it closes owned facilities. It cannot create a later generation.
+  When a server owns its environment, server close always detaches its sole
+  exclusive registration before invoking environment close; the environment
+  then closes with its owning server. No public attachment or lifecycle option
+  is introduced.
+- The authoritative generation-stop order for last detach, explicit generation
+  stop, and zero-attachment environment close is: under the lifecycle gate,
+  atomically mark the generation stopping and close trigger admission and local
+  notification; call the worker stop path so a `PAUSED` result cannot start
+  another one-shot run; await already-active work without forcibly interrupting
+  its current drain; classify any rejection under the established
+  registration/generation ownership rule; consume every operational record
+  eligible at this boundary and report only still-`unreported` causes; then
+  permanently retire the old worker, loops, and generation. Stop always precedes
+  await and record consumption. A durable write racing after admission closes
+  remains pending for a later generation's startup recovery.
+- Attach, detach, generation stop, and environment close use the same
+  package-internal lifecycle gate. If attach linearizes before last detach marks
+  the generation stopping, it becomes another live registration and last detach
+  has not begun. If attach arrives after that transition begins, it waits for
+  complete old-generation stop, active-work settlement, rejection
+  classification, record consumption/reporting, and permanent retirement. It
+  never joins the stopping generation and no fresh worker overlaps the old one.
+  If the environment remains open after retirement, the first waiting attach
+  creates exactly one fresh generation and startup recovery; later eligible
+  attaches join that fresh generation subject to ownership cardinality. If
+  environment close wins the serialized transition instead, waiting and later
+  attaches reject and no fresh generation is created.
 - Server shutdown order is: stop that server's external network intake and
   sessions; detach its package-internal registration and serialize against
   active delivery work while its contexts and endpoint dependencies remain
