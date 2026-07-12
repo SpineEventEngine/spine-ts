@@ -24,6 +24,32 @@ import {
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryRunCoordinator", () => {
+  it("isolates equal readiness facts by generation-local owner", async () => {
+    const first = ownedScope("owner-a", "shared", 0, 1);
+    const second = ownedScope("owner-b", "shared", 0, 1);
+    const firstFailure = new Error("first owner failed");
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, rejected(0, 1, firstFailure)),
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [first, second], worker });
+
+    const settlement = await coordinator.start([first, second]);
+
+    expect(worker.starts).toHaveLength(2);
+    expect(worker.maxConcurrent).toBe(1);
+    expect(entry(worker.starts, 0).obligation.scopes).toEqual([first]);
+    expect(entry(worker.starts, 1).obligation.scopes).toEqual([second]);
+    expect(settlement.scopes).toEqual([
+      expect.objectContaining({
+        scope: first,
+        disposition: "REJECTED",
+        cause: firstFailure,
+      }),
+      expect.objectContaining({ scope: second, disposition: "IDLE" }),
+    ]);
+  });
+
   it("admits later configured scopes into the same generation", async () => {
     const first = scope("first", 0, 2);
     const second = scope("second", 1, 2);
@@ -186,6 +212,7 @@ describe("DeliveryRunCoordinator", () => {
       cause: failure,
       progress: { delivered: 2 },
     });
+    expect(settlement.scopes[0]?.cause).toBe(failure);
     expect(settlement.scopes[1]).toMatchObject({ disposition: "IDLE" });
     expect(settlement.scopes[2]).toMatchObject({ disposition: "IDLE" });
 
@@ -289,7 +316,7 @@ describe("DeliveryRunCoordinator", () => {
   it("surfaces evidence-processing failures without classifying worker rejection", async () => {
     const configured = scope("first", 0, 1);
     const worker = new FakeRunWorker([
-      (obligation) => malformedWorkerEvidence(obligation, configured.shard),
+      (obligation) => malformedWorkerEvidence(obligation, configured.ready.shard),
     ]);
     const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
 
@@ -301,7 +328,7 @@ describe("DeliveryRunCoordinator", () => {
   it("surfaces a notify-only invariant fault at the next observable start", async () => {
     const configured = scope("first", 0, 1);
     const worker = new FakeRunWorker([
-      (obligation) => malformedWorkerEvidence(obligation, configured.shard),
+      (obligation) => malformedWorkerEvidence(obligation, configured.ready.shard),
       (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
     ]);
     const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
@@ -320,7 +347,7 @@ describe("DeliveryRunCoordinator", () => {
     const reportingFailure = new Error("reporting failed");
     const cleanupFailure = new Error("cleanup failed");
     const worker = new FakeRunWorker(
-      [(obligation) => malformedWorkerEvidence(obligation, configured.shard)],
+      [(obligation) => malformedWorkerEvidence(obligation, configured.ready.shard)],
       events,
     );
     worker.retireFailure = cleanupFailure;
@@ -352,7 +379,7 @@ describe("DeliveryRunCoordinator", () => {
     async (kind) => {
       const configured = scope("first", 0, 1);
       const worker = new FakeRunWorker([
-        (obligation) => identityMismatchEvidence(kind, obligation, configured.shard),
+        (obligation) => identityMismatchEvidence(kind, obligation, configured.ready.shard),
       ]);
       const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
 
@@ -624,13 +651,13 @@ describe("DeliveryRunCoordinator", () => {
     const configured = scope("first", 0, 1);
     const worker = new DeliveryWorker({
       delivery,
-      shards: [configured.shard],
+      shards: [configured.ready.shard],
       node: "worker-a",
       onMessage: () => undefined,
     });
     const adapter = deliveryRunWorker(worker);
     const obligation = Object.freeze({ scopes: Object.freeze([configured]) });
-    const running = adapter.start(obligation, [configured.shard]);
+    const running = adapter.start(obligation, [configured.ready.shard]);
     let settled = false;
 
     const awaiting = adapter.awaitSettled().then(() => {
@@ -651,7 +678,7 @@ describe("DeliveryRunCoordinator", () => {
     const configured = scope("first", 0, 1);
     const worker = new DeliveryWorker({
       delivery: createDelivery(),
-      shards: [configured.shard],
+      shards: [configured.ready.shard],
       node: "worker-a",
       onMessage: () => undefined,
     });
@@ -662,7 +689,9 @@ describe("DeliveryRunCoordinator", () => {
     await adapter.retire();
 
     expect(() =>
-      adapter.start(Object.freeze({ scopes: Object.freeze([configured]) }), [configured.shard]),
+      adapter.start(Object.freeze({ scopes: Object.freeze([configured]) }), [
+        configured.ready.shard,
+      ]),
     ).toThrow("DeliveryWorker is permanently retired.");
     expect(() => worker.start()).toThrow("DeliveryWorker is permanently retired.");
   });
@@ -767,21 +796,41 @@ class FakeRunWorker implements DeliveryRunWorker {
   }
 }
 
-function scope(targetTypeUrl: string, index: number, ofTotal: number): DeliveryRunScope {
+function scope(
+  targetTypeUrl: string,
+  index: number,
+  ofTotal: number,
+  ownerKey = "owner",
+): DeliveryRunScope {
   return Object.freeze({
-    tenantId: `tenant-${targetTypeUrl}`,
-    label: "UPDATE_SUBSCRIBER",
-    targetTypeUrl,
-    shard: new ShardIndex(index, ofTotal),
+    owner: Object.freeze({ key: ownerKey }),
+    ready: Object.freeze({
+      tenantId: `tenant-${targetTypeUrl}`,
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl,
+      shard: new ShardIndex(index, ofTotal),
+    }),
   });
+}
+
+function ownedScope(
+  ownerKey: string,
+  targetTypeUrl: string,
+  index: number,
+  ofTotal: number,
+): DeliveryRunScope {
+  return scope(targetTypeUrl, index, ofTotal, ownerKey);
 }
 
 function cloneScope(value: DeliveryRunScope): DeliveryRunScope {
   return Object.freeze({
-    ...(value.tenantId === undefined ? {} : { tenantId: value.tenantId }),
-    label: value.label,
-    targetTypeUrl: value.targetTypeUrl,
-    shard: new ShardIndex(value.shard.index, value.shard.ofTotal),
+    owner: Object.freeze({ key: value.owner.key }),
+    ready: Object.freeze({
+      ...(value.ready.tenantId === undefined ? {} : { tenantId: value.ready.tenantId }),
+      label: value.ready.label,
+      targetTypeUrl: value.ready.targetTypeUrl,
+      shard: new ShardIndex(value.ready.shard.index, value.ready.shard.ofTotal),
+    }),
   });
 }
 

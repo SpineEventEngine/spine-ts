@@ -20,6 +20,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
+  readonly #keepTenant: (tenantId: string) => Promise<void>;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
@@ -27,10 +28,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
+    keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
+    this.#keepTenant = keepTenant;
   }
 
   register(target: ProcessManagerInboxTarget): void {
@@ -98,6 +101,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
     await written.handoff.complete(() =>
@@ -111,6 +115,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     inputs: ProcessManagerInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
+    await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
     const failures: unknown[] = [];
@@ -124,6 +129,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
     } finally {
       this.#cleanupRows(rows);
+    }
+  }
+
+  async #keepDeliveryTenant(deliveryTenantId: string | undefined): Promise<void> {
+    if (deliveryTenantId !== undefined) {
+      await this.#keepTenant(deliveryTenantId);
     }
   }
 

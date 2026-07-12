@@ -378,19 +378,25 @@ export class BoundedContext {
       post: (event: Event) => this.#eventBus.post(event),
     });
     const deliveryReadiness = new DeliveryReadiness();
-    this.#processManagerInbox = new LocalProcessManagerInbox(
-      this.#snapshot.name.value,
-      deliveryReadiness,
-    );
-    this.#projectionInbox = new LocalProjectionInbox(this.#snapshot.name.value, deliveryReadiness);
-    eventSubscribers.set(this, (typeUrl, subscriber) =>
-      eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
-    );
     const tenantIndex = createTenantIndex({
       contextName: this.#snapshot.name.value,
       tenantMode: this.#snapshot.tenantMode,
       storageFactory,
     });
+    const keepTenant = (tenantId: string) => tenantIndex.keep(tenantId);
+    this.#processManagerInbox = new LocalProcessManagerInbox(
+      this.#snapshot.name.value,
+      deliveryReadiness,
+      keepTenant,
+    );
+    this.#projectionInbox = new LocalProjectionInbox(
+      this.#snapshot.name.value,
+      deliveryReadiness,
+      keepTenant,
+    );
+    eventSubscribers.set(this, (typeUrl, subscriber) =>
+      eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
+    );
     contextSystemPairings.set(this, createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);

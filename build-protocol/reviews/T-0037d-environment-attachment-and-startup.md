@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 fresh-generation tenant recovery proof assigned
+Status: Slice 2 Round 1 fixes focused verified; Round 2 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -281,3 +281,26 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   test. Ordering plus an older tenant-index test is insufficient by itself; one
   real same-storage rebuilt descriptor must enumerate and recover the durable
   dynamic-tenant row without another readiness signal.
+- The focused proof resumed under fully read `receiving-code-review` and strict
+  TDD. Inspection confirms the missing proof is testable through the existing
+  generated process-manager fixture and actual multitenant command receive
+  path; no production or lifecycle expansion is justified before the focused
+  test executes.
+- The missing acceptance proof is now present and GREEN without production
+  changes. One real built multitenant context persists a version-1 inbox row
+  through its actual command receive and deliberately failing handler. A fresh
+  context/repository/descriptor over the same storage enumerates that tenant,
+  attachment replays the exact durable row to `DELIVERED`, and recovered state
+  is visible without another command, receive, or readiness signal. Fixture
+  registries and contexts are uniquely owned and cleaned. Focused test passes
+  1/1 and the expanded seven-file regression passes 175/175; generated
+  typecheck, ESLint, and cleanup pass. No production, Slice 3, or public delta
+  was added by this closure.
+- Final fresh verification passes 175/175 plus generated typecheck,
+  ESLint/cleanup, format, diff hygiene, public-entrypoint and generated/
+  Protobuf/protected scans, with identical Status mirrors. This test-only
+  acceptance closure is ready for coordinator re-review.
+- `2026-07-12T22:25:00Z`: Coordinator independently repeated 175 focused
+  regressions, generated build typecheck, and diff hygiene. All pass. The
+  complete owner-qualified, tenant-durable, finite-readiness fix is ready for a
+  committed Round 2 package; security remains deferred.

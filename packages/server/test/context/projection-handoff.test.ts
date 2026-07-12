@@ -11,6 +11,33 @@ import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("keeps a multitenant descriptor tenant before inbox persistence", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const kept = Promise.withResolvers<undefined>();
+    const keep = vi.fn(() => kept.promise);
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const inbox = new LocalProjectionInbox("Tasks", undefined, keep);
+    inbox.register({ targetTypeUrl, replay: () => Promise.resolve() });
+
+    const receiving = inbox.receive(
+      delivery,
+      projectionInput(targetTypeUrl, "dynamic"),
+      "tenant-dynamic",
+    );
+    await Promise.resolve();
+
+    expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+
+    kept.resolve(undefined);
+    await receiving;
+  });
+
   it("routes persisted rows without exact drain after ownership transfer", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 fresh-generation tenant recovery proof assigned
+Status: Slice 2 Round 1 fixes focused verified; Round 2 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -450,3 +450,20 @@ cross-context isolation.
 The affected server loopback suite produced the expected sandbox `listen
 EPERM`, then passed 21/21 under native execution. Full `pnpm verify` remains the
 final milestone gate and was not run.
+
+### Fresh-generation tenant recovery acceptance proof
+
+A focused real-context test now persists the first multitenant process-manager
+row through the built context's command receive path. The first handler fails
+after persistence, leaving the exact version-1 row `TO_DELIVER`; the context is
+closed, then rebuilt with a fresh repository and descriptor over the same
+storage factory. The fresh descriptor enumerates the durable tenant through
+`startupScopes()`, environment attachment recovers that existing row to
+`DELIVERED`, and the fresh process-manager state proves replay. No second
+command, inbox receive, or readiness notification is issued. Current production
+behavior passed this acceptance proof without modification.
+
+Final focused verification passes 175/175 across the canonical seven files;
+generated typecheck, ESLint/cleanup, format, diff, public-entrypoint,
+generated/Protobuf/protected-file, and identical-Status checks pass. No commit
+or full `pnpm verify` was run.

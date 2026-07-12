@@ -17,6 +17,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  TenantIdSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -46,6 +47,8 @@ import {
   type RepositoryView,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { Delivery } from "../../src/delivery/delivery.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -184,6 +187,39 @@ class GeneratedTaskProcessManager extends ProcessManager<
     return create(ProjectionStateSchema, {
       id: command.id,
       name: `${command.name} event`,
+      priority: 1,
+    });
+  }
+}
+
+const pendingFreshRecovery = new Error("leave dynamic tenant row for fresh recovery");
+
+class FailingRecoveryProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: AggregateState): void {
+    void command;
+    throw pendingFreshRecovery;
+  }
+}
+
+class FreshRecoveryProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: AggregateState): ProjectionState {
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: command.id,
+        queue: `${command.name} recovered`,
+      }),
+    );
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: command.name,
       priority: 1,
     });
   }
@@ -420,6 +456,90 @@ describe("BoundedContext assembly", () => {
         (await context.stand().read(ProcessManagerStateSchema, "task-attached")) !== undefined,
       "attached environment delivery",
     );
+  });
+
+  it("recovers a durable dynamic-tenant row through a fresh same-storage descriptor", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const tenantId = "tenant-first-row";
+    const contextName = "FreshRecoveryTasks";
+    const failingRegistry = createGeneratedRegistryFixture([
+      processManagerRegistry(FailingRecoveryProcessManager),
+    ]);
+    const recoveryRegistry = createGeneratedRegistryFixture([
+      processManagerRegistry(FreshRecoveryProcessManager),
+    ]);
+    let first: BoundedContext | undefined;
+    let recovered: BoundedContext | undefined;
+
+    try {
+      first = await BoundedContext.multitenant(contextName)
+        .withStorageFactory(storageFactory)
+        .withGeneratedRegistryRoot(failingRegistry.root)
+        .add(FailingRecoveryProcessManager)
+        .addEventDispatcher(createEventDispatcher([ProjectionStateSchema], () => undefined))
+        .buildAsync();
+
+      await expect(
+        first
+          .commandBus()
+          .post(createAggregateCommand("dynamic-command", "dynamic-task", tenantId)),
+      ).rejects.toThrow(pendingFreshRecovery.message);
+      const firstDescriptor = internalDeliveryDescriptor(first);
+      const durable = new Delivery({
+        context: firstDescriptor.storageContext({ tenantId }),
+        storageFactory,
+      });
+      const pending = await durable.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
+      });
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
+        inboxId: { targetId: "dynamic-task" },
+        signalId: "dynamic-command",
+        version: 1n,
+      });
+      await first.close();
+      first = undefined;
+
+      recovered = await BoundedContext.multitenant(contextName)
+        .withStorageFactory(storageFactory)
+        .withGeneratedRegistryRoot(recoveryRegistry.root)
+        .add(FreshRecoveryProcessManager)
+        .addEventDispatcher(createEventDispatcher([ProjectionStateSchema], () => undefined))
+        .buildAsync();
+      const descriptor = internalDeliveryDescriptor(recovered);
+
+      await expect(descriptor.startupScopes()).resolves.toEqual([{ tenantId }]);
+      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+        ownership: "caller",
+        descriptors: [boundedContextAccess.delivery(recovered)],
+      });
+
+      expect(attachment.startup.scopes).toHaveLength(1);
+      await expect(
+        new Delivery({
+          context: descriptor.storageContext({ tenantId }),
+          storageFactory,
+        }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+      ).resolves.toMatchObject([
+        {
+          inboxId: { targetId: "dynamic-task" },
+          signalId: "dynamic-command",
+          version: 1n,
+        },
+      ]);
+      await expect(
+        recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
+      ).resolves.toMatchObject({
+        id: "dynamic-task",
+        queue: "Task Ready recovered",
+      });
+    } finally {
+      await first?.close();
+      await recovered?.close();
+      removeGeneratedRegistry(failingRegistry);
+      removeGeneratedRegistry(recoveryRegistry);
+    }
   });
 
   it("rejects blank multitenant index entries", async () => {
@@ -1501,11 +1621,18 @@ function createProjectionCommand(id: string) {
   });
 }
 
-function createAggregateCommand(id: string, targetId = "task-ready") {
+function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: string) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined
+          ? {}
+          : {
+              tenantId: create(TenantIdSchema, {
+                kind: { case: "value", value: tenantId },
+              }),
+            }),
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
@@ -1572,6 +1699,28 @@ function createGeneratedRegistryRoot(
   entities: Parameters<typeof createGeneratedRegistryFixture>[0],
 ): URL {
   return createGeneratedRegistryFixture(entities).root;
+}
+
+function processManagerRegistry(
+  entityType: typeof FailingRecoveryProcessManager | typeof FreshRecoveryProcessManager,
+) {
+  return {
+    entityType,
+    stateSchema: ProcessManagerStateSchema,
+    handlers: [
+      {
+        kind: "command-assignment" as const,
+        methodName: "assignTask",
+        signalSchema: AggregateStateSchema,
+        emittedSchemas: [ProjectionStateSchema],
+        parameterCount: 1 as const,
+      },
+    ],
+  };
+}
+
+function removeGeneratedRegistry(fixture: { readonly registryPath: string }): void {
+  rmSync(join(fixture.registryPath, "../../.."), { recursive: true, force: true });
 }
 
 async function waitForCondition(

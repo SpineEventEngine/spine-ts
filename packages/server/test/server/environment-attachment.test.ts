@@ -1,5 +1,5 @@
 import { InMemoryStorageFactory, type StorageContext } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   ContextDeliveryDescriptor,
@@ -13,7 +13,13 @@ import {
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { deliveryStorageFaults, onInboxQuery } from "../delivery/delivery-storage-fault-fixture.js";
-import { EnvironmentRegistrations } from "../../src/server/environment-attachment.js";
+import {
+  EnvironmentRegistrations,
+  RegistrationReadiness,
+  startupObligations,
+} from "../../src/server/environment-attachment.js";
+import type { DeliveryRunScope } from "../../src/delivery/delivery-run-coordinator.js";
+import { EnvironmentDeliveryWorker } from "../../src/server/environment-delivery-worker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 
 describe("EnvironmentRegistrations", () => {
@@ -44,7 +50,176 @@ describe("EnvironmentRegistrations", () => {
   });
 });
 
+describe("RegistrationReadiness", () => {
+  it("fails closed for thousands of distinct unknown scopes without coordinator work", () => {
+    const target = descriptor("Bounded", "type.example.dev/Bounded", new InMemoryStorageFactory());
+    const configured = runScope("owner-bounded", target.ready);
+    const prepare = vi.fn(() => configured);
+    const routed = vi.fn();
+    const readiness = new RegistrationReadiness(
+      [{ descriptor: target.value, scopes: [configured] }],
+      prepare,
+      routed,
+    );
+
+    for (let index = 0; index < 4_096; index += 1) {
+      readiness.notify(target.value, {
+        ...target.ready,
+        targetTypeUrl: `type.example.dev/Unknown-${index.toString()}`,
+      });
+    }
+    readiness.notify(target.value, target.ready);
+
+    expect(() => readiness.open([configured])).toThrow(
+      "Registration readiness received an unconfigured scope.",
+    );
+    readiness.notify(target.value, target.ready);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(routed).not.toHaveBeenCalled();
+  });
+
+  it("admits a dynamic zero-to-first runtime only after readiness is open", () => {
+    const target = descriptor("Dynamic", "type.example.dev/Dynamic", new InMemoryStorageFactory());
+    const dynamic = runScope("owner-dynamic", {
+      ...target.ready,
+      tenantId: "tenant-dynamic",
+    });
+    const routed: DeliveryRunScope[] = [];
+    const readiness = new RegistrationReadiness(
+      [{ descriptor: target.value, scopes: [] }],
+      () => dynamic,
+      (scope) => routed.push(scope),
+    );
+
+    expect(readiness.open([])).toEqual([]);
+    readiness.notify(target.value, dynamic.ready);
+
+    expect(routed).toEqual([dynamic]);
+  });
+});
+
+describe("startup obligations", () => {
+  it("keeps fulfilled PAUSED and SKIPPED outcomes parked without causes", () => {
+    const paused = runScope("owner-paused", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Paused",
+      shard: ShardIndex.single(),
+    });
+    const skipped = runScope("owner-skipped", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Skipped",
+      shard: ShardIndex.single(),
+    });
+
+    const records = startupObligations("registration-status", [paused, skipped], {
+      scopes: [
+        { scope: paused, disposition: "PARKED" },
+        { scope: skipped, disposition: "PARKED" },
+      ],
+      pending: [],
+    }).records();
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ hasCause: false, occurrences: 0 });
+    expect(records[0]?.units).toHaveLength(2);
+  });
+});
+
+describe("EnvironmentDeliveryWorker", () => {
+  it("selects the exact owner when distinct storage runtimes have equal readiness", async () => {
+    const firstStorage = new InMemoryStorageFactory();
+    const secondStorage = new InMemoryStorageFactory();
+    const first = descriptor("FirstOwner", "type.example.dev/Shared", firstStorage);
+    const second = descriptor("SecondOwner", "type.example.dev/Shared", secondStorage);
+    const firstScope = runScope("owner-first", first.ready);
+    const secondScope = runScope("owner-second", second.ready);
+    const worker = new EnvironmentDeliveryWorker();
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      tenant: {},
+      context: second.context,
+      scopes: [secondScope],
+    });
+    await new Delivery({ context: first.context, storageFactory: firstStorage }).inbox.receive(
+      message(first.ready, "first-row"),
+    );
+    await new Delivery({ context: second.context, storageFactory: secondStorage }).inbox.receive(
+      message(second.ready, "second-row"),
+    );
+
+    const firstObligation = Object.freeze({ scopes: Object.freeze([firstScope]) });
+    await worker.start(firstObligation, [first.ready.shard]);
+    expect(first.replayed).toEqual(["first-row"]);
+    expect(second.replayed).toEqual([]);
+
+    const secondObligation = Object.freeze({ scopes: Object.freeze([secondScope]) });
+    await worker.start(secondObligation, [second.ready.shard]);
+    expect(second.replayed).toEqual(["second-row"]);
+
+    expect(() => {
+      worker.add({
+        owner: firstScope.owner,
+        descriptor: first.value,
+        tenant: {},
+        context: first.context,
+        scopes: [firstScope],
+      });
+    }).toThrow("Environment delivery owner is already configured.");
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+});
+
 describe("ServerEnvironment attachment", () => {
+  it("serializes concurrent caller registration assembly", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = descriptor("First", "type.example.dev/First", storageFactory);
+    const second = descriptor("Second", "type.example.dev/Second", storageFactory);
+    const releaseFirst = Promise.withResolvers<undefined>();
+    const events: string[] = [];
+    const firstValue: ContextDeliveryDescriptor = Object.freeze({
+      ...first.value,
+      async startupScopes() {
+        events.push("first-start");
+        await releaseFirst.promise;
+        events.push("first-finish");
+        return first.value.startupScopes();
+      },
+    });
+    const secondValue: ContextDeliveryDescriptor = Object.freeze({
+      ...second.value,
+      startupScopes() {
+        events.push("second-start");
+        return second.value.startupScopes();
+      },
+    });
+    const environment = ServerEnvironment.local();
+
+    const firstAttach = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [firstValue],
+    });
+    const secondAttach = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [secondValue],
+    });
+    await until(() => events.includes("first-start"));
+    expect(events).toEqual(["first-start"]);
+
+    releaseFirst.resolve(undefined);
+    await Promise.all([firstAttach, secondAttach]);
+    expect(events).toEqual(["first-start", "first-finish", "second-start"]);
+  });
+
   it("recovers actual descriptor storage and shares one caller generation", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("First", "type.example.dev/First", storageFactory);
@@ -169,7 +344,7 @@ describe("ServerEnvironment attachment", () => {
       descriptors: [target.value],
     });
 
-    expect(handle.startup.scopes.map(({ scope }) => scope.tenantId)).toEqual([
+    expect(handle.startup.scopes.map(({ scope }) => scope.ready.tenantId)).toEqual([
       "tenant-a",
       "tenant-b",
     ]);
@@ -221,7 +396,7 @@ describe("ServerEnvironment attachment", () => {
     ]);
   });
 
-  it("does not blame or restart a wholly disjoint rejected sibling", async () => {
+  it("does not blame or restart a distinct owner with equal shard facts", async () => {
     const failure = new Error("sibling storage rejected");
     let rejectedQueries = 0;
     const faulty = deliveryStorageFaults(
@@ -235,7 +410,7 @@ describe("ServerEnvironment attachment", () => {
     });
     const healthyStorage = new InMemoryStorageFactory();
     const attaching = descriptor("Attaching", "type.example.dev/Attaching", healthyStorage, {
-      shard: new ShardIndex(1, 2),
+      shard: new ShardIndex(0, 2),
     });
     const environment = ServerEnvironment.local();
 
@@ -250,9 +425,11 @@ describe("ServerEnvironment attachment", () => {
       descriptors: [attaching.value],
     });
 
-    expect(handle.startup.scopes).toContainEqual(
-      expect.objectContaining({ scope: attaching.ready, disposition: "IDLE" }),
+    const attached = handle.startup.scopes.find(
+      ({ scope }) => scope.ready.targetTypeUrl === attaching.ready.targetTypeUrl,
     );
+    expect(attached?.scope.ready).toEqual(attaching.ready);
+    expect(attached?.disposition).toBe("IDLE");
     expect(rejectedQueries).toBe(1);
   });
 });
@@ -373,6 +550,10 @@ function message(ready: DeliveryReady, signalId: string) {
     whenReceived: new Date(),
     version: 1n,
   };
+}
+
+function runScope(ownerKey: string, ready: DeliveryReady): DeliveryRunScope {
+  return Object.freeze({ owner: Object.freeze({ key: ownerKey }), ready });
 }
 
 async function until(predicate: () => boolean): Promise<void> {

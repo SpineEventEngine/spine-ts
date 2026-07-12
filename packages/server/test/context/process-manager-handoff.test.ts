@@ -14,6 +14,37 @@ type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("keeps one multitenant descriptor tenant before batch persistence", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const kept = Promise.withResolvers<undefined>();
+    const keep = vi.fn(() => kept.promise);
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inbox = new LocalProcessManagerInbox("Tasks", undefined, keep);
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(),
+    });
+
+    const receiving = inbox.receiveAll(
+      delivery,
+      ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
+      "tenant-dynamic",
+    );
+    await Promise.resolve();
+
+    expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+
+    kept.resolve(undefined);
+    await receiving;
+  });
+
   it("exact-drains persisted batch rows before propagating a later write failure", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const inputs = ["persisted", "rejected"].map((targetId) =>

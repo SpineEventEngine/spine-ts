@@ -21,16 +21,19 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #targets = new Map<string, ProjectionInboxTarget>();
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
+  readonly #keepTenant: (tenantId: string) => Promise<void>;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
+    keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
+    this.#keepTenant = keepTenant;
   }
 
   register(target: ProjectionInboxTarget): void {
@@ -73,6 +76,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    if (deliveryTenantId !== undefined) {
+      await this.#keepTenant(deliveryTenantId);
+    }
     const written = await delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,

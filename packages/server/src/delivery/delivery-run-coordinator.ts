@@ -182,6 +182,18 @@ export class DeliveryRunCoordinator {
   }
 
   async #runAdmission(scopes: readonly DeliveryRunScope[]): Promise<void> {
+    const byOwner = new Map<string, DeliveryRunScope[]>();
+    for (const scope of scopes) {
+      const partition = byOwner.get(scope.owner.key) ?? [];
+      partition.push(scope);
+      byOwner.set(scope.owner.key, partition);
+    }
+    for (const partition of byOwner.values()) {
+      await this.#runOwnerAdmission(partition);
+    }
+  }
+
+  async #runOwnerAdmission(scopes: readonly DeliveryRunScope[]): Promise<void> {
     const obligation = runObligation(scopes);
     let shards = scopeShards(scopes);
     while (shards.length > 0) {
@@ -208,27 +220,29 @@ export class DeliveryRunCoordinator {
     shards: readonly ShardIndex[],
     cause: unknown,
   ): void {
+    const owner = requiredOwner(scopes);
     const attempted = new Set(shards.map((shard) => shard.key()));
     for (const scope of scopes) {
-      if (attempted.has(scope.shard.key())) {
+      if (attempted.has(scope.ready.shard.key())) {
         this.#settled.set(scopeKey(scope), rejectedSettlement(scope, cause));
       }
     }
-    this.#parkPending(attempted);
+    this.#parkPending(new Set(Array.from(attempted, (key) => ownerShardKey(owner, key))));
   }
 
   #recordEvidence(
     scopes: readonly DeliveryRunScope[],
     evidence: DeliveryWorkerEvidence,
   ): ReadonlySet<string> {
+    const owner = requiredOwner(scopes);
     const rejected = new Set<string>();
     for (const shardEvidence of evidence.shards) {
       const shardKey = shardEvidence.shard.key();
       if (shardEvidence.status === "rejected") {
-        rejected.add(shardKey);
+        rejected.add(ownerShardKey(owner, shardKey));
       }
       for (const scope of scopes) {
-        if (scope.shard.key() === shardKey) {
+        if (scope.ready.shard.key() === shardKey) {
           this.#settled.set(scopeKey(scope), shardSettlement(scope, shardEvidence));
         }
       }
@@ -238,7 +252,7 @@ export class DeliveryRunCoordinator {
 
   #parkPending(rejected: ReadonlySet<string>): void {
     for (const [key, scope] of this.#pending) {
-      if (rejected.has(scope.shard.key())) {
+      if (rejected.has(ownerShardKey(scope.owner, scope.ready.shard.key()))) {
         this.#pending.delete(key);
       }
     }
@@ -278,8 +292,16 @@ export class DeliveryRunCoordinator {
   }
 }
 
-/** @internal Canonical tenant, endpoint, and shard identity admitted for one generation. */
-export type DeliveryRunScope = DeliveryReady;
+/** @internal One generation-local runtime owner. */
+export interface DeliveryRunOwner {
+  readonly key: string;
+}
+
+/** @internal Owner-qualified canonical readiness admitted for one generation. */
+export interface DeliveryRunScope {
+  readonly owner: DeliveryRunOwner;
+  readonly ready: DeliveryReady;
+}
 
 /** @internal Finite package-owned worker obligation for one canonical scope union. */
 export interface DeliveryRunObligation extends DeliveryWorkerObligation {
@@ -352,7 +374,7 @@ function runObligation(scopes: readonly DeliveryRunScope[]): DeliveryRunObligati
 
 function scopeShards(scopes: readonly DeliveryRunScope[]): readonly ShardIndex[] {
   const shards = new Map<string, ShardIndex>();
-  for (const { shard } of scopes) {
+  for (const { shard } of scopes.map(({ ready }) => ready)) {
     shards.set(shard.key(), new ShardIndex(shard.index, shard.ofTotal));
   }
   return Object.freeze(Array.from(shards.values()));
@@ -445,21 +467,37 @@ function cloneSettlement(settlement: DeliveryScopeSettlement): DeliveryScopeSett
 
 function cloneScope(scope: DeliveryRunScope): DeliveryRunScope {
   return Object.freeze({
-    ...(scope.tenantId === undefined ? {} : { tenantId: scope.tenantId }),
-    label: scope.label,
-    targetTypeUrl: scope.targetTypeUrl,
-    shard: new ShardIndex(scope.shard.index, scope.shard.ofTotal),
+    owner: Object.freeze({ key: scope.owner.key }),
+    ready: Object.freeze({
+      ...(scope.ready.tenantId === undefined ? {} : { tenantId: scope.ready.tenantId }),
+      label: scope.ready.label,
+      targetTypeUrl: scope.ready.targetTypeUrl,
+      shard: new ShardIndex(scope.ready.shard.index, scope.ready.shard.ofTotal),
+    }),
   });
 }
 
 function scopeKey(scope: DeliveryRunScope): string {
   return JSON.stringify([
-    scope.tenantId ?? null,
-    scope.label,
-    scope.targetTypeUrl,
-    scope.shard.index,
-    scope.shard.ofTotal,
+    scope.owner.key,
+    scope.ready.tenantId ?? null,
+    scope.ready.label,
+    scope.ready.targetTypeUrl,
+    scope.ready.shard.index,
+    scope.ready.shard.ofTotal,
   ]);
+}
+
+function ownerShardKey(owner: DeliveryRunOwner, shardKey: string): string {
+  return JSON.stringify([owner.key, shardKey]);
+}
+
+function requiredOwner(scopes: readonly DeliveryRunScope[]): DeliveryRunOwner {
+  const owner = scopes[0]?.owner;
+  if (owner === undefined) {
+    throw new Error("Delivery run admission requires at least one scope.");
+  }
+  return owner;
 }
 
 function cloneProgress(progress: DeliveryLoopProgress): DeliveryLoopProgress {
