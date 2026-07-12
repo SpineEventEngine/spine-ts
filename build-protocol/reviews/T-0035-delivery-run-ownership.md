@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 7 decision fix coordinator-verified; re-review pending
+Status: Round 8 four-lane review in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f53c3-f38d-7e80-86f3-3500f68858a1` | Clean  |
-| Documentation              | `019f53c3-f430-77b2-9b1f-92f17f290928` | P1     |
-| TypeScript/API docs        | `019f53c3-f4c4-7770-9efd-0d6a19a33dfd` | Clean  |
-| Performance/reliability    | `019f53c3-f543-7470-befe-6add2c4c25bb` | P1     |
+| Code style/maintainability | `019f53d2-0583-7b03-ad45-31ffb176baae` | Active |
+| Documentation              | `019f53d2-0613-7f62-b4a2-5c4f77dfce9e` | Active |
+| TypeScript/API docs        | `019f53d2-0696-7b83-8b3d-14a12cc55221` | Active |
+| Performance/reliability    | `019f53d2-0715-7531-9972-a935e656c134` | Active |
 
 Security is deferred to final project readiness.
 
@@ -347,3 +347,11 @@ Security is deferred to final project readiness.
   scope, status, 69-event chronology, stop order, attach/last-detach race,
   fresh-generation, internal blocker, compatibility, and public-API leakage
   checks. Fresh four-lane review is next.
+- `2026-07-12T00:54:00Z`: Lightweight docs/status lint passed and coordinator
+  generated fixed Round 8 package
+  `.superpowers/sdd/review-9200dcce..f9ea9d5b.diff` (42 commits, 134,999 bytes).
+  Assigned code style `019f53d2-0583-7b03-ad45-31ffb176baae`, documentation
+  `019f53d2-0613-7f62-b4a2-5c4f77dfce9e`, TypeScript/API docs
+  `019f53d2-0696-7b83-8b3d-14a12cc55221`, and performance/reliability
+  `019f53d2-0715-7531-9972-a935e656c134`. Prompts are package-only and ignore
+  superseded history unless current records claim it active.
