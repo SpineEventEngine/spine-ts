@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Started; baseline verification pending
+Status: Baseline verified; implementation assignment pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -44,3 +44,6 @@ Security is deferred to final project readiness.
 - `2026-07-12T11:43:52Z`: Created the review scaffold with implementation,
   lightweight pre-review lint, immutable package, and four reviewer lanes all
   pending. Security remains deferred to final project readiness.
+- `2026-07-12T11:46:15Z`: Fresh-worktree generated build and focused T-0036
+  compatibility baseline passed 3 files and 150 tests. Sole implementation
+  author assignment is pending.
