@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Implementation committed; required four-lane review not started
+Status: Required four-lane review in progress
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | pending  | Pending |
-| Documentation              | pending  | Pending |
-| TypeScript/API docs        | pending  | Pending |
-| Performance/reliability    | pending  | Pending |
+| Lane                       | Reviewer                               | Status      |
+| -------------------------- | -------------------------------------- | ----------- |
+| Code style/maintainability | `019f5435-93e2-7bb3-bf54-1644a88de98e` | In progress |
+| Documentation              | `019f5435-b294-7d30-aa06-f2e596f0bb0d` | In progress |
+| TypeScript/API docs        | `019f5435-dd92-7282-b914-3dacc12e87d9` | In progress |
+| Performance/reliability    | `019f5436-0605-7623-bd9a-65162ff92066` | In progress |
 
 Security is deferred to final project readiness.
 
@@ -86,3 +86,8 @@ Security is deferred to final project readiness.
 - `2026-07-12T02:43:00Z`: Committed implementation as `1ea10745` and
   reconciled active status plus the durable commit ledger. Fixed-baseline
   review-package generation is next.
+- `2026-07-12T02:45:00Z`: Generated package
+  `.superpowers/sdd/review-67da0b1c..a1714e1f.diff` (95,978 bytes) and assigned
+  all four required independent lanes. Each prompt is constrained to current
+  actionable state and must ignore superseded history unless active records
+  still claim it.
