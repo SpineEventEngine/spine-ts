@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 14 findings accepted; fix pending
+Status: Round 14 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -678,3 +678,7 @@ Security is deferred to final project readiness.
   attach only joins it; clarify T-0037d rollback versus T-0037f cleanup ownership;
   and enumerate all six distinct retry owners in active summaries. All other
   style/docs/API/reliability checks were clean.
+- `2026-07-12T08:36:01Z`: Assigned single Round 14 documentation fix worker
+  `019f5578-0540-7280-bef3-1a6c2283b117` the complete accepted batch. The
+  worker owns documentation only, must preserve the fixed historical ledger,
+  and may edit only after this assignment is committed.
