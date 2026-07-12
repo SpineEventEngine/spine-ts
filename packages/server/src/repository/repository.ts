@@ -458,7 +458,7 @@ export interface ProcessManagerInboxTarget {
   /** Target process-manager state type URL routed by this replay target. */
   readonly targetTypeUrl: string;
   /** Supported delivery labels configured for this target. */
-  readonly labels?: readonly ProcessManagerInboxLabel[];
+  readonly labels: readonly ProcessManagerInboxLabel[];
   /** Replays one durable inbox message under the active delivery tenant. */
   replay(message: ProcessManagerInboxMessage, deliveryTenantId?: string): Promise<void>;
 }

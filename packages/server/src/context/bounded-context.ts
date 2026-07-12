@@ -150,7 +150,7 @@ export interface DeliveryTenantScope {
   readonly tenantId?: string;
 }
 
-/** @internal Built-context facts and readiness route used by delivery lifecycle owners. */
+/** @internal Built-context delivery facts and readiness route. */
 export interface ContextDeliveryDescriptor {
   readonly storageFactory: StorageFactory;
   startupScopes(): Promise<readonly DeliveryTenantScope[]>;

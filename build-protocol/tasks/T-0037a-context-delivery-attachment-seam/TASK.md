@@ -1,6 +1,6 @@
 # T-0037a: Context Delivery Attachment Seam
 
-Status: Round 1 fixes active; RED pending
+Status: Round 1 fixes coordinator-verified; repeat review pending
 
 Started: `2026-07-12T09:52:53Z`
 
@@ -24,7 +24,7 @@ internals or replacing the current local handoff owner prematurely.
 
 - Continue autonomously until this child is complete or a real blocker occurs;
   keep the implementation/review package small and limited to this child.
-- Implement only this child in its own future branch/worktree with one author
+- Implement only this child in its own branch/worktree with one author
   using TDD.
 - Do not assign duplicate authors or reviewers for the same role, and close
   every participating author/reviewer agent after its role completes.
@@ -96,7 +96,7 @@ registration exist; this seam must support that later atomic no-overlap switch.
 - `packages/server/src/context/projection-handoff.ts`
 - `packages/server/src/repository/repository.ts`
 - Focused context handoff and bounded-context tests
-- This task's future durable task/work/review records and narrowly affected
+- This task's durable task/work/review records and narrowly affected
   current architecture wording
 
 ## TDD Acceptance

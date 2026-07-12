@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 1 fixes active; RED pending
+Status: Round 1 fixes coordinator-verified; repeat review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status   |
-| -------------------------- | -------------------------------------- | -------- |
-| Code style/maintainability | `019f55d1-0422-7490-8e00-7f241ed471f0` | Finding  |
-| Documentation              | `019f55d1-0747-7b03-8d77-7548fb7cde85` | Findings |
-| TypeScript/API docs        | `019f55d1-0e42-7c60-9d0b-abadff892fb8` | Clean    |
-| Performance/reliability    | `019f55d1-0ac6-7e50-a90e-215fba97162d` | Finding  |
+| Lane                       | Reviewer                               | Status                       |
+| -------------------------- | -------------------------------------- | ---------------------------- |
+| Code style/maintainability | `019f55d1-0422-7490-8e00-7f241ed471f0` | Round 1 finding; closed      |
+| Documentation              | `019f55d1-0747-7b03-8d77-7548fb7cde85` | Round 1 findings; closed     |
+| TypeScript/API docs        | `019f55d1-0e42-7c60-9d0b-abadff892fb8` | Round 1 clean; repeat needed |
+| Performance/reliability    | `019f55d1-0ac6-7e50-a90e-215fba97162d` | Round 1 finding; closed      |
 
 Security is deferred to final project readiness.
 
@@ -94,3 +94,20 @@ Security is deferred to final project readiness.
   worker is paused until assignment provenance is committed.
 - `2026-07-12T10:21:12Z`: Assignment commit `a04a3eb6` completed; the fix worker
   started with focused foreign-realm RED required before runtime changes.
+- `2026-07-12T10:22:28Z`: Focused foreign-realm RED failed for the intended
+  missing rejection containment: the selected test observed zero calls to the
+  foreign Promise's `then`; production code was still unchanged. The complete
+  accepted Round 1 fix batch now enters GREEN.
+- `2026-07-12T10:27:08Z`: The synchronized regression was checked against the
+  exact old realm-sensitive condition (RED: one selected failure, zero foreign
+  `then` calls) and the restored realm-neutral fix (GREEN: one selected pass).
+  Full focused batch verification remains pending.
+- `2026-07-12T10:29:24Z`: The sole fix worker completed all eight accepted
+  findings without committing. Focused tests passed 4 files and 88 tests;
+  generated and tooling typechecks, changed-file ESLint/Prettier, lightweight
+  docs/status lint, and `git diff --check` passed. Coordinator verification,
+  fix commit, fresh immutable package, and all four repeat lanes remain
+  pending.
+- `2026-07-12T10:32:41Z`: Coordinator verification and lightweight pre-review
+  docs/status lint passed for the complete fix batch. The fix is ready to
+  commit as the fresh literal endpoint for all four repeat lanes.

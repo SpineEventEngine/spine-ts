@@ -36,7 +36,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   endpoints(): readonly DeliveryEndpoint[] {
     return Object.freeze(
       [...this.#targets.values()].flatMap((target) =>
-        (target.labels ?? []).map((label) =>
+        target.labels.map((label) =>
           deliveryEndpoint({
             label,
             inboxId: { targetTypeUrl: target.targetTypeUrl },

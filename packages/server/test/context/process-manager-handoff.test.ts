@@ -1,6 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
@@ -9,6 +10,7 @@ import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
+const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
   it("emits readiness after persistence before exact drain settles", async () => {
@@ -30,6 +32,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       async replay() {
         startReplay();
         await replayReleased;
@@ -112,6 +115,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message.inboxId.targetId);
         return Promise.resolve();
@@ -132,6 +136,51 @@ describe("LocalProcessManagerInbox", () => {
     ).resolves.toHaveLength(2);
     expect(notifications).toBe(2);
     expect(seen).toEqual(["first", "second"]);
+  });
+
+  it("contains a rejected readiness promise created in another realm", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const foreign = runInNewContext(`
+      (() => {
+        let reject;
+        const promise = new Promise((_, onRejected) => {
+          reject = onRejected;
+        });
+        return { promise, reject };
+      })()
+    `) as ForeignDeferred;
+    const then = vi.spyOn(foreign.promise, "then");
+    let markObserved!: () => void;
+    const observed = new Promise<void>((resolve) => {
+      markObserved = resolve;
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+      markObserved();
+      return foreign.promise;
+    });
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.resolve(),
+    });
+
+    const receive = inbox.receive(delivery, {
+      inboxId: { targetId: "pm-foreign-observer", targetTypeUrl },
+      signalId: "foreign-observer-failure",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+    });
+    await observed;
+    await Promise.resolve();
+
+    expect(then).toHaveBeenCalledOnce();
+    foreign.reject(new Error("foreign observer failed"));
+    await expect(receive).resolves.toBeDefined();
   });
 
   it("emits no readiness for a rejected write or a duplicate without new persistence", async () => {
@@ -183,7 +232,11 @@ describe("LocalProcessManagerInbox", () => {
     const drainFailure = new Error("batch replay failed");
     const ready: unknown[] = [];
     const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
-    inbox.register({ targetTypeUrl, replay: () => Promise.reject(drainFailure) });
+    inbox.register({
+      targetTypeUrl,
+      labels: processManagerLabels,
+      replay: () => Promise.reject(drainFailure),
+    });
 
     const result = await inbox
       .receiveAll(
@@ -215,6 +268,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -276,6 +330,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -327,6 +382,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -385,6 +441,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -448,6 +505,7 @@ describe("LocalProcessManagerInbox", () => {
     ];
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -456,6 +514,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -528,6 +587,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -536,6 +596,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -614,6 +675,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl: firstTypeUrl,
+      labels: processManagerLabels,
       async replay(message) {
         seen.push(message);
         startReplay();
@@ -622,6 +684,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: secondTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -685,6 +748,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -758,6 +822,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         seen.push(message);
         return Promise.resolve();
@@ -765,6 +830,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     inbox.register({
       targetTypeUrl: unrelatedProcessManagerTypeUrl,
+      labels: processManagerLabels,
       replay(message) {
         unrelatedSeen.push(message);
         return Promise.reject(new Error("unrelated process-manager should not replay"));
@@ -842,6 +908,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("target failed"));
       },
@@ -877,6 +944,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         const reason = "not-an-error" as unknown as Error;
 
@@ -945,6 +1013,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("scheduled rows should not replay"));
       },
@@ -985,6 +1054,7 @@ describe("LocalProcessManagerInbox", () => {
 
     inbox.register({
       targetTypeUrl,
+      labels: processManagerLabels,
       replay() {
         return Promise.reject(new Error("unexpected replay"));
       },
@@ -1047,6 +1117,11 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 });
+
+interface ForeignDeferred {
+  readonly promise: Promise<never>;
+  reject(error: Error): void;
+}
 
 function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {

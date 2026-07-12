@@ -17,7 +17,7 @@ export interface DeliveryReady extends DeliveryEndpoint {
   readonly tenantId?: string;
 }
 
-/** @internal Synchronous readiness callback installed by context delivery ownership. */
+/** @internal Synchronous post-persist readiness callback. */
 export type OnDeliveryReady = (ready: DeliveryReady) => unknown;
 
 /** @internal Mutable single-route readiness seam shared by context handoffs. */
@@ -47,13 +47,20 @@ export class DeliveryReadiness {
 
     try {
       const result = Reflect.apply(this.#onReady, undefined, [ready]);
-      if (result instanceof Promise) {
-        void result.catch(() => undefined);
+      if (isPromiseLike(result)) {
+        void Promise.resolve(result).catch(() => undefined);
       }
     } catch {
       // Readiness observation cannot alter durable receive or exact-drain outcomes.
     }
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return false;
+  }
+  return "then" in value && typeof value.then === "function";
 }
 
 const drainLimit = 8;
