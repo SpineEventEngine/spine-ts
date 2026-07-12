@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 6 four-lane review in progress
+Status: Round 6 findings recorded; decision fix pending
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0035-delivery-run-ownership`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f53b4-b918-7e22-8ab3-e5fb1b10b8ad` | Active |
-| Documentation              | `019f53b4-b988-77f2-b6c1-48510e09fccc` | Active |
-| TypeScript/API docs        | `019f53b4-ba99-7ed0-a7bf-13ed24e93f70` | Active |
-| Performance/reliability    | `019f53b4-ba0a-7653-8a1a-6be078c11a90` | Active |
+| Code style/maintainability | `019f53b4-b918-7e22-8ab3-e5fb1b10b8ad` | Clean  |
+| Documentation              | `019f53b4-b988-77f2-b6c1-48510e09fccc` | P1     |
+| TypeScript/API docs        | `019f53b4-ba99-7ed0-a7bf-13ed24e93f70` | P2     |
+| Performance/reliability    | `019f53b4-ba0a-7653-8a1a-6be078c11a90` | P1     |
 
 Security is deferred to final project readiness.
 
@@ -278,3 +278,10 @@ Security is deferred to final project readiness.
   `019f53b4-ba99-7ed0-a7bf-13ed24e93f70`, and performance/reliability
   `019f53b4-ba0a-7653-8a1a-6be078c11a90`. Prompts are package-only and ignore
   superseded history unless current records claim it active.
+- `2026-07-12T00:25:00Z`: Round 6 completed and all reviewers were closed.
+  Code style was clean. Required fixes are: assign rejected-shard identity and
+  cause preservation to T-0036; tell callers to close attached `RunningServer`
+  instances rather than invoke internal detach; guarantee a terminating
+  unaffected startup admission after disjoint sibling rejection; and separate
+  parked-cause reporting state from retained operational obligation so shared
+  causes surface once. One decision fix worker and fresh review are required.
