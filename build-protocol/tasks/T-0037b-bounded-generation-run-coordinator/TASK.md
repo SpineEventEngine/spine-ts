@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Round 5 targeted fix re-review assigned
+Status: Round 5 reliability metadata redispatch assigned
 
 Started: `2026-07-12T11:43:52Z`
 

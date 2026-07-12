@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Round 5 targeted fix re-review assigned
+Status: Round 5 reliability metadata redispatch assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -395,3 +395,10 @@ assigned at the safe stop.
   because no user-facing/current behavioral documentation changed beyond
   accurate review evidence; TypeScript/API docs is N/A because the internal fix
   changes no export or contract. Final security review remains project-scoped.
+- `2026-07-12T16:53:04Z`: Style/maintainability
+  `019f573d-13d7-70f3-a8d5-c3af4e168ebf` is accepted clean with confirmed
+  actual `gpt-5.6-terra` / `high` and closed. Performance/reliability
+  `019f573d-179c-7863-9ba0-7d601c99ba0c` was substantively clean but is not
+  accepted because actual model/reasoning metadata was unavailable; it was
+  closed. A replacement performance/reliability lane is assigned with expected
+  explicit `gpt-5.6-terra` / `high` against the unchanged fix package.
