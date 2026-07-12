@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 13 docs fixes verified; fresh review pending
+Status: Round 14 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f5567-10b2-74e1-886b-03084a91336b` | P2     |
-| Documentation              | `019f5567-111a-7c23-a6c2-c4207d514b23` | P2     |
-| TypeScript/API docs        | `019f5567-119d-7743-a798-17c5ac044e8a` | Clean  |
-| Performance/reliability    | `019f5567-1231-70f2-a5b0-6ff9cab56b57` | P1     |
+| Code style/maintainability | `019f5573-79eb-7b60-b670-e9e2c39006a4` | P2    |
+| Documentation              | `019f5573-7a5a-7d32-8b6d-8083ba0bc00b` | P2    |
+| TypeScript/API docs        | `019f5573-7ae5-7f63-87a5-0cb33eeeb49d` | P1/P2 |
+| Performance/reliability    | `019f5573-7b78-7651-8ee1-0f14f2ef7716` | P1    |
 
 Security is deferred to final project readiness.
 
@@ -666,3 +666,15 @@ Security is deferred to final project readiness.
   ledger, exact-scope/frozen-path, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` checks. TypeDoc retained 205 server exports with only the
   known invalid-`origin` warning. Fresh all-lane review remains required.
+- `2026-07-12T08:31:03Z`: Committed the verified Round 13 fix as `b4fb88af`,
+  resolved full endpoint `b4fb88afb4a6f0a4a9cffc37a65c315bcce9a4df`, and
+  generated `.superpowers/sdd/review-0308bc4a..b4fb88af.diff` with that literal
+  endpoint in its header (57 commits, 241,104 bytes). Passed lightweight pre-
+  review lint and assigned all four Round 14 lanes.
+- `2026-07-12T08:35:12Z`: Closed all four Round 14 lanes. Accepted one complete
+  docs batch: keep route rebind and buffered transfer as separate phases; scope
+  non-last close retry to registration cleanup without shared-generation
+  retirement; make explicit stop create its own fresh candidate while racing
+  attach only joins it; clarify T-0037d rollback versus T-0037f cleanup ownership;
+  and enumerate all six distinct retry owners in active summaries. All other
+  style/docs/API/reliability checks were clean.
