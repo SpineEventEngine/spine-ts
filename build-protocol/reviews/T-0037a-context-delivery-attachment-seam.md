@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 4 assigned; reviewers fully paused
+Status: Review Round 4 skill revalidation complete; substantive review paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status       |
-| -------------------------- | -------------------------------------- | ------------ |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Fully paused |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Fully paused |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Fully paused |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Fully paused |
+| Lane                       | Reviewer                               | Status              |
+| -------------------------- | -------------------------------------- | ------------------- |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Revalidated; paused |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Revalidated; paused |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Revalidated; paused |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Revalidated; paused |
 
 Security is deferred to final project readiness.
 
@@ -191,6 +191,40 @@ Performance/reliability reviewer `019f55f7-02da-75a3-8f01-a9f79466affc`:
 - Skipped `monorepo-management` because workspace topology is unchanged.
 - Skipped `using-git-worktrees` because worktree setup belongs to the
   coordinator and the assigned worktree already existed.
+
+## Round 4 Skill Revalidation
+
+- Every resumed reviewer reported `NO DELTA` from its exact, individually
+  enumerated Round 3 record above. Each re-read `EXPECTED_SKILLS.md` (8 skills),
+  reran the complete installed-entrypoint inventory and count (47 readable),
+  rechecked `/Users/armiol/.agents/.skill-lock.json` (version 3, 47 records, 0
+  dismissed), confirmed no unreachable source and no new task-provided skill,
+  and inspected no package/source/task state during revalidation.
+- Style fully re-read `code-review-excellence` (529 lines, SHA-256
+  `014fff1c8db75807106484d5b16451607f0dde266ae50182a2753d68ad3449ed`)
+  and `codebase-design` (114 lines, SHA-256
+  `a8d50abac5a4018f60e1d911d4b6f4e36454ca14d6c390c0695a578c7de65dad`)
+  at the exact paths and sources recorded above. Its complete individually
+  named skip set and reasons have no delta.
+- Documentation fully re-read `code-review-excellence` (529 lines, SHA-256
+  `014fff1c8db75807106484d5b16451607f0dde266ae50182a2753d68ad3449ed`)
+  and `verification-before-completion` (139 lines, SHA-256
+  `ea52d15aabaf72bc6b558efe2c126f161b53961090ddcd712000273bfe8c7b6c`)
+  at the exact paths and sources recorded above. Its complete individually
+  named skip set and reasons have no delta.
+- TypeScript/API docs fully re-read `code-review-excellence` (529 lines,
+  SHA-256
+  `014fff1c8db75807106484d5b16451607f0dde266ae50182a2753d68ad3449ed`)
+  and `typescript-advanced-types` (318 lines, SHA-256
+  `c32101c65134d94ef1a3305ef486020b57be6408f97ed952c9c560e3fe04188d`)
+  at the exact paths and sources recorded above. Its complete individually
+  named skip set and reasons have no delta.
+- Performance/reliability fully re-read `code-review-excellence`,
+  `nodejs-backend-patterns`, `error-handling-patterns`, and
+  `javascript-testing-patterns` at the four exact paths and `wshobson/agents`
+  source recorded above; lock source URLs, source paths, installation metadata,
+  folder hashes, and captured file hashes are unchanged. Its complete
+  individually named skip set and reasons have no delta.
 
 ## Review Criteria
 
@@ -448,3 +482,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
   3 reviewers are assigned fully paused; their exact canonical records above
   remain authoritative, but each must revalidate current inventory, expected
   manifest, and lock provenance and durably record any delta before review.
+- `2026-07-12T11:16:19Z`: All four Round 4 phase-1 revalidations reported no
+  delta; exact evidence is preserved in `Round 4 Skill Revalidation`.
+  Substantive package review remains paused until this record commits.
