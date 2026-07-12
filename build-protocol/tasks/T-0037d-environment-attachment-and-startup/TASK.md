@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 3 architecture resolved; fixes assigned
+Status: Slice 3 Round 3 fixes focused verified; Round 4 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -456,6 +456,40 @@ attachment-path same-storage D-0085 blocking/resolution and distinct-storage
 isolation. No public contract, descriptor contract, later detach/close policy,
 listener wiring, or cross-generation persistence is added.
 
+### Slice 3 Round 3 fix outcome
+
+Both accepted private changes are implemented under strict TDD. Failed rollback
+mode is monotonic `registration | generation`. One memoized explicit retry waits
+behind the attachment serial queue, promotes immediately before retry work when
+queued cleanup has reduced registration count to zero, and then consumes the
+existing authoritative generation retirement. Whole-worker stop skips owners
+already stopped by selected-owner rollback; promoted quiescence failure resets
+only the retry promise, repeats await without repeating stop, and remains
+retryable. Safe completion clears the old generation identity and admits one
+genuinely fresh `DeliveryGeneration` and second worker only after old permanent
+retirement; old readiness stays inert.
+
+Ephemeral `DeliveryRunOwner` keys remain unchanged for coordinator/worker
+routing. A separate generation-local stable overlap key now combines factory
+object identity, structural storage context `[name, multitenant,
+tenantId|null]`, and canonical readiness. Matching replacement descriptors over
+the same actual factory/context reach the exact plain cause-less D-0085 blocker
+despite a fresh rejection; a later matching success resolves the one retained
+record. Repeated failures deduplicate to one stable domain. Different factory
+objects with equal structural facts neither inherit nor resolve that record.
+Selected-owner retirement removes ephemeral translation without losing stable
+unresolved state; generation retirement clears translation, allocator, and
+ledger. The helper-only exported ledger/rejection proof is removed.
+
+Focused RED failed 3/27 before production edits; a separate real worker-stop
+RED failed 1/1 before its private construction seam and skip implementation.
+GREEN passes environment 28/28 and the canonical seven files 189/189. Affected
+coverage passes at 96.48% statements, 90.04% branches, 98.38% functions, and
+96.70% lines. Generated build typecheck, ESLint/cleanup, formatting,
+diff/public/generated/protected scans are the recorded final handoff. No public
+or serialized contract, later lifecycle, subagent, commit, push, or full `pnpm
+verify` is included.
+
 ### Slice 3 Round 2 fix outcome
 
 Both findings are implemented under strict TDD. Attachment claims remain
@@ -466,12 +500,10 @@ canonical explicit-retry error and cannot replace the earlier rollback. After
 that same rollback succeeds, registration cardinality is zero and the untouched
 queued descriptor can attach once as the fresh sole registration.
 
-Reported unresolved identity is now an exact owner-qualified `scopeKey` set,
-not a readiness-keyed map. Equal ready facts in distinct descriptor/storage
-owners neither inherit nor resolve each other. Repeating an exact owner key
-deduplicates, and only successful settlement for that exact owner key removes
-it. The set remains bounded by configured owner-qualified scope cardinality;
-the 2,048-owner regression retains exactly 2,048 entries.
+Round 2 temporarily keyed reported identity by ephemeral owner-qualified
+`scopeKey`. Round 3 review proved replacement descriptors could never reach
+those entries; the stable factory/context/readiness identity above supersedes
+that implementation while preserving exact ephemeral keys for worker routing.
 
 Focused RED failed 4/27 before production edits. GREEN passes 27/27; the
 seven-file regression passes 188/188; native server loopback passes 21/21;

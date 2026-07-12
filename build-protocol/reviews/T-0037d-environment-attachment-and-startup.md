@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 3 architecture resolved; fixes assigned
+Status: Slice 3 Round 3 fixes focused verified; Round 4 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -517,3 +517,34 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   deterministic fresh-generation promotion, same-storage replacement D-0085
   block/resolution, and distinct-storage isolation. Security remains deferred
   to final project readiness.
+- Round 3 fix applicability was rechecked under fully read `implement`,
+  `receiving-code-review`, and strict TDD. Both findings are present and the
+  accepted private resolution is implementable without descriptor/public/later
+  lifecycle changes. Deterministic RED evidence precedes all production edits.
+- Pre-production RED is 3 failed/24 passed: frozen registration rollback,
+  unbounded ephemeral-key repetition, and unreachable same-storage D-0085 all
+  fail exactly as reviewed; distinct-factory isolation remains green.
+- Focused GREEN is 27/27. Dynamic promotion/fresh generation, exact phase
+  counts, old-readiness inertness, attachment-path same-storage D-0085 and
+  resolution, bounded stable deduplication, and distinct-factory isolation all
+  pass. Expanded and static verification remain pending.
+- Round 3 fixes are focused verified for Round 4 review. The final focused suite
+  is 28/28 after adding exact real-adapter stop-count proof; canonical seven-file
+  regression is 189/189. Promotion is monotonic and serialized, failed promoted
+  quiescence retries await without duplicate stop, old generation retirement
+  precedes one fresh generation/worker, and old readiness remains inert.
+- Attachment-path evidence establishes stable same-factory/context/readiness
+  D-0085 block and resolution with cardinality one, plus equal-fact
+  distinct-factory isolation. Helper-only `ReportedFailures`/`throwRejected`
+  exports and tests are removed; ephemeral routing identity remains unchanged.
+  Accepted coverage is 96.48% statements, 90.04% branches, 98.38% functions,
+  and 96.70% lines. Generated typecheck, ESLint/cleanup, format,
+  diff/public/generated/protected, and Status checks form the handoff gate.
+  Round 4 review remains pending; security stays deferred.
+- `2026-07-12T23:34:35Z`: The implementer completed and was closed with actual
+  runtime metadata matching explicit `gpt-5.6-terra` / `medium`. Coordinator
+  inspection accepted the bounded private diff and independently repeated the
+  canonical seven-file regression (189/189), generated/type/lint/cleanup gate,
+  format, diff, and status checks. Native server loopback passes 21/21 after the
+  expected sandbox-only `listen EPERM`. The fix is ready for a committed Round
+  4 package; full verify and final security remain deferred.

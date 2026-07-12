@@ -34,22 +34,17 @@ export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
 export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
   readonly #stoppedOwners = new Set<string>();
+  readonly #createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+
+  constructor(options: EnvironmentDeliveryWorkerOptions = {}) {
+    this.#createWorker = options.createWorker ?? createDeliveryWorker;
+  }
 
   add(runtime: EnvironmentDeliveryRuntime): void {
     if (this.#workers.has(runtime.owner.key)) {
       throw new Error("Environment delivery owner is already configured.");
     }
-    const delivery = new Delivery({
-      context: runtime.context,
-      storageFactory: runtime.descriptor.storageFactory,
-    });
-    const worker = new DeliveryWorker({
-      delivery,
-      shards: uniqueShards(runtime.scopes),
-      node: runtime.context.name,
-      onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
-    });
-    this.#workers.set(runtime.owner.key, deliveryRunWorker(worker));
+    this.#workers.set(runtime.owner.key, this.#createWorker(runtime));
   }
 
   start(
@@ -66,9 +61,13 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
 
   stop(): void {
     const failures: unknown[] = [];
-    for (const worker of this.#workers.values()) {
+    for (const [key, worker] of this.#workers) {
+      if (this.#stoppedOwners.has(key)) {
+        continue;
+      }
       try {
         worker.stop();
+        this.#stoppedOwners.add(key);
       } catch (error) {
         failures.push(error);
       }
@@ -135,6 +134,24 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     }
     return worker;
   }
+}
+
+interface EnvironmentDeliveryWorkerOptions {
+  readonly createWorker?: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+}
+
+function createDeliveryWorker(runtime: EnvironmentDeliveryRuntime): DeliveryRunWorker {
+  const delivery = new Delivery({
+    context: runtime.context,
+    storageFactory: runtime.descriptor.storageFactory,
+  });
+  const worker = new DeliveryWorker({
+    delivery,
+    shards: uniqueShards(runtime.scopes),
+    node: runtime.context.name,
+    onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
+  });
+  return deliveryRunWorker(worker);
 }
 
 function soleOwner(scopes: readonly DeliveryRunScope[]): DeliveryRunOwner {

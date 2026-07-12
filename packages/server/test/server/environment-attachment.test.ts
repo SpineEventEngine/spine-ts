@@ -23,6 +23,7 @@ import {
 import type {
   DeliveryRunObligation,
   DeliveryRunScope,
+  DeliveryRunWorker,
 } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
 import {
@@ -225,6 +226,60 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.start(secondObligation, [second.ready.shard]);
     expect(second.replayed).toEqual(["second-row"]);
     worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("skips a selected owner already stopped before whole-generation stop", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const runtimeWorkers: DeliveryRunWorker[] = [firstRuntimeWorker, secondRuntimeWorker];
+    let nextWorker = 0;
+    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new WorkerWithOptions({
+      createWorker() {
+        const selected = runtimeWorkers[nextWorker];
+        nextWorker += 1;
+        if (selected === undefined) {
+          throw new Error("Unexpected runtime worker creation.");
+        }
+        return selected;
+      },
+    });
+    const first = descriptor(
+      "StopOnceFirst",
+      "type.example.dev/StopOnceFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "StopOnceSecond",
+      "type.example.dev/StopOnceSecond",
+      new InMemoryStorageFactory(),
+    );
+    const firstScope = runScope("stop-once-first", first.ready);
+    const secondScope = runScope("stop-once-second", second.ready);
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      tenant: {},
+      context: second.context,
+      scopes: [secondScope],
+    });
+
+    worker.stopOwners([firstScope.owner.key]);
+    worker.stop();
+
+    expect(firstRuntimeWorker.stopCalls).toBe(1);
+    expect(secondRuntimeWorker.stopCalls).toBe(1);
     await worker.awaitSettled();
     await worker.retire();
   });
@@ -851,11 +906,28 @@ describe("failed attachment rollback", () => {
     expect(worker.retireCalls).toBe(1);
   });
 
-  it("undoes a queued claim when the preceding attachment retains unsafe rollback", async () => {
-    const worker = new LifecycleWorker();
-    worker.enqueue({ rejected: new Error("queued predecessor rejected") });
-    worker.awaitOwnerFailures.push(new Error("queued predecessor did not quiesce"));
-    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+  it("promotes a queued shared rollback to generation retirement before one fresh attach", async () => {
+    const events: string[] = [];
+    const oldWorker = new LifecycleWorker(events);
+    const freshWorker = new LifecycleWorker(events);
+    const workers = [oldWorker, freshWorker];
+    let factoryCalls = 0;
+    oldWorker.enqueue({ rejected: new Error("queued predecessor rejected") });
+    oldWorker.awaitOwnerFailures.push(new Error("queued predecessor did not quiesce"));
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) {
+          throw new Error("Unexpected environment generation.");
+        }
+        return worker;
+      },
+      report: () => {
+        events.push("report");
+        return Promise.resolve();
+      },
+    });
     const predecessor = descriptor(
       "QueuedPredecessor",
       "type.example.dev/QueuedPredecessor",
@@ -877,62 +949,91 @@ describe("failed attachment rollback", () => {
     expect(queued.enumerations).toBe(0);
     expect(queued.storageContexts).toBe(0);
     expect(queued.transitions).toBe(0);
-    expect(worker.starts).toBe(1);
+    expect(oldWorker.starts).toBe(1);
     expect(activeRegistrationCount(attachments)).toBe(0);
+
+    oldWorker.awaitFailures.push(new Error("promoted generation did not quiesce"));
+    const firstRetry = attachments.retryFailedStart();
+    const secondRetry = attachments.retryFailedStart();
+    expect(secondRetry).toBe(firstRetry);
+    await expect(Promise.all([firstRetry, secondRetry])).rejects.toThrow(
+      "Delivery run coordinator could not establish quiescence.",
+    );
+    expect(oldWorker.events).toEqual(["start", "stopOwners", "awaitOwners", "stop", "await"]);
 
     await attachments.retryFailedStart();
     expect(activeRegistrationCount(attachments)).toBe(0);
-    worker.enqueue("IDLE");
-    await expect(
-      attachments.attach({ ownership: "caller", descriptors: [queued.value] }),
-    ).resolves.toBeDefined();
+    expect(oldWorker.events).toEqual([
+      "start",
+      "stopOwners",
+      "awaitOwners",
+      "stop",
+      "await",
+      "await",
+      "report",
+      "retire",
+    ]);
+    expect(oldWorker.stopOwnerCalls).toBe(1);
+    expect(oldWorker.awaitOwnerCalls).toBe(1);
+    expect(oldWorker.stopCalls).toBe(1);
+    expect(oldWorker.awaitCalls).toBe(2);
+    expect(oldWorker.retireCalls).toBe(1);
+    expect(oldWorker.retiredOwners).toEqual([]);
+
+    freshWorker.enqueue("IDLE");
+    const attached = await attachments.attach({ ownership: "caller", descriptors: [queued.value] });
     expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(attached.generation).toBeDefined();
     expect(queued.enumerations).toBe(1);
+    expect(factoryCalls).toBe(2);
+    expect(oldWorker.addedOwners).toEqual(["environment-owner-1"]);
+    expect(freshWorker.addedOwners).toEqual(["environment-owner-1"]);
+    expect(events.indexOf("retire")).toBeLessThan(events.lastIndexOf("start"));
+
+    await predecessor.readiness.claim(predecessor.ready).complete(() => Promise.resolve());
+    await Promise.resolve();
+    expect(oldWorker.starts).toBe(1);
+    expect(freshWorker.starts).toBe(1);
   });
 
-  it("bounds thousands of reported failures to their configured owner domains", async () => {
+  it("bounds repeated reported failures to one stable storage/context/readiness domain", async () => {
     const worker = new LifecycleWorker();
     const attachments = new EnvironmentAttachments({ createWorker: () => worker });
     const sharedType = "type.example.dev/BoundedReportedFailure";
-    const sibling = descriptor("BoundedSibling", sharedType, new InMemoryStorageFactory());
+    const sharedFactory = new InMemoryStorageFactory();
+    const sibling = descriptor(
+      "BoundedSibling",
+      "type.example.dev/BoundedSibling",
+      new InMemoryStorageFactory(),
+    );
     worker.enqueue("IDLE");
     await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
 
     for (let attempt = 0; attempt < 2048; attempt += 1) {
-      const failed = descriptor(
-        `BoundedFailure-${attempt.toString()}`,
-        sharedType,
-        new InMemoryStorageFactory(),
-      );
+      const failed = descriptor("BoundedFailure", sharedType, sharedFactory);
       worker.enqueue({ rejected: new Error(`failure-${attempt.toString()}`) });
       await expect(
         attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
       ).rejects.toBeInstanceOf(Error);
     }
 
-    expect(unresolvedReportedDomainCount(attachments)).toBe(2048);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
   });
 
-  it("does not inherit or resolve failure state across equal facts in distinct owners", async () => {
+  it("does not inherit or resolve stable failure state across distinct factory objects", async () => {
     const worker = new LifecycleWorker();
     const attachments = new EnvironmentAttachments({ createWorker: () => worker });
     const sharedType = "type.example.dev/OwnerQualifiedReportedFailure";
+    const failedFactory = new InMemoryStorageFactory();
+    const distinctFactory = new InMemoryStorageFactory();
     const sibling = descriptor(
       "OwnerQualifiedSibling",
       "type.example.dev/OwnerQualifiedSibling",
       new InMemoryStorageFactory(),
     );
-    const failed = descriptor("OwnerQualifiedFailure", sharedType, new InMemoryStorageFactory());
-    const successful = descriptor(
-      "OwnerQualifiedSuccess",
-      sharedType,
-      new InMemoryStorageFactory(),
-    );
-    const freshFailure = descriptor(
-      "OwnerQualifiedFreshFailure",
-      sharedType,
-      new InMemoryStorageFactory(),
-    );
+    const failed = descriptor("EqualStorageContext", sharedType, failedFactory);
+    const successful = descriptor("EqualStorageContext", sharedType, distinctFactory);
+    const freshFailure = descriptor("EqualStorageContext", sharedType, distinctFactory);
     const original = new Error("owner-qualified reported failure");
     const fresh = new Error("distinct owner fresh failure");
     worker.enqueue("IDLE", { rejected: original });
@@ -955,50 +1056,32 @@ describe("failed attachment rollback", () => {
     expect(unresolvedReportedDomainCount(attachments)).toBe(2);
   });
 
-  it("deduplicates and resolves only an exact owner-qualified reported scope", async () => {
-    const internals = await import("../../src/server/environment-attachment.js");
-    const ReportedFailures = (
-      internals as unknown as {
-        readonly ReportedFailures: new () => ReportedFailuresProbe;
-        readonly throwRejected: (
-          records: readonly ReturnType<typeof reportedRecord>[],
-          blocked: boolean,
-        ) => void;
-      }
-    ).ReportedFailures;
-    const throwRejected = (
-      internals as unknown as {
-        readonly throwRejected: (
-          records: readonly ReturnType<typeof reportedRecord>[],
-          blocked: boolean,
-        ) => void;
-      }
-    ).throwRejected;
-    expect(ReportedFailures).toBeTypeOf("function");
-    const failures = new ReportedFailures();
-    const ready = Object.freeze({
-      label: "UPDATE_SUBSCRIBER" as const,
-      targetTypeUrl: "type.example.dev/ExactReportedScope",
-      shard: ShardIndex.single(),
-    });
-    const first = runScope("exact-owner-one", ready);
-    const second = runScope("exact-owner-two", ready);
-    const record = reportedRecord(first, new Error("exact owner failure"));
+  it("blocks then resolves a matching replacement in the same stable storage domain", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const storageFactory = new InMemoryStorageFactory();
+    const type = "type.example.dev/StableReportedFailure";
+    const sibling = descriptor(
+      "StableSibling",
+      "type.example.dev/StableSibling",
+      new InMemoryStorageFactory(),
+    );
+    const failed = descriptor("StableStorageContext", type, storageFactory);
+    const blocked = descriptor("StableStorageContext", type, storageFactory);
+    const resolved = descriptor("StableStorageContext", type, storageFactory);
+    const original = new Error("stable original rejection");
+    const fresh = new Error("stable fresh rejection");
+    worker.enqueue("IDLE", { rejected: original });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBe(original);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
 
-    failures.record([first], [record]);
-    failures.record([first], [record]);
-    expect(failures.size).toBe(1);
-    expect(failures.overlaps([first])).toBe(true);
-    expect(failures.overlaps([second])).toBe(false);
-
-    failures.resolve([second], settlement(second, "IDLE"));
-    expect(failures.overlaps([first])).toBe(true);
-    failures.resolve([first], settlement(first, "IDLE"));
-    expect(failures.size).toBe(0);
-
+    worker.enqueue({ rejected: fresh });
     let blocker: unknown;
     try {
-      throwRejected([record], true);
+      await attachments.attach({ ownership: "caller", descriptors: [blocked.value] });
     } catch (error) {
       blocker = error;
     }
@@ -1007,6 +1090,13 @@ describe("failed attachment rollback", () => {
     );
     expect(blocker).not.toBeInstanceOf(AggregateError);
     expect(blocker).not.toHaveProperty("cause");
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+
+    worker.enqueue("IDLE");
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [resolved.value] }),
+    ).resolves.toBeDefined();
+    expect(unresolvedReportedDomainCount(attachments)).toBe(0);
   });
 });
 
@@ -1019,46 +1109,6 @@ function unresolvedReportedDomainCount(attachments: EnvironmentAttachments): num
 function activeRegistrationCount(attachments: EnvironmentAttachments): number {
   return (attachments as EnvironmentAttachments & { readonly activeRegistrationCount: number })
     .activeRegistrationCount;
-}
-
-interface ReportedFailuresProbe {
-  readonly size: number;
-  record(
-    scopes: readonly DeliveryRunScope[],
-    records: readonly ReturnType<typeof reportedRecord>[],
-  ): void;
-  overlaps(scopes: readonly DeliveryRunScope[]): boolean;
-  resolve(scopes: readonly DeliveryRunScope[], run: ReturnType<typeof settlement>): void;
-}
-
-function reportedRecord(scope: DeliveryRunScope, cause: Error) {
-  return Object.freeze({
-    owner: Object.freeze({ kind: "generation" as const }),
-    obligation: "generation",
-    units: Object.freeze([runScopeKey(scope)]),
-    cause,
-    hasCause: true,
-    occurrences: 1,
-    reportedSinceResolution: true,
-  });
-}
-
-function settlement(scope: DeliveryRunScope, disposition: "IDLE" | "REJECTED") {
-  return Object.freeze({
-    scopes: Object.freeze([Object.freeze({ scope, disposition })]),
-    pending: Object.freeze([]),
-  });
-}
-
-function runScopeKey(scope: DeliveryRunScope): string {
-  return JSON.stringify([
-    scope.owner.key,
-    scope.ready.tenantId ?? null,
-    scope.ready.label,
-    scope.ready.targetTypeUrl,
-    scope.ready.shard.index,
-    scope.ready.shard.ofTotal,
-  ]);
 }
 
 interface TestDescriptor {
@@ -1201,6 +1251,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly stopOwnerFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
+  readonly addedOwners: string[] = [];
   starts = 0;
   stopCalls = 0;
   awaitCalls = 0;
@@ -1221,7 +1272,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   }
 
   add(runtime: EnvironmentDeliveryRuntime): void {
-    void runtime;
+    this.addedOwners.push(runtime.owner.key);
   }
 
   start(
