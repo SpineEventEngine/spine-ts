@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 2 Round 2 four-lane review in progress
+Status: Slice 2 Round 2 stalled-peer integration proof assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -364,6 +364,13 @@ row through a real built descriptor, reconstruct a fresh context/descriptor over
 the same storage, prove `startupScopes()` enumerates that tenant, and prove
 startup recovery replays the durable row without another receive/readiness
 notification. This remains a focused test-first completion of Slice 2.
+
+Round 2 requires one final integration proof through `EnvironmentAttachments`:
+use two descriptors, stall one descriptor transition, route thousands of
+unknown dynamic scopes through the already-transferred peer, prove the
+attachment fails closed after the peer settles, and prove no coordinator work
+was admitted and no unknown per-key state was retained. Direct helper-only
+coverage does not satisfy this lifecycle race.
 
 The focused fix validates the complete input through one temporary identity set
 before mutating generation descriptor ownership. A repeated identity now

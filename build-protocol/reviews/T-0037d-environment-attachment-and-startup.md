@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 2 four-lane review in progress
+Status: Slice 2 Round 2 stalled-peer integration proof assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -309,3 +309,9 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   bytes). Expected fixed-role profiles are style Terra High, documentation Luna
   Medium, TypeScript/API docs Terra High, and reliability Terra High. Scope is
   the complete Round 1 fix and current claims only; security remains deferred.
+- `2026-07-12T22:33:00Z`: Round 2 is complete and all reviewers are closed.
+  Runtime profiles matched explicit dispatch. Style, documentation, and API are
+  clean. Reliability requires one deterministic two-descriptor stalled-peer
+  attachment race proving unknown dynamic readiness remains finite, causes
+  fail-closed attachment, and admits zero coordinator work. One Terra Medium
+  owner receives this test-only finding; Round 3 remains pending.
