@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 1 Round 2 two-finding fix assigned
+Status: Slice 1 coordinator recovery fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -76,3 +76,17 @@ applicable review or a concrete N/A disposition under `BUILD_PROTOCOL.md`.
   reentrant completion/abandon can bypass one-shot drain ownership, and the
   exceptional unknown-scope map violates the finite transition-buffer contract.
   One Terra Medium fix owner receives both before another targeted re-review.
+- Round 2 two-finding fix resumed under `receiving-code-review` and strict TDD.
+  The exceptional retention claim is withdrawn; no partial fix returns to
+  review. Re-review remains pending one package proving synchronous reentry
+  safety and finite fail-closed unknown-scope handling.
+- Both findings are fixed and focused verified for targeted re-review. RED was
+  4 expected failures/20 passes; GREEN is 24/24 focused and 154/154 in the
+  six-file regression set. A single memoized completion Promise now precedes
+  `onDrain`; one invalid-transition bit replaces all unknown-key retention and
+  rejects after admitted drains without route installation. Coverage and static
+  gates pass. No reviewer has yet accepted this fix package.
+- `2026-07-12T19:22:00Z`: Coordinator pre-commit inspection found one secondary
+  recovery defect: finite unknown-scope failure permanently disables transition
+  retry and later readiness ownership. Re-review is paused until focused TDD
+  proves retry with a refreshed complete domain and no intermediate route.

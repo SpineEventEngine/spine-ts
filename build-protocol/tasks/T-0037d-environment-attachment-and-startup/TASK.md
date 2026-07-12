@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 1 Round 2 two-finding fix assigned
+Status: Slice 1 coordinator recovery fix assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -264,6 +264,13 @@ batch before Slice 1 re-review:
    durable recovery, but it must not silently drop work, grow per unknown scope,
    or claim successful transfer.
 
+- `2026-07-12T19:22:00Z`: Coordinator inspection found the finite failure is
+  not recoverable: `failed` mode rejects every later transition and drops every
+  later readiness, so no retry or durable recovery can acquire ownership. Add a
+  focused RED proving one failed stale-scope transition can be retried with a
+  refreshed complete domain, while no environment route is published between
+  attempts and durable rows remain eligible for startup recovery.
+
 ## Slice 1 Outcome
 
 The complete Round 1 batch is implemented and focused verified. Direct gates
@@ -274,14 +281,20 @@ Process-manager batches exact-drain every persisted row after either a later
 write failure or an earlier drain failure while preserving the first failure.
 
 Configured transition readiness remains deduplicated and bounded by the
-configured canonical scope map. A readiness key omitted from that map is
-retained separately and transferred after admitted drains instead of being
-dropped or changing the durable receive outcome. This exceptional retention is
-not claimed to be bounded by an invalid/incomplete configured set; Slice 2 must
-assemble the complete canonical scope domain before invoking transition.
+configured canonical scope map. An omitted key sets one finite invalid-transition
+flag; no unknown key is retained. Durable receives continue to resolve without
+direct drain, then the transition waits admitted drains, clears configured
+readiness, rejects without installing/reporting a route, and remains failed
+closed for later durable retry/recovery. Slice 2 must assemble the complete
+canonical scope domain before invoking transition.
+
+Direct completion publishes and memoizes one shared Promise before invoking
+`onDrain`. Synchronous reentrant `complete()` returns that Promise without a
+second drain, and synchronous `abandon()` cannot resolve its active gate. The
+gate settles only with the original drain.
 
 The later-slice interface remains the package-internal descriptor
 `transition(scopes, onReady)` method. No registration, generation, startup,
 rollback, public API/export, listener, lifecycle policy, or generated artifact
-was added. Slice 2 must not consume the barrier until Round 1 re-review accepts
-this corrected package.
+was added. Slice 2 must not consume the barrier until targeted Round 2 re-review
+accepts this corrected package.
