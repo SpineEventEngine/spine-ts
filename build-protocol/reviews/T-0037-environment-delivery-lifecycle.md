@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 11 findings accepted; fix pending
+Status: Round 11 docs fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -511,3 +511,7 @@ Security is deferred to final project readiness.
   active parent summaries must record verified Round 10 and active Round 11;
   and Participants must be ordered from Round 1 forward. All other child-slice,
   API-leakage, documentation, and reliability checks were clean.
+- `2026-07-12T07:45:08Z`: Assigned single Round 11 documentation fix worker
+  `019f5549-70a7-7dd1-8c79-6663b5794c07` the complete accepted batch. The
+  worker owns documentation only, must preserve the fixed historical package
+  ledger, and may begin editing only after this assignment is committed.
