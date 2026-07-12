@@ -1,6 +1,15 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: Candidate; not started
+Status: Architecture boundary planning assigned
+
+Started: `2026-07-12T17:05:11Z`
+
+Baseline commit: `c65f2c23`
+
+Branch: `task/T-0037c-parked-delivery-obligations`
+
+This `Status` header is canonical for T-0037c. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037b complete and integrated.
 
@@ -54,6 +63,15 @@ real environment registrations. T-0037d, T-0037e1, T-0037e2, and T-0037e3
 consume parked obligations; T-0037f integrates their outputs where server
 lifecycle ordering requires them.
 
+## Planning Assignment
+
+This milestone changes bounded operational ownership, failure cardinality, and
+one-time reporting semantics, so the existing requirements-splitter role is
+assigned once at the milestone boundary. Expected explicit profile is
+`gpt-5.6-sol` / `high`. It must not edit files or spawn subagents. Its output
+must narrow this task without adding public policy or work owned by T-0037d and
+later children.
+
 ## Likely Files
 
 - A new package-internal parked-obligation module under
@@ -96,3 +114,10 @@ lifecycle ordering requires them.
 No real registration cardinality, startup recovery/rollback, environment
 attachment, generation retirement, close ordering, server integration, retry
 timing, public API, or T-0036 loop/worker change belongs here.
+
+## Focused Gate
+
+Parked-obligation tests, T-0037b coordinator tests, delivery worker regressions,
+generated and tooling typechecks, changed-file lint/format, diff hygiene,
+public-leak scan, relevant four-concern review dispositions, then final full
+`pnpm verify` and post-merge verification.
