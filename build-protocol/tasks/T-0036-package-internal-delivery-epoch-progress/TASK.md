@@ -1,6 +1,6 @@
 # T-0036: Package-Internal Delivery Epoch Progress
 
-Status: Round 2 four-lane rereview in progress
+Status: Round 2 docs/status findings; fix pending
 Started: `2026-07-12T01:45:00Z`
 Baseline commit: `67da0b1c`
 Branch: `task/T-0036-package-internal-delivery-epoch-progress`
@@ -171,6 +171,11 @@ membership.
   `git diff --check`. Only the known invalid-`origin` TypeDoc warning remains.
 - PASS: Round 1 fixes committed as `474bfd78`; the rereview-package status
   reconciliation is the sole future hash under the commit-ledger convention.
+- REVIEW: Round 2 code style, TypeScript/API docs, and
+  performance/reliability returned clean. Documentation found only stale
+  current summary/ledger text: the implementation report still says completed
+  coordinator/package steps remain, and the ledger omits known reconciliation
+  commit `add82669`. A narrow docs/status fix and all-lane rereview remain.
 
 ## Implementation Result
 

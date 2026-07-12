@@ -1,6 +1,6 @@
 # T-0036 Review Log
 
-Status: Round 2 four-lane rereview in progress
+Status: Round 2 docs/status findings; fix pending
 
 Task: `T-0036 Package-Internal Delivery Epoch Progress`
 
@@ -8,12 +8,12 @@ Branch: `task/T-0036-package-internal-delivery-epoch-progress`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status      |
-| -------------------------- | -------------------------------------- | ----------- |
-| Code style/maintainability | `019f5446-7928-7290-b5f4-fa28a1180bf0` | In progress |
-| Documentation              | `019f5446-9694-7cb1-bfda-1b34bf2be1f0` | In progress |
-| TypeScript/API docs        | `019f5446-b2a2-7220-8c00-f6998d838cde` | In progress |
-| Performance/reliability    | `019f5446-d164-7603-b19f-322258785c2e` | In progress |
+| Lane                       | Reviewer                               | Status   |
+| -------------------------- | -------------------------------------- | -------- |
+| Code style/maintainability | `019f5446-7928-7290-b5f4-fa28a1180bf0` | Clean    |
+| Documentation              | `019f5446-9694-7cb1-bfda-1b34bf2be1f0` | Findings |
+| TypeScript/API docs        | `019f5446-b2a2-7220-8c00-f6998d838cde` | Clean    |
+| Performance/reliability    | `019f5446-d164-7603-b19f-322258785c2e` | Clean    |
 
 Security is deferred to final project readiness.
 
@@ -129,3 +129,8 @@ Security is deferred to final project readiness.
   `.superpowers/sdd/review-67da0b1c..add82669.diff` (117,150 bytes) and assigned
   all four Round 2 lanes. Prompts require current-state-only findings and
   explicit verification of the single-read admission fix.
+- `2026-07-12T04:10:00Z`: Closed all Round 2 lanes. Code style,
+  TypeScript/API docs, and performance/reliability are clean. Documentation
+  found only stale current implementation-report remaining-work text and the
+  missing known `add82669` ledger entry. One narrow docs/status fix worker and
+  fresh all-lane rereview are required.
