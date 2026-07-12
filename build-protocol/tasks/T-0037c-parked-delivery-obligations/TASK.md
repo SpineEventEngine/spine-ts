@@ -1,6 +1,6 @@
 # T-0037c: Parked Delivery Obligations
 
-Status: TDD implementation assigned
+Status: Implementation metadata redispatch assigned
 
 Started: `2026-07-12T17:05:11Z`
 
@@ -85,6 +85,51 @@ architecture wording, and durable records under explicit expected
 `gpt-5.6-terra` / `medium`. It must use TDD, keep T-0037b coordinator production
 code unchanged unless a proved acceptance blocker requires otherwise, and add
 no public export or later-lifecycle ownership.
+
+## Pre-implementation Record
+
+- `2026-07-12T17:29:00Z`: Canonical skill-applicability check completed before
+  production work. `test-driven-development` applies to every runtime slice;
+  `javascript-testing-patterns` applies to focused Vitest behavior tests;
+  `domain-modeling` applies to retaining the D-0085 distinction between an
+  operational obligation and its reportable cause; and `codebase-design`
+  applies to a single package-internal deep module. `planning-with-files` was
+  considered but is not applied because its project-root plan files are outside
+  this child's exact assigned files; the canonical task, work, and review logs
+  are the durable planning records. No library is needed: this is a finite
+  in-memory table, not common external infrastructure.
+- Spine JVM guardrail: inspected
+  `spine-jvm-docs/spine-routing-dispatch-and-delivery.md` sections “Delivery”,
+  “Delivery Run”, and “Failures and Retries”, which identify the corresponding
+  `core-jvm/server` `Delivery.java`, `DeliveryMonitor.java`, and delivery
+  package paths. The documented `/private/tmp/spine-research/core-jvm` source
+  path is unavailable in this worktree environment, so source inspection could
+  not supplement the local notes. Impact: preserve familiar configured-shard
+  delivery concepts while adding no monitor, automatic retry, or policy API.
+- The current execution surface provides no authoritative actual runtime
+  model/reasoning metadata. The required explicit expected profile remains
+  `gpt-5.6-terra` / `medium`; this record does not claim unavailable metadata.
+- TDD evidence: the first focused RED run was
+  `pnpm exec vitest run packages/server/test/delivery/parked-delivery-obligations.test.ts`;
+  it failed because `parked-delivery-obligations.js` did not exist. The initial
+  seven behavior tests are GREEN after adding only
+  `packages/server/src/delivery/parked-delivery-obligations.ts`; they cover
+  canonical coalescing/count saturation, independent one-time reporting,
+  representative replacement, exact partial consumption, owner-removal
+  reclassification, one shared record, and cause-less fulfilled `FAILED`.
+  T-0037b coordinator production remains unchanged because this pure internal
+  module provides the accepted seam without lifecycle integration.
+- `2026-07-12T17:37:13Z`: Focused gate GREEN: parked-obligation, T-0037b
+  coordinator, and delivery-worker suites passed 135 tests; `pnpm typecheck`
+  completed generated, build, and tooling typechecks; changed-file ESLint and
+  Prettier checks and `git diff --check` passed. Root export/package/README
+  public-leak scans found no reference to the module. `pnpm verify` was not run
+  under the explicit focused-gate instruction. Independent review is pending
+  because the current sole-owner instruction prohibits spawning reviewers.
+- `2026-07-12T17:38:52Z`: The implementation result is not accepted because
+  actual child model/reasoning metadata was unavailable. Its uncommitted patch
+  is preserved for one replacement explicit Terra Medium implementer to verify
+  independently against this canonical task and correct as needed.
 
 ## Likely Files
 
