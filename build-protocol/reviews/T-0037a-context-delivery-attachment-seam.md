@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 4 finding logged; fix assignment pending
+Status: Round 4 fix worker assigned; paused for assignment commit
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -494,3 +494,6 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
   exact target's bounded configured endpoints; add a focused regression that
   distinguishes the current global `endpoints()` call from the corrected path.
   The other three lanes were clean. All four lanes repeat after the fix.
+- `2026-07-12T11:20:54Z`: Assigned sole fix worker
+  `019f560d-e277-7d13-9c09-f9e10d8381ff` for the accepted performance finding;
+  worker remains paused until assignment provenance commits.
