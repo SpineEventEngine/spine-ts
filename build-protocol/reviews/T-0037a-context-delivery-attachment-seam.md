@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Round 1 fix worker assigned; paused for assignment commit
+Status: Round 1 fixes active; RED pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -92,3 +92,5 @@ Security is deferred to final project readiness.
 - `2026-07-12T10:20:29Z`: Assigned sole fix worker
   `019f55d6-d9cb-7730-a13b-61bb97e092ba` for the complete eight-item batch;
   worker is paused until assignment provenance is committed.
+- `2026-07-12T10:21:12Z`: Assignment commit `a04a3eb6` completed; the fix worker
+  started with focused foreign-realm RED required before runtime changes.
