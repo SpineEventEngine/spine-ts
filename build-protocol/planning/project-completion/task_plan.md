@@ -1,6 +1,6 @@
 # Project Completion Planning Task
 
-Status: Validation complete; commit pending
+Status: Complete
 
 ## Goal
 
@@ -17,7 +17,7 @@ readiness.
 - [x] Derive the remaining dependency graph and task slices.
 - [x] Write `build-protocol/PROJECT_COMPLETION_PLAN.md`.
 - [x] Validate links, task coverage, status assumptions, and completion gates.
-- [ ] Commit all planning artifacts.
+- [x] Commit all planning artifacts.
 
 ## Constraints
 

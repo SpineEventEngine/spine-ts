@@ -43,3 +43,4 @@
   T-0042 sequence is represented.
 - `git diff -- human-review-1-jul.md` is empty; the user-owned file remains
   untouched and untracked.
+- The plan and initial ledgers were committed on `main` as `59b8b274`.
