@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Safe stop; Round 5 two-finding fix pending
+Status: Round 5 two-finding fix assigned
 
 Started: `2026-07-12T11:43:52Z`
 

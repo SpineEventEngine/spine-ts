@@ -1,6 +1,6 @@
 # T-0037b Review Log
 
-Status: Safe stop; Round 5 two-finding fix pending
+Status: Round 5 two-finding fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037b-bounded-generation-run-coordinator/TASK.md`.
@@ -53,6 +53,17 @@ complete four-lane result is aggregated before any fix assignment.
 
 The complete accepted batch contains exactly these two findings. No fixer is
 assigned at the safe stop.
+
+## Round 5 Fix Assignment
+
+- Function: existing implementation role.
+- Expected model/reasoning: `gpt-5.6-terra` / `medium`.
+- Scope: the exact two accepted P1 findings above, focused coordinator tests,
+  and current durable logs.
+- Required TDD: observe both failures before production edits, then prove
+  synchronous throws remain fatal and one active start admits at most one
+  successor while later readiness remains pending for a later external start.
+- No other implementation or review agent may write the assigned paths.
 
 ## Review Criteria
 
