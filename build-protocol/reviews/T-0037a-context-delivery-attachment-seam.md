@@ -1,6 +1,6 @@
 # T-0037a Review Log
 
-Status: Review Round 5 assigned; reviewers fully paused
+Status: Review Round 5 skill revalidation complete; substantive review paused
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037a-context-delivery-attachment-seam/TASK.md`.
@@ -11,12 +11,12 @@ Branch: `task/T-0037a-context-delivery-attachment-seam`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                               | Status       |
-| -------------------------- | -------------------------------------- | ------------ |
-| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Fully paused |
-| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Fully paused |
-| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Fully paused |
-| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Fully paused |
+| Lane                       | Reviewer                               | Status              |
+| -------------------------- | -------------------------------------- | ------------------- |
+| Code style/maintainability | `019f55f6-f8d3-7630-9ecf-88e97b009e3e` | Revalidated; paused |
+| Documentation              | `019f55f6-fbfd-7eb1-bdfe-f89149cdf2b5` | Revalidated; paused |
+| TypeScript/API docs        | `019f55f6-ff64-7e93-bd56-958adb44661a` | Revalidated; paused |
+| Performance/reliability    | `019f55f7-02da-75a3-8f01-a9f79466affc` | Revalidated; paused |
 
 Security is deferred to final project readiness.
 
@@ -225,6 +225,23 @@ Performance/reliability reviewer `019f55f7-02da-75a3-8f01-a9f79466affc`:
   source recorded above; lock source URLs, source paths, installation metadata,
   folder hashes, and captured file hashes are unchanged. Its complete
   individually named skip set and reasons have no delta.
+
+## Round 5 Skill Revalidation
+
+- All four resumed reviewers reported `NO DELTA` from the exact Round 3 records
+  and Round 4 revalidation. Each re-read `EXPECTED_SKILLS.md`, reran the complete
+  inventory/count (47 readable), rechecked the version-3 lock (47 records, 0
+  dismissed), fully re-read its unchanged exact selected paths, confirmed no
+  new task-provided skill and no unreachable source, and retained the complete
+  individually named skip sets and reasons above.
+- Style, documentation, and TypeScript/API docs reconfirmed the same selected
+  line counts and SHA-256 values recorded in Round 4. Performance/reliability
+  reconfirmed its four exact paths, hashes, lock sources, source paths,
+  installation metadata, and folder hashes.
+- Style's attempt to extract only prior skill sections used a nonexistent
+  terminating heading and exposed later review-log history. It did not inspect
+  the Round 5 package or changed source and made no edit. This exposure is
+  recorded rather than hidden; its skill selection has no delta.
 
 ## Review Criteria
 
@@ -528,3 +545,7 @@ SKILL.md -print` result, and version-3 47-entry skill-lock provenance. It
   endpoint `3d00dd6f6373b24c2ade437d316dcc5b8dbdc312`. The same four closed Round
   4 reviewers are assigned fully paused; prior exact records remain
   authoritative, with current no-delta revalidation required before review.
+- `2026-07-12T11:31:27Z`: All four Round 5 phase-1 revalidations reported no
+  delta; exact evidence and the style lane's review-log exposure caveat are
+  preserved in `Round 5 Skill Revalidation`. Substantive package review remains
+  paused until this record commits.
