@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 2 Round 3 four-lane review in progress
+Status: Slice 2 Round 3 record corrections assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -344,3 +344,10 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   Expected fixed-role profiles are style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Security remains
   deferred.
+- `2026-07-12T22:44:00Z`: Round 3 is complete and every reviewer is closed.
+  Runtime profiles matched explicit dispatch. No runtime or API defect remains.
+  Active records must acknowledge the mechanical worker formatting change and
+  narrow the integration-test claim: the race proves fail-closed/no-work/no-
+  later-admission behavior; one-bit retention is established by current source
+  inspection and the finite helper design, not observable from that race alone.
+  One Terra Medium record-fix owner is assigned before Round 4.
