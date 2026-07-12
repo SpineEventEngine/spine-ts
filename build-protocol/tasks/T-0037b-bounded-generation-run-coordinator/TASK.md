@@ -1,6 +1,6 @@
 # T-0037b: Bounded Generation Run Coordinator
 
-Status: Implementation verified; review package pending
+Status: Review Round 1 skill checks pending
 
 Started: `2026-07-12T11:43:52Z`
 
