@@ -3710,7 +3710,14 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   registration rollback when quiescence is established, even if reporting or
   retirement cleanup fails, so a caller-owned environment remains reusable.
   It must retain the slot and prohibit replacement if quiescence is not
-  established. T-0037d also owns the atomic
+  established. T-0037d independently owns explicit retry of that same caller-
+  owned failed-start rollback: the failed attempt retains endpoint dependencies
+  and performs no later authoritative phase, while retry does not repeat
+  admission closure or stop, proves quiescence, completes classification,
+  eligible consumption/reporting, permanent retirement/cleanup, and slot
+  clearing exactly once, then permits one later eligible fresh attachment
+  without overlap. T-0037f's server-owned continuation remains distinct.
+  T-0037d also owns the atomic
   ownership barrier that closes new direct exact-drain admission, awaits every
   already-admitted direct exact drain in the attaching scope, gives persistence
   during route installation one bounded transition readiness buffer, transfers
@@ -3726,8 +3733,10 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   retirement; one bounded canonical-scope transition owner covers writes
   through fresh recovery and route rebind; every surviving registration,
   readiness route, and configured/startup scope rebinds to exactly one fresh
-  generation before any retirement result is propagated or later writes can
-  strand; buffered scopes transfer losslessly and exactly once; transition-
+  generation before buffered scopes transfer losslessly and exactly once into
+  fresh pending admission; only then is the candidate published and later-write
+  admission reopened, before any earlier retirement result is propagated;
+  transition-
   construction/rebind/transfer failure retains the bounded transition owner,
   publishes no partial generation, keeps admission closed, and, after candidate
   construction, retains that same unpublished candidate as its sole owner until
@@ -3737,6 +3746,10 @@ Close`, and `T-0037f Server Lifecycle Integration`.
   candidate exists may construct one on retry; and the attach joins that same
   generation, rejecting only
   after permanent close or independent ownership-cardinality refusal. T-0037e
+  tests route-rebind and transfer failures after non-empty per-unit progress
+  across multiple survivors/routes/scopes, retains completed-unit progress in
+  the transition owner, and resumes the same candidate without repeating those
+  units or creating an owner gap or old/new overlap. T-0037e
   also owns finally-equivalent clearing of an ordinary last-detach slot after
   proven quiescence despite reporting or inert permanent-cleanup error. It
   retains the unsafe slot when quiescence fails, then an explicit retry resumes

@@ -64,8 +64,16 @@ error. The primitive preserves close-admission/stop, await, classify, consume/
 report, then permanent-retirement/cleanup order. A later attach to an open
 caller-owned environment may then install one fresh generation without overlap.
 If the primitive cannot establish quiescence, rollback retains the slot and
-prohibits replacement instead of claiming endpoint safety. This is failed-start
-rollback ownership only.
+every endpoint dependency, performs no classification, consumption/reporting,
+permanent retirement/cleanup, or slot clearing, and prohibits replacement
+instead of claiming endpoint safety. An explicit retry resumes that same
+admission-closed, stopped failed-start rollback without duplicating completed
+admission closure or stop. It must prove quiescence, complete classification,
+eligible consumption/reporting, permanent retirement/cleanup, and safe slot
+clearing exactly once, then permit exactly one later eligible fresh attachment
+without old/new overlap. This is caller-owned failed-start rollback ownership
+only; T-0037f separately owns the server lifecycle operation that invokes this
+seam for a server-owned startup failure.
 
 The child exposes an internal attachment handle for future server integration.
 It does not yet change `Server.start()` or listener ordering.
@@ -130,8 +138,16 @@ It does not yet change `Server.start()` or listener ordering.
   start, accept notification, or invoke endpoints; the slot is cleared; and the
   caller-owned environment later attaches one fresh generation without reuse or
   old/new overlap. A cleanup error may leak inert resources but cannot reactivate
-  the instance. A quiescence failure instead retains the unsafe slot and rejects
-  replacement. Permanent close remains T-0037e.
+  the instance. A distinct deterministic quiescence-failure test proves the
+  initial attempt retains the unsafe sole slot and every endpoint dependency,
+  performs no classification, consumption/reporting, permanent retirement/
+  cleanup, or slot clearing, and rejects replacement. The test explicitly
+  retries that same caller-owned failed-start rollback, proves admission closure
+  and stop are not repeated, establishes quiescence, completes every remaining
+  phase exactly once in the authoritative order, and clears the slot only after
+  safety is proven. It then permits exactly one later eligible fresh attachment
+  without reuse, owner gap, or old/new overlap. Permanent close remains T-0037e;
+  server-owned startup continuation remains T-0037f.
 
 ## D-0085 Invariants
 

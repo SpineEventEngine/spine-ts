@@ -94,10 +94,12 @@ already admitted must settle before the transition error returns, so no
 candidate endpoint invocation continues after propagation. T-0037e preserves
 and aggregates the transition error truthfully and does not self-loop. Only a
 later external lifecycle/readiness retry may resume that same retained candidate,
-never construct a second candidate, complete exact-once retained-scope transfer
-and route rebind, publish it, then reopen admission. No surviving scope may
-return to the old generation or fall outside the transition owner. An eligible
-attach racing this transition waits to join the same eventual fresh generation.
+never construct a second candidate, complete exact-once survivor/readiness route
+rebind first, then exact-once retained-scope transfer into fresh pending
+admission, publish it, and finally reopen later-write admission. No surviving
+scope may return to the old generation or fall outside the transition owner. An
+eligible attach racing this transition waits to join the same eventual fresh
+generation.
 
 One package-internal environment-lifecycle explicit-stop entry point owned here
 is the sole explicit-stop caller of T-0037b's primitive. Server integration and
@@ -191,17 +193,22 @@ network or context/resource ordering.
   later-write admission remains closed; and the canonical transition owner
   retains a non-empty set bounded by current tenant/configured-scope cardinality.
   Construction failure proves no candidate exists and one may be constructed on
-  retry. Rebind and transfer failures each inject active bounded candidate work,
-  prove the transition owner retains the same sole candidate identity, await all
+  retry. Rebind and transfer cases each use multiple surviving registrations,
+  readiness routes, and retained canonical scopes and inject failure only after
+  at least one unit of that phase has completed while at least one remains. They
+  inject active bounded candidate work, prove the transition owner retains the
+  same sole candidate identity plus per-unit completion progress, await all
   already-admitted candidate work before propagating so no endpoint invocation
   continues afterward, and prove no second candidate is constructed. Each
   operation propagates its transition error exactly once, truthfully aggregated
   with an earlier retirement/reporting error when both exist, and performs no
   recursive or background retry. A later external lifecycle/readiness request
-  resumes the retained candidate when one exists, completes exactly one fresh
-  generation, rebinds every survivor and route without owner gap or old/new
-  overlap, transfers each retained scope exactly once without repeating a
-  completed rebind or transfer, and only then publishes it and reopens admission.
+  resumes the retained candidate when one exists. It does not repeat completed
+  rebind or transfer units; it completes each remaining survivor/readiness route
+  rebind exactly once, then each remaining retained-scope transfer into fresh
+  pending admission exactly once, publishes exactly one fresh generation, and
+  only then reopens later-write admission. The tests prove no owner gap or
+  old/new overlap throughout partial progress and retry.
 - Focused internal-access tests prove the T-0037e environment entry point is the
   sole explicit-stop caller and server/handoff code has no direct primitive
   access.

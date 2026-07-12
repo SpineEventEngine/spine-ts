@@ -1,6 +1,6 @@
 # T-0037: Environment Delivery Lifecycle
 
-Status: Round 12 docs fix worker active
+Status: Round 12 docs fixes verified; fresh review pending
 Started: `2026-07-12T04:15:00Z`
 Baseline commit: `0308bc4a`
 Branch: `task/T-0037-environment-delivery-lifecycle`
@@ -131,7 +131,15 @@ tests around the built-context descriptor, actual storage factory, tenant
 enumeration, and post-persist readiness ordering. The parent branch must not be
 used for child runtime work.
 
-## Verification
+## Review Package Process
+
+Before generating each review package, resolve the endpoint commit with
+`git rev-parse HEAD`, record that immutable SHA, and pass the literal SHA as the
+review-package script's endpoint argument. Never pass the moving name `HEAD` to
+the script. Current orchestration is defined only by this file's `Status` header
+and the latest timestamped Events in the work/review logs.
+
+## Historical Verification Through Round 11 (`34f8f5e4`)
 
 - PASS: Requirements splitter `019f548a-4e89-7183-867e-c52d97bd6b0b`
   completed read-only and was closed. Coordinator accepted the six-slice
@@ -205,5 +213,5 @@ used for child runtime work.
   work-log chronology findings. The Round 10 worker and coordinator verification
   passed, and the fix was committed as `724e384d`. Round 11 accepted the retained
   fresh-candidate ownership, successful quiescence-retry, active-summary, and
-  participant-ordering findings. The Round 11 docs fix is authored; coordinator
-  verification and fresh review remain pending, and no clean review is claimed.
+  participant-ordering findings. The Round 11 docs fix later passed worker and
+  coordinator verification and was committed as `34f8f5e4`.

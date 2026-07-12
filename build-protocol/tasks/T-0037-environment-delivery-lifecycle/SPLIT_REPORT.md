@@ -1,6 +1,6 @@
 # T-0037 Split Report
 
-Status: Round 12 docs fix worker active
+Status: Round 12 docs fixes verified; fresh review pending
 
 Baseline: `ab8fc9f4`
 
@@ -62,6 +62,8 @@ persistence, including earlier rows in a partially failed `receiveAll` flow and
 none for a rejected write. It must preserve the current immediate exact drain
 and must not start a worker or attach an environment registration.
 
+## Historical Review Summary Through Round 11 (`34f8f5e4`)
+
 The verified Round 1 fix was committed as `3847e1b6`; reconciliation through
 `80ef21e2` formed the Round 2 review boundary. Round 2 fixes were committed as
 `7281ba07`. Round 3 reviewed package `0308bc4a..49b3fb4b`; its accepted docs
@@ -87,10 +89,10 @@ error qualification, this stale handoff correction, and work-log chronology.
 The Round 10 worker and coordinator verification passed, and the fix was
 committed as `724e384d`. Round 11 accepted the retained fresh-candidate
 ownership, successful quiescence-retry, active-summary, and participant-ordering
-findings. The Round 11 docs fix is authored; coordinator verification and fresh
-review remain pending, and no clean review is claimed.
+findings. The Round 11 docs fix later passed worker and coordinator verification
+and was committed as `34f8f5e4`.
 
-## Verification
+## Historical Verification Through Round 11 (`34f8f5e4`)
 
 `pnpm docs:check` passed after the standard fresh-worktree ignored-declaration
 bootstrap, with zero errors and only the known invalid-`origin` warning.
@@ -127,5 +129,9 @@ coordinator verification and was committed as `ee6fb396`. The Round 10 worker
 and coordinator verification passed, and the fix was committed as `724e384d`.
 Round 11 accepted the retained fresh-candidate ownership, successful quiescence-
 retry, active-summary, and participant-ordering findings. The Round 11 docs fix
-is authored; coordinator verification and fresh review remain pending, and no
-clean review is claimed.
+later passed worker and coordinator verification and was committed as
+`34f8f5e4`.
+
+For current orchestration, use this report's `Status` header and the latest
+timestamped Events in the T-0037 work/review logs. Historical summaries above
+never state current pending work.

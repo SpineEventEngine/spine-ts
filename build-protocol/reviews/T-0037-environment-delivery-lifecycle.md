@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 12 docs fix worker active
+Status: Round 12 docs fixes verified; fresh review pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -68,6 +68,14 @@ Security is deferred to final project readiness.
   rollback/replacement, and T-0037e invokes it only for explicit generation
   stop, ordinary last detach, and permanent close plus fresh-generation race
   policy.
+- Confirm T-0037d independently tests explicit retry of the same caller-owned
+  failed-start rollback after quiescence failure. The first attempt retains the
+  unsafe sole slot and endpoint dependencies, performs no later authoritative
+  phase or slot clear, and permits no replacement. Retry does not duplicate
+  admission closure or stop; it proves quiescence, completes every remaining
+  phase and safe slot clearing exactly once, then permits one later eligible
+  fresh attachment without overlap. Keep T-0037f's server-owned operation
+  distinct.
 - Confirm an otherwise eligible attach arriving after reusable explicit stop
   begins waits through full retirement and creates or joins exactly one fresh
   generation. Every surviving registration, readiness route, and configured/
@@ -112,8 +120,12 @@ Security is deferred to final project readiness.
   unpublished candidate across rebind/transfer failure, waits for active admitted
   candidate work before propagation, and a later external retry resumes it
   without constructing a second candidate. Confirm candidate identity, no
-  endpoint invocation after propagation, exact-once rebind/transfer, one fresh
-  generation, and admission without owner gap or old/new overlap.
+  endpoint invocation after propagation, route rebind before buffered transfer,
+  then publication before later-write admission. Rebind and transfer tests use
+  multiple survivors/routes/scopes, fail after at least one unit completes and
+  one remains, persist per-unit progress, and prove retry of the same candidate
+  does not repeat completed units. Confirm one fresh generation and admission
+  without owner gap or old/new overlap.
 - Confirm server-owned startup failure attempts rollback/quiescence without
   listener intake while endpoint dependencies stay open. After proven
   quiescence, reporting or inert permanent-cleanup errors do not skip later
@@ -141,6 +153,9 @@ Security is deferred to final project readiness.
   assignment/findings/current-worker orchestration until a later fixed package
   is generated. Those current records remain in timestamped Events and
   Participants, avoiding impossible maintenance-commit self-reference.
+- Confirm review-package generation first resolves the endpoint with
+  `git rev-parse HEAD` and passes that literal commit SHA to the script. A fixed
+  package header must never identify its endpoint as the moving name `HEAD`.
 
 ## Rounds
 
@@ -572,3 +587,23 @@ Security is deferred to final project readiness.
   `019f555c-0f63-7ad0-ba1d-e61f9b5ef118` the complete accepted batch. The
   worker owns documentation and durable process instructions only, must preserve
   the fixed historical ledger, and may edit only after this assignment commit.
+- `2026-07-12T08:07:27Z`: Round 12 documentation fix authored the complete
+  accepted lifecycle and process batch. Coordinator verification remains
+  pending; no clean review is claimed.
+- `2026-07-12T08:13:17Z`: Worker verification passed targeted failed-start
+  retry, rebind-before-transfer, partial-progress, stable-summary, literal-SHA,
+  status, 98-event chronology, 62-participant order/uniqueness, byte-identical
+  36-entry ledger, docs, format, whitespace, exact seven-file scope, untracked,
+  and frozen-path checks. TypeDoc retained 205 server exports with only the known
+  invalid-`origin` warning. Coordinator verification remains pending.
+- `2026-07-12T08:15:20Z`: Coordinator pre-acceptance inspection confirmed the
+  lifecycle/process contracts and corrected the worker's stale audit counts to
+  98 events and 62 unique participants. Independent coordinator verification
+  remains pending.
+- `2026-07-12T08:16:16Z`: Coordinator closed the worker and independently passed
+  failed-start retry, rebind-before-transfer, non-empty partial-progress,
+  stable-summary, literal-SHA process, 99-event chronology, 62-participant
+  order/uniqueness, byte-identical 36-entry ledger, exact-scope/frozen-path,
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check` checks. TypeDoc
+  retained 205 server exports with only the known invalid-`origin` warning.
+  Fresh all-lane review remains required.
