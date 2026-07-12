@@ -1,6 +1,6 @@
 # T-0035 Review Log
 
-Status: Round 5 findings recorded; decision fix pending
+Status: Round 5 decision fix in progress
 
 Task: `T-0035 Delivery Run Trigger And Lifecycle Ownership Decision`
 
@@ -247,3 +247,7 @@ Security is deferred to final project readiness.
   requires exclusive server-owned registration cardinality and explicit refusal
   or serialization semantics for environment close with live caller-owned
   attachments. One decision fix worker and fresh four-lane review are required.
+- `2026-07-12T00:11:00Z`: Resumed decision author
+  `019f5358-deb4-7d02-87b3-06b4c88eafc7` as the single Round 5 fix worker for
+  the complete active-rejection and close-authority batch. Fresh four-lane
+  review remains pending after verification.
