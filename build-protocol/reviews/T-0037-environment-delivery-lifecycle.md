@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 15 findings accepted; fix pending
+Status: Round 15 split fix worker active
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -729,3 +729,7 @@ Security is deferred to final project readiness.
   reusable-stop, and permanent-close children before implementation; and make
   the parent TASK status the sole canonical current-state source with all other
   headers explicit mirrors. Documentation and reliability lanes were clean.
+- `2026-07-12T09:00:07Z`: Assigned single Round 15 documentation/split fix worker
+  `019f558e-0791-7491-92b2-dca092214c68` the complete accepted batch. The
+  worker owns the child-brief split and connected active docs only, must preserve
+  historical evidence, and may edit only after this assignment is committed.
