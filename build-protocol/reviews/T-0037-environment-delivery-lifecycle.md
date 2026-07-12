@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 6 review active
+Status: Round 6 findings accepted; fix pending
 
 Task: `T-0037 Environment Delivery Lifecycle`
 
@@ -10,10 +10,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f54eb-9835-7f21-93c6-ae4af96acb5f` | Active |
-| Documentation              | `019f54eb-98f0-7701-a78b-9862d0bbdc61` | Active |
-| TypeScript/API docs        | `019f54eb-997e-76b2-bab6-5cf1e6739911` | Active |
-| Performance/reliability    | `019f54eb-9a28-75c2-affb-9f1a17ab9a4d` | Active |
+| Code style/maintainability | `019f54eb-9835-7f21-93c6-ae4af96acb5f` | P1/P2  |
+| Documentation              | `019f54eb-98f0-7701-a78b-9862d0bbdc61` | P1     |
+| TypeScript/API docs        | `019f54eb-997e-76b2-bab6-5cf1e6739911` | P1/P2  |
+| Performance/reliability    | `019f54eb-9a28-75c2-affb-9f1a17ab9a4d` | P2/P3  |
 
 Security is deferred to final project readiness.
 
@@ -277,3 +277,10 @@ Security is deferred to final project readiness.
 - `2026-07-12T06:02:39Z`: Generated fixed-baseline package
   `.superpowers/sdd/review-0308bc4a..a8c2f3c5.diff` (31 commits, 135,277 bytes)
   after a zero-match stale-status lint and assigned all four Round 6 lanes.
+- `2026-07-12T06:06:10Z`: Closed all four Round 6 lanes. Accepted one complete
+  docs batch: move server-detach reuse documentation from T-0037e to T-0037f
+  because it becomes publicly reachable only after server integration;
+  reconcile active Round 5 summaries/verification to verified and committed;
+  and complete the commit ledger with reconciliation and current review commits.
+  All runtime ownership, race, reliability, ledger-rule, and public-leak checks
+  are otherwise clean.
