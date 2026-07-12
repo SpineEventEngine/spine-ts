@@ -3163,12 +3163,44 @@ Decision:
   propagate or aggregate through the existing failed-start error model. Cleanup
   does not claim or delete durable pending rows; their later recoverability
   follows the environment/storage lifetime rules below.
-- After a newly supported inbox row is durably persisted, the local write path
-  notifies the same package-internal seam. Notification carries readiness only;
-  it does not carry a timer, backoff value, monitor action, payload, or retry
-  policy. A notification during an active run is coalesced, so work committed
-  after that run's last relevant read receives one later bounded run without a
-  concurrent `DeliveryWorker.start()` call.
+- After each individual newly supported inbox row is durably persisted, the
+  local write path notifies the same package-internal seam. This is a per-row
+  durability boundary: each successful row emits independently of call,
+  configured scope, or batch grouping. Every successful earlier row in a
+  `receiveAll` or other batch remains notified when a later row rejects, while
+  a rejected or unattempted write emits no readiness. Notification carries
+  readiness only and uses a synchronous non-throwing package-internal callback;
+  observer failure cannot reject a completed persistence, interrupt later batch
+  writes, or replace the existing handoff result. It does not carry a timer,
+  backoff value, monitor action, payload, error, or retry policy. Notifications
+  during an active run merge idempotently into one pending admission containing
+  every eligible canonical tenant/configured scope they identify. The pending
+  set preserves tenant identity, deduplicates by canonical scope, and is bounded
+  by the current tenant/configured descriptor/shard domain, not trigger or
+  repeated-notification count. Legitimate growth may track current tenant or
+  configuration cardinality; it cannot retain only the first or last scope.
+  Thus disjoint writes and scopes from mixed fulfilled/rejected
+  partitions remain eligible for one later bounded run without a concurrent
+  package-internal/direct worker start.
+- Before environment attachment owns a context, its existing immediate exact
+  drain remains the compatibility owner. Environment attachment makes the
+  ownership switch an atomic serialized barrier: it closes admission to new
+  direct exact drains, waits for every already-admitted direct exact drain in the
+  attaching scope to settle, installs readiness routing, and only then admits
+  startup recovery or other environment-owned work. Once direct-drain admission
+  closes, a supported row persisted before readiness routing is installed
+  submits its canonical scope to a transition buffer bounded by the same current
+  tenant/configured-scope domain as normal coalescing. It cannot fall back to
+  direct drain. Route installation transfers each buffered scope exactly once
+  into the generation's lossless pending admission before opening environment
+  admission. Attachment and startup admission remain pending while an earlier
+  exact drain is active. Every receive admitted after the switch uses durable
+  persistence plus synchronous non-throwing readiness only and cannot invoke
+  direct exact drain. Thus no durable row loses both owners, and direct and
+  environment run owners cannot overlap for an attached context, row, or scope.
+  Before the switch, existing exact-drain completion and error behavior remains.
+  After it, the local handoff does not await or surface endpoint delivery
+  outcome; lifecycle settlement/reporting owns that later outcome.
 - Retryable failures left `TO_DELIVER` remain the responsibility of this same
   owner. `FAILED` records that later reconsideration is needed but does not
   immediately retrigger itself. A later package-internal retry-readiness policy
@@ -3398,39 +3430,152 @@ Decision:
   atomically mark the generation stopping and close trigger admission and local
   notification; call the worker stop path so a `PAUSED` result cannot start
   another one-shot run; await already-active work without forcibly interrupting
-  its current drain; classify any rejection under the established
-  registration/generation ownership rule; consume every operational record
-  eligible at this boundary and report only still-`unreported` causes; then
-  permanently retire the old worker, loops, and generation. Stop always precedes
-  await and record consumption. A durable write racing after admission closes
-  remains pending. After reusable last detach or explicit generation stop while
-  the same caller-owned environment remains open, a later generation of that
-  environment can recover it. After permanent `ServerEnvironment.close()`, no
-  generation of that same environment is possible. Recovery then requires a
-  separately created environment/process over storage that remains externally
-  available and persistent, if facility ownership and backend lifetime permit;
-  this decision makes no recovery promise after environment-owned storage is
+  its current drain and establish that no old worker/loop can invoke an endpoint
+  again; classify rejection; consume every operational record eligible at this
+  boundary and report only still-`unreported` causes; then permanently retire
+  the old worker, loops, and generation and perform fallible cleanup. Stop always
+  precedes await, await establishes quiescence before classification, and
+  classification plus record consumption/reporting precede permanent retirement/
+  cleanup. Once stop/await succeeds, irreversible admission closure, stopped
+  state, and proven quiescence mean the old instance can never start, accept
+  notification, or invoke endpoints again. A later reporting or cleanup failure
+  is aggregated but cannot reactivate or make that instance reusable; cleanup
+  failure may only leak inert resources. A durable write racing after admission
+  closes remains pending.
+  After reusable last detach or explicit generation stop while the same caller-
+  owned environment remains open, a later generation can recover it only after
+  quiescence is established. Ordinary last detach clears its stopped,
+  proven-quiescent retired current-generation slot through a finally-equivalent
+  path before propagating a reporting or inert permanent-cleanup error, so a
+  later attach can create one fresh generation without overlap. A failure that
+  cannot establish quiescence is distinct: the old slot and every endpoint-
+  dependent context, resource, and facility remain retained because endpoint
+  safety is not proven. That unsafe state requires an explicit lifecycle retry;
+  it cannot clear or replace the slot or close dependencies beneath possibly
+  active work. The retry resumes the same stop transition: admission closure and
+  stop are not duplicated, already-settled phases are not repeated, and only
+  after quiescence is proven does it classify, consume/report eligible records,
+  permanently retire/clean up exactly once, and clear the slot. It may then
+  resume deferred server cleanup or permit exactly one later fresh attachment
+  without old/new overlap. The initial failed attempt does not classify,
+  consume/report, retire, clear the slot, or tear down endpoint dependencies.
+  Reusable explicit generation stop and zero-registration permanent close obey
+  that same quiescence-failure retry boundary. For reusable explicit stop, the
+  failed attempt retains the unsafe current generation, live registrations,
+  transition owner and readiness buffer, and every endpoint dependency. It
+  performs no classification, consumption/reporting, retirement, or fresh-
+  generation transition. Explicit retry resumes the same admission-closed,
+  stopped operation without repeating admission closure or stop, proves
+  quiescence, completes each remaining authoritative retirement phase exactly
+  once, and then performs survivor/readiness-route rebind, transfer of every
+  configured/startup/buffered/retained canonical scope into fresh pending
+  admission, candidate publication, and later-write
+  admission reopen exactly once, with one generation and no overlap. For a
+  zero-registration permanent close, the failed attempt retains the unsafe slot
+  and endpoint dependencies, performs no later retirement or facility teardown,
+  leaves permanent close in progress, and prohibits attachment or replacement.
+  Retry resumes that same close without repeating admission closure or stop,
+  proves quiescence, completes classification, eligible consumption/reporting,
+  retirement, and slot clearing, then closes every owned facility exactly once
+  and leaves the environment permanently closed. Refusal while registrations
+  remain live is a separate pre-transition outcome.
+  After permanent `ServerEnvironment.close()`, no generation of that same
+  environment is possible. Recovery then requires a separately
+  created environment/process over storage that remains externally available
+  and persistent, if facility ownership and backend lifetime permit; this
+  decision makes no recovery promise after environment-owned storage is
   permanently closed.
+- The coordinator-instance primitive must retire in a `finally`-equivalent path
+  even when the caller-supplied operational-record consumption/reporting step
+  rejects. It preserves that failure, combines it with any stop, settlement,
+  classification, or permanent-retirement cleanup failure under existing
+  aggregation semantics, and exposes the combined failure only after retirement/
+  cleanup is attempted in the authoritative order. Once stop/await establishes
+  quiescence, admission is irreversibly closed, the instance is stopped, and no
+  old worker/loop can invoke endpoints again. Reporting or cleanup failure cannot
+  reverse that fail-closed postcondition; cleanup failure may leave only inert
+  resources. A reusable lifecycle caller may therefore clear or replace its
+  slot and complete any required fresh-generation transition before propagating
+  the combined result. If quiescence itself cannot be established, the primitive
+  reports that distinct unsafe result; replacement and endpoint-dependent
+  teardown are prohibited until an explicit retry proves quiescence.
 - Attach, detach, generation stop, and environment close use the same
-  package-internal lifecycle gate. If attach linearizes before last detach marks
-  the generation stopping, it becomes another live registration and last detach
-  has not begun. If attach arrives after that transition begins, it waits for
+  package-internal lifecycle gate. If attach linearizes before reusable last
+  detach or explicit generation stop marks the generation stopping, it joins the
+  current generation subject to ownership cardinality. An otherwise eligible
+  attach that arrives after either reusable stop transition begins waits through
   complete old-generation stop, active-work settlement, rejection
   classification, record consumption/reporting, and permanent retirement. It
   never joins the stopping generation and no fresh worker overlaps the old one.
-  If the environment remains open after retirement, the first waiting attach
-  creates exactly one fresh generation and startup recovery; later eligible
-  attaches join that fresh generation subject to ownership cardinality. If
-  environment close wins the serialized transition instead, waiting and later
-  attaches reject and no fresh generation is created.
+  After ordinary last detach, no registrations remain; the first later eligible
+  attach creates exactly one fresh generation and startup recovery, and later
+  eligible attaches join it. Reusable explicit stop is different because live
+  registrations remain: that stop transition constructs the sole fresh
+  candidate itself, even when no attach races, then rebinds routes, transfers
+  canonical scopes,
+  publishes, and reopens admission in the order below. An eligible attach racing
+  explicit stop waits for and joins that transition-owned candidate; it never
+  creates another. Such an attach rejects only if permanent environment close
+  wins the serialized transition or independent ownership cardinality refuses
+  it. No reusable-stop policy may reject it merely because retirement is in
+  progress.
+- Reusable explicit generation stop leaves registrations live, so retirement
+  alone cannot complete that transition. Closing old-generation readiness
+  installs one bounded canonical tenant/configured-scope transition buffer, or
+  an equivalent persistence barrier, that owns readiness for writes from that
+  close through the fresh recovery snapshot and readiness-route rebind. After
+  old retirement, the explicit-stop transition constructs exactly one fresh
+  candidate even without a racing attach. It first completes rebind of every
+  surviving registration and readiness route to that candidate, retaining
+  per-unit route progress. It then transfers every configured, startup,
+  buffered, and retained canonical scope losslessly and exactly once into fresh
+  pending admission with separate per-unit transfer progress, publishes the candidate, and only
+  then reopens later-write admission. Thus a write persisted after fresh
+  recovery captures its snapshot but before routes rebind still causes an
+  eventual fresh-generation run without an unrelated trigger. Fresh-generation creation,
+  complete route rebind, all-scope transfer, candidate publication, and
+  admission reopen normally finish before T-0037e2 propagates an earlier
+  retirement or reporting error once. Configured/startup/buffered/retained
+  scopes are transferred and are never route-rebound. If fresh
+  construction, route rebind, or transfer itself fails, the old generation stays
+  admission-closed, stopped, and quiescent after permanent retirement/cleanup
+  was attempted, no partial fresh generation is published, later-write admission
+  stays closed, and the bounded canonical transition owner retains every not-yet-
+  transferred scope. Construction failure before a candidate exists retains no
+  candidate and may construct one on retry. Once construction succeeds, that
+  same transition owner is the sole owner of the one constructed-but-unpublished
+  candidate across rebind or transfer failure. Before returning a transition
+  error, it awaits settlement of every bounded candidate startup/recovery unit
+  already admitted, so no candidate endpoint invocation continues after error
+  propagation. T-0037e2 preserves and truthfully aggregates the transition error
+  with any earlier error; it does not self-loop. Only a later external lifecycle/
+  readiness retry may resume that retained candidate, never construct a second
+  one, complete exact-once registration/readiness-route rebind and all canonical-
+  scope transfer, publish it,
+  and reopen admission. An otherwise eligible attach racing the transition
+  waits for that same eventual generation. The transition owner prevents an
+  ownership gap while old quiescence and candidate settlement prevent old/new
+  overlap. No surviving scope may return to the retired generation, and only
+  permanent close or independent ownership cardinality may reject the attach.
+  README and TypeDoc describe only observable `Server`, `RunningServer`, and
+  `ServerEnvironment` behavior; they do not name or describe this package-
+  internal explicit-stop operation.
 - Server shutdown order is: stop that server's external network intake and
   sessions; detach its package-internal registration and serialize against
   active delivery work while its contexts and endpoint dependencies remain
   open; consume only the operational records eligible under that detach's
   ownership scope and aggregate only their still-`unreported` causes; then close
   its contexts and other endpoint resources. A non-last detach leaves the
-  shared generation and live
-  generation-owned records active for remaining registrations. A last detach
+  shared generation and live generation-owned records active for remaining
+  registrations. Failure after its registration-scoped work barrier is
+  established retains the departing registration's endpoint dependencies plus
+  its unfinished cleanup and eligible reporting work for explicit retry. Retry
+  resumes only cleanup and eligible reporting exactly once; it never stops or
+  retires the shared generation, clears its slot, or closes sibling endpoint
+  dependencies, contexts, resources, or facilities. Sibling generation
+  identity, readiness, pending work,
+  endpoints, and facilities remain active throughout; newly orphaned generation
+  records follow the existing parked-versus-eligible partition. A last detach
   additionally quiesces the generation, consumes every remaining operational
   record, and includes every remaining `unreported` cause exactly once. If the
   server owns the environment, its sole registration is
@@ -3440,10 +3585,28 @@ Decision:
   no worker promise is active. An active rejection observed while shutdown
   awaits work is partitioned before aggregation: non-last detach includes only
   the departing registration's records and newly orphaned generation records,
-  while live shared generation and sibling records remain parked. Shutdown
-  continues every remaining close and propagates or aggregates all eligible
-  close failures consistently with the existing `RetryableCloseGroup` behavior.
-  Transport or storage must never close beneath an active run.
+  while live shared generation and sibling records remain parked. For a last
+  detach, shutdown continues every remaining close after quiescence and
+  propagates or aggregates all eligible reporting and inert cleanup failures
+  consistently with the existing `RetryableCloseGroup` behavior. If last-detach
+  quiescence cannot be established, shutdown retains the unsafe generation slot
+  plus its endpoint-dependent contexts, resources, delivery facilities,
+  transport, and storage for explicit retry; it does not close beneath possibly
+  active work. That retry resumes the same last-detach shutdown without
+  duplicating completed admission closure or stop, proves quiescence, then
+  performs classification, eligible consumption/reporting, permanent
+  retirement/cleanup, slot clearing, and remaining server cleanup exactly once.
+  When startup failure occurs against a caller-owned environment and rollback
+  cannot establish quiescence, the server opens no listener and retains every
+  endpoint-dependent context and resource while leaving the caller-owned
+  environment and its facilities open. Explicit retry of that same server
+  cleanup resumes T-0037d's same failed-start rollback without repeating
+  admission closure or stop, proves quiescence, completes the remaining
+  rollback phases and safe slot clearing exactly once, and closes deferred
+  server-owned contexts and resources exactly once. It never closes the caller-
+  owned environment or facilities. That environment remains reusable for one
+  later eligible fresh attachment and server without old/new overlap. This is
+  distinct from server-owned environment continuation and teardown.
 - Implement D-0085 in small sequenced successors. The smallest first successor
   is `T-0036 Package-Internal Delivery Epoch Progress`. It changes only
   package-internal `DeliveryLoop`/`DeliveryWorker` prerequisites: cap the full
@@ -3543,3 +3706,165 @@ Consequences:
   neither successor absorbs retry timing or public policy.
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.
+
+## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
+
+Status: Accepted
+
+Date: 2026-07-12
+
+Task: `T-0037`
+
+Context: D-0085 deliberately combined the complete environment-owned delivery
+lifecycle so ownership, readiness, rejection handling, registration rollback,
+generation retirement, and shutdown ordering would have one coherent semantic
+contract. T-0036 has implemented and verified only D-0085's package-internal
+finite-epoch and per-shard evidence prerequisite. The remaining successor is
+too large for one careful implementation and four-lane review package: it
+crosses context handoff, delivery coordination, bounded operational records,
+environment registration, generation close, and server network lifecycle.
+
+Current code facts constrain the sequence. `ServerEnvironment.delivery` is
+only an optional closeable facility. Repository handoffs construct short-lived,
+tenant-specific `Delivery` instances after persistence and immediately
+exact-drain the received row. Built contexts retain the storage factory they
+actually used behind `boundedContextAccess`, including a builder-selected
+factory that differs from the environment default. `TenantIndex.all()` can
+enumerate a multitenant context's recorded tenants, but startup does not use it
+to assemble delivery work. `RunningHttp2Server.close()` currently stops network
+intake and then closes one flat ordered closeable group; it has no delivery
+registration barrier. T-0036 evidence and its verified behavior remain
+unchanged and explicitly invoked.
+
+Decision:
+
+- Split D-0085's T-0037 successor into eight ordered implementation children:
+  `T-0037a Context Delivery Attachment Seam`, `T-0037b Bounded Generation Run
+Coordinator`, `T-0037c Parked Delivery Obligations`, `T-0037d Environment
+Attachment And Startup`, `T-0037e1 Registration Detach Lifecycle`, `T-0037e2
+Reusable Generation Stop`, `T-0037e3 Permanent Environment Close`, and
+  `T-0037f Server Lifecycle Integration`. The former T-0037e brief is a
+  superseded split-parent audit record and must not be implemented.
+- The invariant map is exclusive. T-0037a owns package-internal built-context
+  delivery descriptors, actual storage-factory access, startup tenant
+  enumeration, endpoint/shard attachment facts, and per-successful-row
+  post-persist readiness emission through a synchronous non-throwing internal
+  notification seam. T-0037b owns serialized bounded generation runs, lossless
+  bounded canonical-scope coalescing, T-0036 evidence
+  interpretation, and the reusable authoritative coordinator-instance
+  stop/await/retire primitive, including the fail-closed stopped/quiescent
+  postcondition while preserving classify/consume/report-before-retirement
+  order. T-0037c owns finite canonical operational
+  obligation and cause-reporting records. T-0037d owns environment
+  registration cardinality, attachment, startup recovery, and failed-start
+  rollback, including invoking T-0037b's primitive and clearing/replacing the
+  empty generation slot through a finally-equivalent path after sole/first-
+  registration rollback when quiescence is established, even if reporting or
+  retirement cleanup fails, so a caller-owned environment remains reusable.
+  It must retain the slot and prohibit replacement if quiescence is not
+  established. T-0037d independently owns explicit retry of that same caller-
+  owned failed-start rollback: the failed attempt retains endpoint dependencies
+  and performs no later authoritative phase, while retry does not repeat
+  admission closure or stop, proves quiescence, completes classification,
+  eligible consumption/reporting, permanent retirement/cleanup, and slot
+  clearing exactly once, then permits one later eligible fresh attachment
+  without overlap. T-0037d owns this caller-owned failed-start rollback state
+  machine and its same-operation retry. T-0037f owns deferred server-level
+  cleanup around that seam for caller-owned and server-owned startup failure,
+  preserving each mode's distinct environment and facility ownership.
+  T-0037d also owns the atomic
+  ownership barrier that closes new direct exact-drain admission, awaits every
+  already-admitted direct exact drain in the attaching scope, gives persistence
+  during route installation one bounded transition readiness buffer, transfers
+  buffered scopes exactly once into installed environment readiness, and only
+  then admits startup/environment work, so no durable row loses both owners,
+  the two run owners never overlap, and later receives use readiness only.
+  T-0037e1 owns registration detach. Non-last detach and retry remain
+  registration-scoped and non-retiring. Ordinary last detach invokes T-0037b's
+  existing primitive, clears a proven-quiescent retired slot through a finally-
+  equivalent path despite reporting or inert cleanup error, retains an unsafe
+  slot when quiescence fails, and retries that same operation before one later
+  first attach may create a fresh generation. It also owns detach/attach races.
+  T-0037e2 owns the sole package-internal reusable explicit-stop entry point;
+  server/handoff code cannot call the primitive directly. It creates the sole
+  transition-owned fresh candidate even without a racing attach. Its four
+  distinct ordered phases are: (1) rebind surviving registrations and readiness
+  routes with per-unit checkpoints; (2) transfer configured, startup, buffered,
+  and retained canonical scopes exactly once into fresh pending admission with
+  separate per-unit checkpoints; (3) publish the candidate; and (4) reopen
+  later-write admission. Canonical scopes are transferred, never rebound. One
+  bounded transition owner covers writes through fresh recovery and both first
+  phases. Construction/rebind/transfer failure publishes no candidate, keeps
+  admission closed, retains bounded state, and permits only later external retry.
+  After construction, retry resumes the same candidate and completed per-unit
+  progress after admitted candidate work settles; it never constructs another
+  candidate or self-loops. A racing eligible attach waits and joins that
+  candidate. Reporting-failure and post-consumption retirement-failure tests
+  must each complete rebind, all-scope transfer, publication, and admission
+  reopen before propagating the original error exactly once. T-0037e3 owns live-
+  registration close refusal and zero-registration permanent close. It retains
+  an unsafe slot and every facility when quiescence fails, retries that same
+  close without repeating completed phases, then safely clears the slot and
+  tears down every owned facility exactly once while remaining closed. T-0037f
+  alone integrates those seams with listener startup, network shutdown, contexts,
+  resources, and owned facilities. For caller-owned failed startup, T-0037f
+  resumes T-0037d's retained rollback through quiescence and exact-once deferred
+  server cleanup while leaving the shared environment open and proving one
+  later eligible fresh server attachment without overlap; server-owned
+  continuation remains separate. T-0037d does not own
+  ordinary detach or race policy; T-0037e1/e2/e3 do not reopen failed-start
+  rollback or coordinator-instance retirement.
+- The six distinct deterministic same-operation generation-retirement retry
+  owners are: caller-owned failed-start rollback in T-0037d; ordinary last
+  detach in T-0037e1; reusable explicit stop in T-0037e2; zero-registration
+  permanent close in T-0037e3; and server-owned startup cleanup plus caller-
+  owned server cleanup in T-0037f. Each keeps its own slot, dependency,
+  environment, and facility ownership duties. Non-last detach is a separate
+  non-retiring registration-scoped retry in T-0037e1: it cannot stop or retire
+  the shared generation or clear its slot.
+- Each active child depends on the preceding active child and receives its own
+  branch, implementation log, review log, TDD cycle, focused verification, and four
+  required review lanes when implementation starts. Candidate briefs do not
+  create those unstarted artifacts. T-0037 remains a sequencing parent and
+  changes no runtime behavior itself.
+- T-0037a is the first handoff. It must expose one small package-internal
+  `boundedContextAccess` descriptor/readiness seam grounded in built-context
+  state. It does not start a worker, attach an environment registration, or
+  replace the current exact-drain behavior before T-0037d owns the transition.
+- Every active child preserves D-0085 rather than redesigning it: one environment
+  owner; finite one-shot T-0036 runs; readiness after every successful
+  individual row persistence and never a rejected write; one lossless pending
+  canonical-scope union bounded by current canonical tenant/configured scope
+  cardinality, never trigger or repeated-notification count; per-shard
+  rather than aggregate scheduling; no spin from fulfilled `FAILED`/`SKIPPED`
+  or rejected starts; bounded parked state; ownership-scoped startup/cleanup;
+  one reusable stop-before-await-before-classify-before-consume/report-before-
+  retire/cleanup coordinator primitive with non-overlapping lifecycle callers
+  and a quiescence-gated replacement postcondition; and network, endpoint,
+  transport, and storage close ordering.
+- JVM evidence is adopted narrowly: delivery ownership belongs at environment
+  level and local post-persist notification may submit readiness. The TS
+  implementation must not copy a process singleton, per-message threads,
+  repeat callbacks, public `DeliveryMonitor` actions, a catch-up station, or
+  global storage-factory copying.
+- Retry delay/backoff/jitter/timers, public monitor/scheduler/health surfaces,
+  process supervision, transport topology/adapters, `CATCH_UP` as a trigger or
+  delivery path, legacy `IMPORT_EVENT` support, and changes to T-0034 or T-0036
+  remain outside all eight children.
+- T-0037e3 may update README/TypeDoc only for behavior independently observable
+  at its merge point, such as existing `ServerEnvironment.close()` behavior if
+  publicly reachable without server detach. T-0037f alone documents caller-
+  owned environment reuse after server detach and the full observable `Server`,
+  `RunningServer`, and `ServerEnvironment` lifecycle. Public docs must not name
+  or describe package-internal explicit generation stop.
+
+Consequences:
+
+- Review packages align with one ownership seam apiece while the complete
+  D-0085 lifecycle remains ordered and traceable.
+- The first child can prove context delivery facts and durable-write readiness
+  without prematurely creating a second lifecycle owner.
+- Later children consume stable predecessors instead of reopening loop/worker
+  internals or combining server integration with obligation bookkeeping.
+- This decision changes sequencing and durable documentation only. It does not
+  claim any T-0037 child behavior is implemented.

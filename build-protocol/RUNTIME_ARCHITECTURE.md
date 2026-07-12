@@ -33,8 +33,12 @@ complete server/runtime environment. It introduced a Node HTTP/2 listener over
 scheduling, or ZeroMQ-specific public API. Current source now also has a small
 explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
 facilities, and close ownership. Its optional closeable delivery facility is
-not an active delivery scheduler. D-0085 assigns a package-internal
-environment-owned bounded-run lifecycle to a successor implementation.
+not an active delivery scheduler. Current server close still stops network
+intake/sessions and then closes one flat group of contexts, resources, and an
+optionally owned environment; there is no delivery-registration barrier yet.
+D-0085 assigns a package-internal environment-owned bounded-run lifecycle to
+future implementation, and D-0086 sequences it through eight ordered
+implementation children without claiming that lifecycle is current behavior.
 
 ## Read-Side and Write-Side Segregation
 
@@ -373,3 +377,113 @@ applier/import delivery. `IMPORT_EVENT` is no longer a supported public
 delivery label for new inbox writes; stored/wire legacy rows using it are
 recognized only as deprecated compatibility data and fail closed before
 delivery.
+
+## Environment Delivery Lifecycle Sequence
+
+Current built-context handoffs construct short-lived tenant-specific
+`Delivery` instances, persist supported inbox work, and immediately exact-drain
+that row. Built contexts retain the storage factory actually used to build them
+behind `boundedContextAccess`; a builder-specific factory can differ from the
+environment default. The tenant index can enumerate recorded multitenant
+tenants, but server startup does not currently enumerate those scopes for
+recovery. T-0036's finite epochs and ordered fulfilled/rejected per-shard
+evidence remain package-internal, explicitly invoked, and unchanged.
+
+D-0086 maps the future D-0085 lifecycle into eight strict implementation slices.
+The former T-0037e is a superseded split-parent audit record, not a ninth
+implementation child:
+
+1. T-0037a owns context delivery descriptors, actual storage, tenant startup
+   scopes, endpoint/shard facts, and readiness after every successful
+   individual row persistence, including successful rows in a partially failed
+   batch and never a rejected write. Its internal notification is synchronous
+   and non-throwing, so observation cannot change durable receive outcomes.
+2. T-0037b owns serialized finite generation runs, one lossless pending union
+   deduplicated by canonical tenant/configured scope and bounded by current
+   tenant/configured scope cardinality rather than notification count,
+   per-shard interpretation of T-0036 evidence, and the reusable authoritative
+   coordinator-instance stop/await/retire primitive. It closes admission and
+   stops, awaits quiescence, classifies, consumes/reports eligible records, then
+   permanently retires and cleans up in that order. Once stop/await succeeds,
+   irreversible admission closure, stopped state, and quiescence prevent any old
+   start, notification, or endpoint invocation despite later reporting or
+   cleanup failure; cleanup failure may leak only inert resources. A distinct
+   inability to establish quiescence prohibits slot replacement and endpoint-
+   dependent teardown until explicit retry. That retry resumes the same stopped,
+   admission-closed transition without duplicating completed stop work, proves
+   quiescence, then classifies, consumes/reports, retires/cleans up, and permits
+   safe slot clearing exactly once. A reusable lifecycle caller may
+   receive an earlier retirement/reporting error only after completing its
+   required slot clearing or fresh-generation transition. A fresh-construction,
+   route-rebind, or buffered-transfer error instead propagates while that
+   transition remains incomplete and retained for external retry.
+3. T-0037c owns bounded canonical operational obligations and one-time cause
+   reporting.
+4. T-0037d owns environment registration cardinality, startup recovery, the
+   no-overlap barrier that closes new direct exact-drain admission, awaits any
+   already-admitted direct exact drain in the attaching scope, buffers canonical
+   readiness from persistence during route installation within the configured-
+   scope bound, transfers each buffered scope exactly once into the installed
+   route, and only then admits startup/environment work. Subsequent receives use
+   readiness only; no durable row loses both owners. It also owns registration-
+   scoped rollback, including invoking T-0037b's primitive and clearing the
+   retired empty generation slot through a finally-equivalent path after sole
+   failed attachment despite reporting or retirement-cleanup failure. It may
+   replace that slot only when quiescence was established. T-0037d owns the
+   caller-owned failed-start rollback state machine and same-operation retry;
+   T-0037f owns the surrounding deferred server cleanup for either environment
+   ownership mode.
+5. T-0037e1 owns registration detach. Non-last detach/retry is scoped to the
+   departing registration and never retires the shared generation. Ordinary
+   last detach invokes the existing primitive, clears only a proven-quiescent
+   retired slot, retries the same unsafe operation after quiescence failure,
+   and permits one later first attach to create a fresh generation. It also
+   owns detach/attach linearization.
+6. T-0037e2 owns reusable explicit stop and the sole transition-owned fresh
+   candidate. It first rebinds surviving registrations and readiness routes,
+   with per-unit checkpoints. It then transfers configured, startup, buffered,
+   and retained canonical scopes exactly once into fresh pending admission,
+   with separate per-unit checkpoints. Configured/startup/buffered/retained
+   scopes are transferred, never rebound. Only after both phases does it publish
+   the candidate and reopen later-write admission. Construction or partial-
+   progress failure retains bounded ownership and the same candidate, when one
+   exists, for external retry without overlap or self-loop. A racing eligible
+   attach waits and joins that candidate. Reporting or inert retirement errors
+   propagate only after rebind, all-scope transfer, publication, and admission
+   reopen complete exactly once.
+7. T-0037e3 owns live-registration permanent-close refusal and zero-registration
+   permanent close. It retries quiescence failure without tearing down endpoint
+   dependencies, clears only a safe retired slot, and closes every owned
+   facility exactly once while remaining permanently closed.
+8. T-0037f owns server listener/startup and network/context/resource/facility
+   shutdown ordering. A non-last close retry resumes only departing-registration
+   cleanup and eligible reporting; it never retires the shared generation or
+   clears its slot, and sibling generation identity, readiness, pending work,
+   endpoints, contexts/resources, and facilities remain usable. Last-detach
+   retirement remains a separate path.
+
+The six deterministic same-operation generation-retirement retries stay
+distinct: caller-owned failed-start rollback (T-0037d); ordinary last detach
+(T-0037e1); reusable explicit stop (T-0037e2); zero-registration permanent
+close (T-0037e3); and server-owned startup cleanup plus caller-owned server
+cleanup (T-0037f).
+Non-last detach is a separate non-retiring registration-scoped retry and is not
+one of those six.
+
+The first future handoff is T-0037a's package-internal
+`boundedContextAccess` descriptor/readiness seam. It does not start a worker or
+change environment ownership by itself. JVM evidence supports only placing
+delivery ownership at environment level and submitting readiness after durable
+local persistence. The TS sequence rejects JVM singleton state, per-message
+threads, repeat callbacks, public monitor actions, catch-up stations, and
+global storage-factory copying. Retry timing and all public scheduler,
+monitoring, health, topology, adapter, and catch-up policy remain deferred.
+The sequence adds no root/public export, signature, or option and commits no
+generated artifact; package-internal declarations emitted by normal
+documentation/type builds may change with internal implementation. T-0037e3
+updates existing README/TypeDoc only for behavior independently observable at
+its merge point, such as existing `ServerEnvironment.close()` behavior if
+publicly reachable without server detach. T-0037f alone documents caller-owned
+environment reuse after server detach and the full observable `Server`,
+`RunningServer`, and `ServerEnvironment` startup/close lifecycle. Neither child
+names or describes package-internal explicit generation stop in public docs.
