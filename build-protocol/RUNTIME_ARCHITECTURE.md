@@ -37,8 +37,8 @@ not an active delivery scheduler. Current server close still stops network
 intake/sessions and then closes one flat group of contexts, resources, and an
 optionally owned environment; there is no delivery-registration barrier yet.
 D-0085 assigns a package-internal environment-owned bounded-run lifecycle to
-future implementation, and D-0086 sequences it through six ordered children
-without claiming that lifecycle is current behavior.
+future implementation, and D-0086 sequences it through eight ordered
+implementation children without claiming that lifecycle is current behavior.
 
 ## Read-Side and Write-Side Segregation
 

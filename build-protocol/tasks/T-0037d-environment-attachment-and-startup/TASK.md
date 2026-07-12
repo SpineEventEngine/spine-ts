@@ -148,8 +148,8 @@ It does not yet change `Server.start()` or listener ordering.
   and stop are not repeated, establishes quiescence, completes every remaining
   phase exactly once in the authoritative order, and clears the slot only after
   safety is proven. It then permits exactly one later eligible fresh attachment
-  without reuse, owner gap, or old/new overlap. Permanent close remains T-0037e;
-  server-owned startup continuation remains T-0037f.
+  without reuse, owner gap, or old/new overlap. Permanent close remains
+  T-0037e3; server-owned startup continuation remains T-0037f.
 
 ## D-0085 Invariants
 

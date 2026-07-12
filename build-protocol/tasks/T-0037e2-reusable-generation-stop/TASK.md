@@ -94,11 +94,15 @@ before failure settles before error propagation.
   Retry resumes without repeating admission closure/stop, proves quiescence,
   completes retirement and all four fresh phases exactly once.
 - A reporting-failure case and a distinct post-consumption permanent-retirement-
-  failure case each require this exact order before the original error propagates
-  exactly once: registration/readiness-route rebind -> transfer all configured,
-  startup, buffered, and retained scopes -> candidate publication -> admission
-  reopen -> original error propagation. The candidate never remains unpublished
-  or admission-closed after either replacement-safe result.
+  failure case each independently persist a supported canonical-scope write
+  after the fresh snapshot and before route rebind and prove the transition
+  buffer is non-empty. Each case then requires this exact order before the
+  original error propagates exactly once: registration/readiness-route rebind ->
+  transfer every configured, startup, buffered, and retained scope exactly once
+  -> candidate publication -> admission reopen -> buffered-write admission
+  without an unrelated trigger -> original error propagation. Neither case may
+  rely on the separate normal interleaving test, and the candidate never remains
+  unpublished or admission-closed after either replacement-safe result.
 - Focused internal-access tests prove this environment entry point is the sole
   explicit-stop caller and server/handoff code cannot call the primitive.
 - Focused public-leak/API checks remain green and no generated output is tracked.

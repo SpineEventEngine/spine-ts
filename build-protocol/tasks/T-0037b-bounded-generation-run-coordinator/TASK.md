@@ -133,8 +133,9 @@ canonical lifecycle cause records; T-0037c and T-0037d own those concerns.
   teardown. An explicit retry of the same primitive does not duplicate completed
   admission closure or stop; it proves quiescence, then performs classification,
   the eligible record consumption/reporting callback, and permanent retirement/
-  cleanup exactly once. T-0037d/e must not clear or replace the instance before
-  that successful retry establishes the replacement-safe postcondition.
+  cleanup exactly once. The exact active lifecycle callers T-0037d, T-0037e1,
+  T-0037e2, and T-0037e3 must not clear or replace the instance before that
+  successful retry establishes the replacement-safe postcondition.
 - Existing package-internal/direct `DeliveryWorker.start()` compatibility and
   all T-0036 tests remain unchanged.
 

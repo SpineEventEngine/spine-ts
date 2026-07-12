@@ -50,7 +50,9 @@ report state, one bounded reported-since-resolution flag, and a saturating
 occurrence count per canonical record.
 
 T-0037c may use synthetic owner tokens in tests. It does not create or remove
-real environment registrations; T-0037d and T-0037e consume this module.
+real environment registrations. T-0037d, T-0037e1, T-0037e2, and T-0037e3
+consume parked obligations; T-0037f integrates their outputs where server
+lifecycle ordering requires them.
 
 ## Likely Files
 

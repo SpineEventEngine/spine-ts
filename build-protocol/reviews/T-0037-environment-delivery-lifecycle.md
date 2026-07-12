@@ -1,6 +1,6 @@
 # T-0037 Review Log
 
-Status: Round 16 docs fix worker active
+Status: Round 16 docs fixes verified; fresh review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 the parent T-0037 `TASK.md`; Rounds are audit detail, not competing authority.
@@ -13,10 +13,10 @@ Branch: `task/T-0037-environment-delivery-lifecycle`
 
 | Lane                       | Reviewer                               | Status |
 | -------------------------- | -------------------------------------- | ------ |
-| Code style/maintainability | `019f559e-393d-7cb0-9b7c-ee4bc03da726` | P2    |
-| Documentation              | `019f559e-39dc-7e81-8032-dbb76acfdf91` | P1/P2 |
-| TypeScript/API docs        | `019f559e-3a68-74e2-b469-89d3e05dc138` | P1    |
-| Performance/reliability    | `019f559e-3afc-7ae1-ac6b-4505eaef48ae` | P1/P2 |
+| Code style/maintainability | `019f559e-393d-7cb0-9b7c-ee4bc03da726` | P2     |
+| Documentation              | `019f559e-39dc-7e81-8032-dbb76acfdf91` | P1/P2  |
+| TypeScript/API docs        | `019f559e-3a68-74e2-b469-89d3e05dc138` | P1     |
+| Performance/reliability    | `019f559e-3afc-7ae1-ac6b-4505eaef48ae` | P1/P2  |
 
 Security is deferred to final project readiness.
 
@@ -108,10 +108,14 @@ Security is deferred to final project readiness.
   and readiness route, transfers all configured/startup/buffered/retained
   canonical scopes, publishes the candidate, and reopens admission through a
   finally-equivalent path before propagating that result. Distinct reporting-
-  rejection and post-consumption permanent-retirement-failure tests each persist a canonical-scope
-  write after the fresh snapshot but before route rebind, prove the bounded
-  buffer is non-empty, then prove exact-once transfer/admission and exact-once
-  error propagation only after complete survivor rebinding.
+  rejection and post-consumption permanent-retirement-failure tests each
+  independently persist a supported canonical-scope write after the fresh
+  snapshot but before route rebind, prove the bounded transition buffer is non-
+  empty, then prove route rebind, exact-once transfer of every configured/
+  startup/buffered/retained scope, publication, admission reopen, and buffered-
+  write admission without an unrelated trigger before exact-once original error
+  propagation. Neither failure test may rely on the separate normal
+  interleaving test.
 - Confirm T-0037e1 ordinary last detach clears its stopped, proven-quiescent,
   permanently retired current-generation slot through a finally-equivalent path
   before propagating reporting or inert permanent-cleanup errors. Separate
@@ -784,3 +788,22 @@ Security is deferred to final project readiness.
   `019f55a2-d63d-7a12-9f7c-7e6679b85ee4` the complete accepted batch. The
   worker owns only the stale active references, child count, e2 error-test
   interleavings, and connected status/log updates; editing waits for this commit.
+- `2026-07-12T09:29:30Z`: Round 16 documentation fix authored the exact active
+  lifecycle caller/consumer ownership, eight-child architecture count, and two
+  independent non-empty e2 failure interleavings with complete rebind, all-scope
+  transfer, publication, admission reopen, buffered-write admission, and delayed
+  original-error propagation. Coordinator verification remains pending; no
+  clean review is claimed.
+- `2026-07-12T09:30:06Z`: Worker verification passed stale-unsuffixed-owner,
+  eight-child, independent non-empty e2 failure interleaving, canonical/mirror
+  status, event chronology, participant uniqueness, byte-identical 36-entry
+  historical ledger, docs, format, whitespace, exact nine-file scope, untracked,
+  and frozen-path checks. TypeDoc retained 205 server exports with only the known
+  invalid-`origin` warning. Coordinator verification remains pending; no clean
+  review is claimed.
+- `2026-07-12T09:33:08Z`: Coordinator closed the worker and independently passed
+  active-owner, eight-child, two independent non-empty e2 failure interleaving,
+  canonical/mirror status, 125-event chronology, 82-participant uniqueness,
+  byte-identical 36-entry ledger, exact-scope/frozen-path, `pnpm docs:check`,
+  `pnpm format:check`, and `git diff --check` checks. TypeDoc retained 205 server
+  exports with only the known invalid-`origin` warning. Fresh review is required.
