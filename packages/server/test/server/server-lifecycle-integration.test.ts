@@ -1070,6 +1070,155 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("keeps a blocked attachment out of another server's failed-start retry", async () => {
+    const fixture = await lifecycleFixture();
+    fixture.worker.release();
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+
+    const ownerStartupFailure = new Error("attachment owner startup failed");
+    const ownerQuiescenceFailure = new Error("attachment owner remained unsafe");
+    const ownerRetryFailure = new Error("attachment owner retry remained unsafe");
+    const ownerStorage = new LifecycleTrackingStorageFactory([]);
+    const ownerContext = await fixture
+      .createBuilder("LifecycleAttachmentRollbackOwner")
+      .withStorageFactory(ownerStorage)
+      .buildAsync();
+    const ownerResource = vi.fn();
+    const ownerServer = Server.atPort(0, { environment: fixture.environment })
+      .add(ownerContext)
+      .addResource({ close: ownerResource });
+    fixture.worker.rejectNextStart(ownerStartupFailure);
+    fixture.worker.failNextAwait(ownerQuiescenceFailure);
+    const ownerStarting = ownerServer.start();
+    void ownerStarting.catch(() => undefined);
+
+    const blockedStorage = new LifecycleTrackingStorageFactory([]);
+    const blockedContext = await fixture
+      .createBuilder("LifecycleBlockedAttachment")
+      .withStorageFactory(blockedStorage)
+      .buildAsync();
+    const duplicateBlockedClose = new Error("blocked resource closed more than once");
+    let blockedCloseCalls = 0;
+    const blockedResource = vi.fn(() => {
+      blockedCloseCalls += 1;
+      if (blockedCloseCalls > 1) {
+        throw duplicateBlockedClose;
+      }
+    });
+    const blockedServer = Server.atPort(0, { environment: fixture.environment })
+      .add(blockedContext)
+      .addResource({ close: blockedResource });
+    let blockedStarting: Promise<unknown> | undefined;
+    let ownerRetry: Promise<unknown> | undefined;
+    let blockedRetry: Promise<unknown> | undefined;
+    let releaseOwnerRetry: (() => void) | undefined;
+
+    try {
+      const ownerStartError = await ownerStarting.catch((error: unknown) => error);
+      expect(ownerStartError).toBeInstanceOf(AggregateError);
+      expect((ownerStartError as AggregateError).errors).toEqual([
+        ownerStartupFailure,
+        ownerQuiescenceFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(ownerResource).not.toHaveBeenCalled();
+      expect(ownerStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      blockedStarting = blockedServer.start();
+      const blockedStartError = await blockedStarting.catch((error: unknown) => error);
+      expect(blockedStartError).toMatchObject({
+        message: "Environment generation rollback requires an explicit retry.",
+      });
+      expect(blockedStartError).not.toBeInstanceOf(AggregateError);
+      expect(Object.hasOwn(blockedStartError as object, "cause")).toBe(false);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+
+      const awaitCallsBeforeRetry = fixture.worker.awaitCalls;
+      releaseOwnerRetry = fixture.worker.holdNextAwait(ownerRetryFailure);
+      ownerRetry = ownerServer.start();
+      void ownerRetry.catch(() => undefined);
+      await waitFor(() => fixture.worker.awaitCalls === awaitCallsBeforeRetry + 1);
+      blockedRetry = blockedServer.start();
+      void blockedRetry.catch(() => undefined);
+
+      let blockedRetrySettled = false;
+      let blockedTerminal: unknown;
+      void blockedRetry
+        .catch((error: unknown) => error)
+        .then((result) => {
+          blockedTerminal = result;
+          blockedRetrySettled = true;
+        });
+      await waitFor(() => blockedRetrySettled);
+      expectConsumedFailedStartServer(blockedTerminal);
+      expect(blockedTerminal).not.toBe(ownerRetryFailure);
+      expect(blockedResource).toHaveBeenCalledOnce();
+      expect(
+        blockedStorage.storages.every((storage) => blockedStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(ownerResource).not.toHaveBeenCalled();
+      expect(ownerStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+
+      const sessionDuringRetry = http2.connect(sibling.baseUrl);
+      sessionDuringRetry.on("error", () => undefined);
+      await once(sessionDuringRetry, "remoteSettings");
+      sessionDuringRetry.close();
+      await once(sessionDuringRetry, "close");
+
+      releaseOwnerRetry();
+      releaseOwnerRetry = undefined;
+      const ownerRetryError = await ownerRetry.catch((error: unknown) => error);
+      expect(ownerRetryError).toBe(ownerRetryFailure);
+      expect(ownerRetryError).not.toBe(blockedStartError);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(ownerResource).not.toHaveBeenCalled();
+      expect(ownerStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const ownerCompletion = await ownerServer.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(ownerCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(ownerResource).toHaveBeenCalledOnce();
+      expect(
+        ownerStorage.storages.every((storage) => ownerStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(blockedResource).toHaveBeenCalledOnce();
+      expect(fixture.worker.starts).toBe(2);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+
+      const ownerTerminal = await ownerServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(ownerTerminal);
+      const blockedTerminalAgain = await blockedServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(blockedTerminalAgain);
+      expect(blockedResource).toHaveBeenCalledOnce();
+
+      const sessionAfterRetry = http2.connect(sibling.baseUrl);
+      sessionAfterRetry.on("error", () => undefined);
+      await once(sessionAfterRetry, "remoteSettings");
+      sessionAfterRetry.close();
+      await once(sessionAfterRetry, "close");
+
+      await sibling.close();
+      await expect(fixture.environment.close()).resolves.toBeUndefined();
+    } finally {
+      releaseOwnerRetry?.();
+      await ownerStarting.catch(() => undefined);
+      await blockedStarting?.catch(() => undefined);
+      await ownerRetry?.catch(() => undefined);
+      await blockedRetry?.catch(() => undefined);
+      await ownerServer.start().catch(() => undefined);
+      await ownerServer.start().catch(() => undefined);
+      await blockedServer.start().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await ownerContext.close().catch(() => undefined);
+      await blockedContext.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("terminally rejects a consumed server after retrying immediate-safe cleanup", async () => {
     const events: string[] = [];
     const startupFailure = new Error("safe startup recovery failed");

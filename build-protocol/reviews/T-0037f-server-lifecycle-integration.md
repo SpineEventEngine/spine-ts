@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 3 round-3 re-review assigned
+Status: Slice 3 round-4 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -545,3 +545,44 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   reviewers are assigned at `gpt-5.6-terra` / high with no subagents against
   the package from accepted Slice 2 through the new round-3 commit. Docs N/A;
   security deferred to T-0041.
+
+## Slice 3 Round-3 Re-review Result
+
+- `2026-07-13T20:52:15Z`: style/maintainability HIGH; TypeScript/API docs HIGH;
+  performance/reliability HIGH. All corroborate the same finding. Actual model
+  profiles are `gpt-5.6-terra` / high, matching dispatch; no subagents; closed.
+- Confirmed high: an attachment rejected before claim creation because another
+  server owns pending rollback is marked owner by ambient
+  `failedStartPending`. Require attempt-qualified rollback provenance and a
+  concurrent owner-B/blocked-C regression. Both earlier listener-detach highs
+  are resolved. Documentation N/A; security deferred to T-0041.
+
+## Slice 3 Round-4 Review-Fix Handback
+
+- The corroborated high is addressed by exact active-rollback rejection
+  identity. `Server` no longer uses ambient pending state to assign cleanup
+  ownership; only the attachment error that created the retryable rollback can
+  produce an owning record. The later blocked contender immediately follows
+  safe never-attached dependency cleanup and terminal consumption.
+- Direct contract RED is the missing observation; integration RED is C blocked
+  on B's held retry. Both GREEN tests pass and prove exact cause ownership,
+  one-time closes, no contender retry work, B-only rollback progression, and a
+  usable sibling generation.
+- The five-file gate passes 167/167 with both typechecks and scoped lint/cleanup.
+  The ten-path allowlist adds only the architecture-authorized direct attachment
+  test. This remains implementation handback for coordinator re-review, not
+  self-acceptance; public API, docs, Slice 4+, and running close remain excluded.
+- `2026-07-13T21:00:38Z`: final formatted-tree gate passes both typechecks, 5
+  files / 167 native tests, scoped ESLint, cleanup, exact ten-path Prettier,
+  nine-path-in-ten scope, 4/4 status, public-leak/public-surface, and diff-check
+  audits. The corroborated high is ready for coordinator re-review.
+
+## Slice 3 Round-4 Re-review Assignment
+
+- `2026-07-13T21:02:54Z`: coordinator accepts/closes the same implementer,
+  actual `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both
+  typechecks, 6 files / 185 tests, and all scoped checks pass independently.
+- Fresh whole-slice style, TypeScript/API docs, and performance/reliability
+  reviewers are assigned at `gpt-5.6-terra` / high with no subagents against
+  the accepted Slice 2 baseline through the new round-4 commit. Documentation
+  N/A; security deferred to T-0041.

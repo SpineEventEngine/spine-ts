@@ -184,6 +184,7 @@ interface ServerEnvironmentAccess {
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle>;
   failedStartPending(environment: ServerEnvironment): boolean;
+  failedStartRetryPending(environment: ServerEnvironment, error: unknown): boolean;
   retryFailedStart(environment: ServerEnvironment): Promise<void>;
   detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): Promise<void>;
   retryDetach(
@@ -222,6 +223,13 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       throw new TypeError("Failed-start observation requires a ServerEnvironment instance.");
     }
     return attachments.failedStartPending;
+  },
+  failedStartRetryPending(environment: ServerEnvironment, error: unknown) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      throw new TypeError("Failed-start retry observation requires a ServerEnvironment instance.");
+    }
+    return attachments.failedStartRetryPending(error);
   },
   retryFailedStart(environment: ServerEnvironment) {
     testAttachmentsInstallable.delete(environment);

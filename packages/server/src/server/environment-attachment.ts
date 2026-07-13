@@ -210,6 +210,11 @@ export class EnvironmentAttachments {
     return this.#failedRollback !== undefined;
   }
 
+  /** @internal Whether this exact attachment rejection owns failed-start rollback retry. */
+  failedStartRetryPending(error: unknown): boolean {
+    return this.#failedRollback?.rejection === error;
+  }
+
   /** @internal Whether detach of this exact handle has established endpoint safety. */
   endpointSafe(attachment: EnvironmentAttachmentHandle): boolean {
     const attached = this.#handles.get(attachment);
@@ -900,12 +905,15 @@ export class EnvironmentAttachments {
         mode: remaining === 0 ? "generation" : "registration",
         inFlight: undefined,
         retry: undefined,
+        rejection: undefined,
       };
       this.#failedRollback = rollback;
       try {
         await this.#continueRollback(rollback);
       } catch (rollbackError) {
-        throw failedStartError(startError, rollbackError);
+        const rejection = failedStartError(startError, rollbackError);
+        rollback.rejection = rejection;
+        throw rejection;
       }
       throw startError;
     }
@@ -963,6 +971,7 @@ interface FailedStartRollback {
   mode: "registration" | "generation";
   inFlight: Promise<undefined> | undefined;
   retry: Promise<undefined> | undefined;
+  rejection: AggregateError | undefined;
 }
 
 interface AttachedHandle {

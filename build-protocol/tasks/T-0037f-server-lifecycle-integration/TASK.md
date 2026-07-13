@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 round-3 re-review assigned
+Status: Slice 3 round-4 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -782,3 +782,46 @@ gate passes.
   scoped ESLint, cleanup enforcement, Prettier, scope/status/public-leak, and
   diff gates. Fresh whole-Slice 3 style/API/reliability re-review is assigned;
   documentation is N/A and security remains deferred.
+
+## Slice 3 Round-3 Re-review Findings
+
+- `2026-07-13T20:52:15Z`: all three actual `gpt-5.6-terra` / high reviewers
+  corroborate one high-confidence finding, used no subagents, and are closed.
+  Both prior listener-detach findings are resolved; no other defects reported.
+- High: a fresh server whose attachment is blocked by another server's pending
+  rollback can still infer ownership from ambient `failedStartPending`. Make
+  rollback ownership exact to the failed attachment attempt and add the
+  deterministic owner-B/blocked-C regression. The same `gpt-5.6-terra` /
+  medium implementer receives this bounded round-4 fix.
+
+## Slice 3 Round-4 Review-Fix Handback
+
+- `EnvironmentAttachments.failedStartRetryPending(error)` is a package-internal
+  read-only exact-error observation. It is true only when the active retryable
+  failed-start rollback originated the same attachment rejection and becomes
+  false when that rollback clears. `Server` uses it only when creating its
+  private cleanup record; ambient pending state remains progress-only.
+- Direct contract coverage distinguishes B's owning failed attachment error
+  from C's later pre-claim admission rejection. The three-server integration
+  proves C closes its never-attached context/resource dependencies once,
+  becomes terminal, neither joins nor receives B's held retry cause, and does
+  no build/attach/listen retry while B alone retries and clears rollback. The
+  shared sibling generation remains usable throughout.
+- Strict RED is 0/1 direct plus 0/1 native integration; minimal GREEN is 1/1
+  plus 1/1. The established five-file Slice 3 gate, including direct attachment
+  coverage, passes 167/167. Both typechecks, scoped ESLint, and cleanup
+  enforcement pass before final synchronized format/audit evidence.
+- `2026-07-13T21:00:38Z`: final formatted-tree verification passes both
+  typechecks, 5 files / 167 native tests, scoped ESLint, cleanup enforcement,
+  and exact ten-path Prettier. Audits report 9 changed paths inside the justified
+  ten-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-4 Coordinator Gate
+
+- `2026-07-13T21:02:54Z`: accepted/closed same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent gate
+  passes both typechecks, 6 files / 185 native tests, scoped ESLint, cleanup,
+  Prettier, exact scope/status/public-leak/public-surface, and diff checks.
+  Fresh whole-Slice 3 style/API/reliability re-review is assigned; docs N/A and
+  security deferred.

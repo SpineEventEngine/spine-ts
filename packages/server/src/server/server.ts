@@ -110,7 +110,7 @@ export class Server {
         [...contexts, ...this.#resources, ...(this.#ownsEnvironment ? [this.#environment] : [])],
         "Server start cleanup failed while closing owned contexts/resources.",
       );
-      if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+      if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
         this.#failedStartCleanup = { closeGroup, ownsFailedStartRollback: true };
       } else {
         try {

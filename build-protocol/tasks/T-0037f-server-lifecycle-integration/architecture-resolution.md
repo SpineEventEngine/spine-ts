@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 round-3 re-review assigned
+Status: Slice 3 round-4 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -743,3 +743,40 @@ smallest coherent implementation.
   typechecks, 5 files / 165 tests, and every scoped static/audit gate. The
   existing implementer ran actual `gpt-5.6-terra` / medium with no subagents
   and is closed. Architecture remains unchanged; whole-slice re-review follows.
+
+## Slice 3 Round-4 Attachment Provenance Clarification
+
+- `2026-07-13T20:52:15Z`: exact rollback ownership must originate from the
+  attachment attempt that created the failed rollback. An ambient pending flag
+  cannot distinguish that owner from a later attachment rejected before claim
+  creation. Add only the narrow package-internal provenance needed by `Server`
+  and a three-server regression; do not expose a public lifecycle state or
+  alter Slice 4+ running-close behavior.
+
+## Slice 3 Round-4 Resolution Handback
+
+- The active `FailedStartRollback` retains only its exact boundary
+  `AggregateError`. A package-internal read-only comparison answers whether a
+  supplied attachment rejection is that active retry owner. A blocked
+  pre-claim attachment receives a distinct explicit-retry error and therefore
+  cannot acquire rollback authority.
+- `Server` snapshots only the comparison result into its existing private
+  cleanup provenance. It does not inspect claims, generations, or rollback
+  internals. Existing ambient `failedStartPending` remains solely an owning
+  record's progress check. No public export, state hierarchy, option,
+  signature, listener/running-close path, or Slice 4+ behavior changes.
+- Focused RED/GREEN is 0/1 then 1/1 on both direct and three-server layers; the
+  five-file native gate is 167/167, with both typechecks and scoped
+  lint/cleanup passing before final synchronized handback audits.
+- `2026-07-13T21:00:38Z`: final typecheck/native/lint/cleanup/Prettier and exact
+  scope/status/public-leak/public-surface/diff gates pass. Nine changed paths
+  remain inside the explicit ten-path boundary; the tenth path is the unchanged
+  lifecycle fixture retained in the established Slice 3 allowlist.
+
+## Slice 3 Round-4 Coordinator Acceptance
+
+- `2026-07-13T21:02:54Z`: exact rejection provenance is accepted after
+  independent coordinator verification: both typechecks, 6 files / 185 tests,
+  and every scoped static/audit gate pass. The actual Terra Medium implementer
+  used no subagents and is closed. Public and architectural surfaces remain
+  unchanged; fresh whole-slice re-review follows.
