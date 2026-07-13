@@ -28,6 +28,7 @@ export class Server {
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #environment: ServerEnvironment;
   readonly #ownsEnvironment: boolean;
+  #starting: Promise<RunningServer> | undefined;
 
   /** Create a server builder. Prefer {@link Server.atPort} for the common case. */
   constructor(options: ServerOptions = {}) {
@@ -69,7 +70,25 @@ export class Server {
   }
 
   /** Start the HTTP/2 listener and return its running lifecycle handle. */
-  async start(): Promise<RunningServer> {
+  start(): Promise<RunningServer> {
+    const current = this.#starting;
+    if (current !== undefined) {
+      return current;
+    }
+    const starting = this.#startOnce();
+    this.#starting = starting;
+    void starting.then(
+      () => {
+        this.#finishStart(starting);
+      },
+      () => {
+        this.#finishStart(starting);
+      },
+    );
+    return starting;
+  }
+
+  async #startOnce(): Promise<RunningServer> {
     const contexts = await buildContexts(this.#contexts, this.#environment.storageFactory);
     const attachment = await serverEnvironmentAccess.attach(this.#environment, {
       ownership: this.#ownsEnvironment ? "server" : "caller",
@@ -106,6 +125,12 @@ export class Server {
       port: address.port,
       closeables,
     });
+  }
+
+  #finishStart(starting: Promise<RunningServer>): void {
+    if (this.#starting === starting) {
+      this.#starting = undefined;
+    }
   }
 }
 
@@ -303,6 +328,7 @@ async function cleanupFailedStart(
   startError: unknown,
 ): Promise<void> {
   const errors: unknown[] = [];
+  let detachFailed = false;
 
   try {
     await closeNetwork(server, sessions);
@@ -313,16 +339,19 @@ async function cleanupFailedStart(
   try {
     await serverEnvironmentAccess.detach(environment, attachment);
   } catch (error) {
+    detachFailed = true;
     collectCloseError(error, errors);
   }
 
-  try {
-    await new RetryableCloseGroup(
-      closeables,
-      "Server start cleanup failed while closing owned contexts/resources.",
-    ).close();
-  } catch (error) {
-    collectCloseError(error, errors);
+  if (!detachFailed) {
+    try {
+      await new RetryableCloseGroup(
+        closeables,
+        "Server start cleanup failed while closing owned contexts/resources.",
+      ).close();
+    } catch (error) {
+      collectCloseError(error, errors);
+    }
   }
 
   if (errors.length > 0) {

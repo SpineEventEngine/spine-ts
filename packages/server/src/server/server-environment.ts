@@ -15,7 +15,7 @@ import {
   EnvironmentAttachments,
   type EnvironmentAttachOptions,
   type EnvironmentAttachmentHandle,
-  type EnvironmentAttachmentsOptions,
+  type EnvironmentGenerationWorker,
 } from "./environment-attachment.js";
 
 /** Deployment profile used by a small explicit server runtime environment. */
@@ -108,6 +108,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       "ServerEnvironment close failed.",
     );
     environmentAttachments.set(this, new EnvironmentAttachments());
+    testAttachmentsInstallable.add(this);
     Object.freeze(this);
   }
 
@@ -157,6 +158,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * successfully are not closed again.
    */
   close(): Promise<void> {
+    testAttachmentsInstallable.delete(this);
     this.#close ??= this.#attachments()
       .admitPermanentClose()
       .then(() => this.#closeGroup.close())
@@ -191,15 +193,17 @@ interface ServerEnvironmentAccess {
   retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
   installTestAttachments(
     environment: ServerEnvironment,
-    options: EnvironmentAttachmentsOptions,
+    createWorker: () => EnvironmentGenerationWorker,
   ): void;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 
 /** @internal Package-only environment delivery attachment access for later server lifecycle use. */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   attach(environment: ServerEnvironment, options: EnvironmentAttachOptions) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
@@ -207,6 +211,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.attach(options);
   },
   retryFailedStart(environment: ServerEnvironment) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Rollback retry requires a ServerEnvironment instance."));
@@ -214,6 +219,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.retryFailedStart();
   },
   detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Detach requires a ServerEnvironment instance."));
@@ -221,6 +227,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.detach(attachment);
   },
   retryDetach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
@@ -228,6 +235,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.retryDetach(attachment);
   },
   stopDelivery(environment: ServerEnvironment) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Delivery stop requires a ServerEnvironment instance."));
@@ -235,6 +243,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.stopDelivery();
   },
   retryDeliveryStop(environment: ServerEnvironment) {
+    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       return Promise.reject(
@@ -243,11 +252,17 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     }
     return attachments.retryDeliveryStop();
   },
-  installTestAttachments(environment: ServerEnvironment, options: EnvironmentAttachmentsOptions) {
+  installTestAttachments(
+    environment: ServerEnvironment,
+    createWorker: () => EnvironmentGenerationWorker,
+  ) {
     if (!environmentAttachments.has(environment)) {
       throw new TypeError("Test attachments require a ServerEnvironment instance.");
     }
-    environmentAttachments.set(environment, new EnvironmentAttachments(options));
+    if (!testAttachmentsInstallable.delete(environment)) {
+      throw new Error("Test attachments may only be installed before environment lifecycle use.");
+    }
+    environmentAttachments.set(environment, new EnvironmentAttachments({ createWorker }));
   },
 });
 

@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 1 review assigned
+Status: Slice 1 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -132,3 +132,53 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   documentation changed; Slice 6 owns the final lifecycle contract. Security
   remains deferred to T-0041. Historical superseded text is non-actionable
   unless current Slice 1 records claim it as active.
+
+## Slice 1 Review Results
+
+- `2026-07-13T17:44:01Z`: style
+  `019f5c90-4653-7e13-b1c7-4760c6446ca0`, API
+  `019f5c90-6aee-7393-9d83-e79d34851f12`, and reliability
+  `019f5c90-914b-7bc1-bf48-b3681947aa07` all match explicit Terra High runtime
+  metadata, used no subagents, and are closed. API is CLEAN.
+- High: do not run endpoint-dependent close hooks after listener-failure detach
+  rejection. High: coalesce concurrent `Server.start()` calls. Medium: narrow
+  and guard the package-internal test worker installer.
+- Required test fixes: observe listener construction/open directly; trace real
+  context/resource/owned-facility order and caller-owned reuse; cover concurrent
+  close exact-once detach; and cover listener-bind-failure detach/cleanup gating.
+- One existing Terra Medium implementer receives the complete batch. Fresh
+  style/API/reliability re-review follows focused verification; documentation
+  remains N/A and security deferred.
+
+## Slice 1 Review-Fix Checkpoint
+
+- `2026-07-13T17:48:00Z`: the existing implementer accepted the complete batch
+  after source verification and is applying it with strict RED/GREEN tests.
+  No partial review disposition is claimed; all three accepted code findings
+  and all five direct coverage requirements remain open until fresh focused
+  evidence is recorded.
+
+## Slice 1 Review-Fix Handback
+
+- `2026-07-13T17:51:28Z`: all three accepted code findings and all direct
+  coverage requirements are addressed with RED/GREEN evidence in the work log.
+  The implementation returns for fresh style/maintainability, TypeScript/API,
+  and performance/reliability review; this handback does not self-dispose those
+  concerns.
+- Review focus: confirm detach rejection prevents every endpoint-dependent
+  listener-start cleanup hook; start coalescing is in-flight only; close still
+  detaches once; the test installer accepts only a worker factory and cannot
+  replace lifecycle state; direct tests use real listener contention, context,
+  resources, and facilities; and no public or later-slice lifecycle seam leaks.
+- Documentation remains N/A because no README/TSDoc claim changed. Security
+  remains deferred to T-0041. No retained failed-start cleanup retry or
+  endpoint-safety observation is present.
+
+## Slice 1 Re-review Assignment
+
+- `2026-07-13T17:53:59Z`: the resumed implementer is accepted and closed at
+  actual Terra Medium with no subagents. Fresh 5-file / 120-test and all scoped
+  type/lint/cleanup/format/scope/status/leak/diff checks pass.
+- Resume style, API, and reliability reviewers at their explicit Terra High
+  profiles against a fresh package covering all Slice 1 commits. Documentation
+  remains N/A; security remains deferred.

@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 1 review assigned
+Status: Slice 1 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -335,3 +335,59 @@ gate passes.
   assigned in parallel at explicit Terra High, no subagents. Documentation is
   N/A because Slice 1 changes no observable README/TSDoc claim; Slice 6 owns the
   final lifecycle docs. Security remains deferred to T-0041.
+
+## Slice 1 Review Findings And Fix Assignment
+
+- `2026-07-13T17:44:01Z`: all three reviewers ran at actual
+  `gpt-5.6-terra` / `high`, matching explicit dispatch, with no subagents;
+  TypeScript/API is CLEAN. Style reports one high and one medium;
+  performance/reliability reports one high. All are closed.
+- High: listener-failure cleanup currently continues into contexts/resources/
+  owned environment after a rejected detach, which may close endpoint
+  dependencies before quiescence. Stop later cleanup on detach rejection in
+  this slice; retained retry remains later-slice work.
+- High: concurrent `Server.start()` calls can build/attach independently.
+  Coalesce one in-flight start and prove both callers receive the same result.
+- Medium: narrow the test installer to the required worker factory and reject
+  replacement after lifecycle use or a prior install.
+- Required coverage: directly observe no listener construction/open before
+  recovery; instrument actual context/resource/owned-facility order and
+  caller-owned reuse; prove concurrent close coalesces to one detach; and prove
+  listener-bind failure detaches before eligible owned cleanup without tearing
+  down after unsafe detach failure.
+- The same existing Terra Medium implementer context receives the complete
+  batch with unchanged Slice 1 ownership. Focused verification and fresh
+  applicable re-review are required.
+
+## Slice 1 Review-Fix Handback
+
+- `2026-07-13T17:51:28Z`: all accepted findings are implemented within the
+  existing eight-file scope. Listener-failure cleanup now treats detach
+  rejection as a hard gate and aggregates the listener plus detach failures
+  without closing contexts, resources, or an owned environment beneath
+  unproved quiescence.
+- Concurrent `Server.start()` calls now return one in-flight promise and share
+  one build, attachment, listener, and `RunningServer` result. The in-flight
+  slot clears after settlement, preserving the existing sequential-call
+  boundary outside this slice. Concurrent successful close already coalesced;
+  direct coverage now proves one exact detach.
+- The deterministic installer now accepts only a worker factory and consumes a
+  one-time pre-lifecycle eligibility token. A second install, any install after
+  attachment/detach/stop/retry use, and any install after permanent-close
+  admission reject. It remains package-internal and absent from root exports.
+- Direct tests now observe zero HTTP/2 construction before recovery release,
+  instrument a real context plus resource and owned facility order, reuse one
+  caller-owned environment through a fresh context/server attachment, cover
+  concurrent start/close, and exercise safe and unsafe real listener-bind
+  cleanup. Retained failed-start cleanup retry and endpoint-safety observation
+  remain explicitly unimplemented.
+
+## Slice 1 Review-Fix Coordinator Gate
+
+- `2026-07-13T17:53:59Z`: the resumed implementer remains actual Terra Medium,
+  used no subagents, and is closed. Coordinator native focused tests pass
+  5 files / 120 tests; generated typecheck, scoped ESLint, cleanup, Prettier,
+  exact eight-file scope/status/public-leak lint, and diff checks pass.
+- The same style, API, and reliability reviewers receive a fresh whole-Slice 1
+  package at their explicit Terra High profiles, no subagents. Documentation
+  remains N/A and security deferred.

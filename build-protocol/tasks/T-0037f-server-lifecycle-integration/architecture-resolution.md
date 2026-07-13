@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 1 review assigned
+Status: Slice 1 re-review assigned
 
 ## Resolution Summary
 
@@ -304,11 +304,26 @@ the existing normal detach required before the pre-existing close group can
 close an owned environment. Later slices retain unsafe quiescence, retained
 cleanup retry, sharing, and last-detach behavior ownership.
 
+#### Review-Fix Handback
+
+`2026-07-13T17:51:28Z`: Slice 1 now hard-gates listener-failure dependency
+cleanup on successful detach, coalesces only the current start attempt, and
+narrows the deterministic installer to one pre-lifecycle worker factory.
+Tests cover the complete accepted review batch without adding the later
+endpoint-safety query or deferred cleanup state machine.
+
 #### Coordinator Gate
 
 Actual implementer metadata matches Terra Medium. Fresh 5-file / 114-test,
 typecheck, lint, cleanup, format, scope/status, public-leak, and diff checks
 pass. Applicable Slice 1 review concerns are assigned.
+
+#### Review-Fix Assignment
+
+The accepted Slice 1 review batch requires start coalescing, unsafe listener-
+failure detach gating, a narrow pristine-only worker installer, and direct
+listener/order/reuse/concurrent-close/bind-failure probes. These complete Slice
+1 safety evidence without implementing retained cleanup retry from later slices.
 
 ### Slice 2: Caller-Owned Failed-Start Continuation
 
@@ -484,3 +499,9 @@ smallest coherent implementation.
   matching explicit dispatch; the splitter used no subagents and is closed.
 - Coordinator planning-file checks and the fresh 5-file / 160-test server and
   environment baseline pass. Slice 1 alone is authorized for Terra Medium TDD.
+
+## Slice 1 Review-Fix Coordinator Gate
+
+- `2026-07-13T17:53:59Z`: fresh 5-file / 120-test and all scoped mechanical,
+  status, scope, public-leak, and diff checks pass. A fresh whole-slice
+  style/API/reliability re-review is assigned; later slices remain unauthorized.

@@ -8,7 +8,12 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { file_spine_options } from "@spine-ts/proto";
-import { BoundedContext, Projection, ServerEnvironment } from "../../src/index.js";
+import {
+  BoundedContext,
+  Projection,
+  ServerEnvironment,
+  type ServerEnvironmentLocalOptions,
+} from "../../src/index.js";
 import type { DeliveryRunObligation } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
 import type { EnvironmentGenerationWorker } from "../../src/server/environment-attachment.js";
@@ -27,11 +32,17 @@ class LifecycleProjection extends Projection<string, typeof LifecycleStateSchema
   }
 }
 
-export async function lifecycleFixture(options: { readonly events?: string[] } = {}) {
+export async function lifecycleFixture(
+  options: {
+    readonly events?: string[];
+    readonly environment?: ServerEnvironmentLocalOptions;
+    readonly awaitFailure?: Error;
+  } = {},
+) {
   const events = options.events ?? [];
-  const worker = new HeldStartupWorker(events);
-  const environment = ServerEnvironment.local();
-  serverEnvironmentAccess.installTestAttachments(environment, { createWorker: () => worker });
+  const worker = new HeldStartupWorker(events, options.awaitFailure);
+  const environment = ServerEnvironment.local(options.environment);
+  serverEnvironmentAccess.installTestAttachments(environment, () => worker);
   const registry = generatedRegistry([
     {
       entityType: LifecycleProjection,
@@ -47,16 +58,19 @@ export async function lifecycleFixture(options: { readonly events?: string[] } =
       ],
     },
   ]);
-  const context = await BoundedContext.singleTenant("Lifecycle")
-    .withGeneratedRegistryRoot(registry.root)
-    .add(LifecycleProjection)
-    .buildAsync();
+  const createContext = (name: string) =>
+    BoundedContext.singleTenant(name)
+      .withGeneratedRegistryRoot(registry.root)
+      .add(LifecycleProjection)
+      .buildAsync();
+  const context = await createContext("Lifecycle");
 
   return Object.freeze({
     context,
     environment,
     events,
     worker,
+    createContext,
     dispose() {
       rmSync(registry.directory, { recursive: true, force: true });
     },
@@ -67,14 +81,31 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #release = Promise.withResolvers<undefined>();
   readonly #started = Promise.withResolvers<undefined>();
   readonly #events: string[];
+  readonly #awaitFailure: Error | undefined;
   #starts = 0;
+  #stopCalls = 0;
+  #awaitCalls = 0;
+  #retireCalls = 0;
 
-  constructor(events: string[]) {
+  constructor(events: string[], awaitFailure?: Error) {
     this.#events = events;
+    this.#awaitFailure = awaitFailure;
   }
 
   get starts(): number {
     return this.#starts;
+  }
+
+  get stopCalls(): number {
+    return this.#stopCalls;
+  }
+
+  get awaitCalls(): number {
+    return this.#awaitCalls;
+  }
+
+  get retireCalls(): number {
+    return this.#retireCalls;
   }
 
   started(): Promise<void> {
@@ -140,15 +171,20 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   }
 
   stop(): void {
+    this.#stopCalls += 1;
     this.#events.push("stop");
   }
 
   awaitSettled(): Promise<void> {
+    this.#awaitCalls += 1;
     this.#events.push("await");
-    return Promise.resolve();
+    return this.#awaitFailure === undefined
+      ? Promise.resolve()
+      : Promise.reject(this.#awaitFailure);
   }
 
   retire(): Promise<void> {
+    this.#retireCalls += 1;
     this.#events.push("retire");
     return Promise.resolve();
   }
