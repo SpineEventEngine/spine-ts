@@ -321,6 +321,9 @@ export class EnvironmentAttachments {
       if (this.#failedLastDetach !== undefined) {
         this.#refuseStop(stop, detachRetryRequiredError());
       }
+      if (this.#failedNonLastDetachOwnsRegistration()) {
+        this.#refuseStop(stop, detachRetryRequiredError());
+      }
       const generation = this.#registrations.generation;
       if (generation === undefined) {
         return;
@@ -396,6 +399,9 @@ export class EnvironmentAttachments {
         new Error("Environment attachment handle is not owned by this environment."),
       );
     }
+    if (this.#rejectedStopOwns(attached)) {
+      return Promise.reject(deliveryStopRetryRequiredError());
+    }
     if (attached.operation !== undefined) {
       return attached.operation.promise;
     }
@@ -411,6 +417,9 @@ export class EnvironmentAttachments {
       return Promise.reject(
         new Error("Environment attachment handle is not owned by this environment."),
       );
+    }
+    if (this.#rejectedStopOwns(attached)) {
+      return Promise.reject(deliveryStopRetryRequiredError());
     }
     const operation = attached.operation;
     if (operation === undefined) {
@@ -434,6 +443,9 @@ export class EnvironmentAttachments {
 
   #queueDetach(attached: AttachedHandle, previousOperation?: DetachHandleOperation): Promise<void> {
     const detaching = this.#serial.then(() => {
+      if (this.#incompleteStopOwns(attached)) {
+        throw deliveryStopRetryRequiredError();
+      }
       if (this.#failedRollback !== undefined) {
         attached.operation = previousOperation;
         throw explicitRetryError();
@@ -455,6 +467,31 @@ export class EnvironmentAttachments {
       },
     );
     return detaching;
+  }
+
+  #failedNonLastDetachOwnsRegistration(): boolean {
+    for (const attached of this.#attached.values()) {
+      if (
+        attached.detachKind === "non-last" &&
+        attached.operation?.status !== "complete" &&
+        attached.generation.hasRegistration(attached.claim.token)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #rejectedStopOwns(attached: AttachedHandle): boolean {
+    const stop = this.#stop;
+    return (
+      stop?.status === "rejected" && stop.admitted && stop.survivors?.includes(attached) === true
+    );
+  }
+
+  #incompleteStopOwns(attached: AttachedHandle): boolean {
+    const stop = this.#stop;
+    return stop?.admitted === true && !stop.drained && stop.survivors?.includes(attached) === true;
   }
 
   async #detachRegistration(attached: AttachedHandle): Promise<void> {

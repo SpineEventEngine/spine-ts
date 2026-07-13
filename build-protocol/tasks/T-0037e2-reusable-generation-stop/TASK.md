@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 1 review wave 2 assigned
+Status: Slice 1 review wave 3 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -172,9 +172,22 @@ the committed fix delta is assigned to fresh four-lane review.
 
 The coordinator fix audit additionally requires stop selection to occur at
 serialized admission, so earlier queued attach/detach operations linearize
-first. This correction is implemented with focused RED/GREEN; verification and
-re-review remain.
+first. This correction, its focused RED/GREEN, and coordinator verification are
+complete; Wave 2 found one remaining lifecycle-ownership asymmetry.
 
 The final Wave 1 contract fix makes ordinary stop refuse after an admitted
 rejection with a private stable explicit-retry message; only explicit retry
-advances retained state. Focused RED/GREEN is recorded; verification remains.
+advances retained state. Focused RED/GREEN and coordinator verification are
+complete; fresh review of that fix was clean.
+
+Wave 2 fixes require stop to refuse a still-owned rejected non-last detach and
+require detach/retry-detach to refuse while an admitted rejected stop owns its
+frozen survivor set. Focused RED/GREEN and coordinator verification passed; the
+committed fix delta is assigned to fresh four-lane review. No other Slice 1
+behavior or later slice is reopened.
+
+The existing implementer reproduced both Wave 2 ownership directions in
+focused RED and made them GREEN using only the existing handle operation and
+retained stop operation. Focused T-0037e2 plus T-0037d/e1 regressions and the
+public-index/typecheck checks pass; status remains fixes assigned until
+coordinator acceptance.

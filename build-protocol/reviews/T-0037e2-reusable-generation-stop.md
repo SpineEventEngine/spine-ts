@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 1 review wave 2 assigned
+Status: Slice 1 review wave 3 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -101,3 +101,39 @@ Derived status mirror: the canonical current state is the `Status` header in
   Wave 2 style, documentation, TypeScript/API docs, and
   performance/reliability review at their immutable explicit profiles, all
   read-only and without subagents.
+
+## Slice 1 Review Wave 2
+
+- Style/maintainability: CLEAN.
+- Documentation: P2 stale task-summary statements said verification remained;
+  corrected in the Wave 2 fix assignment update.
+- TypeScript/API docs: P1 asymmetric recovery ownership. Rejected non-last
+  detach must block stop, and an admitted rejected stop must block detach and
+  retry-detach from removing its frozen survivor.
+- Performance/reliability: CLEAN.
+- Deduplicated fix batch is returned to the same implementer at explicit and
+  immutable `gpt-5.6-terra` / `medium`, no subagents. Focused tests must cover
+  both ownership directions without implementing racing attach or later-slice
+  transition faults.
+- Every lane's actual retained profile matched explicit dispatch and no
+  contradictory metadata or child agent appeared.
+- Wave 2 fixes passed independent focused, public-index, typecheck, formatting,
+  diff, status, inventory, and public-leak checks at
+  `2026-07-13T05:45:29Z`. The committed fix delta is assigned to fresh Wave 3
+  review by all four existing read-only lanes at their immutable explicit
+  profiles, with no subagents.
+
+## Slice 1 Review Wave 2 Fix Evidence
+
+- Focused RED reproduced all three ownership failures: rejected non-last
+  detach did not block stop, and both call-time and serialized detaches could
+  remove survivors frozen by an admitted rejected stop.
+- Focused GREEN now uses the existing attached-handle detach operation and
+  retained `GenerationStop` as the two bounded ownership markers. Stop refuses
+  before route/candidate/retirement mutation until non-last detach retry
+  completes. Detach and retry-detach refuse frozen survivors until explicit
+  stop retry publishes the candidate; a queued rejected detach remains
+  retryable against that candidate.
+- Focused and regression evidence is 2 files / 70 tests, public-index is 10 / 10,
+  and generated-build typechecking passes. Status remains Wave 2 fixes assigned
+  pending coordinator acceptance; no later-slice behavior was added.

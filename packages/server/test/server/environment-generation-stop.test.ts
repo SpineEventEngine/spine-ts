@@ -78,6 +78,62 @@ describe("environment generation stop", () => {
     await expect(attachments.stopDelivery()).resolves.toBeUndefined();
   });
 
+  it("refuses stop while rejected non-last detach owns a live registration", async () => {
+    const oldWorker = new ControlledWorker([], "non-last-old");
+    const candidateWorker = new ControlledWorker([], "non-last-candidate");
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const storage = new InMemoryStorageFactory();
+    const first = descriptor("NonLastFirst", "type.example.dev/NonLastFirst", storage);
+    const second = descriptor("NonLastSecond", "type.example.dev/NonLastSecond", storage);
+    const firstHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value],
+    });
+    const secondHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [second.value],
+    });
+    const oldGeneration = secondHandle.generation;
+    oldWorker.awaitOwnerFailures.push(new Error("non-last detach quiescence failed"));
+
+    await expect(attachments.detach(firstHandle)).rejects.toThrow(
+      "non-last detach quiescence failed",
+    );
+    expect(attachments.activeRegistrationCount).toBe(2);
+    const generationRetirementCalls = [
+      oldWorker.stopCalls,
+      oldWorker.awaitCalls,
+      oldWorker.retireCalls,
+    ];
+
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment generation detach requires an explicit retry.",
+    );
+    expect(attachments.activeRegistrationCount).toBe(2);
+    expect(factoryCalls).toBe(1);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual(
+      generationRetirementCalls,
+    );
+    second.readiness.claim(second.ready);
+    await until(() => second.notifications === 1);
+
+    await attachments.retryDetach(firstHandle);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    await attachments.stopDelivery();
+    expect(secondHandle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(secondHandle);
+  });
+
   it("retries one retained stop after candidate construction fails without repeating old retirement", async () => {
     const events: string[] = [];
     const oldWorker = new ControlledWorker(events, "old");
@@ -108,6 +164,16 @@ describe("environment generation stop", () => {
     const initial = attachments.stopDelivery();
     await expect(initial).rejects.toBe(constructionFailure);
     const retiredBeforeRetry = [oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls];
+    const oldGeneration = firstHandle.generation;
+    await expect(attachments.detach(firstHandle)).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    await expect(attachments.retryDetach(firstHandle)).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    expect(attachments.activeRegistrationCount).toBe(2);
+    expect(firstHandle.generation).toBe(oldGeneration);
+    expect(secondHandle.generation).toBe(oldGeneration);
     await expect(attachments.stopDelivery()).rejects.toThrow(
       "Environment delivery stop requires an explicit retry.",
     );
@@ -125,6 +191,57 @@ describe("environment generation stop", () => {
     expect(factoryCalls).toBe(3);
     expect(firstHandle.generation).toBe(secondHandle.generation);
     await attachments.detach(firstHandle);
+    await attachments.detach(secondHandle);
+  });
+
+  it("retains a queued detach while a rejected stop owns its frozen survivor", async () => {
+    const oldWorker = new ControlledWorker([], "queued-stop-old");
+    const candidateWorker = new ControlledWorker([], "queued-stop-candidate");
+    const constructionFailure = new Error("queued candidate construction failed");
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        factoryCalls += 1;
+        if (factoryCalls === 1) return oldWorker;
+        if (factoryCalls === 2) throw constructionFailure;
+        if (factoryCalls === 3) return candidateWorker;
+        throw new Error("Unexpected generation worker.");
+      },
+    });
+    const storage = new InMemoryStorageFactory();
+    const first = descriptor("QueuedStopFirst", "type.example.dev/QueuedStopFirst", storage);
+    const second = descriptor("QueuedStopSecond", "type.example.dev/QueuedStopSecond", storage);
+    const firstHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value],
+    });
+    const secondHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [second.value],
+    });
+    const oldGeneration = firstHandle.generation;
+
+    const stopping = attachments.stopDelivery();
+    const detaching = attachments.detach(firstHandle);
+    await expect(stopping).rejects.toBe(constructionFailure);
+    await expect(detaching).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    await expect(attachments.retryDetach(firstHandle)).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    expect(attachments.activeRegistrationCount).toBe(2);
+    expect(firstHandle.generation).toBe(oldGeneration);
+    expect(secondHandle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+
+    await attachments.retryDeliveryStop();
+    expect(firstHandle.generation).toBe(secondHandle.generation);
+    expect(firstHandle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(3);
+    await attachments.retryDetach(firstHandle);
+    expect(attachments.activeRegistrationCount).toBe(1);
     await attachments.detach(secondHandle);
   });
 
@@ -321,6 +438,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly gates: Promise<void>[] = [];
   readonly startFailures: Error[] = [];
   readonly awaitFailures: Error[] = [];
+  readonly awaitOwnerFailures: Error[] = [];
   readonly targets: string[] = [];
   starts = 0;
   stopCalls = 0;
@@ -388,7 +506,8 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   }
   stopOwners(_keys: readonly string[]): void {}
   awaitOwnersSettled(_keys: readonly string[]): Promise<void> {
-    return Promise.resolve();
+    const failure = this.awaitOwnerFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
   retireOwners(_keys: readonly string[]): Promise<void> {
     return Promise.resolve();
