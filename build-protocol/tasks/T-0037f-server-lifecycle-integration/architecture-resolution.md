@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 5 round-2 re-review assigned
+Status: Slice 5 round-3 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -974,3 +974,31 @@ smallest coherent implementation.
   all scoped gates. Actual Terra Medium implementer used no subagents and is
   closed. Production/public/architecture surfaces remain unchanged; test-
   validity re-review follows.
+
+## Slice 5 Round-3 Teardown Clarification
+
+- `2026-07-13T22:40:14Z`: every prototype spy and running server in the two
+  safe-failure scenarios must be acquired after entering a protected block and
+  released through optional teardown handles. This is test hygiene required
+  for deterministic evidence, with no behavior or architecture change.
+
+## Slice 5 Round-3 Review-Fix Handback
+
+- `2026-07-13T22:44:54Z`: the two safe-failure tests now establish teardown
+  protection before fixture, prototype spy, and running-server acquisition.
+  Optional handles and nested cleanup preserve every Slice 5 assertion while
+  covering setup/start rejection windows. No lifecycle authority, architecture,
+  production behavior, or public surface changed.
+- Verification passes 3/3 affected cases, 6/6 corrected Slice 5 cases, 36/36
+  integration cases, 8 files / 360 native tests, and both typechecks. Final
+  static/audit evidence follows for coordinator re-review.
+- `2026-07-13T22:47:22Z`: final scoped lint/cleanup/format and exact five-path
+  scope, 4/4 status, public-leak/public-surface, zero-production-diff, and
+  diff-integrity gates pass.
+
+## Slice 5 Round-3 Coordinator Acceptance
+
+- `2026-07-13T22:49:43Z`: protected safe-failure setup and independent teardown
+  pass both typechecks, 8 files / 360 tests, and all scoped coordinator gates.
+  Actual Terra Medium implementer used no subagents and is closed. No behavior
+  or architecture change; final test-validity re-review follows.

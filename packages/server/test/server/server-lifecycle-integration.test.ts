@@ -547,7 +547,6 @@ describe("Server lifecycle integration", () => {
         "last retirement",
       ),
     );
-    const storageFactory = new LifecycleTrackingStorageFactory(events);
     let deliveryAttempts = 0;
     const closeDelivery = vi.fn(() => {
       deliveryAttempts += 1;
@@ -556,28 +555,7 @@ describe("Server lifecycle integration", () => {
         throw facilityFailure;
       }
     });
-    const fixture = await lifecycleFixture({
-      events,
-      workers: [worker],
-      environment: {
-        storageFactory,
-        ownsStorageFactory: true,
-        delivery: { close: closeDelivery },
-        ownsDelivery: true,
-      },
-    });
-    const closeFixtureContext = fixture.context.close.bind(fixture.context);
     let contextAttempts = 0;
-    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
-      this: BoundedContext,
-    ) {
-      if (this !== fixture.context) {
-        throw new Error("Unexpected context close in safe last-cleanup test.");
-      }
-      contextAttempts += 1;
-      events.push("context");
-      return contextAttempts === 1 ? Promise.reject(contextFailure) : closeFixtureContext();
-    });
     const closeSuccessfulResource = vi.fn(() => events.push("resource-success"));
     let resourceAttempts = 0;
     const closeRetryingResource = vi.fn(() => {
@@ -587,16 +565,44 @@ describe("Server lifecycle integration", () => {
         throw resourceFailure;
       }
     });
-    const running = await Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
-      .add(fixture.context)
-      .addResource({ close: closeSuccessfulResource })
-      .addResource({ close: closeRetryingResource })
-      .start();
+    let fixture: Awaited<ReturnType<typeof lifecycleFixture>> | undefined;
+    let running: Awaited<ReturnType<Server["start"]>> | undefined;
+    let restoreContextClose: () => void = () => undefined;
 
     try {
+      const storageFactory = new LifecycleTrackingStorageFactory(events);
+      fixture = await lifecycleFixture({
+        events,
+        workers: [worker],
+        environment: {
+          storageFactory,
+          ownsStorageFactory: true,
+          delivery: { close: closeDelivery },
+          ownsDelivery: true,
+        },
+      });
+      const closeFixtureContext = fixture.context.close.bind(fixture.context);
+      const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+        this: BoundedContext,
+      ) {
+        if (this !== fixture?.context) {
+          throw new Error("Unexpected context close in safe last-cleanup test.");
+        }
+        contextAttempts += 1;
+        events.push("context");
+        return contextAttempts === 1 ? Promise.reject(contextFailure) : closeFixtureContext();
+      });
+      restoreContextClose = () => {
+        closeContext.mockRestore();
+      };
+      running = await Server.atPort(0, {
+        environment: fixture.environment,
+        ownsEnvironment: true,
+      })
+        .add(fixture.context)
+        .addResource({ close: closeSuccessfulResource })
+        .addResource({ close: closeRetryingResource })
+        .start();
       const firstFailure = await running.close().catch((error: unknown) => error);
 
       expect(firstFailure).toBeInstanceOf(AggregateError);
@@ -628,11 +634,17 @@ describe("Server lifecycle integration", () => {
       expect(closeDelivery).toHaveBeenCalledTimes(2);
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
-      closeContext.mockRestore();
-      await running.close().catch(() => undefined);
-      await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
-      fixture.dispose();
+      try {
+        await running?.close().catch(() => undefined);
+      } finally {
+        try {
+          restoreContextClose();
+        } finally {
+          await fixture?.context.close().catch(() => undefined);
+          await fixture?.environment.close().catch(() => undefined);
+          fixture?.dispose();
+        }
+      }
     }
   });
 
@@ -656,14 +668,16 @@ describe("Server lifecycle integration", () => {
       worker.release();
       const retirementFailure = createFailure();
       worker.failNextRetire(retirementFailure);
-      const fixture = await lifecycleFixture({ workers: [worker] });
       const closeResource = vi.fn();
-      const running = await Server.atPort(0, { environment: fixture.environment })
-        .add(fixture.context)
-        .addResource({ close: closeResource })
-        .start();
+      let fixture: Awaited<ReturnType<typeof lifecycleFixture>> | undefined;
+      let running: Awaited<ReturnType<Server["start"]>> | undefined;
 
       try {
+        fixture = await lifecycleFixture({ workers: [worker] });
+        running = await Server.atPort(0, { environment: fixture.environment })
+          .add(fixture.context)
+          .addResource({ close: closeResource })
+          .start();
         const firstFailure = await running.close().catch((error: unknown) => error);
 
         expect(firstFailure).toBe(retirementFailure);
@@ -680,10 +694,10 @@ describe("Server lifecycle integration", () => {
         expect(closeResource).toHaveBeenCalledOnce();
         await expect(fixture.environment.close()).resolves.toBeUndefined();
       } finally {
-        await running.close().catch(() => undefined);
-        await fixture.context.close().catch(() => undefined);
-        await fixture.environment.close().catch(() => undefined);
-        fixture.dispose();
+        await running?.close().catch(() => undefined);
+        await fixture?.context.close().catch(() => undefined);
+        await fixture?.environment.close().catch(() => undefined);
+        fixture?.dispose();
       }
     },
   );

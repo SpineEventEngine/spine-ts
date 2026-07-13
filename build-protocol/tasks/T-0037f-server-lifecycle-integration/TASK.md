@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 5 round-2 re-review assigned
+Status: Slice 5 round-3 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1061,3 +1061,39 @@ gate passes.
   typechecks, 8 files / 360 tests, lint/cleanup/Prettier, exact scope/status/
   leak/surface/diff checks, and zero production diff. Fresh style/reliability
   re-review is assigned at Terra High; API/docs N/A, security deferred.
+
+## Slice 5 Round-2 Re-review Finding
+
+- `2026-07-13T22:40:14Z`: reliability CLEAN; style reports one MEDIUM. Actual
+  reviewers ran Terra High, no subagents, both closed.
+- Medium: two safe-failure tests still install prototype-wide context-close
+  spies and start servers before entering `try/finally`. Move every acquisition
+  into protected blocks with optional handles so setup/start failure always
+  restores spies and disposes fixtures. Same Terra Medium implementer owns the
+  test-only round-3 fix; production/public diff remains forbidden.
+
+## Slice 5 Round-3 Review-Fix Handback
+
+- `2026-07-13T22:44:54Z`: both safe-failure scenarios now enter `try` before
+  fixture acquisition, prototype spy installation, or server start. Optional
+  fixture/running-server handles and nested teardown ensure server close, spy
+  restoration, context/environment cleanup, and fixture disposal are attempted
+  even when setup or start rejects.
+- This is a test-hygiene correction with all accepted assertions unchanged; no
+  runtime RED was manufactured and production/public diffs remain empty.
+  Focused affected cases pass 3/3, corrected Slice 5 passes 6/6, full
+  integration passes 36/36, the eight-file gate passes 360/360, and both
+  typechecks pass. Final synchronized static/audit evidence follows; this is
+  implementation handback, not self-acceptance.
+- `2026-07-13T22:47:22Z`: final synchronized tree passes scoped ESLint,
+  cleanup enforcement, exact five-path Prettier/scope, 4/4 status, zero public
+  internal-name leak, empty production/public-surface diffs, and
+  `git diff --check`.
+
+## Slice 5 Round-3 Coordinator Gate
+
+- `2026-07-13T22:49:43Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 8 files / 360 tests, all scoped checks/audits, and zero production
+  or public diff. Fresh style/reliability re-review is assigned at Terra High;
+  API/docs N/A, security deferred.

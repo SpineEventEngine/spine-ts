@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 5 round-2 re-review assigned
+Status: Slice 5 round-3 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -795,4 +795,38 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   8 files / 360 tests, and all scoped gates pass independently.
 - Fresh style/maintainability and performance/reliability reviewers run at
   `gpt-5.6-terra` / high, no subagents, against the corrected test-only package.
+  API/docs N/A for zero production/public diff; security deferred.
+
+## Slice 5 Round-2 Re-review Result
+
+- `2026-07-13T22:40:14Z`: performance/reliability CLEAN; style/maintainability
+  MEDIUM. Actual profiles are `gpt-5.6-terra` / high, matching dispatch; no
+  subagents; both closed.
+- Remaining medium: prototype `BoundedContext.close` spies and server starts in
+  two safe-failure scenarios occur before `try/finally`, contradicting the
+  every-resource teardown claim. Move acquisitions inside protected blocks;
+  then rerun style/reliability. API/docs N/A; security deferred.
+
+## Slice 5 Round-3 Review-Fix Handback
+
+- `2026-07-13T22:44:54Z`: the remaining style finding is implemented in both
+  safe-failure scenarios. Every fixture, prototype spy, and server is acquired
+  after entering `try`; optional handles and nested teardown protect every
+  partial setup/start window without changing accepted assertions.
+- Review evidence: affected cases 3/3, corrected Slice 5 6/6, full integration
+  36/36, eight-file regression 360/360, and both typechecks pass. Production
+  and public surfaces remain unchanged. Final scoped static/audit evidence
+  follows; fresh coordinator re-review is required.
+- `2026-07-13T22:47:22Z`: final handback passes scoped ESLint, cleanup, exact
+  five-path Prettier/scope, synchronized 4/4 status, zero public leak, empty
+  production/public-surface diffs, and diff check. This remains implementation
+  handback, not acceptance.
+
+## Slice 5 Round-3 Re-review Assignment
+
+- `2026-07-13T22:49:43Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  8 files / 360 tests, and all scoped gates pass independently.
+- Fresh style/maintainability and performance/reliability reviewers run at
+  `gpt-5.6-terra` / high, no subagents, on the five-path teardown correction.
   API/docs N/A for zero production/public diff; security deferred.
