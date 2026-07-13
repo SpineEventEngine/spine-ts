@@ -512,6 +512,7 @@ describe("environment generation stop", () => {
     expect(candidateWorker.starts).toBe(1);
     firstGate.resolve();
     await until(() => candidateWorker.starts === 2);
+    expect(candidateWorker.targets[1]).toBe("type.example.dev/BarrierSecond");
     expect(firstHandle.generation).toBe(oldGeneration);
     expect(secondHandle.generation).toBe(oldGeneration);
     secondGate.resolve();
@@ -526,8 +527,8 @@ describe("environment generation stop", () => {
     expect(secondHandle.generation).toBe(firstHandle.generation);
     expect(candidateWorker.targets).toEqual([
       "type.example.dev/BarrierFirst",
-      "type.example.dev/BarrierFirst",
       "type.example.dev/BarrierSecond",
+      "type.example.dev/BarrierFirst",
     ]);
     expect(events.indexOf("old:retire")).toBeLessThan(events.indexOf("candidate:start"));
     expect(factoryCalls).toBe(2);

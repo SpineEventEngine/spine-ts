@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 2A review wave 1 assigned
+Status: Slice 2A review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -237,3 +237,54 @@ Derived status mirror: the canonical current state is the `Status` header in
   violates implemented behavior or makes 2B unsound.
 - Wave 1 assigns all four existing read-only lanes at immutable explicit
   profiles, no subagents. Security remains deferred to T-0041.
+
+## Slice 2A Review Wave 1
+
+- Style/maintainability: CLEAN.
+- Documentation: P2 deferred `verification-before-completion` selection/read was
+  not recorded at the final evidence boundary.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: P2 transfer selection rescans the completed prefix;
+  P2 per-survivor capture repeats generation-wide pending/record scans.
+- Deduplicated fix batch returns to the same implementer at immutable/explicit
+  `gpt-5.6-terra` / `medium`, no subagents: stable pending queue with dirty
+  re-enqueue, one generation-wide retained snapshot, and completion-skill
+  evidence. Slice 2B gaps remain unchanged.
+- Every lane's actual profile matched explicit dispatch; no contradiction or
+  child agent appeared.
+- Coordinator fix audit adds one correction before re-review: array
+  `shift()`/`unshift()` is not an O(1) pending queue. Replace it with bounded
+  linked head/tail or an equivalent structure without changing checkpoint
+  behavior.
+
+## Slice 2A Review Wave 1 Fix Evidence
+
+- Focused RED reproduced dirty-unit unfairness and the missing generation-wide
+  retained snapshot. GREEN proves first stable, later stable, then dirty-tail
+  transfer order and token-specific configured-order retained capture without
+  consuming records.
+- The first fix established deduplicated ordering but used O(N) array-front
+  mutation, so its complexity claim is superseded. The corrected
+  `TransitionScopes` uses intrusive `pendingNext` links and bounded head/tail
+  fields for constant-reference enqueue, restore, peek, and pop while preserving
+  dirty tail re-enqueue and explicit-retry restoration. `DeliveryGeneration`
+  still captures all registrations from one coordinator settlement and one
+  token-indexed records snapshot.
+- The implementer selected and read `verification-before-completion` fully
+  before final claims. Final evidence at `2026-07-13T06:39:45Z` is 4 files / 91
+  tests, generated-build typecheck, focused Prettier, exact status/public/
+  inventory/structure scans, and diff hygiene passing. Slice 2B remains
+  unchanged; no full verify, commit, push, generated change, or subagent.
+- Coordinator-audit structural RED found array `shift()`/`unshift()` and missing
+  linked head/tail state. GREEN and the deterministic focused test prove the
+  linked deque retains first stable, later stable, dirty-first order. Fresh
+  four-file verification after the correction is 91 / 91 tests plus passing
+  generated-build typecheck; final formatting and scope scans are recorded in
+  the work log.
+- At `2026-07-13T06:45:34Z`, the final structure scan confirmed intrusive linked
+  head/tail storage with no array-front mutation or stale queue array. Prettier,
+  exact status/public/inventory checks, and diff hygiene also passed with Slice
+  2B and every exclusion unchanged.
+- Wave 1 fixes passed coordinator verification at `2026-07-13T06:47:08Z`. The
+  committed fix delta is assigned to fresh Wave 2 review by all four existing
+  read-only lanes at immutable explicit profiles, no subagents.

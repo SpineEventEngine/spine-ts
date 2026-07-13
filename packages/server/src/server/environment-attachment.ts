@@ -358,9 +358,7 @@ export class EnvironmentAttachments {
           }),
         ),
       );
-      for (const survivor of survivors) {
-        old.captureTransition(survivor.claim.token, stop.scopes);
-      }
+      old.captureTransition(stop.scopes);
     }
     if (!stop.oldRetired) {
       await old.retire();
@@ -765,6 +763,8 @@ interface TransitionScopeUnit {
   transferredVersion: number;
   inFlightVersion: number | undefined;
   dirtyDuringFlight: boolean;
+  queued: boolean;
+  pendingNext: TransitionScopeUnit | undefined;
 }
 
 class TransitionScopes {
@@ -772,7 +772,8 @@ class TransitionScopes {
     string,
     Map<ContextDeliveryDescriptor, Map<string, TransitionScopeUnit>>
   >();
-  readonly #ordered: TransitionScopeUnit[] = [];
+  #pendingHead: TransitionScopeUnit | undefined;
+  #pendingTail: TransitionScopeUnit | undefined;
 
   capture(
     token: string,
@@ -790,16 +791,24 @@ class TransitionScopes {
   }
 
   nextPending(): TransitionScopeUnit | undefined {
-    return this.#ordered.find(
-      ({ version, transferredVersion, inFlightVersion }) =>
-        inFlightVersion === undefined && transferredVersion < version,
-    );
+    return this.#pendingHead;
   }
 
   begin(unit: TransitionScopeUnit): number {
-    if (unit.inFlightVersion !== undefined || unit.transferredVersion >= unit.version) {
+    if (
+      this.#pendingHead !== unit ||
+      !unit.queued ||
+      unit.inFlightVersion !== undefined ||
+      unit.transferredVersion >= unit.version
+    ) {
       throw new Error("Environment transition scope is not pending.");
     }
+    this.#pendingHead = unit.pendingNext;
+    if (this.#pendingHead === undefined) {
+      this.#pendingTail = undefined;
+    }
+    unit.queued = false;
+    unit.pendingNext = undefined;
     unit.inFlightVersion = unit.version;
     unit.dirtyDuringFlight = false;
     return unit.inFlightVersion;
@@ -812,11 +821,15 @@ class TransitionScopes {
     unit.transferredVersion = version;
     unit.inFlightVersion = undefined;
     unit.dirtyDuringFlight = false;
+    if (unit.transferredVersion < unit.version) {
+      this.#enqueue(unit);
+    }
   }
 
   reject(unit: TransitionScopeUnit): void {
     unit.inFlightVersion = undefined;
     unit.dirtyDuringFlight = false;
+    this.#enqueue(unit, true);
   }
 
   sources(unit: TransitionScopeUnit): readonly TransitionScopeSource[] {
@@ -845,20 +858,43 @@ class TransitionScopes {
         transferredVersion: 0,
         inFlightVersion: undefined,
         dirtyDuringFlight: false,
+        queued: false,
+        pendingNext: undefined,
       };
       scopes.set(readyKey(ready), unit);
       descriptors.set(descriptor, scopes);
       this.#registrations.set(token, descriptors);
-      this.#ordered.push(unit);
+      this.#enqueue(unit);
     } else if (dirty) {
       if (unit.inFlightVersion !== undefined && !unit.dirtyDuringFlight) {
         unit.version += 1;
         unit.dirtyDuringFlight = true;
       } else if (unit.inFlightVersion === undefined && unit.transferredVersion === unit.version) {
         unit.version += 1;
+        this.#enqueue(unit);
       }
     }
     unit.provenance.add(source);
+  }
+
+  #enqueue(unit: TransitionScopeUnit, first = false): void {
+    if (unit.queued) {
+      return;
+    }
+    unit.queued = true;
+    if (first) {
+      unit.pendingNext = this.#pendingHead;
+      this.#pendingHead = unit;
+      this.#pendingTail ??= unit;
+    } else if (this.#pendingTail === undefined) {
+      unit.pendingNext = undefined;
+      this.#pendingHead = unit;
+      this.#pendingTail = unit;
+    } else {
+      unit.pendingNext = undefined;
+      this.#pendingTail.pendingNext = unit;
+      this.#pendingTail = unit;
+    }
   }
 }
 
@@ -1233,27 +1269,26 @@ class DeliveryGeneration {
     this.#dropRetiredState();
   }
 
-  captureTransition(token: string, capture: TransitionScopes): void {
-    const state = this.#registrations.get(token);
-    if (state === undefined) {
-      throw new Error("Environment registration is not active.");
-    }
+  captureTransition(capture: TransitionScopes): void {
     const pending = this.#coordinator?.settlement().pending ?? Object.freeze([]);
-    this.#captureScopes(
-      token,
-      state,
-      this.#deliveryRecords.configuredScopes(token),
-      "configured",
-      capture,
-    );
-    this.#captureScopes(token, state, state.startupScopes, "startup", capture);
-    this.#captureScopes(
-      token,
-      state,
-      this.#deliveryRecords.retainedScopes(token, pending),
-      "retained",
-      capture,
-    );
+    const retained = this.#deliveryRecords.retainedScopeSnapshot(pending);
+    for (const [token, state] of this.#registrations) {
+      this.#captureScopes(
+        token,
+        state,
+        this.#deliveryRecords.configuredScopes(token),
+        "configured",
+        capture,
+      );
+      this.#captureScopes(token, state, state.startupScopes, "startup", capture);
+      this.#captureScopes(
+        token,
+        state,
+        retained.get(token) ?? Object.freeze([]),
+        "retained",
+        capture,
+      );
+    }
   }
 
   closeRegistration(

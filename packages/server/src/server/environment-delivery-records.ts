@@ -85,17 +85,24 @@ export class EnvironmentDeliveryRecords {
     return Object.freeze([...(this.#registrations.get(token)?.values() ?? [])]);
   }
 
-  /** @internal Stable configured scopes still pending or represented by parked records. */
-  retainedScopes(token: string, pending: readonly DeliveryRunScope[]): readonly DeliveryRunScope[] {
+  /** @internal Stable per-registration scopes still pending or represented by parked records. */
+  retainedScopeSnapshot(
+    pending: readonly DeliveryRunScope[],
+  ): ReadonlyMap<string, readonly DeliveryRunScope[]> {
     const retained = new Set(pending.map(scopeKey));
     for (const record of this.records()) {
       for (const unit of record.units) {
         retained.add(unit);
       }
     }
-    return Object.freeze(
-      this.configuredScopes(token).filter((scope) => retained.has(scopeKey(scope))),
-    );
+    const snapshot = new Map<string, readonly DeliveryRunScope[]>();
+    for (const [token, configured] of this.#registrations) {
+      snapshot.set(
+        token,
+        Object.freeze([...configured.values()].filter((scope) => retained.has(scopeKey(scope)))),
+      );
+    }
+    return snapshot;
   }
 
   /** @internal Atomically select, report, consume, and remove one registration's ownership. */

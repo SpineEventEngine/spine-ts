@@ -71,18 +71,24 @@ describe("EnvironmentDeliveryRecords", () => {
     ]);
   });
 
-  it("captures retained pending and parked scopes without consuming configured order", () => {
+  it("snapshots retained scopes for every registration in token-specific configured order", () => {
     const first = scope("one", "First", 0);
-    const second = scope("one", "Second", 1);
+    const shared = scope("shared", "Shared", 1);
     const third = scope("one", "Third", 0);
+    const fourth = scope("two", "Fourth", 1);
     const records = new EnvironmentDeliveryRecords();
-    const failure = new Error("second rejected");
-    records.register("registration-one", [first, second, third]);
-    records.observe(rejected(second, failure));
+    records.register("registration-one", [first, shared, third]);
+    records.register("registration-two", [fourth, shared]);
+    records.observe(rejected(third, new Error("third rejected")));
+    records.observe(rejected(fourth, new Error("fourth rejected")));
     const before = records.records();
 
-    expect(records.retainedScopes("registration-one", [third, second])).toEqual([second, third]);
-    expect(records.configuredScopes("registration-one")).toEqual([first, second, third]);
+    const retained = records.retainedScopeSnapshot([shared]);
+
+    expect(retained.get("registration-one")).toEqual([shared, third]);
+    expect(retained.get("registration-two")).toEqual([fourth, shared]);
+    expect(records.configuredScopes("registration-one")).toEqual([first, shared, third]);
+    expect(records.configuredScopes("registration-two")).toEqual([fourth, shared]);
     expect(records.records()).toEqual(before);
   });
 

@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2A review wave 1 assigned
+Status: Slice 2A review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -248,3 +248,15 @@ preflight must precede candidate storage, direct candidate-recovery rejection
 must clear and retry its in-flight unit on the same candidate, and a newly
 discovered readiness/tenant key after capture must be proven. This split keeps
 review bounded and waives no accepted Slice 2 requirement.
+
+## Slice 2A Review Wave 1 Fix Record
+
+At `2026-07-13T06:39:45Z`, the first fix pass completed the required queue
+ordering and generation-capture behavior, but the coordinator audit then found
+that its array-front mutations were still O(N). At `2026-07-13T06:44:29Z`, the
+implementer replaced that array with an intrusive linked head/tail deque while
+preserving dirty tail re-admission and retry restoration. Generation capture
+still takes one pending/record snapshot and distributes retained scopes by
+registration in configured order. Corrected RED/GREEN and mechanical evidence
+is recorded in the canonical work and review logs. Slice 2B remains unchanged
+and unimplemented.
