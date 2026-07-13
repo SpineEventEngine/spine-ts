@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification lint fix review assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -481,3 +481,68 @@ At `2026-07-13T11:00:31Z`, the redispatch review returned CLEAN in all four
 canonical concerns. Desktop rollout metadata exactly matches every explicit
 reviewer profile and every agent is closed. The fresh Terra Medium audit is
 accepted; full `pnpm verify` is the sole remaining pre-merge gate.
+
+## Final Verification Lint Fix Assignment
+
+The full gate now passes generated and tooling typechecks but stops at 67
+ESLint errors in the reusable-stop production module and two focused test
+files. One fresh implementer is assigned at explicit
+`gpt-5.6-terra` / `medium`, no subagents, to make a behavior-preserving lint
+correction. Exact arbitrary rejection/throw identity remains binding; lint must
+not coerce supported `unknown` failures into `Error` or change lifecycle
+ordering, concurrency, or tests.
+
+## Final Verification Lint Fix Start And Root Cause
+
+- At `2026-07-13T11:03:17Z`, the fresh existing implementer began this bounded
+  lint batch in `.worktrees/T-0037e2-reusable-generation-stop`, explicitly
+  assigned `gpt-5.6-terra` / `medium`, with no subagents. It owns only the
+  three stated source/test files and these three durable T-0037e2 records;
+  `human-review-1-jul.md`, commits, pushes, public APIs, and generated output
+  remain excluded.
+- Canonical skill applicability: inspected the session inventory, the complete
+  readable `/Users/armiol/.agents/skills` entrypoint listing, repo manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `test-driven-development`, `systematic-debugging`, and
+  `verification-before-completion`. They govern the RED/GREEN lint cycle,
+  diagnosis before fixes, and fresh completion evidence. `javascript-testing-patterns`,
+  `typescript-advanced-types`, `nodejs-backend-patterns`, architecture/planning,
+  review, worktree, and subagent skills were triaged N/A: no test-framework or
+  type/API design change, new architecture, review dispatch, worktree setup,
+  or delegation is authorized. Project protocol and this bounded assignment
+  take precedence over advisory skill guidance.
+- Root-cause record before edits: focused lint is the reproducible RED. The
+  67 failures are static-rule violations left outside earlier focused
+  type/test gates, not a lifecycle behavior regression: 16 narrow production
+  syntax/type-style findings, seven fixture forwarding/void-expression
+  findings, and 44 resolver/rejection/fixture findings. The sole apparent
+  rule-versus-contract conflict is intentionally propagating an arbitrary
+  `unknown` reason by exact identity; only a local explanatory suppression is
+  permitted there. Existing behavior tests are the regression oracle while
+  structural lint corrections remain behavior-preserving.
+
+## Final Verification Lint Fix Evidence
+
+- GREEN: focused ESLint over the three assigned files exits 0 after correcting
+  all 67 findings. The only suppressions are line-local and explanatory for
+  accepted exact arbitrary-`unknown` propagation: one internal aggregate throw
+  and three fixture rejection cases; all other findings use narrowing, explicit
+  `undefined` resolver settlement, bound fixture forwarding, or synchronous
+  method declarations.
+- At `2026-07-13T11:10:05Z`, strict tooling typecheck, proto generation (25
+  copied Spine checksums), and forced `tsc -b --force` each exited 0. The
+  required five-file lifecycle suite passed 5 files / 162 tests. Focused
+  Prettier passed all six assigned files after formatting the work log.
+- Exact changed inventory is the three durable records plus the three assigned
+  source/test files only. Status mirrors are synchronized to this review
+  request; public/package/docs/examples/generated diff and untracked-generated
+  scans are empty, private stop-name scan outside assigned runtime/tests is
+  empty, and `git diff --check` exits 0. No subagent, commit, push, or full
+  `pnpm verify` was run.
+
+Desktop rollout confirms the fresh lint owner actual
+`gpt-5.6-terra` / `medium`. Coordinator verification passes focused ESLint,
+strict typechecking, 162 lifecycle tests, formatting, exact scope, and diff
+hygiene. The committed lint endpoint is assigned to the four canonical review
+concerns.

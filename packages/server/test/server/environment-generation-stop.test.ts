@@ -30,7 +30,7 @@ describe("environment generation stop", () => {
   it("admits a queued attachment before selecting stop survivors", async () => {
     const oldWorker = new ControlledWorker([], "queued-old");
     const candidateWorker = new ControlledWorker([], "queued-candidate");
-    const candidateGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise);
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -61,7 +61,7 @@ describe("environment generation stop", () => {
     expect(stopSettled).toBe(false);
     await until(() => candidateWorker.starts === 1);
     expect(handle.generation).toBe(oldGeneration);
-    candidateGate.resolve();
+    candidateGate.resolve(undefined);
     await stopping;
     expect(handle.generation).not.toBe(oldGeneration);
     expect(factoryCalls).toBe(2);
@@ -71,7 +71,7 @@ describe("environment generation stop", () => {
   it("defers an attachment ordered after stop and joins the published candidate", async () => {
     const oldWorker = new ControlledWorker([], "after-stop-old");
     const candidateWorker = new ControlledWorker([], "after-stop-candidate");
-    const candidateGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise);
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -132,7 +132,7 @@ describe("environment generation stop", () => {
     expect(factoryCalls).toBe(2);
     expect(attachSettled).toBe(false);
 
-    candidateGate.resolve();
+    candidateGate.resolve(undefined);
     await stopping;
     const laterHandle = await attaching;
     const finalHandle = await finalAttaching;
@@ -153,7 +153,7 @@ describe("environment generation stop", () => {
   it("preserves call order when stop completion races two conflicting waiters", async () => {
     const oldWorker = new ControlledWorker([], "cohort-race-old");
     const candidateWorker = new ControlledWorker([], "cohort-race-candidate");
-    const candidateGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise);
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -198,14 +198,17 @@ describe("environment generation stop", () => {
     expect(shared.startupCalls).toBe(0);
     expect(attachments.activeRegistrationCount).toBe(1);
 
-    candidateGate.resolve();
+    candidateGate.resolve(undefined);
     const [stopOutcome, earlierOutcome, ...remainingOutcomes] = await Promise.allSettled([
       stopping,
       earlier,
       ...spacerAttachments,
       later,
     ]);
-    const laterOutcome = remainingOutcomes.at(-1)!;
+    const laterOutcome = remainingOutcomes.at(-1);
+    if (laterOutcome === undefined) {
+      throw new Error("Expected the later attachment outcome.");
+    }
     const spacerOutcomes = remainingOutcomes.slice(0, -1);
 
     expect(stopOutcome.status).toBe("fulfilled");
@@ -233,7 +236,7 @@ describe("environment generation stop", () => {
   it("keeps an after-stop attachment pending across unsafe retirement and explicit retry", async () => {
     const oldWorker = new ControlledWorker([], "waiting-unsafe-old");
     const candidateWorker = new ControlledWorker([], "waiting-unsafe-candidate");
-    const retryGate = Promise.withResolvers<void>();
+    const retryGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(retryGate.promise);
     const stopFailure = new Error("waiting unsafe stop failed");
     oldWorker.stopFailures.push(stopFailure);
@@ -287,7 +290,7 @@ describe("environment generation stop", () => {
     expect(attachments.activeRegistrationCount).toBe(1);
     expect(factoryCalls).toBe(2);
 
-    retryGate.resolve();
+    retryGate.resolve(undefined);
     await retry;
     const laterHandle = await attaching;
 
@@ -302,7 +305,7 @@ describe("environment generation stop", () => {
   it("keeps an after-stop attachment pending across partial candidate retry", async () => {
     const oldWorker = new ControlledWorker([], "waiting-partial-old");
     const candidateWorker = new ControlledWorker([], "waiting-partial-candidate");
-    const retryGate = Promise.withResolvers<void>();
+    const retryGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(Promise.resolve(), retryGate.promise);
     const transitionFailure = new Error("waiting partial transfer failed");
     const workers = [oldWorker, candidateWorker];
@@ -357,7 +360,7 @@ describe("environment generation stop", () => {
     expect(attachments.activeRegistrationCount).toBe(1);
     expect(factoryCalls).toBe(2);
 
-    retryGate.resolve();
+    retryGate.resolve(undefined);
     await retry;
     const laterHandle = await attaching;
 
@@ -371,9 +374,9 @@ describe("environment generation stop", () => {
   it("releases an after-stop attachment when replacement succeeds before old failure propagation", async () => {
     const oldWorker = new ControlledWorker([], "waiting-safe-old");
     const candidateWorker = new ControlledWorker([], "waiting-safe-candidate");
-    const candidateGate = Promise.withResolvers<void>();
-    const waiterGate = Promise.withResolvers<void>();
-    const waiterStarted = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
+    const waiterGate = Promise.withResolvers<undefined>();
+    const waiterStarted = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise, waiterGate.promise);
     const retirementFailure = new Error("waiting replacement-safe retirement failed");
     oldWorker.retireFailures.push(retirementFailure);
@@ -416,8 +419,10 @@ describe("environment generation stop", () => {
       events.push("attach");
       return handle;
     });
-    candidateWorker.onStarts.push(waiterStarted.resolve);
-    candidateGate.resolve();
+    candidateWorker.onStarts.push(() => {
+      waiterStarted.resolve(undefined);
+    });
+    candidateGate.resolve(undefined);
 
     expect(
       await Promise.race([
@@ -427,7 +432,7 @@ describe("environment generation stop", () => {
     ).toBe("attach-started");
     expect(stopSettled).toBe(false);
 
-    waiterGate.resolve();
+    waiterGate.resolve(undefined);
     const laterHandle = await observedAttach;
     expect(await observedStop).toBe(retirementFailure);
 
@@ -447,8 +452,8 @@ describe("environment generation stop", () => {
   ])("keeps a rejected waiter independent from a $name stop result", async ({ oldFailure }) => {
     const oldWorker = new ControlledWorker([], "waiter-failure-old");
     const candidateWorker = new ControlledWorker([], "waiter-failure-candidate");
-    const candidateGate = Promise.withResolvers<void>();
-    const waiterGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
+    const waiterGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise, waiterGate.promise);
     if (oldFailure !== undefined) oldWorker.retireFailures.push(oldFailure);
     const workers = [oldWorker, candidateWorker];
@@ -501,7 +506,7 @@ describe("environment generation stop", () => {
       },
     );
 
-    candidateGate.resolve();
+    candidateGate.resolve(undefined);
     await until(() => candidateWorker.starts === 2);
     expect(stopSettled).toBe(false);
 
@@ -531,7 +536,7 @@ describe("environment generation stop", () => {
   it("applies ownership conflict only when an after-stop attachment is re-admitted", async () => {
     const oldWorker = new ControlledWorker([], "waiting-conflict-old");
     const candidateWorker = new ControlledWorker([], "waiting-conflict-candidate");
-    const candidateGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise);
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -572,7 +577,7 @@ describe("environment generation stop", () => {
     expect(descriptorEnumerations).toBe(0);
     expect(conflicting.startupCalls).toBe(0);
     expect(attachments.activeRegistrationCount).toBe(1);
-    candidateGate.resolve();
+    candidateGate.resolve(undefined);
     await stopping;
     await expect(attaching).rejects.toThrow(
       "Server-owned environment registration requires exclusive ownership.",
@@ -1023,7 +1028,7 @@ describe("environment generation stop", () => {
     const oldWorker = new ControlledWorker([], "capture-old");
     const candidateWorker = new ControlledWorker([], "capture-candidate");
     const workers = [oldWorker, candidateWorker];
-    const oldSettlementGate = Promise.withResolvers<void>();
+    const oldSettlementGate = Promise.withResolvers<undefined>();
     oldWorker.awaitGates.push(oldSettlementGate.promise);
     const sources: string[][] = [];
     let factoryCalls = 0;
@@ -1056,7 +1061,7 @@ describe("environment generation stop", () => {
     await until(() => oldWorker.awaitCalls === 1);
     target.readiness.claim(target.ready);
     expect(candidateWorker.starts).toBe(0);
-    oldSettlementGate.resolve();
+    oldSettlementGate.resolve(undefined);
     await stopping;
 
     expect(sources).toEqual([["configured", "startup", "buffered", "retained"]]);
@@ -1068,8 +1073,8 @@ describe("environment generation stop", () => {
   it("settles a failed partial transfer and retries only its unpublished candidate unit", async () => {
     const oldWorker = new ControlledWorker([], "transfer-old");
     const candidateWorker = new ControlledWorker([], "transfer-candidate");
-    const firstGate = Promise.withResolvers<void>();
-    const secondGate = Promise.withResolvers<void>();
+    const firstGate = Promise.withResolvers<undefined>();
+    const secondGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(firstGate.promise, secondGate.promise);
     const workers = [oldWorker, candidateWorker];
     const transferFailure = new Error("second canonical transfer failed");
@@ -1109,11 +1114,11 @@ describe("environment generation stop", () => {
       stopSettled = true;
     });
     await until(() => candidateWorker.starts === 1);
-    firstGate.resolve();
+    firstGate.resolve(undefined);
     await until(() => candidateWorker.starts === 2);
     expect(stopSettled).toBe(false);
     expect(handle.generation).toBe(oldGeneration);
-    secondGate.resolve();
+    secondGate.resolve(undefined);
     await expect(stopping).rejects.toBe(transferFailure);
     expect(stopSettled).toBe(true);
     expect(handle.generation).toBe(oldGeneration);
@@ -1140,7 +1145,7 @@ describe("environment generation stop", () => {
   it("restores a directly rejected candidate recovery unit on the same candidate", async () => {
     const oldWorker = new ControlledWorker([], "recovery-old");
     const candidateWorker = new ControlledWorker([], "recovery-candidate");
-    const recoveryGate = Promise.withResolvers<void>();
+    const recoveryGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(Promise.resolve(), recoveryGate.promise);
     const workers = [oldWorker, candidateWorker];
     const recoveryFailure = new Error("candidate recovery rejected");
@@ -1295,9 +1300,9 @@ describe("environment generation stop", () => {
     const events: string[] = [];
     const oldWorker = new ControlledWorker(events, "old");
     const candidateWorker = new ControlledWorker(events, "candidate");
-    const firstGate = Promise.withResolvers<void>();
-    const secondGate = Promise.withResolvers<void>();
-    const readinessGate = Promise.withResolvers<void>();
+    const firstGate = Promise.withResolvers<undefined>();
+    const secondGate = Promise.withResolvers<undefined>();
+    const readinessGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(firstGate.promise, secondGate.promise, readinessGate.promise);
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -1336,17 +1341,17 @@ describe("environment generation stop", () => {
     first.readiness.claim(first.ready);
     await Promise.resolve();
     expect(candidateWorker.starts).toBe(1);
-    firstGate.resolve();
+    firstGate.resolve(undefined);
     await until(() => candidateWorker.starts === 2);
     expect(candidateWorker.targets[1]).toBe("type.example.dev/BarrierSecond");
     expect(firstHandle.generation).toBe(oldGeneration);
     expect(secondHandle.generation).toBe(oldGeneration);
-    secondGate.resolve();
+    secondGate.resolve(undefined);
     await until(() => candidateWorker.starts === 3);
     expect(firstHandle.generation).toBe(oldGeneration);
     expect(secondHandle.generation).toBe(oldGeneration);
     expect(stopSettled).toBe(false);
-    readinessGate.resolve();
+    readinessGate.resolve(undefined);
     await stopping;
     expect(stopSettled).toBe(true);
     expect(firstHandle.generation).not.toBe(oldGeneration);
@@ -1364,9 +1369,9 @@ describe("environment generation stop", () => {
   });
 
   it("captures a new tenant readiness key during old retirement and settles it before publication", async () => {
-    const oldRetirementGate = Promise.withResolvers<void>();
-    const originalGate = Promise.withResolvers<void>();
-    const newTenantGate = Promise.withResolvers<void>();
+    const oldRetirementGate = Promise.withResolvers<undefined>();
+    const originalGate = Promise.withResolvers<undefined>();
+    const newTenantGate = Promise.withResolvers<undefined>();
     const oldWorker = new ControlledWorker([], "new-key-old");
     oldWorker.awaitGates.push(oldRetirementGate.promise);
     const candidateWorker = new ControlledWorker([], "new-key-candidate");
@@ -1406,16 +1411,16 @@ describe("environment generation stop", () => {
     expect(factoryCalls).toBe(1);
     expect(handle.generation).toBe(oldGeneration);
 
-    oldRetirementGate.resolve();
+    oldRetirementGate.resolve(undefined);
     await until(() => candidateWorker.starts === 1);
     expect(candidateWorker.tenants).toEqual(["tenant-original"]);
     expect(handle.generation).toBe(oldGeneration);
-    originalGate.resolve();
+    originalGate.resolve(undefined);
     await until(() => candidateWorker.starts === 2);
     expect(candidateWorker.tenants).toEqual(["tenant-original", "tenant-new"]);
     expect(handle.generation).toBe(oldGeneration);
 
-    newTenantGate.resolve();
+    newTenantGate.resolve(undefined);
     await stopping;
     expect(handle.generation).not.toBe(oldGeneration);
     expect(candidateWorker.starts).toBe(3);
@@ -1619,12 +1624,19 @@ describe("environment generation stop", () => {
       if (failureKind === "retire") {
         oldWorker.retireFailures.push(oldFailure);
       }
-      const candidateSettlement = Promise.withResolvers<void>();
-      const reopenedSettlement = Promise.withResolvers<void>();
-      const candidateStarted = Promise.withResolvers<void>();
-      const reopenedStarted = Promise.withResolvers<void>();
+      const candidateSettlement = Promise.withResolvers<undefined>();
+      const reopenedSettlement = Promise.withResolvers<undefined>();
+      const candidateStarted = Promise.withResolvers<undefined>();
+      const reopenedStarted = Promise.withResolvers<undefined>();
       candidateWorker.gates.push(candidateSettlement.promise, reopenedSettlement.promise);
-      candidateWorker.onStarts.push(candidateStarted.resolve, reopenedStarted.resolve);
+      candidateWorker.onStarts.push(
+        () => {
+          candidateStarted.resolve(undefined);
+        },
+        () => {
+          reopenedStarted.resolve(undefined);
+        },
+      );
       const workers = [oldWorker, candidateWorker];
       let factoryCalls = 0;
       let reportCalls = 0;
@@ -1664,8 +1676,10 @@ describe("environment generation stop", () => {
         descriptors: [target.value],
       });
       const oldGeneration = handle.generation;
-      const retainedStarted = Promise.withResolvers<void>();
-      oldWorker.onStarts.push(retainedStarted.resolve);
+      const retainedStarted = Promise.withResolvers<undefined>();
+      oldWorker.onStarts.push(() => {
+        retainedStarted.resolve(undefined);
+      });
       oldWorker.startFailures.push(parkedFailure);
       target.readiness.claim(target.ready);
       await retainedStarted.promise;
@@ -1702,7 +1716,7 @@ describe("environment generation stop", () => {
         `safe-${failureKind}:transfer`,
       ]);
 
-      candidateSettlement.resolve();
+      candidateSettlement.resolve(undefined);
       expect(
         await Promise.race([
           reopenedStarted.promise.then(() => "reopened" as const),
@@ -1715,7 +1729,7 @@ describe("environment generation stop", () => {
       expect(candidateWorker.starts).toBe(2);
       expect(events.at(-1)).toBe(`safe-${failureKind}-candidate:start`);
 
-      reopenedSettlement.resolve();
+      reopenedSettlement.resolve(undefined);
       await observed;
 
       expect(propagated).toBe(oldFailure);
@@ -1726,8 +1740,10 @@ describe("environment generation stop", () => {
         "Environment has no failed delivery stop to retry.",
       );
 
-      const usableStarted = Promise.withResolvers<void>();
-      candidateWorker.onStarts.push(usableStarted.resolve);
+      const usableStarted = Promise.withResolvers<undefined>();
+      candidateWorker.onStarts.push(() => {
+        usableStarted.resolve(undefined);
+      });
       target.readiness.claim(target.ready);
       await usableStarted.promise;
       expect(candidateWorker.starts).toBe(3);
@@ -1793,6 +1809,8 @@ describe("environment generation stop", () => {
         if (worker === undefined) throw new Error("Unexpected generation worker.");
         return worker;
       },
+      // Exact non-Error rejection identity is the behavior under test.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       report: () => Promise.reject(reportFailure),
     });
     const target = descriptor(
@@ -1940,6 +1958,8 @@ describe("environment generation stop", () => {
         },
         report() {
           reportCalls += 1;
+          // Exact historical rejection identity is the behavior under test.
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
           return failureKind === "report" ? Promise.reject(historical) : Promise.resolve();
         },
         transitionFaults: {
@@ -1998,7 +2018,7 @@ describe("environment generation stop", () => {
   it("preserves a previously attachment-synthesized aggregate as one later phase cause", async () => {
     const oldWorker = new ControlledWorker([], "historical-attachment-old");
     const candidateWorker = new ControlledWorker([], "historical-attachment-candidate");
-    const candidateGate = Promise.withResolvers<void>();
+    const candidateGate = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(candidateGate.promise);
     const recoveryFailure = new Error("historical candidate recovery failure");
     const transferFailure = new Error("historical transfer fault");
@@ -2121,21 +2141,27 @@ describe("environment generation stop", () => {
     );
     const parkedFailure = new Error("combined retained readiness");
     oldWorker.retireFailures.push(retireFailure);
-    const firstSettlement = Promise.withResolvers<void>();
-    const secondSettlement = Promise.withResolvers<void>();
-    const reopenedSettlement = Promise.withResolvers<void>();
-    const firstStarted = Promise.withResolvers<void>();
-    const secondStarted = Promise.withResolvers<void>();
-    const reopenedStarted = Promise.withResolvers<void>();
+    const firstSettlement = Promise.withResolvers<undefined>();
+    const secondSettlement = Promise.withResolvers<undefined>();
+    const reopenedSettlement = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    const secondStarted = Promise.withResolvers<undefined>();
+    const reopenedStarted = Promise.withResolvers<undefined>();
     candidateWorker.gates.push(
       firstSettlement.promise,
       secondSettlement.promise,
       reopenedSettlement.promise,
     );
     candidateWorker.onStarts.push(
-      firstStarted.resolve,
-      secondStarted.resolve,
-      reopenedStarted.resolve,
+      () => {
+        firstStarted.resolve(undefined);
+      },
+      () => {
+        secondStarted.resolve(undefined);
+      },
+      () => {
+        reopenedStarted.resolve(undefined);
+      },
     );
     const workers = [oldWorker, candidateWorker];
     let factoryCalls = 0;
@@ -2177,8 +2203,10 @@ describe("environment generation stop", () => {
       descriptors: [target.value],
     });
     const oldGeneration = handle.generation;
-    const retainedStarted = Promise.withResolvers<void>();
-    oldWorker.onStarts.push(retainedStarted.resolve);
+    const retainedStarted = Promise.withResolvers<undefined>();
+    oldWorker.onStarts.push(() => {
+      retainedStarted.resolve(undefined);
+    });
     oldWorker.startFailures.push(parkedFailure);
     target.readiness.claim(target.ready);
     await retainedStarted.promise;
@@ -2201,7 +2229,7 @@ describe("environment generation stop", () => {
     expect(firstPropagated).toBeUndefined();
     expect(handle.generation).toBe(oldGeneration);
 
-    firstSettlement.resolve();
+    firstSettlement.resolve(undefined);
     await firstObserved;
 
     expect(firstPropagated).toBeInstanceOf(AggregateError);
@@ -2230,7 +2258,7 @@ describe("environment generation stop", () => {
     expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
     expect(reportCalls).toBe(1);
 
-    secondSettlement.resolve();
+    secondSettlement.resolve(undefined);
     expect(
       await Promise.race([
         reopenedStarted.promise.then(() => "reopened" as const),
@@ -2241,12 +2269,14 @@ describe("environment generation stop", () => {
     expect(handle.generation).not.toBe(oldGeneration);
     expect(candidateWorker.starts).toBe(3);
 
-    reopenedSettlement.resolve();
+    reopenedSettlement.resolve(undefined);
     await retry;
 
     expect(factoryCalls).toBe(2);
-    const usableStarted = Promise.withResolvers<void>();
-    candidateWorker.onStarts.push(usableStarted.resolve);
+    const usableStarted = Promise.withResolvers<undefined>();
+    candidateWorker.onStarts.push(() => {
+      usableStarted.resolve(undefined);
+    });
     target.readiness.claim(target.ready);
     await usableStarted.promise;
     expect(candidateWorker.starts).toBe(4);
@@ -2511,14 +2541,18 @@ class ControlledWorker implements EnvironmentGenerationWorker {
     this.#events.push(`${this.#name}:retire`);
     if (this.retireFailures.length === 0) return Promise.resolve();
     const failure = this.retireFailures.shift();
+    // Exact arbitrary rejection identity is exercised by the lifecycle tests.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     return Promise.reject(failure);
   }
-  stopOwners(_keys: readonly string[]): void {}
-  awaitOwnersSettled(_keys: readonly string[]): Promise<void> {
+  stopOwners(): void {
+    // This test double has no owner-specific stop work.
+  }
+  awaitOwnersSettled(): Promise<void> {
     const failure = this.awaitOwnerFailures.shift();
     return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
-  retireOwners(_keys: readonly string[]): Promise<void> {
+  retireOwners(): Promise<void> {
     return Promise.resolve();
   }
 }

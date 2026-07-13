@@ -302,7 +302,11 @@ export class EnvironmentAttachments {
       detachKind: undefined,
       generationCleared: false,
     });
-    this.#attached.set(claim.token, this.#handles.get(attachment)!);
+    const handle = this.#handles.get(attachment);
+    if (handle === undefined) {
+      throw new Error("Attached environment handle was not retained.");
+    }
+    this.#attached.set(claim.token, handle);
     return attachment;
   }
 
@@ -346,10 +350,17 @@ export class EnvironmentAttachments {
   #queueStop(stop: GenerationStop, retrying: boolean): Promise<void> {
     stop.status = "running";
     stop.retrying = retrying;
-    const gate = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<undefined>();
     stop.promise = gate.promise;
     const admission = this.#serial.then(() => {
-      void this.#continueStop(stop).then(gate.resolve, gate.reject);
+      void this.#continueStop(stop).then(
+        () => {
+          gate.resolve(undefined);
+        },
+        (reason: unknown) => {
+          gate.reject(reason);
+        },
+      );
     });
     this.#serial = admission.then(
       () => undefined,
@@ -382,7 +393,7 @@ export class EnvironmentAttachments {
     if (stop?.status === "running" && stop.retrying) {
       return stop.promise;
     }
-    if (stop === undefined || stop.status !== "rejected") {
+    if (stop?.status !== "rejected") {
       return Promise.reject(new Error("Environment has no failed delivery stop to retry."));
     }
     return this.#queueStop(stop, true);
@@ -414,8 +425,10 @@ export class EnvironmentAttachments {
       stop.survivors = Object.freeze([...this.#attached.values()]);
       stop.admitted = true;
     }
-    const old = stop.old!;
-    const survivors = stop.survivors!;
+    const { old, survivors } = stop;
+    if (old === undefined || survivors === undefined) {
+      throw new Error("Admitted delivery stop is missing generation state.");
+    }
     if (stop.routes === undefined) {
       stop.routes = Object.freeze(
         survivors.map((survivor) =>
@@ -441,18 +454,27 @@ export class EnvironmentAttachments {
       stop.oldRetired = true;
     }
     try {
-      stop.routeUnits ??= Object.freeze(
-        survivors.flatMap((survivor, registration) =>
-          survivor.descriptors.map((descriptor) => ({
-            survivor,
-            descriptor,
-            readiness: stop.routes![registration]!,
-          })),
-        ),
-      );
+      let routeUnits = stop.routeUnits;
+      if (routeUnits === undefined) {
+        const routes = stop.routes;
+        routeUnits = Object.freeze(
+          survivors.flatMap((survivor, registration) => {
+            const readiness = routes.at(registration);
+            if (readiness === undefined) {
+              throw new Error("Closed delivery route is missing readiness.");
+            }
+            return survivor.descriptors.map((descriptor) => ({
+              survivor,
+              descriptor,
+              readiness,
+            }));
+          }),
+        );
+        stop.routeUnits = routeUnits;
+      }
       if (stop.routeSnapshots === undefined) {
         const snapshots: DeliveryDescriptorSnapshot[] = [];
-        for (const route of stop.routeUnits) {
+        for (const route of routeUnits) {
           snapshots.push(await snapshotDescriptor(route.descriptor));
         }
         stop.routeSnapshots = Object.freeze(snapshots);
@@ -463,10 +485,16 @@ export class EnvironmentAttachments {
         stop.candidate = candidate;
       }
       const candidate = stop.candidate;
-      const candidateGeneration = stop.candidateGeneration!;
-      while (stop.routePrepared < stop.routeUnits.length) {
-        const route = stop.routeUnits[stop.routePrepared]!;
-        const snapshot = stop.routeSnapshots[stop.routePrepared]!;
+      const candidateGeneration = stop.candidateGeneration;
+      if (candidateGeneration === undefined) {
+        throw new Error("Candidate delivery generation was not retained.");
+      }
+      while (stop.routePrepared < routeUnits.length) {
+        const route = routeUnits[stop.routePrepared];
+        const snapshot = stop.routeSnapshots[stop.routePrepared];
+        if (route === undefined || snapshot === undefined) {
+          throw new Error("Prepared delivery route is missing its snapshot.");
+        }
         this.#transitionFaults?.onRoutePrepare?.(route.descriptor);
         const scopes = await candidate.prepareTransferredRoute(
           Object.freeze({ token: route.survivor.claim.token, generation: candidateGeneration }),
@@ -510,7 +538,11 @@ export class EnvironmentAttachments {
         transfer = stop.scopes.nextPending();
       }
       if (!stop.published) {
-        this.#generations.delete(stop.generation!);
+        const generation = stop.generation;
+        if (generation === undefined) {
+          throw new Error("Admitted delivery stop is missing its generation.");
+        }
+        this.#generations.delete(generation);
         this.#generations.set(candidateGeneration, candidate);
         this.#registrations.replace(candidateGeneration);
         for (const survivor of survivors) {
@@ -1191,7 +1223,7 @@ class DeliveryGeneration {
     );
   }
 
-  async prepareTransferredRoute(
+  prepareTransferredRoute(
     claim: EnvironmentRegistrationClaim,
     snapshot: DeliveryDescriptorSnapshot,
     readiness: RegistrationReadiness,
@@ -1224,13 +1256,14 @@ class DeliveryGeneration {
     }
     state.startupScopes = appendScopes(state.startupScopes, registration.scopes);
     state.descriptors = Object.freeze([...state.descriptors, descriptor]);
+    const ownership = state.ownership;
     readiness.rebindDescriptor(
       descriptor,
-      (candidate, ready) => this.#prepareReady(candidate, ready, state!.ownership, claim.token),
+      (candidate, ready) => this.#prepareReady(candidate, ready, ownership, claim.token),
       (scope) => this.#coordinator?.notify(scope),
     );
     this.#descriptors.add(descriptor);
-    return registration.scopes;
+    return Promise.resolve(registration.scopes);
   }
 
   async recoverTransferred(
@@ -1405,7 +1438,7 @@ class DeliveryGeneration {
   }
 
   async retire(): Promise<GenerationRetirementResult> {
-    const token = this.#registrations.keys().next().value as string | undefined;
+    const token = this.#registrations.keys().next().value;
     if (token === undefined) {
       this.#retiredWithoutCoordinator = true;
       return Object.freeze({ status: "succeeded" });
@@ -2141,6 +2174,8 @@ function throwCurrentAggregation(failures: readonly unknown[]): never {
     throw failures[0];
   }
   if (failures.length > 1) {
+    // Exact arbitrary failure identity is part of the internal retry contract.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
     throw Object.freeze({
       [currentAggregationFailure]: true,
       causes: Object.freeze([...failures]),

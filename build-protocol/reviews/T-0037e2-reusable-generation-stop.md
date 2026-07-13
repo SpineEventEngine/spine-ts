@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification lint fix review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1000,3 +1000,62 @@ Derived status mirror: the canonical current state is the `Status` header in
 - The fresh Terra Medium audit is accepted with no behavior defect or active
   record inconsistency. Full verification is the sole remaining pre-merge
   requirement; security remains deferred to T-0041.
+
+## Final Verification Lint Finding
+
+- Full verification passes generated/tooling typechecks and then reports 67
+  ESLint errors across `environment-attachment.ts` and its two focused test
+  files. No reviewer finding is reopened; this is a mechanical final-gate
+  result omitted from the focused inner checks.
+- One fresh `gpt-5.6-terra` / `medium` implementer, no subagents, receives the
+  complete behavior-preserving lint batch. Exact `unknown` failure identity and
+  all accepted lifecycle semantics remain binding. A fresh four-concern review
+  is required before the full gate is retried.
+
+## Final Verification Lint Fix Start And Root Cause
+
+- Fresh existing implementer start: `.worktrees/T-0037e2-reusable-generation-stop`,
+  explicit expected `gpt-5.6-terra` / `medium`, no subagents; exact ownership
+  is the assigned three lint files and three durable records only. No commit,
+  push, public/generated change, or touch to `human-review-1-jul.md` is
+  authorized.
+- Canonical skill-applicability evidence completed before source/test edits:
+  session inventory, full readable user-skill entrypoint listing, expected
+  manifest, and installed lock. Fully read selected TDD, systematic-debugging,
+  and completion-verification skills. Test-framework, advanced-type, API,
+  architecture, planning, review, worktree, and subagent skills are N/A for
+  this narrow non-contract lint pass; protocol and assignment scope prevail.
+- Root-cause disposition: reproduce the focused lint batch as RED before any
+  correction. The 67 failures are lint coverage omitted from prior inner gates,
+  not evidence against accepted lifecycle behavior. Preserve the existing
+  suite as behavior oracle; correct each structural rule directly, except a
+  narrowly documented line-level `unknown` throw/reject propagation conflict
+  that must retain exact reason identity.
+
+## Final Verification Lint Fix Evidence
+
+- Implementer GREEN evidence: focused ESLint exits 0 after correcting all 67
+  assigned findings. Exact arbitrary `unknown` failure identity remains intact;
+  four local explanatory rule suppressions cover only the accepted throw/reject
+  contracts, while all other corrections are direct narrowings or fixture
+  typing/forwarding changes.
+- At `2026-07-13T11:10:05Z`, strict tooling typecheck, 25-checksum proto
+  generation, forced generated build, and the five-file lifecycle suite (5
+  files / 162 tests) each pass. Focused Prettier passes all six assigned files
+  and records.
+- Headers now request lint-fix review. Diff scope is exactly the three owned
+  source/test files plus these three durable records; status, public/package,
+  generated/untracked, private-name, and `git diff --check` scans are clean.
+  No subagent, full `pnpm verify`, commit, or push occurred.
+
+## Final Verification Lint Fix Review Assignment
+
+- Fresh implementer actual Desktop profile is `gpt-5.6-terra` / `medium`,
+  matching dispatch; no subagent; closed. Coordinator verification passes
+  focused ESLint, strict typecheck, 5 files / 162 tests, formatting, exact
+  scope, public/generated scans, and diff hygiene.
+- Assigned explicit profiles are style/maintainability
+  `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+  TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, bounded to the lint correction and
+  affected lifecycle paths, and no subagents.

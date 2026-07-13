@@ -173,17 +173,17 @@ describe("EnvironmentDeliveryWorker", () => {
         lateAccessorCalls += 1;
         throw lateAccessorFailure;
       },
-      startupScopes: target.value.startupScopes,
-      storageContext: target.value.storageContext,
-      endpoints: target.value.endpoints,
-      onReady: target.value.onReady,
-      transition: target.value.transition,
-      replay: target.value.replay,
+      startupScopes: target.value.startupScopes.bind(target.value),
+      storageContext: target.value.storageContext.bind(target.value),
+      endpoints: target.value.endpoints.bind(target.value),
+      onReady: target.value.onReady.bind(target.value),
+      transition: target.value.transition.bind(target.value),
+      replay: target.value.replay.bind(target.value),
     });
     const scope = runScope("captured-factory-owner", target.ready);
     const worker = new EnvironmentDeliveryWorker();
 
-    expect(() =>
+    expect(() => {
       worker.add({
         owner: scope.owner,
         descriptor: guardedDescriptor,
@@ -191,8 +191,8 @@ describe("EnvironmentDeliveryWorker", () => {
         tenant: {},
         context: target.context,
         scopes: [scope],
-      }),
-    ).not.toThrow();
+      });
+    }).not.toThrow();
     expect(lateAccessorCalls).toBe(0);
     await new Delivery({
       context: target.context,
