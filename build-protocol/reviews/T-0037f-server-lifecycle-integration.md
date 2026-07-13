@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 5 implementation assigned
+Status: Slice 5 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -719,3 +719,39 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   isolation, and bounded hooks are accepted with 5 files / 178 tests plus all
   scoped gates. Documentation N/A; security deferred. Slice 5 implementation
   is assigned at Terra Medium before fresh applicable review.
+
+## Slice 5 Implementation Handback
+
+- `2026-07-13T22:09:18Z`: existing implementer, actual explicit
+  `gpt-5.6-terra` / medium, no subagents, hands back direct last-detach and
+  active-work evidence. The fixture now admits one real held post-start run and
+  can return `PAUSED`; tests observe network/session first, transport/storage
+  retained through settlement, no successor, exact unsafe retry, safe cleanup
+  continuation, failed-index preservation, caller-owned fresh generation, and
+  empty aggregate failure presence.
+- RED 0/1 exposed an invalid producer/entity identity in the new test event,
+  not a lifecycle production defect. Minimal fixture correction gave GREEN
+  1/1, after which all corrected last-only probes passed the accepted Slice 4
+  state machine unchanged. Review should verify that no `server.ts` change is
+  appropriate under Slice 5's explicit “use the same running-close state
+  machine” architecture rather than requiring a synthetic production delta.
+- Current evidence: focused 6/6, integration 36/36, eight-file native gate
+  360/360, both typechecks clean. Final scoped lint/cleanup/Prettier and exact
+  scope/status/public-leak/public-surface/diff results follow. This is review
+  handback, not self-acceptance; documentation review is N/A for excluded Slice
+  6 and security remains deferred.
+- `2026-07-13T22:12:10Z`: final handback gate passes native 360/360, both
+  typechecks, scoped ESLint, cleanup, exact six-path Prettier/scope, synchronized
+  4/4 status, zero internal-name leak, unchanged public surface, and diff check.
+  Fresh coordinator review remains pending.
+
+## Slice 5 Review Assignment
+
+- `2026-07-13T22:14:51Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  8 files / 360 tests, and all scoped gates pass independently.
+- Style/maintainability and performance/reliability run at
+  `gpt-5.6-terra` / high, no subagents, against the test-only Slice 5 package.
+  They must test for vacuous fixtures/assertions and missing active-work/order
+  paths. TypeScript/API docs N/A because no production/API/declaration diff;
+  documentation N/A; security deferred; Slice 6 excluded.

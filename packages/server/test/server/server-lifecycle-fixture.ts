@@ -3,11 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { file_spine_options } from "@spine-ts/proto";
+import { packAny, packEvent } from "@spine-ts/core";
+import {
+  EventContextSchema,
+  EventIdSchema,
+  UserIdSchema,
+  VersionSchema,
+  file_spine_options,
+} from "@spine-ts/proto";
 import {
   InMemoryStorageFactory,
   type RecordSpec,
@@ -96,6 +103,19 @@ export async function lifecycleFixture(
     worker,
     createBuilder,
     createContext,
+    postEvent(target: BoundedContext, id: string) {
+      return target.eventBus().post(
+        packEvent({
+          id: create(EventIdSchema, { value: id }),
+          context: create(EventContextSchema, {
+            producerId: packAny(UserIdSchema, create(UserIdSchema, { value: id })),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: LifecycleStateSchema,
+          message: create(LifecycleStateSchema, { id }),
+        }),
+      );
+    },
     dispose() {
       rmSync(registry.directory, { recursive: true, force: true });
     },
@@ -107,6 +127,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #started = Promise.withResolvers<undefined>();
   readonly #events: string[];
   readonly #startupFailures: Error[] = [];
+  readonly #startAttempts: (() => Promise<DeliveryLoopStatus>)[] = [];
   readonly #awaitAttempts: (() => Promise<void>)[] = [];
   readonly #retireFailures: Error[] = [];
   #starts = 0;
@@ -160,6 +181,14 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     this.#startupFailures.push(error);
   }
 
+  holdNextStart(status: DeliveryLoopStatus = "IDLE"): () => void {
+    const held = Promise.withResolvers<DeliveryLoopStatus>();
+    this.#startAttempts.push(() => held.promise);
+    return () => {
+      held.resolve(status);
+    };
+  }
+
   failNextAwait(error: Error): void {
     this.#awaitAttempts.push(() => Promise.reject(error));
   }
@@ -193,12 +222,13 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     this.#started.resolve(undefined);
     await this.#release.promise;
     const failure = this.#startupFailures.shift();
+    const status = failure === undefined ? await (this.#startAttempts.shift()?.() ?? "IDLE") : null;
     return Object.freeze({
       obligation,
       shards: Object.freeze(
         shards.map((shard) =>
           failure === undefined
-            ? fulfilledEvidence(shard, obligation)
+            ? fulfilledEvidence(shard, obligation, status ?? "IDLE")
             : rejectedEvidence(shard, obligation, failure),
         ),
       ),
@@ -283,13 +313,19 @@ export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
   }
 }
 
-function fulfilledEvidence(shard: ShardIndex, obligation: DeliveryRunObligation) {
+type DeliveryLoopStatus = "IDLE" | "PAUSED" | "STOPPED";
+
+function fulfilledEvidence(
+  shard: ShardIndex,
+  obligation: DeliveryRunObligation,
+  status: DeliveryLoopStatus = "IDLE",
+) {
   return Object.freeze({
     status: "fulfilled" as const,
     shard,
     obligation,
     run: Object.freeze({
-      status: "IDLE" as const,
+      status,
       runs: 1,
       processed: 0,
       accepted: 0,

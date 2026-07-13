@@ -1,6 +1,7 @@
 import * as http2 from "node:http2";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createTransportTopic } from "@spine-ts/transport";
 
 import { BoundedContext, Server, ServerEnvironment } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
@@ -129,15 +130,19 @@ describe("Server lifecycle integration", () => {
   });
 
   it("reuses a caller-owned environment through a fresh server attachment", async () => {
-    const fixture = await lifecycleFixture();
+    const firstWorker = new HeldStartupWorker([]);
+    const freshWorker = new HeldStartupWorker([]);
+    firstWorker.release();
+    freshWorker.release();
+    const fixture = await lifecycleFixture({ workers: [firstWorker, freshWorker] });
     const firstStart = Server.atPort(0, { environment: fixture.environment })
       .add(fixture.context)
       .start();
 
     try {
-      await fixture.worker.startedWithin();
-      fixture.worker.release();
       const first = await firstStart;
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
       await first.close();
 
       const freshContext = await fixture.createContext("LifecycleFresh");
@@ -146,10 +151,12 @@ describe("Server lifecycle integration", () => {
         .start();
       await fresh.close();
 
-      expect(fixture.worker.starts).toBe(2);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(1);
       await expect(fixture.environment.close()).resolves.toBeUndefined();
     } finally {
-      fixture.worker.release();
+      firstWorker.release();
+      freshWorker.release();
       await firstStart.then(
         (running) => running.close(),
         () => undefined,
@@ -215,6 +222,344 @@ describe("Server lifecycle integration", () => {
       fixture.dispose();
     }
   });
+
+  it("holds last owned teardown until active delivery settles without a paused successor", async () => {
+    const events: string[] = [];
+    const worker = new HeldStartupWorker(events);
+    worker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const closeDelivery = vi.fn(() => events.push("delivery"));
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory,
+        ownsStorageFactory: true,
+        delivery: { close: closeDelivery },
+        ownsDelivery: true,
+      },
+    });
+    const closeFixtureContext = fixture.context.close.bind(fixture.context);
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== fixture.context) {
+        throw new Error("Unexpected context close in active last-detach test.");
+      }
+      events.push("context");
+      return closeFixtureContext();
+    });
+    const closeResource = vi.fn(() => events.push("resource"));
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer);
+    });
+    const running = await Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(fixture.context)
+      .addResource({ close: closeResource })
+      .start();
+    const session = http2.connect(running.baseUrl);
+    session.on("error", () => undefined);
+    session.on("close", () => events.push("session"));
+    await once(session, "remoteSettings");
+    const releaseActive = worker.holdNextStart("PAUSED");
+    const transportTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
+    });
+    const posting = fixture.postEvent(fixture.context, "active-last-close");
+    await posting;
+    await waitFor(() => worker.starts === 2);
+    const firstClose = running.close();
+    void firstClose.catch(() => undefined);
+
+    try {
+      await waitFor(() => worker.stopCalls === 1);
+      const concurrentClose = running.close();
+
+      expect(concurrentClose).toBe(firstClose);
+      expect(network?.calls()).toBe(1);
+      expect(events.indexOf("session")).toBeLessThan(events.indexOf("stop"));
+      expect(worker.starts).toBe(2);
+      expect(worker.awaitCalls).toBe(0);
+      expect(worker.retireCalls).toBe(0);
+      expect(closeContext).not.toHaveBeenCalled();
+      expect(closeResource).not.toHaveBeenCalled();
+      expect(closeDelivery).not.toHaveBeenCalled();
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      await expect(
+        fixture.environment.transport.publish({ topic: transportTopic, envelope: "active" }),
+      ).resolves.toBeUndefined();
+
+      releaseActive();
+      await Promise.all([firstClose, concurrentClose]);
+      await running.close();
+
+      expect(worker.starts).toBe(2);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(closeDelivery).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(1);
+      await expect(
+        fixture.environment.transport.publish({ topic: transportTopic, envelope: "closed" }),
+      ).rejects.toThrow("Local signal transport is closed.");
+      expect(events.slice(-7)).toEqual([
+        "stop",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "delivery",
+        "facility",
+      ]);
+    } finally {
+      releaseActive();
+      closeContext.mockRestore();
+      await posting.catch(() => undefined);
+      await running.close().catch(() => undefined);
+      await fixture.context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("retains every owned dependency until unsafe last detach retry proves quiescence", async () => {
+    const events: string[] = [];
+    const worker = new HeldStartupWorker(events);
+    worker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const closeDelivery = vi.fn(() => events.push("delivery"));
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory,
+        ownsStorageFactory: true,
+        delivery: { close: closeDelivery },
+        ownsDelivery: true,
+      },
+    });
+    const closeResource = vi.fn(() => events.push("resource"));
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer);
+    });
+    const running = await Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(fixture.context)
+      .addResource({ close: closeResource })
+      .start();
+    const quiescenceFailure = new Error("last generation remained active");
+    worker.failNextAwait(quiescenceFailure);
+    let releaseRetry: (() => void) | undefined;
+
+    try {
+      const firstFailure = await running.close().catch((error: unknown) => error);
+
+      expect(firstFailure).toMatchObject({ cause: quiescenceFailure });
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(0);
+      expect(closeResource).not.toHaveBeenCalled();
+      expect(closeDelivery).not.toHaveBeenCalled();
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+
+      releaseRetry = worker.holdNextAwait();
+      const firstRetry = running.close();
+      void firstRetry.catch(() => undefined);
+      await waitFor(() => worker.awaitCalls === 2);
+      const concurrentRetry = running.close();
+      expect(concurrentRetry).toBe(firstRetry);
+      releaseRetry();
+      releaseRetry = undefined;
+      await Promise.all([firstRetry, concurrentRetry]);
+      await running.close();
+
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(2);
+      expect(worker.retireCalls).toBe(1);
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(closeDelivery).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(1);
+    } finally {
+      releaseRetry?.();
+      await running.close().catch(() => undefined);
+      await fixture.context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("continues owned last cleanup after safe retirement errors and retries failed indexes", async () => {
+    const events: string[] = [];
+    const firstRetirementFailure = new Error("last retirement failed");
+    const nestedRetirementFailure = new Error("nested last retirement failed");
+    const contextFailure = new Error("last context close failed");
+    const resourceFailure = new Error("last resource close failed");
+    const facilityFailure = new Error("last delivery facility close failed");
+    const worker = new HeldStartupWorker(events);
+    worker.release();
+    worker.failNextRetire(
+      new AggregateError(
+        [
+          firstRetirementFailure,
+          new AggregateError([nestedRetirementFailure], "nested last retirement"),
+        ],
+        "last retirement",
+      ),
+    );
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    let deliveryAttempts = 0;
+    const closeDelivery = vi.fn(() => {
+      deliveryAttempts += 1;
+      events.push("delivery");
+      if (deliveryAttempts === 1) {
+        throw facilityFailure;
+      }
+    });
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory,
+        ownsStorageFactory: true,
+        delivery: { close: closeDelivery },
+        ownsDelivery: true,
+      },
+    });
+    const closeFixtureContext = fixture.context.close.bind(fixture.context);
+    let contextAttempts = 0;
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== fixture.context) {
+        throw new Error("Unexpected context close in safe last-cleanup test.");
+      }
+      contextAttempts += 1;
+      events.push("context");
+      return contextAttempts === 1 ? Promise.reject(contextFailure) : closeFixtureContext();
+    });
+    const closeSuccessfulResource = vi.fn(() => events.push("resource-success"));
+    let resourceAttempts = 0;
+    const closeRetryingResource = vi.fn(() => {
+      resourceAttempts += 1;
+      events.push("resource-retry");
+      if (resourceAttempts === 1) {
+        throw resourceFailure;
+      }
+    });
+    const running = await Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(fixture.context)
+      .addResource({ close: closeSuccessfulResource })
+      .addResource({ close: closeRetryingResource })
+      .start();
+
+    try {
+      const firstFailure = await running.close().catch((error: unknown) => error);
+
+      expect(firstFailure).toBeInstanceOf(AggregateError);
+      expect((firstFailure as AggregateError).errors).toEqual([
+        firstRetirementFailure,
+        nestedRetirementFailure,
+        contextFailure,
+        resourceFailure,
+        facilityFailure,
+      ]);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+      expect(closeRetryingResource).toHaveBeenCalledOnce();
+      expect(closeDelivery).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(1);
+
+      await running.close();
+      await running.close();
+
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(closeContext).toHaveBeenCalledTimes(2);
+      expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+      expect(closeRetryingResource).toHaveBeenCalledTimes(2);
+      expect(closeDelivery).toHaveBeenCalledTimes(2);
+      expect(storageFactory.closeCalls).toBe(1);
+    } finally {
+      closeContext.mockRestore();
+      await running.close().catch(() => undefined);
+      await fixture.context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it.each([
+    {
+      kind: "empty",
+      createFailure: () => new AggregateError([], "empty last retirement"),
+    },
+    {
+      kind: "nested-empty",
+      createFailure: () =>
+        new AggregateError(
+          [new AggregateError([], "nested empty last retirement")],
+          "nested-empty last retirement",
+        ),
+    },
+  ])(
+    "preserves $kind aggregate failure presence across safe last cleanup",
+    async ({ createFailure }) => {
+      const worker = new HeldStartupWorker([]);
+      worker.release();
+      const retirementFailure = createFailure();
+      worker.failNextRetire(retirementFailure);
+      const fixture = await lifecycleFixture({ workers: [worker] });
+      const closeResource = vi.fn();
+      const running = await Server.atPort(0, { environment: fixture.environment })
+        .add(fixture.context)
+        .addResource({ close: closeResource })
+        .start();
+
+      try {
+        const firstFailure = await running.close().catch((error: unknown) => error);
+
+        expect(firstFailure).toBe(retirementFailure);
+        expect(worker.stopCalls).toBe(1);
+        expect(worker.awaitCalls).toBe(1);
+        expect(worker.retireCalls).toBe(1);
+        expect(closeResource).toHaveBeenCalledOnce();
+
+        await running.close();
+        await running.close();
+        expect(worker.stopCalls).toBe(1);
+        expect(worker.awaitCalls).toBe(1);
+        expect(worker.retireCalls).toBe(1);
+        expect(closeResource).toHaveBeenCalledOnce();
+        await expect(fixture.environment.close()).resolves.toBeUndefined();
+      } finally {
+        await running.close().catch(() => undefined);
+        await fixture.context.close().catch(() => undefined);
+        await fixture.environment.close().catch(() => undefined);
+        fixture.dispose();
+      }
+    },
+  );
 
   it("closes one shared running server without retiring its sibling generation", async () => {
     const events: string[] = [];

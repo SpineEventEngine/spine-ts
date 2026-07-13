@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 5 implementation assigned
+Status: Slice 5 review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -905,3 +905,36 @@ smallest coherent implementation.
   `PAUSED` successor, ordered context/resource/owned-environment close, safe-
   error continuation, and exact retry. Same Terra Medium implementer; no new
   lifecycle access beyond Slice 4 and no docs/public redesign.
+
+## Slice 5 Implementation Handback
+
+- `2026-07-13T22:09:18Z`: the accepted Slice 4 `RunningHttp2Server` checkpoints
+  also satisfy the last-detach architecture without production change. Real
+  active-work integration proves network/session closure first, irreversible
+  stop before held settlement, no post-stop `PAUSED` successor, no old/new
+  generation overlap, and context/resource/environment teardown only after the
+  environment-owned replacement-safe barrier.
+- Unsafe last detach remains handle-qualified and retains all dependencies;
+  coalesced retry resumes the rejected detach without repeating successful
+  network or stop hooks. Safe retirement/inert failures permit the ordered
+  close group to continue, flatten with later cleanup errors, and retry only
+  failed indexes. Empty aggregate failure presence and caller-owned fresh-
+  generation reuse remain intact.
+- Executable RED 0/1 identified an invalid producer/entity identity in the new
+  real-event fixture before worker admission. Minimal fixture correction made
+  the corrected behavior test 1/1 GREEN; all other last-only probes were green
+  against unchanged production. The architecture therefore gains direct
+  evidence, not a new state or access mechanism. Native evidence is 6/6
+  focused, 36/36 integration, and 8 files / 360 tests; coordinator review is
+  pending.
+- `2026-07-13T22:12:10Z`: both typechecks and all scoped lint, cleanup,
+  formatting, exact six-path scope, 4/4 status, public-leak/public-surface, and
+  diff-integrity gates pass on the synchronized handback.
+
+## Slice 5 Coordinator Acceptance
+
+- `2026-07-13T22:14:51Z`: evidence-only Slice 5 passes independent coordinator
+  verification: both typechecks, 8 files / 360 tests, and all scoped gates.
+  Actual Terra Medium implementer used no subagents and is closed. Production,
+  public, and architecture surfaces are unchanged; maintainability and
+  reliability review now validate that the evidence is non-vacuous.

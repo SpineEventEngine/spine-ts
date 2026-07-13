@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 5 implementation assigned
+Status: Slice 5 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -971,3 +971,44 @@ gate passes.
   and all scoped gates. Slice 5 last-detach/owned close and active-work safety
   is assigned to the same implementer at `gpt-5.6-terra` / medium, no
   subagents. Slice 6 docs/compatibility remains excluded.
+
+## Slice 5 Implementation Handback
+
+- `2026-07-13T22:09:18Z`: direct integration now drives a real post-start
+  durable event into a held worker run, begins owned last close with an open
+  HTTP/2 session, and proves network/session close and stop admission precede
+  settlement. Transport, record storage, context, resource, and owned
+  facilities stay open until the run returns `PAUSED`; no successor starts.
+- Unsafe last quiescence retains every owned dependency and coalesces an exact
+  detach retry without repeating network close or stop. Safe nested retirement,
+  context/resource, and facility failures flatten in stable phase order; retry
+  touches only failed indexes. Empty and nested-empty last-retirement failures
+  retain exact observable presence. Fresh caller-owned reuse uses a distinct
+  worker generation and proves no overlap.
+- The first executable active-work probe was RED 0/1 because the new fixture
+  event producer and entity identity differed, so repository routing prevented
+  delivery admission. Correcting that test fixture made the probe GREEN 1/1;
+  the accepted Slice 4 running-close state machine then passed every corrected
+  Slice 5 branch unchanged. No truthful production defect was found, so
+  `server.ts` and lifecycle authority files are intentionally unchanged.
+- Focused Slice 5 evidence is 6/6; full integration is 36/36; the architecture
+  eight-file native gate is 360/360. Both typechecks pass. Final static,
+  formatting, scope/status/leak/surface, and diff evidence follows in the work
+  and review logs. This is implementation handback, not self-acceptance; no
+  commit/push/merge or Slice 6/protected-file work occurred.
+- `2026-07-13T22:12:10Z`: final synchronized tree passes 8 files / 360 tests,
+  both typechecks, scoped ESLint, cleanup enforcement, exact six-path Prettier
+  and scope audit, 4/4 status, zero internal-name leak, unchanged public
+  surface, and `git diff --check`.
+
+## Slice 5 Coordinator Gate And Review Assignment
+
+- `2026-07-13T22:14:51Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent gate
+  passes both typechecks, 8 files / 360 native tests, lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff checks.
+- Test-only slice: TypeScript/API docs N/A because production declarations and
+  public surface are unchanged; documentation N/A because Slice 6 is excluded;
+  security deferred. Style/maintainability and performance/reliability review
+  are assigned at `gpt-5.6-terra` / high, no subagents, with explicit test-
+  validity scrutiny.
