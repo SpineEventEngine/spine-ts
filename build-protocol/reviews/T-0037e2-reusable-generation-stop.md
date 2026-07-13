@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 4 review wave 1 assigned
+Status: Slice 4 review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -802,3 +802,46 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; all read-only and no-subagent.
+
+## Slice 4 Review Wave 1 Results
+
+- Style/maintainability: P2. Replacement-safe waiter-before-error ordering was
+  claimed but not asserted. Actual `gpt-5.6-terra` / `high`; skill check; no
+  subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill check; no
+  subagent.
+- TypeScript/API docs: P1. Stop does not await re-admitted waiter settlement.
+  Actual `gpt-5.6-terra` / `high`; skill check; no subagent.
+- Performance/reliability: P1. Serial classification/requeue race can invert
+  FIFO and cardinality winners. Actual `gpt-5.6-terra` / `high`; skill check;
+  no subagent.
+- The complete fix batch is assigned to the same implementer at explicit
+  expected `gpt-5.6-terra` / `medium`, no subagents.
+
+## Slice 4 Review Wave 1 Fix Evidence
+
+- The existing implementer at fixed/explicit `gpt-5.6-terra` / `medium`, no
+  subagents, recorded the canonical review/TDD/testing/error/completion skill
+  check before edits.
+- RED reproduced both findings: a deterministic serial-tail race made the
+  earlier shared-descriptor waiter lose, and stop success/replacement-safe
+  rejection settled before deferred waiter success or failure.
+- GREEN assigns the incomplete stop's cohort synchronously, requeues it FIFO,
+  and awaits one `Promise.allSettled` tail. Individual attach conflict/start
+  failures remain on their own promises; successful stop remains fulfilled and
+  replacement-safe rejection retains the exact old reason.
+- Focused GREEN passed 39 / 39; the requested five-file suite passed 161 / 161;
+  generated-build typechecking passed. Final format/status/public/inventory/
+  diff evidence is recorded in the canonical work log. Coordinator review is
+  requested with no full verify, commit, push, public/generated change, or
+  Slice expansion.
+
+## Slice 4 Review Wave 2 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T10:11:40Z`: 5 files / 161 tests, generated-build typecheck,
+  focused Prettier, static boundaries, exact scope, and diff hygiene.
+- Existing explicit profiles remain style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no-subagent.

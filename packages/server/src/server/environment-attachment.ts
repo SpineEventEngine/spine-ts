@@ -205,7 +205,9 @@ export class EnvironmentAttachments {
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     const gate = Promise.withResolvers<EnvironmentAttachmentHandle>();
-    const snapshotDescriptors = this.#stop === undefined;
+    const stop = this.#stop;
+    const waitForStop = stop !== undefined && !stop.completed;
+    const snapshotDescriptors = !waitForStop;
     const waiter: AttachmentWaiter = {
       options: Object.freeze({
         ownership: options.ownership,
@@ -215,21 +217,19 @@ export class EnvironmentAttachments {
       }),
       gate,
       snapshotDescriptors,
-      status: "queued",
+      status: waitForStop ? "waiting" : "queued",
     };
-    this.#queueAttachment(waiter);
+    if (waitForStop) {
+      stop.waiters.push(waiter);
+    } else {
+      this.#queueAttachment(waiter);
+    }
     return gate.promise;
   }
 
   #queueAttachment(waiter: AttachmentWaiter): void {
     waiter.status = "queued";
     const attaching = this.#serial.then(async () => {
-      const stop = this.#stop;
-      if (stop?.admitted === true && !stop.completed) {
-        waiter.status = "waiting";
-        stop.waiters.push(waiter);
-        return;
-      }
       const admittedOptions: EnvironmentAttachOptions = Object.freeze({
         ownership: waiter.options.ownership,
         descriptors: waiter.snapshotDescriptors
@@ -250,15 +250,17 @@ export class EnvironmentAttachments {
     });
   }
 
-  #releaseStopWaiters(stop: GenerationStop): void {
-    if (stop.waitersReleased) return;
-    stop.waitersReleased = true;
-    for (const waiter of stop.waiters) {
-      if (waiter.status === "waiting") {
+  async #releaseStopWaiters(stop: GenerationStop): Promise<void> {
+    if (!stop.waitersReleased) {
+      stop.waitersReleased = true;
+      const settlements = stop.waiters.map((waiter) => {
         this.#queueAttachment(waiter);
-      }
+        return waiter.gate.promise;
+      });
+      stop.waiters.length = 0;
+      stop.waiterSettlement = Promise.allSettled(settlements).then(() => undefined);
     }
-    stop.waiters.length = 0;
+    await stop.waiterSettlement;
   }
 
   async #startQueuedAttachment(
@@ -331,6 +333,7 @@ export class EnvironmentAttachments {
       drained: false,
       waiters: [],
       waitersReleased: false,
+      waiterSettlement: undefined,
       completed: false,
       promise: Promise.resolve(),
       status: "running",
@@ -388,21 +391,23 @@ export class EnvironmentAttachments {
   async #continueStop(stop: GenerationStop): Promise<void> {
     if (!stop.admitted) {
       if (this.#failedRollback !== undefined) {
-        this.#refuseStop(stop, explicitRetryError());
+        await this.#refuseStop(stop, explicitRetryError());
       }
       if (this.#failedLastDetach !== undefined) {
-        this.#refuseStop(stop, detachRetryRequiredError());
+        await this.#refuseStop(stop, detachRetryRequiredError());
       }
       if (this.#failedNonLastDetachOwnsRegistration()) {
-        this.#refuseStop(stop, detachRetryRequiredError());
+        await this.#refuseStop(stop, detachRetryRequiredError());
       }
       const generation = this.#registrations.generation;
       if (generation === undefined) {
+        stop.completed = true;
+        await this.#releaseStopWaiters(stop);
         return;
       }
       const old = this.#generations.get(generation);
       if (old === undefined) {
-        this.#refuseStop(stop, new Error("Environment generation is not current."));
+        await this.#refuseStop(stop, new Error("Environment generation is not current."));
       }
       stop.generation = generation;
       stop.old = old;
@@ -530,7 +535,7 @@ export class EnvironmentAttachments {
       throwFailures(failures, "Environment delivery stop transition failed.");
     }
     stop.completed = true;
-    this.#releaseStopWaiters(stop);
+    await this.#releaseStopWaiters(stop);
     if (stop.oldRetirement.status === "retained") {
       const { reason } = stop.oldRetirement;
       stop.oldRetirement = { status: "emitted" };
@@ -547,10 +552,12 @@ export class EnvironmentAttachments {
     return causes;
   }
 
-  #refuseStop(stop: GenerationStop, error: Error): never {
+  async #refuseStop(stop: GenerationStop, error: Error): Promise<never> {
+    stop.completed = true;
     if (this.#stop === stop) {
       this.#stop = undefined;
     }
+    await this.#releaseStopWaiters(stop);
     throw error;
   }
 
@@ -860,6 +867,7 @@ interface GenerationStop {
   drained: boolean;
   readonly waiters: AttachmentWaiter[];
   waitersReleased: boolean;
+  waiterSettlement: Promise<void> | undefined;
   completed: boolean;
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";

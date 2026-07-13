@@ -143,6 +143,86 @@ describe("environment generation stop", () => {
     await attachments.detach(finalHandle);
   });
 
+  it("preserves call order when stop completion races two conflicting waiters", async () => {
+    const oldWorker = new ControlledWorker([], "cohort-race-old");
+    const candidateWorker = new ControlledWorker([], "cohort-race-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "CohortRaceInitial",
+      "type.example.dev/CohortRaceInitial",
+      new InMemoryStorageFactory(),
+    );
+    const shared = descriptor(
+      "CohortRaceShared",
+      "type.example.dev/CohortRaceShared",
+      new InMemoryStorageFactory(),
+    );
+    const spacers = Array.from({ length: 4 }, (_, index) =>
+      descriptor(
+        `CohortRaceSpacer${index.toString()}`,
+        `type.example.dev/CohortRaceSpacer${index.toString()}`,
+        new InMemoryStorageFactory(),
+      ),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const earlier = attachments.attach({ ownership: "caller", descriptors: [shared.value] });
+    await Promise.resolve();
+    const spacerAttachments = spacers.map((spacer) =>
+      attachments.attach({ ownership: "caller", descriptors: [spacer.value] }),
+    );
+    const later = attachments.attach({ ownership: "caller", descriptors: [shared.value] });
+    expect(shared.startupCalls).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+
+    candidateGate.resolve();
+    const [stopOutcome, earlierOutcome, ...remainingOutcomes] = await Promise.allSettled([
+      stopping,
+      earlier,
+      ...spacerAttachments,
+      later,
+    ]);
+    const laterOutcome = remainingOutcomes.at(-1)!;
+    const spacerOutcomes = remainingOutcomes.slice(0, -1);
+
+    expect(stopOutcome.status).toBe("fulfilled");
+    expect(earlierOutcome.status).toBe("fulfilled");
+    expect(spacerOutcomes.every((outcome) => outcome.status === "fulfilled")).toBe(true);
+    expect(laterOutcome.status).toBe("rejected");
+    if (laterOutcome.status === "rejected") {
+      expect(laterOutcome.reason).toEqual(
+        expect.objectContaining({ message: "Context delivery descriptor is already attached." }),
+      );
+    }
+    expect(shared.startupCalls).toBe(1);
+    expect(attachments.activeRegistrationCount).toBe(2 + spacers.length);
+    expect(factoryCalls).toBe(2);
+
+    if (earlierOutcome.status !== "fulfilled") throw earlierOutcome.reason;
+    await attachments.detach(initialHandle);
+    await attachments.detach(earlierOutcome.value);
+    for (const outcome of spacerOutcomes) {
+      if (outcome.status !== "fulfilled") throw outcome.reason;
+      await attachments.detach(outcome.value);
+    }
+  });
+
   it("keeps an after-stop attachment pending across unsafe retirement and explicit retry", async () => {
     const oldWorker = new ControlledWorker([], "waiting-unsafe-old");
     const candidateWorker = new ControlledWorker([], "waiting-unsafe-candidate");
@@ -285,7 +365,9 @@ describe("environment generation stop", () => {
     const oldWorker = new ControlledWorker([], "waiting-safe-old");
     const candidateWorker = new ControlledWorker([], "waiting-safe-candidate");
     const candidateGate = Promise.withResolvers<void>();
-    candidateWorker.gates.push(candidateGate.promise);
+    const waiterGate = Promise.withResolvers<void>();
+    const waiterStarted = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise, waiterGate.promise);
     const retirementFailure = new Error("waiting replacement-safe retirement failed");
     oldWorker.retireFailures.push(retirementFailure);
     const workers = [oldWorker, candidateWorker];
@@ -316,15 +398,127 @@ describe("environment generation stop", () => {
     const stopping = attachments.stopDelivery();
     await until(() => candidateWorker.starts === 1);
     const attaching = attachments.attach({ ownership: "caller", descriptors: [later.value] });
+    const events: string[] = [];
+    let stopSettled = false;
+    const observedStop = stopping.catch((reason: unknown) => {
+      stopSettled = true;
+      events.push("stop");
+      return reason;
+    });
+    const observedAttach = attaching.then((handle) => {
+      events.push("attach");
+      return handle;
+    });
+    candidateWorker.onStarts.push(waiterStarted.resolve);
     candidateGate.resolve();
 
-    await expect(stopping).rejects.toBe(retirementFailure);
-    const laterHandle = await attaching;
+    expect(
+      await Promise.race([
+        waiterStarted.promise.then(() => "attach-started" as const),
+        observedStop.then(() => "stop-settled" as const),
+      ]),
+    ).toBe("attach-started");
+    expect(stopSettled).toBe(false);
+
+    waiterGate.resolve();
+    const laterHandle = await observedAttach;
+    expect(await observedStop).toBe(retirementFailure);
 
     expect(laterHandle.generation).toBe(initialHandle.generation);
+    expect(events).toEqual(["attach", "stop"]);
     expect(factoryCalls).toBe(2);
     await attachments.detach(initialHandle);
     await attachments.detach(laterHandle);
+  });
+
+  it.each([
+    { name: "successful", oldFailure: undefined },
+    {
+      name: "replacement-safe",
+      oldFailure: new Error("waiter failure replacement-safe retirement failed"),
+    },
+  ])("keeps a rejected waiter independent from a $name stop result", async ({ oldFailure }) => {
+    const oldWorker = new ControlledWorker([], "waiter-failure-old");
+    const candidateWorker = new ControlledWorker([], "waiter-failure-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    const waiterGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise, waiterGate.promise);
+    if (oldFailure !== undefined) oldWorker.retireFailures.push(oldFailure);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "WaiterFailureInitial",
+      "type.example.dev/WaiterFailureInitial",
+      new InMemoryStorageFactory(),
+    );
+    const later = descriptor(
+      "WaiterFailureLater",
+      "type.example.dev/WaiterFailureLater",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [later.value] });
+    const events: string[] = [];
+    let stopSettled = false;
+    const stopOutcome = stopping.then(
+      () => {
+        stopSettled = true;
+        events.push("stop");
+        return Object.freeze({ status: "fulfilled" as const });
+      },
+      (reason: unknown) => {
+        stopSettled = true;
+        events.push("stop");
+        return Object.freeze({ status: "rejected" as const, reason });
+      },
+    );
+    const attachOutcome = attaching.then(
+      () => Object.freeze({ status: "fulfilled" as const }),
+      (reason: unknown) => {
+        events.push("attach");
+        return Object.freeze({ status: "rejected" as const, reason });
+      },
+    );
+
+    candidateGate.resolve();
+    await until(() => candidateWorker.starts === 2);
+    expect(stopSettled).toBe(false);
+
+    const waiterFailure = new Error("waiter candidate startup failed");
+    waiterGate.reject(waiterFailure);
+    const rejectedAttach = await attachOutcome;
+    const settledStop = await stopOutcome;
+
+    expect(rejectedAttach.status).toBe("rejected");
+    if (rejectedAttach.status === "rejected") {
+      expect(rejectedAttach.reason).toBe(waiterFailure);
+    }
+    if (oldFailure === undefined) {
+      expect(settledStop.status).toBe("fulfilled");
+    } else {
+      expect(settledStop.status).toBe("rejected");
+      if (settledStop.status === "rejected") {
+        expect(settledStop.reason).toBe(oldFailure);
+      }
+    }
+    expect(events).toEqual(["attach", "stop"]);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(initialHandle);
   });
 
   it("applies ownership conflict only when an after-stop attachment is re-admitted", async () => {

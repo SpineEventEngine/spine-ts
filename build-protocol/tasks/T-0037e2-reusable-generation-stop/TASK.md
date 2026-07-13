@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 4 review wave 1 assigned
+Status: Slice 4 review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -385,3 +385,13 @@ replacement-safe error propagation, and independent ownership conflict while
 preserving ordinary attach snapshots and prior detach behavior. Static
 private/public/generated boundary checks and exact verification evidence are
 recorded in the canonical work/review logs; coordinator review is requested.
+
+## Slice 4 Review Wave 1 Fix Handback
+
+Every attach called before the successful transition closes its waiter cohort
+now joins that one retained stop synchronously in call order. Phase 4 queues the
+cohort once and awaits every attachment settlement without adopting individual
+attachment failures into the stop result. Deterministic tests prove FIFO
+conflict ownership, waiter-before-stop settlement, exact replacement-safe old
+error identity, and successful-stop independence. Coordinator review is
+requested with exact evidence in the canonical logs.
