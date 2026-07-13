@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 Round 1 fixes focused verified; Round 2 review pending
+Status: Slice 1 Round 2 review in progress
 
 Started: `2026-07-13T00:46:22Z`
 

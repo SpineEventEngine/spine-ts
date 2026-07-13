@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 1 Round 1 fixes focused verified; Round 2 review pending
+Status: Slice 1 Round 2 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -64,6 +64,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   independently passes 102/102 plus generated/type/lint/cleanup, format, and
   diff gates. The complete finding batch is ready for a committed Round 2
   package; full verify and security remain deferred.
+- Round 2 package is `.superpowers/sdd/review-0c54a218..b99bd7f1.diff` (one
+  commit, 33,509 bytes). Pre-review lint is clean. Expected explicit profiles
+  are style/API/reliability Terra High and documentation Luna Medium. Review is
+  limited to retained faults, sync observer enforcement, selected-unit causes,
+  detach reclassification order, tests, and corrected chronology.
 - All four coordinator findings are corrected under focused TDD. Meaningful
   settlement equality, terminal barrier-fault propagation, bounded per-unit
   cause reselection, and atomic counted-owner detach/retire record consumption
