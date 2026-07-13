@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3A review wave 2 assigned
+Status: Slice 3A accepted; Slice 3B assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -551,3 +551,18 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only and no-subagent. Historical superseded
   text remains non-actionable unless active records claim it.
+
+## Slice 3A Review Wave 2 And Closure
+
+- Style/maintainability: CLEAN. Actual `gpt-5.6-terra` / `high`; the P3 is
+  resolved without weakening observable proof. Skill check reported; no
+  subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill check reported;
+  no subagent.
+- TypeScript/API docs: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Performance/reliability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Slice 3A is accepted at `2026-07-13T08:13:19Z`. Slice 3B is assigned at
+  explicit expected `gpt-5.6-terra` / `medium`, no subagents; review waits for
+  focused replacement-safe error and settlement evidence.
