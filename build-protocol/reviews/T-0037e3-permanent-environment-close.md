@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task Round 4 re-review assigned
+Status: Final whole-task Round 5 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -826,8 +826,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   future review phase.
 - Documentation evidence: targeted active-claim/status `rg` scans, scoped
   Prettier write/check on all four assigned records, `git diff --check`, and
-  exact four-record scope/status lint. `docs:check` is N/A because no API,
-  package, or generated documentation input changed.
+  exact four-record scope/status lint. The implementer did not run `docs:check`
+  because this documentation-only batch did not warrant it; the later coordinator
+  gate ran full `docs:check` and it passed.
 - Exclusions and handback: no runtime/test/public/API/Proto/generated/listener/
   security/example or `human-review-1-jul.md` change; no commit, push, full
   verify, or merge. Status: Round 4 docs-fix handback requested.
@@ -836,7 +837,40 @@ Derived status mirror: the canonical current state is the `Status` header in
 
 - `2026-07-13T16:28:14Z`: coordinator accepts the Terra Medium implementer and
   fresh docs/API/format/diff/status/claim/scope evidence. It used no subagents.
+- The coordinator later ran full `docs:check` and it passed.
 - Iterable causes are the supported contract; malformed non-iterable or
   throwing-accessor causes are explicitly unsupported. Architecture body and
   derived header now follow canonical status without stale phase assertions.
   Fresh four-concern dispositions are required; security remains deferred.
+
+## Final Whole-Task Round 4 Re-review Results
+
+- `2026-07-13T16:33:07Z`: runtime/API behavior is CLEAN. One stale architecture
+  phase assertion is corroborated across concerns, and API identifies ambiguous
+  `docs:check` chronology. Desktop metadata confirms every profile; all
+  reviewers used no subagents and are closed.
+- Final docs fix must remove body-level phase assertions, make the derived header
+  generic, and distinguish implementer non-execution from later coordinator
+  `docs:check` success. Runtime/security scope remains unchanged/deferred.
+
+## Final Whole-Task Round 5 Docs-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  Dispositions: all four reviewers' stale-phase and `docs:check` provenance
+  findings are accepted; the generic derived header, phase-free active body, and
+  explicit check chronology resolve them.
+- Exact checks: exhaustive targeted `rg` scans, Prettier, full `docs:check`,
+  `git diff --check`, and exact four-record scope/status lint; all pass.
+- Exclusions: no runtime, test, public/API/Proto/generated, listener, security,
+  example, or `human-review-1-jul.md` change; no commit, push, full verify, or
+  merge. Round 5 docs-fix handback is requested.
+
+## Final Whole-Task Round 5 Re-review Assignment
+
+- `2026-07-13T16:38:00Z`: coordinator accepts the Terra Medium implementer and
+  fresh full docs/API/format/cleanup/diff/phase/provenance/scope evidence. It used
+  no subagents.
+- Architecture status is permanently generic and active body text contains no
+  numbered phase. Implementer non-execution and later coordinator success for
+  `docs:check` are explicit. Fresh four-concern dispositions are required;
+  security remains deferred.

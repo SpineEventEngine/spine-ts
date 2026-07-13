@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final whole-task Round 4 re-review assigned
+Status: Final whole-task Round 5 re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -1091,9 +1091,9 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   canonical `TASK.md` header rather than naming a stale Round 3 phase.
 - Exact validation is recorded in the work and review logs: targeted active-claim
   and status `rg` scans, Prettier on these four records, `git diff --check`, and
-  exact four-record scope/status lint. `docs:check` is excluded as not warranted:
-  this batch changes no API/package documentation or generated documentation
-  inputs.
+  exact four-record scope/status lint. The implementer did not run `docs:check`
+  because this documentation-only batch did not warrant it; the later coordinator
+  gate ran full `docs:check` and it passed.
 - Exclusions: no runtime, test, public/API/Proto/generated, listener, security,
   example, or `human-review-1-jul.md` change; no commit, push, full verify, or
   merge. Status: Round 4 docs-fix handback requested.
@@ -1102,7 +1102,41 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 
 - `2026-07-13T16:28:14Z`: Desktop metadata confirms the implementer at actual
   `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
-  Coordinator `docs:check`, scoped Prettier, status/claim lint, exact scope, and
-  `git diff --check` pass.
+  The coordinator later ran full `docs:check`, scoped Prettier, status/claim
+  lint, exact scope, and `git diff --check`; all passed.
 - The four-record unsupported-input and durable status-mirror correction is
   assigned for final four-concern Round 4 re-review. Runtime remains unchanged.
+
+## Final Whole-Task Round 4 Re-review Findings
+
+- `2026-07-13T16:33:07Z`: all runtime/API concerns are CLEAN. The four reviewers
+  corroborate one stale architecture-body phase assertion; API also flags
+  ambiguous implementer-versus-coordinator `docs:check` provenance.
+- Remove every phase-specific assertion from the architecture body and use only
+  a generic pointer to the canonical `TASK.md` status. Make the architecture
+  header generic as well so future phase changes cannot stale it.
+- In task/work/review/architecture handbacks, state that the implementer did not
+  run `docs:check`, and that the later coordinator gate did run and pass it.
+- Desktop metadata matches style/API/reliability Terra High and documentation
+  Luna Medium. All reviewers used no subagents and are closed. One Terra Medium
+  implementer receives the final docs-only batch.
+
+## Final Whole-Task Round 5 Docs-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  Dispositions: the architecture header is generic; its active body/footer names
+  no numbered phase or status; and the `docs:check` chronology is unambiguous.
+- Exact checks: exhaustive targeted `rg` scans, Prettier, full `docs:check`,
+  `git diff --check`, and exact four-record scope/status lint; all pass.
+- Exclusions: no runtime, test, public/API/Proto/generated, listener, security,
+  example, or `human-review-1-jul.md` change; no commit, push, full verify, or
+  merge. Round 5 docs-fix handback is requested.
+
+## Final Whole-Task Round 5 Coordinator Gate
+
+- `2026-07-13T16:38:00Z`: Desktop metadata confirms the implementer at actual
+  `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
+  Coordinator full `docs:check`, Prettier, cleanup, diff, phase/provenance scans,
+  and exact four-file scope/status lint pass.
+- The generic architecture mirror and explicit implementer/coordinator check
+  chronology are assigned for final four-concern Round 5 re-review.

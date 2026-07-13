@@ -1,6 +1,6 @@
 # T-0037e3 Architecture Resolution
 
-Status: Derived mirror of TASK.md — Final whole-task Round 4 re-review assigned
+Status: Derived mirror; see canonical TASK.md status
 
 ## Resolution Summary
 
@@ -584,11 +584,10 @@ behavior, or public exclusions without a newly demonstrated architecture block.
 ## Derived Status And Aggregate-Cause Boundary
 
 - Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
-  Finding disposition: both Round 3 re-review P2s are resolved in documentation
-  only.
+  Finding disposition: both historical re-review P2s are resolved in
+  documentation only.
 - This record's `Status` header is a derived mirror of the canonical `TASK.md`
-  header; it intentionally does not restate a numbered review phase in body
-  text. The current canonical phase is Round 4 docs-fix handback requested.
+  header; this body intentionally makes no numbered phase or status assertion.
 - Iterable `AggregateError.errors` causes retain the supported prior traversal
   contract. Malformed non-iterable values and values whose `errors` accessor
   throws are unsupported and outside accepted behavior; this resolution makes
@@ -596,10 +595,11 @@ behavior, or public exclusions without a newly demonstrated architecture block.
 - This wording is documentation-only. It changes no lifecycle ownership,
   admission, facility order, error order, public contract, or accepted
   exclusion.
-- Exact checks are targeted active-claim/status `rg` scans, scoped Prettier
-  write/check on the four assigned records, `git diff --check`, and exact
-  four-record scope/status lint. `docs:check` is N/A because no API/package
-  documentation or generated documentation input changed.
-- Exclusions and handback: no runtime/test/public/API/Proto/generated/listener/
-  security/example or `human-review-1-jul.md` change; no commit, push, full
-  verify, or merge. Status: Round 4 docs-fix handback requested.
+- The implementer did not run `docs:check` because this documentation-only batch
+  did not warrant it. The later coordinator gate ran full `docs:check` and it
+  passed.
+- Exact checks for this correction are exhaustive targeted `rg` scans, Prettier,
+  full `docs:check`, `git diff --check`, and exact four-record scope/status
+  lint; all pass. No runtime/test/public/API/Proto/generated/listener/security/
+  example or `human-review-1-jul.md` change, commit, push, full verify, or merge
+  is in scope.
