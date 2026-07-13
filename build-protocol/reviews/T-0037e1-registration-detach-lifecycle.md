@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -328,3 +328,8 @@ Derived status mirror: the canonical current state is the `Status` header in
   Both full test suites pass 65 files / 1,481 tests and branch coverage is
   exactly 90.00% (4,140/4,600). No critical, high-confidence, or other
   actionable finding remains. T-0037e1 is accepted for merge.
+- `2026-07-13T04:22:17Z`: Merge `da1af218` is integrated and post-merge full
+  verification exits `0` with 65 files / 1,481 tests passing in both ordinary
+  and coverage runs, branch coverage at 90.00%, and every static, docs/API,
+  Protobuf, and generated gate clean. T-0037e1 remains review-clean, complete,
+  and integrated; security remains deferred to T-0041.

@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 ### Final Verification Finding
 
