@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3B review wave 1 assigned
+Status: Slice 3B review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -599,3 +599,59 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; all read-only and no-subagent.
+
+## Slice 3B Review Wave 1 Results
+
+- Style/maintainability: P2. `oldFailure: unknown | undefined` loses a valid
+  `undefined` rejection and duplicates once-only observation state. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- Documentation: P2. “ordinary explicit-retry refusal” reverses the tested
+  ordinary-continuation refusal pending explicit retry. Actual
+  `gpt-5.6-luna` / `medium`; skill check reported; no subagent.
+- TypeScript/API docs: P1/P2. Raw rejection identity is coerced or dropped;
+  generic aggregate flattening erases/splits exact phase causes; transfer sees
+  a live readiness object while reopen sees a clone. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- Performance/reliability: P1. Empty aggregate flattening can silently complete
+  a failed transition; undefined retirement rejection is lost. The bounded
+  drain map and settlement ordering were otherwise clean. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- The deduplicated fix batch is assigned to the same implementer at explicit
+  expected `gpt-5.6-terra` / `medium`, no subagents; Wave 2 waits for focused
+  edge-case evidence and coordinator verification.
+
+## Slice 3B Review Wave 1 Fix Evidence
+
+- Focused RED ran 26 stop tests with 5 expected failures: `undefined`
+  retirement resolved, non-`Error` report identity was coerced, an empty phase
+  aggregate vanished, a mutable readiness object diverged between transition
+  and reopen, and a phase-owned aggregate was flattened into its child.
+- GREEN replaces the duplicated sentinel/observation fields with one tagged
+  retained result, tracks report rejection presence explicitly, tags only
+  aggregates synthesized by the existing coordinator/attachment failure
+  helpers, and shares one frozen readiness snapshot across the existing stable
+  route's phase-2 and phase-4 consumers. Ordered combined assertions now use
+  individual identity checks.
+- Focused GREEN passed 26 / 26; the requested five-file regression suite passed
+  148 / 148 and generated-build typechecking passed. Final format, status,
+  public/generated/inventory, and diff evidence is recorded in the work log.
+  No Slice 4, public API/export/docs/generated change, full verify, commit,
+  push, or subagent occurred. Coordinator review is requested.
+- Fresh post-format verification at `2026-07-13T08:50:33Z` again passed 5 files
+  / 148 tests, generated-build typechecking, focused Prettier, synchronized
+  review-request status, exact six-file inventory, empty public/generated
+  inventory, stale-structure scan, and `git diff --check`.
+
+## Slice 3B Review Wave 2 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T08:52:04Z`: 5 files / 148 tests, generated-build typecheck,
+  focused Prettier, exact status/scope, and diff hygiene.
+- Pre-review lint found no public/generated/future-policy leakage; the new
+  retirement-cause provenance helper remains package-internal and unexported.
+- Existing explicit profiles remain style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no-subagent, and bounded to the fix
+  delta. Superseded history remains non-actionable unless active records claim
+  it.

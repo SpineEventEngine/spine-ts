@@ -7,11 +7,13 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
   DeliveryRunQuiescenceError,
   type DeliveryRunObligation,
+  type DeliveryRunScope,
 } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
 import {
   EnvironmentAttachments,
   type EnvironmentGenerationWorker,
+  RegistrationReadiness,
 } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
@@ -1131,13 +1133,204 @@ describe("environment generation stop", () => {
     },
   );
 
+  it("preserves an undefined replacement-safe retirement rejection", async () => {
+    const oldWorker = new ControlledWorker([], "undefined-old");
+    const candidateWorker = new ControlledWorker([], "undefined-candidate");
+    oldWorker.retireFailures.push(undefined);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const target = descriptor(
+      "UndefinedRetirement",
+      "type.example.dev/UndefinedRetirement",
+      new InMemoryStorageFactory(),
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const outcome = await attachments.stopDelivery().then(
+      () => Object.freeze({ status: "fulfilled" as const }),
+      (reason: unknown) => Object.freeze({ status: "rejected" as const, reason }),
+    );
+
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.reason).toBeUndefined();
+    }
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect(oldWorker.retireCalls).toBe(1);
+    await expect(attachments.retryDeliveryStop()).rejects.toThrow(
+      "Environment has no failed delivery stop to retry.",
+    );
+    await attachments.detach(handle);
+  });
+
+  it("preserves a non-Error report rejection by identity", async () => {
+    const oldWorker = new ControlledWorker([], "non-error-report-old");
+    const candidateWorker = new ControlledWorker([], "non-error-report-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const reportFailure = Object.freeze({ code: "report-rejected" });
+    const parkedFailure = new Error("non-error report retained readiness");
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      report: () => Promise.reject(reportFailure),
+    });
+    const target = descriptor(
+      "NonErrorReport",
+      "type.example.dev/NonErrorReport",
+      new InMemoryStorageFactory(),
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+    oldWorker.startFailures.push(parkedFailure);
+    target.readiness.claim(target.ready);
+    await until(() => oldWorker.starts === 2);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const propagated = await attachments.stopDelivery().catch((reason: unknown) => reason);
+
+    expect(propagated).toBe(reportFailure);
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(handle);
+  });
+
+  it("retains an empty phase AggregateError as one failed transition cause", async () => {
+    const oldWorker = new ControlledWorker([], "empty-aggregate-old");
+    const candidateWorker = new ControlledWorker([], "empty-aggregate-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const phaseFailure = new AggregateError([], "empty candidate phase failure");
+    let factoryCalls = 0;
+    let transferAttempts = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer() {
+          transferAttempts += 1;
+          if (transferAttempts === 1) throw phaseFailure;
+        },
+      },
+    });
+    const target = descriptor(
+      "EmptyAggregate",
+      "type.example.dev/EmptyAggregate",
+      new InMemoryStorageFactory(),
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const firstFailure = await attachments.stopDelivery().catch((reason: unknown) => reason);
+
+    expect(firstFailure).toBe(phaseFailure);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect(transferAttempts).toBe(2);
+    await attachments.detach(handle);
+  });
+
+  it("uses one immutable readiness snapshot for transition capture and reopen", () => {
+    const targetTypeUrl = "type.example.dev/MutableReadiness";
+    const target = descriptor("MutableReadiness", targetTypeUrl, new InMemoryStorageFactory(), {
+      multitenant: true,
+      startupTenantId: "tenant-original",
+    });
+    const owner = Object.freeze({ key: "mutable-readiness-owner" });
+    const configured: DeliveryRunScope = Object.freeze({
+      owner,
+      ready: Object.freeze({
+        tenantId: "tenant-original",
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl,
+        shard: ShardIndex.single(),
+      }),
+    });
+    const mutableReady = {
+      tenantId: "tenant-original",
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl,
+      shard: ShardIndex.single(),
+    } satisfies DeliveryReady;
+    let transitionReady: DeliveryReady | undefined;
+    let reopenedReady: DeliveryReady | undefined;
+    const route = new RegistrationReadiness(
+      [{ descriptor: target.value, scopes: [configured] }],
+      (_descriptor, ready) => Object.freeze({ owner, ready }),
+      () => undefined,
+    );
+    route.open([configured]);
+    route.prepareTransition((_descriptor, ready) => {
+      transitionReady = ready;
+    });
+
+    route.notify(target.value, mutableReady);
+    mutableReady.tenantId = "tenant-mutated";
+    mutableReady.label = "MUTATED";
+    mutableReady.targetTypeUrl = "type.example.dev/Mutated";
+    route.rebind(
+      (_descriptor, ready) => {
+        reopenedReady = ready;
+        return Object.freeze({ owner, ready });
+      },
+      () => undefined,
+    );
+    route.open([]);
+
+    expect(transitionReady).toBe(reopenedReady);
+    expect(transitionReady).toMatchObject({
+      tenantId: "tenant-original",
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl,
+    });
+  });
+
   it("orders replacement-safe old causes before a transition failure and retries one candidate", async () => {
     const events: string[] = [];
     const oldWorker = new ControlledWorker(events, "combined-old");
     const candidateWorker = new ControlledWorker(events, "combined-candidate");
     const reportFailure = new Error("combined old report failed");
     const retireFailure = new Error("combined old retirement failed");
-    const transitionFailure = new Error("combined candidate transfer failed");
+    const nestedPhaseCause = new Error("combined nested phase cause");
+    const transitionFailure = new AggregateError(
+      [nestedPhaseCause],
+      "combined candidate transfer failed",
+    );
     const parkedFailure = new Error("combined retained readiness");
     oldWorker.retireFailures.push(retireFailure);
     const firstSettlement = Promise.withResolvers<void>();
@@ -1224,11 +1417,11 @@ describe("environment generation stop", () => {
     await firstObserved;
 
     expect(firstPropagated).toBeInstanceOf(AggregateError);
-    expect((firstPropagated as AggregateError).errors).toEqual([
-      reportFailure,
-      retireFailure,
-      transitionFailure,
-    ]);
+    const orderedCauses = (firstPropagated as AggregateError).errors;
+    expect(orderedCauses).toHaveLength(3);
+    expect(orderedCauses[0]).toBe(reportFailure);
+    expect(orderedCauses[1]).toBe(retireFailure);
+    expect(orderedCauses[2]).toBe(transitionFailure);
     expect(handle.generation).toBe(oldGeneration);
     expect(factoryCalls).toBe(2);
     expect(routePreparations).toBe(1);
@@ -1427,7 +1620,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly startFailures: Error[] = [];
   readonly stopFailures: Error[] = [];
   readonly awaitFailures: Error[] = [];
-  readonly retireFailures: Error[] = [];
+  readonly retireFailures: unknown[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly onStarts: (() => void)[] = [];
   readonly targets: string[] = [];
@@ -1512,8 +1705,9 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   retire(): Promise<void> {
     this.retireCalls += 1;
     this.#events.push(`${this.#name}:retire`);
+    if (this.retireFailures.length === 0) return Promise.resolve();
     const failure = this.retireFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    return Promise.reject(failure);
   }
   stopOwners(_keys: readonly string[]): void {}
   awaitOwnersSettled(_keys: readonly string[]): Promise<void> {

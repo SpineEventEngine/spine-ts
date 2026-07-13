@@ -9,6 +9,13 @@ import {
 } from "./delivery-worker.js";
 import { ShardIndex } from "./shard-index.js";
 
+const synthesizedRetirementFailures = new WeakMap<AggregateError, readonly unknown[]>();
+
+/** @internal Ordered causes owned by this coordinator's retirement aggregation. */
+export function deliveryRunRetirementCauses(error: unknown): readonly unknown[] | undefined {
+  return error instanceof AggregateError ? synthesizedRetirementFailures.get(error) : undefined;
+}
+
 /** @internal Serializes finite worker starts for one delivery generation. */
 export class DeliveryRunCoordinator {
   readonly #worker: DeliveryRunWorker;
@@ -623,7 +630,10 @@ function throwFailures(failures: readonly unknown[]): void {
     throw failures[0];
   }
   if (failures.length > 1) {
-    throw new AggregateError(failures, "Delivery run retirement failed.");
+    const causes = Object.freeze([...failures]);
+    const aggregate = new AggregateError(causes, "Delivery run retirement failed.");
+    synthesizedRetirementFailures.set(aggregate, causes);
+    throw aggregate;
   }
 }
 

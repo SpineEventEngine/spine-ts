@@ -4,6 +4,7 @@ import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/
 import type { DeliveryEndpoint, DeliveryReady } from "../context/local-inbox-handoff.js";
 import {
   DeliveryRunCoordinator,
+  deliveryRunRetirementCauses,
   type DeliveryRunOwner,
   type DeliveryRunScope,
   type DeliveryRunSettlement,
@@ -274,8 +275,7 @@ export class EnvironmentAttachments {
       survivors: undefined,
       routes: undefined,
       oldRetired: false,
-      oldFailure: undefined,
-      oldFailureObserved: false,
+      oldRetirement: { status: "pending" },
       candidateGeneration: undefined,
       candidate: undefined,
       routeUnits: undefined,
@@ -378,7 +378,7 @@ export class EnvironmentAttachments {
         if (!old.replacementSafe) {
           throw error;
         }
-        stop.oldFailure = error;
+        stop.oldRetirement = { status: "retained", reason: error };
       }
       stop.oldRetired = true;
     }
@@ -473,22 +473,24 @@ export class EnvironmentAttachments {
         stop.drained = true;
       }
     } catch (error) {
-      const failures = [...this.#takeUnobservedOldFailures(stop), ...aggregateCauses(error)];
+      const failures = [...this.#takeOldRetirementCauses(stop), ...synthesizedCauses(error)];
       throwFailures(failures, "Environment delivery stop transition failed.");
     }
     stop.completed = true;
-    if (stop.oldFailure !== undefined && !stop.oldFailureObserved) {
-      stop.oldFailureObserved = true;
-      throw stop.oldFailure;
+    if (stop.oldRetirement.status === "retained") {
+      const { reason } = stop.oldRetirement;
+      stop.oldRetirement = { status: "emitted" };
+      throw reason;
     }
   }
 
-  #takeUnobservedOldFailures(stop: GenerationStop): readonly unknown[] {
-    if (stop.oldFailure === undefined || stop.oldFailureObserved) {
+  #takeOldRetirementCauses(stop: GenerationStop): readonly unknown[] {
+    if (stop.oldRetirement.status !== "retained") {
       return Object.freeze([]);
     }
-    stop.oldFailureObserved = true;
-    return aggregateCauses(stop.oldFailure);
+    const { reason } = stop.oldRetirement;
+    stop.oldRetirement = { status: "emitted" };
+    return deliveryRunRetirementCauses(reason) ?? Object.freeze([reason]);
   }
 
   #refuseStop(stop: GenerationStop, error: Error): never {
@@ -785,8 +787,7 @@ interface GenerationStop {
   survivors: readonly AttachedHandle[] | undefined;
   routes: readonly RegistrationReadiness[] | undefined;
   oldRetired: boolean;
-  oldFailure: unknown | undefined;
-  oldFailureObserved: boolean;
+  oldRetirement: OldRetirementResult;
   candidateGeneration: EnvironmentGeneration | undefined;
   candidate: DeliveryGeneration | undefined;
   routeUnits: readonly StopRoute[] | undefined;
@@ -801,6 +802,14 @@ interface GenerationStop {
   status: "running" | "rejected" | "complete";
   retrying: boolean;
 }
+
+type OldRetirementResult =
+  | { readonly status: "pending" }
+  | { readonly status: "retained"; readonly reason: unknown }
+  | { readonly status: "emitted" };
+
+type ReportFailure =
+  { readonly status: "none" } | { readonly status: "retained"; readonly reason: unknown };
 
 interface StopRoute {
   readonly survivor: AttachedHandle;
@@ -1433,13 +1442,13 @@ class DeliveryGeneration {
     const causes = consumeGeneration
       ? this.#deliveryRecords.retire()
       : this.#deliveryRecords.rollback(token);
-    let reportFailure: unknown;
+    let reportFailure: ReportFailure = { status: "none" };
     try {
       if (causes.length > 0) {
         await this.#report(causes);
       }
     } catch (error) {
-      reportFailure = error;
+      reportFailure = { status: "retained", reason: error };
     }
     if (!consumeGeneration) {
       const unresolved = new Set(
@@ -1454,8 +1463,8 @@ class DeliveryGeneration {
         ),
       );
     }
-    if (reportFailure !== undefined) {
-      throw asError(reportFailure);
+    if (reportFailure.status === "retained") {
+      throw reportFailure.reason;
     }
   }
 
@@ -1709,8 +1718,9 @@ export class RegistrationReadiness {
     }
     if (this.#onTransition !== undefined) {
       try {
-        this.#onTransition(descriptor, ready);
-        this.#buffer(descriptor, ready);
+        const snapshot = cloneReady(ready);
+        this.#onTransition(descriptor, snapshot);
+        this.#buffer(descriptor, snapshot);
       } catch {
         this.#invalid = true;
       }
@@ -1721,7 +1731,7 @@ export class RegistrationReadiness {
       this.#invalid = true;
       return;
     }
-    this.#buffer(descriptor, scope.ready);
+    this.#buffer(descriptor, cloneReady(scope.ready));
   }
 
   fail(): void {
@@ -1791,7 +1801,7 @@ export class RegistrationReadiness {
 
   #buffer(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
     const readies = this.#buffered.get(descriptor) ?? new Map<string, DeliveryReady>();
-    readies.set(readyKey(ready), cloneReady(ready));
+    readies.set(readyKey(ready), ready);
     this.#buffered.set(descriptor, readies);
   }
 }
@@ -2025,13 +2035,22 @@ function throwFailures(failures: readonly unknown[], message: string): void {
     throw failures[0];
   }
   if (failures.length > 1) {
-    throw new AggregateError(failures, message);
+    const causes = Object.freeze([...failures]);
+    const aggregate = new AggregateError(causes, message);
+    synthesizedEnvironmentFailures.set(aggregate, causes);
+    throw aggregate;
   }
 }
 
-function aggregateCauses(error: unknown): readonly unknown[] {
-  return error instanceof AggregateError ? error.errors : Object.freeze([error]);
+function synthesizedCauses(error: unknown): readonly unknown[] {
+  return (
+    deliveryRunRetirementCauses(error) ??
+    (error instanceof AggregateError ? synthesizedEnvironmentFailures.get(error) : undefined) ??
+    Object.freeze([error])
+  );
 }
+
+const synthesizedEnvironmentFailures = new WeakMap<AggregateError, readonly unknown[]>();
 
 function handle(
   claim: EnvironmentRegistrationClaim,

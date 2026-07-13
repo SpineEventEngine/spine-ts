@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3B review wave 1 assigned
+Status: Slice 3B review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -343,3 +343,14 @@ synchronous reopen are followed by awaited candidate admission before the old
 error propagates. Focused RED/GREEN and final evidence are in the canonical
 logs; no parallel retirement owner, public surface, or Slice 4 behavior was
 added. Coordinator review is requested.
+
+## Slice 3B Review Wave 1 Fix Handback
+
+The retained old-retirement outcome now has explicit pending, retained-reason,
+and emitted states, preserving every JavaScript rejection value including
+`undefined` exactly once. Report rejection identity is no longer coerced;
+only coordinator-owned aggregates carry flattening provenance, while exact
+phase-owned aggregates remain one cause. The stable route clones one immutable
+readiness snapshot for transition capture and reopen. Focused edge regressions
+and final verification are recorded in the canonical work/review logs;
+coordinator review is requested without Slice 4 or public/generated expansion.
