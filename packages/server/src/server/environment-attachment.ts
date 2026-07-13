@@ -626,6 +626,9 @@ export class EnvironmentAttachments {
       if (this.#registrations.count !== 0) {
         throw new Error("ServerEnvironment cannot close while it is in use.");
       }
+      if (this.#failedRollback !== undefined) {
+        throw explicitRetryError();
+      }
       this.#cancelProvisionalStop();
       if (this.#registrations.generation !== undefined || this.#generations.size !== 0) {
         throw new Error("Environment generation is not current.");

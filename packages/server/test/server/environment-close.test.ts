@@ -230,6 +230,120 @@ describe("ServerEnvironment close", () => {
     await expect(waiting).rejects.toThrow("ServerEnvironment is closed.");
     await expect(stopping).resolves.toBeUndefined();
   });
+
+  it(
+    "refuses permanent admission for a retained failed start until its exact retry " +
+      "clears the generation",
+    async () => {
+      const startFailure = new Error("failed start");
+      const rollbackFailure = new Error("failed-start rollback did not quiesce");
+      const worker = failedStartWorker(startFailure, rollbackFailure);
+      const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+
+      await expect(
+        attachments.attach({
+          ownership: "caller",
+          descriptors: [gatedDescriptor(Promise.withResolvers(), resolvedGate())],
+        }),
+      ).rejects.toBeInstanceOf(AggregateError);
+      expect(attachments.activeRegistrationCount).toBe(0);
+      expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual([1, 1, 0]);
+
+      await expect(attachments.admitPermanentClose()).rejects.toThrow(
+        "Environment generation rollback requires an explicit retry.",
+      );
+      expect(attachments.activeRegistrationCount).toBe(0);
+      expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual([1, 1, 0]);
+
+      await attachments.retryFailedStart();
+      expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual([1, 2, 1]);
+      await expect(attachments.admitPermanentClose()).resolves.toBeUndefined();
+    },
+  );
+
+  it("refuses close during an unsafe last detach without changing its retry owner", async () => {
+    const quiescenceFailure = new Error("last detach did not quiesce");
+    const worker = lifecycleWorker([quiescenceFailure]);
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [gatedDescriptor(Promise.withResolvers(), resolvedGate())],
+    });
+
+    const detaching = attachments.detach(handle);
+    await expect(detaching).rejects.toThrow(
+      "Delivery run coordinator could not establish quiescence.",
+    );
+    const beforeClose = [worker.stopCalls, worker.awaitCalls, worker.retireCalls] as const;
+
+    await expect(attachments.admitPermanentClose()).rejects.toThrow(
+      "ServerEnvironment cannot close while it is in use.",
+    );
+    expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual(beforeClose);
+    expect(attachments.activeRegistrationCount).toBe(1);
+
+    await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+    await expect(attachments.admitPermanentClose()).resolves.toBeUndefined();
+  });
+
+  it("refuses close during an incomplete reusable stop without changing its retry owner", async () => {
+    const transitionFailure = new Error("candidate transition failed");
+    const oldWorker = lifecycleWorker();
+    const candidateWorker = lifecycleWorker();
+    const workers = [oldWorker, candidateWorker];
+    let workerIndex = 0;
+    let transferAttempts = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[workerIndex];
+        workerIndex += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer() {
+          transferAttempts += 1;
+          if (transferAttempts === 1) throw transitionFailure;
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [gatedDescriptor(Promise.withResolvers(), resolvedGate())],
+    });
+
+    await expect(attachments.stopDelivery()).rejects.toBe(transitionFailure);
+    const generation = handle.generation;
+    const beforeClose = [
+      oldWorker.stopCalls,
+      oldWorker.awaitCalls,
+      oldWorker.retireCalls,
+      candidateWorker.stopCalls,
+      candidateWorker.awaitCalls,
+      candidateWorker.retireCalls,
+    ] as const;
+
+    await expect(attachments.admitPermanentClose()).rejects.toThrow(
+      "ServerEnvironment cannot close while it is in use.",
+    );
+    expect(handle.generation).toBe(generation);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect([
+      oldWorker.stopCalls,
+      oldWorker.awaitCalls,
+      oldWorker.retireCalls,
+      candidateWorker.stopCalls,
+      candidateWorker.awaitCalls,
+      candidateWorker.retireCalls,
+    ]).toEqual(beforeClose);
+
+    await expect(attachments.retryDeliveryStop()).resolves.toBeUndefined();
+    await expect(attachments.admitPermanentClose()).rejects.toThrow(
+      "ServerEnvironment cannot close while it is in use.",
+    );
+    await attachments.detach(handle);
+    await expect(attachments.admitPermanentClose()).resolves.toBeUndefined();
+  });
 });
 
 function gatedDescriptor(
@@ -278,4 +392,153 @@ function countedDescriptors(): readonly ContextDeliveryDescriptor[] & {
     },
     length: 0,
   }) as unknown as readonly ContextDeliveryDescriptor[] & { readonly enumerations: number };
+}
+
+function resolvedGate(): PromiseWithResolvers<undefined> {
+  const gate = Promise.withResolvers<undefined>();
+  gate.resolve(undefined);
+  return gate;
+}
+
+function failedStartWorker(
+  startFailure: Error,
+  rollbackFailure: Error,
+): EnvironmentGenerationWorker & {
+  readonly stopCalls: number;
+  readonly awaitCalls: number;
+  readonly retireCalls: number;
+} {
+  let awaitFailure: Error | undefined = rollbackFailure;
+  let stopCalls = 0;
+  let awaitCalls = 0;
+  let retireCalls = 0;
+  return {
+    get stopCalls() {
+      return stopCalls;
+    },
+    get awaitCalls() {
+      return awaitCalls;
+    },
+    get retireCalls() {
+      return retireCalls;
+    },
+    add() {
+      // The failed worker has no observable ownership side effects for this admission test.
+    },
+    start(obligation, shards) {
+      return Promise.resolve({
+        obligation,
+        shards: Object.freeze(
+          shards.map((shard) =>
+            Object.freeze({
+              status: "rejected" as const,
+              shard,
+              obligation,
+              cause: startFailure,
+              progress: Object.freeze({
+                runs: 1,
+                processed: 0,
+                accepted: 0,
+                delivered: 0,
+                failed: 1,
+                failures: Object.freeze([startFailure]),
+              }),
+            }),
+          ),
+        ),
+      });
+    },
+    stop() {
+      stopCalls += 1;
+    },
+    awaitSettled() {
+      awaitCalls += 1;
+      const failure = awaitFailure;
+      awaitFailure = undefined;
+      return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    },
+    retire() {
+      retireCalls += 1;
+      return Promise.resolve();
+    },
+    stopOwners() {
+      // Failed-start generation retirement is the only rollback path under test.
+    },
+    awaitOwnersSettled() {
+      return Promise.resolve();
+    },
+    retireOwners() {
+      return Promise.resolve();
+    },
+  };
+}
+
+function lifecycleWorker(awaitFailures: readonly Error[] = []): EnvironmentGenerationWorker & {
+  readonly stopCalls: number;
+  readonly awaitCalls: number;
+  readonly retireCalls: number;
+} {
+  const failures = [...awaitFailures];
+  let stopCalls = 0;
+  let awaitCalls = 0;
+  let retireCalls = 0;
+  return {
+    get stopCalls() {
+      return stopCalls;
+    },
+    get awaitCalls() {
+      return awaitCalls;
+    },
+    get retireCalls() {
+      return retireCalls;
+    },
+    add() {
+      // The focused close tests only observe lifecycle ownership through counters.
+    },
+    start(obligation, shards) {
+      const progress = Object.freeze({
+        runs: 1,
+        processed: 0,
+        accepted: 0,
+        delivered: 0,
+        failed: 0,
+        failures: Object.freeze([]),
+      });
+      return Promise.resolve({
+        obligation,
+        shards: Object.freeze(
+          shards.map((shard) =>
+            Object.freeze({
+              status: "fulfilled" as const,
+              shard,
+              obligation,
+              run: Object.freeze({ status: "IDLE" as const, ...progress }),
+              progress,
+            }),
+          ),
+        ),
+      });
+    },
+    stop() {
+      stopCalls += 1;
+    },
+    awaitSettled() {
+      awaitCalls += 1;
+      const failure = failures.shift();
+      return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    },
+    retire() {
+      retireCalls += 1;
+      return Promise.resolve();
+    },
+    stopOwners() {
+      // These close tests only use generation-wide retirement.
+    },
+    awaitOwnersSettled() {
+      return Promise.resolve();
+    },
+    retireOwners() {
+      return Promise.resolve();
+    },
+  };
 }

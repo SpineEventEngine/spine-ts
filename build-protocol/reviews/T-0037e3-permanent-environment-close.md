@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 2 implementation assigned
+Status: Slice 2 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -467,3 +467,67 @@ Derived status mirror: the canonical current state is the `Status` header in
   and are closed.
 - No actionable Slice 1 finding remains. Slice 1 is accepted and Slice 2
   implementation is authorized. Security remains deferred to T-0041.
+
+## Slice 2 Review Handback
+
+- Existing implementer assignment/profile: explicit `gpt-5.6-terra` /
+  `medium`, no subagents. Review scope is accepted failed-start ordering and
+  inherited detach/stop reachability only.
+- RED/GREEN: retained failed-start close initially produced the orphan invariant
+  rather than the existing explicit-retry channel. The minimal GREEN places the
+  recognized failed-start check between zero-registration refusal and
+  provisional-stop/orphan handling. Exact retry clears its generation and later
+  close succeeds.
+- Unsafe last detach and incomplete reusable stop refuse close through the
+  unchanged in-use channel with no observed lifecycle counter or
+  handle/generation change; `retryDetach()` and `retryDeliveryStop()` remain the
+  sole continuations. Close plus predecessor lifecycle/record/coordinator suites
+  pass 5 files / 178 tests. Generated build typecheck, scoped ESLint, scoped
+  Prettier, and whitespace checks pass.
+- Static disposition: the permanent-admission callback has no generation or
+  coordinator retirement call; no T-0037b caller, public/API/docs, generated,
+  facility, parked, server-cleanup, or protected human-review change was added.
+  Security remains deferred to T-0041.
+- Status: Slice 2 implementation handback requested for the existing review
+  wave. No commit or push occurred.
+
+## Slice 2 Pre-review Finding
+
+- `2026-07-13T15:03:41Z`: behavior and static checks pass except cleanup
+  enforcement, which identifies one 121-character test title. Task-record list
+  continuation indentation also needs a mechanical correction.
+- Review dispatch is withheld. One Terra Medium implementer must make both
+  formatting fixes, rerun focused checks, and provide an updated handback.
+
+## Slice 2 Pre-review Fix Handback
+
+- Existing implementer executed the full assigned batch with explicit
+  `gpt-5.6-terra` / `medium`, no subagents. The only code-file change wraps the
+  flagged 121-character test title; it does not alter test behavior or runtime
+  code. The task RED sentence's list-continuation indentation is also restored.
+- Fresh focused evidence:
+  `corepack pnpm vitest run packages/server/test/server/environment-close.test.ts`
+  passes 1 file / 9 tests.
+- Cleanup: `node scripts/check-cleanup-rules.mjs` exits 0.
+- Scoped `corepack pnpm exec prettier --check` over five changed files exits 0.
+- `git diff --check` exits 0. The work log records the same commands and
+  outcomes.
+- Pre-review lint finding is resolved. Status is
+  `Slice 2 pre-review fix handback requested`; the unchanged existing Slice 2
+  review wave can proceed.
+  No commit, push, API, production behavior, later-slice, or protected
+  human-review change occurred.
+
+## Slice 2 Review Assignment
+
+- `2026-07-13T15:09:27Z`: coordinator accepts the mechanical fixer at actual
+  Terra Medium and the complete Slice 2 handback. Fresh evidence is five files /
+  178 tests plus generated typecheck, scoped ESLint, cleanup enforcement,
+  Prettier, and `git diff --check`.
+- Lightweight lint finds synchronized status, no duplicate retry/retirement
+  policy, no public/API leak, no T-0037b close caller, and no active future
+  policy overclaim. Historical superseded text is excluded unless current
+  records claim it as active.
+- Fresh dispositions are required for style/maintainability, documentation,
+  TypeScript/API docs, and performance/reliability. Security remains deferred to
+  T-0041.

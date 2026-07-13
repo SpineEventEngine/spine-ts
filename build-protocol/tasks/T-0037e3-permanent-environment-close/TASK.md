@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 2 implementation assigned
+Status: Slice 2 review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -682,3 +682,70 @@ consistency. All four canonical concerns are reassigned.
 - Slice 2 is now authorized for retained failed-start, unsafe last-detach, and
   incomplete reusable-stop refusal/retry reachability proof. It must not take
   over predecessor retirement or retry ownership.
+
+## Slice 2 Implementation Handback
+
+- Existing implementer assignment: explicit `gpt-5.6-terra` / `medium`, no
+  subagents. Scope is limited to retained-owner refusal and reachability proof;
+  no commit or push was made.
+- TDD RED: retained failed-start close reached `Environment generation is not
+current.` rather than the established explicit-retry rejection. GREEN checks
+  the recognized failed-start owner after the zero-count guard and before
+  provisional-stop cancellation and the orphan invariant.
+- Behavior/evidence: retained failed-start remains unchanged at zero
+  registrations until `retryFailedStart()` clears its generation, after which
+  permanent admission succeeds. Unsafe last detach and incomplete reusable stop
+  refuse close through the existing in-use channel and preserve their retry
+  continuation. Focused validation passed 5 files / 178 tests: close,
+  attachment, generation-stop, delivery-records, and run-coordinator. Generated
+  build typecheck, scoped ESLint, scoped Prettier, and whitespace checks passed.
+- Static proof: the admission callback has no retirement call and the diff adds
+  no `DeliveryGeneration.retire`, `DeliveryRunCoordinator.retire`, T-0037b
+  caller, public/API change, or protected human-review change.
+- Exclusions remain intact: no failed-start/detach/stop redesign, parked
+  semantics, facility continuation, server cleanup, public API/docs, generated
+  output, commit, or push. Slice 2 is ready for the existing review wave;
+  security remains deferred to T-0041.
+
+## Slice 2 Coordinator Pre-review Finding
+
+- `2026-07-13T15:03:41Z`: coordinator behavior verification passes 5 files /
+  178 tests, generated build typecheck, scoped ESLint, Prettier, and whitespace
+  checks. Cleanup enforcement fails one 121-character test title at
+  `environment-close.test.ts:234`; the RED sentence above also needs normal
+  list-continuation indentation.
+- One explicit Terra Medium implementer receives this complete mechanical fix.
+  Review remains blocked until focused close, cleanup, formatting, and diff
+  checks are green.
+
+## Slice 2 Pre-review Fix Handback
+
+- Existing implementer executed this mechanical correction at the explicit
+  `gpt-5.6-terra` / `medium` profile, with no subagents. It changes neither
+  runtime behavior nor test assertions, public API, or later-slice scope.
+- Fixed the 121-character retained-failed-start test title by wrapping only its
+  `it()` call, and restored the RED sentence's Markdown list-continuation
+  indentation after `current.`
+- Fresh focused evidence:
+  `corepack pnpm vitest run packages/server/test/server/environment-close.test.ts`
+  passes 1 file / 9 tests.
+- Cleanup: `node scripts/check-cleanup-rules.mjs` exits 0.
+- Scoped `corepack pnpm exec prettier --check` over five changed files exits 0.
+- `git diff --check` exits 0.
+- Pre-review handback is requested for the existing Slice 2 review wave. No
+  commit, push, production behavior, test behavior, API, or protected
+  human-review file change occurred.
+
+## Slice 2 Coordinator Review Gate
+
+- `2026-07-13T15:09:27Z`: Desktop metadata confirms the pre-review fixer at
+  actual `gpt-5.6-terra` / `medium`, matching explicit assignment, with no
+  subagents. Coordinator verification passes all five focused files / 178 tests,
+  generated build typecheck, scoped ESLint, cleanup enforcement, five-file
+  Prettier, and `git diff --check`.
+- Lightweight pre-review lint finds synchronized current status, one shared
+  failed-start retry error source, no duplicate close/retirement policy, no
+  public/API leak, no T-0037b permanent-close caller, and no active future-policy
+  overclaim.
+- The exact five-file Slice 2 batch is assigned to all four canonical review
+  concerns. Security remains deferred to T-0041; Slice 3 is unauthorized.
