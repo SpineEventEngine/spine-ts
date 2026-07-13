@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification fix review assigned
+Status: T-0037e2 profile redispatch review assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -458,3 +458,21 @@ Coordinator verification independently passed strict test-tooling typechecking,
 162 lifecycle regression tests, focused formatting, exact scope, and diff
 hygiene. The committed fixture-only endpoint is assigned to the four canonical
 review concerns.
+
+## Implementation Profile Redispatch
+
+The focused fixture review found no code defect, one stale status sentence, and
+one acceptance-gate failure. Desktop session metadata proves the reused
+implementer changed from assigned Terra Medium to Sol High after
+`2026-07-13T05:06Z`; later handbacks therefore cannot be accepted under the
+explicit-profile protocol even though the actual model was stronger. Those
+handbacks are withdrawn. One fresh implementer is assigned at explicit
+`gpt-5.6-terra` / `medium`, no subagents, to audit the complete current
+T-0037e2 implementation against this task and correct any defect before final
+review and verification resume.
+
+The fresh audit returned no behavior defect. Desktop rollout `turn_context`
+confirms actual `gpt-5.6-terra` / `medium`; coordinator verification passes
+strict tooling typecheck, 162 lifecycle tests, focused formatting, exact scope,
+and diff hygiene. The records-only audit endpoint is assigned to the four
+canonical review concerns.
