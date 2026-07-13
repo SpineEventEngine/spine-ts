@@ -1,6 +1,24 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Candidate; not started
+Status: Architecture resolution assigned
+
+Started: `2026-07-13T04:26:45Z`
+
+Baseline commit: `8e3139ac`
+
+Branch: `task/T-0037e2-reusable-generation-stop`
+
+Worktree: `.worktrees/T-0037e2-reusable-generation-stop`
+
+This `Status` header is canonical for T-0037e2. Its work and review logs are
+derived mirrors and must match it before review.
+
+Because reusable stop changes live-registration ownership, canonical-scope
+transfer, publication, admission, concurrency, and external retry boundaries,
+one existing requirements splitter is assigned the milestone architecture pass
+at expected and explicit `gpt-5.6-sol` / `high`, with documentation-only
+ownership and no subagents. It must preserve accepted T-0037b/d/e1 behavior and
+split implementation into small independently reviewable slices.
 
 Dependency: T-0037e1 complete and integrated.
 
