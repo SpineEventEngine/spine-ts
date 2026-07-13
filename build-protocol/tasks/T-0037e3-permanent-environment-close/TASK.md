@@ -1,8 +1,27 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Candidate; not started
+Status: Architecture resolution assigned
+
+Started: `2026-07-13T12:48:44Z`
+
+Baseline commit: `2f2ae456`
+
+Branch: `task/T-0037e3-permanent-environment-close`
+
+Worktree: `.worktrees/T-0037e3-permanent-environment-close`
 
 Dependency: T-0037e2 complete and integrated.
+
+This `Status` header is canonical for T-0037e3. Its work/review logs are
+derived mirrors and must agree before review.
+
+Because permanent close changes the public `ServerEnvironment.close()`
+contract, close/attach serialization, generation retirement ownership, and
+facility teardown ordering, one existing requirements splitter is assigned a
+single architecture pass at explicit expected `gpt-5.6-sol` / `high`, with no
+subagents and documentation-only ownership. It must inspect the relevant Spine
+JVM server evidence, preserve D-0085 and accepted T-0037d/e1/e2 behavior, and
+produce the smallest implementation-ready slices without reopening exclusions.
 
 ## Objective
 
