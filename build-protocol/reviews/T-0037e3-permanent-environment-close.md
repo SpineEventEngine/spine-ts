@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Architecture review assigned
+Status: Architecture fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -78,3 +78,69 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to the
   architecture resolution and active task claims.
+
+## Architecture Review Findings And Fix Assignment
+
+- Style/maintainability: P1 eager provisional-stop/serialized-close race.
+- Documentation: P2 unsupported stop/readiness “rejection” claim.
+- TypeScript/API docs: P2 “permanently closed” wording missing from proposed
+  TSDoc.
+- Performance/reliability: HIGH zero-registration/current-generation state is
+  unreachable under current ownership; MEDIUM retained-operation close tests
+  are omitted.
+- Every reviewer used no subagents and is closed. The same Sol High requirements
+  splitter receives the complete five-finding batch for architecture records
+  only. No implementation is authorized until re-review is clean.
+
+## Architecture Review-Fix Resume
+
+- The same rollout records actual `gpt-5.6-sol / high` at
+  `2026-07-13T13:13:05.956Z`, matching explicit dispatch for the resumed
+  existing requirements splitter; no subagents were used.
+- Prior canonical inventory/manifest/entrypoint/lock evidence remains valid.
+  Before record edits, the splitter fully read and selected
+  `receiving-code-review`, `codebase-design`, and its directly relevant
+  `DEEPENING.md`. No new task-provided skill name/path was supplied.
+
+## Architecture Review-Fix Handback
+
+- This disposition supersedes the initial architecture handback's permanent-
+  retirement ownership claims while preserving the coordinator-authored review
+  history above.
+- Performance/reliability HIGH disposition: resolved. Integrated reachability
+  proves there is no legal close-owned zero-registration/current-generation
+  state. Retained failed-start refuses through its existing explicit-retry
+  channel; unsafe detach and incomplete reusable stop remain live and refuse as
+  in use. Permanent admission requires no generation and adds no T-0037b caller.
+- Style/maintainability P1 disposition: resolved. The eager unadmitted stop has
+  an explicit cancellation reason, all waiters reject and settle, `#stop` clears
+  by identity, close never awaits the stop turn queued behind it, and that turn
+  later rejects without lifecycle mutation. The deterministic race ends with a
+  later attach rejecting from permanent state.
+- Documentation and TypeScript/API P2 dispositions: resolved. Attach,
+  `stopDelivery()`, and `retryDeliveryStop()` have defined promise rejection
+  checks; readiness remains synchronous `void` and stale retired-coordinator
+  notification no-ops. Proposed TSDoc says “permanently closed.”
+- Reliability MEDIUM disposition: resolved. Focused tests explicitly attempt
+  close during retained failed-start, unsafe last detach, and incomplete
+  reusable stop, proving exact owner/admission/generation/slot/dependency/
+  facility/error-state retention and deterministic continuation by the existing
+  operation retry.
+- All four canonical concerns are returned for re-review as one complete batch.
+  Status is `Architecture review-fix handback requested`; implementation remains
+  unauthorized. Only the four architecture/task/work/review records changed;
+  no tests/full verify, commit, push, generated output, or protected human-review
+  access occurred.
+- Review-fix handback hygiene passed: Prettier write/check on all four records,
+  `git diff --check`, synchronized status headers, and exact documentation-only
+  four-file short status. The complete batch is ready for architecture re-review.
+
+## Architecture Fix Coordinator Gate And Re-Review Assignment
+
+- Coordinator inspection and lightweight pre-review lint pass for the complete
+  five-finding correction; scope remains the four architecture records only.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to the fixed
+  state model and acceptance tests.

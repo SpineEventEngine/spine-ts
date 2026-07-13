@@ -1,6 +1,6 @@
 # T-0037e3 Architecture Resolution
 
-Status: Architecture review assigned
+Status: Architecture fix re-review assigned
 
 ## Resolution Summary
 
@@ -10,19 +10,18 @@ only public entry and delegates to that environment-owned operation before any
 owned facility closes. Add no public close variant, retry method, state query,
 option, error type, declaration, or export.
 
-One private `EnvironmentClose` operation record owns permanent-close admission,
-the selected zero-registration generation, retirement/slot checkpoints,
-already-emitted lifecycle failures, and the current attempt promise. It is a
-record local to `environment-attachment.ts`, not a new class or exported seam.
-The existing `RetryableCloseGroup` continues to own the ordered facility list
-and its successful-index retry checkpoints. `ServerEnvironment` supplies that
-one existing group to `EnvironmentAttachments` at construction; it does not
+One private `EnvironmentClose` operation record owns only permanent-close
+admission and the current facility-close attempt. It is a record local to
+`environment-attachment.ts`, not a new class or exported seam. The existing
+`RetryableCloseGroup` continues to own the ordered facility list and its
+successful-index retry checkpoints. `ServerEnvironment` supplies that one
+existing group to `EnvironmentAttachments` at construction; it does not
 interpret generation state or duplicate close phases.
 
 This is the smallest deep interface: public callers know only
-`close(): Promise<void>`, while registration admission, close/attach ordering,
-generation retirement, safe slot clearing, record reporting, facility retry,
-and error ordering remain package-local.
+`close(): Promise<void>`, while registration admission, close/attach/stop
+ordering, retained-owner refusal, facility retry, and error ordering remain
+package-local.
 
 ## Evidence
 
@@ -62,6 +61,31 @@ and error ordering remain package-local.
   patterns. Permanent close consumes those patterns but creates no candidate,
   rebind, transfer, publication, or admission reopen.
 
+### Integrated Reachability And Ownership
+
+The integrated T-0037d/e1/e2 state machine has no legal close-owned state that
+contains both zero registrations and a current generation:
+
+- successful ordinary last detach retires and clears its generation before a
+  later close can enter the serial gate;
+- unsafe last detach retains its registration and exact detach owner;
+- reusable stop retains every surviving registration and its exact stop owner;
+- failed-start rollback removes the failed claim before retirement, so it is
+  the sole zero-registration/current-generation state, but T-0037d retains that
+  exact generation and is the only legal retry owner until it retires and
+  clears the slot.
+
+T-0037e3 therefore narrows the conditional “any current generation” branch: a
+close-eligible zero-registration admission must also have no current generation.
+It never fabricates an orphan generation and never takes over a retained
+T-0037d/e1/e2 operation. A zero-registration current generation first receives
+the existing failed-start explicit-retry-required refusal; any generation that
+has neither registrations nor a recognized retained owner is an invariant
+error before permanent admission. No T-0037b primitive call is legal from
+permanent close at this integrated boundary. The predecessor operation remains
+the sole caller that retires and clears its generation, after which a later
+public close performs permanent facility teardown.
+
 ### Local Spine JVM Guardrail
 
 Local evidence was inspected before design; no browsing was required.
@@ -98,7 +122,8 @@ Local evidence was inspected before design; no browsing was required.
   its serialized claim succeeds.
 - **Permanent close admission**: the one serialized zero-registration commit
   after which this environment can never accept another registration,
-  readiness trigger, generation, or replacement.
+  explicit stop, generation, or replacement. No live readiness route exists at
+  this point; a stale synchronous readiness callback remains a no-op.
 - **Proven quiescence**: `DeliveryGeneration.replacementSafe === true` after the
   T-0037b primitive has completed stop and settlement. A stopped flag without
   this postcondition is not sufficient.
@@ -123,28 +148,18 @@ not the semantic state owner.
 The private operation needs only these checkpoints:
 
 - permanent admission committed;
-- selected current generation, if any;
-- generation retirement replacement-safe;
-- matching generation slot cleared;
-- ordered lifecycle failures pending emission or already emitted;
 - facilities complete; and
 - current attempt promise/status.
 
 The facility group remains the only per-facility completion ledger. Do not copy
 its indexes or owned-closeable list into `EnvironmentClose`.
 
-| State              | Registration/trigger admission | Generation and dependencies                           | Facilities                                               | Permitted next action                                           |
-| ------------------ | ------------------------------ | ----------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| Open               | Open                           | Current slot may be absent or live                    | Open                                                     | Attach/detach/stop or close admission                           |
-| Refused            | Unchanged open state           | Unchanged                                             | Unchanged                                                | Caller closes live servers, then calls `close()` again          |
-| Closing unsafe     | Permanently closed             | Exact old slot and all endpoint dependencies retained | Unattempted                                              | The same public `close()` retries quiescence                    |
-| Closing facilities | Permanently closed             | Proven-quiescent slot cleared                         | Successful facilities closed; failed facilities retained | The same public `close()` retries only failed facilities        |
-| Closed             | Permanently closed             | No current slot                                       | Every owned facility closed                              | Repeated `close()` resolves; all attach/trigger attempts reject |
-
-A replacement-safe reporting or inert-retirement failure may make the first
-attempt reject after the operation has already reached `Closed`. That failure
-is emitted once; a later idempotent `close()` resolves and does not report it
-again.
+| State              | Attachment/explicit-stop admission | Generation                                          | Facilities                                               | Permitted next action                                        |
+| ------------------ | ---------------------------------- | --------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| Open               | Open                               | Absent, live, or retained by its existing operation | Open                                                     | Existing lifecycle operation or close admission              |
+| Refused            | Unchanged open state               | Unchanged in the same existing owner                | Unchanged                                                | Complete/retry the existing owner, then call `close()` again |
+| Closing facilities | Permanently closed                 | Absent                                              | Successful facilities closed; failed facilities retained | The same public `close()` retries only failed facilities     |
+| Closed             | Permanently closed                 | Absent                                              | Every owned facility closed                              | Repeated `close()` resolves; attach/explicit stop reject     |
 
 ## Serialized Admission And Close/Attach Linearization
 
@@ -158,12 +173,34 @@ before serialized admission.
    retain `EnvironmentClose`; do not close readiness/admission, stop work,
    classify or consume records, clear a slot, or call any facility. The existing
    generation and registrations remain usable.
-3. With zero registrations, refuse any retained T-0037d/e1/e2 operation through
-   its existing explicit-retry-required channel. Permanent close does not take
-   over failed-start rollback, detach, or reusable-stop state.
-4. Otherwise create the private close record and commit permanent admission
-   closure before awaiting retirement. That commit is irreversible even if
-   quiescence later fails.
+3. With zero registrations, inspect retained owners before current-generation
+   reachability. A retained failed-start rollback receives the existing
+   `Environment generation rollback requires an explicit retry.` rejection.
+   Permanent close never advances that operation.
+4. Distinguish an eager T-0037e2 `#stop` with `admitted === false` from an
+   admitted or retained stop. Because its queue position is after this close,
+   it has no generation ownership. Add exactly
+   `cancelledByClose: Error | undefined` to package-private `GenerationStop`.
+   Set it to one plain `Error("ServerEnvironment is closed.")`. Snapshot the
+   waiting attachment gates, empty `waiters`, set `waitersReleased`, attach
+   `Promise.allSettled()` to their promises as `waiterSettlement`, then mark
+   each waiter complete and reject its gate with that same error. This order
+   installs rejection observers before settlement. Clear `#stop` only when it
+   still identifies this provisional record. Do **not** await `stop.promise`
+   from close: its serial turn is behind close and doing so would deadlock
+   admission. When that queued turn arrives, `#continueStop()` checks the
+   cancellation reason before retained-owner or generation work, sets
+   `completed`, awaits only the waiter settlement, and throws that same closed
+   error through its existing local gate. The public stop promise therefore
+   rejects deterministically and its existing completion handler cannot restore
+   or retain `#stop`.
+5. Require both the current registration generation marker and generation map
+   to be empty. A remaining generation without a recognized retained owner is
+   an invariant error before permanent admission, not permission to call
+   T-0037b.
+6. Create the private close record and commit permanent attachment and explicit-
+   stop admission closure. The commit is irreversible; readiness has no
+   rejectable channel and is handled separately below.
 
 The serial admission order is the race linearization point:
 
@@ -173,77 +210,72 @@ The serial admission order is the race linearization point:
   attach later rejects with plain `Error("ServerEnvironment is closed.")`
   before claim, descriptor enumeration, route transition, storage lookup, or
   worker construction;
-- quiescence failure does not reopen the environment, so an attach ordered
-  after the winning close rejects rather than waiting for close retry.
+- close invoked first and `stopDelivery()` invoked second cancels that stop's
+  eager provisional record and all of its waiters as specified above. A later
+  attach rejects from permanent-close state, not from stale `#stop`, and no
+  waiter remains pending. Close does not wait for the behind-it stop turn;
+- stop whose serial turn runs first either completes its no-generation no-op or
+  becomes an admitted T-0037e2 owner. Close observes that completed state or
+  refuses the live/retained owner; it never cancels an admitted stop.
 
 Duplicate in-flight public close calls share the existing public attempt
-promise. After an unsafe or facility rejection, the next `close()` resumes the
-retained close record; no `retryClose()` interface is added.
+promise. After a facility rejection, the next `close()` resumes the retained
+facility group; no `retryClose()` interface is added.
 
-## Authoritative Close Order
+## Closed Checks And Readiness Semantics
 
-After permanent admission wins:
+The internal channels are exact and intentionally different:
 
-1. If no current generation exists, record retirement/slot phases complete
-   without manufacturing a coordinator, generation, registration, or parked
-   record.
-2. If a current generation exists, invoke `DeliveryGeneration.retire()`.
-   Never call `DeliveryRunCoordinator.retire()` directly and never call
-   T-0037e2 `stopDelivery()`: the former would duplicate generation ownership,
-   while the latter would create a fresh candidate and reopen admission.
-3. The existing call path performs T-0037b order: close coordinator admission
-   and notification, stop, await quiescence, classify, call
-   `EnvironmentDeliveryRecords.retire()` to select/consume/report, then attempt
-   permanent worker retirement/cleanup.
-4. If `replacementSafe` is false, propagate that unsafe retirement reason and
-   stop. Retain the exact generation map entry, registration generation marker,
-   descriptors/runtimes, endpoint dependencies, and every owned facility. Run
-   no classification/consumption/reporting beyond what the primitive permits,
-   no slot clear, and no facility close. Retry re-enters the same coordinator
-   retirement checkpoints; completed admission closure and stop are not
-   repeated.
-5. If `replacementSafe` is true, retain the primitive's ordered failure causes,
-   if any, and synchronously clear only the matching zero-registration current
-   slot through one validated finally-equivalent path. Delete no different or
-   fresh generation.
-6. Attempt every owned facility through the existing close group in fixed
-   delivery, tracer, transport, storage order, even when reporting, inert
-   retirement, or an earlier facility close failed.
-7. Mark lifecycle failures emitted and expose the attempt result only after the
-   slot-clear and complete facility pass.
+- `attach()` checks committed permanent close before consulting provisional
+  stop state or queueing work and returns a rejected promise with
+  `ServerEnvironment is closed.` No claim or descriptor work occurs.
+- `stopDelivery()` and `retryDeliveryStop()` check committed permanent close
+  before allocating, finding, or advancing `#stop` and return a rejected promise
+  with the same plain error. Close-first/stop-second is the provisional race
+  exception handled at serialized close admission because close was queued but
+  not yet committed when stop allocated.
+- Readiness notification remains synchronous `void`. Permanent close admits
+  only after zero registrations and no generation, so no live readiness route
+  exists. A stale callback that reaches a previously retired coordinator uses
+  the existing `DeliveryRunCoordinator.notify()` rule and no-ops when
+  `#accepting` is false. It does not throw, return a rejected promise, create a
+  close error, or gain a new public/internal error channel.
 
-Proven quiescence makes report/retirement cleanup failures inert: they cannot
-reactivate worker admission or endpoint invocation. Therefore they cannot block
-safe slot clearing or later facilities. A quiescence failure is categorically
-different and blocks both.
+## Permanent Facility Close And Errors
 
-## Error And Cause Semantics
+After permanent admission wins, no generation or parked record remains for
+T-0037e3 to retire, classify, consume, or report. Those actions completed in
+the predecessor owner, or close refused that retained owner. Permanent close
+therefore invokes neither `DeliveryGeneration.retire()` nor
+`DeliveryRunCoordinator.retire()` and creates no quiescence/reporting failure
+branch.
 
-- Unsafe stop/quiescence failure propagates the exact current retirement reason
-  and performs no facility aggregation because no later phase is safe.
-- `EnvironmentDeliveryRecords.retire()` remains the only cause-selection
-  operation. It reports eligible original unreported cause objects once in
-  the existing configured record/unit order, marks them reported atomically,
-  and consumes all generation records. Already-reported unresolved causes are
-  consumed but are not passed to the report callback again.
-- Report callback failure and permanent-retirement cleanup failure retain the
-  order produced by the T-0037b primitive. They are not retried after
-  `replacementSafe`; the close operation checkpoints them as emitted after the
-  complete close attempt.
+Attempt every owned facility through the existing close group in fixed
+delivery, tracer, transport, storage order. Facility semantics remain:
+
 - Facility failures retain existing owned-closeable order. Every owned facility
   receives one attempt in the first safe teardown pass. A successful close is
   never invoked again. A failed facility receives one new attempt per explicit
   later `close()` call until it succeeds; later facilities are attempted on
   every pass in which they remain incomplete.
-- After replacement safety, flatten the current primitive causes and the
-  current facility group's `AggregateError.errors` into one ordered
-  `AggregateError` with the existing message `ServerEnvironment close failed.`
-  Lifecycle causes come first; facility causes follow in delivery, tracer,
-  transport, storage order. Do not nest aggregate envelopes or add `cause`,
-  codes, result objects, or custom error classes.
-- Causes/errors already emitted by a completed safe phase are absent from a
-  later retry. A retry reports only failures from work actually attempted in
-  that retry.
+- Preserve the existing flat `AggregateError` message
+  `ServerEnvironment close failed.` and delivery/tracer/transport/storage cause
+  order. Do not add `cause`, codes, result objects, or custom error classes.
+- A retry reports only failures from facilities attempted in that retry.
+
+Unreported-versus-reported cause behavior remains proven at the predecessor
+retirement interfaces (`EnvironmentDeliveryRecords.retire()` and T-0037d/e1/e2
+tests). T-0037e3 adds a deterministic retained-failed-start refusal proving it
+does not consume or resurface either kind while T-0037d still owns them.
+
+Quiescence, reporting, and inert-cleanup failures remain on the predecessor
+operation promise; permanent close does not combine them with facility errors.
+An unsafe predecessor retains its slot, dependencies, and facilities, so close
+refuses and attempts no facility. A replacement-safe predecessor clears its
+matching slot even when reporting or inert cleanup rejects; a separately queued
+or later close then observes the owner-free state and attempts every facility.
+This preserves complete teardown without duplicating or reordering the original
+cause across operation boundaries.
 
 ## Public `ServerEnvironment.close()` Boundary
 
@@ -262,9 +294,10 @@ generations, coordinators, slots, explicit stop, checkpoints, or retry owners.
 
 If TSDoc changes in this child, limit it to wording equivalent to:
 
-> Permanently close this environment after it is no longer in use. Failed close
-> attempts may be retried; facilities that already closed successfully are not
-> closed again.
+> Permanently close this environment after it is no longer in use. Once close
+> admission succeeds, the environment is permanently closed and cannot be
+> reused. Failed facility-close attempts may be retried; facilities that already
+> closed successfully are not closed again.
 
 Do not add README/user-guide lifecycle claims that depend on server detach;
 T-0037f owns that observable integration and documentation. No generated
@@ -296,24 +329,32 @@ Acceptance:
 - Deterministic gate-controlled races prove attach-first refusal and close-first
   permanent attach rejection. The losing attach performs no claim, descriptor,
   transition, storage, or worker work.
-- A zero-registration/no-generation close permanently rejects later attach and
-  internal stop/trigger admission, closes normal facilities, and is idempotent.
-- Retained failed-start, detach, or reusable-stop work remains owned by its
-  existing explicit retry path; close does not advance it.
+- A zero-registration/no-generation close permanently rejects later attach,
+  `stopDelivery()`, and `retryDeliveryStop()`, closes normal facilities, and is
+  idempotent. Stale `void` readiness is a no-op, not a rejection.
+- A deterministic close-first/stop-second race proves the eager unadmitted stop
+  is marked cancelled with the closed error, every provisional attach waiter
+  rejects, close does not await the behind-it stop promise, the queued stop turn
+  rejects through its existing gate without lifecycle action, `#stop` remains
+  clear, and a later attach deterministically rejects from permanent-close
+  state.
 
 Focused tests: public duplicate close, direct private registration refusal,
-attach-first and close-first barriers, no-generation close, later attach/stop
-rejection, and unchanged existing facility ownership behavior.
+attach-first and close-first barriers, close-first/provisional-stop-second plus
+waiter cleanup, no-generation close, exact later attach/stop/retry-stop closed
+checks, stale-readiness no-op, and unchanged existing facility ownership
+behavior.
 
 Risk: creating permanent state before the serialized live-count check would
 make refusal destructive. Mitigation: create `EnvironmentClose` only inside the
-zero-registration serial admission step and assert an empty lifecycle/facility
-event log on refusal.
+zero-registration/no-generation serial admission step, explicitly cancel only
+an unadmitted later stop, and assert an empty lifecycle/facility event log on
+refusal.
 
-Exclusions: current-generation retirement faults, parked causes, facility error
-aggregation, server/listener integration, public docs beyond narrow TSDoc.
+Exclusions: current-generation retirement, parked-cause consumption, facility
+error retry, server/listener integration, public docs beyond narrow TSDoc.
 
-### Slice 2: Generation Retirement, Slot Safety, And Cause Once-Only
+### Slice 2: Retained-Owner Refusal And Reachability Proof
 
 Ownership:
 
@@ -327,35 +368,49 @@ Ownership:
 
 Acceptance:
 
-- A current zero-registration generation is retired only through
-  `DeliveryGeneration.retire()` in exact stop, await, classify, consume/report,
-  permanent-retire order; no reusable-stop candidate or direct coordinator
-  caller is introduced.
-- Separate stop/await quiescence failures retain the exact slot, generation,
-  descriptors/runtimes, endpoint dependencies, and facilities; perform no
-  later authoritative phase; and keep permanent admission closed.
-- Repeated public close calls coalesce per attempt. Explicit later close retry
-  resumes the same primitive, does not duplicate successful admission closure
-  or stop, proves quiescence, completes remaining phases once, and clears only
-  the matching slot.
-- Eligible unreported original causes reach the report callback once in stable
-  order. An already-reported unresolved cause is consumed by permanent close
-  without callback or propagation. Cause-less parked work is consumed silently.
-- A reporting failure and an inert retirement failure each still leave the old
-  instance permanently inert and the slot safely cleared before propagation;
-  neither failure appears on a later close retry.
+- Retained failed-start with zero registrations and a current generation rejects
+  close through the existing failed-start explicit-retry-required channel.
+  Permanent admission remains open; no close record, generation retirement,
+  record selection/reporting, slot clear, facility attempt, or error-state
+  mutation occurs. The exact failed-start retry still resumes and clears its
+  own generation; a later close then succeeds from no-generation state.
+- Unsafe last detach rejects close through the live-registration in-use channel.
+  The exact handle, slot, endpoint dependencies, detach retry, and facilities
+  are unchanged; no permanent-close state exists. `retryDetach()` remains the
+  sole continuation.
+- Incomplete admitted reusable stop rejects close through the live-registration
+  in-use channel. The exact `GenerationStop`, candidate/checkpoints/buffer,
+  registrations, waiters, and facilities are unchanged; no permanent-close
+  state exists. `retryDeliveryStop()` remains the sole continuation.
+- The static ownership proof establishes that zero registrations plus a current
+  generation is legal only while the recognized failed-start owner is present,
+  in which case close refuses. A defensive runtime branch treats any otherwise
+  orphan generation as an invariant failure before permanent admission. No
+  T-0037b caller is added for permanent close.
+- Existing deterministic predecessor regressions prove unsafe quiescence keeps
+  slot/dependencies/facilities, while replacement-safe reporting or inert
+  cleanup failure clears the matching slot. A separately queued or later close
+  then attempts all facilities; lifecycle and facility failures stay on their
+  respective operation promises.
+- Static scans prove permanent close calls neither `DeliveryGeneration.retire()`
+  nor `DeliveryRunCoordinator.retire()` and does not alter the accepted callers
+  in T-0037d/e1/e2.
 
-Focused tests: stop throw, await rejection, same-operation retry checkpoint
-counts, exact event order, slot identity, unreported/reported/cause-less records,
-separate report and retire failures, and no old/new generation construction.
+Focused tests: retained failed-start close/refusal/retry/later close, unsafe
+last-detach close/refusal/retry, incomplete reusable-stop close/refusal/retry,
+exact state snapshots before/after each refusal, empty facility event logs,
+safe-cleanup-failure followed by complete facility close, and static ownership/
+retirement-caller checks. Do not add a test-only production seam to fabricate an
+unreachable orphan state.
 
-Risk: calling the primitive again after replacement safety can repeat a report
-or inert cleanup error. Mitigation: checkpoint replacement safety and ordered
-primitive causes in `EnvironmentClose`, then clear the generation reference
-before any external result is exposed.
+Risk: treating every zero-registration current generation as close-owned would
+steal T-0037d rollback and duplicate retirement. Mitigation: recognized-owner
+checks precede the no-generation invariant and permanent admission; tests prove
+the predecessor operation remains byte-for-byte/identity-equivalent owner after
+refusal.
 
-Exclusions: facility fault continuation, reusable candidate/rebind/transfer,
-ordinary detach, failed-start rollback, server cleanup.
+Exclusions: implementing or changing failed-start rollback, detach, reusable
+stop, T-0037b retirement, parked-record semantics, or server cleanup.
 
 ### Slice 3: Facility Continuation, Error Order, And Public Closure
 
@@ -374,28 +429,23 @@ Ownership:
 
 Acceptance:
 
-- Independent report and inert-retirement failures each precede facility
-  failures in one flat `AggregateError`; facility errors remain ordered
-  delivery, tracer, transport, storage.
-- Every facility is attempted despite earlier safe lifecycle or facility
-  failure. Successful facilities close exactly once; failed facilities retry
-  once per later `close()` attempt; already-emitted lifecycle errors never
-  reappear.
-- Quiescence failure attempts no facility. Its successful retry clears the slot
-  before the first facility event and closes every owned facility.
+- Every facility is attempted despite an earlier facility failure. Facility
+  errors remain ordered delivery, tracer, transport, storage in one flat
+  `AggregateError`.
+- Successful facilities close exactly once; failed facilities retry once per
+  later `close()` attempt; successful earlier facility results never reappear.
 - Caller-owned facilities are never closed. Missing/non-closeable existing
   entries preserve current `RetryableCloseGroup` behavior.
 - Public/root exports, options, signatures, package `exports`, API manifest,
   README terminology, examples, Protobuf, and generated tracked files remain
   unchanged except a narrowly justified existing `close()` TSDoc refinement.
 - Static caller scans prove only `EnvironmentAttachments` reaches
-  `DeliveryGeneration.retire()` for permanent close, no direct T-0037b primitive
-  call was added, and server/handoff code has no permanent-close shortcut.
+  permanent facility close, no T-0037b primitive call was added, and server/
+  handoff code has no permanent-close shortcut.
 
-Focused tests: all-four-facility failure/continuation, mixed lifecycle/facility
-failure order, partial facility success plus retry, all-facility completion
-plus earlier lifecycle error then idempotent close, caller-owned exclusion,
-public export/API checks, and T-0037d/e1/e2 lifecycle regressions.
+Focused tests: all-four-facility failure/continuation, partial facility success
+plus retry, all-facility completion then idempotent close, caller-owned
+exclusion, public export/API checks, and T-0037d/e1/e2 lifecycle regressions.
 
 Risk: rethrowing the facility group's aggregate as one nested cause would break
 deterministic error order. Mitigation: reuse `collectCloseError` and preserve the
@@ -418,6 +468,7 @@ and post-merge verification as required by the protocol.
 
 No detach or ordinary last-detach redesign; no failed-start rollback takeover;
 no reusable stop, candidate, rebind, scope transfer, publication, or reopen; no
+permanent-close invocation of the T-0037b retirement primitive; no
 server/listener/session/context/resource integration; no retry timing, timer,
 backoff, jitter, monitor, health, action, scheduler, or topology surface; no
 adapter/catch-up/T-0036 change; no public retry/state/registration/generation
@@ -425,8 +476,27 @@ API, option, signature, declaration, or export; no README claim about caller-
 owned server reuse; no examples, Protobuf, generated artifact, decision rewrite,
 or accepted T-0037d/e1/e2 semantic change.
 
-No blocking architecture uncertainty remains. Private field/helper spelling and
-test-fixture mechanics may vary, but implementation may not change the owner,
-linearization point, phase order, replacement-safety boundary, retry semantics,
-facility order, error order, cause-once behavior, or public exclusions without
-a newly demonstrated architecture block.
+## Architecture Review-Fix Disposition
+
+- HIGH reachability: narrowed permanent admission to the only legal unowned
+  state, zero registrations and no generation. Recognized failed-start ownership
+  refuses through its existing retry channel; orphan generation is an invariant
+  error. Permanent close adds no T-0037b caller.
+- P1 provisional stop: defined `cancelledByClose`, waiter rejection/settlement,
+  identity-safe `#stop` clearing, no close-side wait on the behind-it stop
+  promise, and queued-turn rejection with no lifecycle work.
+- P2 internal channels: attach, stop, and stop-retry reject through their promise
+  channels after permanent admission; synchronous readiness acquires no error
+  channel and stale retired-coordinator notification no-ops.
+- P2 public docs: the bounded TSDoc text explicitly says the environment is
+  “permanently closed.”
+- MEDIUM retained states: deterministic tests now cover close during retained
+  failed-start, unsafe last detach, and incomplete reusable stop, preserving the
+  exact owner, admission, generation/slot, dependencies, facilities, and error
+  state until that predecessor operation's existing retry completes.
+
+No blocking architecture uncertainty remains. Other private helper spelling and
+test-fixture mechanics may vary, but implementation may not change the named
+cancellation checkpoint, owner, linearization point, phase order, replacement-
+safety boundary, retry semantics, facility order, error order, cause-once
+behavior, or public exclusions without a newly demonstrated architecture block.
