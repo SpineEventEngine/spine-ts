@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 1 fixes assigned
+Status: Slice 4 Round 1 fixes verified; Round 2 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -254,3 +254,14 @@ Derived status mirror: the canonical current state is the `Status` header in
   retry findings are deduplicated into one state-preserving fix. All reviewers
   are closed; one Terra Medium owner receives the complete four-item batch
   before Round 2. Security/full verify remain deferred.
+- `2026-07-13T03:44:01Z`: The complete deduplicated Round 1 batch is corrected
+  under strict TDD. Serial admission now yields to failed-start rollback while
+  restoring either no new operation or the genuine prior rejected detach;
+  attach inputs are snapshotted synchronously; initial worker-factory failure
+  clears its empty ownership slot; and active exclusions distinguish the
+  implemented coordination guard from excluded failed-start implementation.
+  RED failed 4/4 for the original behaviors. GREEN passes environment 61/61,
+  focused 135/135, affected 233/233, generated/build/tooling typecheck/lint,
+  formatting, generated cleanliness, diff hygiene, and public-surface scans.
+  Round 2 is pending all four canonical concerns; security/full verify remain
+  deferred.

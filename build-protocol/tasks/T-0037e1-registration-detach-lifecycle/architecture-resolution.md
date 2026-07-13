@@ -250,3 +250,28 @@ generation and leaves `retryDetach()` with no operation to adopt. Only
 detach enters its ordinary classification and retirement path. This is the
 opposite-direction complement to unsafe last-detach blocking and does not merge
 the two retry state machines.
+
+## Slice 4 Round 1 Corrections
+
+Failed-start ownership is checked both at detach/retry API admission and again
+when the queued attempt reaches the lifecycle serial gate. A new detach uses a
+temporary per-handle operation only to preserve duplicate-call promise
+coalescing; if blocked before lifecycle work begins, admission restores the
+handle to no detach operation. A retry queued from a genuine rejected detach
+retains that prior operation and restores it if failed-start rollback wins
+admission. Completed/inert operations remain authoritative. Thus
+`retryFailedStart()` is the only failed-start continuation and the original
+detach remains retryable afterward without stop, classification, or retirement
+from the blocked attempt.
+
+Attachment API input is a call-time value: ownership is copied synchronously
+and descriptors are shallow-copied into a frozen array before queuing. Claim,
+generation capture/creation, enumeration, route assembly, and worker creation
+remain deferred to serial admission. If initial worker construction throws,
+the sole claim is removed and its matching now-empty registration generation
+and ownership slot are cleared before rejection, permitting a later differently
+owned attachment to create one fresh worker generation.
+
+Failed-start rollback implementation itself remains excluded from this slice;
+only coordination and retry-state separation between the accepted failed-start
+state machine and detach is implemented here.

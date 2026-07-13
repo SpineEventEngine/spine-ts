@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 1 fixes assigned
+Status: Slice 4 Round 1 fixes verified; Round 2 review pending
 
 ### Slice 4 Round 1 Findings
 
@@ -20,6 +20,15 @@ Status: Slice 4 Round 1 fixes assigned
 
 One Terra Medium owner receives the complete deduplicated batch under focused
 TDD before Round 2.
+
+Disposition: corrected under strict focused TDD. New detach and retry attempts
+recheck failed-start ownership at serial admission; an unstarted detach clears
+its temporary operation, while a blocked retry restores its genuine prior
+rejected operation. `attach()` captures call-time ownership and a frozen shallow
+descriptor-array copy. Initial worker-construction failure removes the claim
+and clears its matching empty registration slot. The active exclusion now
+reserves failed-start rollback implementation except for this coordination
+guard. Focused and static evidence is recorded in the work log.
 
 ### Slice 4 Coordinator Finding
 
@@ -277,8 +286,9 @@ rebind/transfer, permanent environment close, or server cleanup ordering.
 
 No reusable explicit generation stop, survivor rebind, scope transfer,
 candidate publication, permanent environment close, facility teardown,
-failed-start rollback, server/listener integration, retry timing, public
-monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
+failed-start rollback implementation beyond the Slice 4 coordination/separation
+guard, server/listener integration, retry timing, public monitor/health/action
+API, topology, adapter, catch-up path, or T-0036 change.
 
 ## Slice 1 Implementation Record
 
@@ -375,14 +385,16 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   generation. A completed prior-generation handle stays inert and cannot alter
   the fresh registration. Failed-start rollback and detach retain distinct
   retry entry points and state machines in both directions.
-- Initial Slice 4 RED ran 56 focused environment tests and produced the expected five race
-  failures. GREEN passes environment 56/56, focused coordinator/parked/records/
+- Initial Slice 4 RED ran 56 focused environment tests and produced the expected
+  five race failures. GREEN passed environment 56/56, focused coordinator/parked/records/
   environment 130/130, and the canonical affected bounded-context/handoff/
   coordinator/parked/environment regression 228/228. The coordinator finding
-  adds one observed targeted RED and raises current GREEN evidence to
-  environment 57/57, focused 131/131, and affected 229/229. Generated build/tooling
-  typechecks and changed-file lint/format pass; final static/public-leak
-  evidence is recorded in the work log. Full verification, commit, and push
+  added one observed targeted RED and raised that pre-review evidence to
+  environment 57/57, focused 131/131, and affected 229/229. Round 1 adds four
+  observed RED regressions; current GREEN is environment 61/61, focused
+  135/135, and affected 233/233. Generated/build/tooling typecheck/lint,
+  formatting, generated cleanliness, diff/public scans, and exact status
+  evidence are recorded in the work log. Full verification, commit, and push
   remain intentionally unrun. Reusable stop, survivor transfer/rebind,
   permanent close, facilities/server integration, public APIs/exports,
   examples, docs, and generated artifacts remain excluded.

@@ -175,7 +175,11 @@ export class EnvironmentAttachments {
   }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
-    const attaching = this.#serial.then(() => this.#startQueuedAttachment(options));
+    const admittedOptions: EnvironmentAttachOptions = Object.freeze({
+      ownership: options.ownership,
+      descriptors: Object.freeze([...options.descriptors]),
+    });
+    const attaching = this.#serial.then(() => this.#startQueuedAttachment(admittedOptions));
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
@@ -198,7 +202,9 @@ export class EnvironmentAttachments {
       try {
         generation = new DeliveryGeneration(this.#createWorker(), this.#report);
       } catch (error) {
-        this.#registrations.remove(claim.token);
+        if (this.#registrations.remove(claim.token) === 0) {
+          this.#registrations.clear(claim.generation);
+        }
         throw error;
       }
       this.#generations.set(claim.generation, generation);
@@ -252,11 +258,20 @@ export class EnvironmentAttachments {
       operation.status = "complete";
       return Promise.resolve();
     }
-    return this.#queueDetach(attached);
+    if (this.#failedRollback !== undefined) {
+      return Promise.reject(explicitRetryError());
+    }
+    return this.#queueDetach(attached, operation);
   }
 
-  #queueDetach(attached: AttachedHandle): Promise<void> {
-    const detaching = this.#serial.then(() => this.#detachRegistration(attached));
+  #queueDetach(attached: AttachedHandle, previousOperation?: DetachHandleOperation): Promise<void> {
+    const detaching = this.#serial.then(() => {
+      if (this.#failedRollback !== undefined) {
+        attached.operation = previousOperation;
+        throw explicitRetryError();
+      }
+      return this.#detachRegistration(attached);
+    });
     const operation: DetachHandleOperation = { promise: detaching, status: "running" };
     attached.operation = operation;
     this.#serial = detaching.then(
