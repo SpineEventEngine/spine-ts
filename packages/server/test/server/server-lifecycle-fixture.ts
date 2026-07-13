@@ -44,17 +44,29 @@ export async function lifecycleFixture(
     readonly events?: string[];
     readonly environment?: ServerEnvironmentLocalOptions;
     readonly awaitFailure?: Error;
-    readonly worker?: HeldStartupWorker;
-    readonly createWorker?: () => EnvironmentGenerationWorker;
+    readonly workers?: readonly HeldStartupWorker[];
   } = {},
 ) {
   const events = options.events ?? [];
-  const worker = options.worker ?? new HeldStartupWorker(events, options.awaitFailure);
+  const configuredWorkers =
+    options.workers === undefined ? undefined : Object.freeze([...options.workers]);
+  if (configuredWorkers?.length === 0) {
+    throw new Error("Lifecycle fixture requires at least one worker.");
+  }
+  const worker = configuredWorkers?.[0] ?? new HeldStartupWorker(events, options.awaitFailure);
+  let generation = 0;
   const environment = ServerEnvironment.local(options.environment);
-  serverEnvironmentAccess.installTestAttachments(
-    environment,
-    options.createWorker ?? (() => worker),
-  );
+  serverEnvironmentAccess.installTestAttachments(environment, () => {
+    if (configuredWorkers === undefined) {
+      return worker;
+    }
+    const next = configuredWorkers[generation];
+    generation += 1;
+    if (next === undefined) {
+      throw new Error("Unexpected environment generation.");
+    }
+    return next;
+  });
   const registry = generatedRegistry([
     {
       entityType: LifecycleProjection,
@@ -95,7 +107,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #started = Promise.withResolvers<undefined>();
   readonly #events: string[];
   readonly #startupFailures: Error[] = [];
-  readonly #awaitFailures: Error[] = [];
+  readonly #awaitAttempts: (() => Promise<void>)[] = [];
   #starts = 0;
   #stopCalls = 0;
   #awaitCalls = 0;
@@ -104,7 +116,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   constructor(events: string[], awaitFailure?: Error) {
     this.#events = events;
     if (awaitFailure !== undefined) {
-      this.#awaitFailures.push(awaitFailure);
+      this.failNextAwait(awaitFailure);
     }
   }
 
@@ -148,7 +160,15 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   }
 
   failNextAwait(error: Error): void {
-    this.#awaitFailures.push(error);
+    this.#awaitAttempts.push(() => Promise.reject(error));
+  }
+
+  holdNextAwait(): () => void {
+    const held = Promise.withResolvers<undefined>();
+    this.#awaitAttempts.push(() => held.promise);
+    return () => {
+      held.resolve(undefined);
+    };
   }
 
   add(runtime: EnvironmentDeliveryRuntime): void {
@@ -184,8 +204,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   awaitSettled(): Promise<void> {
     this.#awaitCalls += 1;
     this.#events.push("await");
-    const failure = this.#awaitFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    return this.#awaitAttempts.shift()?.() ?? Promise.resolve();
   }
 
   retire(): Promise<void> {

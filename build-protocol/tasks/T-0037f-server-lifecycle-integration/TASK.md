@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 review assigned
+Status: Slice 2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -448,6 +448,51 @@ gate passes.
 - Style/maintainability, TypeScript/API docs, and performance/reliability are
   assigned at explicit Terra High, no subagents. Documentation is N/A because
   no observable README/TSDoc changed; security remains deferred.
+
+## Slice 2 Review Findings And Fix Assignment
+
+- `2026-07-13T18:28:02Z`: all three Terra High reviewers match explicit
+  dispatch, used no subagents, and are closed. They corroborate one high;
+  style also reports two medium findings.
+- High: when caller-owned rollback is already safe as `attach()` rejects, close
+  built contexts/resources immediately and aggregate cleanup failures with the
+  original startup error; do not leak or rebuild them.
+- Medium: the read-only `failedStartPending()` observation must not consume the
+  pristine test-installer token. Medium: consolidate fixture worker/factory
+  configuration so returned evidence always describes the installed worker.
+- Required coverage: immediate-safe rollback cleanup/reuse; concurrent cleanup-
+  retry coalescing; repeated environment retry failure; context/resource partial
+  close failure, failed-index-only retry, aggregation, cause-once behavior, and
+  cleanup-record clearing.
+- The same Terra Medium implementer receives the complete batch with unchanged
+  Slice 2 ownership. Later slices remain unauthorized.
+
+## Slice 2 Review-Fix Handback
+
+- `2026-07-13T18:37:05Z`: the complete accepted batch is implemented within
+  the existing Slice 2 paths. A caller-owned attach rejection whose rollback
+  is already safe immediately closes the actual context/resource group; any
+  close causes are flattened after the original startup failure. That one-shot
+  cleanup is not retained and performs no rebuild or listener construction.
+- `failedStartPending()` now only reads attachment state and preserves pristine
+  installer eligibility. The lifecycle fixture accepts one snapshotted worker
+  sequence; its returned first worker and installed generation factory now
+  share that authoritative source.
+- Direct tests cover immediate safe cleanup and caller-environment reuse,
+  concurrent retained-retry coalescing, repeated unsafe environment retry,
+  original/reportable cause-once behavior, and partial context/resource close
+  failure with successful-index preservation and failed-index-only retry.
+- Server-owned/listener retention, handle endpoint safety, later slices,
+  public/docs changes, and all other exclusions remain untouched.
+
+## Slice 2 Review-Fix Coordinator Gate
+
+- `2026-07-13T18:40:27Z`: the resumed implementer remains actual Terra Medium,
+  used no subagents, and is closed. Tooling/generated typechecks, native
+  5 files / 154 tests, scoped lint/cleanup/Prettier, exact scope/status/leak,
+  and diff checks pass.
+- The same style/API/reliability reviewers receive a fresh whole-Slice 2
+  package at explicit Terra High, no subagents. Documentation remains N/A.
 - `2026-07-13T18:16:55Z`: correction complete. Worker and helper shard
   parameters now use real `ShardIndex`; zero-message rejected startup evidence
   retains the error only as shard `cause` and reports zero failed messages with

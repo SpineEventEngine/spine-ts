@@ -100,13 +100,16 @@ export class Server {
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
     } catch (error) {
-      if (!this.#ownsEnvironment && serverEnvironmentAccess.failedStartPending(this.#environment)) {
-        this.#failedStartCleanup = {
-          closeGroup: new RetryableCloseGroup(
-            [...contexts, ...this.#resources],
-            "Server start cleanup failed while closing owned contexts/resources.",
-          ),
-        };
+      if (!this.#ownsEnvironment) {
+        const closeGroup = new RetryableCloseGroup(
+          [...contexts, ...this.#resources],
+          "Server start cleanup failed while closing owned contexts/resources.",
+        );
+        if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+          this.#failedStartCleanup = { closeGroup };
+        } else {
+          await cleanupSafeAttachmentFailure(closeGroup, error);
+        }
       }
       throw error;
     }
@@ -435,6 +438,20 @@ function toCleanupErrors(error: unknown): readonly unknown[] {
     return error.errors;
   }
   return [error];
+}
+
+async function cleanupSafeAttachmentFailure(
+  closeGroup: RetryableCloseGroup,
+  startError: unknown,
+): Promise<void> {
+  try {
+    await closeGroup.close();
+  } catch (error) {
+    throw new AggregateError(
+      [startError, ...toCleanupErrors(error)],
+      "Server attachment failed and immediate dependency cleanup also failed.",
+    );
+  }
 }
 
 function throwCleanupErrors(errors: readonly unknown[]): never {

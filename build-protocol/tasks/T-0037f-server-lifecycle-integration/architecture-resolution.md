@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 2 review assigned
+Status: Slice 2 re-review assigned
 
 ## Resolution Summary
 
@@ -536,6 +536,28 @@ smallest coherent implementation.
 - `2026-07-13T18:20:43Z`: tooling/generated typechecks, 5 files / 151 tests,
   and all scoped mechanical/public-leak checks pass. Applicable Slice 2 review
   concerns are assigned; later slices remain unauthorized.
+
+## Slice 2 Review-Fix Assignment
+
+- `2026-07-13T18:28:02Z`: fix immediate-safe caller cleanup, keep the pending
+  observation read-only, unify fixture worker ownership, and prove cleanup-only
+  retry under coalescing/repeated environment and partial close failures. This
+  remains caller-owned Slice 2 behavior only.
+
+## Slice 2 Review-Fix Handback
+
+- `2026-07-13T18:37:05Z`: safe no-handle rollback now enters one immediate,
+  non-retained `RetryableCloseGroup`; unsafe rollback still retains that same
+  group and delegates all progress to existing environment retry state. The
+  pending projection is observational only. No endpoint-safety result,
+  listener/handle continuation, generation state copy, or public seam was added.
+- Test fixture worker generation is now one snapshotted sequence, preserving
+  deterministic identity without broadening production configuration.
 - `2026-07-13T18:16:55Z`: the fixture now satisfies that evidence contract
   without changing server/environment architecture, runtime behavior, public
   surface, or the later-slice boundary.
+
+## Slice 2 Review-Fix Coordinator Gate
+
+- `2026-07-13T18:40:27Z`: all focused type/test/mechanical/leak checks pass;
+  fresh whole-slice style/API/reliability re-review is assigned.

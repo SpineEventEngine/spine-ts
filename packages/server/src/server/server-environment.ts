@@ -212,7 +212,6 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     return attachments.attach(options);
   },
   failedStartPending(environment: ServerEnvironment) {
-    testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);
     if (attachments === undefined) {
       throw new TypeError("Failed-start observation requires a ServerEnvironment instance.");

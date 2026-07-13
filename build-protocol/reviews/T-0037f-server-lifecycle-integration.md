@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 2 review assigned
+Status: Slice 2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -245,6 +245,40 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Style, API, and reliability are each assigned at explicit Terra High with no
   subagents. Documentation is N/A; security deferred. Review only current Slice
   2 claims and ignore superseded history unless active records revive it.
+
+## Slice 2 Review Results
+
+- `2026-07-13T18:28:02Z`: style/API/reliability actual Terra High matches all
+  explicit dispatches; no subagents; all closed.
+- Corroborated high: immediate-safe caller-owned failed attach leaks built
+  dependencies and omits cleanup-error aggregation. Style mediums: pending
+  observation mutates test-install eligibility; fixture can return a worker
+  different from the installed factory output.
+- Required tests cover immediate-safe cleanup, concurrent cleanup retry,
+  repeated environment retry failure, and partial close retry/aggregation/
+  cause-once/record clearing. Same Terra Medium implementer owns the batch;
+  applicable re-review follows. Documentation N/A; security deferred.
+- `2026-07-13T18:34:08Z`: complete-batch RED is recorded in the work log.
+  Two failures now directly reproduce the accepted runtime/read-only findings;
+  the remaining required retry tests pass as baseline characterizations. No
+  production fix or review disposition is claimed yet.
+
+## Slice 2 Review-Fix Handback
+
+- `2026-07-13T18:37:05Z`: all accepted high/medium findings and required direct
+  coverage are addressed. Focused GREEN is 12/12 and the five-file native gate
+  is 154/154; tooling/generated typechecks, scoped ESLint, and cleanup pass.
+  Applicable style/API/reliability re-review remains orchestrator-owned.
+- Re-review focus: confirm safe rollback cleanup is immediate/non-retained and
+  preserves original-first aggregation; pending observation is side-effect
+  free; fixture worker identity has one source; repeated/concurrent unsafe
+  retry never re-emits original causes; and partial close retries only failed
+  indexes before clearing the private record. Documentation remains N/A,
+  security deferred, and Slice 3+ excluded.
+- `2026-07-13T18:38:58Z`: final implementer gate passes both typechecks,
+  5 files / 154 native tests, scoped lint/cleanup/format, the nine-path allowlist
+  status/public-leak audit, and diff integrity. The package is ready for the
+  assigned clean re-review; no concern is self-disposed by this handback.
 - `2026-07-13T18:16:55Z`: fixture correction is ready for pre-review handback.
   Tooling RED/GREEN and 5-file / 151-test native evidence are recorded in the
   work log. Treat this as evidence-contract typing/data repair only; production
@@ -252,3 +286,12 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - `2026-07-13T18:19:13Z`: all required tooling/native/generated/lint/cleanup/
   format/exact-scope/public-leak/diff gates pass. The corrected Slice 2 package
   returns to the unchanged pending specialist pre-review boundary.
+
+## Slice 2 Re-review Assignment
+
+- `2026-07-13T18:40:27Z`: accepted/closed implementer actual Terra Medium;
+  tooling/generated typechecks, 5 files / 154 tests, and all scoped mechanical/
+  status/scope/leak/diff checks pass.
+- Resume style/API/reliability at explicit Terra High, no subagents, against a
+  fresh package covering all Slice 2 commits. Documentation N/A; security
+  deferred.
