@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Final coverage fix verified; review pending
+Status: Final coverage fix review in progress
 
 ### Final Verification Finding
 
@@ -21,6 +21,11 @@ detach behavior to prove neither was mutated. Focused environment tests pass
 standalone coverage gate passes 65 files / 1,481 tests with global branch
 coverage exactly 90.00% (4,140/4,600), and LCOV records one hit on each formerly
 uncovered branch. Production source and coverage thresholds are unchanged.
+
+The test-only fix is frozen from `6e251516` through `48768ef5` in
+`.superpowers/sdd/review-6e251516..48768ef5.diff` (one commit, 12,664 bytes).
+Review explicitly assigns style, TypeScript/API, and reliability to
+`gpt-5.6-terra` / `high`, plus documentation to `gpt-5.6-luna` / `medium`.
 
 ### Slice 4 Round 2 Finding
 

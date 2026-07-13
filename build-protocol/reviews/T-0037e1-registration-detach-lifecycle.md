@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Final coverage fix verified; review pending
+Status: Final coverage fix review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -311,3 +311,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   Production, threshold, public API, and generated behavior are unchanged. The
   fix is ready for focused review; full `pnpm verify`, commit, and push remain
   unperformed.
+- Focused package is
+  `.superpowers/sdd/review-6e251516..48768ef5.diff` (one commit, 12,664 bytes).
+  Expected explicit profiles are style, TypeScript/API, and reliability
+  `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
+  read-only with no subagents. Scope is test quality, evidence truthfulness,
+  validation-contract compatibility, and coverage reliability only.
