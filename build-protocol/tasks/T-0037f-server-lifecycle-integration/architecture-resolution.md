@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 round-2 re-review assigned
+Status: Slice 3 round-3 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -704,3 +704,42 @@ smallest coherent implementation.
 - `2026-07-13T19:49:09Z`: both typechecks, native 5 files / 159 tests, scoped
   lint/cleanup/format, exact nine-path scope/status/public-leak, and diff gates
   pass at unchanged baseline HEAD `65384a9a`.
+
+## Slice 3 Round-3 Ownership Clarification
+
+- `2026-07-13T20:33:31Z`: whole-slice re-review confirms the prior blocked-
+  detach routing fix but finds that the listener record can still adopt a
+  different server's environment-wide failed-start retry after its own handle
+  clears. Exact cleanup provenance, not ambient environment state, must decide
+  whether this record owns `retryFailedStart()`.
+- The correction remains private orchestration state plus a focused concurrent
+  shared-environment regression. It adds no public API and does not alter
+  Slice 4+ running-close semantics.
+
+## Slice 3 Round-3 Resolution Handback
+
+- Rollback retry authority is now a required private fact on the server's
+  retained cleanup record. An unsafe attachment-start rollback creates an
+  owning record; immediate-safe dependency retry and listener-failure cleanup
+  create non-owning records. Ambient `failedStartPending` remains only the
+  owning record's progress check, never an ownership source.
+- Exact detach/retry routing remains environment-owned and unchanged. A
+  non-owning listener record that clears its exact handle proceeds directly to
+  its retryable close group even when another server retains unsafe rollback.
+  No lifecycle access, export, option, signature, running-close path, or Slice
+  4+ behavior changed.
+- Focused RED/GREEN is 0/1 then 1/1; the native five-file Slice 3 gate is
+  165/165, with both typechecks and scoped lint/cleanup passing before final
+  synchronized handback audits.
+- `2026-07-13T20:44:56Z`: final typecheck/native/lint/cleanup/Prettier and exact
+  scope/status/public-leak/diff gates pass. Seven changed paths remain within
+  the accepted nine-path Slice 3 boundary; the architecture and public surface
+  are otherwise unchanged.
+
+## Slice 3 Round-3 Coordinator Acceptance
+
+- `2026-07-13T20:48:57Z`: the private provenance correction and deterministic
+  cross-server regression pass independent coordinator verification: both
+  typechecks, 5 files / 165 tests, and every scoped static/audit gate. The
+  existing implementer ran actual `gpt-5.6-terra` / medium with no subagents
+  and is closed. Architecture remains unchanged; whole-slice re-review follows.

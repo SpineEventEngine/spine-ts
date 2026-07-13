@@ -164,11 +164,15 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     this.#awaitAttempts.push(() => Promise.reject(error));
   }
 
-  holdNextAwait(): () => void {
+  holdNextAwait(releaseFailure?: Error): () => void {
     const held = Promise.withResolvers<undefined>();
     this.#awaitAttempts.push(() => held.promise);
     return () => {
-      held.resolve(undefined);
+      if (releaseFailure === undefined) {
+        held.resolve(undefined);
+      } else {
+        held.reject(releaseFailure);
+      }
     };
   }
 

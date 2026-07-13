@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 round-2 re-review assigned
+Status: Slice 3 round-3 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -739,3 +739,46 @@ gate passes.
 - `2026-07-13T20:27:48Z`: accepted/closed implementer actual Terra Medium;
   both typechecks, 5 files / 164 tests, all scoped gates pass. Fresh whole-slice
   style/API/reliability re-review assigned at Terra High; docs N/A.
+
+## Slice 3 Round-2 Re-review Findings
+
+- `2026-07-13T20:33:31Z`: style/maintainability and TypeScript/API docs are
+  CLEAN. Performance/reliability reports one high-confidence ownership defect.
+  All actual reviewers ran Terra High, used no subagents, and are closed.
+- High: after a listener-failure record completes its exact detach, it consults
+  environment-wide `failedStartPending` and may retry another server's unsafe
+  failed-start rollback. Retain exact rollback provenance so only its owning
+  record invokes `retryFailedStart()`; add the concurrent shared-environment
+  regression without completing the rollback owner first. The same Terra
+  Medium implementation context receives this bounded fix.
+
+## Slice 3 Round-3 Review-Fix Handback
+
+- Each private `FailedStartCleanup` now records whether that exact server
+  cleanup owns failed-start rollback. Only an owning record may invoke
+  `retryFailedStart()`; listener cleanup and immediate-safe dependency retry
+  records never adopt ambient rollback state from another server.
+- The deterministic shared caller-environment regression holds B's unsafe
+  rollback retry while A finishes its already-safe exact detach. A completes
+  and terminally consumes only its own cleanup, B alone receives its exact
+  retry cause, B alone later clears rollback and closes its dependencies, and
+  the sibling generation remains usable throughout.
+- Strict focused RED is 0/1 at A's settlement barrier against unchanged
+  production; minimal GREEN is 1/1. The established native Slice 3 regression
+  passes 5 files / 165 tests; both typechecks, scoped ESLint, and cleanup
+  enforcement pass. Final synchronized format/scope/status/public-leak/diff
+  evidence is recorded at handback completion.
+- `2026-07-13T20:44:56Z`: final formatted-tree verification passes both
+  typechecks, 5 files / 165 native tests, scoped ESLint, cleanup enforcement,
+  and exact nine-path Prettier. Audits report 7 changed paths inside the
+  nine-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-3 Coordinator Gate
+
+- `2026-07-13T20:48:57Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching explicit dispatch, with no subagents.
+  Coordinator verification passes both typechecks, 5 files / 165 native tests,
+  scoped ESLint, cleanup enforcement, Prettier, scope/status/public-leak, and
+  diff gates. Fresh whole-Slice 3 style/API/reliability re-review is assigned;
+  documentation is N/A and security remains deferred.

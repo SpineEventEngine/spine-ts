@@ -927,6 +927,149 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("keeps listener cleanup out of another server's failed-start retry", async () => {
+    const fixture = await lifecycleFixture();
+    fixture.worker.release();
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    const listenerRetirementFailure = new Error("isolated listener retirement failed");
+    const listenerStorage = new LifecycleTrackingStorageFactory([]);
+    const listenerContext = await fixture
+      .createBuilder("LifecycleIsolatedListenerCleanup")
+      .withStorageFactory(listenerStorage)
+      .buildAsync();
+    const listenerResource = vi.fn();
+    fixture.worker.failNextRetire(listenerRetirementFailure);
+    const listenerServer = Server.atPort(sibling.port, { environment: fixture.environment })
+      .add(listenerContext)
+      .addResource({ close: listenerResource });
+    const listenerStarting = listenerServer.start();
+    void listenerStarting.catch(() => undefined);
+
+    const rollbackStartupFailure = new Error("isolated rollback startup failed");
+    const rollbackQuiescenceFailure = new Error("isolated rollback remained unsafe");
+    const rollbackRetryFailure = new Error("isolated rollback retry remained unsafe");
+    const rollbackStorage = new LifecycleTrackingStorageFactory([]);
+    const rollbackContext = await fixture
+      .createBuilder("LifecycleIsolatedFailedRollback")
+      .withStorageFactory(rollbackStorage)
+      .buildAsync();
+    const rollbackResource = vi.fn();
+    const rollbackServer = Server.atPort(0, { environment: fixture.environment })
+      .add(rollbackContext)
+      .addResource({ close: rollbackResource });
+    let rollbackStarting: Promise<unknown> | undefined;
+    let listenerRetry: Promise<unknown> | undefined;
+    let rollbackRetry: Promise<unknown> | undefined;
+    let releaseRollbackRetry: (() => void) | undefined;
+
+    try {
+      const listenerStartError = await listenerStarting.catch((error: unknown) => error);
+      expect(listenerStartError).toBeInstanceOf(AggregateError);
+      expect((listenerStartError as AggregateError).errors).toEqual([
+        expect.objectContaining({ code: "EADDRINUSE" }),
+        listenerRetirementFailure,
+      ]);
+      expect(listenerResource).toHaveBeenCalledOnce();
+      expect(
+        listenerStorage.storages.every((storage) => listenerStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+
+      fixture.worker.rejectNextStart(rollbackStartupFailure);
+      fixture.worker.failNextAwait(rollbackQuiescenceFailure);
+      rollbackStarting = rollbackServer.start();
+      const rollbackStartError = await rollbackStarting.catch((error: unknown) => error);
+      expect(rollbackStartError).toBeInstanceOf(AggregateError);
+      expect((rollbackStartError as AggregateError).errors).toEqual([
+        rollbackStartupFailure,
+        rollbackQuiescenceFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(rollbackResource).not.toHaveBeenCalled();
+      expect(rollbackStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const awaitCallsBeforeRetry = fixture.worker.awaitCalls;
+      releaseRollbackRetry = fixture.worker.holdNextAwait(rollbackRetryFailure);
+      listenerRetry = listenerServer.start();
+      void listenerRetry.catch(() => undefined);
+      rollbackRetry = rollbackServer.start();
+      void rollbackRetry.catch(() => undefined);
+      await waitFor(() => fixture.worker.awaitCalls === awaitCallsBeforeRetry + 1);
+
+      let listenerRetrySettled = false;
+      let listenerCompletion: unknown;
+      void listenerRetry
+        .catch((error: unknown) => error)
+        .then((result) => {
+          listenerCompletion = result;
+          listenerRetrySettled = true;
+        });
+      await waitFor(() => listenerRetrySettled);
+      expectDeferredCleanupCompletion(listenerCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(listenerResource).toHaveBeenCalledOnce();
+      expect(
+        listenerStorage.storages.every((storage) => listenerStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(rollbackResource).not.toHaveBeenCalled();
+      expect(rollbackStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const sessionDuringRetry = http2.connect(sibling.baseUrl);
+      sessionDuringRetry.on("error", () => undefined);
+      await once(sessionDuringRetry, "remoteSettings");
+      sessionDuringRetry.close();
+      await once(sessionDuringRetry, "close");
+
+      releaseRollbackRetry();
+      releaseRollbackRetry = undefined;
+      const rollbackRetryError = await rollbackRetry.catch((error: unknown) => error);
+      expect(rollbackRetryError).toBe(rollbackRetryFailure);
+      expect(rollbackRetryError).not.toBe(listenerStartError);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(rollbackResource).not.toHaveBeenCalled();
+      expect(rollbackStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const rollbackCompletion = await rollbackServer.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(rollbackCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(rollbackResource).toHaveBeenCalledOnce();
+      expect(
+        rollbackStorage.storages.every((storage) => rollbackStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(fixture.worker.starts).toBe(3);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
+      const listenerTerminal = await listenerServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(listenerTerminal);
+      const rollbackTerminal = await rollbackServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(rollbackTerminal);
+
+      const sessionAfterRetry = http2.connect(sibling.baseUrl);
+      sessionAfterRetry.on("error", () => undefined);
+      await once(sessionAfterRetry, "remoteSettings");
+      sessionAfterRetry.close();
+      await once(sessionAfterRetry, "close");
+
+      await sibling.close();
+      await expect(fixture.environment.close()).resolves.toBeUndefined();
+    } finally {
+      releaseRollbackRetry?.();
+      await listenerStarting.catch(() => undefined);
+      await rollbackStarting?.catch(() => undefined);
+      await listenerRetry?.catch(() => undefined);
+      await rollbackRetry?.catch(() => undefined);
+      await rollbackServer.start().catch(() => undefined);
+      await rollbackServer.start().catch(() => undefined);
+      await listenerServer.start().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await listenerContext.close().catch(() => undefined);
+      await rollbackContext.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("terminally rejects a consumed server after retrying immediate-safe cleanup", async () => {
     const events: string[] = [];
     const startupFailure = new Error("safe startup recovery failed");
