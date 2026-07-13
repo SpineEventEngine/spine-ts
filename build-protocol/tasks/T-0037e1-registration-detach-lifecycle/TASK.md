@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 Round 2 review in progress
+Status: Slice 3 clean; Slice 4 races and handle separation assigned
 
 ### Slice 3 Round 1 Finding
 
@@ -20,6 +20,14 @@ Round 2 reviews the record-only correction frozen from `4447cf56` through
 `42f07b96` in `.superpowers/sdd/review-4447cf56..42f07b96.diff` (one commit,
 10,277 bytes). Explicit profiles remain style, TypeScript/API, and reliability
 `gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
+
+### Slice 3 Acceptance
+
+Round 2 is clean in all four canonical concerns and every reviewer is closed.
+Ordinary last detach, safe and unsafe retirement failure behavior, checkpointed
+retry, zero-scope retirement, and the corrected retry contract are accepted.
+The existing Terra Medium owner now receives final Slice 4 race linearization
+and handle/retry-state separation only.
 
 ### Slice 2 Round 1 Findings
 

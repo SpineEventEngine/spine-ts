@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 3 Round 2 review in progress
+Status: Slice 3 clean; Slice 4 races and handle separation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -207,3 +207,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`. Each
   concern reviews only the corrected retirement-retry wording and current
   records; historical superseded text is non-actionable unless claimed active.
+- Round 2 disposition: all four concerns are CLEAN and all reviewers are closed
+  with explicit profiles matching immutable role metadata. The corrected
+  retirement-retry contract is accepted and Slice 3 is clean.
+- Slice 4 is assigned to the existing Terra Medium implementer. It receives a
+  fresh four-concern review after focused verification; security and full
+  verification remain deferred until final child acceptance.
