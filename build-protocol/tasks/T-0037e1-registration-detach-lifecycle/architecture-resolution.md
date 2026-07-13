@@ -241,15 +241,17 @@ generation. Reusable stop, survivor rebind/transfer, permanent close,
 facilities/server wiring, public lifecycle controls/exports, and later task
 policy remain outside this resolution.
 
-While failed-start rollback remains unresolved, a valid sibling `detach()` is
-rejected with the existing failed-start explicit-retry-required error after
-handle/duplicate-operation validation but before any new detach operation is
-created or queued. This preserves the rollback's exclusive ownership of the
-generation and leaves `retryDetach()` with no operation to adopt. Only
-`retryFailedStart()` can resume that rollback; after it completes, sibling
-detach enters its ordinary classification and retirement path. This is the
-opposite-direction complement to unsafe last-detach blocking and does not merge
-the two retry state machines.
+If failed-start rollback already exists when a valid sibling `detach()` is
+called, API-time validation rejects with the existing failed-start explicit-
+retry-required error before any detach operation is created or queued. If
+`detach()` was called earlier and queued before a later attachment installs
+failed-start rollback, a temporary operation exists to coalesce duplicate calls;
+serial admission rejects it and restores the handle to no detach operation
+because lifecycle detach never began. A queued retry is different: serial
+admission restores its genuine prior rejected detach operation. Only
+`retryFailedStart()` can resume the rollback; after it completes, sibling detach
+or retry enters its ordinary path. This is the opposite-direction complement to
+unsafe last-detach blocking and does not merge the two retry state machines.
 
 ## Slice 4 Round 1 Corrections
 

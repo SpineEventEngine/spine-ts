@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 2 documentation fix assigned
+Status: Slice 4 Round 2 fix verified; Round 3 review pending
 
 ### Slice 4 Round 2 Finding
 
@@ -9,6 +9,12 @@ detach already queued before rollback wins serial admission. The latter uses a
 temporary operation for duplicate promise coalescing, then restores the handle
 to no detach operation when blocked. One Terra Medium owner receives this sole
 record correction before Round 3.
+
+Disposition: corrected in the active architecture. Existing failed-start state
+rejects `detach()` before operation creation; a detach queued before rollback
+temporarily coalesces duplicate calls and restores no operation when blocked at
+serial admission; a queued retry restores its genuine prior rejected operation.
+No source, test, or behavior changed.
 
 ### Slice 4 Round 1 Findings
 

@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 2 documentation fix assigned
+Status: Slice 4 Round 2 fix verified; Round 3 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -277,3 +277,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   restoration to no operation if failed-start rollback wins. All four agents
   are closed; one Terra Medium record owner receives the sole correction before
   Round 3. Security/full verify remain deferred.
+- `2026-07-13T03:53:13Z`: The sole Round 2 documentation finding is corrected.
+  Active architecture now separately records API-time rejection with no
+  operation, queued-new-detach temporary coalescing state restored to no
+  operation at blocked serial admission, and queued-retry restoration of the
+  genuine prior rejected operation. No implementation or test evidence changed;
+  Round 3 documentation review is pending.
