@@ -1362,6 +1362,390 @@ describe("ordinary last registration detach", () => {
   });
 });
 
+describe("attachment and last-detach linearization", () => {
+  it("defers a queued registration claim and descriptor work until serial admission", async () => {
+    const worker = new LifecycleWorker();
+    worker.enqueue("IDLE", "IDLE");
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        factoryCalls += 1;
+        return worker;
+      },
+    });
+    const first = descriptor(
+      "ClaimGateFirst",
+      "type.example.dev/ClaimGateFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "ClaimGateSecond",
+      "type.example.dev/ClaimGateSecond",
+      new InMemoryStorageFactory(),
+    );
+    const releaseFirst = Promise.withResolvers<undefined>();
+    let firstAdmitted = false;
+    const gatedFirst: ContextDeliveryDescriptor = Object.freeze({
+      ...first.value,
+      async startupScopes() {
+        firstAdmitted = true;
+        await releaseFirst.promise;
+        return first.value.startupScopes();
+      },
+    });
+
+    const firstAttach = attachments.attach({ ownership: "caller", descriptors: [gatedFirst] });
+    await until(() => firstAdmitted);
+    const secondAttach = attachments.attach({
+      ownership: "caller",
+      descriptors: [second.value],
+    });
+    await flushMicrotasks();
+
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(second.enumerations).toBe(0);
+    expect(second.storageContexts).toBe(0);
+    expect(factoryCalls).toBe(1);
+
+    releaseFirst.resolve(undefined);
+    await expect(Promise.all([firstAttach, secondAttach])).resolves.toHaveLength(2);
+    expect(activeRegistrationCount(attachments)).toBe(2);
+    expect(second.enumerations).toBe(1);
+  });
+
+  it("lets an attachment admitted before detach make the departing handle non-last", async () => {
+    const worker = new LifecycleWorker();
+    worker.enqueue("IDLE", "IDLE");
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const departing = descriptor(
+      "AttachBeforeDetachDeparting",
+      "type.example.dev/AttachBeforeDetachDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "AttachBeforeDetachSibling",
+      "type.example.dev/AttachBeforeDetachSibling",
+      new InMemoryStorageFactory(),
+    );
+    const departingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    const releaseSibling = Promise.withResolvers<undefined>();
+    let siblingAdmitted = false;
+    const gatedSibling: ContextDeliveryDescriptor = Object.freeze({
+      ...sibling.value,
+      async startupScopes() {
+        siblingAdmitted = true;
+        await releaseSibling.promise;
+        return sibling.value.startupScopes();
+      },
+    });
+
+    const siblingAttach = attachments.attach({
+      ownership: "caller",
+      descriptors: [gatedSibling],
+    });
+    await until(() => siblingAdmitted);
+    const detaching = attachments.detach(departingHandle);
+    releaseSibling.resolve(undefined);
+    const siblingHandle = await siblingAttach;
+    await detaching;
+
+    expect(siblingHandle.generation).toBe(departingHandle.generation);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.stoppedOwners).toEqual([["environment-owner-1"]]);
+
+    worker.enqueue("IDLE");
+    await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+  });
+
+  it("queues an attachment behind safe last retirement and makes one fresh generation", async () => {
+    const events: string[] = [];
+    const oldWorker = new LifecycleWorker(events);
+    const freshWorker = new LifecycleWorker(events);
+    const workers = [oldWorker, freshWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) {
+          throw new Error("Unexpected delivery generation.");
+        }
+        return worker;
+      },
+    });
+    const retiring = descriptor(
+      "DetachFirstRetiring",
+      "type.example.dev/DetachFirstRetiring",
+      new InMemoryStorageFactory(),
+    );
+    const fresh = descriptor(
+      "DetachFirstFresh",
+      "type.example.dev/DetachFirstFresh",
+      new InMemoryStorageFactory(),
+    );
+    oldWorker.enqueue("IDLE");
+    const staleHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [retiring.value],
+    });
+    const quiescence = Promise.withResolvers<undefined>();
+    oldWorker.awaitGates.push(quiescence.promise);
+
+    const detaching = attachments.detach(staleHandle);
+    await until(() => oldWorker.awaitCalls === 1);
+    freshWorker.enqueue("IDLE", "IDLE");
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [fresh.value] });
+    await flushMicrotasks();
+    expect(fresh.enumerations).toBe(0);
+    expect(fresh.storageContexts).toBe(0);
+    expect(factoryCalls).toBe(1);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+
+    quiescence.resolve(undefined);
+    await detaching;
+    const freshHandle = await attaching;
+
+    expect(freshHandle.generation).not.toBe(staleHandle.generation);
+    expect(factoryCalls).toBe(2);
+    expect(events.indexOf("retire")).toBeLessThan(events.lastIndexOf("start"));
+    await expect(attachments.detach(staleHandle)).resolves.toBeUndefined();
+    expect(activeRegistrationCount(attachments)).toBe(1);
+
+    await fresh.readiness.claim(fresh.ready).complete(() => Promise.resolve());
+    await until(() => freshWorker.starts === 2);
+  });
+
+  it("blocks queued attachment after unsafe last detach until explicit detach retry", async () => {
+    const oldWorker = new LifecycleWorker();
+    const freshWorker = new LifecycleWorker();
+    const workers = [oldWorker, freshWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) {
+          throw new Error("Unexpected delivery generation.");
+        }
+        return worker;
+      },
+    });
+    const retiring = descriptor(
+      "UnsafeRaceRetiring",
+      "type.example.dev/UnsafeRaceRetiring",
+      new InMemoryStorageFactory(),
+    );
+    const blocked = descriptor(
+      "UnsafeRaceBlocked",
+      "type.example.dev/UnsafeRaceBlocked",
+      new InMemoryStorageFactory(),
+    );
+    oldWorker.enqueue("IDLE");
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [retiring.value],
+    });
+    const quiescence = Promise.withResolvers<undefined>();
+    oldWorker.awaitGates.push(quiescence.promise);
+
+    const detaching = attachments.detach(handle);
+    await until(() => oldWorker.awaitCalls === 1);
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [blocked.value] });
+    const failure = new Error("last detach did not quiesce");
+    quiescence.reject(failure);
+
+    await expect(detaching).rejects.toMatchObject({ cause: failure });
+    await expect(attaching).rejects.toThrow(
+      "Environment generation detach requires an explicit retry.",
+    );
+    expect(blocked.enumerations).toBe(0);
+    expect(blocked.storageContexts).toBe(0);
+    expect(blocked.transitions).toBe(0);
+    expect(factoryCalls).toBe(1);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    await expect(attachments.retryFailedStart()).rejects.toThrow(
+      "Environment has no failed-start rollback to retry.",
+    );
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [blocked.value] }),
+    ).rejects.toThrow("Environment generation detach requires an explicit retry.");
+    expect(blocked.enumerations).toBe(0);
+    expect(factoryCalls).toBe(1);
+    expect(oldWorker.awaitCalls).toBe(1);
+
+    await attachments.retryDetach(handle);
+    freshWorker.enqueue("IDLE");
+    const freshHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [blocked.value],
+    });
+    expect(freshHandle.generation).not.toBe(handle.generation);
+    expect(factoryCalls).toBe(2);
+    expect(oldWorker.stopCalls).toBe(1);
+    expect(oldWorker.awaitCalls).toBe(2);
+  });
+
+  it.each(["report", "retire"] as const)(
+    "admits a queued fresh generation after replacement-safe %s failure",
+    async (failureKind) => {
+      const events: string[] = [];
+      const failure = new Error(`${failureKind} failed after replacement safety`);
+      const oldWorker = new LifecycleWorker(events);
+      const freshWorker = new LifecycleWorker(events);
+      if (failureKind === "retire") {
+        oldWorker.retireFailures.push(failure);
+      }
+      const workers = [oldWorker, freshWorker];
+      let factoryCalls = 0;
+      const attachments = new EnvironmentAttachments({
+        createWorker() {
+          const worker = workers[factoryCalls];
+          factoryCalls += 1;
+          if (worker === undefined) {
+            throw new Error("Unexpected delivery generation.");
+          }
+          return worker;
+        },
+        report() {
+          events.push("report");
+          return failureKind === "report" ? Promise.reject(failure) : Promise.resolve();
+        },
+      });
+      const retiring = descriptor(
+        `SafeFailureRetiring-${failureKind}`,
+        `type.example.dev/SafeFailureRetiring-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const fresh = descriptor(
+        `SafeFailureFresh-${failureKind}`,
+        `type.example.dev/SafeFailureFresh-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const rejection = new Error("active rejection before safe failure");
+      oldWorker.enqueue("IDLE", { rejected: rejection });
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [retiring.value],
+      });
+      await retiring.readiness.claim(retiring.ready).complete(() => Promise.resolve());
+      await until(() => oldWorker.starts === 2);
+      await flushMicrotasks();
+      const quiescence = Promise.withResolvers<undefined>();
+      oldWorker.awaitGates.push(quiescence.promise);
+
+      const detaching = attachments.detach(handle);
+      await until(() => oldWorker.awaitCalls === 1);
+      freshWorker.enqueue("IDLE");
+      const attaching = attachments.attach({ ownership: "caller", descriptors: [fresh.value] });
+      await flushMicrotasks();
+      expect(fresh.enumerations).toBe(0);
+      expect(factoryCalls).toBe(1);
+
+      quiescence.resolve(undefined);
+      await expect(detaching).rejects.toBe(failure);
+      const freshHandle = await attaching;
+
+      expect(freshHandle.generation).not.toBe(handle.generation);
+      expect(factoryCalls).toBe(2);
+      expect(activeRegistrationCount(attachments)).toBe(1);
+      expect(events.indexOf("retire")).toBeLessThan(events.lastIndexOf("start"));
+    },
+  );
+
+  it("keeps failed-start rollback retry separate from detach retry", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sibling = descriptor(
+      "RetryEntrySibling",
+      "type.example.dev/RetryEntrySibling",
+      new InMemoryStorageFactory(),
+    );
+    const failed = descriptor(
+      "RetryEntryFailed",
+      "type.example.dev/RetryEntryFailed",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", { rejected: new Error("failed start") });
+    const siblingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    worker.awaitOwnerFailures.push(new Error("failed-start rollback did not quiesce"));
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBeInstanceOf(AggregateError);
+    expect(worker.awaitOwnerCalls).toBe(1);
+
+    await expect(attachments.retryDetach(siblingHandle)).rejects.toThrow(
+      "Environment attachment has no failed detach to retry.",
+    );
+    expect(worker.awaitOwnerCalls).toBe(1);
+
+    await attachments.retryFailedStart();
+    expect(worker.awaitOwnerCalls).toBe(2);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+  });
+
+  it("blocks sibling detach until failed-start rollback is explicitly retried", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sibling = descriptor(
+      "RetrySeparationSibling",
+      "type.example.dev/RetrySeparationSibling",
+      new InMemoryStorageFactory(),
+    );
+    const failed = descriptor(
+      "RetrySeparationFailed",
+      "type.example.dev/RetrySeparationFailed",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", { rejected: new Error("failed start") });
+    const siblingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    worker.awaitOwnerFailures.push(new Error("failed-start rollback did not quiesce"));
+
+    await expect(
+      attachments.attach({ ownership: "caller", descriptors: [failed.value] }),
+    ).rejects.toBeInstanceOf(AggregateError);
+    expect(worker.awaitOwnerCalls).toBe(1);
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.awaitCalls).toBe(0);
+    expect(worker.retireCalls).toBe(0);
+
+    await expect(attachments.detach(siblingHandle)).rejects.toThrow(
+      "Environment generation rollback requires an explicit retry.",
+    );
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.awaitCalls).toBe(0);
+    expect(worker.retireCalls).toBe(0);
+
+    await expect(attachments.retryDetach(siblingHandle)).rejects.toThrow(
+      "Environment attachment has no failed detach to retry.",
+    );
+    expect(worker.awaitOwnerCalls).toBe(1);
+
+    await attachments.retryFailedStart();
+    expect(worker.awaitOwnerCalls).toBe(2);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.retireCalls).toBe(0);
+
+    await attachments.detach(siblingHandle);
+    expect(activeRegistrationCount(attachments)).toBe(0);
+    expect(worker.stopCalls).toBe(1);
+    expect(worker.awaitCalls).toBe(1);
+    expect(worker.retireCalls).toBe(1);
+  });
+});
+
 describe("failed attachment rollback", () => {
   it("reclaims dynamic owners admitted by a failing open registration while preserving its sibling", async () => {
     const worker = new LifecycleWorker();
@@ -1732,14 +2116,14 @@ describe("failed attachment rollback", () => {
     expect(worker.retireCalls).toBe(1);
   });
 
-  it("promotes a queued shared rollback to generation retirement before one fresh attach", async () => {
+  it("keeps a queued follower outside unsafe failed-start retirement before one fresh attach", async () => {
     const events: string[] = [];
     const oldWorker = new LifecycleWorker(events);
     const freshWorker = new LifecycleWorker(events);
     const workers = [oldWorker, freshWorker];
     let factoryCalls = 0;
     oldWorker.enqueue({ rejected: new Error("queued predecessor rejected") });
-    oldWorker.awaitOwnerFailures.push(new Error("queued predecessor did not quiesce"));
+    oldWorker.awaitFailures.push(new Error("queued predecessor did not quiesce"));
     const attachments = new EnvironmentAttachments({
       createWorker() {
         const worker = workers[factoryCalls];
@@ -1785,24 +2169,23 @@ describe("failed attachment rollback", () => {
     await expect(Promise.all([firstRetry, secondRetry])).rejects.toThrow(
       "Delivery run coordinator could not establish quiescence.",
     );
-    expect(oldWorker.events).toEqual(["start", "stopOwners", "awaitOwners", "stop", "await"]);
+    expect(oldWorker.events).toEqual(["start", "stop", "await", "await"]);
 
     await attachments.retryFailedStart();
     expect(activeRegistrationCount(attachments)).toBe(0);
     expect(oldWorker.events).toEqual([
       "start",
-      "stopOwners",
-      "awaitOwners",
       "stop",
+      "await",
       "await",
       "await",
       "report",
       "retire",
     ]);
-    expect(oldWorker.stopOwnerCalls).toBe(1);
-    expect(oldWorker.awaitOwnerCalls).toBe(1);
+    expect(oldWorker.stopOwnerCalls).toBe(0);
+    expect(oldWorker.awaitOwnerCalls).toBe(0);
     expect(oldWorker.stopCalls).toBe(1);
-    expect(oldWorker.awaitCalls).toBe(2);
+    expect(oldWorker.awaitCalls).toBe(3);
     expect(oldWorker.retireCalls).toBe(1);
     expect(oldWorker.retiredOwners).toEqual([]);
 

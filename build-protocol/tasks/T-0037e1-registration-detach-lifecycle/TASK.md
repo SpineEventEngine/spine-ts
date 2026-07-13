@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 coordinator retry-separation fix assigned
+Status: Slice 4 focused verified; Round 1 review pending
 
 ### Slice 4 Coordinator Finding
 
@@ -11,6 +11,14 @@ leaving two state machines over one generation and stale retry state. Detach
 must reject with failed-start explicit-retry behavior, `retryDetach()` must not
 adopt that rejection, and detach may begin only after `retryFailedStart()`
 finishes. One Terra Medium owner receives this regression and fix before review.
+
+Disposition: corrected under strict focused TDD. `detach()` now checks the
+retained failed-start rollback after exact handle/duplicate-operation validation
+and before creating or queueing a new detach operation. The blocked sibling
+therefore retains readiness/generation ownership, `retryDetach()` still reports
+no failed detach, `retryFailedStart()` alone resumes rollback, and ordinary
+detach succeeds afterward. The opposite unsafe-last-detach direction remains
+unchanged.
 
 ### Slice 3 Round 1 Finding
 
@@ -348,10 +356,12 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   generation. A completed prior-generation handle stays inert and cannot alter
   the fresh registration. Failed-start rollback and detach retain distinct
   retry entry points and state machines in both directions.
-- RED ran 56 focused environment tests and produced the expected five race
+- Initial Slice 4 RED ran 56 focused environment tests and produced the expected five race
   failures. GREEN passes environment 56/56, focused coordinator/parked/records/
   environment 130/130, and the canonical affected bounded-context/handoff/
-  coordinator/parked/environment regression 228/228. Generated build/tooling
+  coordinator/parked/environment regression 228/228. The coordinator finding
+  adds one observed targeted RED and raises current GREEN evidence to
+  environment 57/57, focused 131/131, and affected 229/229. Generated build/tooling
   typechecks and changed-file lint/format pass; final static/public-leak
   evidence is recorded in the work log. Full verification, commit, and push
   remain intentionally unrun. Reusable stop, survivor transfer/rebind,

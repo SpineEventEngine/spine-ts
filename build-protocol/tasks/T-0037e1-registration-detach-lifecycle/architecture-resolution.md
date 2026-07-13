@@ -212,3 +212,41 @@ failure. Retry after safe cleanup is inert, and only a later attach constructs
 one fresh generation. Scope-less generations have no cause table and retire as
 an atomic no-record case. No attach race, unsafe queued-attach policy, reusable
 stop, permanent close, server/public wiring, or public export is added.
+
+## Slice 4 Recorded Outcome
+
+The lifecycle serial gate now admits an attachment before registration claim,
+generation capture/creation, descriptor enumeration, storage/route assembly,
+or worker creation. Consequently an attachment admitted first is a real sibling
+in the current generation before a later detach classifies, while a last detach
+admitted first owns stop and retirement before any later attachment can observe
+or create generation state.
+
+Unsafe last-detach failure before replacement safety retains an environment-
+local reference to that exact handle operation. Queued and later attachment
+admission rejects with detach-retry-required behavior without invoking detach
+or mutating registration/generation state. Explicit `retryDetach()` remains the
+only continuation and clears the blocker only through the existing
+replacement-safe slot-clearing path. Post-replacement-safe reporting or inert
+worker-retirement failure does not install the blocker: detach preserves its
+stable failure while the serial successor creates one fresh generation after
+the old slot is gone. A completed old handle remains bound to its completed
+operation and is inert against the fresh generation.
+
+Failed-start rollback retains its separate environment state and
+`retryFailedStart()` entry point. Neither retry API observes, completes, masks,
+or implicitly runs the other operation. Moving claim to admission also means a
+queued follower is not counted as ownership of a predecessor's failed-start
+generation. Reusable stop, survivor rebind/transfer, permanent close,
+facilities/server wiring, public lifecycle controls/exports, and later task
+policy remain outside this resolution.
+
+While failed-start rollback remains unresolved, a valid sibling `detach()` is
+rejected with the existing failed-start explicit-retry-required error after
+handle/duplicate-operation validation but before any new detach operation is
+created or queued. This preserves the rollback's exclusive ownership of the
+generation and leaves `retryDetach()` with no operation to adopt. Only
+`retryFailedStart()` can resume that rollback; after it completes, sibling
+detach enters its ordinary classification and retirement path. This is the
+opposite-direction complement to unsafe last-detach blocking and does not merge
+the two retry state machines.

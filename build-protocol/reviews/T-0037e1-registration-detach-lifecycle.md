@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 coordinator retry-separation fix assigned
+Status: Slice 4 focused verified; Round 1 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -230,3 +230,12 @@ Derived status mirror: the canonical current state is the `Status` header in
   two-way retry-state separation. One Terra Medium owner receives the complete
   finding and regression before any Slice 4 review package is frozen. All four
   canonical review concerns remain pending.
+- `2026-07-13T03:27:47Z`: The coordinator finding is corrected under strict
+  focused TDD. Detach now rejects before operation creation while failed-start
+  rollback owns the generation; `retryDetach()` cannot adopt the block,
+  `retryFailedStart()` is the sole continuation, and ordinary sibling detach
+  succeeds only afterward. Targeted RED failed 1/1 for the original premature
+  retirement; GREEN passes environment 57/57, focused 131/131, affected
+  229/229, generated/tooling typechecks, changed-file lint/format, generated
+  cleanliness, diff hygiene, and package/root public-surface scans. Slice 4 is
+  again ready for Round 1; all four canonical concerns remain pending.

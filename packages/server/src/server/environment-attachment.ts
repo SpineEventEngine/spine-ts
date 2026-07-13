@@ -135,6 +135,7 @@ export class EnvironmentAttachments {
   readonly #nonLastDetachTokens = new Set<string>();
   #serial = Promise.resolve();
   #failedRollback: FailedStartRollback | undefined;
+  #failedLastDetach: AttachedHandle | undefined;
 
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
@@ -174,23 +175,7 @@ export class EnvironmentAttachments {
   }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
-    if (this.#failedRollback !== undefined) {
-      return Promise.reject(explicitRetryError());
-    }
-    let claim: EnvironmentRegistrationClaim;
-    try {
-      claim = this.#registrations.claim(options.ownership);
-    } catch (error) {
-      return Promise.reject(asError(error));
-    }
-    let generation = this.#generations.get(claim.generation);
-    if (generation === undefined) {
-      generation = new DeliveryGeneration(this.#createWorker(), this.#report);
-      this.#generations.set(claim.generation, generation);
-    }
-    const attaching = this.#serial.then(() =>
-      this.#startQueuedAttachment(generation, claim, options.descriptors),
-    );
+    const attaching = this.#serial.then(() => this.#startQueuedAttachment(options));
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
@@ -199,15 +184,26 @@ export class EnvironmentAttachments {
   }
 
   async #startQueuedAttachment(
-    generation: DeliveryGeneration,
-    claim: EnvironmentRegistrationClaim,
-    descriptors: readonly ContextDeliveryDescriptor[],
+    options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
-      this.#registrations.remove(claim.token);
       throw explicitRetryError();
     }
-    const attachment = await this.#attachRegistration(generation, claim, descriptors);
+    if (this.#failedLastDetach !== undefined) {
+      throw detachRetryRequiredError();
+    }
+    const claim = this.#registrations.claim(options.ownership);
+    let generation = this.#generations.get(claim.generation);
+    if (generation === undefined) {
+      try {
+        generation = new DeliveryGeneration(this.#createWorker(), this.#report);
+      } catch (error) {
+        this.#registrations.remove(claim.token);
+        throw error;
+      }
+      this.#generations.set(claim.generation, generation);
+    }
+    const attachment = await this.#attachRegistration(generation, claim, options.descriptors);
     this.#handles.set(attachment, {
       claim,
       generation,
@@ -228,6 +224,9 @@ export class EnvironmentAttachments {
     }
     if (attached.operation !== undefined) {
       return attached.operation.promise;
+    }
+    if (this.#failedRollback !== undefined) {
+      return Promise.reject(explicitRetryError());
     }
     return this.#queueDetach(attached);
   }
@@ -290,6 +289,11 @@ export class EnvironmentAttachments {
     if (attached.detachKind === "last") {
       try {
         await attached.generation.retireRegistration(attached.claim.token);
+      } catch (error) {
+        if (!attached.generation.replacementSafe) {
+          this.#failedLastDetach = attached;
+        }
+        throw error;
       } finally {
         if (attached.generation.replacementSafe) {
           this.#clearRetiredGeneration(attached);
@@ -317,6 +321,9 @@ export class EnvironmentAttachments {
       this.#generations.delete(attached.claim.generation);
       this.#registrations.clear(attached.claim.generation);
       attached.generationCleared = true;
+    }
+    if (this.#failedLastDetach === attached) {
+      this.#failedLastDetach = undefined;
     }
   }
 
@@ -1138,6 +1145,10 @@ class ReportedFailures {
 
 function explicitRetryError(): Error {
   return new Error("Environment generation rollback requires an explicit retry.");
+}
+
+function detachRetryRequiredError(): Error {
+  return new Error("Environment generation detach requires an explicit retry.");
 }
 
 function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
