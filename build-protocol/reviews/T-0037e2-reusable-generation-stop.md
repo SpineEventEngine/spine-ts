@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 1 review wave 3 assigned
+Status: Slice 1 review wave 4 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -135,5 +135,32 @@ Derived status mirror: the canonical current state is the `Status` header in
   stop retry publishes the candidate; a queued rejected detach remains
   retryable against that candidate.
 - Focused and regression evidence is 2 files / 70 tests, public-index is 10 / 10,
-  and generated-build typechecking passes. Status remains Wave 2 fixes assigned
-  pending coordinator acceptance; no later-slice behavior was added.
+  and generated-build typechecking passes. Wave 3 review was assigned after
+  coordinator verification; no later-slice behavior was added.
+
+## Slice 1 Review Wave 3
+
+- Style/maintainability: CLEAN.
+- Documentation: P2 stale newly appended status wording; corrected in the Wave
+  3 fix assignment update.
+- TypeScript/API docs: P2 duplicate ordinary detach must return its existing
+  canonical operation promise before applying immediate rejected-stop refusal.
+- Performance/reliability: CLEAN.
+- The one behavior fix is returned to the same implementer at immutable and
+  explicit `gpt-5.6-terra` / `medium`, no subagents. Immediate detach without an
+  operation and retry-detach remain blocked by rejected-stop ownership.
+- Every lane's actual profile matched explicit dispatch; no contradictory
+  metadata or child agent appeared.
+- Wave 3 promise-identity fix passed coordinator verification at
+  `2026-07-13T05:53:36Z`: 3 files / 80 tests plus generated typecheck,
+  formatting, status/inventory lint, and diff hygiene. The committed tiny delta
+  is assigned to fresh Wave 4 review by all four existing read-only lanes at
+  immutable explicit profiles, no subagents.
+
+## Slice 1 Review Wave 3 Fix Evidence
+
+- Focused promise-identity RED failed 1 of 9 tests; GREEN passed 9 of 9 after
+  restoring canonical existing-detach-operation precedence. The requested
+  70-test lifecycle regression suite, 10-test public-index suite,
+  generated-build typecheck, and focused formatting check pass. Status remains
+  Wave 3 fixes assigned pending coordinator acceptance.

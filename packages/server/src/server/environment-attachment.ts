@@ -399,11 +399,11 @@ export class EnvironmentAttachments {
         new Error("Environment attachment handle is not owned by this environment."),
       );
     }
-    if (this.#rejectedStopOwns(attached)) {
-      return Promise.reject(deliveryStopRetryRequiredError());
-    }
     if (attached.operation !== undefined) {
       return attached.operation.promise;
+    }
+    if (this.#rejectedStopOwns(attached)) {
+      return Promise.reject(deliveryStopRetryRequiredError());
     }
     if (this.#failedRollback !== undefined) {
       return Promise.reject(explicitRetryError());

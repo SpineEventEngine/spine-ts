@@ -227,6 +227,9 @@ describe("environment generation stop", () => {
     await expect(detaching).rejects.toThrow(
       "Environment delivery stop requires an explicit retry.",
     );
+    const duplicateDetach = attachments.detach(firstHandle);
+    void duplicateDetach.catch(() => undefined);
+    expect(duplicateDetach).toBe(detaching);
     await expect(attachments.retryDetach(firstHandle)).rejects.toThrow(
       "Environment delivery stop requires an explicit retry.",
     );
