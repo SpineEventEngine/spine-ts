@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 3 fix re-review assigned
+Status: Final whole-task review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -906,3 +906,16 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - The complete nested-flattening, all-four caller-owned, and owned
   non-closeable test batch is accepted for four-concern re-review. No runtime or
   public surface changed; security remains deferred to T-0041.
+
+## Slice 3 Clean Closure And Final Review
+
+- `2026-07-13T15:43:46Z`: all four Slice 3 fix re-review concerns are CLEAN.
+  Desktop metadata confirms style, TypeScript/API, and reliability at actual
+  Terra High and documentation at actual Luna Medium. All reviewers used no
+  subagents and are closed.
+- Slice 3 is accepted. The full T-0037e3 branch from baseline `2f2ae456` is
+  assigned to one final four-concern integration review covering admission
+  races, retained-owner refusal/retry, facility continuation, public wording,
+  and cross-slice consistency. Security remains deferred to T-0041.
+- Full `pnpm verify` remains reserved for the final acceptance gate after this
+  whole-task review is clean.
