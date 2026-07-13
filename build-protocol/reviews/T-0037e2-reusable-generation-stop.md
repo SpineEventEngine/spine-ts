@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3B review wave 3 assigned
+Status: Slice 3B review wave 4 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -708,3 +708,54 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only and no-subagent. Review is bounded to
   undefined-fault presence and operation-local provenance fixes.
+
+## Slice 3B Review Wave 3 Results
+
+- Style/maintainability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill check reported;
+  no subagent.
+- TypeScript/API docs: P2. Global consumed provenance cannot prove the current
+  coordinator originated an aggregate reused as its sole report/retire reason.
+  Actual `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- Performance/reliability: P2. The same stale mapping expands historical
+  children instead of retaining the reused aggregate as one current cause.
+  Actual `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- The deduplicated fix is assigned to the same implementer at explicit expected
+  `gpt-5.6-terra` / `medium`, no subagents; Wave 4 waits for coordinator-local
+  provenance evidence.
+
+## Slice 3B Review Wave 3 Fix Evidence
+
+- Focused RED ran 31 stop tests / 2 failed. Reusing a previously
+  coordinator-synthesized aggregate as the sole later report or worker-retire
+  reason produced three final causes by substituting its historical children,
+  rather than `[historicalAggregate, transitionFailure]`.
+- GREEN removes the module-global error WeakMap/helper. Each coordinator stores
+  at most one current retirement `{reason, causes}` outcome; the single-failure
+  path records the exact reason as one cause, and `DeliveryGeneration` consumes
+  it only from that coordinator when `Object.is(currentReason, reason)`.
+- Focused GREEN passed 31 / 31. The requested five-file stop/coordinator/
+  records/attachment/public-index suite passed 153 / 153 and generated-build
+  typechecking passed. Both report and worker-retirement cases prove exact
+  historical aggregate identity followed by transition failure, once-only old
+  cause emission, first-attempt non-publication, one candidate, and concurrent
+  explicit-retry coalescing. Final format/status/scope/diff evidence is in the
+  work log. No Slice 4, full verify, commit, push, public/generated change, or
+  subagent occurred; coordinator review is requested.
+- Fresh post-format verification at `2026-07-13T09:23:22Z` again passed 5 files
+  / 153 tests, generated-build typechecking, focused Prettier, synchronized
+  review-request status, exact six-file inventory, empty public/generated
+  inventory, coordinator-local outcome structure scan, and
+  `git diff --check`.
+
+## Slice 3B Review Wave 4 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T09:24:43Z`: 5 files / 153 tests, generated-build typecheck,
+  focused Prettier, exact status/scope, and diff hygiene.
+- Existing explicit profiles remain style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no-subagent, and bounded to the
+  coordinator-local current retirement result.

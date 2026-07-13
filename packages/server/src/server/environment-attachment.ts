@@ -4,7 +4,6 @@ import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/
 import type { DeliveryEndpoint, DeliveryReady } from "../context/local-inbox-handoff.js";
 import {
   DeliveryRunCoordinator,
-  deliveryRunRetirementCauses,
   type DeliveryRunOwner,
   type DeliveryRunScope,
   type DeliveryRunSettlement,
@@ -1345,18 +1344,19 @@ class DeliveryGeneration {
       this.#retiredWithoutCoordinator = true;
       return Object.freeze({ status: "succeeded" });
     }
+    const coordinator = this.#coordinator;
     try {
-      if (this.#coordinator === undefined) {
+      if (coordinator === undefined) {
         await this.#consumeRegistration(token, true);
         this.#retiredWithoutCoordinator = true;
       } else {
-        await this.#coordinator.retire(() => this.#consumeRegistration(token, true));
+        await coordinator.retire(() => this.#consumeRegistration(token, true));
       }
     } catch (reason) {
       return Object.freeze({
         status: "failed",
         reason,
-        causes: deliveryRunRetirementCauses(reason) ?? Object.freeze([reason]),
+        causes: coordinator?.takeRetirementFailureCauses(reason) ?? Object.freeze([reason]),
       });
     }
     this.#registrations.clear();

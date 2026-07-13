@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3B review wave 3 assigned
+Status: Slice 3B review wave 4 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -364,3 +364,13 @@ transfer aggregation uses a private current-catch outcome; previously returned
 aggregate objects are therefore exact later phase reasons. Focused reuse and
 same-candidate retry evidence is recorded in the canonical logs. Coordinator
 review is requested without Slice 4 or public/generated expansion.
+
+## Slice 3B Review Wave 3 Fix Handback
+
+Retirement cause provenance is now owned by the originating
+`DeliveryRunCoordinator` as one current instance-local outcome. Single failures
+retain `[exactReason]`, including a historical coordinator aggregate reused as
+the sole report or worker-retirement reason. The consuming generation can take
+those causes only by presenting the exact current rejection reason. Focused
+report/retirement reuse and same-candidate retry evidence is recorded in the
+canonical logs; coordinator review is requested.

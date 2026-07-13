@@ -1297,6 +1297,102 @@ describe("environment generation stop", () => {
     await expectRetainedTransitionFailure(historical, "ReusedCoordinatorAggregate");
   });
 
+  it.each(["report", "retire"] as const)(
+    "keeps a historical coordinator aggregate exact as the sole later %s cause",
+    async (failureKind) => {
+      const historicalReport = new Error(`historical ${failureKind} origin report`);
+      const historicalRetire = new Error(`historical ${failureKind} origin retirement`);
+      const originWorker = new ControlledWorker([], `historical-${failureKind}-origin`);
+      originWorker.retireFailures.push(historicalRetire);
+      const originScope: DeliveryRunScope = Object.freeze({
+        owner: Object.freeze({ key: `historical-${failureKind}-origin-owner` }),
+        ready: Object.freeze({
+          label: "UPDATE_SUBSCRIBER",
+          targetTypeUrl: `type.example.dev/Historical${failureKind}Origin`,
+          shard: ShardIndex.single(),
+        }),
+      });
+      const origin = new DeliveryRunCoordinator({ scopes: [originScope], worker: originWorker });
+      const historical = await origin
+        .retire(() => Promise.reject(historicalReport))
+        .catch((reason: unknown) => reason);
+      expect(historical).toBeInstanceOf(AggregateError);
+
+      const oldWorker = new ControlledWorker([], `reused-${failureKind}-old`);
+      const candidateWorker = new ControlledWorker([], `reused-${failureKind}-candidate`);
+      if (failureKind === "retire") {
+        oldWorker.retireFailures.push(historical);
+      }
+      const workers = [oldWorker, candidateWorker];
+      const transitionFailure = new Error(`reused ${failureKind} transition failure`);
+      const parkedFailure = new Error(`reused ${failureKind} retained readiness`);
+      let factoryCalls = 0;
+      let reportCalls = 0;
+      let transferAttempts = 0;
+      const attachments = new EnvironmentAttachments({
+        createWorker() {
+          const worker = workers[factoryCalls];
+          factoryCalls += 1;
+          if (worker === undefined) throw new Error("Unexpected generation worker.");
+          return worker;
+        },
+        report() {
+          reportCalls += 1;
+          return failureKind === "report" ? Promise.reject(historical) : Promise.resolve();
+        },
+        transitionFaults: {
+          onScopeTransfer() {
+            transferAttempts += 1;
+            if (transferAttempts === 1) throw transitionFailure;
+          },
+        },
+      });
+      const target = descriptor(
+        `Reused${failureKind}`,
+        `type.example.dev/Reused${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [target.value],
+      });
+      const oldGeneration = handle.generation;
+      if (failureKind === "report") {
+        oldWorker.startFailures.push(parkedFailure);
+        target.readiness.claim(target.ready);
+        await until(() => oldWorker.starts === 2);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      const propagated = await attachments.stopDelivery().catch((reason: unknown) => reason);
+
+      expect(propagated).toBeInstanceOf(AggregateError);
+      const orderedCauses = (propagated as AggregateError).errors;
+      expect(orderedCauses).toHaveLength(2);
+      expect(orderedCauses[0]).toBe(historical);
+      expect(orderedCauses[1]).toBe(transitionFailure);
+      expect(handle.generation).toBe(oldGeneration);
+      expect(factoryCalls).toBe(2);
+      expect(transferAttempts).toBe(1);
+      expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+      expect(reportCalls).toBe(failureKind === "report" ? 1 : 0);
+      await expect(attachments.stopDelivery()).rejects.toThrow(
+        "Environment delivery stop requires an explicit retry.",
+      );
+
+      const retry = attachments.retryDeliveryStop();
+      expect(attachments.retryDeliveryStop()).toBe(retry);
+      await retry;
+      expect(handle.generation).not.toBe(oldGeneration);
+      expect(factoryCalls).toBe(2);
+      expect(transferAttempts).toBe(2);
+      expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+      expect(reportCalls).toBe(failureKind === "report" ? 1 : 0);
+      await attachments.detach(handle);
+    },
+  );
+
   it("preserves a previously attachment-synthesized aggregate as one later phase cause", async () => {
     const oldWorker = new ControlledWorker([], "historical-attachment-old");
     const candidateWorker = new ControlledWorker([], "historical-attachment-candidate");

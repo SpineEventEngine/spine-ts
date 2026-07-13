@@ -9,18 +9,6 @@ import {
 } from "./delivery-worker.js";
 import { ShardIndex } from "./shard-index.js";
 
-const synthesizedRetirementFailures = new WeakMap<AggregateError, readonly unknown[]>();
-
-/** @internal Ordered causes owned by this coordinator's retirement aggregation. */
-export function deliveryRunRetirementCauses(error: unknown): readonly unknown[] | undefined {
-  if (!(error instanceof AggregateError)) {
-    return undefined;
-  }
-  const causes = synthesizedRetirementFailures.get(error);
-  synthesizedRetirementFailures.delete(error);
-  return causes;
-}
-
 /** @internal Serializes finite worker starts for one delivery generation. */
 export class DeliveryRunCoordinator {
   readonly #worker: DeliveryRunWorker;
@@ -34,6 +22,7 @@ export class DeliveryRunCoordinator {
   #finalized = false;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
+  #retirementFailure: RetirementFailure | undefined;
   readonly #onSettlement: ((settlement: DeliveryScopeSettlement) => unknown) | undefined;
 
   constructor(options: {
@@ -170,6 +159,16 @@ export class DeliveryRunCoordinator {
       },
     );
     return retirement;
+  }
+
+  /** @internal Consume causes only from this coordinator's exact current retirement failure. */
+  takeRetirementFailureCauses(reason: unknown): readonly unknown[] | undefined {
+    const failure = this.#retirementFailure;
+    if (failure === undefined || !Object.is(failure.reason, reason)) {
+      return undefined;
+    }
+    this.#retirementFailure = undefined;
+    return failure.causes;
   }
 
   #admit(scopes: readonly DeliveryRunScope[]): void {
@@ -373,8 +372,17 @@ export class DeliveryRunCoordinator {
       failures.push(error);
     }
     this.#finalized = true;
-    throwFailures(failures);
+    const failure = retirementFailure(failures);
+    if (failure !== undefined) {
+      this.#retirementFailure = failure;
+      throw failure.reason;
+    }
   }
+}
+
+interface RetirementFailure {
+  readonly reason: unknown;
+  readonly causes: readonly unknown[];
 }
 
 /** @internal One generation-local runtime owner. */
@@ -630,16 +638,14 @@ function emptyProgress(): DeliveryLoopProgress {
   });
 }
 
-function throwFailures(failures: readonly unknown[]): void {
-  if (failures.length === 1) {
-    throw failures[0];
+function retirementFailure(failures: readonly unknown[]): RetirementFailure | undefined {
+  if (failures.length === 0) {
+    return undefined;
   }
-  if (failures.length > 1) {
-    const causes = Object.freeze([...failures]);
-    const aggregate = new AggregateError(causes, "Delivery run retirement failed.");
-    synthesizedRetirementFailures.set(aggregate, causes);
-    throw aggregate;
-  }
+  const causes = Object.freeze([...failures]);
+  const reason =
+    causes.length === 1 ? causes[0] : new AggregateError(causes, "Delivery run retirement failed.");
+  return Object.freeze({ reason, causes });
 }
 
 function asError(value: unknown): Error {
