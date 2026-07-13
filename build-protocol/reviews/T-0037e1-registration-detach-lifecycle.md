@@ -15,3 +15,7 @@ Derived status mirror: the canonical current state is the `Status` header in
   T-0037b authoritative retirement, T-0037c parked obligations, and T-0037d
   environment ownership while excluding reusable stop, permanent close, and
   server integration.
+- The first explicit Sol High dispatch was closed/rejected before work because
+  the model pool reported temporary capacity; it produced no accepted design.
+  A replacement requirements-splitter dispatch keeps the identical role,
+  profile, and bounded read-only assignment.
