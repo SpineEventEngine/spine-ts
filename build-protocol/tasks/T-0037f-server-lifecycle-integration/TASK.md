@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 round-5 re-review assigned
+Status: Slice 4 implementation assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -867,3 +867,15 @@ gate passes.
   exact scope/status/public-leak/public-surface, and diff gates. Fresh whole-
   Slice 3 style/API/reliability re-review is assigned; docs N/A, security
   deferred.
+
+## Slice 3 Clean Closure And Slice 4 Assignment
+
+- `2026-07-13T21:24:28Z`: whole-Slice 3 style/maintainability, TypeScript/API
+  docs, and performance/reliability are CLEAN. Actual reviewers ran
+  `gpt-5.6-terra` / high, matching dispatch, used no subagents, and are closed.
+  Documentation was N/A and security remains deferred to T-0041.
+- Slice 3 is accepted at `71c7a9aa` with both typechecks, 6 files / 188 tests,
+  and all scoped gates clean. Slice 4 shared non-last running close is assigned
+  to the same existing implementer at `gpt-5.6-terra` / medium, no subagents.
+  It must preserve sibling generation/readiness/work/facilities, retry only the
+  departing handle and failed close indexes, and never retire shared state.

@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 round-5 re-review assigned
+Status: Slice 4 implementation assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -819,3 +819,13 @@ smallest coherent implementation.
   independent coordinator verification: both typechecks, 6 files / 188 tests,
   and all scoped gates. Actual Terra Medium implementer used no subagents and
   is closed. Public/architecture surfaces remain unchanged; re-review follows.
+
+## Slice 3 Acceptance And Slice 4 Boundary
+
+- `2026-07-13T21:24:28Z`: all three applicable whole-slice reviewers are CLEAN
+  at actual `gpt-5.6-terra` / high, no subagents, closed. Slice 3 exact cleanup
+  provenance is accepted at `71c7a9aa`.
+- Slice 4 now implements only shared non-last `RunningServer.close()` behavior:
+  network first, exact non-last detach/safety, departing dependencies, retry
+  checkpoints, sibling isolation, and no generation stop/retire/slot/facility
+  close. Same implementer dispatch is `gpt-5.6-terra` / medium.
