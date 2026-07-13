@@ -167,6 +167,8 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     attachment: EnvironmentAttachmentHandle,
   ): Promise<void>;
+  stopDelivery(environment: ServerEnvironment): Promise<void>;
+  retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
@@ -200,6 +202,22 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
     }
     return attachments.retryDetach(attachment);
+  },
+  stopDelivery(environment: ServerEnvironment) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Delivery stop requires a ServerEnvironment instance."));
+    }
+    return attachments.stopDelivery();
+  },
+  retryDeliveryStop(environment: ServerEnvironment) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(
+        new TypeError("Delivery stop retry requires a ServerEnvironment instance."),
+      );
+    }
+    return attachments.retryDeliveryStop();
   },
 });
 

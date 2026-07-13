@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Architecture accepted; Slice 1 assigned
+Status: Slice 1 review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -37,3 +37,21 @@ Derived status mirror: the canonical current state is the `Status` header in
   Slice 1 alone is assigned to the existing implementer at expected and explicit
   `gpt-5.6-terra` / `medium`, with no subagents. Reviewers are not dispatched
   until focused Slice 1 behavior and mechanical checks pass.
+- After architecture commit `b0a09e3f`, Slice 1 implementation began. The implementer
+  recorded the canonical skill-applicability check in the canonical work log:
+  selected and read `test-driven-development`, `implement`,
+  `javascript-testing-patterns`, `typescript-advanced-types`,
+  `nodejs-backend-patterns`, `codebase-design`, and
+  `verification-before-completion`; task scope and the no-commit/no-subagent
+  instruction override conflicting advisory skill steps. No review has run.
+- Coordinator verification and the lightweight pre-review lint passed at
+  `2026-07-13T05:09:52Z`; the committed Slice 1 package is ready for review.
+  Wave 1 assigns the existing style/maintainability reviewer at explicit
+  `gpt-5.6-terra` / `high`, documentation reviewer at explicit
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs reviewer at explicit
+  `gpt-5.6-terra` / `high`, and performance/reliability reviewer at explicit
+  `gpt-5.6-terra` / `high`. Every lane is read-only with no subagents.
+- Implementer profile acceptance uses the execution surface's immutable runtime
+  role registry (`gpt-5.6-terra` / `medium`) plus the matching explicit spawn;
+  the child reported no contradictory runtime value. No inherited parent
+  default or unconfigured generic role was used.

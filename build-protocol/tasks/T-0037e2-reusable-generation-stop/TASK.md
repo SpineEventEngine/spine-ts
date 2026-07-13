@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Architecture accepted; Slice 1 assigned
+Status: Slice 1 review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -155,3 +155,12 @@ checkpoints, and explicit retry with no public token or export. Coordinator
 acceptance at `2026-07-13T04:49:19Z` authorized only Slice 1, the private stop
 foundation and complete happy path. The existing implementer is assigned at
 explicit `gpt-5.6-terra` / `medium` with no subagents.
+
+## Slice 1 Implementation Record
+
+The existing implementer began after architecture commit `b0a09e3f`, assigned
+explicit `gpt-5.6-terra` / `medium`, no subagents. Its canonical skill-
+applicability check and selected skill details are recorded in the canonical
+T-0037e2 work log; the review log mirrors this status without replacing
+accepted history. Coordinator verification and pre-review lint passed, so the
+four canonical reviewers are assigned against the committed Slice 1 package.
