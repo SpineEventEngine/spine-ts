@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 6 review assigned
+Status: Slice 6 final re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1064,3 +1064,38 @@ smallest coherent implementation.
   dimensions above 90%, 205 expected server exports, and every repository gate.
   Actual Terra Medium implementer used no subagents and is closed. Public
   signatures/exports/runtime remain unchanged; four final review lanes follow.
+
+## Slice 6 Final Review Correction
+
+- `2026-07-13T23:28:49Z`: arbitrary close failures require failure presence
+  independent of flattened leaf count across the shared retryable close group,
+  not only detach reporting. Preserve empty aggregate identity when traversal
+  contributes no leaves and retain the failed hook for retry. Complete startup
+  network-gate and original-first aggregation docs. This is a narrow accepted-
+  contract correction, not a new public surface or lifecycle redesign.
+
+## Slice 6 Final Review-Fix Handback
+
+- `2026-07-13T23:39:27Z`: `RetryableCloseGroup` now treats recursive aggregate
+  traversal and failure presence as separate concerns. A non-empty aggregate
+  still contributes its flat ordered leaves; an empty or nested-empty aggregate
+  contributes the original top-level failure when traversal added no leaf.
+  Therefore the failed close index remains pending while later eligible close
+  hooks run, and a repeated close retries only that index before becoming inert.
+- Direct running-server coverage proves both empty shapes reject first close,
+  allow a later resource hook once, retry only the failed explicit resource,
+  then make subsequent close inert. Startup documentation now exposes the
+  network hard gate and original-first cleanup aggregation without naming
+  private lifecycle mechanisms. Full verify passes 68 files / 1,597 tests in
+  both native and coverage phases; no lifecycle architecture, public surface,
+  service fixture, or generated source changed. Coordinator re-review remains.
+- Final exact audit passes eight-path formatting/scope, 4/4 synchronized status,
+  public-leak/export/service-fixture checks, generated-clean verification, and
+  diff integrity.
+
+## Slice 6 Final Fix Coordinator Acceptance
+
+- `2026-07-13T23:46:55Z`: shared close failure presence, explicit-resource
+  retry evidence, and completed startup docs pass independent full verify with
+  1,597 native and coverage tests and all project gates. Actual Terra Medium
+  implementer used no subagents and is closed. Final four-lane re-review follows.

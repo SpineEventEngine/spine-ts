@@ -41,6 +41,7 @@ export class RetryableCloseGroup {
 }
 
 export function collectCloseError(error: unknown, errors: unknown[]): void {
+  const previousCount = errors.length;
   const ancestors = new Set<AggregateError>();
   const work: AggregateTraversalFrame[] = [{ type: "visit", error }];
 
@@ -71,6 +72,10 @@ export function collectCloseError(error: unknown, errors: unknown[]): void {
     for (let index = causes.length - 1; index >= 0; index -= 1) {
       work.push({ type: "visit", error: causes[index] });
     }
+  }
+
+  if (errors.length === previousCount) {
+    errors.push(error);
   }
 }
 

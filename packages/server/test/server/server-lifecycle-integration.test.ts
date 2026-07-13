@@ -702,6 +702,64 @@ describe("Server lifecycle integration", () => {
     },
   );
 
+  it.each([
+    {
+      kind: "empty",
+      createFailure: () => new AggregateError([], "empty explicit-resource close"),
+    },
+    {
+      kind: "nested-empty",
+      createFailure: () =>
+        new AggregateError(
+          [new AggregateError([], "nested empty explicit-resource close")],
+          "nested-empty explicit-resource close",
+        ),
+    },
+  ])(
+    "retries an explicit resource after $kind aggregate failure without repeating later hooks",
+    async ({ createFailure }) => {
+      const fixture = await lifecycleFixture();
+      fixture.worker.release();
+      const resourceFailure = createFailure();
+      let retryingAttempts = 0;
+      const retryingResource = vi.fn(() => {
+        retryingAttempts += 1;
+        if (retryingAttempts === 1) {
+          throw resourceFailure;
+        }
+        if (retryingAttempts > 2) {
+          throw new Error("Explicit resource close repeated after success.");
+        }
+      });
+      const laterResource = vi.fn();
+      const running = await Server.atPort(0, { environment: fixture.environment })
+        .add(fixture.context)
+        .addResource({ close: retryingResource })
+        .addResource({ close: laterResource })
+        .start();
+
+      try {
+        const firstFailure = await running.close().catch((error: unknown) => error);
+
+        expect(firstFailure).toBeInstanceOf(AggregateError);
+        expect((firstFailure as AggregateError).errors).toEqual([resourceFailure]);
+        expect(retryingResource).toHaveBeenCalledOnce();
+        expect(laterResource).toHaveBeenCalledOnce();
+
+        await running.close();
+        await running.close();
+
+        expect(retryingResource).toHaveBeenCalledTimes(2);
+        expect(laterResource).toHaveBeenCalledOnce();
+      } finally {
+        await running.close().catch(() => undefined);
+        await fixture.context.close().catch(() => undefined);
+        await fixture.environment.close().catch(() => undefined);
+        fixture.dispose();
+      }
+    },
+  );
+
   it("closes one shared running server without retiring its sibling generation", async () => {
     const events: string[] = [];
     const worker = new HeldStartupWorker(events);

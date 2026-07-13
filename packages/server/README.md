@@ -908,7 +908,11 @@ failure opens no listener and closes contexts already assembled by that
 attempt. If environment startup or listener open fails, cleanup closes acquired
 network resources first, waits until active work can no longer use the server's
 dependencies, closes contexts and explicit resources, then closes facilities
-when the environment is server-owned.
+when the environment is server-owned. If network cleanup fails, it is a hard
+gate: a cleanup-only `start()` retry must complete it before contexts, explicit
+resources, or environment facilities close; all remain open until then. An
+initial rejection combines the original startup or listener failure first with
+reached cleanup failures in stable phase order.
 
 If failed-start cleanup cannot yet complete safely, a later `start()` on the
 same `Server` is cleanup-only: it does not rebuild contexts or open a listener.

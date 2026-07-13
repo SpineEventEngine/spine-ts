@@ -86,7 +86,12 @@ export class Server {
    * by that attempt. If environment startup or listener open fails, the server
    * first closes acquired network resources, waits until active work can no
    * longer use its dependencies, then closes contexts and explicit resources,
-   * followed by facilities of a server-owned environment.
+   * followed by facilities of a server-owned environment. If network cleanup
+   * fails, it is a hard gate: a cleanup-only `start()` retry must complete it
+   * before contexts, explicit resources, or environment facilities close; all
+   * remain open until then. An initial rejection combines the original startup
+   * or listener failure first with reached cleanup failures in stable phase
+   * order.
    *
    * If that cleanup cannot yet complete safely, a later call on this same
    * instance is cleanup-only: it does not assemble contexts or open a listener.

@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 review assigned
+Status: Slice 6 final re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -894,3 +894,48 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Assign documentation reviewer at `gpt-5.6-luna` / medium and style,
   TypeScript/API docs, performance/reliability at `gpt-5.6-terra` / high, all
   no subagents, against the final Slice 6 package. Security deferred to T-0041.
+
+## Slice 6 Final Review Result
+
+- `2026-07-13T23:28:49Z`: style/maintainability CLEAN; documentation MEDIUM x2;
+  TypeScript/API docs HIGH; performance/reliability HIGH corroborating API.
+  Actual docs `gpt-5.6-luna` / medium; specialists `gpt-5.6-terra` / high;
+  matching dispatch, no subagents, all closed.
+- Fix shared close failure presence for empty aggregates with explicit-resource
+  retry coverage. Add startup network-gate and initial original-plus-cleanup
+  stable-order wording to README/TSDoc. Service fixture changes are otherwise
+  accepted. Security deferred to T-0041.
+
+## Slice 6 Final Review-Fix Handback
+
+- `2026-07-13T23:39:27Z`: review the generic close-error correction and two
+  explicit-resource running-close cases. Strict RED showed both empty and
+  nested-empty aggregates incorrectly resolved first close. Minimal GREEN
+  preserves the top-level aggregate only when recursive traversal contributed
+  no leaf, retaining the failed index while preserving flat non-empty ordering
+  and existing cycle/arbitrary-value behavior. Focused GREEN is 2/2, lifecycle
+  is 38/38, and server/lifecycle/index is 69/69.
+- Review README and `Server.start()` TSDoc for the two assigned public-observable
+  additions: network cleanup is a hard gate before dependency/facility cleanup,
+  and initial startup/listener rejection reports the original failure first
+  followed by reached cleanup failures in stable phase order. No private
+  lifecycle vocabulary, export, signature, service-fixture, or generated source
+  change was introduced.
+- The unchanged service suite passes 98/98. Full verify passes native and
+  coverage at 68 files / 1,597 tests with 95.3/90.13/98.1/95.34 percent
+  coverage; docs report all 205 expected server exports. Both typechecks and
+  scoped static/generated gates pass. Final exact handback audits follow;
+  security remains deferred to T-0041 and fresh coordinator re-review is
+  required. This is not self-acceptance.
+- Final exact audit passes the 6/6 observable-doc scan, eight-path formatting
+  and scope, 4/4 status synchronization, public-leak/export/service-fixture and
+  generated-clean checks, and diff integrity.
+
+## Slice 6 Final Re-review Assignment
+
+- `2026-07-13T23:46:55Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent full
+  verify passes all phases and two 1,597-test runs.
+- Resume documentation at `gpt-5.6-luna` / medium and style, API, reliability
+  at `gpt-5.6-terra` / high, no subagents, against fresh final fix package.
+  Security deferred to T-0041.

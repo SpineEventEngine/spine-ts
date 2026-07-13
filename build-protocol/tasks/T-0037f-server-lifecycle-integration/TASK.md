@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 review assigned
+Status: Slice 6 final re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1181,3 +1181,55 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
 - Final Slice 6 review is assigned: documentation at `gpt-5.6-luna` / medium;
   style, TypeScript/API docs, and performance/reliability at
   `gpt-5.6-terra` / high; no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Final Review Findings And Fix Assignment
+
+- `2026-07-13T23:28:49Z`: style CLEAN; documentation reports two MEDIUM; API
+  and reliability corroborate one HIGH. Documentation actual
+  `gpt-5.6-luna` / medium; others actual `gpt-5.6-terra` / high; matching
+  dispatch, no subagents, all closed.
+- High: `RetryableCloseGroup` flattens `AggregateError([])` to zero causes,
+  resolves dependency close, and prevents retry, contradicting the accepted
+  arbitrary-failure docs. Preserve no-leaf aggregates in generic close
+  collection and prove explicit-resource failure plus failed-index retry.
+- Medium docs: state that startup cleanup network failure gates all later
+  dependency/facility cleanup until cleanup-only `start()` retry; state that
+  initial startup/listener rejection combines original plus reached cleanup
+  failures in stable phase order. Same Terra Medium implementer owns this batch.
+
+## Slice 6 Final Review-Fix Handback
+
+- `2026-07-13T23:39:27Z`: strict RED used the new explicit-resource running-
+  close cases for empty and nested-empty aggregates. Both cases observed a
+  resolved first close (`undefined`) instead of an `AggregateError`, proving
+  the failed resource was not retained for retry. The minimal generic fix
+  preserves the original aggregate only when recursive traversal contributes
+  no leaf cause; non-empty flattening, cycle handling, stable order, arbitrary
+  values, and failed-index retry behavior remain unchanged. Focused GREEN is
+  2/2; full lifecycle GREEN is 38/38.
+- Public README and `Server.start()` TSDoc now state the startup network-cleanup
+  hard gate and initial original-first, stable phase-order aggregation. The
+  cleanup-only retry wording continues to exclude already reported/original
+  causes. No export, signature, generated source, or service fixture changed.
+- Focused server/lifecycle/index passes 3 files / 69 tests (the prior 67 plus
+  the two new aggregate cases); the unchanged service suite passes 98/98.
+  Generated docs include all 205 expected server exports. Both typechecks,
+  scoped ESLint, cleanup, Proto lint, and generated-clean gates pass. Full
+  verify passes native and coverage runs at 68 files / 1,597 tests with
+  95.3/90.13/98.1/95.34 statement/branch/function/line coverage. Final exact
+  format/scope/status/export/leak/diff audits follow before coordinator review;
+  this is implementation handback, not self-acceptance.
+- `2026-07-13T23:39:27Z`: final exact audit passes eight-path Prettier and
+  scope, 4/4 synchronized status, zero public internal-name leak, unchanged
+  package/root exports and service fixture, no generated/untracked output, and
+  clean `git diff --check`.
+
+## Slice 6 Final Fix Coordinator Gate
+
+- `2026-07-13T23:46:55Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify exits
+  0: native and coverage each pass 68 files / 1,597 tests; coverage is
+  95.3/90.13/98.1/95.34 percent; all generation, type, lint, cleanup, format,
+  docs/API, Proto, and generated-clean gates pass.
+- Fresh final re-review: documentation Luna Medium; style/API/reliability Terra
+  High; no subagents. Security remains deferred to T-0041.
