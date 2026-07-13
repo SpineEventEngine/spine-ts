@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 4 implementation assigned
+Status: Slice 4 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -638,3 +638,37 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   tests plus both typechecks and all scoped gates. Documentation N/A; security
   deferred. Slice 4 implementation is assigned at Terra Medium before a fresh
   applicable review wave.
+
+## Slice 4 Implementation Handback
+
+- `2026-07-13T21:33:11Z`: existing implementer, actual explicit
+  `gpt-5.6-terra` / medium, no subagents, hands back shared non-last running
+  close only. Production is limited to `server.ts`; no environment access,
+  fixture, public surface, last/owned close, or documentation changed.
+- Review target: verify network-success checkpointing; exact ordinary versus
+  retry detach choice; endpoint-safe continuation while retaining unfinished
+  attachment cleanup; unsafe dependency retention; detach-first flat cause
+  order; failed-index-only retry; sibling/generation/facility isolation; and
+  concurrent/repeated close behavior. Existing delivery-record tests remain the
+  authority for newly orphaned record selection.
+- Strict behavioral RED is 0/1 unsafe retry and 0/1 safe continuation. Minimal
+  GREEN is 1/1 and 1/1, post-refactor focused 2/2, integration 29/29, and the
+  architecture five-file gate 176/176. Both typechecks and scoped lint/cleanup
+  pass before final formatting/audits.
+- This status requests fresh applicable coordinator review. It is not
+  self-acceptance; no commit, push, merge, protected-file access, subagent, or
+  Slice 5/6 expansion occurred.
+- `2026-07-13T21:35:09Z`: final handback verification passes both typechecks,
+  5 files / 176 tests, scoped lint/cleanup, exact formatting, six-path-in-ten
+  scope, 4/4 status, zero-match internal leak, unchanged public surface, and
+  diff integrity. Fresh applicable review remains pending.
+
+## Slice 4 Review Assignment
+
+- `2026-07-13T21:38:45Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  5 files / 176 tests, and all scoped gates pass independently.
+- Slice 4 style, TypeScript/API docs, and performance/reliability reviewers run
+  at `gpt-5.6-terra` / high with no subagents against `0a5814a5..HEAD` after the
+  implementation commit. Documentation N/A; security deferred; Slice 5+
+  excluded.

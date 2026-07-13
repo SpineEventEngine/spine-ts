@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 4 implementation assigned
+Status: Slice 4 review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -829,3 +829,38 @@ smallest coherent implementation.
   network first, exact non-last detach/safety, departing dependencies, retry
   checkpoints, sibling isolation, and no generation stop/retire/slot/facility
   close. Same implementer dispatch is `gpt-5.6-terra` / medium.
+
+## Slice 4 Implementation Handback
+
+- `2026-07-13T21:33:11Z`: the accepted Slice 4 shape required no new
+  environment observation. Running close now retains independent network,
+  exact attachment, and `RetryableCloseGroup` checkpoints. It calls
+  `retryDetach` only for this handle's rejected operation and otherwise calls
+  ordinary detach; endpoint safety alone decides whether departing dependencies
+  may close after a detach rejection.
+- Unsafe selected-owner quiescence leaves contexts/resources open and retries
+  only the existing detach after the successful network phase. Safe
+  post-barrier owner-retirement failure closes all eligible dependencies,
+  aggregates detach-first causes with close failures, and retries only retained
+  detach cleanup plus failed close indexes. Network failure remains a hard
+  pre-detach gate.
+- The new shared-generation integration evidence also proves sibling
+  connectability/readiness, open caller facilities and sibling storages,
+  same-generation join, close coalescing/idempotency, and exact-once hooks. The
+  existing delivery-record gate continues to prove newly orphaned selection
+  policy. No generation stop, retirement, slot clear, last-detach policy, owned
+  active-work policy, public surface, or docs were added.
+- RED is 0/1 unsafe retry and 0/1 safe continuation; GREEN is 1/1 and 1/1,
+  integration 29/29, and the architecture gate 5 files / 176 tests. Handoff is
+  pending fresh coordinator review, not self-acceptance.
+- `2026-07-13T21:35:09Z`: final formatted-tree typecheck/native/lint/cleanup/
+  Prettier and exact scope/status/public-leak/public-surface/diff gates pass.
+  Six changed paths remain inside the ten-path Slice 4 boundary.
+
+## Slice 4 Coordinator Acceptance
+
+- `2026-07-13T21:38:45Z`: independent coordinator verification passes both
+  typechecks, 5 files / 176 tests, and all scoped static/audit gates. Actual
+  Terra Medium implementer used no subagents and is closed. The accepted
+  architecture boundary remains non-last shared running close only; fresh
+  applicable review follows.

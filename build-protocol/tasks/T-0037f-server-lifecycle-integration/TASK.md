@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 4 implementation assigned
+Status: Slice 4 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -879,3 +879,42 @@ gate passes.
   to the same existing implementer at `gpt-5.6-terra` / medium, no subagents.
   It must preserve sibling generation/readiness/work/facilities, retry only the
   departing handle and failed close indexes, and never retire shared state.
+
+## Slice 4 Implementation Handback
+
+- `2026-07-13T21:33:11Z`: `RunningHttp2Server.close()` now checkpoints one
+  successful network close, chooses ordinary detach versus exact rejected
+  `retryDetach`, and consults exact-handle endpoint safety before dependency
+  teardown. Unsafe quiescence retains the exact attachment and every departing
+  dependency; safe post-barrier failure permits the existing retryable close
+  group while retaining unfinished detach cleanup.
+- Shared non-last evidence proves A-only network/session, owner, context, and
+  resource shutdown; B remains connectable with open dependencies/facilities,
+  and a third server joins the same generation. Concurrent/repeated close is
+  coalesced/inert, successful hooks and close indexes do not repeat, and a
+  network-close failure gates detach and all dependencies until network retry.
+- Strict RED: unsafe retry failed 0/1 by timing out before a second quiescence
+  attempt; safe post-barrier cleanup failed 0/1 because the retirement cause
+  surfaced alone and dependencies were skipped. Minimal GREEN passes both 1/1,
+  the focused integration file 29/29, and the architecture five-file gate
+  176/176. Both typechecks and scoped lint/cleanup pass; final formatted-tree
+  audits are recorded in the synchronized handback records.
+- Production changes remain in `server.ts`; no environment lifecycle access,
+  fixture, public API, last/owned active-work behavior, or documentation was
+  changed. This is implementation handback for coordinator review, not
+  acceptance, and no commit/push/merge was performed.
+- `2026-07-13T21:35:09Z`: final formatted-tree gate passes both typechecks,
+  5 files / 176 native tests, scoped ESLint, cleanup enforcement, exact
+  ten-path Prettier, six-path-in-ten scope, 4/4 synchronized status,
+  zero-match internal-name leak scan, unchanged public surface, and clean diff
+  check.
+
+## Slice 4 Coordinator Gate And Review Assignment
+
+- `2026-07-13T21:38:45Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Coordinator reruns
+  pass both typechecks, 5 files / 176 native tests, scoped lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff gates.
+- Fresh Slice 4 style/maintainability, TypeScript/API docs, and performance/
+  reliability review is assigned at `gpt-5.6-terra` / high, no subagents.
+  Documentation N/A; security deferred; Slice 5+ excluded.

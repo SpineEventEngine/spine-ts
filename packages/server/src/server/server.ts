@@ -374,6 +374,7 @@ class RunningHttp2Server implements RunningServer {
   readonly baseUrl: string;
   #closed: Promise<void> | undefined;
   #networkClosed = false;
+  #attachmentDetached = false;
   readonly #closeGroup: RetryableCloseGroup;
 
   constructor(options: RunningHttp2ServerOptions) {
@@ -404,8 +405,45 @@ class RunningHttp2Server implements RunningServer {
       await closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
-    await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
-    await this.#closeGroup.close();
+    const detachErrors: unknown[] = [];
+    if (!this.#attachmentDetached) {
+      try {
+        if (serverEnvironmentAccess.detachRetryPending(this.#environment, this.#attachment)) {
+          await serverEnvironmentAccess.retryDetach(this.#environment, this.#attachment);
+        } else {
+          await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
+        }
+        this.#attachmentDetached = true;
+      } catch (error) {
+        collectCloseError(error, detachErrors);
+      }
+      if (detachErrors.length > 0) {
+        let endpointSafe = false;
+        try {
+          endpointSafe = serverEnvironmentAccess.endpointSafe(this.#environment, this.#attachment);
+        } catch (error) {
+          collectCloseError(error, detachErrors);
+        }
+        if (!endpointSafe) {
+          throwRunningDetachErrors(detachErrors);
+        }
+      }
+    }
+    try {
+      await this.#closeGroup.close();
+    } catch (error) {
+      if (detachErrors.length === 0) {
+        throw error;
+      }
+      collectCloseError(error, detachErrors);
+      throw new AggregateError(
+        detachErrors,
+        "Server close failed while detaching delivery and closing owned contexts/resources.",
+      );
+    }
+    if (detachErrors.length > 0) {
+      throwRunningDetachErrors(detachErrors);
+    }
   }
 }
 
@@ -533,6 +571,13 @@ function throwListenerStartError(startError: unknown, cleanupErrors: readonly un
     errors,
     "Server start failed while opening listener and cleanup also failed.",
   );
+}
+
+function throwRunningDetachErrors(errors: readonly unknown[]): never {
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  throw new AggregateError(errors, "Server close failed while detaching delivery.");
 }
 
 async function closeNetwork(

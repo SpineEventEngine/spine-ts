@@ -216,6 +216,278 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("closes one shared running server without retiring its sibling generation", async () => {
+    const events: string[] = [];
+    const worker = new HeldStartupWorker(events);
+    worker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: { storageFactory, ownsStorageFactory: true },
+    });
+    await fixture.context.close();
+    const departingResource = vi.fn();
+    const siblingResource = vi.fn();
+    let departing: Awaited<ReturnType<Server["start"]>> | undefined;
+    let sibling: Awaited<ReturnType<Server["start"]>> | undefined;
+    let joined: Awaited<ReturnType<Server["start"]>> | undefined;
+
+    try {
+      departing = await Server.atPort(0, { environment: fixture.environment })
+        .add(fixture.createBuilder("LifecycleSharedDeparting"))
+        .addResource({ close: departingResource })
+        .start();
+      const departingStorages = [...storageFactory.storages];
+      sibling = await Server.atPort(0, { environment: fixture.environment })
+        .add(fixture.createBuilder("LifecycleSharedSibling"))
+        .addResource({ close: siblingResource })
+        .start();
+      const siblingStorages = storageFactory.storages.filter(
+        (storage) => !departingStorages.includes(storage),
+      );
+
+      const firstClose = departing.close();
+      const concurrentClose = departing.close();
+      expect(concurrentClose).toBe(firstClose);
+      await Promise.all([firstClose, concurrentClose]);
+      await departing.close();
+
+      expect(departingResource).toHaveBeenCalledOnce();
+      expect(siblingResource).not.toHaveBeenCalled();
+      expect(
+        departingStorages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(siblingStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(worker.starts).toBe(2);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+
+      await expectConnectable(sibling);
+      joined = await Server.atPort(0, { environment: fixture.environment })
+        .add(fixture.createBuilder("LifecycleSharedJoined"))
+        .start();
+      expect(worker.starts).toBe(3);
+      await expectConnectable(sibling);
+      await joined.close();
+      joined = undefined;
+      expect(siblingResource).not.toHaveBeenCalled();
+      expect(siblingStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+    } finally {
+      await joined?.close().catch(() => undefined);
+      await departing?.close().catch(() => undefined);
+      await sibling?.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("retries unsafe shared detach without repeating successful network close", async () => {
+    const worker = new HeldStartupWorker([]);
+    worker.release();
+    const fixture = await lifecycleFixture({ workers: [worker] });
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    const storageFactory = new LifecycleTrackingStorageFactory([]);
+    const context = await fixture
+      .createBuilder("LifecycleUnsafeRunningDetach")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const resourceClose = vi.fn();
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer);
+    });
+    const departing = await Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: resourceClose })
+      .start();
+    const quiescenceFailure = new Error("shared selected owner remained active");
+    worker.failNextAwait(quiescenceFailure);
+    let releaseRetry: (() => void) | undefined;
+
+    try {
+      const firstFailure = await departing.close().catch((error: unknown) => error);
+      expect(firstFailure).toBe(quiescenceFailure);
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(0);
+      expect(resourceClose).not.toHaveBeenCalled();
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      await expectConnectable(sibling);
+
+      releaseRetry = worker.holdNextAwait();
+      const firstRetry = departing.close();
+      void firstRetry.catch(() => undefined);
+      await waitFor(() => worker.awaitCalls === 2);
+      const concurrentRetry = departing.close();
+      expect(concurrentRetry).toBe(firstRetry);
+      releaseRetry();
+      releaseRetry = undefined;
+      await Promise.all([firstRetry, concurrentRetry]);
+      await departing.close();
+
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(2);
+      expect(worker.retireCalls).toBe(1);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      await expectConnectable(sibling);
+    } finally {
+      releaseRetry?.();
+      await departing.close().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("continues shared dependency cleanup after safe detach cleanup failure", async () => {
+    const worker = new HeldStartupWorker([]);
+    worker.release();
+    const fixture = await lifecycleFixture({ workers: [worker] });
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    const storageFactory = new LifecycleTrackingStorageFactory([]);
+    const context = await fixture
+      .createBuilder("LifecycleSafeRunningDetachFailure")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const successfulResource = vi.fn();
+    const retirementFailure = new Error("shared selected owner retirement failed after barrier");
+    const resourceFailure = new Error("shared dependency close failed");
+    const retryGate = Promise.withResolvers<undefined>();
+    let retryingResourceAttempts = 0;
+    const retryingResource = vi.fn(() => {
+      retryingResourceAttempts += 1;
+      if (retryingResourceAttempts === 1) {
+        throw resourceFailure;
+      }
+      if (retryingResourceAttempts === 2) {
+        return retryGate.promise;
+      }
+      throw new Error("Shared dependency close repeated after success.");
+    });
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer);
+    });
+    const departing = await Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: successfulResource })
+      .addResource({ close: retryingResource })
+      .start();
+    worker.failNextRetire(retirementFailure);
+
+    try {
+      const firstFailure = await departing.close().catch((error: unknown) => error);
+      expect(firstFailure).toBeInstanceOf(AggregateError);
+      expect((firstFailure as AggregateError).errors).toEqual([retirementFailure, resourceFailure]);
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledOnce();
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      await expectConnectable(sibling);
+
+      const firstRetry = departing.close();
+      void firstRetry.catch(() => undefined);
+      await waitFor(() => retryingResourceAttempts === 2);
+      const concurrentRetry = departing.close();
+      expect(concurrentRetry).toBe(firstRetry);
+      retryGate.resolve(undefined);
+      await Promise.all([firstRetry, concurrentRetry]);
+      await departing.close();
+
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledTimes(2);
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      await expectConnectable(sibling);
+    } finally {
+      retryGate.resolve(undefined);
+      await departing.close().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("gates shared detach and dependencies behind successful network close", async () => {
+    const worker = new HeldStartupWorker([]);
+    worker.release();
+    const fixture = await lifecycleFixture({ workers: [worker] });
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    const storageFactory = new LifecycleTrackingStorageFactory([]);
+    const context = await fixture
+      .createBuilder("LifecycleRunningNetworkGate")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const resourceClose = vi.fn();
+    const networkFailure = new Error("shared running network close failed");
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer, [networkFailure]);
+    });
+    const departing = await Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: resourceClose })
+      .start();
+
+    try {
+      const firstFailure = await departing.close().catch((error: unknown) => error);
+      expect(firstFailure).toBe(networkFailure);
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(0);
+      expect(worker.awaitCalls).toBe(0);
+      expect(worker.retireCalls).toBe(0);
+      expect(resourceClose).not.toHaveBeenCalled();
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      await expectConnectable(sibling);
+
+      await departing.close();
+      expect(network?.calls()).toBe(2);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      await expectConnectable(sibling);
+    } finally {
+      await departing.close().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("closes server-owned dependencies after safe startup rollback errors", async () => {
     const events: string[] = [];
     const startupFailure = new Error("owned startup recovery failed");
@@ -2253,4 +2525,38 @@ function failListenerNetwork(
       },
     },
   });
+}
+
+interface NetworkCloseProbe {
+  calls(): number;
+}
+
+function trackNetworkClose(
+  server: http2.Http2Server,
+  closeFailures: readonly Error[] = [],
+): NetworkCloseProbe {
+  const failures = [...closeFailures];
+  const close = server.close.bind(server);
+  let calls = 0;
+  Object.defineProperty(server, "close", {
+    configurable: true,
+    value: (callback?: (error?: Error) => void) => {
+      calls += 1;
+      const failure = failures.shift();
+      if (failure !== undefined) {
+        setImmediate(() => callback?.(failure));
+        return server;
+      }
+      return close(callback);
+    },
+  });
+  return Object.freeze({ calls: () => calls });
+}
+
+async function expectConnectable(server: { readonly baseUrl: string }): Promise<void> {
+  const session = http2.connect(server.baseUrl);
+  session.on("error", () => undefined);
+  await once(session, "remoteSettings");
+  session.close();
+  await once(session, "close");
 }
