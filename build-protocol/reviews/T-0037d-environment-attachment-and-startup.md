@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 4 fixes focused verified; Round 5 review pending
+Status: Slice 3 Round 5 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -594,3 +594,10 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   canonical regression (192/192), generated/type/lint/cleanup, format, diff,
   and status gates; native server lifecycle passes 21/21. The fix is ready for
   a committed Round 5 package. Full verify and final security remain deferred.
+- `2026-07-12T23:59:31Z`: Round 5 package is
+  `.superpowers/sdd/review-10e182d8..73a9e61f.diff` (one commit, 52,763 bytes).
+  Pre-review docs/status/API/policy lint is clean. Expected explicit profiles
+  are style Terra High, documentation Luna Medium, TypeScript/API docs Terra
+  High, and reliability Terra High. Review is bounded to scoped owner removal,
+  cleanup ordering/failure behavior, bounded retention, sibling preservation,
+  test-only diagnostics, and current records. Security remains deferred.
