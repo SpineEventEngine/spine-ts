@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2A review wave 2 assigned
+Status: Slice 2A accepted; Slice 2B assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -248,6 +248,11 @@ preflight must precede candidate storage, direct candidate-recovery rejection
 must clear and retry its in-flight unit on the same candidate, and a newly
 discovered readiness/tenant key after capture must be proven. This split keeps
 review bounded and waives no accepted Slice 2 requirement.
+
+At `2026-07-13T06:53:10Z`, Slice 2A closed after Wave 2 reported all four
+canonical concerns clean. Slice 2B is assigned to the same implementer at
+immutable/explicit `gpt-5.6-terra` / `medium`, no subagents, and owns only the
+three recorded remaining edges. Slice 2 is not accepted until 2B closes.
 
 ## Slice 2A Review Wave 1 Fix Record
 
