@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 2B review wave 1 assigned
+Status: Slice 2B review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -356,3 +356,54 @@ Derived status mirror: the canonical current state is the `Status` header in
   TypeScript/API docs `gpt-5.6-terra` / `high`; performance/reliability
   `gpt-5.6-terra` / `high`. Each lane is read-only, owns only its canonical
   concern over Slice 2B, and may not spawn subagents.
+
+## Slice 2B Review Wave 1 Results
+
+- Code style/maintainability: CLEAN. Actual runtime
+  `gpt-5.6-terra` / `high`; canonical skill check reported; no subagent.
+- Documentation: CLEAN. Actual runtime `gpt-5.6-luna` / `medium`; canonical
+  skill check reported; no subagent.
+- TypeScript/API docs: P1. The pre-candidate descriptor snapshot omits
+  `storageFactory`, so candidate domain assembly still performs a potentially
+  fallible or changing descriptor property read after candidate construction.
+  Actual runtime `gpt-5.6-terra` / `high`; canonical skill check reported; no
+  subagent.
+- Performance/reliability: P1. Candidate route preparation marks a descriptor
+  fresh before fallible worker runtime installation; an installation failure
+  leaves the route checkpoint incomplete while explicit retry rejects the same
+  candidate descriptor as already attached. Actual runtime
+  `gpt-5.6-terra` / `high`; canonical skill check reported; no subagent.
+- Deduplicated fix batch is assigned to the same implementer at explicit
+  expected `gpt-5.6-terra` / `medium`, no subagents. Review Wave 2 waits for
+  focused RED/GREEN evidence, coordinator verification, and a fresh package.
+
+## Slice 2B Review Wave 1 Fix Evidence
+
+- Focused RED reproduced both findings: `storageFactory` accessor failure came
+  after candidate construction, and partial two-tenant worker installation left
+  retry blocked by prematurely committed descriptor freshness.
+- GREEN captures `storageFactory` in the pre-candidate descriptor snapshot and
+  delays the descriptor freshness commit through successful runtime
+  installation and stable-route rebind. Retained cached runtimes distinguish
+  installed owner keys from the failed owner, so explicit retry on the same
+  candidate neither duplicates completed work nor skips the failed install.
+- The work log records exact call/add ordering and focused evidence. At this
+  RED/GREEN evidence point, final regression/type/format/status/public/
+  inventory/diff gates remained in progress and status stayed Wave 1 fixes
+  assigned; the subsequent handback evidence below closes those gates.
+- Post-format verification passed 4 files / 96 tests and generated-build
+  typechecking. All three status mirrors now request coordinator review; final
+  formatting, exact five-path scope, public/generated exclusion, and diff
+  hygiene passed and are recorded in the work log.
+
+## Slice 2B Review Wave 2 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T07:32:45Z`: 4 files / 96 tests, generated-build typechecking,
+  focused Prettier, exact status/inventory, and diff hygiene.
+- Pre-review lint found no public/generated/docs leakage, policy duplication,
+  stale status, or active overclaim. Superseded history remains out of scope.
+- Existing explicit role profiles remain style/maintainability
+  `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+  TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; all lanes are read-only and no-subagent.

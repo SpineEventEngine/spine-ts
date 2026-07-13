@@ -1031,8 +1031,8 @@ class DeliveryGeneration {
     this.#requireFresh(descriptors);
     const registration = await assembleRegistration(
       descriptors,
-      (descriptor, tenant, context, endpoints) =>
-        this.#runtimeFromSnapshot(descriptor, tenant, context, endpoints),
+      (descriptor, tenant, context, endpoints, storageFactory) =>
+        this.#runtimeFromSnapshot(descriptor, tenant, context, endpoints, storageFactory),
     );
     const ownership = new RegistrationOwnership();
     for (const runtime of registration.runtimes) {
@@ -1070,11 +1070,11 @@ class DeliveryGeneration {
     readiness: RegistrationReadiness,
   ): Promise<readonly DeliveryRunScope[]> {
     const descriptor = snapshot.descriptor;
-    this.#requireFresh([descriptor]);
+    this.#validateFreshDescriptors([descriptor]);
     const registration = assembleRegistrationSnapshots(
       [snapshot],
-      (candidate, tenant, context, endpoints) =>
-        this.#runtimeFromSnapshot(candidate, tenant, context, endpoints),
+      (candidate, tenant, context, endpoints, storageFactory) =>
+        this.#runtimeFromSnapshot(candidate, tenant, context, endpoints, storageFactory),
     );
     let state = this.#registrations.get(claim.token);
     if (state === undefined) {
@@ -1102,6 +1102,7 @@ class DeliveryGeneration {
       (candidate, ready) => this.#prepareReady(candidate, ready, state!.ownership, claim.token),
       (scope) => this.#coordinator?.notify(scope),
     );
+    this.#descriptors.add(descriptor);
     return registration.scopes;
   }
 
@@ -1501,6 +1502,7 @@ class DeliveryGeneration {
       tenant,
       descriptor.storageContext(tenant),
       descriptor.endpoints(),
+      descriptor.storageFactory,
     );
   }
 
@@ -1509,6 +1511,7 @@ class DeliveryGeneration {
     tenant: DeliveryTenantScope,
     context: StorageContext,
     endpoints: readonly DeliveryEndpoint[],
+    storageFactory: StorageFactory,
   ): EnvironmentDeliveryRuntime {
     const existing = this.#existingRuntime(descriptor, tenant);
     if (existing !== undefined) {
@@ -1527,7 +1530,7 @@ class DeliveryGeneration {
     for (const scope of runtime.scopes) {
       this.#overlapDomains.set(
         scopeKey(scope),
-        this.#stableDomain(descriptor.storageFactory, context, scope.ready),
+        this.#stableDomain(storageFactory, context, scope.ready),
       );
     }
     const runtimes =
@@ -1594,6 +1597,14 @@ class DeliveryGeneration {
   }
 
   #requireFresh(descriptors: readonly ContextDeliveryDescriptor[]): void {
+    for (const descriptor of this.#validateFreshDescriptors(descriptors)) {
+      this.#descriptors.add(descriptor);
+    }
+  }
+
+  #validateFreshDescriptors(
+    descriptors: readonly ContextDeliveryDescriptor[],
+  ): ReadonlySet<ContextDeliveryDescriptor> {
     const unique = new Set<ContextDeliveryDescriptor>();
     for (const descriptor of descriptors) {
       if (unique.has(descriptor)) {
@@ -1604,9 +1615,7 @@ class DeliveryGeneration {
       }
       unique.add(descriptor);
     }
-    for (const descriptor of unique) {
-      this.#descriptors.add(descriptor);
-    }
+    return unique;
   }
 }
 
@@ -1753,6 +1762,7 @@ interface AssembledRegistration {
 
 interface DeliveryDescriptorSnapshot {
   readonly descriptor: ContextDeliveryDescriptor;
+  readonly storageFactory: StorageFactory;
   readonly startup: readonly DeliveryRuntimeSnapshot[];
   readonly endpoints: readonly DeliveryEndpoint[];
 }
@@ -1769,6 +1779,7 @@ async function assembleRegistration(
     tenant: DeliveryTenantScope,
     context: StorageContext,
     endpoints: readonly DeliveryEndpoint[],
+    storageFactory: StorageFactory,
   ) => EnvironmentDeliveryRuntime,
 ): Promise<AssembledRegistration> {
   const snapshots: DeliveryDescriptorSnapshot[] = [];
@@ -1781,6 +1792,7 @@ async function assembleRegistration(
 async function snapshotDescriptor(
   descriptor: ContextDeliveryDescriptor,
 ): Promise<DeliveryDescriptorSnapshot> {
+  const storageFactory = descriptor.storageFactory;
   const tenants = await descriptor.startupScopes();
   const endpoints = Object.freeze(
     descriptor.endpoints().map((endpoint) =>
@@ -1807,6 +1819,7 @@ async function snapshotDescriptor(
   });
   return Object.freeze({
     descriptor,
+    storageFactory,
     startup: Object.freeze(startup),
     endpoints,
   });
@@ -1819,15 +1832,16 @@ function assembleRegistrationSnapshots(
     tenant: DeliveryTenantScope,
     context: StorageContext,
     endpoints: readonly DeliveryEndpoint[],
+    storageFactory: StorageFactory,
   ) => EnvironmentDeliveryRuntime,
 ): AssembledRegistration {
   const scopes = new Map<string, DeliveryRunScope>();
   const runtimes: EnvironmentDeliveryRuntime[] = [];
   const assembled: AssembledRegistration["descriptors"][number][] = [];
-  for (const { descriptor, startup, endpoints } of snapshots) {
+  for (const { descriptor, storageFactory, startup, endpoints } of snapshots) {
     const descriptorScopes: DeliveryRunScope[] = [];
     for (const { tenant, context } of startup) {
-      const runtime = runtimeFor(descriptor, tenant, context, endpoints);
+      const runtime = runtimeFor(descriptor, tenant, context, endpoints, storageFactory);
       const runtimeScopes = runtime.scopes;
       if (runtimeScopes.length > 0) {
         runtimes.push(runtime);

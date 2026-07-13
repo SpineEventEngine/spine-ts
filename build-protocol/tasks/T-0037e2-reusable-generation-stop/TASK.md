@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2B review wave 1 assigned
+Status: Slice 2B review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -292,3 +292,13 @@ tenant together with its storage context before candidate construction.
 Initial candidate runtime assembly consumes only those captured values; dynamic
 readiness for a newly observed tenant retains the live descriptor path. The
 canonical work/review logs record the audit RED/GREEN and refreshed gates.
+
+## Slice 2B Review Wave 1 Fix Handback
+
+The complete Wave 1 batch now captures `storageFactory` in the pre-candidate
+descriptor snapshot and makes candidate route freshness commit only after
+retry-safe runtime installation and stable-route rebinding. Focused tests prove
+a fallible accessor cannot create a candidate and a two-tenant partial worker
+installation resumes on the exact retained candidate without duplicating the
+completed tenant or skipping the failed tenant. Final evidence is recorded in
+the canonical work/review logs; coordinator review is requested.
