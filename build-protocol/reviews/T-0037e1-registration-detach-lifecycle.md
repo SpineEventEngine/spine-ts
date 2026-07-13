@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 focused verified; Round 1 review pending
+Status: Slice 2 Round 1 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -9,6 +9,10 @@ Derived status mirror: the canonical current state is the `Status` header in
   metadata. Coordinator verification independently passes 215/215 and all
   generated/type/lint/cleanup, format, and diff gates. The non-last detach slice
   is ready for a committed Round 1 package; security/full verify remain deferred.
+- Slice 2 Round 1 package is
+  `.superpowers/sdd/review-0e13e3c1..2c5160f6.diff` (one commit, 66,470 bytes).
+  Expected profiles are style/API/reliability Terra High and documentation Luna
+  Medium. Later last-detach/race behavior and security are out of this wave.
 
 - Security review is deferred to T-0041 unless explicitly requested.
 - Canonical task concerns remain code style/maintainability, documentation
