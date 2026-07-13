@@ -18,6 +18,39 @@ describe("EnvironmentDeliveryRecords", () => {
     expect(records.records()).toEqual([]);
   });
 
+  it("rejects detaching an absent registration instead of consuming another lifecycle owner", () => {
+    const records = new EnvironmentDeliveryRecords();
+
+    expect(() => records.detach("registration-missing")).toThrow(
+      "Environment delivery registration is not configured.",
+    );
+  });
+
+  it("rejects rolling back an absent registration instead of removing retained ownership", () => {
+    const records = new EnvironmentDeliveryRecords();
+
+    expect(() => records.rollback("registration-missing")).toThrow(
+      "Environment delivery registration is not configured.",
+    );
+  });
+
+  it("retires an empty generation without manufacturing delivery obligations", () => {
+    const records = new EnvironmentDeliveryRecords();
+
+    expect(records.retire()).toEqual([]);
+    expect(records.records()).toEqual([]);
+    expect(records.configuredScopeCount).toBe(0);
+  });
+
+  it("does not roll back an empty registration without a configured delivery scope", () => {
+    const records = new EnvironmentDeliveryRecords();
+    records.register("registration-empty", []);
+
+    expect(() => {
+      records.rollback("registration-empty");
+    }).toThrow("Environment delivery records require a registered scope.");
+  });
+
   it("bounds repeated rejection evidence and consumes only the fulfilled unit", () => {
     const first = scope("one", "First", 0);
     const second = scope("one", "Second", 1);
@@ -53,6 +86,33 @@ describe("EnvironmentDeliveryRecords", () => {
     expect(records.records()).toEqual([
       expect.objectContaining({ units: [unit(selected)], cause: failure, occurrences: 1 }),
     ]);
+  });
+
+  it("retains cause-less parked work until the registration is retired", () => {
+    const selected = scope("one", "Selected", 0);
+    const records = new EnvironmentDeliveryRecords();
+    records.register("registration-one", [selected]);
+
+    records.observe(Object.freeze({ scope: selected, disposition: "PARKED" }));
+
+    expect(records.records()).toEqual([
+      expect.objectContaining({
+        owner: { kind: "registration", token: "registration-one" },
+        units: [unit(selected)],
+        hasCause: false,
+      }),
+    ]);
+    expect(records.retire()).toEqual([]);
+    expect(records.records()).toEqual([]);
+  });
+
+  it("rejects a settlement for a scope that no active registration owns", () => {
+    const records = new EnvironmentDeliveryRecords();
+    const unregistered = scope("missing", "Missing", 0);
+
+    expect(() => {
+      records.observe(idle(unregistered));
+    }).toThrow("Environment delivery settlement scope is not registered.");
   });
 
   it("deduplicates dynamic scope registration and observes the joined scope", () => {
@@ -153,6 +213,80 @@ describe("EnvironmentDeliveryRecords", () => {
 
     expect(records.detach("registration-two")).toEqual([sharedFailure]);
     expect(records.records()).toEqual([]);
+  });
+
+  it("detaches shared ownership without reporting or consuming the retained scope", () => {
+    const shared = scope("shared", "Shared", 0);
+    const records = new EnvironmentDeliveryRecords();
+    const failure = new Error("shared rejected");
+    records.register("registration-one", [shared]);
+    records.register("registration-two", [shared]);
+    records.observe(rejected(shared, failure));
+
+    expect(records.detach("registration-one")).toEqual([]);
+
+    expect(records.configuredScopes("registration-two")).toEqual([shared]);
+    expect(records.records()).toEqual([
+      expect.objectContaining({
+        owner: { kind: "registration", token: "registration-two" },
+        units: [unit(shared)],
+        cause: failure,
+      }),
+      expect.objectContaining({
+        owner: { kind: "generation" },
+        units: [unit(shared)],
+        cause: failure,
+      }),
+    ]);
+  });
+
+  it("retires a post-detach generation without recreating consumed generation obligations", () => {
+    const selected = scope("one", "Selected", 0);
+    const records = new EnvironmentDeliveryRecords();
+    records.register("registration-one", [selected]);
+    records.observe(idle(selected));
+
+    expect(records.detach("registration-one")).toEqual([]);
+    expect(records.retire()).toEqual([]);
+    expect(records.records()).toEqual([]);
+  });
+
+  it("retires configured healthy scope ownership without leaving generation records", () => {
+    const selected = scope("one", "Selected", 0);
+    const records = new EnvironmentDeliveryRecords();
+    records.register("registration-one", [selected]);
+    records.observe(idle(selected));
+
+    expect(records.retire()).toEqual([]);
+    expect(records.configuredScopeCount).toBe(0);
+    expect(records.records()).toEqual([]);
+  });
+
+  it("keeps a shared scope configured while rolling back only its failed-start owner", () => {
+    const shared = scope("shared", "Shared", 0);
+    const records = new EnvironmentDeliveryRecords();
+    const failure = new Error("shared rejected");
+    records.register("registration-one", [shared]);
+    records.register("registration-two", [shared]);
+    records.observe(rejected(shared, failure));
+
+    expect(records.rollback("registration-one")).toEqual([failure]);
+
+    expect(records.configuredScopes("registration-one")).toEqual([]);
+    expect(records.configuredScopes("registration-two")).toEqual([shared]);
+    expect(records.configuredScopeCount).toBe(1);
+    expect(records.records()).toEqual([
+      expect.objectContaining({
+        owner: { kind: "registration", token: "registration-two" },
+        units: [unit(shared)],
+        cause: failure,
+      }),
+      expect.objectContaining({
+        owner: { kind: "generation" },
+        units: [unit(shared)],
+        cause: failure,
+      }),
+    ]);
   });
 
   it("atomically retires all configured ownership and operational records in stable order", () => {

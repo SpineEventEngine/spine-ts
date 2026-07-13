@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 final verification
+Status: T-0037e2 coverage fix review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1260,3 +1260,80 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Chronology and supported-contract precision are clean. Full verification is
   the sole remaining pre-merge requirement; security remains deferred to
   T-0041.
+
+## Final Verification Coverage Finding And Assignment
+
+- Native full verification passed generation, typechecks, lint, cleanup,
+  formatting, and both 66-file / 1,523-test executions, then failed only the
+  existing 90% branch threshold at 89.69% (4,316/4,812). At least 15 more
+  branches require behavior-focused coverage; neither threshold nor production
+  behavior may change.
+- Before acceptance, one fresh implementer at explicit
+  `gpt-5.6-terra` / `medium`, no subagents, owns focused server tests and these
+  three records only. After focused lifecycle and standalone coverage evidence,
+  the test-only delta must receive style/maintainability, documentation,
+  TypeScript/API docs, and performance/reliability dispositions. Security
+  remains deferred to T-0041.
+
+## Final Verification Coverage Test Fix Start And Skill Applicability
+
+- At `2026-07-13T12:00:00Z`, the existing implementer began the assigned
+  test-only coverage repair in `.worktrees/T-0037e2-reusable-generation-stop`,
+  explicit and actual `gpt-5.6-terra` / `medium`, with no subagents. Ownership
+  is focused `packages/server/test` lifecycle suites and these three records;
+  production, thresholds, package/public/generated/example files, commits,
+  pushes, full `pnpm verify`, and `human-review-1-jul.md` remain excluded.
+- Canonical skill applicability: the session inventory was checked and the
+  complete `test-driven-development` instructions were read and selected for
+  behavior-focused test additions. Debugging is N/A because the failure is the
+  known aggregate coverage threshold; architecture, API, worktree,
+  review-dispatch, and subagent skills are N/A for this bounded test-only work.
+  Project protocol and task scope govern.
+- Coordinator runtime check: Desktop rollout
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T12-51-02-019f5b50-fd61-7943-9aba-4cec3851ed28.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at `2026-07-13T11:51:04.997Z`,
+  matching the explicit implementer dispatch.
+
+## Final Verification Coverage Test Fix Failed Native Gate And Follow-Up
+
+- Native coordinator coverage passed 66 files / 1,539 tests but exited `1` at
+  4,330/4,812 branches (89.98%), exactly one covered branch below the existing
+  threshold.
+- The implementation follow-up remains test-only with the current existing
+  implementer: add one smallest coherent case for a definitely uncovered
+  lifecycle branch, prove the focused LCOV counter moves, rerun focused gates,
+  and request fresh native aggregate coverage. Review is not yet requested;
+  production, thresholds, package/public/generated/example files, commits,
+  pushes, full `pnpm verify`, and `human-review-1-jul.md` remain excluded.
+
+## Final Verification Coverage Follow-Up Evidence
+
+- One additional coordinator case verifies that a non-Error external worker
+  start throw is normalized to a stable `Error` fault across repeated
+  admission. Focused LCOV proves the exact previously uncovered branch at
+  `delivery-run-coordinator.ts:652` moved to `BRDA:652,60,1,1`; the existing
+  Error path is `BRDA:652,60,0,15`.
+- Focused coordinator coverage passed 1 file / 46 tests and failed only the
+  expected global thresholds for a one-suite run. The full changed-test set
+  passes 3 files / 129 tests, with focused ESLint, strict `pnpm tsc -b`,
+  focused Prettier, and diff hygiene green.
+- A fresh native aggregate coverage run is requested from the coordinator.
+  Review handback remains pending that result; production, thresholds,
+  package/public/generated/example files, full `pnpm verify`, commits, pushes,
+  and `human-review-1-jul.md` remain untouched.
+
+## Final Verification Coverage Coordinator Gate And Review Assignment
+
+- Native aggregate coverage passes 66 files / 1,540 tests and all global
+  thresholds: statements 95.24%, branches 90% (4,331/4,812), functions
+  97.99%, and lines 95.28%.
+- Lightweight pre-review lint passes focused ESLint/Prettier, synchronized
+  status, exact six-file scope, public/generated/package/example no-delta
+  checks, and `git diff --check`. The review package contains test and durable
+  record changes only; production behavior and threshold configuration did not
+  change.
+- Assigned explicit profiles are style/maintainability
+  `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+  TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no subagents. Historical superseded
+  text is non-actionable unless an active task/log claim presents it as current.

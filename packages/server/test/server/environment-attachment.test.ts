@@ -340,6 +340,156 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.awaitSettled();
     await worker.retire();
   });
+
+  it("retires every selected owner before reporting multiple owner cleanup failures", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const firstFailure = new Error("first retirement failed");
+    const secondFailure = new Error("second retirement failed");
+    firstRuntimeWorker.retireFailures.push(firstFailure);
+    secondRuntimeWorker.retireFailures.push(secondFailure);
+    const runtimeWorkers: DeliveryRunWorker[] = [firstRuntimeWorker, secondRuntimeWorker];
+    let nextWorker = 0;
+    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new WorkerWithOptions({
+      createWorker() {
+        const selected = runtimeWorkers[nextWorker];
+        nextWorker += 1;
+        if (selected === undefined) {
+          throw new Error("Unexpected runtime worker creation.");
+        }
+        return selected;
+      },
+    });
+    const first = descriptor(
+      "RetireFailureFirst",
+      "type.example.dev/RetireFailureFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "RetireFailureSecond",
+      "type.example.dev/RetireFailureSecond",
+      new InMemoryStorageFactory(),
+    );
+    const firstScope = runScope("retire-failure-first", first.ready);
+    const secondScope = runScope("retire-failure-second", second.ready);
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      storageFactory: first.value.storageFactory,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      storageFactory: second.value.storageFactory,
+      tenant: {},
+      context: second.context,
+      scopes: [secondScope],
+    });
+
+    await expect(
+      worker.retireOwners([firstScope.owner.key, secondScope.owner.key]),
+    ).rejects.toMatchObject({
+      errors: [firstFailure, secondFailure],
+    });
+
+    expect(firstRuntimeWorker.retireCalls).toBe(1);
+    expect(secondRuntimeWorker.retireCalls).toBe(1);
+    await expect(worker.retireOwners([firstScope.owner.key])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+  });
+
+  it("preserves a selected owner's exact retirement failure after retiring its routing state", async () => {
+    const runtimeWorker = new LifecycleWorker();
+    const failure = new Error("selected retirement failed");
+    runtimeWorker.retireFailures.push(failure);
+    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new WorkerWithOptions({ createWorker: () => runtimeWorker });
+    const selected = descriptor(
+      "SelectedRetireFailure",
+      "type.example.dev/SelectedRetireFailure",
+      new InMemoryStorageFactory(),
+    );
+    const selectedScope = runScope("selected-retire-failure", selected.ready);
+    worker.add({
+      owner: selectedScope.owner,
+      descriptor: selected.value,
+      storageFactory: selected.value.storageFactory,
+      tenant: {},
+      context: selected.context,
+      scopes: [selectedScope],
+    });
+
+    await expect(worker.retireOwners([selectedScope.owner.key])).rejects.toBe(failure);
+    await expect(worker.retireOwners([selectedScope.owner.key])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+  });
+
+  it("awaits every generation worker retirement before reporting cleanup failures", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const firstFailure = new Error("first generation retirement failed");
+    const secondFailure = new Error("second generation retirement failed");
+    firstRuntimeWorker.retireFailures.push(firstFailure);
+    secondRuntimeWorker.retireFailures.push(secondFailure);
+    const runtimeWorkers: DeliveryRunWorker[] = [firstRuntimeWorker, secondRuntimeWorker];
+    let nextWorker = 0;
+    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new WorkerWithOptions({
+      createWorker() {
+        const selected = runtimeWorkers[nextWorker];
+        nextWorker += 1;
+        if (selected === undefined) {
+          throw new Error("Unexpected runtime worker creation.");
+        }
+        return selected;
+      },
+    });
+    const first = descriptor(
+      "GenerationRetireFailureFirst",
+      "type.example.dev/GenerationRetireFailureFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "GenerationRetireFailureSecond",
+      "type.example.dev/GenerationRetireFailureSecond",
+      new InMemoryStorageFactory(),
+    );
+    const firstScope = runScope("generation-retire-failure-first", first.ready);
+    const secondScope = runScope("generation-retire-failure-second", second.ready);
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      storageFactory: first.value.storageFactory,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      storageFactory: second.value.storageFactory,
+      tenant: {},
+      context: second.context,
+      scopes: [secondScope],
+    });
+
+    await expect(worker.retire()).rejects.toMatchObject({ errors: [firstFailure, secondFailure] });
+
+    expect(firstRuntimeWorker.retireCalls).toBe(1);
+    expect(secondRuntimeWorker.retireCalls).toBe(1);
+  });
 });
 
 describe("ServerEnvironment attachment", () => {
