@@ -15,6 +15,7 @@ import {
   EnvironmentAttachments,
   type EnvironmentAttachOptions,
   type EnvironmentAttachmentHandle,
+  type EnvironmentAttachmentsOptions,
 } from "./environment-attachment.js";
 
 /** Deployment profile used by a small explicit server runtime environment. */
@@ -188,6 +189,10 @@ interface ServerEnvironmentAccess {
   ): Promise<void>;
   stopDelivery(environment: ServerEnvironment): Promise<void>;
   retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
+  installTestAttachments(
+    environment: ServerEnvironment,
+    options: EnvironmentAttachmentsOptions,
+  ): void;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
@@ -237,6 +242,12 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       );
     }
     return attachments.retryDeliveryStop();
+  },
+  installTestAttachments(environment: ServerEnvironment, options: EnvironmentAttachmentsOptions) {
+    if (!environmentAttachments.has(environment)) {
+      throw new TypeError("Test attachments require a ServerEnvironment instance.");
+    }
+    environmentAttachments.set(environment, new EnvironmentAttachments(options));
   },
 });
 

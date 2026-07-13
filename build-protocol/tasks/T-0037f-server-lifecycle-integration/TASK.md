@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 1 implementation assigned
+Status: Slice 1 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -299,3 +299,39 @@ gate passes.
   at explicit expected `gpt-5.6-terra` / `medium`, no subagents. Later slices
   remain unauthorized until Slice 1 TDD, focused verification, and applicable
   review concerns are clean.
+
+## Slice 1 Implementation Handback
+
+- `2026-07-13T17:37:37Z`: Slice 1 implements only recovery-before-listener and
+  normal happy-path shutdown. `Server.start()` now derives the built-context
+  descriptors, attaches them with the existing ownership mode, awaits finite
+  recovery, and only then creates/listens on HTTP/2. The successful opaque
+  attachment handle is retained by the running server.
+- Normal close now preserves the required order: network intake/sessions,
+  existing attachment detach, contexts/resources, and only then an owned
+  environment. Caller-owned environments are excluded from the final close
+  group; a repeated successful close stays inert.
+- RED/GREEN: the new deterministic integration test first failed twice with
+  `Attached startup recovery did not begin.` because the baseline never
+  attached contexts. After the minimal server orchestration change, it passes
+  recovery hold/release, host/port/base URL compatibility, normal detach/close
+  order, caller-owned environment reuse, and repeated-close behavior.
+- No Slice 2+ failed-start continuation, endpoint-safety observations, public
+  API/options/exports, README, generated, Proto, example, delivery, commit,
+  push, or merge change was made. Listener-error cleanup performs only the
+  existing normal detach needed to retain the pre-existing listener-failure
+  compatibility behavior; retained failed-start retry and unsafe-state logic
+  remain later-slice work.
+
+## Slice 1 Coordinator Gate And Review Assignment
+
+- `2026-07-13T17:38:37Z`: Desktop metadata confirms implementer
+  `019f5c85-56d7-7251-8231-a18906d8f175` at actual `gpt-5.6-terra` / `medium`,
+  matching explicit dispatch. It used no subagents and is closed.
+- Coordinator native focused gate passes 5 files / 114 tests, generated build
+  typecheck, scoped ESLint, cleanup enforcement, Prettier, `git diff --check`,
+  exact eight-file scope/status lint, and public-leak scans.
+- Style/maintainability, TypeScript/API docs, and performance/reliability are
+  assigned in parallel at explicit Terra High, no subagents. Documentation is
+  N/A because Slice 1 changes no observable README/TSDoc claim; Slice 6 owns the
+  final lifecycle docs. Security remains deferred to T-0041.

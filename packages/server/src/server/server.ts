@@ -10,8 +10,9 @@ import {
   boundedContextAccess,
 } from "../context/bounded-context.js";
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
+import type { EnvironmentAttachmentHandle } from "./environment-attachment.js";
 import { collectCloseError, RetryableCloseGroup } from "./retryable-close.js";
-import { ServerEnvironment } from "./server-environment.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -70,6 +71,10 @@ export class Server {
   /** Start the HTTP/2 listener and return its running lifecycle handle. */
   async start(): Promise<RunningServer> {
     const contexts = await buildContexts(this.#contexts, this.#environment.storageFactory);
+    const attachment = await serverEnvironmentAccess.attach(this.#environment, {
+      ownership: this.#ownsEnvironment ? "server" : "caller",
+      descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
+    });
     const services = new SpineServices({
       contexts,
       ...this.#services,
@@ -81,12 +86,22 @@ export class Server {
       ...this.#resources,
       ...(this.#ownsEnvironment ? [this.#environment] : []),
     ];
-    const address = await listenOrCleanup(httpServer, sessions, closeables, this.#host, this.#port);
+    const address = await listenOrCleanup(
+      httpServer,
+      sessions,
+      closeables,
+      this.#environment,
+      attachment,
+      this.#host,
+      this.#port,
+    );
     const host = typeof address.address === "string" ? address.address : this.#host;
 
     return new RunningHttp2Server({
       server: httpServer,
       sessions,
+      environment: this.#environment,
+      attachment,
       host,
       port: address.port,
       closeables,
@@ -150,6 +165,8 @@ class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #closeables: readonly unknown[];
+  readonly #environment: ServerEnvironment;
+  readonly #attachment: EnvironmentAttachmentHandle;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -161,6 +178,8 @@ class RunningHttp2Server implements RunningServer {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
+    this.#environment = options.environment;
+    this.#attachment = options.attachment;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -183,6 +202,7 @@ class RunningHttp2Server implements RunningServer {
       await closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
+    await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
     await this.#closeGroup.close();
   }
 }
@@ -191,6 +211,8 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
+  readonly environment: ServerEnvironment;
+  readonly attachment: EnvironmentAttachmentHandle;
   readonly host: string;
   readonly port: number;
 }
@@ -259,13 +281,15 @@ async function listenOrCleanup(
   server: http2.Http2Server,
   sessions: Set<http2.ServerHttp2Session>,
   closeables: readonly unknown[],
+  environment: ServerEnvironment,
+  attachment: EnvironmentAttachmentHandle,
   host: string,
   port: number,
 ): Promise<AddressInfo> {
   try {
     return await listen(server, host, port);
   } catch (error) {
-    await cleanupFailedStart(server, sessions, closeables, error);
+    await cleanupFailedStart(server, sessions, closeables, environment, attachment, error);
     throw error;
   }
 }
@@ -274,12 +298,20 @@ async function cleanupFailedStart(
   server: http2.Http2Server,
   sessions: Set<http2.ServerHttp2Session>,
   closeables: readonly unknown[],
+  environment: ServerEnvironment,
+  attachment: EnvironmentAttachmentHandle,
   startError: unknown,
 ): Promise<void> {
   const errors: unknown[] = [];
 
   try {
     await closeNetwork(server, sessions);
+  } catch (error) {
+    collectCloseError(error, errors);
+  }
+
+  try {
+    await serverEnvironmentAccess.detach(environment, attachment);
   } catch (error) {
     collectCloseError(error, errors);
   }

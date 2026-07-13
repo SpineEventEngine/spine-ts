@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 1 implementation assigned
+Status: Slice 1 review assigned
 
 ## Resolution Summary
 
@@ -295,6 +295,20 @@ package-internal deterministic environment test setup needed by that test.
   `environment-attachment.test.ts`, and `environment-close.test.ts`; generated
   build typecheck, scoped lint/format, cleanup rules, diff check, and export-key
   test.
+
+#### Implementation Handback
+
+`2026-07-13T17:37:37Z`: implemented as specified. No safety observation or
+failed-start continuation is included: the only failed-listener adjustment is
+the existing normal detach required before the pre-existing close group can
+close an owned environment. Later slices retain unsafe quiescence, retained
+cleanup retry, sharing, and last-detach behavior ownership.
+
+#### Coordinator Gate
+
+Actual implementer metadata matches Terra Medium. Fresh 5-file / 114-test,
+typecheck, lint, cleanup, format, scope/status, public-leak, and diff checks
+pass. Applicable Slice 1 review concerns are assigned.
 
 ### Slice 2: Caller-Owned Failed-Start Continuation
 

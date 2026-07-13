@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 1 implementation assigned
+Status: Slice 1 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -94,4 +94,41 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   subagents. Style/maintainability, TypeScript/API docs, and performance/
   reliability are relevant after focused checks. Documentation is N/A unless
   Slice 1 changes an observable active claim; Slice 6 owns final public docs.
+
+## Slice 1 Implementer Checkpoint
+
+- `2026-07-13T17:34:00Z`: implementation is in strict RED/GREEN TDD. The
+  canonical skill applicability record is in the work log. No review finding
+  or disposition exists yet; reviewer dispatch remains outside implementer
+  authority. Documentation is provisionally N/A because Slice 1 changes no
+  active observable documentation; style, TypeScript/API-surface, and
+  performance/reliability remain pending focused verification and review.
   Security remains deferred to T-0041.
+
+## Slice 1 Implementation Handback
+
+- `2026-07-13T17:37:37Z`: strict RED/GREEN and focused mechanical checks are
+  recorded in the work log. The implementation has no review disposition yet;
+  its required review wave remains style/maintainability, TypeScript/API
+  surface, and performance/reliability. Documentation is N/A for Slice 1
+  because no active observable documentation changed; Slice 6 owns that work.
+- Review attention: verify attachment occurs and finite recovery settles before
+  listener creation; the exact handle reaches running close; normal shutdown
+  is network/sessions, detach, contexts/resources, then owned facilities;
+  caller-owned environments stay open; no public/root surface leaks; and no
+  Slice 2+ retry/safety behavior was introduced.
+
+## Slice 1 Review Assignment
+
+- `2026-07-13T17:38:37Z`: implementer actual Terra Medium matches explicit
+  dispatch; it used no subagents and is closed. Coordinator 5-file / 114-test,
+  typecheck, lint, cleanup, format, exact scope/status/public-leak, and diff
+  checks pass.
+- Style/maintainability: assigned at explicit `gpt-5.6-terra` / `high`.
+  TypeScript/API docs: assigned at explicit `gpt-5.6-terra` / `high`.
+  Performance/reliability: assigned at explicit `gpt-5.6-terra` / `high`.
+  No reviewer may spawn subagents.
+- Documentation: N/A for this slice because no README/TSDoc or observable active
+  documentation changed; Slice 6 owns the final lifecycle contract. Security
+  remains deferred to T-0041. Historical superseded text is non-actionable
+  unless current Slice 1 records claim it as active.
