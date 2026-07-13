@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Final gate expectation fix focused verified; Round 7 review pending
+Status: Final gate expectation fix Round 7 review in progress
 
 Started: `2026-07-12T18:25:27Z`
 

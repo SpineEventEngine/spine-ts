@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Final gate expectation fix focused verified; Round 7 review pending
+Status: Final gate expectation fix Round 7 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -689,3 +689,9 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   repository/handoff tests (153/153), the canonical regression (193/193),
   generated/type/lint/cleanup, format, and diff gates. The fix is ready for a
   committed Round 7 package; full verify and final security remain deferred.
+- `2026-07-13T00:32:27Z`: Round 7 package is
+  `.superpowers/sdd/review-11e63aae..1d3c8d52.diff` (one commit, 15,557 bytes).
+  Pre-review docs/status/API/policy lint is clean. Expected explicit profiles
+  are style Terra High, documentation Luna Medium, TypeScript/API docs Terra
+  High, and reliability Terra High. Review is test-and-record only and bounded
+  to accurate preservation of the accepted persisted-batch failure contract.
