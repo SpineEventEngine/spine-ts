@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 Round 2 review in progress
+Status: Slice 1 clean; Slice 2 non-last detach assigned
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -63,6 +63,14 @@ The same Terra Medium owner receives all four under strict TDD before Round 1.
 5. Correct impossible active UTC chronology in work/review logs.
 
 One Terra Medium owner receives the complete batch before Round 2.
+
+### Slice 1 Acceptance
+
+Round 2 is clean in all four canonical lanes. Settlement observation, retained
+faults, selected-owner barrier, per-unit causes, atomic record operations,
+dynamic bounds, and private API boundaries are accepted. Slice 2 now consumes
+this foundation and implements non-last registration detach/retry only; last
+detach, races, and public/server integration remain later.
 
 Disposition: all five Round 1 findings are corrected and focused verified.
 Barriers check retained faults before and after waits; observer thenables are

@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 1 Round 2 review in progress
+Status: Slice 1 clean; Slice 2 non-last detach assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -69,6 +69,10 @@ Derived status mirror: the canonical current state is the `Status` header in
   are style/API/reliability Terra High and documentation Luna Medium. Review is
   limited to retained faults, sync observer enforcement, selected-unit causes,
   detach reclassification order, tests, and corrected chronology.
+- Round 2 is clean in all four lanes and all reviewers are closed. Slice 1
+  review is accepted. Slice 2 is assigned to Terra Medium and will receive a
+  fresh package/review bounded to non-last detach, retry checkpoints, sibling
+  preservation, and private access. Security remains deferred.
 - All four coordinator findings are corrected under focused TDD. Meaningful
   settlement equality, terminal barrier-fault propagation, bounded per-unit
   cause reselection, and atomic counted-owner detach/retire record consumption
