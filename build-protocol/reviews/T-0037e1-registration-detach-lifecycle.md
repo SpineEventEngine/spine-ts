@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: All reviews clean; final verification in progress
+Status: Complete; ready to merge
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -323,3 +323,8 @@ Derived status mirror: the canonical current state is the `Status` header in
   production or threshold file changed. Every reviewer is closed with matching
   explicit/immutable role metadata. Full verification is the only remaining
   pre-merge gate.
+- Final verification exits `0` with all build, type, lint, format, ordinary
+  test, coverage, docs/API, proto, and generated-cleanliness gates passing.
+  Both full test suites pass 65 files / 1,481 tests and branch coverage is
+  exactly 90.00% (4,140/4,600). No critical, high-confidence, or other
+  actionable finding remains. T-0037e1 is accepted for merge.

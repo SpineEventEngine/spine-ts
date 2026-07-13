@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: All reviews clean; final verification in progress
+Status: Complete; ready to merge
 
 ### Final Verification Finding
 
@@ -30,6 +30,12 @@ Review explicitly assigns style, TypeScript/API, and reliability to
 The focused coverage-fix review is clean in all four concerns and every reviewer
 is closed. No actionable T-0037e1 finding remains. Full `pnpm verify` is the
 only outstanding pre-merge gate.
+
+Final native `pnpm --config.verify-deps-before-run=false verify` exits `0`.
+Build/type/lint/format pass; ordinary and coverage suites each pass 65 files /
+1,481 tests; coverage is statements 95.28%, branches 90.00%, functions 98.10%,
+and lines 95.32%; docs/API, proto lint, and generated cleanliness pass. All
+acceptance criteria are satisfied and no actionable review finding remains.
 
 ### Slice 4 Round 2 Finding
 
