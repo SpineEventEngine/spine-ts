@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 3 Round 1 review in progress
+Status: Slice 3 Round 1 documentation fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -185,3 +185,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   read-only with no subagents. Review is bounded to ordinary last-detach
   classification/order, replacement-safe cleanup, unsafe retry, tests, records,
   and private API claims; Slice 4 race policy remains excluded.
+- Round 1 disposition: style, TypeScript/API, and reliability are CLEAN.
+  Documentation reports one P2 at `architecture-resolution.md:84`: unsafe
+  quiescence retry calls `retire()` again after the coordinator clears its
+  rejected in-flight promise, so the exact-once claim must apply to stop and
+  completed checkpoints rather than method invocation. All four agents are
+  closed with matching immutable role metadata. One Terra Medium owner receives
+  this complete one-finding batch before Round 2; security/full verify remain
+  deferred.

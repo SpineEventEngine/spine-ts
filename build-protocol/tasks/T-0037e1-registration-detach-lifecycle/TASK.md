@@ -1,6 +1,15 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 Round 1 review in progress
+Status: Slice 3 Round 1 documentation fix assigned
+
+### Slice 3 Round 1 Finding
+
+Documentation must not say `DeliveryRunCoordinator.retire()` is invoked exactly
+once. An unsafe quiescence rejection clears the in-flight retirement promise,
+and explicit detach retry re-enters the same coordinator retirement state
+machine. The stable guarantee is that stop executes once and completed
+checkpoints are not duplicated. One Terra Medium owner receives this record-only
+correction before Round 2.
 
 ### Slice 2 Round 1 Findings
 
