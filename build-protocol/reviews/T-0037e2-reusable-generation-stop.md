@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3 accepted; Slice 4 assigned
+Status: Slice 4 review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -773,3 +773,32 @@ Derived status mirror: the canonical current state is the `Status` header in
   instance state and exact retry confirmed. Skill check reported; no subagent.
 - Slice 3 is accepted at `2026-07-13T09:29:48Z`. Slice 4 is assigned at
   explicit expected `gpt-5.6-terra` / `medium`, no subagents.
+
+## Slice 4 Implementer Evidence
+
+- Existing implementer, fixed/explicit `gpt-5.6-terra` / `medium`, no
+  subagents. Canonical skill/JVM/TDD/completion applicability and RED/GREEN are
+  recorded in the work log.
+- One private retained `GenerationStop` now owns FIFO attach waiters. Its
+  serialized admission does no early descriptor/claim/worker work and releases
+  immediately; successful phase 4 requeues each once against the published
+  candidate before replacement-safe error propagation.
+- Deterministic coverage includes attach-before, two ordered attach-after
+  waiters, unsafe-retirement retry, partial same-candidate retry,
+  replacement-safe rejection, ownership conflict, one worker lineage, and
+  complete original-handle detach. Requested regressions pass 5 files / 158
+  tests; generated-build typechecking and focused formatting pass.
+- Coordinator review is requested. Final status/public/generated/inventory and
+  diff gates are recorded in the canonical work log; no full verify, commit,
+  push, public change, permanent close/server integration, or Slice expansion
+  occurred.
+
+## Slice 4 Review Wave 1 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T09:51:25Z`: 5 files / 158 tests, generated-build typecheck,
+  focused Prettier, static boundary scans, exact scope, and diff hygiene.
+- Existing explicit profiles are style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; all read-only and no-subagent.

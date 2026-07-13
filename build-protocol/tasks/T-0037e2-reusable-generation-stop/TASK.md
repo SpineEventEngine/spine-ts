@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3 accepted; Slice 4 assigned
+Status: Slice 4 review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -374,3 +374,14 @@ the sole report or worker-retirement reason. The consuming generation can take
 those causes only by presenting the exact current rejection reason. Focused
 report/retirement reuse and same-candidate retry evidence is recorded in the
 canonical logs; coordinator review is requested.
+
+## Slice 4 Implementer Handback
+
+The existing lifecycle owner now defers attach work ordered after an admitted
+stop, records bounded FIFO waiters without retaining the serial gate, and
+re-admits them once against the sole published candidate. Focused tests cover
+attach-before, ordered attach-after success, unsafe and partial explicit retry,
+replacement-safe error propagation, and independent ownership conflict while
+preserving ordinary attach snapshots and prior detach behavior. Static
+private/public/generated boundary checks and exact verification evidence are
+recorded in the canonical work/review logs; coordinator review is requested.

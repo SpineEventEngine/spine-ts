@@ -61,6 +61,329 @@ describe("environment generation stop", () => {
     await attachments.detach(handle);
   });
 
+  it("defers an attachment ordered after stop and joins the published candidate", async () => {
+    const oldWorker = new ControlledWorker([], "after-stop-old");
+    const candidateWorker = new ControlledWorker([], "after-stop-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "AfterStopInitial",
+      "type.example.dev/AfterStopInitial",
+      new InMemoryStorageFactory(),
+    );
+    const later = descriptor(
+      "AfterStopLater",
+      "type.example.dev/AfterStopLater",
+      new InMemoryStorageFactory(),
+    );
+    const final = descriptor(
+      "AfterStopFinal",
+      "type.example.dev/AfterStopFinal",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+    let descriptorEnumerations = 0;
+    const laterDescriptors = countedDescriptors([later.value], () => {
+      descriptorEnumerations += 1;
+    });
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const attaching = attachments.attach({ ownership: "caller", descriptors: laterDescriptors });
+    const finalAttaching = attachments.attach({
+      ownership: "caller",
+      descriptors: [final.value],
+    });
+    let attachSettled = false;
+    void attaching.then(
+      () => {
+        attachSettled = true;
+      },
+      () => {
+        attachSettled = true;
+      },
+    );
+
+    expect(descriptorEnumerations).toBe(0);
+    expect(later.startupCalls).toBe(0);
+    expect(later.contextCalls).toBe(0);
+    expect(later.endpointCalls).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(factoryCalls).toBe(2);
+    expect(attachSettled).toBe(false);
+
+    candidateGate.resolve();
+    await stopping;
+    const laterHandle = await attaching;
+    const finalHandle = await finalAttaching;
+
+    expect(descriptorEnumerations).toBe(1);
+    expect(laterHandle.generation).toBe(initialHandle.generation);
+    expect(finalHandle.generation).toBe(initialHandle.generation);
+    expect(candidateWorker.targets.slice(-2)).toEqual([
+      "type.example.dev/AfterStopLater",
+      "type.example.dev/AfterStopFinal",
+    ]);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(initialHandle);
+    await attachments.detach(laterHandle);
+    await attachments.detach(finalHandle);
+  });
+
+  it("keeps an after-stop attachment pending across unsafe retirement and explicit retry", async () => {
+    const oldWorker = new ControlledWorker([], "waiting-unsafe-old");
+    const candidateWorker = new ControlledWorker([], "waiting-unsafe-candidate");
+    const retryGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(retryGate.promise);
+    const stopFailure = new Error("waiting unsafe stop failed");
+    oldWorker.stopFailures.push(stopFailure);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "WaitingUnsafeInitial",
+      "type.example.dev/WaitingUnsafeInitial",
+      new InMemoryStorageFactory(),
+    );
+    const later = descriptor(
+      "WaitingUnsafeLater",
+      "type.example.dev/WaitingUnsafeLater",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+    let descriptorEnumerations = 0;
+    const laterDescriptors = countedDescriptors([later.value], () => {
+      descriptorEnumerations += 1;
+    });
+
+    const stopping = attachments.stopDelivery();
+    const attaching = attachments.attach({ ownership: "caller", descriptors: laterDescriptors });
+    let attachSettled = false;
+    void attaching.then(
+      () => {
+        attachSettled = true;
+      },
+      () => {
+        attachSettled = true;
+      },
+    );
+    await expect(stopping).rejects.toBeInstanceOf(DeliveryRunQuiescenceError);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await until(() => candidateWorker.starts === 1);
+    expect(attachSettled).toBe(false);
+    expect(descriptorEnumerations).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(factoryCalls).toBe(2);
+
+    retryGate.resolve();
+    await retry;
+    const laterHandle = await attaching;
+
+    expect(descriptorEnumerations).toBe(1);
+    expect(laterHandle.generation).toBe(initialHandle.generation);
+    expect(factoryCalls).toBe(2);
+    expect(oldWorker.stopCalls).toBe(2);
+    await attachments.detach(initialHandle);
+    await attachments.detach(laterHandle);
+  });
+
+  it("keeps an after-stop attachment pending across partial candidate retry", async () => {
+    const oldWorker = new ControlledWorker([], "waiting-partial-old");
+    const candidateWorker = new ControlledWorker([], "waiting-partial-candidate");
+    const retryGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(Promise.resolve(), retryGate.promise);
+    const transitionFailure = new Error("waiting partial transfer failed");
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    let transferAttempts = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer() {
+          transferAttempts += 1;
+          if (transferAttempts === 1) throw transitionFailure;
+        },
+      },
+    });
+    const initial = descriptor(
+      "WaitingPartialInitial",
+      "type.example.dev/WaitingPartialInitial",
+      new InMemoryStorageFactory(),
+    );
+    const later = descriptor(
+      "WaitingPartialLater",
+      "type.example.dev/WaitingPartialLater",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+
+    const stopping = attachments.stopDelivery();
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [later.value] });
+    let attachSettled = false;
+    void attaching.then(
+      () => {
+        attachSettled = true;
+      },
+      () => {
+        attachSettled = true;
+      },
+    );
+    await expect(stopping).rejects.toBe(transitionFailure);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await until(() => candidateWorker.starts === 2);
+    expect(attachSettled).toBe(false);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(factoryCalls).toBe(2);
+
+    retryGate.resolve();
+    await retry;
+    const laterHandle = await attaching;
+
+    expect(laterHandle.generation).toBe(initialHandle.generation);
+    expect(factoryCalls).toBe(2);
+    expect(transferAttempts).toBe(2);
+    await attachments.detach(initialHandle);
+    await attachments.detach(laterHandle);
+  });
+
+  it("releases an after-stop attachment when replacement succeeds before old failure propagation", async () => {
+    const oldWorker = new ControlledWorker([], "waiting-safe-old");
+    const candidateWorker = new ControlledWorker([], "waiting-safe-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const retirementFailure = new Error("waiting replacement-safe retirement failed");
+    oldWorker.retireFailures.push(retirementFailure);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "WaitingSafeInitial",
+      "type.example.dev/WaitingSafeInitial",
+      new InMemoryStorageFactory(),
+    );
+    const later = descriptor(
+      "WaitingSafeLater",
+      "type.example.dev/WaitingSafeLater",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [later.value] });
+    candidateGate.resolve();
+
+    await expect(stopping).rejects.toBe(retirementFailure);
+    const laterHandle = await attaching;
+
+    expect(laterHandle.generation).toBe(initialHandle.generation);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(initialHandle);
+    await attachments.detach(laterHandle);
+  });
+
+  it("applies ownership conflict only when an after-stop attachment is re-admitted", async () => {
+    const oldWorker = new ControlledWorker([], "waiting-conflict-old");
+    const candidateWorker = new ControlledWorker([], "waiting-conflict-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "WaitingConflictInitial",
+      "type.example.dev/WaitingConflictInitial",
+      new InMemoryStorageFactory(),
+    );
+    const conflicting = descriptor(
+      "WaitingConflictLater",
+      "type.example.dev/WaitingConflictLater",
+      new InMemoryStorageFactory(),
+    );
+    const initialHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+    let descriptorEnumerations = 0;
+    const conflictingDescriptors = countedDescriptors([conflicting.value], () => {
+      descriptorEnumerations += 1;
+    });
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const attaching = attachments.attach({
+      ownership: "server",
+      descriptors: conflictingDescriptors,
+    });
+
+    expect(descriptorEnumerations).toBe(0);
+    expect(conflicting.startupCalls).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    candidateGate.resolve();
+    await stopping;
+    await expect(attaching).rejects.toThrow(
+      "Server-owned environment registration requires exclusive ownership.",
+    );
+
+    expect(descriptorEnumerations).toBe(1);
+    expect(conflicting.startupCalls).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(initialHandle);
+  });
+
   it("serially refuses a queued stop after unsafe last detach takes recovery ownership", async () => {
     const worker = new ControlledWorker([], "queued-detach");
     const attachments = new EnvironmentAttachments({ createWorker: () => worker });
@@ -1683,6 +2006,18 @@ describe("environment generation stop", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+function countedDescriptors(
+  descriptors: readonly ContextDeliveryDescriptor[],
+  onEnumerate: () => void,
+): readonly ContextDeliveryDescriptor[] {
+  return new Proxy(descriptors, {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) onEnumerate();
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
+}
 
 function descriptor(
   name: string,

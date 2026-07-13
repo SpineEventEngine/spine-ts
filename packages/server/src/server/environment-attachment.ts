@@ -204,16 +204,61 @@ export class EnvironmentAttachments {
   }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
-    const admittedOptions: EnvironmentAttachOptions = Object.freeze({
-      ownership: options.ownership,
-      descriptors: Object.freeze([...options.descriptors]),
+    const gate = Promise.withResolvers<EnvironmentAttachmentHandle>();
+    const snapshotDescriptors = this.#stop === undefined;
+    const waiter: AttachmentWaiter = {
+      options: Object.freeze({
+        ownership: options.ownership,
+        descriptors: snapshotDescriptors
+          ? Object.freeze([...options.descriptors])
+          : options.descriptors,
+      }),
+      gate,
+      snapshotDescriptors,
+      status: "queued",
+    };
+    this.#queueAttachment(waiter);
+    return gate.promise;
+  }
+
+  #queueAttachment(waiter: AttachmentWaiter): void {
+    waiter.status = "queued";
+    const attaching = this.#serial.then(async () => {
+      const stop = this.#stop;
+      if (stop?.admitted === true && !stop.completed) {
+        waiter.status = "waiting";
+        stop.waiters.push(waiter);
+        return;
+      }
+      const admittedOptions: EnvironmentAttachOptions = Object.freeze({
+        ownership: waiter.options.ownership,
+        descriptors: waiter.snapshotDescriptors
+          ? waiter.options.descriptors
+          : Object.freeze([...waiter.options.descriptors]),
+      });
+      const attachment = await this.#startQueuedAttachment(admittedOptions);
+      waiter.status = "complete";
+      waiter.gate.resolve(attachment);
     });
-    const attaching = this.#serial.then(() => this.#startQueuedAttachment(admittedOptions));
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
     );
-    return attaching;
+    void attaching.catch((error: unknown) => {
+      waiter.status = "complete";
+      waiter.gate.reject(error);
+    });
+  }
+
+  #releaseStopWaiters(stop: GenerationStop): void {
+    if (stop.waitersReleased) return;
+    stop.waitersReleased = true;
+    for (const waiter of stop.waiters) {
+      if (waiter.status === "waiting") {
+        this.#queueAttachment(waiter);
+      }
+    }
+    stop.waiters.length = 0;
   }
 
   async #startQueuedAttachment(
@@ -284,6 +329,8 @@ export class EnvironmentAttachments {
       published: false,
       reopened: undefined,
       drained: false,
+      waiters: [],
+      waitersReleased: false,
       completed: false,
       promise: Promise.resolve(),
       status: "running",
@@ -296,13 +343,17 @@ export class EnvironmentAttachments {
   #queueStop(stop: GenerationStop, retrying: boolean): Promise<void> {
     stop.status = "running";
     stop.retrying = retrying;
-    const promise = this.#serial.then(() => this.#continueStop(stop));
-    stop.promise = promise;
-    this.#serial = promise.then(
+    const gate = Promise.withResolvers<void>();
+    stop.promise = gate.promise;
+    const admission = this.#serial.then(() => {
+      void this.#continueStop(stop).then(gate.resolve, gate.reject);
+    });
+    this.#serial = admission.then(
       () => undefined,
       () => undefined,
     );
-    void promise.then(
+    void admission.catch(gate.reject);
+    void stop.promise.then(
       () => {
         stop.status = "complete";
         if (this.#stop === stop) {
@@ -479,6 +530,7 @@ export class EnvironmentAttachments {
       throwFailures(failures, "Environment delivery stop transition failed.");
     }
     stop.completed = true;
+    this.#releaseStopWaiters(stop);
     if (stop.oldRetirement.status === "retained") {
       const { reason } = stop.oldRetirement;
       stop.oldRetirement = { status: "emitted" };
@@ -782,6 +834,13 @@ interface RegistrationBinding {
   generation: EnvironmentGeneration;
 }
 
+interface AttachmentWaiter {
+  readonly options: EnvironmentAttachOptions;
+  readonly gate: PromiseWithResolvers<EnvironmentAttachmentHandle>;
+  readonly snapshotDescriptors: boolean;
+  status: "queued" | "waiting" | "complete";
+}
+
 interface GenerationStop {
   admitted: boolean;
   generation: EnvironmentGeneration | undefined;
@@ -799,6 +858,8 @@ interface GenerationStop {
   published: boolean;
   reopened: readonly DeliveryRunScope[] | undefined;
   drained: boolean;
+  readonly waiters: AttachmentWaiter[];
+  waitersReleased: boolean;
   completed: boolean;
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
