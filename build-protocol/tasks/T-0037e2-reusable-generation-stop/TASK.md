@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3A review wave 1 assigned
+Status: Slice 3A review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -323,3 +323,11 @@ successful four-phase replacement, and continued use of the original handle
 and stable readiness route. Existing production checkpoint composition already
 satisfied the accepted behavior, so no production expansion was required.
 Coordinator review is requested; exact evidence is in the canonical work log.
+
+## Slice 3A Review Wave 1 Fix Handback
+
+The redundant post-retry descriptor accessor increment tuple is removed while
+the pre-retry no-access guard and all observable lifecycle, candidate,
+publication, callback, and retry assertions remain. The fix is test/record-only;
+focused verification is recorded in the canonical logs and coordinator review
+is requested.

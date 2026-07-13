@@ -914,17 +914,6 @@ describe("environment generation stop", () => {
     expect(candidateWorker.tenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
     expect([routePreparations, transfers]).toEqual([1, 2]);
     expect(handle.generation).not.toBe(oldGeneration);
-    expect([
-      target.startupCalls,
-      target.contextCalls,
-      target.endpointCalls,
-      target.storageFactoryCalls,
-    ]).toEqual([
-      preflightCalls[0]! + 1,
-      preflightCalls[1]! + 2,
-      preflightCalls[2]! + 2,
-      preflightCalls[3]! + 2,
-    ]);
 
     target.readiness.claim(target.ready);
     await until(() => candidateWorker.starts === 3);

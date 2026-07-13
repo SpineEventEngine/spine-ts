@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3A review wave 1 assigned
+Status: Slice 3A review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -513,3 +513,41 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; all read-only and no-subagent.
+
+## Slice 3A Review Wave 1 Results
+
+- Style/maintainability: P3. The post-retry exact descriptor accessor increment
+  tuple couples the behavior test to the current snapshot/cache lookup strategy
+  and duplicates stronger observable checkpoint assertions. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill check reported;
+  no subagent.
+- TypeScript/API docs: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Performance/reliability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- The test-only fix is assigned to the same implementer at explicit expected
+  `gpt-5.6-terra` / `medium`, no subagents; Wave 2 waits for fresh evidence.
+
+## Slice 3A Review Wave 1 Fix Evidence
+
+- Removed only the post-retry descriptor accessor increment tuple identified by
+  style review. The pre-retry equality guard and observable stop/await/retire,
+  route/transfer, candidate runtime/tenant, generation, callback usability, and
+  retry-coalescing assertions remain intact.
+- The requested five-file suite passed 141 / 141 tests and
+  `pnpm typecheck:build:generated` passed. Final focused format, exact status,
+  inventory/public-boundary, and diff evidence is recorded in the canonical
+  work log. No production, public/generated, Slice 3B/4, commit, push, full
+  verify, or subagent change occurred. Coordinator review is requested.
+
+## Slice 3A Review Wave 2 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T08:09:16Z`: 5 files / 141 tests, generated-build typecheck,
+  focused Prettier, exact scope, and diff hygiene.
+- Existing explicit profiles remain style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no-subagent. Historical superseded
+  text remains non-actionable unless active records claim it.
