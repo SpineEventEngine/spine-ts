@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 Round 2 record fix verified; Round 3 review pending
+Status: Slice 2 Round 3 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -18,6 +18,13 @@ Derived status mirror: the canonical current state is the `Status` header in
   119/119 and affected 217/217 while historical pre-fix counts remain intact.
   This record-only fix is ready for Round 3 documentation review; no behavioral
   acceptance or new test claim is introduced.
+- Round 3 package is
+  `.superpowers/sdd/review-9a465747..2fe4b225.diff` (one commit, 8,501 bytes).
+  Pre-review docs/status lint is clean. Expected explicit profiles are style,
+  TypeScript/API, and reliability `gpt-5.6-terra` / `high`, and documentation
+  `gpt-5.6-luna` / `medium`, each read-only with no subagents and bounded to the
+  current record correction. Historical superseded text is evidence only
+  unless the current status or correction claims it as active.
 
 - Slice 2 implementer completed and was closed with matching Terra Medium
   metadata. Coordinator verification independently passes 215/215 and all

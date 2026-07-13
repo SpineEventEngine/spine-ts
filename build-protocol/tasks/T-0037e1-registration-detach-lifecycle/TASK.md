@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 Round 2 record fix verified; Round 3 review pending
+Status: Slice 2 Round 3 review in progress
 
 ### Slice 2 Round 1 Findings
 
@@ -25,6 +25,12 @@ The active Slice 2 implementation evidence now records the post-fix focused
 119/119 and affected 217/217 results. Earlier timestamped 116/215 entries remain
 historical pre-fix evidence. This correction changes records only; Round 3
 documentation review is pending.
+
+Round 3 reviews only the record correction frozen from `9a465747` through
+`2fe4b225` in
+`.superpowers/sdd/review-9a465747..2fe4b225.diff` (one commit, 8,501 bytes).
+The bounded wave explicitly assigns style, TypeScript/API, and reliability to
+`gpt-5.6-terra` / `high`, and documentation to `gpt-5.6-luna` / `medium`.
 
 Started: `2026-07-13T00:46:22Z`
 
