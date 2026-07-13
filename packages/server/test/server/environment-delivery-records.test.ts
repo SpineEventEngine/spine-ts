@@ -20,18 +20,32 @@ describe("EnvironmentDeliveryRecords", () => {
 
   it("rejects detaching an absent registration instead of consuming another lifecycle owner", () => {
     const records = new EnvironmentDeliveryRecords();
+    const retained = scope("live", "Retained", 0);
+    records.register("registration-live", [retained]);
+    records.observe(Object.freeze({ scope: retained, disposition: "PARKED" }));
+    const retainedRecords = records.records();
 
     expect(() => records.detach("registration-missing")).toThrow(
       "Environment delivery registration is not configured.",
     );
+    expect(records.configuredScopes("registration-live")).toEqual([retained]);
+    expect(records.records()).toEqual(retainedRecords);
+    expect(records.configuredScopeCount).toBe(1);
   });
 
   it("rejects rolling back an absent registration instead of removing retained ownership", () => {
     const records = new EnvironmentDeliveryRecords();
+    const retained = scope("live", "Retained", 0);
+    records.register("registration-live", [retained]);
+    records.observe(Object.freeze({ scope: retained, disposition: "PARKED" }));
+    const retainedRecords = records.records();
 
     expect(() => records.rollback("registration-missing")).toThrow(
       "Environment delivery registration is not configured.",
     );
+    expect(records.configuredScopes("registration-live")).toEqual([retained]);
+    expect(records.records()).toEqual(retainedRecords);
+    expect(records.configuredScopeCount).toBe(1);
   });
 
   it("retires an empty generation without manufacturing delivery obligations", () => {

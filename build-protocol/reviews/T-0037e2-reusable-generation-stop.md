@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 coverage fix review assigned
+Status: T-0037e2 coverage fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1337,3 +1337,97 @@ Derived status mirror: the canonical current state is the `Status` header in
   TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only and no subagents. Historical superseded
   text is non-actionable unless an active task/log claim presents it as current.
+
+## Final Verification Coverage Review Results And Fix Assignment
+
+- Documentation, actual `gpt-5.6-luna` / `medium`: P2 impossible start-time
+  chronology; public docs are N/A.
+- Style/maintainability, actual `gpt-5.6-terra` / `high`: P2 repeated unsafe
+  worker-constructor/sequential-factory fixture and P2 incomplete canonical
+  skill-check evidence.
+- TypeScript/API docs, actual `gpt-5.6-terra` / `high`: CLEAN/N/A; no public or
+  generated API delta.
+- Performance/reliability, actual `gpt-5.6-terra` / `high`: P1 aggregate
+  retirement tests do not prove deferred sibling settlement; P1 absent-owner
+  tests do not prove preservation of another live owner's state.
+- Every reviewer used no subagents and is closed. The same existing implementer
+  resumes at explicit `gpt-5.6-terra` / `medium`, no subagents, with all five
+  findings as one batch. Fixes remain test/record-only and require focused
+  regression, aggregate coverage, lint/type/format/scope/diff evidence, and
+  fresh four-concern review.
+
+The old implementation thread's resumed turn reported actual
+`gpt-5.6-sol` / `high` at `2026-07-13T12:16:13.535Z`, so the profile gate
+rejected and closed it before any source/test edit. A fresh existing implementer
+is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
+`medium`, no subagents.
+
+## Coverage Review Fix Implementation Start And Skill Applicability
+
+- Fresh existing implementer begins the complete five-finding review batch in
+  `.worktrees/T-0037e2-reusable-generation-stop`, owning only the three named
+  server test suites and the three durable T-0037e2 records. Production,
+  thresholds, public/generated/package/example files, commits, pushes,
+  aggregate coverage/full verify, and `human-review-1-jul.md` are excluded; no
+  subagents are used.
+- Explicit dispatch is `gpt-5.6-terra` / `medium`. Coordinator runtime check
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-16-58-019f5b68-be14-71d1-a147-0cb5f02deaae.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at
+  `2026-07-13T12:17:02.052Z`, matching dispatch. The earlier `12:00:00Z`
+  coverage-fix start is qualified as a coordinator log time, not this
+  implementer runtime start; the prior runtime record was
+  `2026-07-13T11:51:04.997Z`.
+- Canonical skill applicability before test edits used the exposed session
+  inventory, task prompt (no task-provided skill name/path),
+  `build-protocol/skills/EXPECTED_SKILLS.md`, full readable entrypoint command
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and readable `/Users/armiol/.agents/.skill-lock.json`; no source was
+  unreachable and installed entrypoints/lock provenance agree with the expected
+  manifest. Fully read/selected `test-driven-development`,
+  `javascript-testing-patterns`, and `verification-before-completion` for the
+  behavior-test, fixture, and evidence work. Expected worktree, planning, ADR,
+  advanced-types, Node/backend, review, and subagent skills are skipped with
+  metadata/path triage: the worktree already exists and scope has no planning,
+  architecture, public API/type, review dispatch, or delegation. Debugging,
+  security, API/design, and backend skills are N/A because findings are concrete
+  and no runtime/public behavior changes. Protocol/scope govern advisory skills.
+
+## Coverage Review Fix Evidence And Handback
+
+- Both aggregate-retirement cases now defer the second worker retirement and
+  prove that the operation remains unsettled after the first failure; once
+  released, each received `AggregateError` preserves the first and second exact
+  failure identities in order. The test-local worker owns the defer gate.
+- Missing-token detach/rollback each preserve an independently seeded live
+  registration with parked work: configured scopes, retained records, and
+  configured count are equal to their pre-rejection snapshot. A local fixture
+  now contains the unsafe constructor cast, sequential factory, and repeated
+  two-runtime setup; no production helper exists.
+- First post-assertion focused regression passed 2 files / 83 tests; required
+  focused regression passed 3 files / 129 tests. Focused ESLint first exposed
+  only the new `Promise.withResolvers<void>` generic at lines 322/394; changing
+  it to `undefined` and resolving explicitly produced green focused ESLint and
+  strict `pnpm tsc -b`, alongside the 129-test regression.
+- Fresh four-concern review handback is requested. Aggregate coverage/full
+  verify, commit, push, production/public/generated/package/example changes, and
+  `human-review-1-jul.md` remain excluded. Final focused Prettier, exact
+  status/scope/public/generated scans, and diff hygiene run after this update.
+
+- Final validation: changed-file Prettier passes; all three records have status
+  `T-0037e2 coverage review fixes requested`; exact diff scope is these three
+  records and the two assigned server test files. The public/generated/package/
+  example scan is empty and `git diff --check` passes. Handback is ready for the
+  fresh four-concern review wave.
+
+## Coverage Review Fix Coordinator Gate And Re-Review Assignment
+
+- Coordinator verification passes the 129-test focused regression, ESLint,
+  strict typecheck, formatting, status/scope/public/generated checks, and diff
+  hygiene. Native aggregate coverage passes 66 files / 1,540 tests and exactly
+  90% branches (4,331/4,812), with all other thresholds green.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to the five
+  findings and their corrections. Superseded history is non-actionable unless
+  active records claim it as current.
