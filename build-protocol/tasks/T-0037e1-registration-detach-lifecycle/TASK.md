@@ -1,8 +1,261 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Candidate; not started
+Status: Complete; ready to merge
+
+### Final Verification Finding
+
+Full `pnpm verify` passes all 65 files / 1,481 tests but global branch coverage
+is 89.95% (4,138/4,600), below the required 90% by two covered branches. The
+current LCOV report identifies two existing relevant untested validation paths:
+unknown registration removal and foreign-handle `retryDetach()`. One Terra
+Medium owner receives the two behavior assertions before a focused review and
+full-gate rerun; no threshold or production behavior may be weakened.
+
+Disposition: verified with test-only behavior assertions in the existing
+environment attachment suite. Removing an already-removed registration now
+asserts the stable inactive-registration error while the live sibling count and
+generation remain usable. A foreign-environment `retryDetach()` now asserts the
+stable ownership error, followed by each environment's existing no-failed-
+detach behavior to prove neither was mutated. Focused environment tests pass
+61/61; the coordinator/parked/records/environment gate passes 135/135. The
+standalone coverage gate passes 65 files / 1,481 tests with global branch
+coverage exactly 90.00% (4,140/4,600), and LCOV records one hit on each formerly
+uncovered branch. Production source and coverage thresholds are unchanged.
+
+The test-only fix is frozen from `6e251516` through `48768ef5` in
+`.superpowers/sdd/review-6e251516..48768ef5.diff` (one commit, 12,664 bytes).
+Review explicitly assigns style, TypeScript/API, and reliability to
+`gpt-5.6-terra` / `high`, plus documentation to `gpt-5.6-luna` / `medium`.
+
+The focused coverage-fix review is clean in all four concerns and every reviewer
+is closed. No actionable T-0037e1 finding remains. Full `pnpm verify` is the
+only outstanding pre-merge gate.
+
+Final native `pnpm --config.verify-deps-before-run=false verify` exits `0`.
+Build/type/lint/format pass; ordinary and coverage suites each pass 65 files /
+1,481 tests; coverage is statements 95.28%, branches 90.00%, functions 98.10%,
+and lines 95.32%; docs/API, proto lint, and generated cleanliness pass. All
+acceptance criteria are satisfied and no actionable review finding remains.
+
+### Slice 4 Round 2 Finding
+
+Active architecture must distinguish API-time failed-start rejection from a
+detach already queued before rollback wins serial admission. The latter uses a
+temporary operation for duplicate promise coalescing, then restores the handle
+to no detach operation when blocked. One Terra Medium owner receives this sole
+record correction before Round 3.
+
+Disposition: corrected in the active architecture. Existing failed-start state
+rejects `detach()` before operation creation; a detach queued before rollback
+temporarily coalesces duplicate calls and restores no operation when blocked at
+serial admission; a queued retry restores its genuine prior rejected operation.
+No source, test, or behavior changed.
+
+Round 3 reviews the record-only correction frozen from `ab42b249` through
+`8e119579` in `.superpowers/sdd/review-ab42b249..8e119579.diff` (one commit,
+10,437 bytes). Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
+
+### Slice 4 Acceptance
+
+Round 3 is clean in all four canonical concerns and every reviewer is closed.
+Serial attachment admission, before/after-stop races, safe/unsafe queued attach
+behavior, stale/opaque handle behavior, two-way retry-state separation, runtime
+input snapshotting, and worker-construction recovery are accepted. All four
+T-0037e1 slices are clean; final child verification is now the only pre-merge
+gate.
+
+### Slice 4 Round 1 Findings
+
+1. Failed-start rollback ownership must be rechecked when queued detach or
+   detach retry reaches serial admission, not only when the API is called. A
+   pre-rollback queued detach must reject without becoming retryable detach
+   state; an already-rejected real detach retry must remain retained but blocked
+   until `retryFailedStart()` completes.
+2. `attach()` must synchronously capture ownership and a shallow immutable
+   descriptor-array snapshot before queuing, so runtime mutation of a readonly
+   TypeScript input cannot change the later admitted operation.
+3. If first-generation `createWorker()` throws, removing its sole claim must
+   also clear the matching empty registration generation/ownership slot so a
+   later attachment can recover with different ownership.
+4. The active explicit-exclusions text must distinguish excluded failed-start
+   rollback implementation from the implemented Slice 4 coordination guard.
+
+One Terra Medium owner receives the complete deduplicated batch under focused
+TDD before Round 2.
+
+Disposition: corrected under strict focused TDD. New detach and retry attempts
+recheck failed-start ownership at serial admission; an unstarted detach clears
+its temporary operation, while a blocked retry restores its genuine prior
+rejected operation. `attach()` captures call-time ownership and a frozen shallow
+descriptor-array copy. Initial worker-construction failure removes the claim
+and clears its matching empty registration slot. The active exclusion now
+reserves failed-start rollback implementation except for this coordination
+guard. Focused and static evidence is recorded in the work log.
+
+Round 2 reviews the complete fix frozen from `fb0650ae` through `1ab44524` in
+`.superpowers/sdd/review-fb0650ae..1ab44524.diff` (one commit, 32,260 bytes).
+Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
+
+### Slice 4 Coordinator Finding
+
+An unresolved failed-start rollback must block detach of an existing sibling
+before a detach operation is created. Otherwise sibling last-detach can retire
+and clear the same generation while `#failedRollback` still owns its rollback,
+leaving two state machines over one generation and stale retry state. Detach
+must reject with failed-start explicit-retry behavior, `retryDetach()` must not
+adopt that rejection, and detach may begin only after `retryFailedStart()`
+finishes. One Terra Medium owner receives this regression and fix before review.
+
+Disposition: corrected under strict focused TDD. `detach()` now checks the
+retained failed-start rollback after exact handle/duplicate-operation validation
+and before creating or queueing a new detach operation. The blocked sibling
+therefore retains readiness/generation ownership, `retryDetach()` still reports
+no failed detach, `retryFailedStart()` alone resumes rollback, and ordinary
+detach succeeds afterward. The opposite unsafe-last-detach direction remains
+unchanged.
+
+### Slice 3 Round 1 Finding
+
+Documentation must not say `DeliveryRunCoordinator.retire()` is invoked exactly
+once. An unsafe quiescence rejection clears the in-flight retirement promise,
+and explicit detach retry re-enters the same coordinator retirement state
+machine. The stable guarantee is that stop executes once and completed
+checkpoints are not duplicated. One Terra Medium owner receives this record-only
+correction before Round 2.
+
+Disposition: corrected in the active architecture. Explicit retry after unsafe
+quiescence re-invokes `retire()` to re-enter the same coordinator retirement
+state machine; stop executes once and completed checkpoints/phases are not
+duplicated. No implementation or test behavior changed.
+
+Round 2 reviews the record-only correction frozen from `4447cf56` through
+`42f07b96` in `.superpowers/sdd/review-4447cf56..42f07b96.diff` (one commit,
+10,277 bytes). Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
+
+### Slice 3 Acceptance
+
+Round 2 is clean in all four canonical concerns and every reviewer is closed.
+Ordinary last detach, safe and unsafe retirement failure behavior, checkpointed
+retry, zero-scope retirement, and the corrected retry contract are accepted.
+The existing Terra Medium owner now receives final Slice 4 race linearization
+and handle/retry-state separation only.
+
+### Slice 2 Round 1 Findings
+
+1. A valid zero-scope registration must detach as a successful no-record
+   operation; first detach cannot reject after cleanup and retry cannot mask it.
+2. Selected-owner barrier is an immediate no-op for an empty owner set and must
+   not wait behind unrelated sibling work.
+3. `EnvironmentAttachmentHandle` needs a module-private nominal brand in
+   addition to runtime `WeakMap` identity, so structural copies do not satisfy
+   the private detach API at compile time.
+4. Current records must say no package/root public export, not no exported
+   package-internal access methods.
+
+One Terra Medium owner receives all four before Round 2.
+
+Disposition: all four Slice 2 Round 1 findings are corrected under strict TDD.
+Focused and affected regressions pass; Round 2 review is pending.
+
+### Slice 2 Round 2 Record Correction
+
+The active Slice 2 implementation evidence now records the post-fix focused
+119/119 and affected 217/217 results. Earlier timestamped 116/215 entries remain
+historical pre-fix evidence. This correction changes records only; Round 3
+documentation review is pending.
+
+Round 3 reviews only the record correction frozen from `9a465747` through
+`2fe4b225` in
+`.superpowers/sdd/review-9a465747..2fe4b225.diff` (one commit, 8,501 bytes).
+The bounded wave explicitly assigns style, TypeScript/API, and reliability to
+`gpt-5.6-terra` / `high`, and documentation to `gpt-5.6-luna` / `medium`.
+
+### Slice 2 Acceptance
+
+Round 3 is clean in all four canonical lanes and every reviewer is closed. The
+record correction accurately presents 119/119 focused and 217/217 affected
+evidence; older 116/215 entries remain historical. Slice 2 is accepted. The
+existing Terra Medium implementation owner now receives Slice 3 ordinary last
+detach only, preserving race/handle separation for Slice 4.
+
+Started: `2026-07-13T00:46:22Z`
+
+Baseline commit: `d8ffc72b`
+
+Branch: `task/T-0037e1-registration-detach-lifecycle`
+
+This `Status` header is canonical for T-0037e1. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037d complete and integrated.
+
+T-0037e1 changes registration detach concurrency, retry, and ordinary
+last-registration retirement boundaries. One existing requirements splitter is
+therefore assigned a milestone-boundary architecture pass with expected and
+explicit `gpt-5.6-sol` / `high`, read-only ownership, and no subagents. It must
+consume the accepted task/completion plan and relevant Spine JVM server evidence
+without reopening completed T-0037b/c/d or later e2/e3/f policy.
+
+The accepted bounded design is recorded in `architecture-resolution.md`. It
+splits this child into four sequential, independently reviewed TDD slices:
+
+1. coordinator settlement observation, selected-owner barrier, and one private
+   generation-local delivery-record owner;
+2. non-last registration detach and retry;
+3. ordinary last-detach authoritative retirement and retry;
+4. attach/detach races, handle validation, and failed-start separation.
+
+One existing Terra Medium implementer is assigned Slice 1 only with sole write
+ownership, strict TDD, and no subagents. Later slices consume the reviewed
+foundation and are not part of the first review package.
+
+### Slice 1 Coordinator Findings
+
+Before packaging, the implementation owner must correct four foundation gaps:
+
+1. Settlement observation emits only genuinely new or changed evidence; an
+   identical repeated settlement must not emit again.
+2. The selected-owner barrier must propagate a terminal coordinator/observer
+   invariant fault instead of swallowing it as successful quiescence.
+3. Exact fulfilled re-evaluation must consume only its unit and retain a cause
+   for any other rejected unit still parked in the same obligation.
+4. The record owner must expose bounded atomic detach and retire selection/
+   consumption primitives required by later slices, not only separate select
+   and remove helpers that permit ordering mistakes.
+
+The same Terra Medium owner receives all four under strict TDD before Round 1.
+
+### Slice 1 Round 1 Findings
+
+1. A barrier invoked after a terminal coordinator/observer fault has already
+   settled must still reject with that retained fault.
+2. Settlement observers must be synchronously enforced; TypeScript `void`
+   callbacks admit async functions, so a returned thenable must fault the
+   coordinator rather than become an unhandled rejection.
+3. Reporting selects the first unreported cause inside the selected units, not
+   the first configured cause outside/previously reported.
+4. Atomic detach must reclassify ownership before reporting so a shared unit
+   ordered before a newly orphaned unit cannot suppress the orphan cause.
+5. Correct impossible active UTC chronology in work/review logs.
+
+One Terra Medium owner receives the complete batch before Round 2.
+
+### Slice 1 Acceptance
+
+Round 2 is clean in all four canonical lanes. Settlement observation, retained
+faults, selected-owner barrier, per-unit causes, atomic record operations,
+dynamic bounds, and private API boundaries are accepted. Slice 2 now consumes
+this foundation and implements non-last registration detach/retry only; last
+detach, races, and public/server integration remain later.
+
+Disposition: all five Round 1 findings are corrected and focused verified.
+Barriers check retained faults before and after waits; observer thenables are
+consumed and rejected synchronously; reporting chooses the first unreported
+selected cause; detach reclassifies before orphan selection/reporting; and the
+active UTC chronology is corrected from local UTC+01 wall time.
 
 ## Objective
 
@@ -101,5 +354,120 @@ rebind/transfer, permanent environment close, or server cleanup ordering.
 
 No reusable explicit generation stop, survivor rebind, scope transfer,
 candidate publication, permanent environment close, facility teardown,
-failed-start rollback, server/listener integration, retry timing, public
-monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
+failed-start rollback implementation beyond the Slice 4 coordination/separation
+guard, server/listener integration, retry timing, public monitor/health/action
+API, topology, adapter, catch-up path, or T-0036 change.
+
+## Slice 1 Implementation Record
+
+- `2026-07-13`: The sole existing Terra Medium implementer completed Slice 1
+  under strict focused TDD with no subagents. The coordinator now records each
+  settlement through an optional private observer and faults observably on an
+  observer invariant error. Its selected-owner barrier removes selected pending
+  scopes before and after awaiting the active turn plus its bounded successor,
+  while retaining configured, sibling, and settled state.
+- One private generation-local `EnvironmentDeliveryRecords` module maps exact
+  registered initial/dynamic scopes to `ParkedDeliveryObligations`; it holds no
+  second cause ledger. Rejection is bounded by the parked table, `PARKED`
+  remains cause-less operational work, `IDLE` consumes its exact unit, and
+  `STOPPED` is inert rather than successful re-evaluation. Its private atomic
+  record-consumption primitives are foundation only; environment lifecycle
+  detach/retry and attachment integration remain excluded for later slices.
+
+## Slice 2 Implementation Record
+
+- `2026-07-13`: The existing implementer completed the non-last registration
+  detach/retry slice at explicit fixed `gpt-5.6-terra` / `medium`, with no
+  subagents. Private `serverEnvironmentAccess.detach()` / `retryDetach()` use
+  exact environment-owned handle identity and one per-handle `WeakMap`
+  operation. Concurrent duplicate detach shares its promise; retry is admitted
+  only after rejection and resumes persisted phase checkpoints.
+- Under the lifecycle serial gate, non-last detach closes only departing
+  readiness, stops and awaits its exact initial/dynamic owner set, establishes
+  the coordinator owner barrier, atomically detaches its delivery records,
+  attempts reporting once, permanently retires selected workers, removes
+  selected coordinator state, and then removes registration/configured overlap
+  state. Unsafe pre-barrier failures retain ownership and endpoints.
+  Post-barrier failures retain stable error identity/order while safe phases
+  continue; report and worker-retirement attempts are never repeated, while a
+  failed coordinator removal remains the only retryable cleanup phase.
+- Sibling generation identity, readiness, records, pending admission, workers,
+  and configured ownership remain usable. At the Slice 2 boundary, ordinary
+  last detach remained explicitly unimplemented and performed no lifecycle
+  mutation. No
+  package/root public export or public `ServerEnvironment` method, server
+  wiring, reusable stop, permanent close, or later race policy was added;
+  exported package-internal access methods remain intentional.
+- Focused evidence is 4 files / 119 tests and the affected T-0037a/b/c/d
+  regression is 7 files / 217 tests. Generated build typecheck passed. Final
+  lint/format/generated/diff/public scans are recorded in the work log. Full
+  verification, commit, and push remain intentionally deferred.
+
+## Slice 3 Implementation Record
+
+- `2026-07-13`: The existing Terra Medium owner implemented ordinary last
+  detach through the existing private handle/retry surface and the authoritative
+  `DeliveryRunCoordinator.retire()` primitive. Classification is fixed once as
+  `last` or `non-last` inside the serialized detach operation; accepted
+  non-last reservation behavior remains intact.
+- Last detach closes registration readiness, delegates stop/admission closure,
+  quiescence, all-generation record consumption/reporting, and permanent worker
+  retirement in D-0085 order. Unsafe quiescence leaves registration/generation
+  slots and endpoint ownership intact; retry re-enters the same coordinator
+  checkpoints without repeating stop or performing an implicit retry.
+- Once retirement is `replacementSafe`, a finally-equivalent outer path removes
+  the matching handle registration, generation map entry, and empty current
+  registration slot before propagating report or inert-retirement failure.
+  Those failures retain identity, are not replayed by retry, and one later
+  eligible attach creates exactly one fresh generation without old/new overlap.
+  A valid zero-scope last registration retires as a no-record generation.
+- Focused evidence is 4 files / 123 tests; the affected T-0037a/b/c/d/e1
+  regression is 7 files / 221 tests. Generated and tooling typechecks,
+  lint/cleanup, repository formatting, and generated cleanliness pass. Full
+  verification, commit, push, Slice 4 races, reusable stop, permanent close,
+  server/public integration, docs, and examples remain excluded.
+- Slice 3 is frozen from assignment `ed73178a` through implementation
+  `1d6c0f98` in `.superpowers/sdd/review-ed73178a..1d6c0f98.diff` (one commit,
+  39,063 bytes). Round 1 explicitly assigns style, TypeScript/API, and
+  reliability to `gpt-5.6-terra` / `high`, and documentation to
+  `gpt-5.6-luna` / `medium`, each read-only with no subagents.
+
+## Slice 4 Implementation Record
+
+- `2026-07-13`: The existing fixed Terra Medium implementer completed final
+  Slice 4 under strict focused TDD with no subagents. Attachment registration
+  claim, current-generation lookup/creation, descriptor enumeration, storage/
+  route assembly, and worker creation now occur only after that attachment is
+  admitted by the lifecycle serial gate.
+- An attachment admitted first joins the current generation and makes a later
+  detach non-last. A last detach admitted first closes/stops the old generation;
+  queued attachment work remains untouched until retirement settles, then
+  creates exactly one fresh generation only after replacement-safe slot
+  clearing. Reporting or inert-retirement failure after replacement safety
+  still propagates from detach without blocking that queued fresh attachment.
+- Unsafe last-detach quiescence retains one detach-specific retry-required
+  state. Queued and later attachments reject before claim, descriptor/storage/
+  route work, or worker creation and never invoke retirement implicitly.
+  `retryDetach()` on the original handle resumes the coordinator checkpoints;
+  successful safe clearing removes the blocker and permits one later fresh
+  generation. A completed prior-generation handle stays inert and cannot alter
+  the fresh registration. Failed-start rollback and detach retain distinct
+  retry entry points and state machines in both directions.
+- Initial Slice 4 RED ran 56 focused environment tests and produced the expected
+  five race failures. GREEN passed environment 56/56, focused coordinator/parked/records/
+  environment 130/130, and the canonical affected bounded-context/handoff/
+  coordinator/parked/environment regression 228/228. The coordinator finding
+  added one observed targeted RED and raised that pre-review evidence to
+  environment 57/57, focused 131/131, and affected 229/229. Round 1 adds four
+  observed RED regressions; current GREEN is environment 61/61, focused
+  135/135, and affected 233/233. Generated/build/tooling typecheck/lint,
+  formatting, generated cleanliness, diff/public scans, and exact status
+  evidence are recorded in the work log. Full verification, commit, and push
+  remain intentionally unrun. Reusable stop, survivor transfer/rebind,
+  permanent close, facilities/server integration, public APIs/exports,
+  examples, docs, and generated artifacts remain excluded.
+- Slice 4 is frozen from assignment `2c57d41c` through implementation/fix
+  `71576629` in `.superpowers/sdd/review-2c57d41c..71576629.diff` (two commits,
+  50,574 bytes). Round 1 explicitly assigns style, TypeScript/API, and
+  reliability to `gpt-5.6-terra` / `high`, and documentation to
+  `gpt-5.6-luna` / `medium`, read-only with no subagents.

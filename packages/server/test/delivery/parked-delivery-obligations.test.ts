@@ -207,7 +207,25 @@ describe("ParkedDeliveryObligations", () => {
     ).toEqual([normalFirst, sharedFirst]);
   });
 
-  it("discards an unreported representative when its exact unit is fulfilled", () => {
+  it("reports the first unreported selected cause across separate selections", () => {
+    const obligations = table();
+    const first = new Error("first");
+    const second = new Error("second");
+    obligations.park(registration("one"), "one-all", ["shard-0"], first);
+    obligations.park(registration("one"), "one-all", ["shard-1"], second);
+
+    expect(obligations.report([selection(registration("one"), "one-all", ["shard-1"])])).toEqual([
+      second,
+    ]);
+    expect(
+      obligations.report([selection(registration("one"), "one-all", ["shard-0", "shard-1"])]),
+    ).toEqual([first]);
+    expect(
+      obligations.report([selection(registration("one"), "one-all", ["shard-0", "shard-1"])]),
+    ).toEqual([]);
+  });
+
+  it("reselects a remaining rejected unit when the first representative is fulfilled", () => {
     const obligations = table();
     const resolved = new Error("resolved");
     obligations.park(registration("one"), "one-all", ["shard-0", "shard-1"], resolved);
@@ -216,10 +234,27 @@ describe("ParkedDeliveryObligations", () => {
 
     expect(
       obligations.report([selection(registration("one"), "one-all", ["shard-0", "shard-1"])]),
-    ).toEqual([]);
+    ).toEqual([resolved]);
     expect(obligations.records()).toEqual([
-      expect.objectContaining({ units: ["shard-1"], hasCause: false }),
+      expect.objectContaining({ units: ["shard-1"], hasCause: true, cause: resolved }),
     ]);
+  });
+
+  it("reselects distinct per-unit causes in configured order after exact fulfillment", () => {
+    const obligations = table();
+    const first = new Error("first");
+    const second = new Error("second");
+    obligations.park(registration("one"), "one-all", ["shard-1"], second);
+    obligations.park(registration("one"), "one-all", ["shard-0"], first);
+
+    obligations.fulfilled(registration("one"), "one-all", ["shard-0"]);
+
+    const selected = [selection(registration("one"), "one-all", ["shard-0", "shard-1"])];
+    expect(obligations.records()).toEqual([
+      expect.objectContaining({ units: ["shard-1"], hasCause: true, cause: second }),
+    ]);
+    expect(obligations.report(selected)).toEqual([second]);
+    expect(obligations.report(selected)).toEqual([]);
   });
 
   it("reclassifies one removed owner across plural generation destinations", () => {
@@ -242,7 +277,8 @@ describe("ParkedDeliveryObligations", () => {
         owner: { kind: "generation" },
         obligation: "generation-1",
         units: ["shard-1"],
-        hasCause: false,
+        cause: failure,
+        hasCause: true,
         occurrences: 2,
       }),
     ]);

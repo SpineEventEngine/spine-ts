@@ -22,12 +22,15 @@ export class DeliveryRunCoordinator {
   #finalized = false;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
+  readonly #onSettlement: ((settlement: DeliveryScopeSettlement) => unknown) | undefined;
 
   constructor(options: {
     readonly scopes: readonly DeliveryRunScope[];
     readonly worker: DeliveryRunWorker;
+    readonly onSettlement?: (settlement: DeliveryScopeSettlement) => unknown;
   }) {
     this.#worker = options.worker;
+    this.#onSettlement = options.onSettlement;
     this.#configure(options.scopes);
     if (this.#configured.size === 0) {
       throw new Error("Delivery run coordinator requires at least one configured scope.");
@@ -99,6 +102,25 @@ export class DeliveryRunCoordinator {
         this.#settled.delete(key);
       }
     }
+  }
+
+  /** @internal Await retained work that could still start selected owners without reclaiming evidence. */
+  async awaitOwnersBarrier(ownerKeys: readonly string[]): Promise<void> {
+    if (ownerKeys.length === 0) {
+      return;
+    }
+    this.#requireHealthy();
+    const owners = new Set(ownerKeys);
+    this.#removePendingOwners(owners);
+    const active = this.#active;
+    await active;
+    this.#requireHealthy();
+    const successor = this.#active;
+    if (successor !== undefined && successor !== active) {
+      await successor;
+      this.#requireHealthy();
+    }
+    this.#removePendingOwners(owners);
   }
 
   settlement(): DeliveryRunSettlement {
@@ -247,7 +269,7 @@ export class DeliveryRunCoordinator {
     const attempted = new Set(shards.map((shard) => shard.key()));
     for (const scope of scopes) {
       if (attempted.has(scope.ready.shard.key())) {
-        this.#settled.set(scopeKey(scope), rejectedSettlement(scope, cause));
+        this.#recordSettlement(scope, rejectedSettlement(scope, cause));
       }
     }
     this.#parkPending(new Set(Array.from(attempted, (key) => ownerShardKey(owner, key))));
@@ -266,7 +288,7 @@ export class DeliveryRunCoordinator {
       }
       for (const scope of scopes) {
         if (scope.ready.shard.key() === shardKey) {
-          this.#settled.set(scopeKey(scope), shardSettlement(scope, shardEvidence));
+          this.#recordSettlement(scope, shardSettlement(scope, shardEvidence));
         }
       }
     }
@@ -281,11 +303,31 @@ export class DeliveryRunCoordinator {
     }
   }
 
+  #recordSettlement(scope: DeliveryRunScope, settlement: DeliveryScopeSettlement): void {
+    const key = scopeKey(scope);
+    const previous = this.#settled.get(key);
+    this.#settled.set(key, settlement);
+    if (previous !== undefined && sameSettlement(previous, settlement)) {
+      return;
+    }
+    const observed = this.#onSettlement?.(cloneSettlement(settlement));
+    if (isPromiseLike(observed)) {
+      void Promise.resolve(observed).catch(() => undefined);
+      throw new Error("Delivery run settlement observer must complete synchronously.");
+    }
+  }
+
   #removePendingOwners(owners: ReadonlySet<string>): void {
     for (const [key, scope] of this.#pending) {
       if (owners.has(scope.owner.key)) {
         this.#pending.delete(key);
       }
+    }
+  }
+
+  #requireHealthy(): void {
+    if (this.#fault !== undefined) {
+      throw this.#fault;
     }
   }
 
@@ -535,6 +577,36 @@ function cloneProgress(progress: DeliveryLoopProgress): DeliveryLoopProgress {
   return Object.freeze({ ...progress, failures: Object.freeze([...progress.failures]) });
 }
 
+function sameSettlement(previous: DeliveryScopeSettlement, next: DeliveryScopeSettlement): boolean {
+  return (
+    previous.disposition === next.disposition &&
+    Object.is(previous.cause, next.cause) &&
+    sameProgress(previous.progress, next.progress)
+  );
+}
+
+function sameProgress(
+  previous: DeliveryLoopProgress | undefined,
+  next: DeliveryLoopProgress | undefined,
+): boolean {
+  if (previous === undefined || next === undefined) {
+    return previous === next;
+  }
+  return (
+    previous.runs === next.runs &&
+    previous.processed === next.processed &&
+    previous.accepted === next.accepted &&
+    previous.delivered === next.delivered &&
+    previous.failed === next.failed &&
+    previous.failures.length === next.failures.length &&
+    previous.failures.every(
+      (failure, index) =>
+        Object.is(failure.message, next.failures[index]?.message) &&
+        Object.is(failure.error, next.failures[index]?.error),
+    )
+  );
+}
+
 function emptyProgress(): DeliveryLoopProgress {
   return Object.freeze({
     runs: 0,
@@ -557,4 +629,11 @@ function throwFailures(failures: readonly unknown[]): void {
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return false;
+  }
+  return typeof (value as { readonly then?: unknown }).then === "function";
 }

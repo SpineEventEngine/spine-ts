@@ -18,6 +18,7 @@ import {
   type EnvironmentDeliveryRuntime,
   type EnvironmentGenerationWorker,
 } from "./environment-delivery-worker.js";
+import { EnvironmentDeliveryRecords } from "./environment-delivery-records.js";
 
 export type { EnvironmentGenerationWorker } from "./environment-delivery-worker.js";
 
@@ -41,11 +42,31 @@ export interface EnvironmentAttachOptions {
   readonly descriptors: readonly ContextDeliveryDescriptor[];
 }
 
-/** @internal Opaque successful attachment used by later detach/stop/server slices. */
-export interface EnvironmentAttachmentHandle extends EnvironmentRegistrationClaim {
+class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {
   readonly startup: DeliveryRunSettlement;
-  records(): readonly ParkedDeliveryObligationRecord[];
+  readonly token: string;
+  readonly generation: EnvironmentGeneration;
+  readonly #records: () => readonly ParkedDeliveryObligationRecord[];
+
+  constructor(
+    claim: EnvironmentRegistrationClaim,
+    startup: DeliveryRunSettlement,
+    records: () => readonly ParkedDeliveryObligationRecord[],
+  ) {
+    this.token = claim.token;
+    this.generation = claim.generation;
+    this.startup = startup;
+    this.#records = records;
+    Object.freeze(this);
+  }
+
+  records(): readonly ParkedDeliveryObligationRecord[] {
+    return this.#records();
+  }
 }
+
+/** @internal Nominal successful attachment used by later detach/stop/server slices. */
+export type EnvironmentAttachmentHandle = AttachedEnvironmentRegistration;
 
 /** @internal Construction seams for deterministic package lifecycle tests. */
 export interface EnvironmentAttachmentsOptions {
@@ -110,8 +131,11 @@ export class EnvironmentAttachments {
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
   readonly #createWorker: () => EnvironmentGenerationWorker;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
+  readonly #handles = new WeakMap<EnvironmentAttachmentHandle, AttachedHandle>();
+  readonly #nonLastDetachTokens = new Set<string>();
   #serial = Promise.resolve();
   #failedRollback: FailedStartRollback | undefined;
+  #failedLastDetach: AttachedHandle | undefined;
 
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
@@ -151,23 +175,11 @@ export class EnvironmentAttachments {
   }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
-    if (this.#failedRollback !== undefined) {
-      return Promise.reject(explicitRetryError());
-    }
-    let claim: EnvironmentRegistrationClaim;
-    try {
-      claim = this.#registrations.claim(options.ownership);
-    } catch (error) {
-      return Promise.reject(asError(error));
-    }
-    let generation = this.#generations.get(claim.generation);
-    if (generation === undefined) {
-      generation = new DeliveryGeneration(this.#createWorker(), this.#report);
-      this.#generations.set(claim.generation, generation);
-    }
-    const attaching = this.#serial.then(() =>
-      this.#startQueuedAttachment(generation, claim, options.descriptors),
-    );
+    const admittedOptions: EnvironmentAttachOptions = Object.freeze({
+      ownership: options.ownership,
+      descriptors: Object.freeze([...options.descriptors]),
+    });
+    const attaching = this.#serial.then(() => this.#startQueuedAttachment(admittedOptions));
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
@@ -175,16 +187,159 @@ export class EnvironmentAttachments {
     return attaching;
   }
 
-  #startQueuedAttachment(
-    generation: DeliveryGeneration,
-    claim: EnvironmentRegistrationClaim,
-    descriptors: readonly ContextDeliveryDescriptor[],
+  async #startQueuedAttachment(
+    options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
-      this.#registrations.remove(claim.token);
+      throw explicitRetryError();
+    }
+    if (this.#failedLastDetach !== undefined) {
+      throw detachRetryRequiredError();
+    }
+    const claim = this.#registrations.claim(options.ownership);
+    let generation = this.#generations.get(claim.generation);
+    if (generation === undefined) {
+      try {
+        generation = new DeliveryGeneration(this.#createWorker(), this.#report);
+      } catch (error) {
+        if (this.#registrations.remove(claim.token) === 0) {
+          this.#registrations.clear(claim.generation);
+        }
+        throw error;
+      }
+      this.#generations.set(claim.generation, generation);
+    }
+    const attachment = await this.#attachRegistration(generation, claim, options.descriptors);
+    this.#handles.set(attachment, {
+      claim,
+      generation,
+      operation: undefined,
+      claimRemoved: false,
+      detachKind: undefined,
+      generationCleared: false,
+    });
+    return attachment;
+  }
+
+  detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      return Promise.reject(
+        new Error("Environment attachment handle is not owned by this environment."),
+      );
+    }
+    if (attached.operation !== undefined) {
+      return attached.operation.promise;
+    }
+    if (this.#failedRollback !== undefined) {
       return Promise.reject(explicitRetryError());
     }
-    return this.#attachRegistration(generation, claim, descriptors);
+    return this.#queueDetach(attached);
+  }
+
+  retryDetach(attachment: EnvironmentAttachmentHandle): Promise<void> {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      return Promise.reject(
+        new Error("Environment attachment handle is not owned by this environment."),
+      );
+    }
+    const operation = attached.operation;
+    if (operation === undefined) {
+      return Promise.reject(new Error("Environment attachment has no failed detach to retry."));
+    }
+    if (operation.status === "running") {
+      return Promise.reject(new Error("Environment attachment detach has not rejected."));
+    }
+    if (
+      operation.status === "complete" ||
+      !attached.generation.hasRegistration(attached.claim.token)
+    ) {
+      operation.status = "complete";
+      return Promise.resolve();
+    }
+    if (this.#failedRollback !== undefined) {
+      return Promise.reject(explicitRetryError());
+    }
+    return this.#queueDetach(attached, operation);
+  }
+
+  #queueDetach(attached: AttachedHandle, previousOperation?: DetachHandleOperation): Promise<void> {
+    const detaching = this.#serial.then(() => {
+      if (this.#failedRollback !== undefined) {
+        attached.operation = previousOperation;
+        throw explicitRetryError();
+      }
+      return this.#detachRegistration(attached);
+    });
+    const operation: DetachHandleOperation = { promise: detaching, status: "running" };
+    attached.operation = operation;
+    this.#serial = detaching.then(
+      () => undefined,
+      () => undefined,
+    );
+    void detaching.then(
+      () => {
+        operation.status = "complete";
+      },
+      () => {
+        operation.status = "rejected";
+      },
+    );
+    return detaching;
+  }
+
+  async #detachRegistration(attached: AttachedHandle): Promise<void> {
+    if (attached.detachKind === undefined) {
+      const liveRegistrations = this.#registrations.count - this.#nonLastDetachTokens.size;
+      if (this.#registrations.count === 1) {
+        attached.detachKind = "last";
+      } else if (liveRegistrations <= 1) {
+        throw new Error("Environment attachment cannot detach the reserved live registration.");
+      } else {
+        attached.detachKind = "non-last";
+        this.#nonLastDetachTokens.add(attached.claim.token);
+      }
+    }
+    if (attached.detachKind === "last") {
+      try {
+        await attached.generation.retireRegistration(attached.claim.token);
+      } catch (error) {
+        if (!attached.generation.replacementSafe) {
+          this.#failedLastDetach = attached;
+        }
+        throw error;
+      } finally {
+        if (attached.generation.replacementSafe) {
+          this.#clearRetiredGeneration(attached);
+        }
+      }
+      return;
+    }
+    try {
+      await attached.generation.detachRegistration(attached.claim.token);
+    } finally {
+      if (!attached.generation.hasRegistration(attached.claim.token) && !attached.claimRemoved) {
+        this.#registrations.remove(attached.claim.token);
+        this.#nonLastDetachTokens.delete(attached.claim.token);
+        attached.claimRemoved = true;
+      }
+    }
+  }
+
+  #clearRetiredGeneration(attached: AttachedHandle): void {
+    if (!attached.claimRemoved) {
+      this.#registrations.remove(attached.claim.token);
+      attached.claimRemoved = true;
+    }
+    if (!attached.generationCleared) {
+      this.#generations.delete(attached.claim.generation);
+      this.#registrations.clear(attached.claim.generation);
+      attached.generationCleared = true;
+    }
+    if (this.#failedLastDetach === attached) {
+      this.#failedLastDetach = undefined;
+    }
   }
 
   retryFailedStart(): Promise<void> {
@@ -294,16 +449,43 @@ interface FailedStartRollback {
   retry: Promise<undefined> | undefined;
 }
 
+interface AttachedHandle {
+  readonly claim: EnvironmentRegistrationClaim;
+  readonly generation: DeliveryGeneration;
+  operation: DetachHandleOperation | undefined;
+  claimRemoved: boolean;
+  detachKind: "non-last" | "last" | undefined;
+  generationCleared: boolean;
+}
+
+interface DetachHandleOperation {
+  promise: Promise<void>;
+  status: "running" | "rejected" | "complete";
+}
+
 interface GenerationRegistration {
   readonly readiness: RegistrationReadiness;
   readonly startupScopes: readonly DeliveryRunScope[];
   readonly ownership: RegistrationOwnership;
+  readonly descriptors: readonly ContextDeliveryDescriptor[];
   rollback?: RegistrationRollback;
+  detach?: RegistrationDetach;
 }
 
 interface RegistrationRollback {
   stopped: boolean;
   quiescent: boolean;
+}
+
+interface RegistrationDetach {
+  stopped: boolean;
+  quiescent: boolean;
+  barrier: boolean;
+  recordsConsumed: boolean;
+  causes: readonly unknown[];
+  reportAttempted: boolean;
+  workerRetirementAttempted: boolean;
+  coordinatorRemoved: boolean;
 }
 
 class RegistrationOwnership {
@@ -334,7 +516,7 @@ class DeliveryGeneration {
     ContextDeliveryDescriptor,
     Map<string, EnvironmentDeliveryRuntime>
   >();
-  readonly #obligations = new Map<string, ParkedDeliveryObligations>();
+  readonly #deliveryRecords = new EnvironmentDeliveryRecords();
   readonly #registrations = new Map<string, GenerationRegistration>();
   readonly #reportedFailures = new ReportedFailures();
   readonly #overlapDomains = new Map<string, string>();
@@ -386,11 +568,13 @@ class DeliveryGeneration {
       this.#addRuntime(runtime);
       ownership.add(runtime);
     }
-    const readiness = this.#readiness(registration, ownership);
+    this.#deliveryRecords.register(claim.token, ownership.scopes);
+    const readiness = this.#readiness(registration, ownership, claim.token);
     this.#registrations.set(claim.token, {
       readiness,
       startupScopes: registration.scopes,
       ownership,
+      descriptors,
     });
     await this.#transition(registration, readiness);
     return await this.#recover(claim, readiness.open(registration.scopes));
@@ -441,19 +625,106 @@ class DeliveryGeneration {
     throwFailures(failures, "Environment registration rollback failed.");
   }
 
-  async retireFailedRegistration(token: string): Promise<void> {
+  async detachRegistration(token: string): Promise<void> {
+    const state = this.#registrations.get(token);
+    if (state === undefined) {
+      return;
+    }
+    state.readiness.fail();
+    const ownerKeys = state.ownership.ownerKeys;
+    const scopes = state.ownership.scopes;
+    const detach = (state.detach ??= {
+      stopped: false,
+      quiescent: false,
+      barrier: false,
+      recordsConsumed: false,
+      causes: Object.freeze([]),
+      reportAttempted: false,
+      workerRetirementAttempted: false,
+      coordinatorRemoved: false,
+    });
+    if (!detach.stopped) {
+      this.#worker.stopOwners(ownerKeys);
+      detach.stopped = true;
+    }
+    if (!detach.quiescent) {
+      await this.#worker.awaitOwnersSettled(ownerKeys);
+      detach.quiescent = true;
+    }
+    if (!detach.barrier) {
+      await this.#coordinator?.awaitOwnersBarrier(ownerKeys);
+      detach.barrier = true;
+    }
+    const failures: unknown[] = [];
+    if (!detach.recordsConsumed) {
+      try {
+        detach.causes = this.#deliveryRecords.detach(token);
+        detach.recordsConsumed = true;
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (detach.recordsConsumed && !detach.reportAttempted) {
+      detach.reportAttempted = true;
+      try {
+        if (detach.causes.length > 0) {
+          await this.#report(detach.causes);
+        }
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (!detach.workerRetirementAttempted) {
+      detach.workerRetirementAttempted = true;
+      try {
+        await this.#worker.retireOwners(ownerKeys);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (!detach.coordinatorRemoved) {
+      try {
+        if (ownerKeys.length > 0) {
+          await this.#coordinator?.removeOwners(ownerKeys);
+        }
+        detach.coordinatorRemoved = true;
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (detach.coordinatorRemoved) {
+      for (const ownerKey of ownerKeys) {
+        this.#configuredOwners.delete(ownerKey);
+      }
+      this.#forgetScopes(scopes);
+      for (const descriptor of state.descriptors) {
+        this.#descriptors.delete(descriptor);
+        this.#runtimes.delete(descriptor);
+      }
+      this.#registrations.delete(token);
+    }
+    throwFailures(failures, "Environment registration detach failed.");
+  }
+
+  async retireRegistration(token: string): Promise<void> {
     this.#registrations.get(token)?.readiness.fail();
     if (this.#coordinator === undefined) {
-      await this.#consumeRegistration(token, true);
-      this.#registrations.delete(token);
-      this.#retiredWithoutCoordinator = true;
-      this.#dropRetiredState();
+      try {
+        await this.#consumeRegistration(token, true);
+      } finally {
+        this.#registrations.delete(token);
+        this.#retiredWithoutCoordinator = true;
+        this.#dropRetiredState();
+      }
       return;
     }
     try {
       await this.#coordinator.retire(async () => {
-        await this.#consumeRegistration(token, true);
-        this.#registrations.delete(token);
+        try {
+          await this.#consumeRegistration(token, true);
+        } finally {
+          this.#registrations.delete(token);
+        }
       });
     } finally {
       if (this.replacementSafe) {
@@ -462,13 +733,18 @@ class DeliveryGeneration {
     }
   }
 
+  async retireFailedRegistration(token: string): Promise<void> {
+    await this.retireRegistration(token);
+  }
+
   #readiness(
     registration: AssembledRegistration,
     ownership: RegistrationOwnership,
+    token: string,
   ): RegistrationReadiness {
     return new RegistrationReadiness(
       registration.descriptors,
-      (descriptor, ready) => this.#prepareReady(descriptor, ready, ownership),
+      (descriptor, ready) => this.#prepareReady(descriptor, ready, ownership, token),
       (scope) => this.#coordinator?.notify(scope),
     );
   }
@@ -497,23 +773,21 @@ class DeliveryGeneration {
     const domains = startup.map((scope) => this.#overlapDomain(scope));
     const previouslyBlocked = this.#reportedFailures.overlaps(domains);
     const settlement = await this.#start(startup);
-    const obligations = this.#recordObligations(claim.token, startup, settlement);
     this.#reportedFailures.resolve(this.#resolvedDomains(startup, settlement));
     const blocked = previouslyBlocked && this.#reportedFailures.overlaps(domains);
-    throwRejected(obligations?.records() ?? [], blocked);
-    return handle(claim, settlement, obligations);
+    const startupRecords = this.#deliveryRecords.registrationRecords(claim.token);
+    throwRejected(startupRecords, blocked);
+    return handle(claim, settlement, () => startupRecords);
   }
 
   async #consumeRegistration(token: string, consumeGeneration: boolean): Promise<void> {
     const state = this.#registrations.get(token);
-    const obligations = this.#obligations.get(token);
-    if (state === undefined || obligations === undefined) {
+    if (state === undefined) {
       return;
     }
-    const units = state.startupScopes.map(scopeKey);
-    const causes = obligations.report([
-      { owner: { kind: "registration", token }, obligation: "startup", units },
-    ]);
+    const causes = consumeGeneration
+      ? this.#deliveryRecords.retire()
+      : this.#deliveryRecords.rollback(token);
     let reportFailure: unknown;
     try {
       if (causes.length > 0) {
@@ -522,12 +796,9 @@ class DeliveryGeneration {
     } catch (error) {
       reportFailure = error;
     }
-    obligations.removeRegistration(token);
-    if (consumeGeneration) {
-      this.#obligations.delete(token);
-    } else {
+    if (!consumeGeneration) {
       const unresolved = new Set(
-        obligations
+        this.#deliveryRecords
           .records()
           .filter(({ hasCause, reportedSinceResolution }) => hasCause && reportedSinceResolution)
           .flatMap(({ units: recordUnits }) => recordUnits),
@@ -537,7 +808,6 @@ class DeliveryGeneration {
           unresolved.has(scopeKey(scope)) ? [this.#overlapDomain(scope)] : [],
         ),
       );
-      this.#obligations.delete(token);
     }
     if (reportFailure !== undefined) {
       throw asError(reportFailure);
@@ -550,23 +820,11 @@ class DeliveryGeneration {
       : await this.#coordinator.start(startup);
   }
 
-  #recordObligations(
-    token: string,
-    startup: readonly DeliveryRunScope[],
-    settlement: DeliveryRunSettlement,
-  ): ParkedDeliveryObligations | undefined {
-    const obligations =
-      startup.length === 0 ? undefined : startupObligations(token, startup, settlement);
-    if (obligations !== undefined) {
-      this.#obligations.set(token, obligations);
-    }
-    return obligations;
-  }
-
   #prepareReady(
     descriptor: ContextDeliveryDescriptor,
     ready: DeliveryReady,
     ownership: RegistrationOwnership,
+    token: string,
   ): DeliveryRunScope {
     const tenant: DeliveryTenantScope =
       ready.tenantId === undefined
@@ -575,6 +833,7 @@ class DeliveryGeneration {
     const runtime = this.#runtime(descriptor, tenant);
     this.#addRuntime(runtime);
     ownership.add(runtime);
+    this.#deliveryRecords.register(token, runtime.scopes);
     const scope = runtime.scopes.find(
       ({ ready: candidate }) => readyKey(candidate) === readyKey(ready),
     );
@@ -594,6 +853,9 @@ class DeliveryGeneration {
       this.#coordinator = new DeliveryRunCoordinator({
         scopes: runtime.scopes,
         worker: this.#worker,
+        onSettlement: (settlement) => {
+          this.#deliveryRecords.observe(settlement);
+        },
       });
     } else {
       this.#coordinator.configure(runtime.scopes);
@@ -900,6 +1162,10 @@ function explicitRetryError(): Error {
   return new Error("Environment generation rollback requires an explicit retry.");
 }
 
+function detachRetryRequiredError(): Error {
+  return new Error("Environment generation detach requires an explicit retry.");
+}
+
 function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
   const rollbackErrors: readonly unknown[] =
     rollbackError instanceof AggregateError
@@ -923,13 +1189,9 @@ function throwFailures(failures: readonly unknown[], message: string): void {
 function handle(
   claim: EnvironmentRegistrationClaim,
   startup: DeliveryRunSettlement,
-  obligations: ParkedDeliveryObligations | undefined,
+  records: () => readonly ParkedDeliveryObligationRecord[],
 ): EnvironmentAttachmentHandle {
-  return Object.freeze({
-    ...claim,
-    startup,
-    records: () => obligations?.records() ?? Object.freeze([]),
-  });
+  return new AttachedEnvironmentRegistration(claim, startup, records);
 }
 
 function readyScope(
