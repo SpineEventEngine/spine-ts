@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task Round 5 re-review assigned
+Status: Final verification assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -874,3 +874,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   numbered phase. Implementer non-execution and later coordinator success for
   `docs:check` are explicit. Fresh four-concern dispositions are required;
   security remains deferred.
+
+## Final Whole-Task Clean Results
+
+- `2026-07-13T16:43:49Z`: all four final concerns return CLEAN at required
+  actual profiles. Desktop metadata confirms every assignment. All reviewers
+  used no subagents and are closed.
+- No actionable T-0037e3 finding remains. Full `pnpm verify` is the final task
+  acceptance gate; security remains deferred to T-0041.
