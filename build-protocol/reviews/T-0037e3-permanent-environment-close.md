@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 3 implementation assigned
+Status: Slice 3 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -586,3 +586,41 @@ Derived status mirror: the canonical current state is the `Status` header in
   closed.
 - Slice 2 is accepted with no remaining finding. Slice 3 implementation is
   authorized; security remains deferred to T-0041.
+
+## Slice 3 Implementation Handback
+
+- Existing implementer, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  Scope is one focused test file and synchronized task/work/review records; no
+  production, public, generated, or protected human-review file changed.
+- Evidence covers ordered delivery/tracer/transport/storage continuation despite
+  failures, one flat `ServerEnvironment close failed.` aggregate, failed-
+  checkpoint-only retry, idempotency, caller-owned exclusion, and non-closeable
+  preservation. Existing `RetryableCloseGroup` required no change.
+- A temporary first-failure rethrow made two new tests fail against raw errors,
+  demonstrating sensitivity; it was restored. Final focused lifecycle regressions
+  pass 3 files / 117 tests; generated typecheck, lint/cleanup, Prettier, and
+  diff hygiene pass.
+- Static scans retain permanent assignment solely in `EnvironmentAttachments`,
+  post-admission retry-group reachability solely in coalesced
+  `ServerEnvironment.close()`, and no T-0037b/server-handoff shortcut. No
+  public/API/package/export/example/Proto/generated delta; existing TSDoc and
+  README retain matching permanent non-reuse/in-use no-teardown wording.
+- Selected caller-owned-server coverage is blocked only by managed-sandbox
+  loopback `listen EPERM`; facility-only selections and direct caller-owned
+  facility coverage pass. Server/listener/session/context/resource ordering,
+  caller-owned server reuse, broad docs, new public concepts, commit, and push
+  remain excluded. Slice 3 handback is returned for existing review concerns.
+
+## Slice 3 Review Assignment
+
+- `2026-07-13T15:29:17Z`: coordinator accepts the implementer at actual Terra
+  Medium and resolves the sandbox limitation through native `server.test.ts`
+  21/21. Fresh evidence also includes 3 lifecycle files / 117 tests, API/export
+  10/10, generated typecheck, lint, cleanup, formatting, and diff checks.
+- Lightweight lint finds exact status mirrors, no runtime/public/package/docs or
+  generated delta, no duplicate close policy, and no active future-policy
+  overclaim. Historical superseded text is excluded unless current records
+  claim it as active.
+- Fresh style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability dispositions are required. Security remains deferred
+  to T-0041.

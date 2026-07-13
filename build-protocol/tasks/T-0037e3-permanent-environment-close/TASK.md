@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 3 implementation assigned
+Status: Slice 3 review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -811,3 +811,47 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - Slice 3 is authorized for owned-facility continuation, stable error ordering,
   retry/idempotency, caller-owned exclusion, and matching public closure
   wording only. Server/listener integration remains excluded.
+
+## Slice 3 Implementation Handback
+
+- Existing implementer role; explicit required profile `gpt-5.6-terra` /
+  `medium`; no subagents. This bounded handback changes only
+  `packages/server/test/server/environment-close.test.ts` plus these three
+  durable T-0037e3 records.
+- Coverage proves all owned facilities continue after earlier failure with one
+  flat `AggregateError("ServerEnvironment close failed.")` in delivery, tracer,
+  transport, storage order; later public close retries only failed checkpoints;
+  completed facilities never reappear; completed close is idempotent; and
+  caller-owned/non-closeable facilities preserve existing behavior.
+- RED/GREEN: initial tests were GREEN against the existing group. A temporary
+  first-failure rethrow made 2/12 tests fail by exposing raw errors rather than
+  the required aggregate; the mutation was immediately reverted. No production
+  file remains changed and `RetryableCloseGroup` is reused unchanged.
+- Evidence: focused T-0037d/e1/e2 lifecycle regressions pass 3 files / 117
+  tests; generated typecheck, scoped ESLint, cleanup enforcement, Prettier, and
+  `git diff --check` pass. Static scans show permanent assignment only in
+  `EnvironmentAttachments`, coalesced `ServerEnvironment.close()` reaches its
+  retry group only after admission, and no T-0037b/server-handoff shortcut.
+  Public/API/package-export/example/Proto/generated diffs are empty; current
+  TSDoc and README match permanent non-reuse and non-destructive in-use/no-
+  teardown behavior.
+- Limitation: selected `server.test.ts` facility-only cases pass; its caller-
+  owned-server case is blocked only by sandbox loopback `listen EPERM`. Direct
+  focused coverage proves caller-owned facility exclusion. No runtime/public
+  surface change, server/listener/session/context/resource ordering, caller-
+  owned server reuse, broad docs, commit, push, or `human-review-1-jul.md`
+  access occurred. Slice 3 handback is requested.
+
+## Slice 3 Coordinator Review Gate
+
+- `2026-07-13T15:29:17Z`: Desktop metadata confirms the implementer at actual
+  `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
+  Coordinator verification passes 3 lifecycle files / 117 tests, native full
+  `server.test.ts` 21/21, server API/export tests 10/10, generated typecheck,
+  scoped ESLint, cleanup enforcement, Prettier, and `git diff --check`.
+- Native server verification resolves the handback's sandbox-only loopback
+  limitation. Lightweight pre-review lint finds synchronized status, no runtime
+  or public/API/package/example/Proto/generated delta, no duplicate close
+  policy, and no future-policy overclaim.
+- The exact four-file Slice 3 batch is assigned to all four canonical review
+  concerns. Security remains deferred to T-0041.
