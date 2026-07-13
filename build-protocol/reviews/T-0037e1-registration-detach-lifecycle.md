@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 1 review in progress
+Status: Slice 4 Round 1 fixes assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -246,3 +246,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   read-only with no subagents. Review scope is serial claim/generation
   admission, attach/detach ordering, safe/unsafe queued attach behavior, stale
   handles, and two-way retry-state separation only.
+- Round 1 disposition: style is CLEAN. Documentation finds one contradictory
+  failed-start exclusion. TypeScript/API finds missing runtime input snapshot
+  and retry bypass. Reliability finds the detach guard must run at serial
+  admission for queued calls/retries and initial worker-construction failure
+  must clear the empty registration generation/ownership slot. The overlapping
+  retry findings are deduplicated into one state-preserving fix. All reviewers
+  are closed; one Terra Medium owner receives the complete four-item batch
+  before Round 2. Security/full verify remain deferred.

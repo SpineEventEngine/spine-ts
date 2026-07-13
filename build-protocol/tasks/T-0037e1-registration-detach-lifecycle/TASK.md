@@ -1,6 +1,25 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 1 review in progress
+Status: Slice 4 Round 1 fixes assigned
+
+### Slice 4 Round 1 Findings
+
+1. Failed-start rollback ownership must be rechecked when queued detach or
+   detach retry reaches serial admission, not only when the API is called. A
+   pre-rollback queued detach must reject without becoming retryable detach
+   state; an already-rejected real detach retry must remain retained but blocked
+   until `retryFailedStart()` completes.
+2. `attach()` must synchronously capture ownership and a shallow immutable
+   descriptor-array snapshot before queuing, so runtime mutation of a readonly
+   TypeScript input cannot change the later admitted operation.
+3. If first-generation `createWorker()` throws, removing its sole claim must
+   also clear the matching empty registration generation/ownership slot so a
+   later attachment can recover with different ownership.
+4. The active explicit-exclusions text must distinguish excluded failed-start
+   rollback implementation from the implemented Slice 4 coordination guard.
+
+One Terra Medium owner receives the complete deduplicated batch under focused
+TDD before Round 2.
 
 ### Slice 4 Coordinator Finding
 
