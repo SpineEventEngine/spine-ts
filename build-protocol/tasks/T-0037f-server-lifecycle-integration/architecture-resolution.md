@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 4 round-2 re-review assigned
+Status: Slice 5 implementation assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -895,3 +895,13 @@ smallest coherent implementation.
   preservation pass independent verification: both typechecks, 5 files / 178
   tests, and all scoped gates. Actual Terra Medium implementer used no
   subagents and is closed. Architecture remains unchanged; re-review follows.
+
+## Slice 4 Acceptance And Slice 5 Boundary
+
+- `2026-07-13T21:55:10Z`: all three applicable Slice 4 reviewers are CLEAN at
+  actual Terra High, no subagents, closed. Shared non-last running close is
+  accepted at `72e41729`.
+- Slice 5 now owns last detach, active delivery quiescence, no post-stop
+  `PAUSED` successor, ordered context/resource/owned-environment close, safe-
+  error continuation, and exact retry. Same Terra Medium implementer; no new
+  lifecycle access beyond Slice 4 and no docs/public redesign.

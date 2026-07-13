@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 4 round-2 re-review assigned
+Status: Slice 5 implementation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -709,3 +709,13 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Fresh Slice 4 style, TypeScript/API docs, and performance/reliability run at
   `gpt-5.6-terra` / high with no subagents against accepted Slice 3 through the
   new round-2 commit. Documentation N/A; security deferred; Slice 5+ excluded.
+
+## Slice 4 Clean Review Closure
+
+- `2026-07-13T21:55:10Z`: style/maintainability CLEAN; TypeScript/API docs
+  CLEAN; performance/reliability CLEAN. Actual profiles are
+  `gpt-5.6-terra` / high, matching dispatch; no subagents; all closed.
+- Empty/nested-empty failure presence, endpoint safety, exact retry, sibling
+  isolation, and bounded hooks are accepted with 5 files / 178 tests plus all
+  scoped gates. Documentation N/A; security deferred. Slice 5 implementation
+  is assigned at Terra Medium before fresh applicable review.
