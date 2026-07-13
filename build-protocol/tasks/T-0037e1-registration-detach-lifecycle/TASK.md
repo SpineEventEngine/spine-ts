@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 Round 1 fix verified; Round 2 review pending
+Status: Slice 3 Round 2 review in progress
 
 ### Slice 3 Round 1 Finding
 
@@ -15,6 +15,11 @@ Disposition: corrected in the active architecture. Explicit retry after unsafe
 quiescence re-invokes `retire()` to re-enter the same coordinator retirement
 state machine; stop executes once and completed checkpoints/phases are not
 duplicated. No implementation or test behavior changed.
+
+Round 2 reviews the record-only correction frozen from `4447cf56` through
+`42f07b96` in `.superpowers/sdd/review-4447cf56..42f07b96.diff` (one commit,
+10,277 bytes). Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
 
 ### Slice 2 Round 1 Findings
 
