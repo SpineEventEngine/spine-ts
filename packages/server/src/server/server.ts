@@ -111,12 +111,12 @@ export class Server {
         "Server start cleanup failed while closing owned contexts/resources.",
       );
       if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
-        this.#failedStartCleanup = { closeGroup, detachAttempted: false };
+        this.#failedStartCleanup = { closeGroup };
       } else {
         try {
           await closeGroup.close();
         } catch (cleanupError) {
-          this.#failedStartCleanup = { closeGroup, detachAttempted: false };
+          this.#failedStartCleanup = { closeGroup };
           throw attachmentCleanupError(error, cleanupError);
         }
         this.#failedStartConsumed = true;
@@ -143,7 +143,6 @@ export class Server {
           ),
           network: { server: httpServer, sessions },
           attachment,
-          detachAttempted: false,
         };
         this.#failedStartCleanup = cleanup;
         return this.#cleanupFailedListenerStart(cleanup, error);
@@ -256,10 +255,9 @@ export class Server {
       return true;
     }
     try {
-      if (cleanup.detachAttempted) {
+      if (serverEnvironmentAccess.detachRetryPending(this.#environment, attachment)) {
         await serverEnvironmentAccess.retryDetach(this.#environment, attachment);
       } else {
-        cleanup.detachAttempted = true;
         await serverEnvironmentAccess.detach(this.#environment, attachment);
       }
       delete cleanup.attachment;
@@ -288,7 +286,6 @@ interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   network?: FailedStartNetwork;
   attachment?: EnvironmentAttachmentHandle;
-  detachAttempted: boolean;
 }
 
 interface FailedStartNetwork {

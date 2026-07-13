@@ -1,6 +1,27 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 re-review assigned
+Status: Slice 3 round-2 re-review assigned
+
+## Slice 3 Round-2 Review-Fix
+
+- `2026-07-13T20:18:47Z`: expose exact-handle read-only retry ownership so
+  blocked initial detach is retried as ordinary detach, not nonexistent retry.
+
+## Slice 3 Round-2 Review-Fix Handback
+
+- `2026-07-13T20:24:18Z`: detach retry ownership remains solely in
+  `EnvironmentAttachments`. The exact-handle read-only projection is true only
+  for a rejected operation retained by that handle; foreign handles reject and
+  observation advances no state. Server no longer infers retry ownership from
+  an attempted call.
+- A detach rejected before operation creation by another failed rollback stays
+  ordinary-detach eligible. Once rollback clears, cleanup advances through the
+  existing exact detach, safety, close-group, and terminal gates. No public
+  surface, generation state copy, running-close behavior, or Slice 4+ semantics
+  are added.
+- `2026-07-13T20:26:17Z`: both typechecks, native 5 files / 164 tests, scoped
+  lint/cleanup/format, exact nine-path scope/status/public-leak, and diff gates
+  pass at unchanged baseline HEAD `0ceedad7`.
 
 ## Slice 3 Review-Fix Assignment
 

@@ -225,6 +225,15 @@ export class EnvironmentAttachments {
     return false;
   }
 
+  /** @internal Whether this exact handle owns a rejected detach operation. */
+  detachRetryPending(attachment: EnvironmentAttachmentHandle): boolean {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      throw new Error("Environment attachment handle is not owned by this environment.");
+    }
+    return attached.operation?.status === "rejected";
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
       return Promise.reject(environmentClosedError());

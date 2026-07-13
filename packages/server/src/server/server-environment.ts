@@ -190,6 +190,10 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     attachment: EnvironmentAttachmentHandle,
   ): Promise<void>;
+  detachRetryPending(
+    environment: ServerEnvironment,
+    attachment: EnvironmentAttachmentHandle,
+  ): boolean;
   endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): boolean;
   stopDelivery(environment: ServerEnvironment): Promise<void>;
   retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
@@ -242,6 +246,13 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
     }
     return attachments.retryDetach(attachment);
+  },
+  detachRetryPending(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      throw new TypeError("Detach-retry observation requires a ServerEnvironment instance.");
+    }
+    return attachments.detachRetryPending(attachment);
   },
   endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
     const attachments = environmentAttachments.get(environment);

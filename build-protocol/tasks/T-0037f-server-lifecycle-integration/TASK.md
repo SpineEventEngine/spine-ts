@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 re-review assigned
+Status: Slice 3 round-2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -700,3 +700,42 @@ gate passes.
   both typechecks, 5 files / 163 tests, and all scoped gates pass.
 - Fresh whole-Slice 3 style/API/reliability re-review assigned at explicit
   Terra High, no subagents. Documentation N/A; security deferred.
+
+## Slice 3 Re-review Findings And Round-2 Fix
+
+- `2026-07-13T20:18:47Z`: reliability high: attempted detach is not always a
+  retry-owned operation when another failed-start rollback blocks admission.
+  Style medium: shorten a five-component test helper. API is CLEAN. All actual
+  Terra High, no subagents, closed.
+- Add exact-handle read-only `detachRetryPending`; choose detach versus
+  retryDetach from environment-owned operation state. Add cross-server blocked-
+  admission regression and shorten the helper. Same Terra Medium implementer.
+
+## Slice 3 Round-2 Review-Fix Handback
+
+- `2026-07-13T20:24:18Z`: package-internal `detachRetryPending` now reads only
+  whether the exact handle owns a rejected detach operation. Server cleanup
+  chooses `retryDetach()` only for that state and otherwise calls ordinary
+  `detach()`. The copied `detachAttempted` fact is removed from failed-start
+  records and cleanup paths.
+- Cross-server coverage proves a listener cleanup retained at network close can
+  have ordinary detach blocked by another server's unsafe failed-start rollback;
+  after rollback-only cleanup clears, the same listener server calls ordinary
+  detach, removes its exact non-last registration, closes dependencies once,
+  preserves the sibling/current generation, completes, and becomes terminal.
+  The focused helper is now `failListenerNetwork`.
+- Strict RED is 20/22: missing observation plus nonexistent detach retry.
+  Focused GREEN is 22/22 and native five-file regression is 164/164. Both
+  typechecks, scoped ESLint, and cleanup enforcement pass before final
+  synchronized format/scope/status/public-leak/diff gates.
+- `2026-07-13T20:26:17Z`: final tooling/generated typechecks, native 5 files /
+  164 tests, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 8 changed paths inside the 9-path allowlist, all statuses
+  synchronized, no internal-name root/package leak, and clean public-surface
+  diff plus `git diff --check`.
+
+## Slice 3 Round-2 Coordinator Gate
+
+- `2026-07-13T20:27:48Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 164 tests, all scoped gates pass. Fresh whole-slice
+  style/API/reliability re-review assigned at Terra High; docs N/A.

@@ -761,7 +761,7 @@ describe("Server lifecycle integration", () => {
     });
     const networkFailure = new Error("instrumented listener network close failed");
     createHttp2Server.mockImplementationOnce((httpServer) => {
-      instrumentListenerAndNetworkFailures(httpServer, listenerFailure, [networkFailure]);
+      failListenerNetwork(httpServer, listenerFailure, [networkFailure]);
     });
     const storageFactory = new LifecycleTrackingStorageFactory(events);
     const fixture = await lifecycleFixture();
@@ -809,6 +809,119 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await server.start().catch(() => undefined);
       await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("uses ordinary detach after another server clears unsafe failed-start rollback", async () => {
+    const fixture = await lifecycleFixture();
+    fixture.worker.release();
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    const listenerFailure = Object.assign(new Error("cross-server listener bind failed"), {
+      code: "EADDRINUSE",
+    });
+    const networkFailure = new Error("cross-server network close failed");
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      failListenerNetwork(httpServer, listenerFailure, [networkFailure]);
+    });
+    const listenerStorage = new LifecycleTrackingStorageFactory([]);
+    const listenerContext = await fixture
+      .createBuilder("LifecycleBlockedListenerDetach")
+      .withStorageFactory(listenerStorage)
+      .buildAsync();
+    const listenerResource = vi.fn();
+    const listenerServer = Server.atPort(0, { environment: fixture.environment })
+      .add(listenerContext)
+      .addResource({ close: listenerResource });
+    const listenerStarting = listenerServer.start();
+    void listenerStarting.catch(() => undefined);
+
+    const startupFailure = new Error("cross-server attachment startup failed");
+    const rollbackFailure = new Error("cross-server attachment rollback remained unsafe");
+    const rollbackStorage = new LifecycleTrackingStorageFactory([]);
+    const rollbackContext = await fixture
+      .createBuilder("LifecycleBlockingFailedRollback")
+      .withStorageFactory(rollbackStorage)
+      .buildAsync();
+    const rollbackResource = vi.fn();
+    const rollbackServer = Server.atPort(0, { environment: fixture.environment })
+      .add(rollbackContext)
+      .addResource({ close: rollbackResource });
+    let rollbackStarting: Promise<unknown> | undefined;
+
+    try {
+      const listenerStartError = await listenerStarting.catch((error: unknown) => error);
+      expect(listenerStartError).toBeInstanceOf(AggregateError);
+      expect((listenerStartError as AggregateError).errors).toEqual([
+        listenerFailure,
+        networkFailure,
+      ]);
+      expect(listenerResource).not.toHaveBeenCalled();
+      expect(listenerStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      fixture.worker.rejectNextStart(startupFailure);
+      fixture.worker.failNextAwait(rollbackFailure);
+      rollbackStarting = rollbackServer.start();
+      const rollbackStartError = await rollbackStarting.catch((error: unknown) => error);
+      expect(rollbackStartError).toBeInstanceOf(AggregateError);
+      expect((rollbackStartError as AggregateError).errors).toEqual([
+        startupFailure,
+        rollbackFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(rollbackResource).not.toHaveBeenCalled();
+      expect(rollbackStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const blockedDetach = await listenerServer.start().catch((error: unknown) => error);
+      expect(blockedDetach).toMatchObject({
+        message: "Environment generation rollback requires an explicit retry.",
+      });
+      expect(listenerResource).not.toHaveBeenCalled();
+      expect(listenerStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const rollbackCompletion = await rollbackServer.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(rollbackCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(rollbackResource).toHaveBeenCalledOnce();
+      expect(
+        rollbackStorage.storages.every((storage) => rollbackStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+
+      const listenerCompletion = await listenerServer.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(listenerCompletion);
+      expect(listenerResource).toHaveBeenCalledOnce();
+      expect(
+        listenerStorage.storages.every((storage) => listenerStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(fixture.worker.starts).toBe(3);
+      expect(fixture.worker.stopCalls).toBe(2);
+      expect(fixture.worker.awaitCalls).toBe(3);
+      expect(fixture.worker.retireCalls).toBe(2);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
+      const terminal = await listenerServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+      const session = http2.connect(sibling.baseUrl);
+      session.on("error", () => undefined);
+      await once(session, "remoteSettings");
+      session.close();
+      await once(session, "close");
+
+      await sibling.close();
+      expect(fixture.worker.retireCalls).toBe(3);
+      await expect(fixture.environment.close()).resolves.toBeUndefined();
+    } finally {
+      fixture.worker.release();
+      await listenerStarting.catch(() => undefined);
+      await rollbackStarting?.catch(() => undefined);
+      await rollbackServer.start().catch(() => undefined);
+      await listenerServer.start().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await listenerContext.close().catch(() => undefined);
+      await rollbackContext.close().catch(() => undefined);
       await fixture.environment.close().catch(() => undefined);
       fixture.dispose();
     }
@@ -1548,6 +1661,9 @@ describe("Server lifecycle integration", () => {
         descriptors: [boundedContextAccess.delivery(second.context)],
       });
 
+      expect(serverEnvironmentAccess.detachRetryPending(first.environment, firstHandle)).toBe(
+        false,
+      );
       expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
       expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
       expect(first.worker.stopCalls).toBe(0);
@@ -1557,6 +1673,9 @@ describe("Server lifecycle integration", () => {
       expect(() => serverEnvironmentAccess.endpointSafe(first.environment, foreignHandle)).toThrow(
         "Environment attachment handle is not owned by this environment.",
       );
+      expect(() =>
+        serverEnvironmentAccess.detachRetryPending(first.environment, foreignHandle),
+      ).toThrow("Environment attachment handle is not owned by this environment.");
       expect(first.worker.stopCalls).toBe(0);
       expect(first.worker.awaitCalls).toBe(0);
       expect(first.worker.retireCalls).toBe(0);
@@ -1632,7 +1751,7 @@ async function closeIfRunningServer(value: unknown): Promise<void> {
   }
 }
 
-function instrumentListenerAndNetworkFailures(
+function failListenerNetwork(
   server: http2.Http2Server,
   listenerFailure: Error,
   networkFailures: readonly Error[],
