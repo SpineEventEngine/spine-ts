@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1509,3 +1509,10 @@ is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
   functions, and 95.28% lines. No review finding remains; all agents are closed
   and security remains deferred to T-0041.
 - T-0037e2 is accepted and ready to merge.
+
+## Main Integration
+
+- Accepted task endpoint `52b721c2` merged at `d3e9d37d`.
+- Native post-merge full verification exits `0` with 66 files / 1,540 tests,
+  90% branch coverage, TypeDoc/API, Proto lint, and generated-clean checks
+  passing. T-0037e2 is complete and integrated.

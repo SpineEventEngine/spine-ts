@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -961,3 +961,11 @@ the same complete batch at explicit `gpt-5.6-terra` / `medium`, no subagents.
 - All canonical review concerns are clean or justified N/A, security remains
   deferred to T-0041, every subagent is closed, and no finding remains. The
   task is complete and ready to merge into `main`.
+
+## Main Integration
+
+- Branch commit `52b721c2` merged into `main` at `d3e9d37d`.
+- Native post-merge `pnpm --config.verify-deps-before-run=false verify` exits
+  `0` with the same 66 files / 1,540 tests, 90% branch coverage, TypeDoc/API
+  export inventory, Proto lint, and generated-clean evidence.
+- T-0037e2 is complete and integrated. T-0037e3 is the next runtime child.
