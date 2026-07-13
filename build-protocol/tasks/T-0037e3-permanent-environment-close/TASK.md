@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 2 fix re-review assigned
+Status: Slice 3 implementation assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -797,3 +797,17 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - The two closed-state-gated assertions resolve the complete P2 without runtime
   change. The four-concern Slice 2 fix re-review is assigned; security remains
   deferred and Slice 3 remains unauthorized.
+
+## Slice 2 Clean Closure
+
+- `2026-07-13T15:20:42Z`: all four fix re-review concerns are CLEAN. Desktop
+  metadata confirms style, TypeScript/API, and reliability at actual Terra High
+  and documentation at actual Luna Medium. All reviewers used no subagents and
+  are closed.
+- Slice 2 is accepted: recognized failed-start refusal precedes orphan
+  classification, all three predecessor retry owners remain authoritative, and
+  tests prove refusal leaves permanent admission unset. Security remains
+  deferred to T-0041.
+- Slice 3 is authorized for owned-facility continuation, stable error ordering,
+  retry/idempotency, caller-owned exclusion, and matching public closure
+  wording only. Server/listener integration remains excluded.
