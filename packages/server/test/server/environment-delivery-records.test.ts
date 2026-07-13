@@ -90,9 +90,38 @@ describe("EnvironmentDeliveryRecords", () => {
       }),
     ]);
 
-    expect(records.detach("registration-two")).toEqual([sharedFailure, sharedFailure]);
+    expect(records.detach("registration-two")).toEqual([sharedFailure]);
     expect(records.records()).toEqual([]);
     expect(records.configuredScopeCount).toBe(0);
+  });
+
+  it("reports a newly orphaned cause before a retained earlier shared cause", () => {
+    const shared = scope("shared", "Shared", 0);
+    const orphaned = scope("one", "Orphaned", 1);
+    const records = new EnvironmentDeliveryRecords();
+    const sharedFailure = new Error("shared rejected");
+    const orphanedFailure = new Error("orphaned rejected");
+    records.register("registration-one", [shared, orphaned]);
+    records.register("registration-two", [shared]);
+    records.observe(rejected(shared, sharedFailure));
+    records.observe(rejected(orphaned, orphanedFailure));
+
+    expect(records.detach("registration-one")).toEqual([orphanedFailure]);
+    expect(records.records()).toEqual([
+      expect.objectContaining({
+        owner: { kind: "registration", token: "registration-two" },
+        units: [unit(shared)],
+        cause: sharedFailure,
+      }),
+      expect.objectContaining({
+        owner: { kind: "generation" },
+        units: [unit(shared)],
+        cause: sharedFailure,
+      }),
+    ]);
+
+    expect(records.detach("registration-two")).toEqual([sharedFailure]);
+    expect(records.records()).toEqual([]);
   });
 
   it("atomically retires all configured ownership and operational records in stable order", () => {

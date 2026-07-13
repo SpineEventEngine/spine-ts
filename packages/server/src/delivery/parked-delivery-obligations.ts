@@ -222,12 +222,8 @@ export class ParkedDeliveryObligations {
     if (record === undefined || selected === undefined) {
       return;
     }
-    const representative = representativeCause(record, configured.units);
-    if (
-      representative === undefined ||
-      representative.evidence.reported ||
-      !selected.has(representative.unit)
-    ) {
+    const representative = reportableCause(record, configured.units, selected);
+    if (representative === undefined) {
       return;
     }
     causes.push(representative.evidence.cause);
@@ -401,6 +397,25 @@ function representativeCause(
     }
     const evidence = record.causes.get(unit);
     if (evidence !== undefined) {
+      return { unit, evidence };
+    }
+  }
+  return undefined;
+}
+
+function reportableCause(
+  record: MutableRecord,
+  configured: readonly string[],
+  selected: ReadonlySet<string>,
+): { readonly unit: string; readonly evidence: MutableCause } | undefined {
+  for (const unit of configured) {
+    const evidence = record.causes.get(unit);
+    if (
+      record.units.includes(unit) &&
+      selected.has(unit) &&
+      evidence !== undefined &&
+      !evidence.reported
+    ) {
       return { unit, evidence };
     }
   }

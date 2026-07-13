@@ -372,6 +372,31 @@ describe("DeliveryRunCoordinator", () => {
 
     await expect(coordinator.start([configured])).rejects.toBe(failure);
     await expect(coordinator.start([configured])).rejects.toBe(failure);
+    await expect(coordinator.awaitOwnersBarrier([configured.owner.key])).rejects.toBe(failure);
+  });
+
+  it("faults synchronously and consumes rejection when a settlement observer returns a promise", async () => {
+    const asynchronousFailure = new Error("asynchronous observer failed");
+    const configured = scope("first", 0, 1);
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [configured],
+      worker,
+      async onSettlement() {
+        await Promise.resolve();
+        throw asynchronousFailure;
+      },
+    });
+
+    await expect(coordinator.start([configured])).rejects.toThrow(
+      "Delivery run settlement observer must complete synchronously.",
+    );
+    await flushMicrotasks();
+    await expect(coordinator.awaitOwnersBarrier([configured.owner.key])).rejects.toThrow(
+      "Delivery run settlement observer must complete synchronously.",
+    );
   });
 
   it("barriers a selected owner through active and admitted successor work without removing siblings", async () => {

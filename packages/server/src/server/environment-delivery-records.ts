@@ -87,21 +87,19 @@ export class EnvironmentDeliveryRecords {
     const units = [...registration.keys()];
     const orphaned = units.filter((unit) => !this.#ownedBySibling(token, unit));
     const obligations = this.#requireObligations();
-    const selections: ParkedDeliveryObligationSelection[] = [
-      { owner: { kind: "registration", token }, obligation: "delivery", units },
-    ];
+    obligations.removeRegistration(token);
+    this.#registrations.delete(token);
+    const selections: ParkedDeliveryObligationSelection[] = [];
     if (orphaned.length > 0) {
       selections.push({ owner: { kind: "generation" }, obligation: "generation", units: orphaned });
     }
     const causes = obligations.report(selections);
-    obligations.removeRegistration(token);
     if (orphaned.length > 0) {
       obligations.fulfilled({ kind: "generation" }, "generation", orphaned);
       for (const unit of orphaned) {
         this.#scopes.delete(unit);
       }
     }
-    this.#registrations.delete(token);
     return causes;
   }
 

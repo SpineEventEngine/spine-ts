@@ -141,3 +141,11 @@ identity, progress counters, and per-failure message/error identity. The parked
 table retains at most one cause per configured unit so exact fulfillment can
 deterministically reselect the next configured rejected unit without an
 unbounded history.
+
+Round 1 hardening keeps observer invocation synchronous and rejects any returned
+thenable with a stable coordinator invariant error while consuming its eventual
+rejection. Selected-owner barriers consult retained terminal fault state around
+both bounded waits. Parked reporting filters to selected, unreported per-unit
+causes before configured-order choice. Atomic record detach reclassifies the
+departing registration first, then reports/consumes only newly orphaned
+generation units, retaining earlier shared causes for later selection.

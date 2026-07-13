@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 1 Round 1 findings assigned
+Status: Slice 1 Round 1 fixes focused verified; Round 2 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -26,7 +26,7 @@ Derived status mirror: the canonical current state is the `Status` header in
   bounded to settlement observation, selected-owner barrier, generation-local
   parked ownership, dynamic scopes, bounds, and sibling preservation. Detach,
   last-retirement, and race APIs remain later slices.
-- `2026-07-13T02:04:35Z`: Slice 1 is focused verified and ready for Round 1.
+- `2026-07-13T01:04:35Z`: Slice 1 is focused verified and ready for Round 1.
   The canonical skill check selected strict TDD/deep-module/verification
   guidance; all other task-inapplicable skills have recorded scope reasons in
   the work log. Fresh evidence is 4 focused files / 94 tests plus generated
@@ -60,6 +60,10 @@ Derived status mirror: the canonical current state is the `Status` header in
   unselected configured cause instead of the first unreported selected cause.
   One Terra Medium owner receives the complete deduplicated batch; Round 2 and
   security remain pending.
+- The Terra Medium owner completed and was closed. Coordinator verification
+  independently passes 102/102 plus generated/type/lint/cleanup, format, and
+  diff gates. The complete finding batch is ready for a committed Round 2
+  package; full verify and security remain deferred.
 - All four coordinator findings are corrected under focused TDD. Meaningful
   settlement equality, terminal barrier-fault propagation, bounded per-unit
   cause reselection, and atomic counted-owner detach/retire record consumption
@@ -69,3 +73,12 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Fresh pre-review evidence is 4 focused files / 99 tests, generated build
   typecheck, changed-file lint/format, generated cleanliness, diff/status
   hygiene, and public/proto leak scans all passing. Round 1 is now pending.
+- `2026-07-13T01:33:46Z`: The complete Round 1 batch is corrected under focused
+  TDD in the same Terra Medium context: retained barrier faults, async observer
+  thenables, selected-unreported cause ordering, reclassify-first orphan
+  reporting, and UTC chronology. Round 2 is pending fresh final mechanical
+  evidence. Security, full verify, commit, and push remain deferred.
+- `2026-07-13T01:35:07Z`: Fresh Round 2 package evidence passes 4 focused files /
+  102 tests, generated/type/lint/cleanup, repository format, generated
+  cleanliness, diff/status, public/proto, and chronology scans. Round 2 review
+  remains pending; no acceptance disposition is claimed.

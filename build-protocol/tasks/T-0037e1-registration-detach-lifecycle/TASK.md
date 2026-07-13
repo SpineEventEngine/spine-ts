@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 Round 1 findings assigned
+Status: Slice 1 Round 1 fixes focused verified; Round 2 review pending
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -64,11 +64,11 @@ The same Terra Medium owner receives all four under strict TDD before Round 1.
 
 One Terra Medium owner receives the complete batch before Round 2.
 
-Disposition: corrected and focused verified. Settlement equality covers
-disposition, cause identity, progress counters, and failure identities; barrier
-faults propagate; parked evidence retains one bounded cause per configured unit;
-and the record owner now exposes atomic `detach(token)` / `retire()` operations
-with exact ownership counts and stable selection order.
+Disposition: all five Round 1 findings are corrected and focused verified.
+Barriers check retained faults before and after waits; observer thenables are
+consumed and rejected synchronously; reporting chooses the first unreported
+selected cause; detach reclassifies before orphan selection/reporting; and the
+active UTC chronology is corrected from local UTC+01 wall time.
 
 ## Objective
 

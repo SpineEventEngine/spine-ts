@@ -207,6 +207,24 @@ describe("ParkedDeliveryObligations", () => {
     ).toEqual([normalFirst, sharedFirst]);
   });
 
+  it("reports the first unreported selected cause across separate selections", () => {
+    const obligations = table();
+    const first = new Error("first");
+    const second = new Error("second");
+    obligations.park(registration("one"), "one-all", ["shard-0"], first);
+    obligations.park(registration("one"), "one-all", ["shard-1"], second);
+
+    expect(obligations.report([selection(registration("one"), "one-all", ["shard-1"])])).toEqual([
+      second,
+    ]);
+    expect(
+      obligations.report([selection(registration("one"), "one-all", ["shard-0", "shard-1"])]),
+    ).toEqual([first]);
+    expect(
+      obligations.report([selection(registration("one"), "one-all", ["shard-0", "shard-1"])]),
+    ).toEqual([]);
+  });
+
   it("reselects a remaining rejected unit when the first representative is fulfilled", () => {
     const obligations = table();
     const resolved = new Error("resolved");

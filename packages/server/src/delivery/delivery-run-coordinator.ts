@@ -22,12 +22,12 @@ export class DeliveryRunCoordinator {
   #finalized = false;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
-  readonly #onSettlement: ((settlement: DeliveryScopeSettlement) => void) | undefined;
+  readonly #onSettlement: ((settlement: DeliveryScopeSettlement) => unknown) | undefined;
 
   constructor(options: {
     readonly scopes: readonly DeliveryRunScope[];
     readonly worker: DeliveryRunWorker;
-    readonly onSettlement?: (settlement: DeliveryScopeSettlement) => void;
+    readonly onSettlement?: (settlement: DeliveryScopeSettlement) => unknown;
   }) {
     this.#worker = options.worker;
     this.#onSettlement = options.onSettlement;
@@ -106,13 +106,16 @@ export class DeliveryRunCoordinator {
 
   /** @internal Await retained work that could still start selected owners without reclaiming evidence. */
   async awaitOwnersBarrier(ownerKeys: readonly string[]): Promise<void> {
+    this.#requireHealthy();
     const owners = new Set(ownerKeys);
     this.#removePendingOwners(owners);
     const active = this.#active;
     await active;
+    this.#requireHealthy();
     const successor = this.#active;
     if (successor !== undefined && successor !== active) {
       await successor;
+      this.#requireHealthy();
     }
     this.#removePendingOwners(owners);
   }
@@ -304,7 +307,11 @@ export class DeliveryRunCoordinator {
     if (previous !== undefined && sameSettlement(previous, settlement)) {
       return;
     }
-    this.#onSettlement?.(cloneSettlement(settlement));
+    const observed = this.#onSettlement?.(cloneSettlement(settlement));
+    if (isPromiseLike(observed)) {
+      void Promise.resolve(observed).catch(() => undefined);
+      throw new Error("Delivery run settlement observer must complete synchronously.");
+    }
   }
 
   #removePendingOwners(owners: ReadonlySet<string>): void {
@@ -312,6 +319,12 @@ export class DeliveryRunCoordinator {
       if (owners.has(scope.owner.key)) {
         this.#pending.delete(key);
       }
+    }
+  }
+
+  #requireHealthy(): void {
+    if (this.#fault !== undefined) {
+      throw this.#fault;
     }
   }
 
@@ -613,4 +626,11 @@ function throwFailures(failures: readonly unknown[]): void {
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return false;
+  }
+  return typeof (value as { readonly then?: unknown }).then === "function";
 }
