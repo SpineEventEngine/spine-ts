@@ -1,6 +1,6 @@
 # T-0037e3 Architecture Resolution
 
-Status: Derived mirror of TASK.md — Final whole-task Round 2 re-review assigned
+Status: Derived mirror of TASK.md — Final whole-task Round 3 re-review assigned
 
 ## Resolution Summary
 
@@ -580,3 +580,10 @@ test-fixture mechanics may vary, but implementation may not change the named
 cancellation checkpoint, owner, linearization point, phase order, replacement-
 safety boundary, retry semantics, facility order, error order, cause-once
 behavior, or public exclusions without a newly demonstrated architecture block.
+
+## Round 3 Derived-Status Handback
+
+- Derived status matches the canonical TASK header: Final whole-task Round 3
+  review-fix handback. The iterable materialization is a private traversal
+  compatibility correction only; it changes no lifecycle ownership, admission,
+  facility order, error order, public contract, or accepted exclusion.

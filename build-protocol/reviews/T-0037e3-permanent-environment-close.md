@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task Round 2 re-review assigned
+Status: Final whole-task Round 3 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -757,3 +757,46 @@ Derived status mirror: the canonical current state is the `Status` header in
   cycles, deep-chain continuation, and failed-index retry. Fresh
   style/maintainability, documentation, TypeScript/API docs, and
   performance/reliability dispositions are required. Security remains deferred.
+
+## Final Whole-Task Round 2 Re-review Results
+
+- `2026-07-13T16:13:22Z`: API is CLEAN. Style reports one P1/P2, docs one P2,
+  and reliability one corroborating P2. Desktop metadata confirms every required
+  profile; all reviewers used no subagents and are closed.
+- P1: preserve prior iterable `AggregateError.errors` consumption by
+  materializing causes before reverse-pushing iterative frames.
+- P2: prove one shared aggregate is traversed in two sibling branches, and
+  rename the test to observable rather than recursive implementation wording.
+- One Terra Medium implementer receives the complete batch. Final verification,
+  merge, and security review remain blocked/deferred.
+
+## Final Whole-Task Round 3 Review-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  P1 is resolved by materializing the original `AggregateError.errors` iterable
+  before the existing reverse-push traversal, preserving mutable iterable input.
+- P2 is resolved by shared-sibling aggregate coverage that observes the same
+  leaf twice in stable DFS order, and by renaming the active test to observable
+  nested/cyclic flattening wording. Existing deep-chain, cycle, duplicate,
+  continuation, and retry coverage remains intact.
+- RED was 1/16: a `Set`-backed aggregate silently produced no failure. GREEN is
+  16/16 in the focused close suite. Malformed non-iterable/accessor behavior
+  remains intentionally outside this batch without a failing regression.
+- Focused lifecycle, generated typecheck, scoped lint/cleanup/Prettier, diff,
+  and docs/status evidence are recorded in the work log. No public/API/Proto/
+  generated/listener/security work, protected human-review access, commit,
+  push, full verify, merge, or architecture-policy expansion is included.
+- Fresh validation: close/attachment/generation-stop passes 3 files / 121
+  tests; generated typecheck, scoped ESLint, cleanup, `docs:check:generated`,
+  scoped Prettier, diff hygiene, and synchronized-status checks pass. The
+  review-fix scope is exactly the six assigned files.
+
+## Final Whole-Task Round 3 Re-review Assignment
+
+- `2026-07-13T16:20:06Z`: coordinator accepts the Terra Medium implementer and
+  fresh 185-test, native server 21-test, docs/typecheck/lint/cleanup/format/diff
+  evidence. It used no subagents.
+- Iterable-error compatibility, sibling-shared path semantics, stack safety,
+  cycles, duplicates, order, continuation, and retry are ready for fresh
+  style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability dispositions. Security remains deferred.

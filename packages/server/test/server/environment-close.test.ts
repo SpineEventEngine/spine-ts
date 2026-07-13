@@ -20,7 +20,7 @@ import {
 } from "../../src/server/server-environment.js";
 
 describe("ServerEnvironment close", () => {
-  it("recursively flattens nested and cyclic owned-facility failures in facility order", async () => {
+  it("flattens nested and cyclic owned-facility failures in facility order", async () => {
     const attempts: string[] = [];
     const deliveryError = new Error("delivery close failed");
     const nestedDeliveryError = new Error("nested delivery close failed");
@@ -29,12 +29,14 @@ describe("ServerEnvironment close", () => {
     const storageError = new Error("storage close failed");
     const cyclicStorageFailure = new AggregateError([storageError], "storage aggregate");
     (cyclicStorageFailure.errors as unknown[]).push(cyclicStorageFailure);
+    const sharedDeliveryFailure = new AggregateError(
+      [nestedDeliveryError],
+      "shared delivery aggregate",
+    );
     const deliveryFailure = new AggregateError(
       [
-        new AggregateError(
-          [deliveryError, new AggregateError([nestedDeliveryError], "nested delivery aggregate")],
-          "delivery branch aggregate",
-        ),
+        new AggregateError([deliveryError, sharedDeliveryFailure], "delivery branch aggregate"),
+        sharedDeliveryFailure,
         deliveryError,
       ],
       "delivery aggregate",
@@ -58,12 +60,36 @@ describe("ServerEnvironment close", () => {
     expect((failure as AggregateError).errors).toEqual([
       deliveryError,
       nestedDeliveryError,
+      nestedDeliveryError,
       deliveryError,
       tracerError,
       transportError,
       storageError,
       cyclicStorageFailure,
     ]);
+    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+  });
+
+  it("flattens iterable aggregate errors while continuing later facilities", async () => {
+    const attempts: string[] = [];
+    const iterableLeaf = new Error("iterable delivery close failed");
+    const iterableFailure = new AggregateError([], "iterable delivery aggregate");
+    (iterableFailure as unknown as { errors: Set<unknown> }).errors = new Set([iterableLeaf]);
+    const environment = ServerEnvironment.local({
+      delivery: failingCloseable("delivery", iterableFailure, attempts),
+      tracerFactory: successfulCloseable("tracer", attempts),
+      transport: successfulCloseable("transport", attempts) as SignalTransport,
+      storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
+      ownsDelivery: true,
+      ownsTracerFactory: true,
+      ownsTransport: true,
+      ownsStorageFactory: true,
+    });
+
+    const failure = await environment.close().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([iterableLeaf]);
     expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
   });
 

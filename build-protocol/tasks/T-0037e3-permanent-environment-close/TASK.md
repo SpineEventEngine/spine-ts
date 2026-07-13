@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final whole-task Round 2 re-review assigned
+Status: Final whole-task Round 3 re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -1015,3 +1015,51 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - Lightweight lint finds four synchronized status mirrors, exact six-file scope,
   no duplicate/public policy leak, and no active future-policy overclaim. The
   iterative deep-chain batch is assigned for final four-concern re-review.
+
+## Final Whole-Task Round 2 Re-review Findings
+
+- `2026-07-13T16:13:22Z`: TypeScript/API is CLEAN. The complete wave yields one
+  P1 compatibility regression and two P2 test/text gaps.
+- P1: indexed `errors.length` traversal drops a mutable iterable such as `Set`,
+  whereas the prior `for...of` behavior consumed it. Materialize the iterable
+  before reverse-pushing frames so failure reporting/retry semantics are
+  preserved.
+- P2: add one shared `AggregateError` object in sibling branches and assert its
+  leaf appears twice in stable order, proving leave-frame ancestor cleanup.
+  Rename the test from implementation-specific “recursively” wording to
+  observable nested/cyclic flattening behavior.
+- Desktop metadata matches style/API/reliability Terra High and documentation
+  Luna Medium. All reviewers used no subagents and are closed. One Terra Medium
+  implementer receives the complete code/test/record batch.
+
+## Final Whole-Task Round 3 Review-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  The bounded private traversal change materializes `AggregateError.errors`
+  through its iterable contract before reverse-pushing visit frames.
+- TDD: the mutable-`Set` aggregate regression was RED at 1/16 because close
+  resolved with no collected failure; GREEN is 16/16 after materialization.
+  The nested/cyclic test now has an observable title and reuses one aggregate
+  in two sibling branches, asserting its leaf twice in stable DFS order.
+- The existing 20,000-deep, cycle, duplicate-leaf, continuation, and
+  failed-index retry coverage remains in the focused close suite. Malformed
+  non-iterable/accessor behavior was deliberately not changed without a RED.
+- Focused lifecycle, generated typecheck, scoped lint/cleanup/Prettier, diff,
+  and docs/status verification are recorded in the work and review logs.
+  Exclusions remain public/API/Proto/generated/listener/security work,
+  examples, protected human review, commit, push, full verify, and merge.
+- Fresh evidence: the close/attachment/generation-stop lifecycle suites pass
+  3 files / 121 tests; generated build typecheck, scoped ESLint, cleanup,
+  Prettier, `git diff --check`, `docs:check:generated`, and status mirroring
+  pass. The exact assigned scope remains six files.
+
+## Final Whole-Task Round 3 Coordinator Gate
+
+- `2026-07-13T16:20:06Z`: Desktop metadata confirms the implementer at actual
+  `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
+  Coordinator verification passes 5 files / 185 tests, native server 21/21,
+  generated typecheck, scoped ESLint, cleanup enforcement, `docs:check`,
+  Prettier, and `git diff --check`.
+- Iterable causes, sibling-shared aggregate traversal, observable naming, deep
+  stack safety, cycles, duplicates, continuation, and retry are accepted for
+  final four-concern Round 3 re-review.
