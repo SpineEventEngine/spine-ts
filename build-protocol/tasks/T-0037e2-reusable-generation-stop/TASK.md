@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification cleanup fix review assigned
+Status: T-0037e2 final verification cleanup review fix assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -591,8 +591,11 @@ all agents are closed. Full `pnpm verify` is again the sole pre-merge gate.
 The full gate now passes typechecking and ESLint but cleanup enforcement rejects
 the private five-component helper name `deliveryStopRetryRequiredError`. One
 fresh implementer receives the private rename-only fix at explicit
-`gpt-5.6-terra` / `medium`, no subagents; error text, callers, behavior, public
-surface, and generated output must remain unchanged.
+`gpt-5.6-terra` / `medium`, no subagents. The precise active contract is
+unchanged error type/message, lifecycle control flow/order, and
+API/public/generated behavior; the private Node `Error.stack` function-frame
+label changes from `deliveryStopRetryRequiredError` to `deliveryStopRetryError`
+and is non-contractual.
 
 ## Final Verification Cleanup Fix Start And Skill Applicability
 
@@ -624,8 +627,11 @@ surface, and generated output must remain unchanged.
   `deliveryStopRetryRequiredError` at
   `packages/server/src/server/environment-attachment.ts:2141` because it has
   five semantic components. GREEN renames only that private helper and its four
-  call sites to `deliveryStopRetryError`; its error text and all call behavior
-  remain unchanged.
+  call sites to `deliveryStopRetryError`. Error type/message, lifecycle control
+  flow/order, and API/public/generated behavior are unchanged. The private Node
+  `Error.stack` function-frame label changes from
+  `deliveryStopRetryRequiredError` to `deliveryStopRetryError` and is
+  non-contractual.
 - GREEN evidence: cleanup enforcement, focused source ESLint, and strict
   tooling typecheck exit `0`; the required lifecycle suite passes 5 files /
   162 tests; focused Prettier passes the source and all three records.
@@ -639,3 +645,49 @@ Desktop rollout confirms the cleanup owner actual `gpt-5.6-terra` / `medium`.
 Coordinator verification passes cleanup enforcement, source ESLint, strict
 typechecking, 162 lifecycle tests, formatting, exact scope, and diff hygiene.
 The committed private rename is assigned to the four canonical concerns.
+
+The cleanup review found no functional defect. Two P2 record corrections are
+assigned to one fresh `gpt-5.6-terra` / `medium` implementer, no subagents:
+restore chronological placement of the cleanup finding and state precisely that
+message/type/control-flow/API behavior is unchanged while the private,
+non-contractual stack-frame function label follows the required rename.
+
+## Final Verification Cleanup Review Fix Start And Skill Applicability
+
+- At `2026-07-13T11:38:53Z`, the fresh existing implementer began this
+  records-only P2 correction in `.worktrees/T-0037e2-reusable-generation-stop`,
+  actual `gpt-5.6-terra` / `medium`, with no subagents. Ownership is only this
+  task record and the matching T-0037e2 work and review logs; source, tests,
+  `human-review-1-jul.md`, commits, pushes, and full verification remain
+  excluded.
+- Canonical skill applicability was recorded before record edits from the
+  session inventory, complete readable `/Users/armiol/.agents/skills`
+  entrypoint listing, `build-protocol/skills/EXPECTED_SKILLS.md`, and readable
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `receiving-code-review` to verify the two confirmed P2s against active
+  records and `verification-before-completion` for fresh focused evidence.
+  TDD/testing, debugging, TypeScript/API, Node/backend, architecture/planning,
+  review dispatch, worktree, and subagent skills are N/A: no runtime/test/API/
+  design change, dispatch, or worktree setup is authorized. Project protocol
+  and this records-only assignment govern.
+
+## Final Verification Cleanup Review Fix Evidence
+
+- This records-only pass moved the complete `Final Verification Cleanup Finding
+And Assignment` section to immediately precede `Final Verification Cleanup
+Fix Start And Skill Applicability` in the work-log chronology and replaced
+  active broad unchanged-runtime/call claims with the precise contract: error
+  type/message, lifecycle control flow/order, and API/public/generated behavior
+  are unchanged; the private Node `Error.stack` function-frame label changes
+  from `deliveryStopRetryRequiredError` to `deliveryStopRetryError` and is
+  non-contractual.
+- Focused Prettier, exact status/chronology/claim searches, records-only
+  inventory, and `git diff --check` are recorded for this pass. No source/test
+  change, full verification, commit, push, subagent, or change to
+  `human-review-1-jul.md` occurred. After this evidence, all three status
+  headers are set to `T-0037e2 final verification cleanup review fix requested`.
+
+Desktop rollout confirms the records fixer actual `gpt-5.6-terra` / `medium`.
+Coordinator verification passes chronology/claim lint, formatting, exact
+records-only scope, and diff hygiene. The committed correction is assigned to
+the four canonical concerns for final focused re-review.
