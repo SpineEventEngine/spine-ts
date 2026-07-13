@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Architecture resolution assigned
+Status: Architecture review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -14,6 +14,48 @@ Dependency: T-0037e2 complete and integrated.
 
 This `Status` header is canonical for T-0037e3. Its work/review logs are
 derived mirrors and must agree before review.
+
+## Architecture Assignment And Skill Applicability
+
+- Existing role: requirements splitter. Documentation-only ownership is limited
+  to this task, its architecture resolution, work log, and review log. Expected
+  dispatch was explicit `gpt-5.6-sol` / `high`; no subagents are permitted.
+- Coordinator runtime evidence: `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-49-59-019f5b86-f6c1-7962-a2d1-8072e13410fe.jsonl`
+  records actual `gpt-5.6-sol / high` at `2026-07-13T12:50:02.268Z`,
+  matching explicit dispatch.
+- Canonical skill applicability completed at `2026-07-13T12:51:31Z` before
+  design evidence inspection. The exposed session inventory, this assignment
+  (which supplied no task-specific skill name or path),
+  `build-protocol/skills/EXPECTED_SKILLS.md`, the complete readable 47-entry
+  listing from
+  `find /Users/armiol/.agents/skills -mindepth 2 -maxdepth 2 -name SKILL.md -print | sort`,
+  and task-relevant entries in `/Users/armiol/.agents/.skill-lock.json` were
+  checked. All eight expected manifest entrypoints are installed; no source was
+  unreachable.
+- Selected and fully read `architecture-decision-records` from
+  `wshobson/agents`, plus `codebase-design` and `domain-modeling` from
+  `mattpocock/skills`; the directly relevant `codebase-design/DEEPENING.md` was
+  also read. They govern the resolution's decision/consequence structure,
+  existing-seam depth, and precise lifecycle vocabulary. Accepted D-0085/D-0086
+  remain authoritative, so no decision-log or glossary file is created or
+  changed.
+- Skipped `planning-with-files` because the protocol's assigned task/work/review
+  records are the durable plan and ownership excludes its extra files;
+  `epic-breakdown-advisor`, `decision-mapping`, and `user-story` because this is
+  one accepted architecture milestone rather than product discovery or backlog
+  creation; `architecture-patterns`, `api-design-principles`, and
+  `nodejs-backend-patterns` because no bounded-context, transport, endpoint, or
+  public-interface redesign is allowed; and implementation, TDD, worktree,
+  review, and verification skills because this pass may not edit code/tests,
+  spawn reviewers, create a worktree, run tests/full verify, commit, or push.
+- Coordinator baseline evidence: fresh-worktree
+  `pnpm install --frozen-lockfile` succeeded from locked/reused dependencies.
+  The initial exact five-suite lifecycle run failed only because ignored
+  generated/build outputs were absent: four suites could not resolve
+  `@spine-ts/storage`/`@spine-ts/proto`, while
+  `environment-delivery-records` passed 18 tests. After `pnpm proto:generate`
+  and `pnpm typecheck:build:generated` both exited 0, the same five suites
+  passed 5 files / 190 tests. No tracked file changed.
 
 Because permanent close changes the public `ServerEnvironment.close()`
 contract, close/attach serialization, generation retirement ownership, and
@@ -121,3 +163,29 @@ No registration detach, ordinary last-detach reuse, reusable explicit stop,
 fresh-candidate rebind/transfer/publication, failed-start rollback, server/
 listener/context/resource integration, retry timing, public monitor/health/
 action surface, topology, adapter, catch-up path, or T-0036 change.
+
+## Architecture Resolution
+
+Implementation-ready ownership, ordering, retry, error, public-boundary, risk,
+and three-slice TDD decisions are recorded in
+`build-protocol/tasks/T-0037e3-permanent-environment-close/architecture-resolution.md`.
+
+The resolution keeps one private permanent-close operation in the existing
+`EnvironmentAttachments` serial owner, invokes T-0037b only through
+`DeliveryGeneration.retire()`, clears only a proven-quiescent matching slot,
+and consumes the existing `RetryableCloseGroup` for ordered exact-once facility
+success/retry. No new public API, option, export, error type, decision, or
+speculative production module is planned. Architecture handback is requested;
+implementation has not started.
+
+Splitter handback checks: Prettier write/check passed for the four owned
+Markdown records, `git diff --check` passed, all four status headers agree, and
+`git status --short` lists only those three modified records plus the new
+architecture resolution. No tests or full verify were run by the splitter.
+
+Coordinator inspection accepts the handback for independent architecture
+review: it keeps permanent close in existing owners, preserves the public
+signature and exclusions, and splits implementation into three ordered bounded
+slices. Lightweight docs/status lint, formatting, exact documentation-only
+scope, public/future-policy claim checks, and `git diff --check` pass. All four
+canonical concerns are assigned against the committed resolution.
