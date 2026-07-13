@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 2 fix verified; Round 3 review pending
+Status: Slice 4 Round 3 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -283,3 +283,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   operation at blocked serial admission, and queued-retry restoration of the
   genuine prior rejected operation. No implementation or test evidence changed;
   Round 3 documentation review is pending.
+- Round 3 package is
+  `.superpowers/sdd/review-ab42b249..8e119579.diff` (one commit, 10,437 bytes).
+  Expected explicit profiles are style, TypeScript/API, and reliability
+  `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
+  read-only with no subagents and bounded to the corrected queued-admission
+  wording and current records.

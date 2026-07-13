@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 2 fix verified; Round 3 review pending
+Status: Slice 4 Round 3 review in progress
 
 ### Slice 4 Round 2 Finding
 
@@ -15,6 +15,11 @@ rejects `detach()` before operation creation; a detach queued before rollback
 temporarily coalesces duplicate calls and restores no operation when blocked at
 serial admission; a queued retry restores its genuine prior rejected operation.
 No source, test, or behavior changed.
+
+Round 3 reviews the record-only correction frozen from `ab42b249` through
+`8e119579` in `.superpowers/sdd/review-ab42b249..8e119579.diff` (one commit,
+10,437 bytes). Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
 
 ### Slice 4 Round 1 Findings
 
