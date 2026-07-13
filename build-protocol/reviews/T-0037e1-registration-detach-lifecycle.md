@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 Round 3 review in progress
+Status: Slice 2 clean; Slice 3 ordinary last detach assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -25,6 +25,15 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-luna` / `medium`, each read-only with no subagents and bounded to the
   current record correction. Historical superseded text is evidence only
   unless the current status or correction claims it as active.
+- Round 3 disposition: all four lanes are CLEAN and all agents are closed.
+  Style, documentation, TypeScript/API, and reliability independently confirm
+  the active 119/119 and 217/217 evidence, historical treatment of 116/215,
+  and absence of new API claims. Immutable orchestration role metadata confirms
+  the actual profiles matched explicit dispatch; generic reviewer prose runtime
+  labels are not accepted as the metadata source. Slice 2 is accepted.
+- Slice 3 is assigned to the existing Terra Medium implementer at explicit
+  `gpt-5.6-terra` / `medium`. It will receive four fresh canonical review lanes
+  after focused verification; security and full verify remain deferred.
 
 - Slice 2 implementer completed and was closed with matching Terra Medium
   metadata. Coordinator verification independently passes 215/215 and all
