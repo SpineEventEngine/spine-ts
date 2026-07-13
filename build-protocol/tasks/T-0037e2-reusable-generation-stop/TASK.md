@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 4 review wave 3 assigned
+Status: T-0037e2 final verification
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -422,3 +422,12 @@ Coordinator verification passed 5 files / 162 tests, generated-build
 typechecking, focused formatting, synchronized status, exact scope, private
 boundary scans, and diff hygiene. The committed fix endpoint is assigned to
 fresh Wave 3 review.
+
+## Slice 4 Acceptance
+
+At `2026-07-13T10:34:59Z`, Wave 3 returned CLEAN in all four canonical
+concerns. The runtime's immutable role configuration confirms the explicitly
+dispatched documentation `gpt-5.6-luna` / `medium` and style, TypeScript/API,
+and performance/reliability `gpt-5.6-terra` / `high` profiles; every reviewer
+is closed. All four T-0037e2 slices are accepted, and the full project gate is
+the only remaining pre-merge requirement.
