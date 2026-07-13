@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 5 findings assigned
+Status: Slice 3 Round 5 fixes focused verified; Round 6 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -490,6 +490,57 @@ Terra Medium owner receives the deduplicated batch under TDD before Round 5.
 
 Documentation and TypeScript/API docs are clean. One Terra Medium owner receives
 both findings under strict TDD before Round 6.
+
+Round 5 implementer applicability check (`gpt-5.6-terra` / `medium`):
+`receiving-code-review` applies because this is a coordinator-reviewed finding
+batch, and `tdd` applies because both changes require focused behavioral REDs
+before production edits. Inspection confirmed the frozen registration ownership
+snapshot and the non-inert cleanup-failure fake. No architecture, public API,
+generated-artifact, subagent, or later-lifecycle skill applies.
+
+Round 5 strict-TDD evidence: the focused environment RED failed exactly 2/30
+(`pnpm exec vitest run packages/server/test/server/environment-attachment.test.ts
+--reporter=dot`). Dynamic rollback stopped only `environment-owner-2` instead
+of initial plus dynamic owners 2/3, and the cleanup-failed retired owner reached
+the fake result queue instead of rejecting as permanently inert. After the
+private live-ownership and fake-inertness changes, coordinator plus environment
+GREEN passes 65/65.
+
+### Slice 3 Round 5 fix outcome
+
+One private live registration-ownership state now deduplicates every initial and
+post-open runtime owner plus all of its canonical scopes. Readiness preparation
+joins that live state before coordinator notification; failed readiness creates
+no later owner. Rollback freezes the complete live state after readiness failure
+and uses it for selected stop, quiescence, permanent retirement, coordinator
+removal, configured-owner removal, and overlap-translation removal. Parked
+startup attribution remains limited to the original finite startup scope set.
+
+The deterministic dynamic-tenant race holds initial startup in flight, admits
+one dynamic tenant twice, then fails startup. It proves owners/scopes 2 and 3 are
+stopped, awaited, retired, and reclaimed; configured owner/scope cardinalities
+return from three to the sibling's one; unresolved startup attribution remains
+one; failed readiness cannot configure later tenants; sibling readiness remains
+usable; and later settlement contains only sibling plus fresh owner 4. The
+cleanup-failure fake now removes selected owners before rejecting and a direct
+selection attempt proves the failed owner is permanently inert.
+
+Final focused coordinator/environment is 65/65; the canonical seven-file gate
+is 193/193. Affected coverage is 96.80% statements, 90.27% branches, 98.28%
+functions, and 97.08% lines. One unscoped coverage probe ran 193/193 but failed
+global thresholds by including unrelated repository sources and is not
+acceptance evidence. Generated build/tooling typecheck and full ESLint/cleanup
+pass after correcting the multitenant test helper's tenant omission validation.
+Formatting, diff, identical-status, public/generated/Protobuf/protected scans
+are the final recorded handoff gate. Changed files are environment attachment
+source/test and the three canonical T-0037d records. No implementer-authored
+commit, push, full verify, subagent, Slice 3-excluded lifecycle, or public API
+work occurred.
+
+Final scans: `pnpm proto:check-generated` reports freshly regenerated ignored,
+untracked outputs; `pnpm proto:verify` verifies 25 copied source checksums.
+Changed-file Prettier, `git diff --check`, identical Status mirrors, and empty
+public entrypoint/package/lockfile/generated/Protobuf/protected diffs pass.
 
 ### Slice 3 Round 4 fix outcome
 

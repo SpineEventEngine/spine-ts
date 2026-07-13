@@ -141,6 +141,15 @@ export class EnvironmentAttachments {
     return count;
   }
 
+  /** @internal Current generation-local canonical scope cardinality. */
+  get configuredScopeCount(): number {
+    let count = 0;
+    for (const generation of this.#generations.values()) {
+      count += generation.configuredScopeCount;
+    }
+    return count;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#failedRollback !== undefined) {
       return Promise.reject(explicitRetryError());
@@ -287,14 +296,34 @@ interface FailedStartRollback {
 
 interface GenerationRegistration {
   readonly readiness: RegistrationReadiness;
-  readonly scopes: readonly DeliveryRunScope[];
-  readonly ownerKeys: readonly string[];
+  readonly startupScopes: readonly DeliveryRunScope[];
+  readonly ownership: RegistrationOwnership;
   rollback?: RegistrationRollback;
 }
 
 interface RegistrationRollback {
   stopped: boolean;
   quiescent: boolean;
+}
+
+class RegistrationOwnership {
+  readonly #scopes = new Map<string, DeliveryRunScope>();
+  readonly #ownerKeys = new Set<string>();
+
+  add(runtime: EnvironmentDeliveryRuntime): void {
+    this.#ownerKeys.add(runtime.owner.key);
+    for (const scope of runtime.scopes) {
+      this.#scopes.set(scopeKey(scope), scope);
+    }
+  }
+
+  get scopes(): readonly DeliveryRunScope[] {
+    return Object.freeze([...this.#scopes.values()]);
+  }
+
+  get ownerKeys(): readonly string[] {
+    return Object.freeze([...this.#ownerKeys]);
+  }
 }
 
 class DeliveryGeneration {
@@ -336,6 +365,10 @@ class DeliveryGeneration {
     return this.#configuredOwners.size;
   }
 
+  get configuredScopeCount(): number {
+    return this.#coordinator?.configuredScopeCount ?? 0;
+  }
+
   hasRegistration(token: string): boolean {
     return this.#registrations.has(token);
   }
@@ -348,14 +381,16 @@ class DeliveryGeneration {
     const registration = await assembleRegistration(descriptors, (descriptor, tenant) =>
       this.#runtime(descriptor, tenant),
     );
+    const ownership = new RegistrationOwnership();
     for (const runtime of registration.runtimes) {
       this.#addRuntime(runtime);
+      ownership.add(runtime);
     }
-    const readiness = this.#readiness(registration);
+    const readiness = this.#readiness(registration, ownership);
     this.#registrations.set(claim.token, {
       readiness,
-      scopes: registration.scopes,
-      ownerKeys: Object.freeze(registration.runtimes.map(({ owner }) => owner.key)),
+      startupScopes: registration.scopes,
+      ownership,
     });
     await this.#transition(registration, readiness);
     return await this.#recover(claim, readiness.open(registration.scopes));
@@ -367,13 +402,15 @@ class DeliveryGeneration {
       return;
     }
     state.readiness.fail();
+    const ownerKeys = state.ownership.ownerKeys;
+    const scopes = state.ownership.scopes;
     const rollback = (state.rollback ??= { stopped: false, quiescent: false });
     if (!rollback.stopped) {
-      this.#worker.stopOwners(state.ownerKeys);
+      this.#worker.stopOwners(ownerKeys);
       rollback.stopped = true;
     }
     if (!rollback.quiescent) {
-      await this.#worker.awaitOwnersSettled(state.ownerKeys);
+      await this.#worker.awaitOwnersSettled(ownerKeys);
       rollback.quiescent = true;
     }
     const failures: unknown[] = [];
@@ -383,22 +420,22 @@ class DeliveryGeneration {
       failures.push(error);
     }
     try {
-      await this.#worker.retireOwners(state.ownerKeys);
+      await this.#worker.retireOwners(ownerKeys);
     } catch (error) {
       failures.push(error);
     }
     let reclaimed = false;
     try {
-      await this.#coordinator?.removeOwners(state.ownerKeys);
+      await this.#coordinator?.removeOwners(ownerKeys);
       reclaimed = true;
     } catch (error) {
       failures.push(error);
     }
     if (reclaimed) {
-      for (const ownerKey of state.ownerKeys) {
+      for (const ownerKey of ownerKeys) {
         this.#configuredOwners.delete(ownerKey);
       }
-      this.#forgetScopes(state.scopes);
+      this.#forgetScopes(scopes);
     }
     this.#registrations.delete(token);
     throwFailures(failures, "Environment registration rollback failed.");
@@ -425,10 +462,13 @@ class DeliveryGeneration {
     }
   }
 
-  #readiness(registration: AssembledRegistration): RegistrationReadiness {
+  #readiness(
+    registration: AssembledRegistration,
+    ownership: RegistrationOwnership,
+  ): RegistrationReadiness {
     return new RegistrationReadiness(
       registration.descriptors,
-      (descriptor, ready) => this.#prepareReady(descriptor, ready),
+      (descriptor, ready) => this.#prepareReady(descriptor, ready, ownership),
       (scope) => this.#coordinator?.notify(scope),
     );
   }
@@ -470,7 +510,7 @@ class DeliveryGeneration {
     if (state === undefined || obligations === undefined) {
       return;
     }
-    const units = state.scopes.map(scopeKey);
+    const units = state.startupScopes.map(scopeKey);
     const causes = obligations.report([
       { owner: { kind: "registration", token }, obligation: "startup", units },
     ]);
@@ -493,7 +533,7 @@ class DeliveryGeneration {
           .flatMap(({ units: recordUnits }) => recordUnits),
       );
       this.#reportedFailures.record(
-        state.scopes.flatMap((scope) =>
+        state.startupScopes.flatMap((scope) =>
           unresolved.has(scopeKey(scope)) ? [this.#overlapDomain(scope)] : [],
         ),
       );
@@ -523,13 +563,18 @@ class DeliveryGeneration {
     return obligations;
   }
 
-  #prepareReady(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): DeliveryRunScope {
+  #prepareReady(
+    descriptor: ContextDeliveryDescriptor,
+    ready: DeliveryReady,
+    ownership: RegistrationOwnership,
+  ): DeliveryRunScope {
     const tenant: DeliveryTenantScope =
       ready.tenantId === undefined
         ? Object.freeze({})
         : Object.freeze({ tenantId: ready.tenantId });
     const runtime = this.#runtime(descriptor, tenant);
     this.#addRuntime(runtime);
+    ownership.add(runtime);
     const scope = runtime.scopes.find(
       ({ ready: candidate }) => readyKey(candidate) === readyKey(ready),
     );

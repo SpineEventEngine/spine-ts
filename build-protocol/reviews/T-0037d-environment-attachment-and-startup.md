@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 5 findings assigned
+Status: Slice 3 Round 5 fixes focused verified; Round 6 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -612,3 +612,36 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   reclamation and sibling usability, plus a fake and assertion proving the
   cleanup-failed selected owner remains permanently inert. Round 6 and security
   remain pending.
+- Receiving-review disposition: both Round 5 findings are accepted after direct
+  source inspection. Strict TDD is applicable and requires a dynamic-open
+  startup-failure RED plus a permanent-inertness RED before production changes.
+  The bounded fix remains private; no public contract, architecture, generated
+  artifact, subagent, or later lifecycle work is applicable.
+- Round 5 RED/GREEN disposition: environment RED failed 2/30 on the exact
+  reviewed ownership and fake-inertness gaps. The private fix tracks live
+  registration owners/scopes while preserving startup-only obligation units;
+  duplicate dynamic readiness deduplicates by owner/scope identity. Coordinator
+  plus environment GREEN is 65/65. Broader focused verification follows.
+- Round 5 findings are fixed and focused verified. Live registration ownership
+  is joined before readiness notification and is the sole rollback reclamation
+  source, while startup obligations retain their finite initial scope domain.
+  The dynamic race proves duplicate tenant readiness deduplication, complete
+  selected owner/scope reclamation, sibling progress, failed-readiness
+  inertness, bounded counts, and clean later settlement. The cleanup-failure
+  fake now permanently retires before rejecting and direct reselection fails.
+- Final coordinator/environment is 65/65; canonical seven-file regression is
+  193/193; affected coverage passes at 96.80/90.27/98.28/97.08 percent. The
+  unscoped global-threshold failure is retained only as a non-acceptance probe.
+  Generated/tooling typecheck and ESLint/cleanup pass. Final record formatting,
+  diff, identical status, and public/generated/protected scans close handoff.
+  Round 6 review is pending; no public/later-lifecycle work or full verify ran.
+- Final scan evidence is clean: generated freshness, 25 copied Protobuf source
+  checksums, changed-file formatting, diff hygiene, identical Status mirrors,
+  and public/package/lock/generated/Protobuf/protected-file boundaries all pass.
+- `2026-07-13T00:19:25Z`: The implementer completed and was closed with actual
+  runtime metadata matching explicit `gpt-5.6-terra` / `medium`. Coordinator
+  inspection accepts the live-registration ownership and finite startup
+  attribution split, then independently repeats the canonical regression
+  (193/193), generated/type/lint/cleanup, format, diff, and status gates. Native
+  server lifecycle passes 21/21. The fix is ready for a committed Round 6
+  package; full verify and final security remain deferred.

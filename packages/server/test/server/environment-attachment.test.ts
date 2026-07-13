@@ -611,6 +611,78 @@ describe("ServerEnvironment attachment", () => {
 });
 
 describe("failed attachment rollback", () => {
+  it("reclaims dynamic owners admitted by a failing open registration while preserving its sibling", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sibling = descriptor(
+      "DynamicOwnerSibling",
+      "type.example.dev/DynamicOwnerSibling",
+      new InMemoryStorageFactory(),
+    );
+    const failed = descriptor(
+      "DynamicOwnerFailed",
+      "type.example.dev/DynamicOwnerFailed",
+      new InMemoryStorageFactory(),
+      { tenants: ["tenant-initial"] },
+    );
+    const replacement = descriptor(
+      "DynamicOwnerReplacement",
+      "type.example.dev/DynamicOwnerReplacement",
+      new InMemoryStorageFactory(),
+    );
+    const startup = Promise.withResolvers<LifecycleOutcome>();
+    const startupFailure = new Error("dynamic owner startup failed");
+    worker.enqueue("IDLE", startup.promise, "IDLE");
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+
+    const failedAttach = attachments.attach({ ownership: "caller", descriptors: [failed.value] });
+    await until(() => worker.starts === 2);
+    const dynamicReady = Object.freeze({ ...failed.ready, tenantId: "tenant-dynamic" });
+    await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
+    await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
+
+    expect(worker.addedOwners).toEqual([
+      "environment-owner-1",
+      "environment-owner-2",
+      "environment-owner-3",
+    ]);
+    expect(configuredOwnerCount(attachments)).toBe(3);
+    expect(configuredScopeCount(attachments)).toBe(3);
+
+    startup.resolve({ rejected: startupFailure });
+    await expect(failedAttach).rejects.toBe(startupFailure);
+
+    expect(worker.stoppedOwners).toEqual([["environment-owner-2", "environment-owner-3"]]);
+    expect(worker.awaitedOwners).toEqual([["environment-owner-2", "environment-owner-3"]]);
+    expect(worker.retiredOwners).toEqual([["environment-owner-2", "environment-owner-3"]]);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+    expect(configuredScopeCount(attachments)).toBe(1);
+    expect(unresolvedReportedDomainCount(attachments)).toBe(1);
+
+    const startsAfterRollback = worker.starts;
+    await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
+    await failed.readiness
+      .claim({ ...failed.ready, tenantId: "tenant-after-failure" })
+      .complete(() => Promise.resolve());
+    await Promise.resolve();
+    expect(worker.starts).toBe(startsAfterRollback);
+    expect(worker.addedOwners).toHaveLength(3);
+
+    worker.enqueue("IDLE", "IDLE");
+    await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === startsAfterRollback + 1);
+    const replacementHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [replacement.value],
+    });
+    expect(replacementHandle.startup.scopes.map(({ scope }) => scope.owner.key)).toEqual([
+      "environment-owner-1",
+      "environment-owner-4",
+    ]);
+    expect(configuredOwnerCount(attachments)).toBe(2);
+    expect(configuredScopeCount(attachments)).toBe(2);
+  });
+
   it("quiesces a failed shared owner before report and retirement while preserving its sibling", async () => {
     const events: string[] = [];
     const reported: unknown[][] = [];
@@ -1083,6 +1155,11 @@ describe("failed attachment rollback", () => {
     expect(configuredOwnerCount(attachments)).toBe(1);
     expect(unresolvedReportedDomainCount(attachments)).toBe(1);
 
+    const retiredScope = runScope("environment-owner-2", failed.ready);
+    await expect(worker.start({ scopes: [retiredScope] }, [failed.ready.shard])).rejects.toThrow(
+      "Lifecycle worker owner is permanently retired.",
+    );
+
     worker.enqueue({ rejected: new Error("fresh cleanup-path rejection") });
     await expect(
       attachments.attach({ ownership: "caller", descriptors: [blocked.value] }),
@@ -1189,6 +1266,11 @@ function configuredOwnerCount(attachments: EnvironmentAttachments): number {
     .configuredOwnerCount;
 }
 
+function configuredScopeCount(attachments: EnvironmentAttachments): number {
+  return (attachments as EnvironmentAttachments & { readonly configuredScopeCount: number })
+    .configuredScopeCount;
+}
+
 interface TestDescriptor {
   readonly value: ContextDeliveryDescriptor;
   readonly context: StorageContext;
@@ -1249,9 +1331,13 @@ function descriptor(
     },
     storageContext: (scope: DeliveryTenantScope) => {
       testDescriptor.storageContexts += 1;
-      return options.tenants === undefined
-        ? context
-        : Object.freeze({ name, multitenant: true, tenantId: scope.tenantId });
+      if (options.tenants === undefined) {
+        return context;
+      }
+      if (scope.tenantId === undefined) {
+        throw new Error("The multitenant test descriptor requires a tenant ID.");
+      }
+      return Object.freeze({ name, multitenant: true, tenantId: scope.tenantId });
     },
     endpoints: () => Object.freeze([ready]),
     onReady: (onReady: OnDeliveryReady) => readiness.onReady(onReady),
@@ -1318,11 +1404,13 @@ function runScope(ownerKey: string, ready: DeliveryReady): DeliveryRunScope {
   return Object.freeze({ owner: Object.freeze({ key: ownerKey }), ready });
 }
 
-type LifecycleResult = "FAILED" | "IDLE" | { readonly rejected: Error };
+type LifecycleOutcome = "FAILED" | "IDLE" | { readonly rejected: Error };
+type LifecycleResult = LifecycleOutcome | Promise<LifecycleOutcome>;
 
 class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly #results: LifecycleResult[] = [];
   readonly #events: string[];
+  readonly #activeOwners = new Set<string>();
   readonly awaitFailures: Error[] = [];
   readonly awaitGates: Promise<void>[] = [];
   readonly retireFailures: Error[] = [];
@@ -1330,6 +1418,8 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly awaitOwnerFailures: Error[] = [];
   readonly retireOwnerFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
+  readonly stoppedOwners: string[][] = [];
+  readonly awaitedOwners: string[][] = [];
   readonly addedOwners: string[] = [];
   starts = 0;
   stopCalls = 0;
@@ -1351,6 +1441,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   }
 
   add(runtime: EnvironmentDeliveryRuntime): void {
+    this.#activeOwners.add(runtime.owner.key);
     this.addedOwners.push(runtime.owner.key);
   }
 
@@ -1358,13 +1449,16 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
     obligation: DeliveryRunObligation,
     shards: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence> {
+    if (obligation.scopes.some(({ owner }) => !this.#activeOwners.has(owner.key))) {
+      return Promise.reject(new Error("Lifecycle worker owner is permanently retired."));
+    }
     this.starts += 1;
     this.#events.push("start");
-    const result = this.#results.shift();
-    if (result === undefined) {
+    const queued = this.#results.shift();
+    if (queued === undefined) {
       return Promise.reject(new Error("Missing lifecycle worker result."));
     }
-    return Promise.resolve({
+    return Promise.resolve(queued).then((result) => ({
       obligation,
       shards: Object.freeze(
         shards.map((shard) =>
@@ -1385,7 +1479,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
               },
         ),
       ),
-    });
+    }));
   }
 
   stop(): void {
@@ -1411,7 +1505,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   }
 
   stopOwners(ownerKeys: readonly string[]): void {
-    void ownerKeys;
+    this.stoppedOwners.push([...ownerKeys]);
     this.stopOwnerCalls += 1;
     this.#events.push("stopOwners");
     const failure = this.stopOwnerFailures.shift();
@@ -1421,7 +1515,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   }
 
   awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
-    void ownerKeys;
+    this.awaitedOwners.push([...ownerKeys]);
     this.awaitOwnerCalls += 1;
     this.#events.push("awaitOwners");
     const failure = this.awaitOwnerFailures.shift();
@@ -1431,6 +1525,9 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   retireOwners(ownerKeys: readonly string[]): Promise<void> {
     this.#events.push("retireOwners");
     this.retiredOwners.push([...ownerKeys]);
+    for (const ownerKey of ownerKeys) {
+      this.#activeOwners.delete(ownerKey);
+    }
     const failure = this.retireOwnerFailures.shift();
     return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
