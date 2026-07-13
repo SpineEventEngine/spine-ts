@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 3 review assigned
+Status: Slice 3 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -439,3 +439,35 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Style/API/reliability assigned at explicit Terra High, no subagents.
   Documentation N/A because no observable docs changed; security deferred.
   Ignore superseded history unless current Slice 3 records revive it.
+
+## Slice 3 Review Results
+
+- `2026-07-13T19:59:08Z`: reliability high: safe endpoint observation must not
+  discard unfinished exact detach ownership. Style/API clean with focused gaps.
+  All actual Terra High, no subagents, closed.
+- Same Terra Medium implementer receives the complete code/test batch. Fresh
+  applicable re-review follows; documentation N/A, security deferred.
+
+## Slice 3 Review-Fix Handback
+
+- `2026-07-13T20:09:14Z`: the high reliability finding is addressed by retaining
+  a safe-but-rejected exact handle until explicit retry succeeds. Dependency
+  safety and detach completion no longer collapse into one checkpoint, and
+  terminal consumption cannot precede both detach and close-group completion.
+- Focused RED is 20/21 with only the accepted defect failing; GREEN is 21/21
+  and the native five-file regression is 163/163. Direct evidence covers the
+  complete recorded shared/network/owned/observation/terminal/identity batch.
+- This remains implementation handback, not self-acceptance. Fresh applicable
+  style/API/reliability re-review remains coordinator-owned; documentation is
+  N/A, security deferred, and Slice 4+ excluded.
+- `2026-07-13T20:10:56Z`: both typechecks, 5 files / 163 native tests, scoped
+  lint/cleanup/Prettier, exact nine-path allowlist/status/public-leak, and diff
+  integrity pass. Six paths changed within ownership; re-review may proceed
+  from this synchronized handback.
+
+## Slice 3 Re-review Assignment
+
+- `2026-07-13T20:12:47Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 163 tests, all scoped gates pass.
+- Resume style/API/reliability at explicit Terra High, no subagents, against a
+  fresh whole-Slice 3 package. Documentation N/A; security deferred.

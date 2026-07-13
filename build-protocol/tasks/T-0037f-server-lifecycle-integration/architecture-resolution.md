@@ -1,6 +1,27 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 review assigned
+Status: Slice 3 re-review assigned
+
+## Slice 3 Review-Fix Assignment
+
+- `2026-07-13T19:59:08Z`: endpoint safety and detach completion are distinct.
+  Preserve safe-error handles for exact retry while allowing dependency close;
+  add the focused network/shared/partial-close/observation evidence.
+
+## Slice 3 Review-Fix Handback
+
+- `2026-07-13T20:09:14Z`: the failed-start record now treats endpoint safety
+  and exact detach completion as independent checkpoints. Safe observation
+  permits the existing close group to advance but does not remove the handle;
+  only successful `detach`/`retryDetach` removes it. Record clearing requires
+  no remaining handle and a complete close group.
+- This preserves original-first aggregation and cause-once behavior while
+  allowing inert exact cleanup to complete later without duplicate dependency
+  close. No environment lifecycle state is copied into `Server`, and no public
+  option, signature, export, running-close behavior, or Slice 4+ path is added.
+- `2026-07-13T20:10:56Z`: both typechecks, native 5 files / 163 tests, scoped
+  lint/cleanup/format, exact nine-path scope/status/public-leak, and diff gates
+  pass at unchanged baseline HEAD `c3c9b3fd`.
 
 ## Resolution Summary
 

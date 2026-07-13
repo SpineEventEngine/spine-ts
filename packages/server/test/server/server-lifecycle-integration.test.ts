@@ -3,6 +3,8 @@ import * as http2 from "node:http2";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BoundedContext, Server, ServerEnvironment } from "../../src/index.js";
+import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import {
   HeldStartupWorker,
@@ -10,21 +12,24 @@ import {
   lifecycleFixture,
 } from "./server-lifecycle-fixture.js";
 
-const createHttp2Server = vi.hoisted(() => vi.fn());
+const createHttp2Server = vi.hoisted(() =>
+  vi.fn<(server: import("node:http2").Http2Server) => void>(),
+);
 
 vi.mock("node:http2", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:http2")>();
   return {
     ...actual,
     createServer(...args: Parameters<typeof actual.createServer>) {
-      createHttp2Server();
-      return actual.createServer(...args);
+      const server = actual.createServer(...args);
+      createHttp2Server(server);
+      return server;
     },
   };
 });
 
 describe("Server lifecycle integration", () => {
-  beforeEach(() => createHttp2Server.mockClear());
+  beforeEach(() => createHttp2Server.mockReset());
 
   it("waits for attached startup recovery before opening the listener", async () => {
     const fixture = await lifecycleFixture();
@@ -389,6 +394,135 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("retries only failed server-owned dependency and facility close indexes", async () => {
+    const events: string[] = [];
+    const startupFailure = new Error("owned partial-cleanup startup failed");
+    const contextFailure = new Error("owned context storage close failed");
+    const resourceFailure = new Error("owned resource close failed");
+    const facilityFailure = new Error("owned tracing facility close failed");
+    const worker = new HeldStartupWorker(events);
+    worker.rejectNextStart(startupFailure);
+    const facilityStorage = new LifecycleTrackingStorageFactory(events);
+    let deliveryCloses = 0;
+    const delivery = {
+      close() {
+        deliveryCloses += 1;
+        events.push("delivery");
+      },
+    };
+    let tracerCloses = 0;
+    const tracerFactory = {
+      close() {
+        tracerCloses += 1;
+        events.push("tracer");
+        if (tracerCloses === 1) {
+          throw facilityFailure;
+        }
+      },
+    };
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory: facilityStorage,
+        ownsStorageFactory: true,
+        delivery,
+        ownsDelivery: true,
+        tracerFactory,
+        ownsTracerFactory: true,
+      },
+    });
+    await fixture.context.close();
+    const contextStorage = new LifecycleTrackingStorageFactory([]);
+    const context = await fixture
+      .createBuilder("LifecycleOwnedPartialCleanup")
+      .withStorageFactory(contextStorage)
+      .buildAsync();
+    const closeBuiltContext = context.close.bind(context);
+    let contextCloses = 0;
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== context) {
+        throw new Error("Unexpected context close in partial owned cleanup test.");
+      }
+      contextCloses += 1;
+      if (contextCloses === 1) {
+        throw contextFailure;
+      }
+      return closeBuiltContext();
+    });
+    const successfulResource = vi.fn(() => events.push("resource-success"));
+    let retryingResourceCloses = 0;
+    const retryingResource = vi.fn(() => {
+      retryingResourceCloses += 1;
+      events.push("resource-retry");
+      if (retryingResourceCloses === 1) {
+        throw resourceFailure;
+      }
+    });
+    const server = Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(context)
+      .addResource({ close: successfulResource })
+      .addResource({ close: retryingResource });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      await worker.startedWithin();
+      worker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        startupFailure,
+        contextFailure,
+        resourceFailure,
+        facilityFailure,
+      ]);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledOnce();
+      expect(deliveryCloses).toBe(1);
+      expect(tracerCloses).toBe(1);
+      expect(facilityStorage.closeCalls).toBe(1);
+      expect(facilityStorage.isOpen()).toBe(false);
+      expect(contextCloses).toBe(1);
+      expect(contextStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(
+        contextStorage.storages.every((storage) => contextStorage.closeCallsFor(storage) === 0),
+      ).toBe(true);
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledTimes(2);
+      expect(deliveryCloses).toBe(1);
+      expect(tracerCloses).toBe(2);
+      expect(facilityStorage.closeCalls).toBe(1);
+      expect(contextCloses).toBe(2);
+      expect(
+        contextStorage.storages.every((storage) => contextStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(contextStorage.storages.every((storage) => !storage.isOpen())).toBe(true);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+    } finally {
+      closeContext.mockRestore();
+      worker.release();
+      await starting.catch(() => undefined);
+      await server.start().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      contextStorage.close();
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("detaches before eligible owned cleanup after listener bind failure", async () => {
     const blocker = await Server.atPort(0).start();
     const events: string[] = [];
@@ -439,6 +573,19 @@ describe("Server lifecycle integration", () => {
         "facility",
       ]);
       expect(createHttp2Server).toHaveBeenCalledTimes(2);
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "facility",
+      ]);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
       const terminal = await server.start().catch((error: unknown) => error);
       expectConsumedFailedStartServer(terminal);
     } finally {
@@ -535,6 +682,134 @@ describe("Server lifecycle integration", () => {
       await context.close().catch(() => undefined);
       await fixture.environment.close().catch(() => undefined);
       await blocker.close();
+      fixture.dispose();
+    }
+  });
+
+  it("retries safe non-last listener cleanup without retiring the sibling generation", async () => {
+    const events: string[] = [];
+    const retirementFailure = new Error("selected worker retirement failed after barrier");
+    const fixture = await lifecycleFixture({ events });
+    const siblingStarting = Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+    fixture.worker.release();
+    const sibling = await siblingStarting;
+    const departingStorage = new LifecycleTrackingStorageFactory([]);
+    const departingContext = await fixture
+      .createBuilder("LifecycleSharedListenerFailure")
+      .withStorageFactory(departingStorage)
+      .buildAsync();
+    const resourceClose = vi.fn();
+    fixture.worker.failNextRetire(retirementFailure);
+    const server = Server.atPort(sibling.port, { environment: fixture.environment })
+      .add(departingContext)
+      .addResource({ close: resourceClose });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      const failure = await starting.catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        expect.objectContaining({ code: "EADDRINUSE" }),
+        retirementFailure,
+      ]);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        departingStorage.storages.every((storage) => departingStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(fixture.worker.starts).toBe(2);
+      expect(fixture.worker.stopCalls).toBe(1);
+      expect(fixture.worker.awaitCalls).toBe(1);
+      expect(fixture.worker.retireCalls).toBe(1);
+
+      const session = http2.connect(sibling.baseUrl);
+      session.on("error", () => undefined);
+      await once(session, "remoteSettings");
+      session.close();
+      await once(session, "close");
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        departingStorage.storages.every((storage) => departingStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(fixture.worker.retireCalls).toBe(1);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+      await sibling.close();
+      expect(fixture.worker.retireCalls).toBe(2);
+    } finally {
+      fixture.worker.release();
+      await starting.catch(() => undefined);
+      await server.start().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await departingContext.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("retries network close before detach and preserves the original listener error", async () => {
+    const events: string[] = [];
+    const listenerFailure = Object.assign(new Error("instrumented listener bind failed"), {
+      code: "EADDRINUSE",
+    });
+    const networkFailure = new Error("instrumented listener network close failed");
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      instrumentListenerAndNetworkFailures(httpServer, listenerFailure, [networkFailure]);
+    });
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture();
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleNetworkCloseFailure")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const resourceClose = vi.fn();
+    const server = Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: resourceClose });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      await fixture.worker.startedWithin();
+      fixture.worker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([listenerFailure, networkFailure]);
+      expect((failure as AggregateError).errors[0]).toBe(listenerFailure);
+      expect(fixture.worker.stopCalls).toBe(0);
+      expect(fixture.worker.awaitCalls).toBe(0);
+      expect(fixture.worker.retireCalls).toBe(0);
+      expect(resourceClose).not.toHaveBeenCalled();
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(fixture.worker.stopCalls).toBe(1);
+      expect(fixture.worker.awaitCalls).toBe(1);
+      expect(fixture.worker.retireCalls).toBe(1);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+    } finally {
+      fixture.worker.release();
+      await starting.catch(() => undefined);
+      await server.start().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1254,6 +1529,59 @@ describe("Server lifecycle integration", () => {
       serverEnvironmentAccess.installTestAttachments(closed, () => worker);
     }).toThrow("Test attachments may only be installed before environment lifecycle use.");
   });
+
+  it("observes exact-handle endpoint safety without mutating pre-detach state", async () => {
+    const first = await lifecycleFixture();
+    const second = await lifecycleFixture();
+    first.worker.release();
+    second.worker.release();
+    let firstHandle: EnvironmentAttachmentHandle | undefined;
+    let secondHandle: EnvironmentAttachmentHandle | undefined;
+
+    try {
+      firstHandle = await serverEnvironmentAccess.attach(first.environment, {
+        ownership: "caller",
+        descriptors: [boundedContextAccess.delivery(first.context)],
+      });
+      secondHandle = await serverEnvironmentAccess.attach(second.environment, {
+        ownership: "caller",
+        descriptors: [boundedContextAccess.delivery(second.context)],
+      });
+
+      expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
+      expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
+      expect(first.worker.stopCalls).toBe(0);
+      expect(first.worker.awaitCalls).toBe(0);
+      expect(first.worker.retireCalls).toBe(0);
+      const foreignHandle = secondHandle;
+      expect(() => serverEnvironmentAccess.endpointSafe(first.environment, foreignHandle)).toThrow(
+        "Environment attachment handle is not owned by this environment.",
+      );
+      expect(first.worker.stopCalls).toBe(0);
+      expect(first.worker.awaitCalls).toBe(0);
+      expect(first.worker.retireCalls).toBe(0);
+
+      await serverEnvironmentAccess.detach(first.environment, firstHandle);
+      expect(first.worker.stopCalls).toBe(1);
+      expect(first.worker.awaitCalls).toBe(1);
+      expect(first.worker.retireCalls).toBe(1);
+    } finally {
+      if (firstHandle !== undefined) {
+        await serverEnvironmentAccess.detach(first.environment, firstHandle).catch(() => undefined);
+      }
+      if (secondHandle !== undefined) {
+        await serverEnvironmentAccess
+          .detach(second.environment, secondHandle)
+          .catch(() => undefined);
+      }
+      await first.context.close().catch(() => undefined);
+      await second.context.close().catch(() => undefined);
+      await first.environment.close().catch(() => undefined);
+      await second.environment.close().catch(() => undefined);
+      first.dispose();
+      second.dispose();
+    }
+  });
 });
 
 function once(target: NodeJS.EventEmitter, event: string): Promise<void> {
@@ -1302,4 +1630,38 @@ async function closeIfRunningServer(value: unknown): Promise<void> {
   if (typeof close === "function") {
     await Reflect.apply(close, value, []);
   }
+}
+
+function instrumentListenerAndNetworkFailures(
+  server: http2.Http2Server,
+  listenerFailure: Error,
+  networkFailures: readonly Error[],
+): void {
+  const failures = [...networkFailures];
+  let networkOpen = true;
+  Object.defineProperties(server, {
+    listen: {
+      configurable: true,
+      value: (...args: unknown[]) => {
+        void args;
+        setImmediate(() => server.emit("error", listenerFailure));
+        return server;
+      },
+    },
+    listening: {
+      configurable: true,
+      get: () => networkOpen,
+    },
+    close: {
+      configurable: true,
+      value: (callback?: (error?: Error) => void) => {
+        const failure = failures.shift();
+        if (failure === undefined) {
+          networkOpen = false;
+        }
+        setImmediate(() => callback?.(failure));
+        return server;
+      },
+    },
+  });
 }

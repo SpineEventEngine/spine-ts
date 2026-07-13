@@ -195,7 +195,7 @@ export class Server {
       collectCloseError(error, errors);
     }
 
-    if (!closeFailed && this.#failedStartCleanup === cleanup) {
+    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }
@@ -225,7 +225,7 @@ export class Server {
       closeFailed = true;
       collectCloseError(error, errors);
     }
-    if (!closeFailed && this.#failedStartCleanup === cleanup) {
+    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }
@@ -269,7 +269,6 @@ export class Server {
     }
     try {
       if (serverEnvironmentAccess.endpointSafe(this.#environment, attachment)) {
-        delete cleanup.attachment;
         return true;
       }
     } catch (error) {

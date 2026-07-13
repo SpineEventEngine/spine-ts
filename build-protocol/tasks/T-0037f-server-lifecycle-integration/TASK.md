@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 review assigned
+Status: Slice 3 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -657,3 +657,46 @@ gate passes.
   closed. Both typechecks, 5 files / 159 native tests, and all scoped gates pass.
 - Assign style/API/reliability at explicit Terra High, no subagents, against a
   stable Slice 3 package. Documentation N/A; security deferred.
+
+## Slice 3 Review Findings And Fix Assignment
+
+- `2026-07-13T19:59:08Z`: reliability high; style/API clean with focused gaps.
+  All actual Terra High, no subagents, closed.
+- Preserve an exact attachment after a safe detach error: safety permits
+  dependency close, but the retained record must survive until `retryDetach()`
+  completes inert cleanup. Do not terminally consume/clear it early.
+- Add caller-owned non-last safe-error/sibling/eventual removal, network-close
+  hard-gate, owned partial close failed-index retry, foreign/pre-detach safety
+  observation, listener-retry terminal rejection, and exact original error
+  identity coverage. Same Terra Medium implementer owns the complete batch.
+
+## Slice 3 Review-Fix Handback
+
+- `2026-07-13T20:09:14Z`: endpoint safety now authorizes dependency close
+  without discarding unfinished exact detach ownership. A safe rejected handle
+  remains in the server-private cleanup record; record clearing and terminal
+  consumption require both successful dependency-group completion and later
+  `retryDetach()` success. That retry performs no rebuild, attach, listen, or
+  duplicate dependency close and then emits the cause-less completion error.
+- Direct coverage adds shared caller-owned non-last safe-error cleanup with a
+  live usable sibling and no generation retirement on inert retry; network-close
+  hard gating; server-owned context/resource/environment-facility failed-index
+  retry; foreign/pre-detach read-only safety; completion-then-terminal behavior;
+  and exact original listener-error identity first in aggregation.
+- Strict RED was 20/21 after correcting one harness assumption about memoized
+  `BoundedContext.close()` outcomes; only premature safe-detach consumption
+  failed. Focused GREEN is 21/21 and the native five-file gate is 163/163.
+  Both typechecks, scoped ESLint, and cleanup enforcement pass before final
+  synchronized formatting/scope/status/leak/diff verification.
+- `2026-07-13T20:10:56Z`: final tooling/generated typechecks, native 5 files /
+  163 tests, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 6 changed paths inside the 9-path allowlist, all statuses
+  synchronized, no internal-name/root/package leak, and clean public-surface
+  diff plus `git diff --check`.
+
+## Slice 3 Review-Fix Coordinator Gate
+
+- `2026-07-13T20:12:47Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 163 tests, and all scoped gates pass.
+- Fresh whole-Slice 3 style/API/reliability re-review assigned at explicit
+  Terra High, no subagents. Documentation N/A; security deferred.
