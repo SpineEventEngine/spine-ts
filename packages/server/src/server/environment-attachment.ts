@@ -554,9 +554,6 @@ export class EnvironmentAttachments {
 
   async #refuseStop(stop: GenerationStop, error: Error): Promise<never> {
     stop.completed = true;
-    if (this.#stop === stop) {
-      this.#stop = undefined;
-    }
     await this.#releaseStopWaiters(stop);
     throw error;
   }

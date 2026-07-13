@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 4 review wave 2 assigned
+Status: Slice 4 review wave 3 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -395,3 +395,30 @@ attachment failures into the stop result. Deterministic tests prove FIFO
 conflict ownership, waiter-before-stop settlement, exact replacement-safe old
 error identity, and successful-stop independence. Coordinator review is
 requested with exact evidence in the canonical logs.
+
+## Slice 4 Review Wave 2 Fix Assignment
+
+Wave 2 found one lifecycle-identity defect shared by the style/maintainability
+and TypeScript/API concerns: a refused stop cleared its retained identity before
+its attachment-waiter settlement tail completed, allowing a waiter callback to
+create a second stop while the original stop promise remained pending. The same
+existing implementer is assigned the bounded correction at explicit
+`gpt-5.6-terra` / `medium`, no subagents. It must retain the stop through waiter
+settlement, let the existing terminal promise handler clear completed state,
+and prove a nested stop request receives the exact original promise.
+
+## Slice 4 Review Wave 2 Fix Handback
+
+The refused-stop owner now remains installed while its completed waiter cohort
+settles; the existing terminal rejection handler clears it afterward. A
+deterministic failed-detach refusal proves that a waiting attachment's
+settlement callback runs before the original stop settles, receives the exact
+original stop promise from a nested `stopDelivery()` call, creates no candidate,
+and leaves retirement and recovery behavior unchanged. Focused RED/GREEN and
+verification evidence are recorded in the canonical logs; coordinator review
+is requested.
+
+Coordinator verification passed 5 files / 162 tests, generated-build
+typechecking, focused formatting, synchronized status, exact scope, private
+boundary scans, and diff hygiene. The committed fix endpoint is assigned to
+fresh Wave 3 review.

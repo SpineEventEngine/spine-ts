@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 4 review wave 2 assigned
+Status: Slice 4 review wave 3 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -845,3 +845,48 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only and no-subagent.
+
+## Slice 4 Review Wave 2 Results
+
+- Code style/maintainability: P1. A refused stop clears its retained identity
+  before waiter settlement, so a waiter callback can create a second stop while
+  the original promise remains pending. Actual `gpt-5.6-terra` / `high`; skill
+  applicability reported; no subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill applicability
+  reported; no subagent.
+- TypeScript/API docs: P1. The same early clear breaks duplicate-stop promise
+  identity during refused-stop waiter settlement. Actual `gpt-5.6-terra` /
+  `high`; skill applicability reported; no subagent.
+- Performance/reliability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill
+  applicability reported; no subagent.
+- The deduplicated fix retains the stop until its completed terminal promise
+  handler can clear it and adds exact-promise coverage for a nested stop request
+  from waiter settlement. The same existing implementer is assigned at explicit
+  expected `gpt-5.6-terra` / `medium`, no subagents.
+
+## Slice 4 Review Wave 2 Fix Evidence
+
+- The fixed/explicit `gpt-5.6-terra` / `medium` implementer, no subagents,
+  recorded the canonical review/TDD/testing/error/completion skill check before
+  source/test edits.
+- RED proved a refused-stop waiter callback received a distinct stop promise
+  while the original refusal was pending. GREEN retains the completed stop
+  identity through awaited waiter settlement and delegates clearing to the
+  existing terminal rejection handler.
+- Deterministic coverage proves strict original-promise identity, pending-stop
+  callback timing, one worker factory call/no candidate, unchanged registration
+  and retirement state before established detach recovery, and unchanged exact
+  refusal behavior. Focused stop tests passed 40 / 40; the requested five-file
+  suite passed 162 / 162; generated-build typechecking passed. Coordinator
+  review is requested; final formatting/status/static/inventory/diff evidence
+  is recorded in the canonical work log.
+
+## Slice 4 Review Wave 3 Assignment
+
+- Coordinator verification and pre-review status/scope/public/generated/diff
+  lint passed at `2026-07-13T10:29:43Z` after 5 files / 162 tests and
+  generated-build typechecking.
+- Wave 3 assigns style/maintainability `gpt-5.6-terra` / `high`, documentation
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs `gpt-5.6-terra` / `high`, and
+  performance/reliability `gpt-5.6-terra` / `high`; read-only, bounded to the
+  refused-stop identity fix, and no subagents.

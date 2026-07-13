@@ -601,6 +601,84 @@ describe("environment generation stop", () => {
     await expect(attachments.stopDelivery()).resolves.toBeUndefined();
   });
 
+  it("retains a refused stop identity through waiter settlement callbacks", async () => {
+    const worker = new ControlledWorker([], "refused-waiter");
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        factoryCalls += 1;
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "RefusedWaiterInitial",
+      "type.example.dev/RefusedWaiterInitial",
+      new InMemoryStorageFactory(),
+    );
+    const waiting = descriptor(
+      "RefusedWaiterLater",
+      "type.example.dev/RefusedWaiterLater",
+      new InMemoryStorageFactory(),
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [initial.value],
+    });
+    worker.awaitFailures.push(new Error("refused waiter detach quiescence failed"));
+    await expect(attachments.detach(handle)).rejects.toBeDefined();
+    const lifecycleBeforeStop = [worker.stopCalls, worker.awaitCalls, worker.retireCalls];
+
+    const stopping = attachments.stopDelivery();
+    let stopSettled = false;
+    void stopping.then(
+      () => {
+        stopSettled = true;
+      },
+      () => {
+        stopSettled = true;
+      },
+    );
+    const attaching = attachments.attach({ ownership: "caller", descriptors: [waiting.value] });
+    const waiterSettled = Promise.withResolvers<unknown>();
+    let nestedStop: Promise<void> | undefined;
+    let stopSettledDuringWaiterCallback: boolean | undefined;
+    void attaching.catch((reason: unknown) => {
+      stopSettledDuringWaiterCallback = stopSettled;
+      nestedStop = attachments.stopDelivery();
+      void nestedStop.catch(() => undefined);
+      waiterSettled.resolve(reason);
+    });
+    const stopOutcome = stopping.then(
+      () => Object.freeze({ status: "fulfilled" as const }),
+      (reason: unknown) => Object.freeze({ status: "rejected" as const, reason }),
+    );
+
+    const waiterReason = await waiterSettled.promise;
+    expect(stopSettledDuringWaiterCallback).toBe(false);
+    expect(nestedStop).toBe(stopping);
+    expect(waiterReason).toEqual(
+      expect.objectContaining({
+        message: "Environment generation detach requires an explicit retry.",
+      }),
+    );
+    const outcome = await stopOutcome;
+    expect(outcome.status).toBe("rejected");
+    if (outcome.status === "rejected") {
+      expect(outcome.reason).toEqual(
+        expect.objectContaining({
+          message: "Environment generation detach requires an explicit retry.",
+        }),
+      );
+    }
+    expect(factoryCalls).toBe(1);
+    expect(waiting.startupCalls).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual(lifecycleBeforeStop);
+
+    await attachments.retryDetach(handle);
+    await expect(attachments.stopDelivery()).resolves.toBeUndefined();
+  });
+
   it("refuses stop while rejected non-last detach owns a live registration", async () => {
     const oldWorker = new ControlledWorker([], "non-last-old");
     const candidateWorker = new ControlledWorker([], "non-last-candidate");
