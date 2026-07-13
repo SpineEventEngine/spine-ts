@@ -3365,7 +3365,7 @@ describe("repository signal routing", () => {
     ]);
   });
 
-  it("writes later process-manager event inbox rows when an earlier routed target fails", async () => {
+  it("exact-drains later process-manager event rows while retaining an earlier routed failure", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createSplitPmRepo();
@@ -3395,15 +3395,26 @@ describe("repository signal routing", () => {
     const posted = dispatcher.dispatch(createProjectionEvent("event-pm-split", "pm-source"));
 
     await expect(posted).rejects.toThrow("pm-fail replay failed");
-    expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail"]);
+    expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "pm-later"]);
+    expect(SplitRouteProcessManager.completedIds).toEqual(["pm-later"]);
 
     const pending = await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
-
-    const later = pending.find(
+    const failed = pending.find(
       (message) =>
         message.signalId === "event-pm-split" &&
         message.label === "REACT_UPON_EVENT" &&
         message.status === "TO_DELIVER" &&
+        message.inboxId.targetId === "pm-fail",
+    );
+    expect(failed?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));
+    expect(pending.some((message) => message.inboxId.targetId === "pm-later")).toBe(false);
+
+    const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    const later = delivered.find(
+      (message) =>
+        message.signalId === "event-pm-split" &&
+        message.label === "REACT_UPON_EVENT" &&
+        message.status === "DELIVERED" &&
         message.inboxId.targetId === "pm-later",
     );
     expect(later?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));

@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Final gate stale expectation fix assigned
+Status: Final gate expectation fix focused verified; Round 7 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -669,3 +669,23 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   explicitly require continued exact draining after an earlier failure while
   propagating the first error. One Terra Medium owner receives the test-only
   correction; a fresh four-lane review is required before final verify resumes.
+- Receiving disposition: systematic debugging and TDD apply. The exact failure
+  is accepted as a stale repository-level expectation because the focused
+  handoff reference requires both already-persisted rows to exact-drain while
+  preserving the first rejection. The correction remains test-and-record only.
+- Final-gate fix disposition: the unchanged RED failed 1/1 on the exact stale
+  started-ID expectation. The reconciled test preserves first-error rejection
+  and proves ordered handler starts, later-only completion, failed-row retry
+  durability, and later-row delivery with the correct target type. Exact GREEN
+  is 1/1; repository routing 125/125; process-manager handoff 28/28; canonical
+  seven files 193/193. Typecheck and full ESLint/cleanup pass after replacing
+  one unsafe matcher with an equivalent typed predicate. Production is
+  unchanged; Round 7 review and coordinator-owned full verify remain pending.
+- Final format/diff/status/generated/Protobuf and protected-boundary scans pass;
+  the active diff is exactly the repository test and three canonical records.
+- `2026-07-13T00:32:27Z`: The implementer completed and was closed with actual
+  runtime metadata matching explicit `gpt-5.6-terra` / `medium`. Coordinator
+  inspection accepts the test-only reconciliation and independently repeats
+  repository/handoff tests (153/153), the canonical regression (193/193),
+  generated/type/lint/cleanup, format, and diff gates. The fix is ready for a
+  committed Round 7 package; full verify and final security remain deferred.

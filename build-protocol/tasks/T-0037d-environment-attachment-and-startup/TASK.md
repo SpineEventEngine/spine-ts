@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Final gate stale expectation fix assigned
+Status: Final gate expectation fix focused verified; Round 7 review pending
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -501,6 +501,38 @@ still expects only the failed target to run and the later durable row to remain
 pending. Reconcile that test with the implemented no-owner-gap contract and
 prove the later row is delivered while the batch call retains the first error.
 No production change is indicated by root-cause evidence.
+
+Final-gate implementer applicability (`gpt-5.6-terra` / `medium`):
+`systematic-debugging` applies to verify the full-gate failure and trace the
+durable-row behavior against the accepted handoff reference; `tdd` applies to
+retain the isolated failing expectation before the smallest test-only update.
+Inspection confirms a stale test contract rather than a production defect. No
+production, architecture, public API, generated, subagent, or lifecycle skill
+applies.
+
+### Final gate expectation fix outcome
+
+The repository routing test now states the accepted behavior directly. The
+dispatcher still rejects with `pm-fail replay failed`; handlers start in exact
+route order `pm-fail`, `pm-later`; only `pm-later` completes; its durable row is
+`DELIVERED` with the process-manager target type and is absent from the pending
+set; the failed target retains its correctly typed `TO_DELIVER` row for retry.
+No behavior assertion was deleted and no production source changed.
+
+The unchanged isolated RED failed 1/1 with actual started IDs
+`[pm-fail, pm-later]` against the stale `[pm-fail]` expectation. The updated
+exact test passes 1/1, the complete repository-routing file passes 125/125,
+process-manager handoff passes 28/28, and the canonical seven files pass
+193/193. Generated build/tooling typecheck passes. Full ESLint/cleanup first
+identified one unsafe nested test matcher; its typed predicate replacement
+preserves the negative pending-row assertion, after which lint/cleanup passes.
+Final formatting, diff, status, public/generated/Protobuf/protected scans are
+the handoff gate. Full `pnpm verify` remains reserved for the coordinator after
+Round 7 review; no commit, push, subagent, or production edit occurred.
+
+Final scans pass: changed-file Prettier, `git diff --check`, identical Status
+mirrors, generated freshness, all 25 copied Protobuf checksums, and empty
+production/public/package/lock/generated/Protobuf/protected-file diffs.
 
 Round 5 implementer applicability check (`gpt-5.6-terra` / `medium`):
 `receiving-code-review` applies because this is a coordinator-reviewed finding
