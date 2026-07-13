@@ -146,13 +146,32 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     });
   }
 
-  /** Close environment-owned facilities. Failed closes may be retried. */
+  /**
+   * Permanently close this environment after it is no longer in use.
+   *
+   * After admission the environment is permanently closed and cannot be reused.
+   *
+   * If the environment is in use, close rejects non-destructively and performs no owned-facility
+   * teardown. Failed facility-close attempts may be retried; facilities that already closed
+   * successfully are not closed again.
+   */
   close(): Promise<void> {
-    this.#close ??= this.#closeGroup.close().catch((error: unknown) => {
-      this.#close = undefined;
-      throw error;
-    });
+    this.#close ??= this.#attachments()
+      .admitPermanentClose()
+      .then(() => this.#closeGroup.close())
+      .catch((error: unknown) => {
+        this.#close = undefined;
+        throw error;
+      });
     return this.#close;
+  }
+
+  #attachments(): EnvironmentAttachments {
+    const attachments = environmentAttachments.get(this);
+    if (attachments === undefined) {
+      throw new Error("ServerEnvironment attachments are not available.");
+    }
+    return attachments;
   }
 }
 

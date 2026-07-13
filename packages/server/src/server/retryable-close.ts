@@ -17,13 +17,7 @@ export class RetryableCloseGroup {
         continue;
       }
 
-      const close = closeMethod(closeable);
-      if (close === undefined) {
-        this.#closedIndexes.add(index);
-        continue;
-      }
-
-      await this.#closeOne(close, index, errors);
+      await this.#closeOne(closeable, index, errors);
     }
 
     if (errors.length > 0) {
@@ -31,8 +25,13 @@ export class RetryableCloseGroup {
     }
   }
 
-  async #closeOne(close: () => unknown, index: number, errors: unknown[]): Promise<void> {
+  async #closeOne(closeable: unknown, index: number, errors: unknown[]): Promise<void> {
     try {
+      const close = closeMethod(closeable);
+      if (close === undefined) {
+        this.#closedIndexes.add(index);
+        return;
+      }
       await close();
       this.#closedIndexes.add(index);
     } catch (error) {
@@ -42,15 +41,42 @@ export class RetryableCloseGroup {
 }
 
 export function collectCloseError(error: unknown, errors: unknown[]): void {
-  if (error instanceof AggregateError) {
-    const causes = error.errors as readonly unknown[];
-    for (const cause of causes) {
-      errors.push(cause);
+  const ancestors = new Set<AggregateError>();
+  const work: AggregateTraversalFrame[] = [{ type: "visit", error }];
+
+  while (work.length > 0) {
+    const frame = work.pop();
+    if (frame === undefined) {
+      continue;
     }
-    return;
+
+    if (frame.type === "leave") {
+      ancestors.delete(frame.aggregate);
+      continue;
+    }
+
+    if (!(frame.error instanceof AggregateError)) {
+      errors.push(frame.error);
+      continue;
+    }
+
+    if (ancestors.has(frame.error)) {
+      errors.push(frame.error);
+      continue;
+    }
+
+    ancestors.add(frame.error);
+    work.push({ type: "leave", aggregate: frame.error });
+    const causes = [...(frame.error.errors as Iterable<unknown>)];
+    for (let index = causes.length - 1; index >= 0; index -= 1) {
+      work.push({ type: "visit", error: causes[index] });
+    }
   }
-  errors.push(error);
 }
+
+type AggregateTraversalFrame =
+  | { readonly type: "visit"; readonly error: unknown }
+  | { readonly type: "leave"; readonly aggregate: AggregateError };
 
 function closeMethod(closeable: unknown): (() => unknown) | undefined {
   if (typeof closeable !== "object" || closeable === null) {

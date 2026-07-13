@@ -454,10 +454,20 @@ implementation child:
    attach waits and joins that candidate. Reporting or inert retirement errors
    propagate only after rebind, all-scope transfer, publication, and admission
    reopen complete exactly once.
-7. T-0037e3 owns live-registration permanent-close refusal and zero-registration
-   permanent close. It retries quiescence failure without tearing down endpoint
-   dependencies, clears only a safe retired slot, and closes every owned
-   facility exactly once while remaining permanently closed.
+7. T-0037e3 owns serialized live-registration and retained-owner permanent-close
+   refusal plus owner-free zero-registration/no-generation permanent admission.
+   Integrated T-0037d/e1/e2 ownership leaves no close-owned current generation:
+   those predecessor operations alone perform generation stop, quiescence,
+   classification, cause reporting, retirement, safe slot clearing, and their
+   same-operation retries. T-0037e3 cancels an eager stop queued behind the
+   winning close only when that stop is both unadmitted and not completed,
+   commits permanent attachment/stop admission, and releases the lifecycle
+   serial gate. A stop-first no-generation operation that has completed its turn
+   but remains retained for waiter settlement is not cancelled; close commits
+   after it, and its queued waiter observes permanent-close rejection before the
+   stop promise resolves normally. The existing coalesced public close attempt
+   runs ordered `RetryableCloseGroup` facility teardown outside the gate. The
+   environment remains permanently closed.
 8. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering. A non-last close retry resumes only departing-registration
    cleanup and eligible reporting; it never retires the shared generation or
@@ -465,13 +475,14 @@ implementation child:
    endpoints, contexts/resources, and facilities remain usable. Last-detach
    retirement remains a separate path.
 
-The six deterministic same-operation generation-retirement retries stay
+The five deterministic same-operation generation-retirement retries stay
 distinct: caller-owned failed-start rollback (T-0037d); ordinary last detach
-(T-0037e1); reusable explicit stop (T-0037e2); zero-registration permanent
-close (T-0037e3); and server-owned startup cleanup plus caller-owned server
-cleanup (T-0037f).
+(T-0037e1); reusable explicit stop (T-0037e2); and server-owned startup cleanup
+plus caller-owned server cleanup (T-0037f). T-0037e3 is not a generation-
+retirement retry owner; it refuses retained predecessor owners and retries only
+failed facility closes through the existing public close attempt.
 Non-last detach is a separate non-retiring registration-scoped retry and is not
-one of those six.
+one of those five.
 
 The first future handoff is T-0037a's package-internal
 `boundedContextAccess` descriptor/readiness seam. It does not start a worker or
@@ -486,7 +497,10 @@ generated artifact; package-internal declarations emitted by normal
 documentation/type builds may change with internal implementation. T-0037e3
 updates existing README/TypeDoc only for behavior independently observable at
 its merge point, such as existing `ServerEnvironment.close()` behavior if
-publicly reachable without server detach. T-0037f alone documents caller-owned
-environment reuse after server detach and the full observable `Server`,
-`RunningServer`, and `ServerEnvironment` startup/close lifecycle. Neither child
-names or describes package-internal explicit generation stop in public docs.
+publicly reachable without server detach. If close TSDoc ships, it explicitly
+states that close rejects non-destructively while the environment is in use and
+performs no owned-facility teardown; the package README carries matching public
+wording. T-0037f alone documents caller-owned environment reuse after server
+detach and the full observable `Server`, `RunningServer`, and
+`ServerEnvironment` startup/close lifecycle. Neither child names or describes
+package-internal explicit generation stop in public docs.
