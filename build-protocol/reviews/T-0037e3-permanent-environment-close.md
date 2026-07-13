@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -982,3 +982,10 @@ Derived status mirror: the canonical current state is the `Status` header in
 - All applicable T-0037e3 review concerns are clean or concretely N/A, all
   agents are closed, and no high-confidence correctness issue remains. Ready to
   merge; security remains deferred to T-0041.
+
+## Main Integration
+
+- Accepted task endpoint `68d907bb` merged at `4928473c`.
+- Native post-merge full verification exits `0` with 67 files / 1,556 tests in
+  both test modes, 90.01% branch coverage, TypeDoc/API, Proto lint/checksums,
+  and generated-clean checks passing. T-0037e3 is complete and integrated.

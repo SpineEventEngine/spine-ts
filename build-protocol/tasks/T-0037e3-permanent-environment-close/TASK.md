@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Complete; ready to merge
+Status: Complete and integrated
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -1264,3 +1264,13 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - T-0037e3 acceptance criteria, focused reviews, bounded final-gate fix review,
   and final task gate are complete. The clean task branch is ready to merge;
   security remains assigned to the final T-0041 release-readiness gate.
+
+## Main Integration
+
+- Task endpoint `68d907bb` merged into `main` at `4928473c`.
+- Native post-merge `pnpm --config.verify-deps-before-run=false verify` exits
+  `0`: both test modes pass 67 files / 1,556 tests; coverage remains 95.27%
+  statements, 90.01% branches, 98.04% functions, and 95.30% lines. Typechecks,
+  lint/cleanup, formatting, TypeDoc/API exports, Proto lint/checksums, and
+  generated-clean checks pass.
+- T-0037e3 is complete and integrated. T-0037f is the next runtime child.
