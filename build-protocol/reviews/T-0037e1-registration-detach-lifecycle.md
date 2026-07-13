@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Final coverage fix review in progress
+Status: All reviews clean; final verification in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -317,3 +317,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
   read-only with no subagents. Scope is test quality, evidence truthfulness,
   validation-contract compatibility, and coverage reliability only.
+- Focused coverage-fix disposition: all four concerns are CLEAN/N/A as
+  applicable. The assertions are behavior-focused, records are accurate,
+  runtime validation contracts are preserved, state remains usable, and no
+  production or threshold file changed. Every reviewer is closed with matching
+  explicit/immutable role metadata. Full verification is the only remaining
+  pre-merge gate.
