@@ -1,6 +1,20 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 Round 1 review in progress
+Status: Slice 2 Round 1 findings assigned
+
+### Slice 2 Round 1 Findings
+
+1. A valid zero-scope registration must detach as a successful no-record
+   operation; first detach cannot reject after cleanup and retry cannot mask it.
+2. Selected-owner barrier is an immediate no-op for an empty owner set and must
+   not wait behind unrelated sibling work.
+3. `EnvironmentAttachmentHandle` needs a module-private nominal brand in
+   addition to runtime `WeakMap` identity, so structural copies do not satisfy
+   the private detach API at compile time.
+4. Current records must say no package/root public export, not no exported
+   package-internal access methods.
+
+One Terra Medium owner receives all four before Round 2.
 
 Started: `2026-07-13T00:46:22Z`
 

@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 Round 1 review in progress
+Status: Slice 2 Round 1 findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -13,6 +13,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   `.superpowers/sdd/review-0e13e3c1..2c5160f6.diff` (one commit, 66,470 bytes).
   Expected profiles are style/API/reliability Terra High and documentation Luna
   Medium. Later last-detach/race behavior and security are out of this wave.
+- Round 1 completed and every reviewer is closed. Style/reliability found the
+  zero-scope registration failure; reliability also found empty-owner barrier
+  sibling blocking. TypeScript/API found structural handle forgeability.
+  Documentation requests package/root-public wording. One Terra Medium owner
+  receives the deduplicated batch; Round 2/security remain pending.
 
 - Security review is deferred to T-0041 unless explicitly requested.
 - Canonical task concerns remain code style/maintainability, documentation
