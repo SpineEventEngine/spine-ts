@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 1 fix re-review assigned
+Status: Slice 1 Round 2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -330,14 +330,15 @@ Derived status mirror: the canonical current state is the `Status` header in
   `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T15-17-20-019f5bd6-eea0-7fa0-a9a9-90515561b218.jsonl`
   records actual `gpt-5.6-terra` / `medium` at `2026-07-13T14:17:22.873Z`.
 - Fresh skills `receiving-code-review`, `test-driven-development`, and
-  `verification-before-completion` were read/applied. The close-first direct-
-  attach RED proved descriptor enumeration preceded the inner permanent-state
-  guard; the minimal guard-before-snapshot correction resolves that defect.
+  `verification-before-completion` were read/applied. The close-first
+  provisional-stop waiter RED proved descriptor enumeration preceded the inner
+  permanent-state guard; the minimal guard-before-snapshot correction resolves
+  that defect.
 - The gated attach-first/close-second test proves serial admission before
-  non-destructive close refusal. Close-first queued direct attach proves no
-  descriptor enumeration before rejection. Deferred facility close proves fresh
-  stop/retry-stop rejection while public close remains pending. Public `close()`
-  TSDoc now has the explicit permanent-close/no-reuse sentence.
+  non-destructive close refusal. The provisional-stop waiter queued behind close
+  proves no descriptor enumeration before rejection. Deferred facility close
+  proves fresh stop/retry-stop rejection while public close remains pending.
+  Public `close()` TSDoc now has the explicit permanent-close/no-reuse sentence.
 - Fresh evidence: RED 4/5 then GREEN 5/5; focused lifecycle 3 files / 110
   tests; native `server.test.ts` 21/21; generated build typecheck, scoped ESLint,
   API docs, scoped Prettier, and `git diff --check` pass. No full verify, commit,
@@ -362,3 +363,97 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Fresh review dispositions are required for style/maintainability,
   documentation, TypeScript/API docs, and performance/reliability. Security is
   deferred to T-0041 by the canonical protocol.
+
+## Slice 1 Fix Re-review Results And Round 2
+
+- `2026-07-13T14:33:11Z`: Style/maintainability CLEAN at actual Terra High;
+  documentation CLEAN at actual Luna Medium; TypeScript/API docs CLEAN at actual
+  Terra High. Performance/reliability at actual Terra High reports one P1.
+  Desktop session turn-context records confirm every explicitly dispatched
+  model/reasoning profile. All reviewers used no subagents and are closed.
+- P1: the close-first/direct-attach no-enumeration proof covers the provisional-
+  stop path only. If last detach owns `#serial`, close queues, and a direct
+  attach follows with no `#stop`, descriptor spread still occurs before the
+  queued permanent-state guard.
+- Required Round 2 fix: move direct-attach materialization behind its serialized
+  permanent-state check without changing attach-first snapshot semantics; add
+  deterministic last-detach/close/direct-attach coverage for zero descriptor
+  enumeration, claim, and worker construction; reconcile active handback claims.
+- One existing Terra Medium fix context receives the complete finding. Security
+  remains deferred to T-0041.
+
+## Slice 1 Round 2 Fix Handback
+
+- Existing implementer resume intended `gpt-5.6-terra` / `medium`, but Desktop
+  runtime metadata records actual `gpt-5.6-sol` / `high`. The candidate handback
+  is rejected by the explicit profile gate and is not eligible for re-review.
+- Contract disposition: ordinary queued attach retains call-time ownership and
+  immutable descriptor snapshot. The initial global serial-turn rewrite was
+  reverted after coordinator feedback because no canonical authority supersedes
+  that accepted regression. A private pending-admission promise creates only the
+  close-first distinction required by the finding.
+- Valid RED: corrected scoped last-detach race produced 5/6 close tests and
+  descriptor enumeration `1` instead of `0`. Bounded-marker RED additionally
+  proved pending-close refusal still enumerated early and duplicate admission
+  did not coalesce, while the ordinary snapshot regression passed. GREEN is 2
+  files / 71 tests.
+- Round 1 and Round 2 paths are now explicit. Round 1 is a provisional-stop
+  waiter released behind close. Round 2 is successful last detach owning
+  `#serial`, close next, and no-stop direct attach third. Round 2 proves the same
+  coalesced admission promise, close success, closed rejection, zero iterable
+  enumeration, zero active claims, and one total worker construction. Refusal
+  clears the pending marker and permits the deferred follower to snapshot once.
+- Verification passes: focused lifecycle 3 files / 111 tests, generated build
+  typecheck, changed-file ESLint, changed-file Prettier, exact five-file scope,
+  and `git diff --check`. Full verify, commit, push, generated output, later
+  slices, and protected human review remain excluded. Complete Round 2 re-review
+  is requested; prior CLEAN concerns remain subject to coordinator disposition.
+
+## Slice 1 Round 2 Profile Gate
+
+- `2026-07-13T14:33:56.931Z`: resumed fix runtime mismatch is actual Sol High
+  versus required Terra Medium. No Round 2 fix acceptance or re-review is
+  recorded from this handback.
+- A fresh explicit Terra Medium implementer must independently inspect and
+  verify the retained five-file candidate before a replacement review package
+  can be generated.
+
+## Slice 1 Round 2 Replacement Handback
+
+- `2026-07-13T14:48:10Z`: Existing implementer replacement handback under the
+  explicit `gpt-5.6-terra` / `medium` redispatch, with no subagents. The former
+  Sol High candidate was independently inspected against the accepted P1 before
+  retention; no reliance is placed on its rejected handback.
+- Finding disposition: retained. The private admission promise synchronously
+  covers the close-first interval, coalesces duplicate internal admission, and
+  clears after either outcome. This defers descriptor materialization only for
+  a no-stop attach invoked behind close; the accepted ordinary call-time
+  descriptor snapshot behavior remains covered by the attachment regression.
+- Independent TDD: removing coalescing fails the deterministic race on promise
+  identity; removing only deferred materialization fails with descriptor
+  enumeration `1` versus required `0`; restoration passes the race 1/1. Fresh
+  focused validation passes close/attachment/generation-stop at 3 files / 111
+  tests, generated build typecheck, changed-file ESLint, five-file Prettier,
+  and `git diff --check`.
+- Replacement package scope remains the three T-0037e3 records,
+  `packages/server/src/server/environment-attachment.ts`, and
+  `packages/server/test/server/environment-close.test.ts`. Full verify, commit,
+  push, generated output, later-slice behavior, and protected human review were
+  not performed. Send this replacement handback to the existing relevant review
+  wave; security remains deferred to its final-readiness gate.
+
+## Slice 1 Round 2 Replacement Re-review Assignment
+
+- `2026-07-13T14:50:22Z`: Desktop metadata accepts replacement implementer
+  `019f5bf0-dc17-74f0-b3bc-a52c16553ea5` at actual Terra Medium, matching the
+  explicit dispatch. It used no subagents.
+- Coordinator evidence passes 3 lifecycle files / 111 tests, generated build
+  typecheck, scoped ESLint, cleanup enforcement, scoped Prettier, and
+  `git diff --check`.
+- Lightweight lint finds synchronized status, one private pending-admission
+  source, no duplicate policy constant, no public/API leak, and no active future
+  policy overclaim. Historical superseded text is excluded unless a current
+  record or changed doc claims it as active.
+- Re-review requires fresh style/maintainability, documentation, TypeScript/API
+  docs, and performance/reliability dispositions. Security remains deferred to
+  T-0041.

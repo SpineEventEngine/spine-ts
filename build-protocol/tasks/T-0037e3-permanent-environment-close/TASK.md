@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 1 fix re-review assigned
+Status: Slice 1 Round 2 re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -523,15 +523,15 @@ consistency. All four canonical concerns are reassigned.
   records actual `gpt-5.6-terra` / `medium` at `2026-07-13T14:17:22.873Z`,
   matching the explicit assignment; no subagents were used.
 - Freshly read/applied: `receiving-code-review`, `test-driven-development`, and
-  `verification-before-completion`. The direct-attach RED exposed descriptor
-  enumeration before the inner closed-state guard, so the narrow production
-  correction is authorized by the demonstrated defect.
+  `verification-before-completion`. The provisional-stop waiter RED exposed
+  descriptor enumeration before the inner closed-state guard, so the narrow
+  production correction is authorized by the demonstrated defect.
 - Deterministic gated attach-first/close-second proves serial attach admission
   wins and close refuses without permanent admission or facility teardown.
-  Close-first/direct-attach-second proves rejection before descriptor enumeration,
-  claim, or worker work. Deferred facility close keeps public close pending while
-  fresh stop/retry-stop calls reject. `close()` TSDoc now states permanent,
-  non-reusable admission.
+  The provisional-stop waiter queued behind close proves rejection before
+  descriptor enumeration, claim, or worker work. Deferred facility close keeps
+  public close pending while fresh stop/retry-stop calls reject. `close()` TSDoc
+  now states permanent, non-reusable admission.
 - Evidence: RED 4/5 then GREEN 5/5 in `environment-close.test.ts`; focused
   lifecycle regression 3 files / 110 tests; native `server.test.ts` 21/21;
   generated build typecheck, scoped ESLint, API docs, scoped Prettier, and
@@ -555,3 +555,116 @@ consistency. All four canonical concerns are reassigned.
   the active review state unless a current record claims it.
 - Slice 1 fix re-review is assigned. Later slices, full `pnpm verify`, and final
   security review remain deferred to their accepted gates.
+
+## Slice 1 Fix Re-review Findings
+
+- `2026-07-13T14:33:11Z`: Style/maintainability, documentation, and
+  TypeScript/API docs are CLEAN. Performance/reliability reports one P1: when a
+  successful last detach owns `#serial`, close queues next, and direct attach
+  follows without `#stop`, the attach can enumerate descriptors before its
+  queued permanent-state guard.
+- Required correction: defer descriptor materialization until the serialized
+  attach turn has checked permanent state while preserving attach-first snapshot
+  ordering. Add a deterministic last-detach/close/direct-attach race proving
+  zero descriptor enumeration, claim, and worker construction after close wins.
+  Correct current handback claims to identify both covered queue paths.
+- Desktop runtime metadata accepts all four explicit profiles: style, API, and
+  reliability used `gpt-5.6-terra` / `high`; documentation used
+  `gpt-5.6-luna` / `medium`. All reviewers used no subagents and are closed.
+- The existing Terra Medium Slice 1 fix context receives this single complete
+  finding. Later slices remain unauthorized.
+
+## Slice 1 Round 2 Fix Handback
+
+- The existing implementer was resumed with the intended `gpt-5.6-terra` /
+  `medium` role, but Desktop turn-context evidence records the resumed turn as
+  actual `gpt-5.6-sol` / `high`. This handback is therefore unaccepted under the
+  model-profile gate. The candidate patch remains available for fresh Terra
+  Medium inspection; no behavioral acceptance is inferred from this section.
+- Coordinator integration feedback was accepted after checking canonical
+  architecture: ordinary queued attach still captures ownership and an
+  immutable descriptor snapshot at call time. That contract is not
+  superseded. Only an attach invoked while permanent-close admission is already
+  pending defers descriptor materialization to its serialized checked turn.
+- TDD evidence: an initial no-record test fixture timed out because that legal
+  last detach has no worker quiescence; after correcting it to one real delivery
+  scope, RED was 5/6 close tests with one forbidden descriptor enumeration.
+  The bounded-marker RED then had two expected close failures: pre-admission
+  enumeration was `1` instead of `0`, and duplicate internal close admission
+  returned a distinct promise. The ordinary call-time snapshot regression stayed
+  green. GREEN is 2 files / 71 tests.
+- Minimal production correction: one private in-flight permanent-admission
+  promise coalesces duplicate admission, marks the close-first interval
+  synchronously, and clears on success or refusal. Direct no-stop attach defers
+  snapshot only during that interval; provisional-stop waiters keep their prior
+  turn-time snapshot behavior; all other direct attaches retain call-time
+  immutable snapshots.
+- Deterministic acceptance now distinguishes both paths: Round 1 covers a
+  provisional-stop waiter queued behind close; Round 2 covers successful last
+  detach holding `#serial`, close next, then no-stop direct attach. Close wins,
+  attach rejects, descriptor enumeration remains zero, active registration
+  count remains zero, and worker construction remains at its one-generation
+  baseline. A refusal case proves deferred descriptors enumerate once after
+  close refusal and attachment continues; duplicate admission coalesces.
+- Fresh verification passes: focused lifecycle 3 files / 111 tests,
+  `corepack pnpm typecheck:build:generated`, changed-file ESLint, changed-file
+  Prettier, and `git diff --check`. Current scope is exactly the three preserved
+  records, `environment-attachment.ts`, and `environment-close.test.ts`; the
+  existing snapshot regression remains unchanged and passes in the focused
+  suite. No full verify, commit, push, generated output, later slice, or
+  protected human-review access occurred. Round 2 re-review is requested;
+  security remains deferred.
+
+## Slice 1 Round 2 Profile Redispatch
+
+- `2026-07-13T14:33:56.931Z` Desktop runtime metadata records the resumed fix
+  turn as actual `gpt-5.6-sol` / `high`, mismatching the required Terra Medium
+  profile. The handback is rejected before re-review.
+- A fresh explicit Terra Medium implementer must inspect the five-file candidate
+  batch, preserve or correct it from canonical authority, rerun focused tests
+  and static gates, and issue a replacement handback. Later slices remain
+  unauthorized.
+
+## Slice 1 Round 2 Replacement Handback
+
+- `2026-07-13T14:48:10Z`: Existing implementer role, explicitly dispatched
+  `gpt-5.6-terra` / `medium`, no subagents. This is the profile-gate
+  redispatch; the retained five-file candidate was independently inspected, not
+  accepted from the prior Sol High handback.
+- Applied `receiving-code-review`, `test-driven-development`, and
+  `verification-before-completion`. Canonical authority supports the narrow
+  private in-flight admission marker: it coalesces duplicate close admission,
+  defers only a close-pending no-stop direct attach, clears after refusal, and
+  leaves the accepted ordinary call-time immutable descriptor snapshot intact.
+  No production correction was required.
+- Independent TDD evidence: temporarily removing coalescing makes the scoped
+  last-detach race fail its same-promise assertion; separately removing only
+  the deferred snapshot makes it fail with descriptor enumeration `1` rather
+  than `0`. Restoring the candidate makes that race pass 1/1. The retained
+  test proves last detach owns `#serial`, close wins, a following direct attach
+  rejects before enumeration/claim/worker work, and duplicate admission
+  coalesces. Existing refusal coverage proves marker cleanup and one deferred
+  materialization; the attachment suite preserves ordinary call-time snapshots.
+- Fresh evidence: `corepack pnpm vitest run packages/server/test/server/environment-close.test.ts packages/server/test/server/environment-attachment.test.ts packages/server/test/server/environment-generation-stop.test.ts` passed 3 files / 111 tests;
+  `corepack pnpm typecheck:build:generated`, scoped ESLint, scoped Prettier,
+  and `git diff --check` exited 0. Scope remains exactly these three records,
+  `environment-attachment.ts`, and `environment-close.test.ts`. No full verify,
+  commit, push, generated output, later slice work, or protected human-review
+  access occurred. Replacement handback is ready for the assigned review wave;
+  security remains deferred.
+
+## Slice 1 Round 2 Replacement Acceptance
+
+- `2026-07-13T14:50:22Z`: Desktop turn-context metadata confirms the replacement
+  implementer ran as explicitly assigned `gpt-5.6-terra` / `medium` at
+  `2026-07-13T14:45:55.430Z`, with no subagents. Coordinator inspection accepts
+  the retained bounded marker and unchanged ordinary call-time snapshot contract.
+- Fresh coordinator verification passes 3 lifecycle files / 111 tests,
+  generated build typecheck, scoped ESLint, cleanup enforcement, five-file
+  Prettier, and `git diff --check`.
+- Lightweight pre-review lint finds synchronized current status, one private
+  in-flight admission marker, no duplicate policy value, no public/root/TypeDoc
+  leak, and no active future-policy overclaim.
+- The exact five-file Round 2 replacement is assigned to all four canonical
+  re-review concerns. Security remains deferred to T-0041; later slices and full
+  `pnpm verify` remain unauthorized.

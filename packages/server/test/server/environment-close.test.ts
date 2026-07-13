@@ -8,6 +8,10 @@ import {
   type OnDeliveryReady,
 } from "../../src/context/local-inbox-handoff.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import {
+  EnvironmentAttachments,
+  type EnvironmentGenerationWorker,
+} from "../../src/server/environment-attachment.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 
 describe("ServerEnvironment close", () => {
@@ -31,6 +35,12 @@ describe("ServerEnvironment close", () => {
         closeSettled = true;
       },
     );
+    const queuedDescriptors = countedDescriptors();
+    const queuedAttaching = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: queuedDescriptors,
+    });
+    const queuedEnumerationsBeforeAdmission = queuedDescriptors.enumerations;
 
     await Promise.resolve();
     expect(closeSettled).toBe(false);
@@ -40,12 +50,10 @@ describe("ServerEnvironment close", () => {
     await expect(closing).rejects.toThrow("ServerEnvironment cannot close while it is in use.");
 
     expect(delivery.close).not.toHaveBeenCalled();
-    await expect(
-      serverEnvironmentAccess.attach(environment, {
-        ownership: "caller",
-        descriptors: [],
-      }),
-    ).resolves.toBeDefined();
+    const queuedAttachment = await queuedAttaching;
+    expect(queuedEnumerationsBeforeAdmission).toBe(0);
+    expect(queuedDescriptors.enumerations).toBe(1);
+    await serverEnvironmentAccess.detach(environment, queuedAttachment);
     await serverEnvironmentAccess.detach(environment, attachment);
   });
 
@@ -63,6 +71,81 @@ describe("ServerEnvironment close", () => {
     await expect(attaching).rejects.toThrow("ServerEnvironment is closed.");
     await expect(stopping).resolves.toBeUndefined();
     expect(descriptors.enumerations).toBe(0);
+  });
+
+  it("admits close after last detach before a queued direct attach performs work", async () => {
+    const detachStarted = Promise.withResolvers<undefined>();
+    const releaseDetach = Promise.withResolvers<undefined>();
+    const worker: EnvironmentGenerationWorker = {
+      add() {
+        // This test worker accepts the one configured delivery owner.
+      },
+      start(obligation, shards) {
+        const progress = Object.freeze({
+          runs: 1,
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: Object.freeze([]),
+        });
+        return Promise.resolve({
+          obligation,
+          shards: Object.freeze(
+            shards.map((shard) => ({
+              status: "fulfilled" as const,
+              shard,
+              obligation,
+              run: Object.freeze({ status: "IDLE" as const, ...progress }),
+              progress,
+            })),
+          ),
+        });
+      },
+      stop() {
+        // The detach gate is the subsequent settlement phase.
+      },
+      awaitSettled() {
+        detachStarted.resolve(undefined);
+        return releaseDetach.promise;
+      },
+      retire: () => Promise.resolve(),
+      stopOwners() {
+        // This race performs whole-generation retirement only.
+      },
+      awaitOwnersSettled: () => Promise.resolve(),
+      retireOwners: () => Promise.resolve(),
+    };
+    let workerConstructions = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        workerConstructions += 1;
+        return worker;
+      },
+    });
+    const startupStarted = Promise.withResolvers<undefined>();
+    const releaseStartup = Promise.withResolvers<undefined>();
+    releaseStartup.resolve(undefined);
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [gatedDescriptor(startupStarted, releaseStartup)],
+    });
+    const detaching = attachments.detach(handle);
+    await detachStarted.promise;
+    const closing = attachments.admitPermanentClose();
+    const coalescedClosing = attachments.admitPermanentClose();
+    const descriptors = countedDescriptors();
+    const attaching = attachments.attach({ ownership: "caller", descriptors });
+
+    releaseDetach.resolve(undefined);
+    await expect(detaching).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
+    await expect(coalescedClosing).resolves.toBeUndefined();
+    await expect(attaching).rejects.toThrow("ServerEnvironment is closed.");
+    expect(coalescedClosing).toBe(closing);
+    expect(descriptors.enumerations).toBe(0);
+    expect(attachments.activeRegistrationCount).toBe(0);
+    expect(workerConstructions).toBe(1);
   });
 
   it("permanently closes an owner-free environment and rejects later lifecycle admission", async () => {

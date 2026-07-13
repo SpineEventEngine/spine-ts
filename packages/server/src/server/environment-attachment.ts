@@ -164,6 +164,7 @@ export class EnvironmentAttachments {
   #failedRollback: FailedStartRollback | undefined;
   #failedLastDetach: AttachedHandle | undefined;
   #stop: GenerationStop | undefined;
+  #permanentCloseAdmission: Promise<void> | undefined;
   #permanentlyClosed = false;
 
   constructor(options: EnvironmentAttachmentsOptions = {}) {
@@ -211,7 +212,7 @@ export class EnvironmentAttachments {
     const gate = Promise.withResolvers<EnvironmentAttachmentHandle>();
     const stop = this.#stop;
     const waitForStop = stop !== undefined && !stop.completed;
-    const snapshotDescriptors = !waitForStop;
+    const snapshotDescriptors = !waitForStop && this.#permanentCloseAdmission === undefined;
     const waiter: AttachmentWaiter = {
       options: Object.freeze({
         ownership: options.ownership,
@@ -617,6 +618,10 @@ export class EnvironmentAttachments {
     if (this.#permanentlyClosed) {
       return Promise.resolve();
     }
+    const current = this.#permanentCloseAdmission;
+    if (current !== undefined) {
+      return current;
+    }
     const admission = this.#serial.then(() => {
       if (this.#registrations.count !== 0) {
         throw new Error("ServerEnvironment cannot close while it is in use.");
@@ -627,10 +632,17 @@ export class EnvironmentAttachments {
       }
       this.#permanentlyClosed = true;
     });
+    this.#permanentCloseAdmission = admission;
     this.#serial = admission.then(
       () => undefined,
       () => undefined,
     );
+    const clearAdmission = (): void => {
+      if (this.#permanentCloseAdmission === admission) {
+        this.#permanentCloseAdmission = undefined;
+      }
+    };
+    void admission.then(clearAdmission, clearAdmission);
     return admission;
   }
 
