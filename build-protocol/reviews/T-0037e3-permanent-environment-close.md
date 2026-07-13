@@ -882,3 +882,92 @@ Derived status mirror: the canonical current state is the `Status` header in
   used no subagents and are closed.
 - No actionable T-0037e3 finding remains. Full `pnpm verify` is the final task
   acceptance gate; security remains deferred to T-0041.
+
+## Final Verification Fix Assignment
+
+- `2026-07-13T16:47:00Z`: the full gate exposed one tooling-typecheck defect in
+  the failed-start worker test fixture: raw `Error[]` does not satisfy the
+  `DeliveryFailure[]` package-internal worker evidence shape. This is a
+  verification finding, not a reopened clean reviewer concern.
+- Existing implementer, explicit expected `gpt-5.6-terra` / `medium`, no
+  subagents, owns the bounded fixture and three status records. Re-review will be
+  scoped by the resulting behavior/API impact after focused checks; security
+  remains deferred to T-0041.
+
+## Final Verification Fix Handback
+
+- `2026-07-13T16:49:21Z`: the isolated test fixture correction initially
+  replaced its raw progress `Error` with synthetic frozen `DeliveryFailure`
+  evidence. The later bounded API review supersedes that impossible progress
+  representation while preserving the rejected-shard start cause and
+  failed-worker semantics. No public or runtime behavior changed.
+- The implementer used no subagents. Selected, fully read skills were
+  `systematic-debugging`, `test-driven-development`, and
+  `verification-before-completion`; the reproduced TS2322 was the RED signal.
+  Focused tooling typecheck and lifecycle evidence is clean, including the
+  native listener rerun after the sandbox-only `listen EPERM` limitation.
+- Scoped format and diff-hygiene checks accompany this handback. Re-review
+  scope/disposition remains coordinator-owned; security stays deferred to
+  T-0041.
+
+## Final Verification Fix Review Assignment
+
+- `2026-07-13T16:51:38Z`: coordinator accepts the closed implementer at actual
+  Terra Medium after matching explicit dispatch. Fresh tooling typecheck,
+  4 files / 139 focused tests, formatting, scope, and diff hygiene pass.
+- TypeScript/API docs reviewer is assigned at explicit expected
+  `gpt-5.6-terra` / `high`, no subagents, to determine whether the synthetic
+  frozen `DeliveryFailure` accurately satisfies the internal worker-evidence
+  contract without public leakage or false guarantees.
+- Style/maintainability: N/A, no production structure or reusable abstraction
+  changed. Documentation: N/A, no active framework/user claim changed.
+  Performance/reliability: N/A, no runtime path, concurrency, persistence, or
+  bounded-resource behavior changed. Security remains deferred to T-0041.
+
+## Final Verification API Findings
+
+- `2026-07-13T16:56:00Z`: reviewer
+  `019f5c64-ba38-78b3-ac2e-b2c4512db91d`, actual Terra High matching explicit
+  dispatch, reports two P2s; it used no subagents and is closed.
+- P2: `processed: 0` plus one synthetic per-message `DeliveryFailure` is not a
+  reachable progress state. Preserve the start error only as rejected-shard
+  `cause`, with zero failed and frozen empty failures in last safe progress.
+- P2: `DeliveryWorkerEvidence` is package-internal and absent from the server
+  public exports; active verification-fix wording must identify that internal
+  status accurately. The same Terra Medium implementer context receives both
+  findings before focused re-review.
+
+## Final Verification Review-Fix Handback
+
+- `2026-07-13T16:58:03Z`: both accepted P2s are resolved. The rejected shard
+  still exposes `cause: startFailure`; its last safe progress now has zero
+  processed, zero failed, and frozen empty failures. The impossible synthetic
+  per-message `DeliveryFailure` is removed.
+- Active verification-fix assignment/handback wording now consistently calls
+  `DeliveryWorkerEvidence` package-internal worker evidence and makes no public-
+  contract claim for that shape. No runtime or public API behavior changed.
+- The existing implementer used no subagents and selected fully read
+  `receiving-code-review` plus `verification-before-completion`. Fresh
+  `typecheck:tooling` and the four focused lifecycle files / 139 tests pass;
+  scoped formatting, synchronized status/exact scope, and diff hygiene
+  accompany this review-fix handback. Bounded API re-review remains coordinator-
+  owned; security stays deferred to T-0041.
+
+## Final Verification API Re-review Assignment
+
+- `2026-07-13T17:00:04Z`: coordinator checks pass after accepting and closing
+  the resumed Terra Medium implementer: tooling typecheck, 4 files / 139 tests,
+  formatting, exact scope/status, active overclaim scan, and diff hygiene.
+- Resume API reviewer `019f5c64-ba38-78b3-ac2e-b2c4512db91d` at its explicit
+  Terra High profile, no subagents, to re-review only the truthful zero-progress
+  fixture and package-internal contract wording. Other concern dispositions are
+  unchanged; security remains deferred.
+
+## Final Verification API Re-review Result
+
+- `2026-07-13T17:01:12Z`: CLEAN. Reviewer
+  `019f5c64-ba38-78b3-ac2e-b2c4512db91d` remains actual Terra High, matching
+  explicit dispatch; it used no subagents and is closed.
+- Coherent zero-message progress and package-internal evidence wording resolve
+  both P2s. No public API/export/TypeDoc/Proto finding remains. Full task
+  verification is assigned; security remains deferred to T-0041.

@@ -1150,3 +1150,101 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - No implementation, integration, public-contract, or active-record finding
   remains. Security stays deferred to T-0041. The reserved full `pnpm verify`
   task-acceptance gate is assigned before completion/merge.
+
+## Final Verification Fix Assignment
+
+- `2026-07-13T16:47:00Z`: the reserved full `pnpm verify` gate stopped in
+  `typecheck:tooling`. The `failedStartWorker()` test fixture supplies a raw
+  `Error` in `DeliveryRunProgress.failures`, where the package-internal worker
+  evidence shape requires a `DeliveryFailure`; generated build typecheck had not
+  included this tooling-only test surface.
+- One existing implementer receives this bounded fixture correction at explicit
+  expected `gpt-5.6-terra` / `medium`, with no subagents. Ownership is limited to
+  `packages/server/test/server/environment-close.test.ts` and these three
+  T-0037e3 records. Production/runtime/public API/Proto/generated behavior,
+  security, examples, merge, and `human-review-1-jul.md` remain excluded.
+
+## Final Verification Fix Handback
+
+- `2026-07-13T16:49:21Z`: the fixture correction keeps the rejected failed-start
+  shard behavior and initially attempted to satisfy the package-internal worker
+  evidence shape with one synthetic `DeliveryFailure`. The later bounded API
+  review supersedes that impossible progress representation while preserving
+  the rejected shard cause and rollback semantics.
+- Skill applicability: session inventory and the 47-entry installed-skill scan
+  were available; the expected-skill manifest and installed lock were checked.
+  `systematic-debugging`, `test-driven-development`, and
+  `verification-before-completion` were fully read and selected. TDD's RED is
+  the reproduced TS2322 tooling failure; no production/runtime code changed.
+- Focused `typecheck:tooling` and the environment-close/lifecycle suites pass;
+  formatting and diff hygiene evidence is recorded with this handback. No
+  production/runtime/public API/Proto/generated files, commit, push, merge, or
+  protected human-review file changed.
+
+## Final Verification Fix Coordinator Gate
+
+- `2026-07-13T16:51:38Z`: Desktop runtime metadata confirms implementer
+  `019f5c60-8f77-7351-99ea-77566bd6b67c` at actual `gpt-5.6-terra` / `medium`,
+  matching the explicit dispatch; it used no subagents and is closed.
+- Coordinator `typecheck:tooling`, 4 focused lifecycle files / 139 tests,
+  scoped Prettier, and `git diff --check` pass. The change is confined to the
+  failing fixture and three assigned records.
+- TypeScript/API contract review is assigned at explicit expected
+  `gpt-5.6-terra` / `high`, no subagents. Style/maintainability is N/A because
+  the correction is one typed fixture value with no production structure;
+  documentation is N/A because no framework claim or user-facing API changed;
+  performance/reliability is N/A because no executed lifecycle, concurrency,
+  persistence, or resource behavior changed. Security remains deferred.
+
+## Final Verification API Findings And Fix Assignment
+
+- `2026-07-13T16:56:00Z`: TypeScript/API reviewer
+  `019f5c64-ba38-78b3-ac2e-b2c4512db91d` returns two P2s. Desktop metadata
+  confirms actual `gpt-5.6-terra` / `high`, matching explicit dispatch; it used
+  no subagents and is closed.
+- The synthetic per-message failure is an impossible progress state because it
+  pairs `processed: 0` with one `DeliveryFailure`. Keep `cause: startFailure`
+  on the rejected shard, but use `failed: 0` and frozen empty `failures` for its
+  last safe progress. Active records must call this a package-internal evidence
+  contract, not a public contract.
+- The same existing implementer context receives both accepted findings at its
+  explicit `gpt-5.6-terra` / `medium` profile, no subagents, with the existing
+  four-file ownership. Focused checks and a fresh bounded API re-review are
+  required before the full gate resumes.
+
+## Final Verification Review-Fix Handback
+
+- `2026-07-13T16:58:03Z`: both accepted API P2s are resolved. The rejected
+  startup shard retains `cause: startFailure`, while its last safe progress now
+  truthfully reports `processed: 0`, `failed: 0`, and frozen empty `failures`.
+  No synthetic per-message delivery failure remains.
+- Active verification-fix assignment and handback wording now identifies
+  `DeliveryWorkerEvidence` as package-internal worker evidence. Prior wording
+  from this batch no longer presents that internal shape as a public contract.
+- The same implementer used no subagents and fully read/selected
+  `receiving-code-review` for the accepted batch and
+  `verification-before-completion` for this handback. Fresh
+  `typecheck:tooling` and four focused lifecycle files / 139 tests pass; scoped
+  formatting, status/scope lint, and diff hygiene accompany the handback. No
+  production/runtime/public API/Proto/generated, commit, push, merge, or
+  protected-file work occurred.
+
+## Final Verification Review-Fix Coordinator Gate
+
+- `2026-07-13T17:00:04Z`: the resumed existing implementer remains actual Terra
+  Medium with no subagents and is closed. Coordinator `typecheck:tooling`,
+  4 lifecycle files / 139 tests, Prettier, exact scope/status lint, the active
+  public-overclaim scan, and `git diff --check` all pass.
+- The same TypeScript/API reviewer receives the two accepted P2 resolutions for
+  bounded re-review at its explicit Terra High profile, no subagents. The other
+  canonical N/A dispositions remain valid because scope and behavior did not
+  expand; security remains deferred.
+
+## Final Verification API Re-review Closure
+
+- `2026-07-13T17:01:12Z`: API reviewer
+  `019f5c64-ba38-78b3-ac2e-b2c4512db91d` returns CLEAN at actual Terra High,
+  matching its explicit dispatch; it used no subagents and is closed.
+- The package-internal fixture now represents coherent zero-message progress,
+  and no public export, TypeDoc, Proto, or compatibility concern remains. The
+  full `pnpm verify` task gate is reassigned.
