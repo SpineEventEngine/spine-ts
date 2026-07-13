@@ -277,6 +277,7 @@ export class EnvironmentAttachments {
       candidateGeneration: undefined,
       candidate: undefined,
       routeUnits: undefined,
+      routeSnapshots: undefined,
       routePrepared: 0,
       scopes: new TransitionScopes(),
       published: false,
@@ -364,13 +365,6 @@ export class EnvironmentAttachments {
       await old.retire();
       stop.oldRetired = true;
     }
-    if (stop.candidate === undefined) {
-      const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
-      stop.candidateGeneration = Object.freeze({ generation: true });
-      stop.candidate = candidate;
-    }
-    const candidate = stop.candidate;
-    const candidateGeneration = stop.candidateGeneration!;
     stop.routeUnits ??= Object.freeze(
       survivors.flatMap((survivor, registration) =>
         survivor.descriptors.map((descriptor) => ({
@@ -380,12 +374,27 @@ export class EnvironmentAttachments {
         })),
       ),
     );
+    if (stop.routeSnapshots === undefined) {
+      const snapshots: DeliveryDescriptorSnapshot[] = [];
+      for (const route of stop.routeUnits) {
+        snapshots.push(await snapshotDescriptor(route.descriptor));
+      }
+      stop.routeSnapshots = Object.freeze(snapshots);
+    }
+    if (stop.candidate === undefined) {
+      const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
+      stop.candidateGeneration = Object.freeze({ generation: true });
+      stop.candidate = candidate;
+    }
+    const candidate = stop.candidate;
+    const candidateGeneration = stop.candidateGeneration!;
     while (stop.routePrepared < stop.routeUnits.length) {
       const route = stop.routeUnits[stop.routePrepared]!;
+      const snapshot = stop.routeSnapshots[stop.routePrepared]!;
       this.#transitionFaults?.onRoutePrepare?.(route.descriptor);
       const scopes = await candidate.prepareTransferredRoute(
         Object.freeze({ token: route.survivor.claim.token, generation: candidateGeneration }),
-        route.descriptor,
+        snapshot,
         route.readiness,
       );
       stop.scopes.capture(route.survivor.claim.token, route.descriptor, scopes, "startup");
@@ -408,10 +417,18 @@ export class EnvironmentAttachments {
       } catch (error) {
         fault = error;
       }
-      await settling;
+      const failures: unknown[] = [];
+      try {
+        await settling;
+      } catch (error) {
+        failures.push(error);
+      }
       if (fault !== undefined) {
+        failures.push(fault);
+      }
+      if (failures.length > 0) {
         stop.scopes.reject(transfer);
-        throw fault;
+        throwFailures(failures, "Environment candidate scope transfer failed.");
       }
       stop.scopes.complete(transfer, version);
       transfer = stop.scopes.nextPending();
@@ -736,6 +753,7 @@ interface GenerationStop {
   candidateGeneration: EnvironmentGeneration | undefined;
   candidate: DeliveryGeneration | undefined;
   routeUnits: readonly StopRoute[] | undefined;
+  routeSnapshots: readonly DeliveryDescriptorSnapshot[] | undefined;
   routePrepared: number;
   readonly scopes: TransitionScopes;
   published: boolean;
@@ -1011,8 +1029,10 @@ class DeliveryGeneration {
     transferredReadiness?: RegistrationReadiness,
   ): Promise<EnvironmentAttachmentHandle> {
     this.#requireFresh(descriptors);
-    const registration = await assembleRegistration(descriptors, (descriptor, tenant) =>
-      this.#runtime(descriptor, tenant),
+    const registration = await assembleRegistration(
+      descriptors,
+      (descriptor, tenant, context, endpoints) =>
+        this.#runtimeFromSnapshot(descriptor, tenant, context, endpoints),
     );
     const ownership = new RegistrationOwnership();
     for (const runtime of registration.runtimes) {
@@ -1046,12 +1066,15 @@ class DeliveryGeneration {
 
   async prepareTransferredRoute(
     claim: EnvironmentRegistrationClaim,
-    descriptor: ContextDeliveryDescriptor,
+    snapshot: DeliveryDescriptorSnapshot,
     readiness: RegistrationReadiness,
   ): Promise<readonly DeliveryRunScope[]> {
+    const descriptor = snapshot.descriptor;
     this.#requireFresh([descriptor]);
-    const registration = await assembleRegistration([descriptor], (candidate, tenant) =>
-      this.#runtime(candidate, tenant),
+    const registration = assembleRegistrationSnapshots(
+      [snapshot],
+      (candidate, tenant, context, endpoints) =>
+        this.#runtimeFromSnapshot(candidate, tenant, context, endpoints),
     );
     let state = this.#registrations.get(claim.token);
     if (state === undefined) {
@@ -1469,22 +1492,37 @@ class DeliveryGeneration {
     descriptor: ContextDeliveryDescriptor,
     tenant: DeliveryTenantScope,
   ): EnvironmentDeliveryRuntime {
-    const tenantKey = tenant.tenantId ?? "\u0000";
-    const existing = this.#runtimes.get(descriptor)?.get(tenantKey);
+    const existing = this.#existingRuntime(descriptor, tenant);
     if (existing !== undefined) {
       return existing;
     }
+    return this.#runtimeFromSnapshot(
+      descriptor,
+      tenant,
+      descriptor.storageContext(tenant),
+      descriptor.endpoints(),
+    );
+  }
+
+  #runtimeFromSnapshot(
+    descriptor: ContextDeliveryDescriptor,
+    tenant: DeliveryTenantScope,
+    context: StorageContext,
+    endpoints: readonly DeliveryEndpoint[],
+  ): EnvironmentDeliveryRuntime {
+    const existing = this.#existingRuntime(descriptor, tenant);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const tenantKey = tenant.tenantId ?? "\u0000";
     this.#nextOwner += 1;
     const owner = Object.freeze({ key: `environment-owner-${this.#nextOwner.toString()}` });
-    const context = descriptor.storageContext(tenant);
     const runtime = Object.freeze({
       owner,
       descriptor,
       tenant,
       context,
-      scopes: Object.freeze(
-        descriptor.endpoints().map((endpoint) => readyScope(owner, endpoint, tenant)),
-      ),
+      scopes: Object.freeze(endpoints.map((endpoint) => readyScope(owner, endpoint, tenant))),
     });
     for (const scope of runtime.scopes) {
       this.#overlapDomains.set(
@@ -1497,6 +1535,13 @@ class DeliveryGeneration {
     runtimes.set(tenantKey, runtime);
     this.#runtimes.set(descriptor, runtimes);
     return runtime;
+  }
+
+  #existingRuntime(
+    descriptor: ContextDeliveryDescriptor,
+    tenant: DeliveryTenantScope,
+  ): EnvironmentDeliveryRuntime | undefined {
+    return this.#runtimes.get(descriptor)?.get(tenant.tenantId ?? "\u0000");
   }
 
   #stableDomain(factory: StorageFactory, context: StorageContext, ready: DeliveryReady): string {
@@ -1706,22 +1751,83 @@ interface AssembledRegistration {
   }[];
 }
 
+interface DeliveryDescriptorSnapshot {
+  readonly descriptor: ContextDeliveryDescriptor;
+  readonly startup: readonly DeliveryRuntimeSnapshot[];
+  readonly endpoints: readonly DeliveryEndpoint[];
+}
+
+interface DeliveryRuntimeSnapshot {
+  readonly tenant: DeliveryTenantScope;
+  readonly context: StorageContext;
+}
+
 async function assembleRegistration(
   descriptors: readonly ContextDeliveryDescriptor[],
   runtimeFor: (
     descriptor: ContextDeliveryDescriptor,
     tenant: DeliveryTenantScope,
+    context: StorageContext,
+    endpoints: readonly DeliveryEndpoint[],
   ) => EnvironmentDeliveryRuntime,
 ): Promise<AssembledRegistration> {
+  const snapshots: DeliveryDescriptorSnapshot[] = [];
+  for (const descriptor of descriptors) {
+    snapshots.push(await snapshotDescriptor(descriptor));
+  }
+  return assembleRegistrationSnapshots(snapshots, runtimeFor);
+}
+
+async function snapshotDescriptor(
+  descriptor: ContextDeliveryDescriptor,
+): Promise<DeliveryDescriptorSnapshot> {
+  const tenants = await descriptor.startupScopes();
+  const endpoints = Object.freeze(
+    descriptor.endpoints().map((endpoint) =>
+      Object.freeze({
+        label: endpoint.label,
+        targetTypeUrl: endpoint.targetTypeUrl,
+        shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
+      }),
+    ),
+  );
+  const startup = tenants.map((tenant) => {
+    const capturedTenant: DeliveryTenantScope = Object.freeze({
+      ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
+    });
+    const context = descriptor.storageContext(capturedTenant);
+    return Object.freeze({
+      tenant: capturedTenant,
+      context: Object.freeze({
+        name: context.name,
+        multitenant: context.multitenant,
+        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+      }),
+    });
+  });
+  return Object.freeze({
+    descriptor,
+    startup: Object.freeze(startup),
+    endpoints,
+  });
+}
+
+function assembleRegistrationSnapshots(
+  snapshots: readonly DeliveryDescriptorSnapshot[],
+  runtimeFor: (
+    descriptor: ContextDeliveryDescriptor,
+    tenant: DeliveryTenantScope,
+    context: StorageContext,
+    endpoints: readonly DeliveryEndpoint[],
+  ) => EnvironmentDeliveryRuntime,
+): AssembledRegistration {
   const scopes = new Map<string, DeliveryRunScope>();
   const runtimes: EnvironmentDeliveryRuntime[] = [];
   const assembled: AssembledRegistration["descriptors"][number][] = [];
-  for (const descriptor of descriptors) {
+  for (const { descriptor, startup, endpoints } of snapshots) {
     const descriptorScopes: DeliveryRunScope[] = [];
-    const tenants = await descriptor.startupScopes();
-    const endpoints = descriptor.endpoints();
-    for (const tenant of tenants) {
-      const runtime = runtimeFor(descriptor, tenant);
+    for (const { tenant, context } of startup) {
+      const runtime = runtimeFor(descriptor, tenant, context, endpoints);
       const runtimeScopes = runtime.scopes;
       if (runtimeScopes.length > 0) {
         runtimes.push(runtime);

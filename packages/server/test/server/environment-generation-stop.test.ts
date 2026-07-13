@@ -194,6 +194,69 @@ describe("environment generation stop", () => {
     await attachments.detach(secondHandle);
   });
 
+  it("retries complete descriptor preflight before constructing one candidate", async () => {
+    const oldWorker = new ControlledWorker([], "preflight-old");
+    const candidateWorker = new ControlledWorker([], "preflight-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const preflightFailure = new Error("candidate descriptor storage context preflight failed");
+    let factoryCalls = 0;
+    const first = descriptor(
+      "PreflightFirst",
+      "type.example.dev/PreflightFirst",
+      new InMemoryStorageFactory(),
+    );
+    const target = descriptor(
+      "PreflightSecond",
+      "type.example.dev/PreflightSecond",
+      new InMemoryStorageFactory(),
+    );
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value, target.value],
+    });
+    const oldGeneration = handle.generation;
+    const firstBaseline = [first.startupCalls, first.contextCalls, first.endpointCalls];
+    const targetBaseline = [target.startupCalls, target.contextCalls, target.endpointCalls];
+    target.contextFailures.push(preflightFailure);
+
+    await expect(attachments.stopDelivery()).rejects.toBe(preflightFailure);
+    expect(factoryCalls).toBe(1);
+    expect([first.startupCalls, first.contextCalls, first.endpointCalls]).toEqual(
+      firstBaseline.map((calls) => calls + 1),
+    );
+    expect([target.startupCalls, target.contextCalls, target.endpointCalls]).toEqual(
+      targetBaseline.map((calls) => calls + 1),
+    );
+    expect(handle.generation).toBe(oldGeneration);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    expect(factoryCalls).toBe(1);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect([first.startupCalls, first.contextCalls, first.endpointCalls]).toEqual(
+      firstBaseline.map((calls) => calls + 2),
+    );
+    expect([target.startupCalls, target.contextCalls, target.endpointCalls]).toEqual(
+      targetBaseline.map((calls) => calls + 2),
+    );
+    expect(factoryCalls).toBe(2);
+    expect(candidateWorker.starts).toBe(2);
+    expect(handle.generation).not.toBe(oldGeneration);
+    await attachments.detach(handle);
+  });
+
   it("retains a completed route checkpoint separately from canonical transfer", async () => {
     const oldWorker = new ControlledWorker([], "route-old");
     const candidateWorker = new ControlledWorker([], "route-candidate");
@@ -362,6 +425,61 @@ describe("environment generation stop", () => {
       "type.example.dev/TransferFirst",
       "type.example.dev/TransferSecond",
       "type.example.dev/TransferSecond",
+    ]);
+    expect(handle.generation).not.toBe(oldGeneration);
+    await attachments.detach(handle);
+  });
+
+  it("restores a directly rejected candidate recovery unit on the same candidate", async () => {
+    const oldWorker = new ControlledWorker([], "recovery-old");
+    const candidateWorker = new ControlledWorker([], "recovery-candidate");
+    const recoveryGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(Promise.resolve(), recoveryGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    const recoveryFailure = new Error("candidate recovery rejected");
+    let factoryCalls = 0;
+    const storage = new InMemoryStorageFactory();
+    const first = descriptor("RecoveryFirst", "type.example.dev/RecoveryFirst", storage);
+    const second = descriptor("RecoverySecond", "type.example.dev/RecoverySecond", storage);
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value, second.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const stopping = attachments.stopDelivery();
+    let stopSettled = false;
+    void stopping.catch(() => {
+      stopSettled = true;
+    });
+    await until(() => candidateWorker.starts === 2);
+    expect(stopSettled).toBe(false);
+    expect(handle.generation).toBe(oldGeneration);
+    recoveryGate.reject(recoveryFailure);
+    await expect(stopping).rejects.toBe(recoveryFailure);
+    expect(stopSettled).toBe(true);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    second.readiness.claim(second.ready);
+    await Promise.resolve();
+    expect(candidateWorker.starts).toBe(2);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect(factoryCalls).toBe(2);
+    expect(candidateWorker.targets).toEqual([
+      "type.example.dev/RecoveryFirst",
+      "type.example.dev/RecoverySecond",
+      "type.example.dev/RecoverySecond",
     ]);
     expect(handle.generation).not.toBe(oldGeneration);
     await attachments.detach(handle);
@@ -536,6 +654,66 @@ describe("environment generation stop", () => {
     await attachments.detach(secondHandle);
   });
 
+  it("captures a new tenant readiness key during old retirement and settles it before publication", async () => {
+    const oldRetirementGate = Promise.withResolvers<void>();
+    const originalGate = Promise.withResolvers<void>();
+    const newTenantGate = Promise.withResolvers<void>();
+    const oldWorker = new ControlledWorker([], "new-key-old");
+    oldWorker.awaitGates.push(oldRetirementGate.promise);
+    const candidateWorker = new ControlledWorker([], "new-key-candidate");
+    candidateWorker.gates.push(originalGate.promise, newTenantGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const target = descriptor(
+      "NewTenantKey",
+      "type.example.dev/NewTenantKey",
+      new InMemoryStorageFactory(),
+      { multitenant: true, startupTenantId: "tenant-original" },
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const stopping = attachments.stopDelivery();
+    await until(() => oldWorker.awaitCalls === 1);
+    target.readiness.claim(
+      Object.freeze({
+        ...target.ready,
+        tenantId: "tenant-new",
+      }),
+    );
+    await Promise.resolve();
+    expect(candidateWorker.starts).toBe(0);
+    expect(factoryCalls).toBe(1);
+    expect(handle.generation).toBe(oldGeneration);
+
+    oldRetirementGate.resolve();
+    await until(() => candidateWorker.starts === 1);
+    expect(candidateWorker.tenants).toEqual(["tenant-original"]);
+    expect(handle.generation).toBe(oldGeneration);
+    originalGate.resolve();
+    await until(() => candidateWorker.starts === 2);
+    expect(candidateWorker.tenants).toEqual(["tenant-original", "tenant-new"]);
+    expect(handle.generation).toBe(oldGeneration);
+
+    newTenantGate.resolve();
+    await stopping;
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(candidateWorker.starts).toBe(2);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(handle);
+  });
+
   it("replaces one live multi-registration generation while preserving handle identity", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("First", "type.example.dev/First", storageFactory);
@@ -573,11 +751,21 @@ function descriptor(
   name: string,
   targetTypeUrl: string,
   storageFactory: InMemoryStorageFactory,
+  options: {
+    readonly multitenant?: boolean;
+    readonly startupTenantId?: string;
+  } = {},
 ): {
   readonly value: ContextDeliveryDescriptor;
   readonly readiness: DeliveryReadiness;
   readonly ready: DeliveryReady;
   readonly notifications: number;
+  readonly startupFailures: Error[];
+  readonly contextFailures: Error[];
+  readonly endpointFailures: Error[];
+  readonly startupCalls: number;
+  readonly contextCalls: number;
+  readonly endpointCalls: number;
 } {
   const readiness = new DeliveryReadiness();
   const ready: DeliveryReady = Object.freeze({
@@ -585,13 +773,45 @@ function descriptor(
     targetTypeUrl,
     shard: ShardIndex.single(),
   });
-  const context = Object.freeze({ name, multitenant: false });
+  const multitenant = options.multitenant === true;
+  const startupFailures: Error[] = [];
+  const contextFailures: Error[] = [];
+  const endpointFailures: Error[] = [];
+  let startupCalls = 0;
+  let contextCalls = 0;
+  let endpointCalls = 0;
   let notifications = 0;
   const value: ContextDeliveryDescriptor = Object.freeze({
     storageFactory,
-    startupScopes: () => Promise.resolve(Object.freeze([Object.freeze({})])),
-    storageContext: () => context,
-    endpoints: () => Object.freeze([ready]),
+    startupScopes: () => {
+      startupCalls += 1;
+      const failure = startupFailures.shift();
+      return failure === undefined
+        ? Promise.resolve(
+            Object.freeze([
+              Object.freeze(
+                options.startupTenantId === undefined ? {} : { tenantId: options.startupTenantId },
+              ),
+            ]),
+          )
+        : Promise.reject(failure);
+    },
+    storageContext: (scope) => {
+      contextCalls += 1;
+      const failure = contextFailures.shift();
+      if (failure !== undefined) throw failure;
+      return Object.freeze({
+        name,
+        multitenant,
+        ...(scope.tenantId === undefined ? {} : { tenantId: scope.tenantId }),
+      });
+    },
+    endpoints: () => {
+      endpointCalls += 1;
+      const failure = endpointFailures.shift();
+      if (failure !== undefined) throw failure;
+      return Object.freeze([ready]);
+    },
     onReady: (onReady) => readiness.onReady(onReady),
     transition: (scopes, onReady, options) =>
       readiness.transition(
@@ -608,6 +828,18 @@ function descriptor(
     value,
     readiness,
     ready,
+    startupFailures,
+    contextFailures,
+    endpointFailures,
+    get startupCalls() {
+      return startupCalls;
+    },
+    get contextCalls() {
+      return contextCalls;
+    },
+    get endpointCalls() {
+      return endpointCalls;
+    },
     get notifications() {
       return notifications;
     },
@@ -621,6 +853,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly awaitFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly targets: string[] = [];
+  readonly tenants: (string | undefined)[] = [];
   starts = 0;
   stopCalls = 0;
   awaitCalls = 0;
@@ -639,6 +872,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
     this.starts += 1;
     this.#events.push(`${this.#name}:start`);
     this.targets.push(...obligation.scopes.map((scope) => scope.ready.targetTypeUrl));
+    this.tenants.push(...obligation.scopes.map((scope) => scope.ready.tenantId));
     const failure = this.startFailures.shift();
     if (failure !== undefined) return Promise.reject(failure);
     const gate = this.gates.shift() ?? Promise.resolve();

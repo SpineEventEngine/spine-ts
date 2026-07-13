@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2A accepted; Slice 2B assigned
+Status: Slice 2B review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -265,3 +265,30 @@ still takes one pending/record snapshot and distributes retained scopes by
 registration in configured order. Corrected RED/GREEN and mechanical evidence
 is recorded in the canonical work and review logs. Slice 2B remains unchanged
 and unimplemented.
+
+## Slice 2B Implementation Start
+
+At `2026-07-13T06:55:21Z`, the existing implementer began only the three
+assigned Slice 2B edges from clean HEAD `0ca3d79d`, fixed and explicitly
+dispatched at `gpt-5.6-terra` / `medium`, with no subagents. The canonical work
+log records the fresh skill applicability check, accepted architecture refresh,
+and focused TDD boundary. Slice 2A history remains accepted; Slices 3--4 and all
+public/generated/server-integration work remain excluded.
+
+## Slice 2B Implementer Handback
+
+Slice 2B now preflights every frozen survivor descriptor before candidate
+construction, restores a directly rejected transfer unit for explicit retry on
+the retained candidate, and proves a newly observed tenant readiness key is
+captured and settled before atomic publication. Focused RED/GREEN and final
+verification evidence are recorded in the canonical work log. The change adds
+no public surface, production file, second lifecycle owner, or Slice 3--4
+policy.
+
+## Slice 2B Handback Audit Fix
+
+The descriptor preflight snapshot now freezes endpoint values and each startup
+tenant together with its storage context before candidate construction.
+Initial candidate runtime assembly consumes only those captured values; dynamic
+readiness for a newly observed tenant retains the live descriptor path. The
+canonical work/review logs record the audit RED/GREEN and refreshed gates.

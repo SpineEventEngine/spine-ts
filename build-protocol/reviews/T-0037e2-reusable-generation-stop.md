@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 2A accepted; Slice 2B assigned
+Status: Slice 2B review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -301,3 +301,58 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Slice 2B is assigned to the same implementer at immutable/explicit
   `gpt-5.6-terra` / `medium`, no subagents. Review waits for the three recorded
   remaining edges and focused mechanical gates.
+
+## Slice 2B Implementation Start
+
+- At `2026-07-13T06:55:21Z`, the existing implementer began only the three
+  assigned Slice 2B edges from clean HEAD `0ca3d79d`, fixed/explicit
+  `gpt-5.6-terra` / `medium`, no subagents. The work log contains the fresh
+  canonical skill inventory, selection/read evidence, JVM guardrail refresh,
+  exclusions, and three-cycle TDD boundary. Slice 2A remains accepted and no
+  Slice 2B review claim exists before focused behavior and mechanical gates.
+
+## Slice 2B Implementer Handback
+
+- Focused RED/GREEN now covers preflight rejection before candidate
+  construction and direct candidate-recovery rejection restoration on the exact
+  retained candidate. The newly observed tenant-key case was honestly
+  validation-first GREEN because the accepted 2A owner already embodied it;
+  the new test supplies deterministic ordering, settlement, and publication
+  proof.
+- The work log records exact behavior and verification evidence. Review scope
+  remains the three private Slice 2B edges only; Slice 2A history is preserved,
+  and Slices 3--4 plus public/generated/server-integration behavior remain
+  excluded.
+- Post-format implementer verification passed 4 files / 94 tests and generated-
+  build typechecking. Exact formatting, status/public/inventory, and diff-hygiene
+  results are recorded in the work log; coordinator review is requested.
+- Coordinator handback audit adds one preflight correction before review: the
+  snapshot must include startup-tenant storage contexts and endpoints so no
+  fallible descriptor read remains after candidate storage.
+
+## Slice 2B Handback Audit Fix Evidence
+
+- Focused RED proved a second-route storage-context failure still occurred
+  after candidate construction. GREEN moves frozen endpoint values and ordered
+  startup-tenant/context pairs into the pre-candidate snapshot and makes initial
+  candidate runtime assembly consume only those values. Dynamic new-tenant
+  readiness keeps its existing live descriptor path.
+- The selected audit test, all 15 reusable-stop tests, the 4-file / 94-test
+  focused regression set, and generated-build typechecking passed. The work log
+  records skill-boundary and final mechanical evidence; coordinator review
+  remains requested.
+
+## Slice 2B Review Wave 1 Assignment
+
+- Coordinator inspection and independent mechanical verification passed at
+  `2026-07-13T07:15:50Z`: 4 files / 94 tests, generated-build typechecking,
+  focused Prettier, and diff hygiene.
+- Lightweight pre-review lint found synchronized status, bounded inventory, no
+  public API or generated leakage, no duplicated policy source, and no active
+  docs overclaim. Reviewers must ignore historical superseded text unless the
+  current task status or Slice 2B changed records claim it as active.
+- Existing role dispatches are explicit: style/maintainability
+  `gpt-5.6-terra` / `high`; documentation `gpt-5.6-luna` / `medium`;
+  TypeScript/API docs `gpt-5.6-terra` / `high`; performance/reliability
+  `gpt-5.6-terra` / `high`. Each lane is read-only, owns only its canonical
+  concern over Slice 2B, and may not spawn subagents.
