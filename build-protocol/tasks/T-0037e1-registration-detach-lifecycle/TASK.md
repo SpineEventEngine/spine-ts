@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 Round 2 review in progress
+Status: Slice 2 Round 2 record finding assigned
 
 ### Slice 2 Round 1 Findings
 
