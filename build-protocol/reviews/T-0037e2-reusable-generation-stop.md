@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 coverage fix re-review assigned
+Status: T-0037e2 coverage author record re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1370,7 +1370,8 @@ is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
   thresholds, public/generated/package/example files, commits, pushes,
   aggregate coverage/full verify, and `human-review-1-jul.md` are excluded; no
   subagents are used.
-- Explicit dispatch is `gpt-5.6-terra` / `medium`. Coordinator runtime check
+- Accepted author agent `019f5b68-be14-71d1-a147-0cb5f02deaae` had explicit
+  dispatch `gpt-5.6-terra` / `medium`. Coordinator runtime check
   `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-16-58-019f5b68-be14-71d1-a147-0cb5f02deaae.jsonl`
   records actual `gpt-5.6-terra` / `medium` at
   `2026-07-13T12:17:02.052Z`, matching dispatch. The earlier `12:00:00Z`
@@ -1431,3 +1432,61 @@ is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
   `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to the five
   findings and their corrections. Superseded history is non-actionable unless
   active records claim it as current.
+
+## Coverage Fix Re-Review Results And Records Assignment
+
+- Documentation: CLEAN, actual `gpt-5.6-luna` / `medium`.
+- Style/maintainability: P2 records-only; add accepted author agent
+  `019f5b68-be14-71d1-a147-0cb5f02deaae` beside its rollout path and
+  explicit/actual Terra Medium profile. Actual reviewer
+  `gpt-5.6-terra` / `high`.
+- TypeScript/API docs: CLEAN/N/A, actual `gpt-5.6-terra` / `high`.
+- Performance/reliability: CLEAN, actual `gpt-5.6-terra` / `high`.
+- All reviewers used no subagents and are closed. One fresh existing
+  implementer receives only the three durable records at explicit
+  `gpt-5.6-terra` / `medium`, no subagents. Runtime/test/API behavior is not
+  reopened.
+
+## Coverage Author Record Fix Start And Skill Applicability
+
+- Fresh existing implementer starts the bounded records-only P2 correction in
+  `.worktrees/T-0037e2-reusable-generation-stop`, explicitly `gpt-5.6-terra` /
+  `medium`, with no subagents. Ownership is exactly this review record and the
+  matching T-0037e2 task and work logs; source, tests, full verification,
+  commits, pushes, and `human-review-1-jul.md` are excluded.
+- Canonical skill applicability completed before this record correction: checked
+  the exposed session inventory and task prompt, expected manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md`, readable entrypoints via
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and readable `/Users/armiol/.agents/.skill-lock.json`; no source was
+  unreachable. Fully read and selected `verification-before-completion` for
+  fresh formatting, scope, and diff evidence. TDD/testing, debugging,
+  TypeScript/API, Node/backend, architecture/planning, review dispatch,
+  worktree, and subagent skills are N/A because no runtime/test/API/design
+  change, dispatch, or worktree setup is authorized. Project protocol and this
+  records-only assignment govern.
+- Coordinator runtime check
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-30-02-019f5b74-b306-70f0-9009-e1e67372adf8.jsonl`
+  records this records-fix implementer's actual `gpt-5.6-terra` / `medium` at
+  `2026-07-13T12:30:05.232Z`, matching the explicit dispatch.
+
+## Coverage Author Record Fix Handback
+
+- Accepted coverage-fix author `019f5b68-be14-71d1-a147-0cb5f02deaae` is now
+  named beside rollout
+  `rollout-2026-07-13T13-16-58-019f5b68-be14-71d1-a147-0cb5f02deaae.jsonl` and
+  its explicit/actual `gpt-5.6-terra` / `medium` evidence, without changing the
+  rejected old-thread history or runtime behavior.
+- Focused Prettier, synchronized status/ownership searches, exact three-record
+  inventory, and `git diff --check` pass. No source/test change, test/full
+  verification, commit, push, subagent, or change to `human-review-1-jul.md`
+  occurred. This records-only correction is ready for review handback.
+
+## Coverage Author Record Fix Coordinator Gate
+
+- Focused Prettier, synchronized status/ownership searches, exact three-record
+  scope, and `git diff --check` pass.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, records-only, and no subagents.
