@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 profile redispatch review assigned
+Status: T-0037e2 final verification
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -476,3 +476,8 @@ confirms actual `gpt-5.6-terra` / `medium`; coordinator verification passes
 strict tooling typecheck, 162 lifecycle tests, focused formatting, exact scope,
 and diff hygiene. The records-only audit endpoint is assigned to the four
 canonical review concerns.
+
+At `2026-07-13T11:00:31Z`, the redispatch review returned CLEAN in all four
+canonical concerns. Desktop rollout metadata exactly matches every explicit
+reviewer profile and every agent is closed. The fresh Terra Medium audit is
+accepted; full `pnpm verify` is the sole remaining pre-merge gate.
