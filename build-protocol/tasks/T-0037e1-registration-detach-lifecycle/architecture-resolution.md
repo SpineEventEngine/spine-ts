@@ -172,3 +172,13 @@ Ordinary last detach is deliberately rejected before readiness or lifecycle
 mutation. Attach/last-detach race policy, authoritative last retirement,
 reusable stop, permanent close, facilities/server wiring, and public lifecycle
 surface remain assigned to later slices.
+
+## Slice 2 Round 1 Corrections
+
+Generation records represent registrations independently of scope cardinality;
+detaching an empty registration consumes that ownership as a no-record no-op.
+An empty selected-owner set establishes no barrier and never waits behind or
+reclaims sibling work. The environment attachment handle is nominal through a
+module-private class private field while environment runtime ownership remains
+the authoritative `WeakMap` identity check. These package-internal exported
+access methods remain absent from package/root public exports.

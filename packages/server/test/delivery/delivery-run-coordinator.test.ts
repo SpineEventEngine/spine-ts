@@ -399,6 +399,26 @@ describe("DeliveryRunCoordinator", () => {
     );
   });
 
+  it("resolves an empty-owner barrier without waiting for active sibling work", async () => {
+    const siblingActive = deferred<DeliveryWorkerEvidence>();
+    const sibling = ownedScope("sibling-owner", "sibling", 0, 1);
+    const worker = new FakeRunWorker([siblingActive.promise]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [sibling], worker });
+    const running = coordinator.start([sibling]);
+    let barrierResolved = false;
+
+    void coordinator.awaitOwnersBarrier([]).then(() => {
+      barrierResolved = true;
+    });
+    await flushMicrotasks();
+
+    expect(barrierResolved).toBe(true);
+    siblingActive.resolve(
+      workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 1, "IDLE")),
+    );
+    await running;
+  });
+
   it("barriers a selected owner through active and admitted successor work without removing siblings", async () => {
     const selectedActive = deferred<DeliveryWorkerEvidence>();
     const siblingActive = deferred<DeliveryWorkerEvidence>();

@@ -106,6 +106,9 @@ export class DeliveryRunCoordinator {
 
   /** @internal Await retained work that could still start selected owners without reclaiming evidence. */
   async awaitOwnersBarrier(ownerKeys: readonly string[]): Promise<void> {
+    if (ownerKeys.length === 0) {
+      return;
+    }
     this.#requireHealthy();
     const owners = new Set(ownerKeys);
     this.#removePendingOwners(owners);

@@ -612,6 +612,49 @@ describe("ServerEnvironment attachment", () => {
 });
 
 describe("non-last registration detach", () => {
+  it("detaches a zero-scope registration once while preserving its sibling", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const empty = descriptor(
+      "EmptyRegistration",
+      "type.example.dev/EmptyRegistration",
+      new InMemoryStorageFactory(),
+      { tenants: [] },
+    );
+    const sibling = descriptor(
+      "EmptyRegistrationSibling",
+      "type.example.dev/EmptyRegistrationSibling",
+      new InMemoryStorageFactory(),
+    );
+    const emptyHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [empty.value],
+    });
+    worker.enqueue("IDLE");
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    const siblingActive = Promise.withResolvers<LifecycleOutcome>();
+    worker.enqueue(siblingActive.promise);
+    await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 2);
+
+    const detaching = attachments.detach(emptyHandle);
+    let detachResolved = false;
+    void detaching.then(() => {
+      detachResolved = true;
+    });
+    await flushMicrotasks();
+    expect(detachResolved).toBe(true);
+    expect(attachments.detach(emptyHandle)).toBe(detaching);
+    await expect(attachments.retryDetach(emptyHandle)).resolves.toBeUndefined();
+
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(worker.stoppedOwners).toEqual([[]]);
+    expect(worker.awaitedOwners).toEqual([[]]);
+    expect(worker.retiredOwners).toEqual([[]]);
+    siblingActive.resolve("IDLE");
+    await flushMicrotasks();
+  });
+
   it("detaches one registration after selected-owner quiescence and keeps its sibling usable", async () => {
     const events: string[] = [];
     const worker = new LifecycleWorker(events);
@@ -769,8 +812,13 @@ describe("non-last registration detach", () => {
       ownership: "caller",
       descriptors: [foreign.value],
     });
-    const forged = Object.freeze({ ...firstHandle });
+    const forged = Object.freeze({
+      // eslint-disable-next-line @typescript-eslint/no-misused-spread -- Intentional nominal copy.
+      ...firstHandle,
+      records: () => firstHandle.records(),
+    });
 
+    // @ts-expect-error Structural copies are not environment attachment handles.
     await expect(serverEnvironmentAccess.detach(environment, forged)).rejects.toThrow(
       "Environment attachment handle is not owned by this environment.",
     );

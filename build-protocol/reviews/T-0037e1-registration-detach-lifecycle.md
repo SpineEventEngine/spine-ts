@@ -1,9 +1,13 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 Round 1 findings assigned
+Status: Slice2 Round1 fixes focused verified; Round2 pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
+
+- Round 1 fix owner completed and was closed. Coordinator verification repeats
+  217/217 and all static gates. The four-finding fix is ready for a committed
+  Round 2 package; security/full verify remain deferred.
 
 - Slice 2 implementer completed and was closed with matching Terra Medium
   metadata. Coordinator verification independently passes 215/215 and all
@@ -18,6 +22,17 @@ Derived status mirror: the canonical current state is the `Status` header in
   sibling blocking. TypeScript/API found structural handle forgeability.
   Documentation requests package/root-public wording. One Terra Medium owner
   receives the deduplicated batch; Round 2/security remain pending.
+- `2026-07-13T02:22:05Z`: One Terra Medium owner corrected all four findings
+  under focused TDD with no subagent. Current behavior evidence is focused
+  119/119 and affected T-0037a/b/c/d 217/217. Zero-scope ownership/no-op detach,
+  empty-owner immediate barrier behavior, nominal compile-time plus runtime
+  handle identity, and package/root-public wording are ready for Round 2.
+  Security and full verify remain deferred.
+- `2026-07-13T02:24:12Z`: Fresh Round 2 package evidence passes focused 119/119,
+  affected T-0037a/b/c/d 217/217, generated plus tooling typechecks,
+  lint/cleanup, format, generated cleanliness, diff/status, and package/root
+  public-export and wording scans. Round 2 review remains pending; no acceptance
+  disposition is claimed.
 
 - Security review is deferred to T-0041 unless explicitly requested.
 - Canonical task concerns remain code style/maintainability, documentation
@@ -117,8 +132,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   deferred.
 - `2026-07-13T01:59:27Z`: Final package evidence is clean: focused 115/115,
   affected T-0037a/b/c/d 214/214, generated/type/lint/cleanup, repository
-  format, generated cleanliness, diff/status, and private-surface scans all
-  pass. Slice 2 Round 1 remains pending; no review acceptance is claimed.
+  format, generated cleanliness, diff/status, and package/root public-surface
+  scans all pass. Slice 2 Round 1 remains pending; no review acceptance is
+  claimed.
 - `2026-07-13T02:02:51Z`: A final architecture inspection adds deterministic
   active-barrier, fixed non-last/sibling-reservation, and three-phase ordered
   cleanup-failure coverage. Superseding evidence passes focused 116/116 and

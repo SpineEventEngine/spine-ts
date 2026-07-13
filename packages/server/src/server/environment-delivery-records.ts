@@ -32,10 +32,10 @@ export class EnvironmentDeliveryRecords {
         added.push(key);
       }
     }
+    this.#registrations.set(token, registered);
     if (added.length === 0) {
       return;
     }
-    this.#registrations.set(token, registered);
     if (this.#obligations === undefined) {
       this.#obligations = new ParkedDeliveryObligations({
         registrations: [{ token, obligations: [{ key: "delivery", units: added }] }],
@@ -92,6 +92,10 @@ export class EnvironmentDeliveryRecords {
       throw new Error("Environment delivery registration is not configured.");
     }
     const units = [...registration.keys()];
+    if (units.length === 0) {
+      this.#registrations.delete(token);
+      return Object.freeze([]);
+    }
     const orphaned = units.filter((unit) => !this.#ownedBySibling(token, unit));
     const obligations = this.#requireObligations();
     obligations.removeRegistration(token);

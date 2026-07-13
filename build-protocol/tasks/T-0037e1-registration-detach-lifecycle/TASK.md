@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 Round 1 findings assigned
+Status: Slice2 Round1 fixes focused verified; Round2 pending
 
 ### Slice 2 Round 1 Findings
 
@@ -15,6 +15,9 @@ Status: Slice 2 Round 1 findings assigned
    package-internal access methods.
 
 One Terra Medium owner receives all four before Round 2.
+
+Disposition: all four Slice 2 Round 1 findings are corrected under strict TDD.
+Focused and affected regressions pass; Round 2 review is pending.
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -228,8 +231,9 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
 - Sibling generation identity, readiness, records, pending admission, workers,
   and configured ownership remain usable. Ordinary last detach remains an
   explicit unimplemented boundary and performs no lifecycle mutation. No
-  public method/export, server wiring, reusable stop, permanent close, or later
-  race policy was added.
+  package/root public export or public `ServerEnvironment` method, server
+  wiring, reusable stop, permanent close, or later race policy was added;
+  exported package-internal access methods remain intentional.
 - Focused evidence is 4 files / 116 tests and the affected T-0037a/b/c/d
   regression is 7 files / 215 tests. Generated build typecheck passed. Final
   lint/format/generated/diff/public scans are recorded in the work log. Full

@@ -8,6 +8,16 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { EnvironmentDeliveryRecords } from "../../src/server/environment-delivery-records.js";
 
 describe("EnvironmentDeliveryRecords", () => {
+  it("represents and detaches a zero-scope registration as a no-record operation", () => {
+    const records = new EnvironmentDeliveryRecords();
+
+    records.register("registration-empty", []);
+
+    expect(records.configuredScopes("registration-empty")).toEqual([]);
+    expect(records.detach("registration-empty")).toEqual([]);
+    expect(records.records()).toEqual([]);
+  });
+
   it("bounds repeated rejection evidence and consumes only the fulfilled unit", () => {
     const first = scope("one", "First", 0);
     const second = scope("one", "Second", 1);

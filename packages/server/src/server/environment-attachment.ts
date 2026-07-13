@@ -42,11 +42,31 @@ export interface EnvironmentAttachOptions {
   readonly descriptors: readonly ContextDeliveryDescriptor[];
 }
 
-/** @internal Opaque successful attachment used by later detach/stop/server slices. */
-export interface EnvironmentAttachmentHandle extends EnvironmentRegistrationClaim {
+class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {
   readonly startup: DeliveryRunSettlement;
-  records(): readonly ParkedDeliveryObligationRecord[];
+  readonly token: string;
+  readonly generation: EnvironmentGeneration;
+  readonly #records: () => readonly ParkedDeliveryObligationRecord[];
+
+  constructor(
+    claim: EnvironmentRegistrationClaim,
+    startup: DeliveryRunSettlement,
+    records: () => readonly ParkedDeliveryObligationRecord[],
+  ) {
+    this.token = claim.token;
+    this.generation = claim.generation;
+    this.startup = startup;
+    this.#records = records;
+    Object.freeze(this);
+  }
+
+  records(): readonly ParkedDeliveryObligationRecord[] {
+    return this.#records();
+  }
 }
+
+/** @internal Nominal successful attachment used by later detach/stop/server slices. */
+export type EnvironmentAttachmentHandle = AttachedEnvironmentRegistration;
 
 /** @internal Construction seams for deterministic package lifecycle tests. */
 export interface EnvironmentAttachmentsOptions {
@@ -615,7 +635,9 @@ class DeliveryGeneration {
     }
     if (!detach.coordinatorRemoved) {
       try {
-        await this.#coordinator?.removeOwners(ownerKeys);
+        if (ownerKeys.length > 0) {
+          await this.#coordinator?.removeOwners(ownerKeys);
+        }
         detach.coordinatorRemoved = true;
       } catch (error) {
         failures.push(error);
@@ -1106,11 +1128,7 @@ function handle(
   startup: DeliveryRunSettlement,
   records: () => readonly ParkedDeliveryObligationRecord[],
 ): EnvironmentAttachmentHandle {
-  return Object.freeze({
-    ...claim,
-    startup,
-    records,
-  });
+  return new AttachedEnvironmentRegistration(claim, startup, records);
 }
 
 function readyScope(
