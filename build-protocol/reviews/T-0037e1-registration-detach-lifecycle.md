@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice2 Round1 fixes focused verified; Round2 pending
+Status: Slice 2 Round 2 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -8,6 +8,9 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Round 1 fix owner completed and was closed. Coordinator verification repeats
   217/217 and all static gates. The four-finding fix is ready for a committed
   Round 2 package; security/full verify remain deferred.
+- Round 2 package is `.superpowers/sdd/review-ac0330f4..69cfee33.diff` (one
+  commit, 32,537 bytes). Expected profiles are style/API/reliability Terra High
+  and documentation Luna Medium, bounded to the four Round 1 fixes.
 
 - Slice 2 implementer completed and was closed with matching Terra Medium
   metadata. Coordinator verification independently passes 215/215 and all
