@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 Round 1 review in progress
+Status: Slice 1 Round 1 findings assigned
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -48,6 +48,21 @@ Before packaging, the implementation owner must correct four foundation gaps:
    and remove helpers that permit ordering mistakes.
 
 The same Terra Medium owner receives all four under strict TDD before Round 1.
+
+### Slice 1 Round 1 Findings
+
+1. A barrier invoked after a terminal coordinator/observer fault has already
+   settled must still reject with that retained fault.
+2. Settlement observers must be synchronously enforced; TypeScript `void`
+   callbacks admit async functions, so a returned thenable must fault the
+   coordinator rather than become an unhandled rejection.
+3. Reporting selects the first unreported cause inside the selected units, not
+   the first configured cause outside/previously reported.
+4. Atomic detach must reclassify ownership before reporting so a shared unit
+   ordered before a newly orphaned unit cannot suppress the orphan cause.
+5. Correct impossible active UTC chronology in work/review logs.
+
+One Terra Medium owner receives the complete batch before Round 2.
 
 Disposition: corrected and focused verified. Settlement equality covers
 disposition, cause identity, progress counters, and failure identities; barrier

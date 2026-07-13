@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 1 Round 1 review in progress
+Status: Slice 1 Round 1 findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -52,6 +52,14 @@ Derived status mirror: the canonical current state is the `Status` header in
   Expected explicit profiles are style Terra High, documentation Luna Medium,
   TypeScript/API docs Terra High, and reliability Terra High. Later detach,
   last retirement, races, public lifecycle, and security are out of this wave.
+- Round 1 completed and all reviewers are closed. Documentation found impossible
+  active UTC chronology. API/style found unhandled async observer thenables.
+  Reliability found retained terminal faults disappearing from later barrier
+  calls and shared-before-orphan detach ordering suppressing orphan causes.
+  Style additionally found reporting chooses a previously reported or
+  unselected configured cause instead of the first unreported selected cause.
+  One Terra Medium owner receives the complete deduplicated batch; Round 2 and
+  security remain pending.
 - All four coordinator findings are corrected under focused TDD. Meaningful
   settlement equality, terminal barrier-fault propagation, bounded per-unit
   cause reselection, and atomic counted-owner detach/retire record consumption
