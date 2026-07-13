@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 2 re-review assigned
+Status: Slice 2 round-2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -295,3 +295,43 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Resume style/API/reliability at explicit Terra High, no subagents, against a
   fresh package covering all Slice 2 commits. Documentation N/A; security
   deferred.
+
+## Slice 2 Re-review Findings
+
+- `2026-07-13T18:46:44Z`: style CLEAN. API/reliability corroborate high lost
+  retry state after immediate-safe close failure; API medium requires recursive
+  flattening of pre-aggregated start causes before close causes. All reviewers
+  match Terra High dispatch, used no subagents, and are closed.
+- Same Terra Medium implementer receives both findings plus direct same-server
+  failed-index retry/record-clearing and combined-aggregate tests. Applicable
+  re-review remains pending; documentation N/A, security deferred.
+- `2026-07-13T18:50:48Z`: direct round-2 RED is recorded in the work log with
+  one failure per accepted finding. No production fix or clean disposition is
+  claimed yet.
+
+## Slice 2 Round-2 Review-Fix Handback
+
+- `2026-07-13T18:54:59Z`: both accepted round-2 findings are addressed. A
+  failed immediate-safe close retains its exact retry group for cleanup-only
+  failed-index retry, and aggregation recursively flattens startup/reporting
+  causes before recursively flattened dependency-close causes.
+- New direct tests prove retry preservation, cause-once behavior, cleanup
+  completion and record clearing, plus one flat stable ordered aggregate. The
+  focused suite is 13/13 and the five-file Slice 2 regression is 155/155;
+  tooling/generated typechecks, scoped ESLint, and cleanup enforcement pass.
+- This is an implementation handback, not self-acceptance. Applicable re-review
+  remains coordinator-owned; documentation is N/A, security remains deferred,
+  and server-owned/listener retention, endpoint safety, Slice 3+, docs, and
+  public-surface changes remain excluded.
+- `2026-07-13T18:57:02Z`: round-2 RED was 2 accepted-finding failures among 13
+  focused tests; GREEN is 13/13 and 5 files / 155 tests. Tooling/generated
+  typechecks, scoped ESLint/cleanup/Prettier, exact nine-path allowlist/status/
+  public-leak audit, and diff integrity pass. Re-review may proceed from this
+  synchronized handback.
+
+## Slice 2 Round-2 Re-review Assignment
+
+- `2026-07-13T18:58:42Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 155 tests, and all scoped gates pass.
+- Resume style/API/reliability at explicit Terra High, no subagents, against a
+  fresh whole Slice 2 package. Documentation N/A; security deferred.

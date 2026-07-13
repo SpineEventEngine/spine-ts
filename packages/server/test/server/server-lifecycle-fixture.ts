@@ -108,6 +108,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #events: string[];
   readonly #startupFailures: Error[] = [];
   readonly #awaitAttempts: (() => Promise<void>)[] = [];
+  readonly #retireFailures: Error[] = [];
   #starts = 0;
   #stopCalls = 0;
   #awaitCalls = 0;
@@ -171,6 +172,10 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     };
   }
 
+  failNextRetire(error: Error): void {
+    this.#retireFailures.push(error);
+  }
+
   add(runtime: EnvironmentDeliveryRuntime): void {
     void runtime;
   }
@@ -210,7 +215,8 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   retire(): Promise<void> {
     this.#retireCalls += 1;
     this.#events.push("retire");
-    return Promise.resolve();
+    const failure = this.#retireFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
 
   stopOwners(ownerKeys: readonly string[]): void {
@@ -232,6 +238,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
 export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
   readonly storages: RecordStorage<unknown, Message>[] = [];
   readonly #events: string[];
+  readonly #storageCloseCalls = new WeakMap<object, number>();
   #closeCalls = 0;
 
   constructor(events: string[]) {
@@ -248,8 +255,21 @@ export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
     const storage = super.createRecordStorage(context, recordSpec);
+    const closeStorage = storage.close.bind(storage);
+    this.#storageCloseCalls.set(storage, 0);
+    Object.defineProperty(storage, "close", {
+      configurable: true,
+      value: () => {
+        this.#storageCloseCalls.set(storage, this.closeCallsFor(storage) + 1);
+        closeStorage();
+      },
+    });
     this.storages.push(storage);
     return storage;
+  }
+
+  closeCallsFor(storage: RecordStorage<unknown, Message>): number {
+    return this.#storageCloseCalls.get(storage) ?? 0;
   }
 
   override close(): void {

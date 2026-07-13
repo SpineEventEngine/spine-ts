@@ -313,7 +313,7 @@ describe("Server lifecycle integration", () => {
     }
   });
 
-  it("immediately closes caller dependencies after an already-safe attachment failure", async () => {
+  it("retries failed immediate-safe cleanup without rebuilding or reattaching", async () => {
     const events: string[] = [];
     const startupFailure = new Error("safe startup recovery failed");
     const cleanupFailure = new Error("resource cleanup failed");
@@ -328,30 +328,25 @@ describe("Server lifecycle integration", () => {
       environment: { storageFactory, ownsStorageFactory: true },
     });
     await fixture.context.close();
-    const context = await fixture
+    const contextBuilder = fixture
       .createBuilder("LifecycleSafeFailedStart")
-      .withStorageFactory(storageFactory)
-      .buildAsync();
-    const closeStorages = storageFactory.storages.map((storage) => vi.spyOn(storage, "close"));
-    const closeBuiltContext = context.close.bind(context);
-    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
-      this: BoundedContext,
-    ) {
-      if (this !== context) {
-        throw new Error("Unexpected context close in safe failed-start cleanup test.");
-      }
-      return closeBuiltContext();
-    });
+      .withStorageFactory(storageFactory);
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close");
     const closeResource = vi.fn();
+    let failedResourceAttempts = 0;
     const failResource = vi.fn(() => {
-      throw cleanupFailure;
+      failedResourceAttempts += 1;
+      if (failedResourceAttempts === 1) {
+        throw cleanupFailure;
+      }
     });
     const server = Server.atPort(0, { environment: fixture.environment })
-      .add(context)
+      .add(contextBuilder)
       .addResource({ close: closeResource })
       .addResource({ close: failResource });
     const starting = server.start();
     void starting.catch(() => undefined);
+    let restarted: { close(): Promise<void> } | undefined;
 
     try {
       expect(fixture.worker).toBe(firstWorker);
@@ -367,22 +362,32 @@ describe("Server lifecycle integration", () => {
       expect(closeResource).toHaveBeenCalledOnce();
       expect(failResource).toHaveBeenCalledOnce();
       expect(builtStorageCount).toBeGreaterThan(0);
-      expect(closeStorages.every((closeStorage) => closeStorage.mock.calls.length === 1)).toBe(
-        true,
-      );
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
       expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
       expect(storageFactory.isOpen()).toBe(true);
       expect(storageFactory.closeCalls).toBe(0);
 
-      closeContext.mockRestore();
-      const freshContext = await fixture.createContext("LifecycleAfterSafeFailedStart");
-      const fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      const completion = await server.start().catch((error: unknown) => error);
+      await closeIfRunningServer(completion);
+      expectDeferredCleanupCompletion(completion);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(failResource).toHaveBeenCalledTimes(2);
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      restarted = await server.start();
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
-      expect(storageFactory.storages).toHaveLength(builtStorageCount);
-      await fresh.close();
+      expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+      await restarted.close();
 
       expect(storageFactory.isOpen()).toBe(true);
       expect(storageFactory.closeCalls).toBe(0);
@@ -390,13 +395,105 @@ describe("Server lifecycle integration", () => {
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
       closeContext.mockRestore();
-      for (const closeStorage of closeStorages) {
-        closeStorage.mockRestore();
-      }
       firstWorker.release();
       freshWorker.release();
       await starting.catch(() => undefined);
-      await context.close().catch(() => undefined);
+      await restarted?.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("flattens safe attachment and dependency cleanup aggregates in stable order", async () => {
+    const startupFailure = new Error("aggregate startup failed");
+    const reportingFailure = new Error("aggregate reporting failed");
+    const retirementFailure = new Error("aggregate retirement failed");
+    const firstContextFailure = new Error("first context cleanup failed");
+    const secondContextFailure = new Error("second context cleanup failed");
+    const firstResourceFailure = new Error("first resource cleanup failed");
+    const secondResourceFailure = new Error("second resource cleanup failed");
+    const worker = new HeldStartupWorker([]);
+    worker.rejectNextStart(startupFailure);
+    worker.failNextRetire(
+      new AggregateError(
+        [reportingFailure, new AggregateError([retirementFailure], "nested retirement")],
+        "post-quiescence failures",
+      ),
+    );
+    const fixture = await lifecycleFixture({ workers: [worker] });
+    const closeFixtureContext = fixture.context.close.bind(fixture.context);
+    let contextCloseAttempts = 0;
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== fixture.context) {
+        throw new Error("Unexpected context close in aggregate cleanup test.");
+      }
+      contextCloseAttempts += 1;
+      return contextCloseAttempts === 1
+        ? Promise.reject(
+            new AggregateError(
+              [
+                firstContextFailure,
+                new AggregateError([secondContextFailure], "nested context cleanup"),
+              ],
+              "context cleanup",
+            ),
+          )
+        : closeFixtureContext();
+    });
+    let resourceCloseAttempts = 0;
+    const closeResource = vi.fn(() => {
+      resourceCloseAttempts += 1;
+      if (resourceCloseAttempts === 1) {
+        throw new AggregateError(
+          [
+            firstResourceFailure,
+            new AggregateError([secondResourceFailure], "nested resource cleanup"),
+          ],
+          "resource cleanup",
+        );
+      }
+    });
+    const server = Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .addResource({ close: closeResource });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      await worker.startedWithin();
+      worker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        startupFailure,
+        reportingFailure,
+        retirementFailure,
+        firstContextFailure,
+        secondContextFailure,
+        firstResourceFailure,
+        secondResourceFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(closeContext).toHaveBeenCalledTimes(2);
+      expect(closeResource).toHaveBeenCalledTimes(2);
+      expect(worker.starts).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(1);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+    } finally {
+      closeContext.mockRestore();
+      worker.release();
+      await starting.catch(() => undefined);
+      await fixture.context.close().catch(() => undefined);
       await fixture.environment.close().catch(() => undefined);
       fixture.dispose();
     }
@@ -727,4 +824,14 @@ function expectDeferredCleanupCompletion(error: unknown): void {
     "Server deferred cleanup completed after an earlier failed start.",
   );
   expect(Object.hasOwn(error as object, "cause")).toBe(false);
+}
+
+async function closeIfRunningServer(value: unknown): Promise<void> {
+  if (value instanceof Error || typeof value !== "object" || value === null) {
+    return;
+  }
+  const close: unknown = Reflect.get(value, "close");
+  if (typeof close === "function") {
+    await Reflect.apply(close, value, []);
+  }
 }

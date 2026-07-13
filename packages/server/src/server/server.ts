@@ -108,7 +108,12 @@ export class Server {
         if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
           this.#failedStartCleanup = { closeGroup };
         } else {
-          await cleanupSafeAttachmentFailure(closeGroup, error);
+          try {
+            await closeGroup.close();
+          } catch (cleanupError) {
+            this.#failedStartCleanup = { closeGroup };
+            throw attachmentCleanupError(error, cleanupError);
+          }
         }
       }
       throw error;
@@ -440,18 +445,14 @@ function toCleanupErrors(error: unknown): readonly unknown[] {
   return [error];
 }
 
-async function cleanupSafeAttachmentFailure(
-  closeGroup: RetryableCloseGroup,
-  startError: unknown,
-): Promise<void> {
-  try {
-    await closeGroup.close();
-  } catch (error) {
-    throw new AggregateError(
-      [startError, ...toCleanupErrors(error)],
-      "Server attachment failed and immediate dependency cleanup also failed.",
-    );
-  }
+function attachmentCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
+  const errors: unknown[] = [];
+  collectCloseError(startError, errors);
+  collectCloseError(cleanupError, errors);
+  return new AggregateError(
+    errors,
+    "Server attachment failed and immediate dependency cleanup also failed.",
+  );
 }
 
 function throwCleanupErrors(errors: readonly unknown[]): never {

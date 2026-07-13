@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 2 re-review assigned
+Status: Slice 2 round-2 re-review assigned
 
 ## Resolution Summary
 
@@ -561,3 +561,30 @@ smallest coherent implementation.
 
 - `2026-07-13T18:40:27Z`: all focused type/test/mechanical/leak checks pass;
   fresh whole-slice style/API/reliability re-review is assigned.
+
+## Slice 2 Round-2 Review-Fix
+
+- `2026-07-13T18:46:44Z`: retain failed immediate-safe close indexes for
+  cleanup-only retry and recursively flatten original-first aggregate causes.
+  No later-slice behavior is introduced.
+
+## Slice 2 Round-2 Review-Fix Handback
+
+- `2026-07-13T18:54:59Z`: the existing private no-handle cleanup record now
+  retains the same `RetryableCloseGroup` when immediate-safe close is partial.
+  Existing retryable-close index state remains the sole authority for later
+  failed-index-only cleanup; no attachment, listener, or generation seam is
+  added.
+- Recursive use of the existing close-error traversal flattens both sides of
+  immediate failure aggregation in original-first order. The implementation
+  introduces no endpoint-safety observation, retained listener/server-owned
+  cleanup, public contract, or later-slice continuation.
+- `2026-07-13T18:57:02Z`: focused RED/GREEN is 11 pass / 2 expected fail, then
+  13/13 pass; the complete native Slice 2 gate is 5 files / 155 tests. Both
+  typechecks and all scoped lint, cleanup, format, nine-path allowlist/status/
+  leak, and diff checks pass.
+
+## Slice 2 Round-2 Coordinator Gate
+
+- `2026-07-13T18:58:42Z`: all focused gates pass; fresh whole-slice applicable
+  re-review is assigned.

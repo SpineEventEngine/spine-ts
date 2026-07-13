@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 re-review assigned
+Status: Slice 2 round-2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -493,7 +493,49 @@ gate passes.
   and diff checks pass.
 - The same style/API/reliability reviewers receive a fresh whole-Slice 2
   package at explicit Terra High, no subagents. Documentation remains N/A.
+
+## Slice 2 Re-review Findings And Round-2 Fix
+
+- `2026-07-13T18:46:44Z`: style is CLEAN; API and reliability corroborate one
+  high, and API reports one medium. All actual profiles are Terra High,
+  matching dispatch; no subagents; all closed.
+- High: if immediate-safe dependency cleanup fails, retain that same
+  `RetryableCloseGroup` so the next same-server `start()` retries only failed
+  indexes and never rebuilds/reattaches/listens over an open dependency.
+- Medium: flatten an already aggregated attachment/start error before appending
+  dependency-close errors, preserving original-first stable order.
+- Add direct same-server immediate-safe failed-index retry/record clearing and
+  safe rollback/reporting aggregate plus dependency-close aggregate coverage.
+  The same Terra Medium implementer owns this bounded round.
 - `2026-07-13T18:16:55Z`: correction complete. Worker and helper shard
   parameters now use real `ShardIndex`; zero-message rejected startup evidence
   retains the error only as shard `cause` and reports zero failed messages with
   frozen empty failures. Runtime behavior is unchanged.
+
+## Slice 2 Round-2 Review-Fix Handback
+
+- `2026-07-13T18:54:59Z`: both accepted findings are implemented within the
+  existing Slice 2 paths. Immediate-safe dependency-close failure now retains
+  the exact retryable close group; the next same-server `start()` is cleanup
+  only, retries failed indexes only, preserves successful indexes, and clears
+  the record only after complete cleanup.
+- Attachment/start and dependency-close aggregate trees are recursively
+  flattened into one stable original-first `AggregateError`. Original startup
+  and already reported delivery causes are omitted from cleanup-only retry.
+- Direct RED/GREEN coverage proves cleanup-only retry, cause-once behavior,
+  completion error, record clearing through a later normal same-server start,
+  and flat ordered aggregation across safe rollback/reporting and dependency
+  close failures. Slice 3+ behavior and public surface remain unchanged.
+- `2026-07-13T18:57:02Z`: RED was 2 expected failures in 13 focused tests;
+  GREEN is 13/13 and the full five-file gate is 155/155. Both typechecks,
+  scoped ESLint/cleanup/Prettier, the exact nine-path allowlist/status/public-
+  leak audit, and `git diff --check` pass; 7 changed paths are within the
+  9-path allowlist.
+
+## Slice 2 Round-2 Coordinator Gate
+
+- `2026-07-13T18:58:42Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Tooling/generated typechecks, 5 files / 155 native tests,
+  scoped lint/cleanup/Prettier, exact scope/status/leak, and diff checks pass.
+- Resume style/API/reliability at explicit Terra High against a fresh whole-
+  Slice 2 package. Documentation N/A; security deferred.
