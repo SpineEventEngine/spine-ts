@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 1 implementation assigned
+Status: Slice 1 review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -95,6 +95,49 @@ single architecture pass at explicit expected `gpt-5.6-sol` / `high`, with no
 subagents and documentation-only ownership. It must inspect the relevant Spine
 JVM server evidence, preserve D-0085 and accepted T-0037d/e1/e2 behavior, and
 produce the smallest implementation-ready slices without reopening exclusions.
+
+## Slice 1 Implementation Handback
+
+- Existing implementer assignment: explicit expected `gpt-5.6-terra` /
+  `medium`, no subagents. Coordinator runtime evidence:
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T15-04-05-019f5bca-cd6f-7992-ba5a-de38a9a9006f.jsonl`
+  records actual `gpt-5.6-terra / medium` at `2026-07-13T14:04:08.210Z`,
+  matching dispatch.
+- Canonical applicability was recorded before production edits. Selected and
+  fully read `test-driven-development` for strict runtime RED/GREEN work and
+  `implement` for issue-bounded implementation. The latter's generic full
+  suite, review, commit, and push instructions conflict with this assignment,
+  so the explicit focused-validation/no-commit/no-push boundary controls.
+  `planning-with-files` is satisfied by these canonical durable records;
+  subagent, worktree, review, architecture, API, and security skills are N/A
+  because this already-assigned worktree has fixed accepted architecture, no
+  subagents, no public expansion, and no requested security review.
+- RED: the new focused close suite failed 2/2 against the prior runtime: an
+  in-use close resolved and closed facilities, and a later attach resolved
+  after close. A separate cancellation RED temporarily removed only the
+  admission callback's cancellation call and failed exactly because the
+  close-first stop resolved rather than rejecting. GREEN: the focused suite
+  passes 4/4, including deferred-facility proof that a cancelled queued stop
+  and waiter settle before public close completes.
+- Slice 1 adds private permanent admission to `EnvironmentAttachments` under
+  its existing serial gate. It refuses a nonzero registration count with the
+  exact in-use error before mutation; otherwise it cancels only an unadmitted,
+  incomplete eager stop, commits permanent admission only with no generation,
+  and releases the gate before `ServerEnvironment` invokes its existing
+  coalesced `RetryableCloseGroup`. Attach, stop, and retry-stop reject from
+  permanent state. No T-0037b caller, API signature/export/options change, or
+  retained-owner Slice 2 behavior was added.
+- Public docs now state permanent closure and the observable non-destructive
+  in-use/no-owned-facility-teardown contract in `ServerEnvironment.close()`
+  TSDoc and `packages/server/README.md`.
+- Evidence: focused close/attachment/reusable-stop regressions pass 3 files /
+  109 tests; `pnpm typecheck:build:generated`, scoped ESLint, cleanup rules,
+  scoped Prettier, and `git diff --check` pass. The requested listener/facility
+  regression `server.test.ts` cannot run in this managed sandbox: 13 listener
+  cases fail only with `listen EPERM: operation not permitted 127.0.0.1`.
+  No implementation failure was observed in the non-listener lifecycle suites.
+  Generated/public-leak scans show no generated output, package export, or
+  signature change. Full `pnpm verify`, commit, and push remain excluded.
 
 ## Objective
 
@@ -449,3 +492,13 @@ consistency. All four canonical concerns are reassigned.
   waiter handling, facility phase separation, focused tests, public TSDoc and
   matching server README wording, plus current records. Slices 2-3 remain
   unauthorized until Slice 1 review is clean.
+
+## Slice 1 Coordinator Gate And Review Assignment
+
+- Coordinator native verification passes 4 files / 130 tests, including the
+  listener-oriented server suite that was sandbox-blocked for the implementer.
+  Generated build typecheck, scoped ESLint, cleanup enforcement, docs/API
+  checks, server export tests, Prettier, exact scope/public/generated scans, and
+  `git diff --check` pass.
+- Slice 1 is assigned to all four canonical reviewer concerns at their explicit
+  profiles, read-only and no subagents. Slices 2-3 remain unauthorized.

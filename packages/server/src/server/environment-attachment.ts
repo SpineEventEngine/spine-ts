@@ -164,6 +164,7 @@ export class EnvironmentAttachments {
   #failedRollback: FailedStartRollback | undefined;
   #failedLastDetach: AttachedHandle | undefined;
   #stop: GenerationStop | undefined;
+  #permanentlyClosed = false;
 
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
@@ -204,6 +205,9 @@ export class EnvironmentAttachments {
   }
 
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
+    if (this.#permanentlyClosed) {
+      return Promise.reject(environmentClosedError());
+    }
     const gate = Promise.withResolvers<EnvironmentAttachmentHandle>();
     const stop = this.#stop;
     const waitForStop = stop !== undefined && !stop.completed;
@@ -266,6 +270,9 @@ export class EnvironmentAttachments {
   async #startQueuedAttachment(
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle> {
+    if (this.#permanentlyClosed) {
+      throw environmentClosedError();
+    }
     if (this.#failedRollback !== undefined) {
       throw explicitRetryError();
     }
@@ -311,6 +318,9 @@ export class EnvironmentAttachments {
   }
 
   stopDelivery(): Promise<void> {
+    if (this.#permanentlyClosed) {
+      return Promise.reject(environmentClosedError());
+    }
     const current = this.#stop;
     if (current !== undefined) {
       if (current.status === "rejected") {
@@ -339,6 +349,7 @@ export class EnvironmentAttachments {
       waitersReleased: false,
       waiterSettlement: undefined,
       completed: false,
+      cancelledByClose: undefined,
       promise: Promise.resolve(),
       status: "running",
       retrying: false,
@@ -389,6 +400,9 @@ export class EnvironmentAttachments {
   }
 
   retryDeliveryStop(): Promise<void> {
+    if (this.#permanentlyClosed) {
+      return Promise.reject(environmentClosedError());
+    }
     const stop = this.#stop;
     if (stop?.status === "running" && stop.retrying) {
       return stop.promise;
@@ -400,6 +414,11 @@ export class EnvironmentAttachments {
   }
 
   async #continueStop(stop: GenerationStop): Promise<void> {
+    if (stop.cancelledByClose !== undefined) {
+      stop.completed = true;
+      await stop.waiterSettlement;
+      throw stop.cancelledByClose;
+    }
     if (!stop.admitted) {
       if (this.#failedRollback !== undefined) {
         await this.#refuseStop(stop, explicitRetryError());
@@ -588,6 +607,50 @@ export class EnvironmentAttachments {
     stop.completed = true;
     await this.#releaseStopWaiters(stop);
     throw error;
+  }
+
+  /** @internal Serialize one irreversible owner-free close admission. */
+  admitPermanentClose(): Promise<void> {
+    if (this.#permanentlyClosed) {
+      return Promise.resolve();
+    }
+    const admission = this.#serial.then(() => {
+      if (this.#registrations.count !== 0) {
+        throw new Error("ServerEnvironment cannot close while it is in use.");
+      }
+      this.#cancelProvisionalStop();
+      if (this.#registrations.generation !== undefined || this.#generations.size !== 0) {
+        throw new Error("Environment generation is not current.");
+      }
+      this.#permanentlyClosed = true;
+    });
+    this.#serial = admission.then(
+      () => undefined,
+      () => undefined,
+    );
+    return admission;
+  }
+
+  #cancelProvisionalStop(): void {
+    const stop = this.#stop;
+    if (stop === undefined || stop.admitted || stop.completed) {
+      return;
+    }
+    const error = environmentClosedError();
+    stop.cancelledByClose = error;
+    stop.waitersReleased = true;
+    const waiters = [...stop.waiters];
+    stop.waiters.length = 0;
+    stop.waiterSettlement = Promise.allSettled(waiters.map((waiter) => waiter.gate.promise)).then(
+      () => undefined,
+    );
+    for (const waiter of waiters) {
+      waiter.status = "complete";
+      waiter.gate.reject(error);
+    }
+    if (this.#stop === stop) {
+      this.#stop = undefined;
+    }
   }
 
   detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
@@ -898,9 +961,14 @@ interface GenerationStop {
   waitersReleased: boolean;
   waiterSettlement: Promise<void> | undefined;
   completed: boolean;
+  cancelledByClose: Error | undefined;
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
   retrying: boolean;
+}
+
+function environmentClosedError(): Error {
+  return new Error("ServerEnvironment is closed.");
 }
 
 type OldRetirementResult =

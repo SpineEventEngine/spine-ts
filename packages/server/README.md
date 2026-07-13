@@ -234,6 +234,9 @@ Current slice exposes:
   ownership during server assembly. Local environments use in-memory storage
   and same-process transport defaults; production environments require
   caller-supplied storage and transport before a server opens network intake.
+  `close()` permanently closes an environment once it is no longer in use. An
+  in-use close rejects non-destructively and performs no owned-facility
+  teardown; after admission, the environment cannot be reused.
   `Server` builds added `BoundedContextBuilder` values with the environment
   storage factory unless the builder already selected a local factory.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.

@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 1 implementation assigned
+Status: Slice 1 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -36,6 +36,44 @@ Derived status mirror: the canonical current state is the `Status` header in
   `environment-delivery-records` passed 18 tests; `pnpm proto:generate` and
   `pnpm typecheck:build:generated` both exited 0; then the exact five suites
   passed 5 files / 190 tests. No tracked file changed.
+
+## Slice 1 Review Handback
+
+- Implementer role and runtime gate: existing implementer, explicit expected
+  `gpt-5.6-terra` / `medium`, no subagents. Coordinator evidence at
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T15-04-05-019f5bca-cd6f-7992-ba5a-de38a9a9006f.jsonl`
+  records actual `gpt-5.6-terra / medium` at `2026-07-13T14:04:08.210Z`,
+  matching dispatch.
+- Skill disposition before production edits: `test-driven-development` and
+  `implement` were fully read and selected. Strict RED/GREEN controls runtime
+  changes; explicit task instructions override implement's generic full-suite,
+  review, commit, and push guidance. Canonical records satisfy persistence;
+  subagent/worktree/review/architecture/API/security skills are N/A for this
+  bounded accepted slice.
+- Behavior delivered: close shares its existing public attempt, serially admits
+  permanent owner-free closure before invoking the existing facility group,
+  refuses a live registration with the exact non-destructive in-use error, and
+  permanently rejects later attach/stop/retry-stop. A close-first provisional
+  stop is cancelled only when unadmitted and incomplete; waiters are observed,
+  rejected, and cleared without close awaiting their queued turn. A completed
+  stop-first no-generation owner remains intact for normal waiter settlement.
+- TDD evidence: initial RED failed 2/2 for prior destructive live-use close and
+  post-close attach reuse. Cancellation RED failed with the expected resolved
+  stop after temporarily omitting the isolated cancellation call. GREEN is 4/4
+  new close tests; the deferred-facility case proves queued cancellation settles
+  before public close completion. T-0037d/e1/e2 affected regressions pass 3
+  files / 109 tests.
+- Mechanical evidence: generated build typecheck, scoped ESLint, cleanup rules,
+  scoped Prettier, static public/API/generated scans, and `git diff --check`
+  pass. The listener-oriented `server.test.ts` regression is blocked only by
+  managed-sandbox `listen EPERM: operation not permitted 127.0.0.1` (13
+  listener cases); no native rerun was authorized. Full verify, commit, and
+  push remain intentionally unperformed.
+- Review requested: style/maintainability, documentation, TypeScript/API docs,
+  and performance/reliability. Security remains deferred to T-0041. Reviewers
+  should confirm the serial gate releases before facility work, exact error and
+  no-mutation refusal behavior, cancellation identity/waiter settlement, no
+  retained-owner takeover, and no public or generated leak.
 
 ## Architecture Handback
 
@@ -263,3 +301,13 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Architecture is accepted. Slice 1 is assigned to one fresh implementer at
   explicit `gpt-5.6-terra` / `medium`, no subagents. Review is required after
   focused verification before any later slice begins.
+
+## Slice 1 Coordinator Gate And Review Assignment
+
+- Native 4-file / 130-test lifecycle/server regression, server export tests,
+  typecheck, lint/cleanup, docs/API, formatting, scope/public/generated, and
+  diff checks pass.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no subagents, and Slice 1 only.
