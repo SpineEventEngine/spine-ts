@@ -1,8 +1,24 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Candidate; not started
+Status: Architecture boundary resolution in progress
+
+Started: `2026-07-13T00:46:22Z`
+
+Baseline commit: `d8ffc72b`
+
+Branch: `task/T-0037e1-registration-detach-lifecycle`
+
+This `Status` header is canonical for T-0037e1. Its work and review logs are
+derived mirrors and must match it before review.
 
 Dependency: T-0037d complete and integrated.
+
+T-0037e1 changes registration detach concurrency, retry, and ordinary
+last-registration retirement boundaries. One existing requirements splitter is
+therefore assigned a milestone-boundary architecture pass with expected and
+explicit `gpt-5.6-sol` / `high`, read-only ownership, and no subagents. It must
+consume the accepted task/completion plan and relevant Spine JVM server evidence
+without reopening completed T-0037b/c/d or later e2/e3/f policy.
 
 ## Objective
 
