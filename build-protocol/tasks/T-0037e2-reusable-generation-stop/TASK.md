@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 1 review wave 4 assigned
+Status: Slice 1 review wave 5 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -189,8 +189,8 @@ behavior or later slice is reopened.
 The existing implementer reproduced both Wave 2 ownership directions in
 focused RED and made them GREEN using only the existing handle operation and
 retained stop operation. Focused T-0037e2 plus T-0037d/e1 regressions and the
-public-index/typecheck checks pass; status remains fixes assigned until
-Wave 3 review closure.
+public-index/typecheck checks passed. Wave 3 review ran and produced the later
+recorded duplicate-detach promise-identity finding.
 
 Wave 3 fixes preserve T-0037e1 duplicate-detach promise identity when a queued
 detach is blocked by rejected-stop ownership. The existing canonical detach

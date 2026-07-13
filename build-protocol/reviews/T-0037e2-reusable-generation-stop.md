@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 1 review wave 4 assigned
+Status: Slice 1 review wave 5 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -157,10 +157,28 @@ Derived status mirror: the canonical current state is the `Status` header in
   is assigned to fresh Wave 4 review by all four existing read-only lanes at
   immutable explicit profiles, no subagents.
 
+## Slice 1 Review Wave 4
+
+- Style/maintainability: CLEAN.
+- Documentation: P2 two historical active summaries still name superseded
+  prior-wave pending states; docs-only correction assigned.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: CLEAN.
+- The same implementer owns only the two stale sentence corrections and status
+  mirrors at immutable/explicit `gpt-5.6-terra` / `medium`, no subagents. No
+  production, test, public-doc, or later-slice change is authorized.
+- All actual reviewer profiles matched explicit dispatch; no contradiction or
+  child agent appeared.
+
 ## Slice 1 Review Wave 3 Fix Evidence
 
 - Focused promise-identity RED failed 1 of 9 tests; GREEN passed 9 of 9 after
   restoring canonical existing-detach-operation precedence. The requested
   70-test lifecycle regression suite, 10-test public-index suite,
-  generated-build typecheck, and focused formatting check pass. Status remains
-  Wave 3 fixes assigned pending coordinator acceptance.
+  generated-build typecheck, and focused formatting check passed. Coordinator
+  verification passed and Wave 4 review was assigned.
+- At `2026-07-13T05:58:33Z`, the two historical summaries and all three status
+  mirrors passed the docs-only formatting, stale-phrase, exact-inventory,
+  public/source/test/generated exclusion, and diff checks. Fresh Wave 5 review
+  is assigned to all four existing read-only lanes at immutable explicit
+  profiles, no subagents.
