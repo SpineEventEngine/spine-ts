@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 2 review assigned
+Status: Slice 2 fix re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -749,3 +749,51 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   overclaim.
 - The exact five-file Slice 2 batch is assigned to all four canonical review
   concerns. Security remains deferred to T-0041; Slice 3 is unauthorized.
+
+## Slice 2 Review Findings And Fix Assignment
+
+- `2026-07-13T15:13:52Z`: documentation, TypeScript/API, and
+  performance/reliability are CLEAN. Style/maintainability reports one P2
+  test-quality gap: failed-start and unsafe-detach cases do not independently
+  prove refusal left permanent state unset, because their exact retries and a
+  later idempotent close can still pass after an erroneous permanent mutation.
+- Required correction: after each exact retry and before final close, assert an
+  operation gated by permanent state succeeds, such as no-generation
+  `stopDelivery()`. The reusable-stop case already proves this through
+  `retryDeliveryStop()`.
+- Desktop metadata matches all explicit profiles: style/API/reliability Terra
+  High and documentation Luna Medium. All reviewers used no subagents and are
+  closed. One Terra Medium implementer receives the complete test/record fix;
+  Slice 3 remains unauthorized.
+
+## Slice 2 Review-Fix Handback
+
+- Existing implementer completed the bounded P2 correction at explicit
+  `gpt-5.6-terra` / `medium`, with no subagents. The accepted finding is
+  resolved: after the exact retained-failed-start retry and after the exact
+  unsafe-last-detach retry, `stopDelivery()` now resolves before final permanent
+  close. Each assertion proves the earlier refused close left permanent
+  admission unset; the existing reusable-stop `retryDeliveryStop()` proof is
+  preserved unchanged.
+- Focused TDD evidence: the two assertions were added before rerunning the
+  focused suite. They are GREEN against the existing correct runtime; a genuine
+  RED was not feasible without temporarily mutating production behavior, which
+  this test-only correction does not authorize.
+- Exact verification: the focused close, attachment, and generation-stop Vitest
+  command passes 3 files / 114 tests. `corepack pnpm typecheck:build:generated`,
+  scoped ESLint, cleanup enforcement, scoped Prettier, and `git diff --check`
+  pass.
+- Exclusions remain intact: no production change, reusable-stop rewrite, Slice
+  3 work, public/API/docs expansion, generated output, protected
+  `human-review-1-jul.md` access, commit, or push. Slice 2 is handed back to
+  the existing review concerns; security remains deferred to T-0041.
+
+## Slice 2 Review-Fix Coordinator Gate
+
+- `2026-07-13T15:17:26Z`: Desktop metadata confirms the fix implementer at
+  actual `gpt-5.6-terra` / `medium`, matching explicit assignment, with no
+  subagents. Coordinator rerun passes 3 files / 114 tests, generated typecheck,
+  scoped ESLint, cleanup enforcement, Prettier, and `git diff --check`.
+- The two closed-state-gated assertions resolve the complete P2 without runtime
+  change. The four-concern Slice 2 fix re-review is assigned; security remains
+  deferred and Slice 3 remains unauthorized.

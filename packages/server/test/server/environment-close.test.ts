@@ -257,6 +257,7 @@ describe("ServerEnvironment close", () => {
 
       await attachments.retryFailedStart();
       expect([worker.stopCalls, worker.awaitCalls, worker.retireCalls]).toEqual([1, 2, 1]);
+      await expect(attachments.stopDelivery()).resolves.toBeUndefined();
       await expect(attachments.admitPermanentClose()).resolves.toBeUndefined();
     },
   );
@@ -283,6 +284,7 @@ describe("ServerEnvironment close", () => {
     expect(attachments.activeRegistrationCount).toBe(1);
 
     await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+    await expect(attachments.stopDelivery()).resolves.toBeUndefined();
     await expect(attachments.admitPermanentClose()).resolves.toBeUndefined();
   });
 

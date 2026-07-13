@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 2 review assigned
+Status: Slice 2 fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -531,3 +531,48 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Fresh dispositions are required for style/maintainability, documentation,
   TypeScript/API docs, and performance/reliability. Security remains deferred to
   T-0041.
+
+## Slice 2 Review Results And Fix Assignment
+
+- `2026-07-13T15:13:52Z`: documentation, TypeScript/API docs, and
+  performance/reliability return CLEAN. Style/maintainability returns one P2.
+  Desktop metadata confirms Luna Medium for docs and Terra High for the other
+  three concerns. All reviewers used no subagents and are closed.
+- P2: retained failed-start and unsafe last-detach tests do not prove refusal
+  left permanent admission unset. Their exact retries and final idempotent close
+  could pass after an erroneous mutation. Add a successful closed-state-gated
+  operation after each retry and before final close.
+- One Terra Medium implementer receives the full test/record batch. Security
+  remains deferred to T-0041 and Slice 3 remains unauthorized.
+
+## Slice 2 Review-Fix Handback
+
+- Existing implementer addressed the complete P2 finding at explicit
+  `gpt-5.6-terra` / `medium`, with no subagents. Disposition: resolved. The
+  retained-failed-start case calls successful `stopDelivery()` after its exact
+  `retryFailedStart()` and before final close. The unsafe-last-detach case calls
+  successful `stopDelivery()` after exact `retryDetach(handle)` and before final
+  close. Since `stopDelivery()` rejects once permanent close is admitted, these
+  assertions fail under the reviewed erroneous mutation. Existing reusable-stop
+  coverage through `retryDeliveryStop()` is retained unchanged.
+- Focused RED/GREEN: the two assertions were introduced before focused
+  execution and are GREEN. A genuine RED would require a temporary production
+  mutation despite a test-only assigned fix, so it was not feasible or done.
+- Exact focused verification: the close, attachment, and generation-stop Vitest
+  command passes 3 files / 114 tests. `corepack pnpm typecheck:build:generated`,
+  scoped ESLint, cleanup enforcement, scoped Prettier, and `git diff --check`
+  pass.
+- No production, public/API/docs, reusable-stop, Slice 3, generated, facility,
+  protected `human-review-1-jul.md`, commit, or push change occurred. The fix
+  is handed back to the existing Slice 2 review concerns; security remains
+  deferred to T-0041.
+
+## Slice 2 Fix Re-review Assignment
+
+- `2026-07-13T15:17:26Z`: coordinator accepts the fix implementer at actual
+  Terra Medium and fresh 3-file / 114-test plus static-gate evidence. It used no
+  subagents.
+- The complete P2 is resolved by two test assertions only. Fresh
+  style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability dispositions are required. Security remains deferred
+  to T-0041.
