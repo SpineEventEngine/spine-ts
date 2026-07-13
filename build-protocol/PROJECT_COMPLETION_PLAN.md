@@ -508,29 +508,37 @@ the integrated lifecycle exposes no owner-free state that can execute it.
 3. Close/attach race has one serialized winner; owner-free close first
    permanently rejects the later attach.
 4. Close first followed synchronously by eager `stopDelivery()` and an attach
-   waiter cancels that unadmitted stop, rejects/clears its waiters, commits
-   permanent admission, and releases `#serial` without awaiting the stop or any
-   facility.
+   waiter cancels that stop only while it is both unadmitted and not completed,
+   rejects/clears its waiters, commits permanent admission, and releases
+   `#serial` without awaiting the stop or any facility.
 5. With an owned facility close held by a deterministic deferred promise, the
    queued cancelled stop and waiter reject before that facility settles while
    the coalesced public close attempt remains pending; a later attach rejects
    from permanent state. Releasing the facility then lets close complete.
-6. Facility teardown outside `#serial` attempts every owned facility in stable
+6. Stop first in a no-generation environment, attach a waiter while that stop is
+   running, then invoke close second. The stop's turn sets `completed` and
+   releases its waiter behind close; close does not cancel the retained stop,
+   commits permanent admission after the stop turn, the queued attach rejects
+   from permanent state, waiter settlement lets the stop promise resolve
+   normally, and `#stop` clears through its existing completion handler.
+7. Facility teardown outside `#serial` attempts every owned facility in stable
    order, closes successful facilities exactly once, and retries only failed
    facilities on a later public `close()` attempt.
-7. Existing T-0037d/e1/e2 tests remain authoritative for unsafe quiescence
+8. Existing T-0037d/e1/e2 tests remain authoritative for unsafe quiescence
    retention, safe slot clearing after reporting/inert cleanup failure, and
    unreported-versus-already-reported causes.
-8. Public docs, if changed, describe only independently observable
-   `ServerEnvironment.close()` behavior and never internal stop.
+9. Public close TSDoc explicitly says an in-use close rejects non-destructively
+   and performs no owned-facility teardown. If this wording ships, the package
+   README must state the same observable behavior. Neither names internal stop.
 
 **Boundary:** no server/listener integration, ordinary detach, reusable stop,
 failed-start rollback, generation retirement, parked-record handling, public
 lifecycle option, retry timing, or topology.
 
 **Focused gate:** permanent close/refusal/race/facility tests including deferred-
-facility/cancelled-stop settlement, T-0037d/e1/e2 regressions, static retirement-
-caller scans, public API/docs checks, typecheck/lint/format/diff, final verify.
+facility/cancelled-stop settlement and completed stop-first waiter settlement,
+T-0037d/e1/e2 regressions, static retirement-caller scans, matching public
+TSDoc/README checks, typecheck/lint/format/diff, final verify.
 
 ### T-0037f: Server Lifecycle Integration
 

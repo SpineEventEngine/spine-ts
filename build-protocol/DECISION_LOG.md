@@ -3417,16 +3417,19 @@ Decision:
   later attach rejects; if server close has not completed its internal detach,
   environment close rejects and may be retried after that `RunningServer.close()`
   settles.
-- Once the serialized close transition observes zero registrations, it
-  permanently rejects later attachments and triggers, then applies the same
-  authoritative generation-stop sequence to any current generation. After
-  retirement, it closes owned facilities. It cannot create a later generation.
-  When a server owns its environment, server close always detaches its sole
-  exclusive registration before invoking environment close; the environment
-  then closes with its owning server. No public attachment or lifecycle option
-  is introduced.
-- The authoritative generation-stop order for last detach, explicit generation
-  stop, and zero-attachment environment close is: under the lifecycle gate,
+- Once the serialized close transition observes zero registrations, the active
+  integrated owner map also requires no current generation and no retained
+  lifecycle owner. It permanently rejects later attachments and explicit stops,
+  releases the lifecycle gate, and then closes owned facilities. It cannot
+  create a later generation. The formerly accepted clause assigning permanent
+  close the authoritative stop sequence for “any current generation” is
+  superseded: T-0037d/e1/e2 retain every reachable generation-bearing operation,
+  and close refuses those owners before mutation. When a server owns its
+  environment, server close always detaches its sole exclusive registration
+  before invoking environment close; the environment then closes with its
+  owning server. No public attachment or lifecycle option is introduced.
+- The authoritative generation-stop order for failed-start rollback, last
+  detach, and reusable explicit generation stop is: under the lifecycle gate,
   atomically mark the generation stopping and close trigger admission and local
   notification; call the worker stop path so a `PAUSED` result cannot start
   another one-shot run; await already-active work without forcibly interrupting
@@ -3459,26 +3462,22 @@ Decision:
   resume deferred server cleanup or permit exactly one later fresh attachment
   without old/new overlap. The initial failed attempt does not classify,
   consume/report, retire, clear the slot, or tear down endpoint dependencies.
-  Reusable explicit generation stop and zero-registration permanent close obey
-  that same quiescence-failure retry boundary. For reusable explicit stop, the
-  failed attempt retains the unsafe current generation, live registrations,
-  transition owner and readiness buffer, and every endpoint dependency. It
-  performs no classification, consumption/reporting, retirement, or fresh-
-  generation transition. Explicit retry resumes the same admission-closed,
-  stopped operation without repeating admission closure or stop, proves
+  Reusable explicit generation stop obeys that same quiescence-failure retry
+  boundary. Its failed attempt retains the unsafe current generation, live
+  registrations, transition owner and readiness buffer, and every endpoint
+  dependency. It performs no classification, consumption/reporting, retirement,
+  or fresh-generation transition. Explicit retry resumes the same admission-
+  closed, stopped operation without repeating admission closure or stop, proves
   quiescence, completes each remaining authoritative retirement phase exactly
   once, and then performs survivor/readiness-route rebind, transfer of every
   configured/startup/buffered/retained canonical scope into fresh pending
-  admission, candidate publication, and later-write
-  admission reopen exactly once, with one generation and no overlap. For a
-  zero-registration permanent close, the failed attempt retains the unsafe slot
-  and endpoint dependencies, performs no later retirement or facility teardown,
-  leaves permanent close in progress, and prohibits attachment or replacement.
-  Retry resumes that same close without repeating admission closure or stop,
-  proves quiescence, completes classification, eligible consumption/reporting,
-  retirement, and slot clearing, then closes every owned facility exactly once
-  and leaves the environment permanently closed. Refusal while registrations
-  remain live is a separate pre-transition outcome.
+  admission, candidate publication, and later-write admission reopen exactly
+  once, with one generation and no overlap. The formerly accepted permanent-
+  close quiescence/unsafe-slot retry paragraph is superseded by integrated
+  reachability: permanent close never owns a current generation, refuses every
+  retained predecessor operation, and retries only incomplete facility closes
+  after owner-free permanent admission. Refusal while registrations remain live
+  is a separate pre-transition outcome.
   After permanent `ServerEnvironment.close()`, no generation of that same
   environment is possible. Recovery then requires a separately
   created environment/process over storage that remains externally available
@@ -3820,10 +3819,12 @@ Reusable Generation Stop`, `T-0037e3 Permanent Environment Close`, and
   candidate. Reporting-failure and post-consumption retirement-failure tests
   must each complete rebind, all-scope transfer, publication, and admission
   reopen before propagating the original error exactly once. T-0037e3 owns live-
-  registration close refusal and zero-registration permanent close. It retains
-  an unsafe slot and every facility when quiescence fails, retries that same
-  close without repeating completed phases, then safely clears the slot and
-  tears down every owned facility exactly once while remaining closed. T-0037f
+  registration and retained-owner close refusal plus owner-free zero-
+  registration/no-generation permanent admission. It adds no generation-
+  retirement/quiescence caller. Its short serialized callback may cancel only an
+  eager stop that is both unadmitted and not completed, then commits permanent
+  admission and releases the gate before the coalesced public close attempt
+  tears down every owned facility while remaining closed. T-0037f
   alone integrates those seams with listener startup, network shutdown, contexts,
   resources, and owned facilities. For caller-owned failed startup, T-0037f
   resumes T-0037d's retained rollback through quiescence and exact-once deferred
@@ -3832,14 +3833,14 @@ Reusable Generation Stop`, `T-0037e3 Permanent Environment Close`, and
   continuation remains separate. T-0037d does not own
   ordinary detach or race policy; T-0037e1/e2/e3 do not reopen failed-start
   rollback or coordinator-instance retirement.
-- The six distinct deterministic same-operation generation-retirement retry
+- The five distinct deterministic same-operation generation-retirement retry
   owners are: caller-owned failed-start rollback in T-0037d; ordinary last
-  detach in T-0037e1; reusable explicit stop in T-0037e2; zero-registration
-  permanent close in T-0037e3; and server-owned startup cleanup plus caller-
-  owned server cleanup in T-0037f. Each keeps its own slot, dependency,
-  environment, and facility ownership duties. Non-last detach is a separate
-  non-retiring registration-scoped retry in T-0037e1: it cannot stop or retire
-  the shared generation or clear its slot.
+  detach in T-0037e1; reusable explicit stop in T-0037e2; and server-owned
+  startup cleanup plus caller-owned server cleanup in T-0037f. Each keeps its
+  own slot, dependency, environment, and facility ownership duties. T-0037e3 is
+  explicitly not a generation-retirement retry owner. Non-last detach is a
+  separate non-retiring registration-scoped retry in T-0037e1: it cannot stop or
+  retire the shared generation or clear its slot.
 - Each active child depends on the preceding active child and receives its own
   branch, implementation log, review log, TDD cycle, focused verification, and four
   required review lanes when implementation starts. Candidate briefs do not
@@ -3871,10 +3872,13 @@ Reusable Generation Stop`, `T-0037e3 Permanent Environment Close`, and
   remain outside all eight children.
 - T-0037e3 may update README/TypeDoc only for behavior independently observable
   at its merge point, such as existing `ServerEnvironment.close()` behavior if
-  publicly reachable without server detach. T-0037f alone documents caller-
-  owned environment reuse after server detach and the full observable `Server`,
-  `RunningServer`, and `ServerEnvironment` lifecycle. Public docs must not name
-  or describe package-internal explicit generation stop.
+  publicly reachable without server detach. If the public close TSDoc ships, it
+  must state that an in-use close rejects non-destructively and performs no
+  owned-facility teardown, and the package README must carry matching observable
+  wording. T-0037f alone documents caller-owned environment reuse after server
+  detach and the full observable `Server`, `RunningServer`, and
+  `ServerEnvironment` lifecycle. Public docs must not name or describe package-
+  internal explicit generation stop.
 
 Consequences:
 
@@ -3895,9 +3899,11 @@ retirement and retry, and T-0037e2 owns reusable-stop retirement and retry;
 T-0037f's accepted future server-cleanup assignments remain outside this
 clarification. T-0037e3 owns serialized live-registration/retained-owner refusal,
 owner-free zero-registration/no-generation permanent admission, cancellation of
-an eager unadmitted stop queued behind that admission, and the subsequent public
-close attempt's facility teardown. The admission/cancellation callback completes
-and releases `EnvironmentAttachments.#serial` before
+an eager stop queued behind that admission only while it is both unadmitted and
+not completed, and the subsequent public close attempt's facility teardown. A
+completed stop-first no-generation operation remains the normal owner of its
+waiter settlement and is not cancelled. The admission/cancellation callback
+completes and releases `EnvironmentAttachments.#serial` before
 `RetryableCloseGroup.close()` starts, so a queued cancelled stop can run and
 reject even while facility settlement is pending. This clarification preserves
 D-0085 ordering in every generation owner and introduces no ninth child, public

@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Architecture authority re-review assigned
+Status: Architecture final re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -78,6 +78,15 @@ derived mirrors and must agree before review.
   `DEEPENING.md` for the existing serial/facility seam. Expanded ownership
   permits only D-0085/D-0086 active outcome clarification and the named runtime/
   completion-plan sections; no new decision or task-provided skill was added.
+- Final-fix runtime evidence: the same rollout records actual
+  `gpt-5.6-sol / high` at `2026-07-13T13:49:34.308Z`, matching explicit
+  dispatch. The resumed existing requirements splitter used no subagents.
+- Final-fix skill applicability: prior canonical manifest, installed-entrypoint,
+  lock, task-provided-skill, and skipped-disposition evidence remains
+  controlling. Before edits, fully read and selected `receiving-code-review`,
+  `architecture-decision-records`, `codebase-design`, and `DEEPENING.md` for the
+  exact active-clause, queue-ownership, and public-doc findings. No new skill or
+  file ownership was introduced.
 
 Because permanent close changes the public `ServerEnvironment.close()`
 contract, close/attach serialization, retained-generation ownership boundary,
@@ -121,8 +130,11 @@ ordered owned-facility teardown outside the lifecycle serial gate.
   signature, option, or root export.
 - Commit no generated artifact and run focused API/public-leak checks. Update
   existing README/TypeDoc only for independently observable environment-close
-  behavior at this merge point. T-0037f owns caller-owned reuse after server
-  detach and full server lifecycle docs. Never name internal explicit stop.
+  behavior at this merge point. Public close TSDoc must explicitly say an in-use
+  close rejects non-destructively and performs no owned-facility teardown; if
+  that wording ships, `packages/server/README.md` must state the same observable
+  contract. T-0037f owns caller-owned reuse after server detach and full server
+  lifecycle docs. Never name internal explicit stop.
 - Do not touch examples or `human-review-1-jul.md`.
 
 ## Exact Ownership
@@ -140,11 +152,13 @@ without mutation. Unsafe last detach and incomplete reusable stop retain live
 registrations, so close returns the in-use error without mutation.
 
 A close that precedes eager provisional `stopDelivery()` allocation marks that
-unadmitted stop cancelled, rejects and clears its attachment waiters, and clears
-`#stop` without awaiting the stop promise, waiter settlement, or any facility.
-The admission callback returns and releases `#serial`; its queued stop turn then
-rejects through the existing stop promise and performs no lifecycle work even
-if facility settlement remains pending.
+stop cancelled only when it is both unadmitted and not completed, rejects and
+clears its attachment waiters, and clears `#stop` without awaiting the stop
+promise, waiter settlement, or any facility. The admission callback returns and
+releases `#serial`; its queued stop turn then rejects through the existing stop
+promise and performs no lifecycle work even if facility settlement remains
+pending. A completed stop-first no-generation record remains owner of its waiter
+settlement and is never cancelled by later close.
 An unrecognized zero-registration orphan generation is an invariant error
 before permanent admission. Permanent close does not invoke T-0037b or duplicate
 failed-start, detach, reusable-stop, generation, parked-record, or readiness
@@ -169,7 +183,9 @@ so predecessor causes are neither duplicated nor reordered across operations.
 - Focused environment close/refusal, facility, retry, close/attach, and
   close/provisional-stop race tests; existing T-0037d/e1/e2 regressions remain
   behavior authorities rather than production ownership
-- This child's future task/work/review records and narrow public docs if needed
+- Existing public close TSDoc and `packages/server/README.md` together if the
+  observable wording ships
+- This child's future task/work/review records
 
 ## Focused Deterministic TDD
 
@@ -179,13 +195,19 @@ so predecessor causes are neither duplicated nor reordered across operations.
   zero-registration close first permanently rejects the attach.
 - A deterministic close-first/stop-second race includes an attach waiter:
   admission commits and releases `#serial` without awaiting the behind-it stop,
-  waiter settlement, or facility; the unadmitted stop and waiter reject with the
-  closed error; the queued stop turn performs no lifecycle work; `#stop` stays
-  clear; a later attach rejects from permanent state.
+  waiter settlement, or facility; the unadmitted and not-completed stop plus its
+  waiter reject with the closed error; the queued stop turn performs no lifecycle
+  work; `#stop` stays clear; a later attach rejects from permanent state.
 - Hold the first owned facility close on a deterministic deferred promise. The
   cancelled stop and waiter must settle while the coalesced public close remains
   pending, proving facility work is outside `#serial`; releasing the facility
   then completes close.
+- In a no-generation environment, invoke stop first, attach while it waits, and
+  invoke close second. The stop turn marks `completed` and releases its waiter
+  behind close; close does not cancel the retained stop and commits after its
+  turn; the queued attach rejects from permanent state; waiter settlement lets
+  the stop promise resolve normally and its existing completion handler clears
+  `#stop`.
 - Retained failed-start at zero registrations refuses through its existing
   explicit-retry-required channel. Unsafe last detach and incomplete reusable
   stop refuse through the in-use channel. Each refusal performs no permanent
@@ -204,8 +226,10 @@ so predecessor causes are neither duplicated nor reordered across operations.
   unreported-versus-already-reported cause behavior. Static checks prove
   permanent close adds no T-0037b caller or duplicate retirement logic.
 - Focused public-leak/API checks remain green; any README/TypeDoc update states
-  that the environment is “permanently closed,” states only observable close
-  behavior, and tracks no generated output.
+  that the environment is “permanently closed” and that an in-use close rejects
+  non-destructively with no owned-facility teardown. If close TSDoc ships, the
+  package README must match it. Public wording states only observable behavior
+  and tracks no generated output.
 
 ## D-0085 Invariants
 
@@ -282,8 +306,8 @@ canonical concerns are assigned against the committed resolution.
   Permanent close admits only zero registrations plus no generation, treats an
   unowned generation as an invariant violation, and adds no T-0037b caller.
 - P1 resolved by exact provisional-stop cancellation. Close marks the eager
-  unadmitted stop with a closed error, rejects and clears all waiters, clears
-  identity-matching `#stop`, and does not await its behind-close promise. The
+  unadmitted and not-completed stop with a closed error, rejects and clears all
+  waiters, clears identity-matching `#stop`, and does not await its behind-close promise. The
   queued stop turn rejects through its existing gate without lifecycle work; a
   deterministic later attach observes permanent-close state.
 - Both P2 findings resolved: attach/stop/stop-retry use explicit promise
@@ -338,9 +362,9 @@ hygiene pass; all four canonical concerns are reassigned.
   admission, provisional-stop cancellation, and subsequent facility teardown.
 - The implementation design uses one short
   `EnvironmentAttachments.admitPermanentClose()` serial callback. It checks and
-  refuses owners, cancels only an eager unadmitted stop and its waiters, commits
-  permanent admission, then returns without awaiting stop/waiter/facility
-  promises. It stores no facility or public-attempt state.
+  refuses owners, cancels only an eager unadmitted and not-completed stop and its
+  waiters, commits permanent admission, then returns without awaiting stop/
+  waiter/facility promises. It stores no facility or public-attempt state.
 - The existing coalesced `ServerEnvironment.#close` attempt awaits that callback
   and invokes `RetryableCloseGroup.close()` outside `#serial`. A deterministic
   deferred-facility test requires the queued cancelled stop and waiter to settle
@@ -364,3 +388,50 @@ owners, the former unreachable T-0037e3 assignment is explicitly superseded,
 and facility teardown begins only after the bounded admission callback releases
 `#serial`. All four canonical concerns are assigned against the seven-file
 documentation endpoint.
+
+## Architecture Authority Re-Review Findings
+
+- Documentation P1: appended outcome wording is insufficient while active
+  D-0085/D-0086 body clauses still assign generation retirement/quiescence to
+  T-0037e3. Narrow or explicitly supersede those exact active clauses.
+- Reliability P1: `admitted === false` alone does not identify a stop queued
+  behind close; a stop-first no-generation operation may be completed but still
+  retained until waiter settlement. Cancel only an unadmitted, not-completed
+  provisional stop or record explicit queue ownership; add stop-first/waiter/
+  close-second acceptance.
+- TypeScript/API P2: proposed public docs must state that close rejects
+  non-destructively while in use with no teardown, and mirror that observable
+  contract in the package README if public wording changes. Style returned
+  CLEAN. All reviewers used no subagents and are closed.
+- The same Sol High requirements splitter receives the three-finding
+  documentation batch; implementation remains unauthorized.
+
+## Architecture Final-Fix Handback
+
+- Documentation P1 resolved in place: D-0085's active permanent-close and
+  authoritative-order clauses and D-0086's active T-0037e3/retry-owner clauses
+  now explicitly supersede close-owned generation retirement. Appended outcome
+  notes remain corroborating context rather than the sole override.
+- Reliability P1 resolved with the exact cancellation predicate
+  `!stop.admitted && !stop.completed`. Deterministic acceptance now covers stop
+  first with no generation and one waiter, close second, completed stop state
+  retained without cancellation, close admission after the stop turn, queued-
+  attach permanent-state rejection, normal stop promise settlement, and existing
+  `#stop` cleanup.
+- TypeScript/API P2 resolved: proposed close TSDoc explicitly states that in-use
+  close rejects non-destructively and performs no owned-facility teardown. If
+  that public wording ships, the same implementation slice must add matching
+  `packages/server/README.md` wording.
+- All seven authorized records and the four status headers are aligned at
+  `Architecture final-fix handback requested`. Implementation/tests remain
+  unauthorized; no full verify, commit, push, new decision, README edit, or
+  protected human-review access occurred.
+- Final-fix hygiene passed: Prettier write/check over all seven records,
+  `git diff --check`, exact seven-file status, synchronized headers, and scoped
+  active-clause/stop-ownership/public-wording scans.
+
+Coordinator inspection accepts the final three-finding docs correction for
+re-review: operative D-0085/D-0086 clauses are explicit, cancellation requires
+`!admitted && !completed`, stop-first waiter acceptance is present, and public
+wording requires non-destructive in-use rejection/no teardown plus README
+consistency. All four canonical concerns are reassigned.

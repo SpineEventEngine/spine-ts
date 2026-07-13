@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Architecture authority re-review assigned
+Status: Architecture final re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -112,8 +112,8 @@ Derived status mirror: the canonical current state is the `Status` header in
   state. Retained failed-start refuses through its existing explicit-retry
   channel; unsafe detach and incomplete reusable stop remain live and refuse as
   in use. Permanent admission requires no generation and adds no T-0037b caller.
-- Style/maintainability P1 disposition: resolved. The eager unadmitted stop has
-  an explicit cancellation reason, all waiters reject and settle, `#stop` clears
+- Style/maintainability P1 disposition: resolved. The eager unadmitted and not-
+  completed stop has an explicit cancellation reason, all waiters reject and settle, `#stop` clears
   by identity, close never awaits the stop turn queued behind it, and that turn
   later rejects without lifecycle mutation. The deterministic race ends with a
   later attach rejecting from permanent state.
@@ -202,3 +202,55 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to active
   authority/phase consistency.
+
+## Architecture Authority Re-Review Findings
+
+- Documentation: P1 exact active D-0085/D-0086 clauses still conflict.
+- Performance/reliability: P1 completed stop-first waiter state can be mistaken
+  for a later provisional stop.
+- TypeScript/API docs: P2 public in-use rejection/no-teardown wording and README
+  consistency. Style/maintainability: CLEAN.
+- Every reviewer used no subagents and is closed. The same Sol High splitter is
+  assigned the three-finding docs batch; implementation remains unauthorized.
+
+## Architecture Final-Fix Resume
+
+- The same rollout records actual `gpt-5.6-sol / high` at
+  `2026-07-13T13:49:34.308Z`, matching explicit dispatch for the resumed
+  requirements splitter; no subagents were used.
+- Prior canonical skill applicability remains valid. The splitter fully read and
+  selected `receiving-code-review`, `architecture-decision-records`,
+  `codebase-design`, and `DEEPENING.md` before changing the same seven-file
+  documentation scope.
+
+## Architecture Final-Fix Handback
+
+- Documentation P1: resolved. The exact active D-0085/D-0086 clauses are
+  narrowed and explicitly supersede T-0037e3 generation retirement/quiescence;
+  appended outcomes no longer carry the correction alone.
+- Performance/reliability P1: resolved. Cancellation requires an eager stop to
+  be both unadmitted and not completed. New deterministic acceptance proves a
+  completed stop-first no-generation record remains owner through waiter
+  settlement, close commits second, the queued attach rejects from permanent
+  state, and stop resolves normally before existing `#stop` cleanup.
+- TypeScript/API P2: resolved. Proposed public TSDoc states in-use close rejects
+  non-destructively and performs no owned-facility teardown; shipping it requires
+  matching package README wording in the same implementation slice.
+- Style's CLEAN disposition remains unchanged. The complete three-finding batch
+  is returned for re-review. Status is
+  `Architecture final-fix handback requested`. Implementation remains
+  unauthorized; no tests/full verify, commit, push, README edit, new decision,
+  or protected human-review access occurred.
+- Final-fix hygiene passed across all seven records: Prettier write/check,
+  `git diff --check`, synchronized headers, exact scoped status, and active-
+  authority/stop-state/public-wording scans. The complete batch is ready for
+  re-review.
+
+## Architecture Final-Fix Coordinator Gate
+
+- Coordinator inspection and lightweight pre-review lint pass for the exact
+  seven-file final correction.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no subagents.

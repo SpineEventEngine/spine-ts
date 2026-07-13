@@ -459,12 +459,15 @@ implementation child:
    Integrated T-0037d/e1/e2 ownership leaves no close-owned current generation:
    those predecessor operations alone perform generation stop, quiescence,
    classification, cause reporting, retirement, safe slot clearing, and their
-   same-operation retries. T-0037e3 cancels an eager unadmitted stop queued
-   behind the winning close, commits permanent attachment/stop admission, and
-   releases the lifecycle serial gate. The existing coalesced public close
-   attempt then runs ordered `RetryableCloseGroup` facility teardown outside
-   that gate, allowing the queued cancelled stop to run and reject even while a
-   facility close remains pending. The environment remains permanently closed.
+   same-operation retries. T-0037e3 cancels an eager stop queued behind the
+   winning close only when that stop is both unadmitted and not completed,
+   commits permanent attachment/stop admission, and releases the lifecycle
+   serial gate. A stop-first no-generation operation that has completed its turn
+   but remains retained for waiter settlement is not cancelled; close commits
+   after it, and its queued waiter observes permanent-close rejection before the
+   stop promise resolves normally. The existing coalesced public close attempt
+   runs ordered `RetryableCloseGroup` facility teardown outside the gate. The
+   environment remains permanently closed.
 8. T-0037f owns server listener/startup and network/context/resource/facility
    shutdown ordering. A non-last close retry resumes only departing-registration
    cleanup and eligible reporting; it never retires the shared generation or
@@ -494,7 +497,10 @@ generated artifact; package-internal declarations emitted by normal
 documentation/type builds may change with internal implementation. T-0037e3
 updates existing README/TypeDoc only for behavior independently observable at
 its merge point, such as existing `ServerEnvironment.close()` behavior if
-publicly reachable without server detach. T-0037f alone documents caller-owned
-environment reuse after server detach and the full observable `Server`,
-`RunningServer`, and `ServerEnvironment` startup/close lifecycle. Neither child
-names or describes package-internal explicit generation stop in public docs.
+publicly reachable without server detach. If close TSDoc ships, it explicitly
+states that close rejects non-destructively while the environment is in use and
+performs no owned-facility teardown; the package README carries matching public
+wording. T-0037f alone documents caller-owned environment reuse after server
+detach and the full observable `Server`, `RunningServer`, and
+`ServerEnvironment` startup/close lifecycle. Neither child names or describes
+package-internal explicit generation stop in public docs.
