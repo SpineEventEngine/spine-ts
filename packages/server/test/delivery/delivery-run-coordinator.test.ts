@@ -24,6 +24,67 @@ import {
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryRunCoordinator", () => {
+  it("rejects constructing a delivery generation without a canonical scope", () => {
+    const worker = new FakeRunWorker([]);
+
+    expect(() => new DeliveryRunCoordinator({ scopes: [], worker })).toThrow(
+      "Delivery run coordinator requires at least one configured scope.",
+    );
+  });
+
+  it("rejects extending a generation after retirement permanently closes admission", async () => {
+    const initial = scope("initial", 0, 2);
+    const later = scope("later", 1, 2);
+    const worker = new FakeRunWorker([]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [initial], worker });
+
+    await coordinator.retire(() => Promise.resolve());
+
+    expect(() => {
+      coordinator.configure([later]);
+    }).toThrow("Delivery run coordinator admission is closed.");
+    expect(worker.stopCalls).toBe(1);
+    expect(worker.retireCalls).toBe(1);
+  });
+
+  it("keeps an owner barrier open for successor work admitted as active work settles", async () => {
+    const activeEvidence = deferred<DeliveryWorkerEvidence>();
+    const successorEvidence = deferred<DeliveryWorkerEvidence>();
+    const selected = ownedScope("selected-owner", "selected", 0, 2);
+    const sibling = ownedScope("sibling-owner", "sibling", 1, 2);
+    const worker = new FakeRunWorker(
+      [activeEvidence.promise, successorEvidence.promise],
+      [],
+      () => {
+        coordinator.notify(sibling);
+      },
+    );
+    const coordinator = new DeliveryRunCoordinator({ scopes: [selected, sibling], worker });
+
+    const started = coordinator.start([selected]);
+    await until(() => worker.starts.length === 1);
+    const barrier = coordinator.awaitOwnersBarrier([selected.owner.key]);
+    activeEvidence.resolve(
+      workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 2, "IDLE")),
+    );
+    await until(() => worker.starts.length === 2);
+    let barrierSettled = false;
+    void barrier.then(() => {
+      barrierSettled = true;
+    });
+    await Promise.resolve();
+    expect(barrierSettled).toBe(false);
+
+    successorEvidence.resolve(
+      workerEvidence(entry(worker.starts, 1).obligation, fulfilled(1, 2, "IDLE")),
+    );
+    await barrier;
+    await started;
+    expect(coordinator.settlement().scopes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ scope: sibling, disposition: "IDLE" })]),
+    );
+  });
+
   it("isolates equal readiness facts by generation-local owner", async () => {
     const first = ownedScope("owner-a", "shared", 0, 1);
     const second = ownedScope("owner-b", "shared", 0, 1);
@@ -298,6 +359,29 @@ describe("DeliveryRunCoordinator", () => {
     expect(settlement.scopes).toMatchObject([{ disposition: "REJECTED", cause: failure }]);
     await Promise.resolve();
     expect(worker.starts).toHaveLength(1);
+  });
+
+  it("normalizes a non-Error worker start throw into one stable coordinator fault", async () => {
+    const configured = scope("first", 0, 1);
+    const worker: DeliveryRunWorker = {
+      get start(): DeliveryRunWorker["start"] {
+        // Deliberately emulate an invalid external worker implementation.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw "worker start rejected";
+      },
+      stop() {
+        // The malformed start never creates active worker resources.
+      },
+      awaitSettled: () => Promise.resolve(),
+      retire: () => Promise.resolve(),
+    };
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+
+    const first = await coordinator.start([configured]).catch((reason: unknown) => reason);
+    const second = await coordinator.start([configured]).catch((reason: unknown) => reason);
+
+    expect(first).toEqual(new Error("worker start rejected"));
+    expect(second).toBe(first);
   });
 
   it("notifies a settlement observer once when rejected start evidence is recorded, never on reads", async () => {

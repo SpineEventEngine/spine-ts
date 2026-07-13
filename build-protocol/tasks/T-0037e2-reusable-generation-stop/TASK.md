@@ -1,6 +1,24 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Candidate; not started
+Status: Complete; ready to merge
+
+Started: `2026-07-13T04:26:45Z`
+
+Baseline commit: `8e3139ac`
+
+Branch: `task/T-0037e2-reusable-generation-stop`
+
+Worktree: `.worktrees/T-0037e2-reusable-generation-stop`
+
+This `Status` header is canonical for T-0037e2. Its work and review logs are
+derived mirrors and must match it before review.
+
+Because reusable stop changes live-registration ownership, canonical-scope
+transfer, publication, admission, concurrency, and external retry boundaries,
+one existing requirements splitter is assigned the milestone architecture pass
+at expected and explicit `gpt-5.6-sol` / `high`, with documentation-only
+ownership and no subagents. It must preserve accepted T-0037b/d/e1 behavior and
+split implementation into small independently reviewable slices.
 
 Dependency: T-0037e1 complete and integrated.
 
@@ -122,3 +140,824 @@ No registration detach, ordinary last-detach retirement, permanent environment
 close/refusal, facility teardown, failed-start rollback, server/listener close
 integration, public explicit-stop API/docs, retry timing, monitor/health/action
 surface, topology, adapter, catch-up path, or T-0036 change.
+
+## Architecture Resolution
+
+The implementation-ready private ownership model, ordered operation, failure/
+retry semantics, attach linearization, public boundary, risks, and four bounded
+TDD slices are recorded in
+[`architecture-resolution.md`](architecture-resolution.md).
+
+The resolution keeps `EnvironmentAttachments` as the sole lifecycle gate and
+adds one private environment-owned stop operation, one unpublished candidate,
+stable registration bindings committed at publication, separate route/transfer
+checkpoints, and explicit retry with no public token or export. Coordinator
+acceptance at `2026-07-13T04:49:19Z` authorized only Slice 1, the private stop
+foundation and complete happy path. The existing implementer is assigned at
+explicit `gpt-5.6-terra` / `medium` with no subagents.
+
+## Slice 1 Implementation Record
+
+The existing implementer began after architecture commit `b0a09e3f`, assigned
+explicit `gpt-5.6-terra` / `medium`, no subagents. Its canonical skill-
+applicability check and selected skill details are recorded in the canonical
+T-0037e2 work log; the review log mirrors this status without replacing
+accepted history. Coordinator verification and pre-review lint passed, so the
+four canonical reviewers are assigned against the committed Slice 1 package.
+
+Wave 1 fixes retain one resumable private stop operation and restore
+T-0037e1 recovery-owner precedence. Focused RED/GREEN evidence is appended to
+the canonical work log. Coordinator verification and pre-review lint passed;
+the committed fix delta is assigned to fresh four-lane review.
+
+The coordinator fix audit additionally requires stop selection to occur at
+serialized admission, so earlier queued attach/detach operations linearize
+first. This correction, its focused RED/GREEN, and coordinator verification are
+complete; Wave 2 found one remaining lifecycle-ownership asymmetry.
+
+The final Wave 1 contract fix makes ordinary stop refuse after an admitted
+rejection with a private stable explicit-retry message; only explicit retry
+advances retained state. Focused RED/GREEN and coordinator verification are
+complete; fresh review of that fix was clean.
+
+Wave 2 fixes require stop to refuse a still-owned rejected non-last detach and
+require detach/retry-detach to refuse while an admitted rejected stop owns its
+frozen survivor set. Focused RED/GREEN and coordinator verification passed; the
+committed fix delta is assigned to fresh four-lane review. No other Slice 1
+behavior or later slice is reopened.
+
+The existing implementer reproduced both Wave 2 ownership directions in
+focused RED and made them GREEN using only the existing handle operation and
+retained stop operation. Focused T-0037e2 plus T-0037d/e1 regressions and the
+public-index/typecheck checks passed. Wave 3 review ran and produced the later
+recorded duplicate-detach promise-identity finding.
+
+Wave 3 fixes preserve T-0037e1 duplicate-detach promise identity when a queued
+detach is blocked by rejected-stop ownership. The existing canonical detach
+operation now wins before creating an immediate stop-retry refusal. Focused
+RED/GREEN and coordinator verification passed; fresh review is assigned.
+
+## Slice 1 Acceptance
+
+At `2026-07-13T06:03:11Z`, Slice 1 closed after Wave 5 reported clean or
+justified N/A dispositions in all four canonical concerns. The accepted private
+foundation owns one serialized stop operation, keeps stable survivor handles
+and routes, retires before candidate startup, publishes once, reopens and
+settles buffered candidate work, resumes retained candidate-construction state,
+and preserves T-0037e1 recovery ownership and detach promise identity.
+
+Slice 2, Bounded Capture, Checkpoints, And Transition Failure Retry, is assigned
+to the same existing implementer at immutable and explicit `gpt-5.6-terra` /
+`medium`, no subagents. Its exact scope and exclusions remain those in the
+accepted architecture resolution; Slices 3--4 remain unauthorized.
+
+## Slice 2 Implementation Record
+
+At `2026-07-13T06:07:25Z`, the existing implementer began only accepted Slice
+2 at HEAD `bb97aa64`, fixed and explicitly dispatched at `gpt-5.6-terra` /
+`medium`, with no subagents. The fresh canonical skill-applicability check, JVM
+evidence, scope decisions, and TDD start are appended to the canonical work
+log. Slice 1 history remains accepted; old-retirement failure policy and racing
+attach behavior remain unauthorized Slices 3--4 work.
+
+At `2026-07-13T06:23:22Z`, the bounded Slice 2 pass was returned for
+coordinator review. It adds one private transition-scope owner, stable
+configured/startup/buffered/retained provenance coalescing, separate route and
+transfer checkpoints, retained-candidate retry, dirty-scope re-admission before
+publication, and a non-consuming retained-record capture. Focused and requested
+regression/type/format/scope checks are recorded in the canonical work log.
+
+The handback is intentionally explicit about two uncovered implementation
+edges and one test gap: descriptor fresh-snapshot/preflight failure still
+occurs after candidate construction; a candidate recovery promise rejection is
+not covered by the fault-seam settlement test; and a newly discovered tenant/
+readiness key after capture is not separately exercised. No additional
+abstraction or later-slice policy was added in this bounded pass.
+
+## Slice 2 Coordinator Disposition
+
+At `2026-07-13T06:27:28Z`, the coordinator accepted the handback as bounded
+Slice 2A, not complete Slice 2. Independent verification passed 4 files / 91
+tests, generated typecheck, formatting, pre-review status/public/inventory lint,
+and diff hygiene. Slice 2A owns capture, route and transfer checkpoints,
+retained-candidate progress, dirty-scope re-admission, and retained-record
+selection.
+
+Slice 2B remains required after 2A review closure: fresh descriptor snapshot/
+preflight must precede candidate storage, direct candidate-recovery rejection
+must clear and retry its in-flight unit on the same candidate, and a newly
+discovered readiness/tenant key after capture must be proven. This split keeps
+review bounded and waives no accepted Slice 2 requirement.
+
+At `2026-07-13T06:53:10Z`, Slice 2A closed after Wave 2 reported all four
+canonical concerns clean. Slice 2B is assigned to the same implementer at
+immutable/explicit `gpt-5.6-terra` / `medium`, no subagents, and owns only the
+three recorded remaining edges. Slice 2 is not accepted until 2B closes.
+
+## Slice 2A Review Wave 1 Fix Record
+
+At `2026-07-13T06:39:45Z`, the first fix pass completed the required queue
+ordering and generation-capture behavior, but the coordinator audit then found
+that its array-front mutations were still O(N). At `2026-07-13T06:44:29Z`, the
+implementer replaced that array with an intrusive linked head/tail deque while
+preserving dirty tail re-admission and retry restoration. Generation capture
+still takes one pending/record snapshot and distributes retained scopes by
+registration in configured order. Corrected RED/GREEN and mechanical evidence
+is recorded in the canonical work and review logs. Slice 2B remains unchanged
+and unimplemented.
+
+## Slice 2B Implementation Start
+
+At `2026-07-13T06:55:21Z`, the existing implementer began only the three
+assigned Slice 2B edges from clean HEAD `0ca3d79d`, fixed and explicitly
+dispatched at `gpt-5.6-terra` / `medium`, with no subagents. The canonical work
+log records the fresh skill applicability check, accepted architecture refresh,
+and focused TDD boundary. Slice 2A history remains accepted; Slices 3--4 and all
+public/generated/server-integration work remain excluded.
+
+## Slice 2B Implementer Handback
+
+Slice 2B now preflights every frozen survivor descriptor before candidate
+construction, restores a directly rejected transfer unit for explicit retry on
+the retained candidate, and proves a newly observed tenant readiness key is
+captured and settled before atomic publication. Focused RED/GREEN and final
+verification evidence are recorded in the canonical work log. The change adds
+no public surface, production file, second lifecycle owner, or Slice 3--4
+policy.
+
+## Slice 2B Handback Audit Fix
+
+The descriptor preflight snapshot now freezes endpoint values and each startup
+tenant together with its storage context before candidate construction.
+Initial candidate runtime assembly consumes only those captured values; dynamic
+readiness for a newly observed tenant retains the live descriptor path. The
+canonical work/review logs record the audit RED/GREEN and refreshed gates.
+
+## Slice 2B Review Wave 1 Fix Handback
+
+The complete Wave 1 batch now captures `storageFactory` in the pre-candidate
+descriptor snapshot and makes candidate route freshness commit only after
+retry-safe runtime installation and stable-route rebinding. Focused tests prove
+a fallible accessor cannot create a candidate and a two-tenant partial worker
+installation resumes on the exact retained candidate without duplicating the
+completed tenant or skipping the failed tenant. Final evidence is recorded in
+the canonical work/review logs; coordinator review is requested.
+
+## Slice 2B Review Wave 2 Fix Handback
+
+The private `EnvironmentDeliveryRuntime` now carries the descriptor snapshot's
+captured `StorageFactory`, and default production worker construction uses that
+field rather than re-reading the descriptor. A production-path regression
+proves no late accessor call and successful replay from the captured factory.
+Dynamic tenant runtime creation remains live only before the runtime is formed;
+all runtime consumers use the frozen identity afterward. Coordinator review is
+requested with final evidence in the canonical logs.
+
+## Slice 3A Implementer Handback
+
+Focused environment tests now cover distinct unsafe synchronous stop and
+await-quiescence failures through the retained generation-stop owner. They
+prove no candidate phase before explicit retry, exact coordinator checkpoints,
+retained buffered readiness and endpoint dependencies, retry coalescing, one
+successful four-phase replacement, and continued use of the original handle
+and stable readiness route. Existing production checkpoint composition already
+satisfied the accepted behavior, so no production expansion was required.
+Coordinator review is requested; exact evidence is in the canonical work log.
+
+## Slice 3A Review Wave 1 Fix Handback
+
+The redundant post-retry descriptor accessor increment tuple is removed while
+the pre-retry no-access guard and all observable lifecycle, candidate,
+publication, callback, and retry assertions remain. The fix is test/record-only;
+focused verification is recorded in the canonical logs and coordinator review
+is requested.
+
+## Slice 3B Implementer Handback
+
+The retained private stop now distinguishes unsafe retirement rejection from a
+replacement-safe finalized old result. Stable report/cleanup causes are retained
+once while the existing candidate phases finish, are ordered before any
+transition cause, and are not re-emitted after explicit continuation. Stable
+routes retain a bounded descriptor/readiness-key drain copy so publication and
+synchronous reopen are followed by awaited candidate admission before the old
+error propagates. Focused RED/GREEN and final evidence are in the canonical
+logs; no parallel retirement owner, public surface, or Slice 4 behavior was
+added. Coordinator review is requested.
+
+## Slice 3B Review Wave 1 Fix Handback
+
+The retained old-retirement outcome now has explicit pending, retained-reason,
+and emitted states, preserving every JavaScript rejection value including
+`undefined` exactly once. Report rejection identity is no longer coerced;
+only framework-synthesized coordinator/attachment aggregates carry flattening provenance, while exact
+phase-owned aggregates remain one cause. The stable route clones one immutable
+readiness snapshot for transition capture and reopen. Focused edge regressions
+and final verification are recorded in the canonical work/review logs;
+coordinator review is requested without Slice 4 or public/generated expansion.
+
+## Slice 3B Review Wave 2 Fix Handback
+
+Undefined transfer faults now use explicit retained presence and cannot publish
+the candidate before explicit retry. Coordinator retirement aggregation is
+captured into the current generation-retirement result, while attachment
+transfer aggregation uses a private current-catch outcome; previously returned
+aggregate objects are therefore exact later phase reasons. Focused reuse and
+same-candidate retry evidence is recorded in the canonical logs. Coordinator
+review is requested without Slice 4 or public/generated expansion.
+
+## Slice 3B Review Wave 3 Fix Handback
+
+Retirement cause provenance is now owned by the originating
+`DeliveryRunCoordinator` as one current instance-local outcome. Single failures
+retain `[exactReason]`, including a historical coordinator aggregate reused as
+the sole report or worker-retirement reason. The consuming generation can take
+those causes only by presenting the exact current rejection reason. Focused
+report/retirement reuse and same-candidate retry evidence is recorded in the
+canonical logs; coordinator review is requested.
+
+## Slice 4 Implementer Handback
+
+The existing lifecycle owner now defers attach work ordered after an admitted
+stop, records bounded FIFO waiters without retaining the serial gate, and
+re-admits them once against the sole published candidate. Focused tests cover
+attach-before, ordered attach-after success, unsafe and partial explicit retry,
+replacement-safe error propagation, and independent ownership conflict while
+preserving ordinary attach snapshots and prior detach behavior. Static
+private/public/generated boundary checks and exact verification evidence are
+recorded in the canonical work/review logs; coordinator review is requested.
+
+## Slice 4 Review Wave 1 Fix Handback
+
+Every attach called before the successful transition closes its waiter cohort
+now joins that one retained stop synchronously in call order. Phase 4 queues the
+cohort once and awaits every attachment settlement without adopting individual
+attachment failures into the stop result. Deterministic tests prove FIFO
+conflict ownership, waiter-before-stop settlement, exact replacement-safe old
+error identity, and successful-stop independence. Coordinator review is
+requested with exact evidence in the canonical logs.
+
+## Slice 4 Review Wave 2 Fix Assignment
+
+Wave 2 found one lifecycle-identity defect shared by the style/maintainability
+and TypeScript/API concerns: a refused stop cleared its retained identity before
+its attachment-waiter settlement tail completed, allowing a waiter callback to
+create a second stop while the original stop promise remained pending. The same
+existing implementer is assigned the bounded correction at explicit
+`gpt-5.6-terra` / `medium`, no subagents. It must retain the stop through waiter
+settlement, let the existing terminal promise handler clear completed state,
+and prove a nested stop request receives the exact original promise.
+
+## Slice 4 Review Wave 2 Fix Handback
+
+The refused-stop owner now remains installed while its completed waiter cohort
+settles; the existing terminal rejection handler clears it afterward. A
+deterministic failed-detach refusal proves that a waiting attachment's
+settlement callback runs before the original stop settles, receives the exact
+original stop promise from a nested `stopDelivery()` call, creates no candidate,
+and leaves retirement and recovery behavior unchanged. Focused RED/GREEN and
+verification evidence are recorded in the canonical logs; coordinator review
+is requested.
+
+Coordinator verification passed 5 files / 162 tests, generated-build
+typechecking, focused formatting, synchronized status, exact scope, private
+boundary scans, and diff hygiene. The committed fix endpoint is assigned to
+fresh Wave 3 review.
+
+## Slice 4 Acceptance
+
+At `2026-07-13T10:34:59Z`, Wave 3 returned CLEAN in all four canonical
+concerns. The runtime's immutable role configuration confirms the explicitly
+dispatched documentation `gpt-5.6-luna` / `medium` and style, TypeScript/API,
+and performance/reliability `gpt-5.6-terra` / `high` profiles; every reviewer
+is closed. All four T-0037e2 slices are accepted, and the full project gate is
+the only remaining pre-merge requirement.
+
+## Final Verification Fix Assignment
+
+The regenerated full gate exposed test-fixture type errors that incremental
+focused typechecking had not rebuilt: one throwing storage-factory getter lacks
+an explicit contract return, one snapshot-mutation fixture assigns an invalid
+delivery label, and one frozen descriptor fixture lacks explicit callback
+parameter types. A single existing implementer is assigned the bounded
+test-only correction at explicit `gpt-5.6-terra` / `medium`, no subagents. No
+production behavior, public API, generated artifact, or coverage threshold may
+change.
+
+## Final Verification Fix Handback
+
+The final-gate correction is fixture-only: the guarded throwing storage-factory
+getter now declares the descriptor contract, the mutable readiness regression
+uses a different supported label while retaining its original-snapshot
+expectation, and the frozen descriptor helper carries the exact tenant/readiness
+callback contracts without shadowing helper options. Forced post-proto build,
+strict test-tooling typecheck, focused tests, and the existing regression suite
+pass; exact evidence is recorded in the canonical work/review logs. Final
+verification fix review is requested.
+
+Coordinator verification independently passed strict test-tooling typechecking,
+162 lifecycle regression tests, focused formatting, exact scope, and diff
+hygiene. The committed fixture-only endpoint is assigned to the four canonical
+review concerns.
+
+## Implementation Profile Redispatch
+
+The focused fixture review found no code defect, one stale status sentence, and
+one acceptance-gate failure. Desktop session metadata proves the reused
+implementer changed from assigned Terra Medium to Sol High after
+`2026-07-13T05:06Z`; later handbacks therefore cannot be accepted under the
+explicit-profile protocol even though the actual model was stronger. Those
+handbacks are withdrawn. One fresh implementer is assigned at explicit
+`gpt-5.6-terra` / `medium`, no subagents, to audit the complete current
+T-0037e2 implementation against this task and correct any defect before final
+review and verification resume.
+
+The fresh audit returned no behavior defect. Desktop rollout `turn_context`
+confirms actual `gpt-5.6-terra` / `medium`; coordinator verification passes
+strict tooling typecheck, 162 lifecycle tests, focused formatting, exact scope,
+and diff hygiene. The records-only audit endpoint is assigned to the four
+canonical review concerns.
+
+At `2026-07-13T11:00:31Z`, the redispatch review returned CLEAN in all four
+canonical concerns. Desktop rollout metadata exactly matches every explicit
+reviewer profile and every agent is closed. The fresh Terra Medium audit is
+accepted; full `pnpm verify` is the sole remaining pre-merge gate.
+
+## Final Verification Lint Fix Assignment
+
+The full gate now passes generated and tooling typechecks but stops at 67
+ESLint errors in the reusable-stop production module and two focused test
+files. One fresh implementer is assigned at explicit
+`gpt-5.6-terra` / `medium`, no subagents, to make a behavior-preserving lint
+correction. Exact arbitrary rejection/throw identity remains binding; lint must
+not coerce supported `unknown` failures into `Error` or change lifecycle
+ordering, concurrency, or tests.
+
+## Final Verification Lint Fix Start And Root Cause
+
+- At `2026-07-13T11:03:17Z`, the fresh existing implementer began this bounded
+  lint batch in `.worktrees/T-0037e2-reusable-generation-stop`, explicitly
+  assigned `gpt-5.6-terra` / `medium`, with no subagents. It owns only the
+  three stated source/test files and these three durable T-0037e2 records;
+  `human-review-1-jul.md`, commits, pushes, public APIs, and generated output
+  remain excluded.
+- Canonical skill applicability: inspected the session inventory, the complete
+  readable `/Users/armiol/.agents/skills` entrypoint listing, repo manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `test-driven-development`, `systematic-debugging`, and
+  `verification-before-completion`. They govern the RED/GREEN lint cycle,
+  diagnosis before fixes, and fresh completion evidence. `javascript-testing-patterns`,
+  `typescript-advanced-types`, `nodejs-backend-patterns`, architecture/planning,
+  review, worktree, and subagent skills were triaged N/A: no test-framework or
+  type/API design change, new architecture, review dispatch, worktree setup,
+  or delegation is authorized. Project protocol and this bounded assignment
+  take precedence over advisory skill guidance.
+- Root-cause record before edits: focused lint is the reproducible RED. The
+  67 failures are static-rule violations left outside earlier focused
+  type/test gates, not a lifecycle behavior regression: 16 narrow production
+  syntax/type-style findings, seven fixture forwarding/void-expression
+  findings, and 44 resolver/rejection/fixture findings. The sole apparent
+  rule-versus-contract conflict is intentionally propagating an arbitrary
+  `unknown` reason by exact identity; only a local explanatory suppression is
+  permitted there. Existing behavior tests are the regression oracle while
+  structural lint corrections remain behavior-preserving.
+
+## Final Verification Lint Fix Evidence
+
+- GREEN: focused ESLint over the three assigned files exits 0 after correcting
+  all 67 findings. The only suppressions are line-local and explanatory for
+  accepted exact arbitrary-`unknown` propagation: one internal aggregate throw
+  and three fixture rejection cases; all other findings use narrowing, explicit
+  `undefined` resolver settlement, bound fixture forwarding, or synchronous
+  method declarations.
+- At `2026-07-13T11:10:05Z`, strict tooling typecheck, proto generation (25
+  copied Spine checksums), and forced `tsc -b --force` each exited 0. The
+  required five-file lifecycle suite passed 5 files / 162 tests. Focused
+  Prettier passed all six assigned files after formatting the work log.
+- Exact changed inventory is the three durable records plus the three assigned
+  source/test files only. At the implementer handback, status mirrors were
+  synchronized to `T-0037e2 final verification lint fix review requested`;
+  coordinator later advanced all headers to `T-0037e2 final verification lint
+fix review assigned` for reviewer dispatch. Public/package/docs/examples/
+  generated diff and untracked-generated scans are empty, private stop-name
+  scan outside assigned runtime/tests is empty, and `git diff --check` exits 0. No subagent, commit, push, or full `pnpm verify` was run in that
+  implementer handback/pass.
+
+Desktop rollout confirms the fresh lint owner actual
+`gpt-5.6-terra` / `medium`. Coordinator verification passes focused ESLint,
+strict typechecking, 162 lifecycle tests, formatting, exact scope, and diff
+hygiene. Coordinator subsequently committed `dbe4df55` and successfully pushed
+it to `origin/task/T-0037e2-reusable-generation-stop`; the committed lint
+endpoint is assigned to the four canonical review concerns.
+
+The lint review found no source/test defect. Two P2 durable-record chronology
+claims must distinguish the implementer handback from the later coordinator
+commit/push and review assignment. One fresh implementer receives this
+records-only correction at explicit `gpt-5.6-terra` / `medium`, no subagents.
+
+## Final Verification Lint Review Records-Only Fix Start
+
+- Fresh existing implementer role: explicit actual profile `gpt-5.6-terra` /
+  `medium`; no subagents. Ownership is only this task record and the matching
+  T-0037e2 work and review logs. Source, tests, `human-review-1-jul.md`,
+  commits, pushes, and full verification remain excluded.
+- Canonical skill applicability before record corrections: fully read
+  `verification-before-completion`; it requires fresh focused evidence before
+  this pass can be handed back. TDD, systematic debugging, JavaScript testing,
+  advanced TypeScript, Node/backend, architecture/planning, review, worktree,
+  and subagent skills are N/A because no runtime/test/API/design change,
+  dispatch, or worktree setup is authorized. The project protocol and this
+  records-only assignment govern the correction.
+
+## Final Verification Lint Review Records-Only Fix Handback
+
+- After the focused record evidence, all three canonical status headers now
+  read `T-0037e2 final verification lint review fix requested`.
+- This implementer pass changed only the three durable T-0037e2 records. It
+  ran focused Prettier, exact status/chronology `rg` checks, exact diff-name
+  inventory, and `git diff --check`; no source/test change, full verification,
+  commit, push, or subagent occurred.
+
+Desktop rollout confirms the records fixer actual `gpt-5.6-terra` / `medium`.
+Coordinator docs/status lint, focused formatting, exact records-only scope, and
+diff hygiene pass. The committed chronology correction is assigned to the four
+canonical concerns for final focused re-review.
+
+At `2026-07-13T11:26:17Z`, the records re-review returned CLEAN for style and
+documentation and justified N/A for TypeScript/API and reliability because the
+delta is records-only. Desktop rollout metadata matches every explicit profile;
+all agents are closed. Full `pnpm verify` is again the sole pre-merge gate.
+
+The full gate now passes typechecking and ESLint but cleanup enforcement rejects
+the private five-component helper name `deliveryStopRetryRequiredError`. One
+fresh implementer receives the private rename-only fix at explicit
+`gpt-5.6-terra` / `medium`, no subagents. The precise active contract is
+unchanged error type/message, lifecycle control flow/order, and
+API/public/generated behavior; the private Node `Error.stack` function-frame
+label changes from `deliveryStopRetryRequiredError` to `deliveryStopRetryError`
+and is non-contractual.
+
+## Final Verification Cleanup Fix Start And Skill Applicability
+
+- At `2026-07-13T11:29:09Z`, the fresh existing implementer began in
+  `.worktrees/T-0037e2-reusable-generation-stop`, actual `gpt-5.6-terra` /
+  `medium`, with no subagents. Ownership is only
+  `packages/server/src/server/environment-attachment.ts` and these three
+  durable T-0037e2 records; `human-review-1-jul.md`, tests, public/generated
+  surfaces, commits, pushes, and full verification remain excluded.
+- Canonical skill applicability before the source edit: inspected the session
+  inventory, complete readable `/Users/armiol/.agents/skills` entrypoint list,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `test-driven-development`, `systematic-debugging`, and
+  `verification-before-completion`: the assigned cleanup-enforcement failure
+  is the RED, its exact private-name diagnosis is the root cause, and fresh
+  focused evidence is required before handback. `javascript-testing-patterns`,
+  `typescript-advanced-types`, `nodejs-backend-patterns`, architecture/planning,
+  review, worktree, and subagent skills are N/A because no test-framework,
+  type/API, runtime behavior, architecture, review dispatch, worktree setup, or
+  delegation change is authorized. The inspected Spine JVM notes
+  `spine-server-runtime-and-bounded-context.md` and
+  `spine-routing-dispatch-and-delivery.md` confirm this is an internal delivery
+  naming-only correction, so they require no lifecycle or API change.
+
+## Final Verification Cleanup Fix Evidence
+
+- RED: `node scripts/check-cleanup-rules.mjs` exited `1` only for
+  `deliveryStopRetryRequiredError` at
+  `packages/server/src/server/environment-attachment.ts:2141` because it has
+  five semantic components. GREEN renames only that private helper and its four
+  call sites to `deliveryStopRetryError`. Error type/message, lifecycle control
+  flow/order, and API/public/generated behavior are unchanged. The private Node
+  `Error.stack` function-frame label changes from
+  `deliveryStopRetryRequiredError` to `deliveryStopRetryError` and is
+  non-contractual.
+- GREEN evidence: cleanup enforcement, focused source ESLint, and strict
+  tooling typecheck exit `0`; the required lifecycle suite passes 5 files /
+  162 tests; focused Prettier passes the source and all three records.
+- Exact scope/public/generated/status scans and `git diff --check` pass: the
+  changed inventory is only this source file and these three durable records;
+  there is no public/package/example/generated or untracked change. No full
+  verification, commit, push, test change, or change to
+  `human-review-1-jul.md` occurred.
+
+Desktop rollout confirms the cleanup owner actual `gpt-5.6-terra` / `medium`.
+Coordinator verification passes cleanup enforcement, source ESLint, strict
+typechecking, 162 lifecycle tests, formatting, exact scope, and diff hygiene.
+The committed private rename is assigned to the four canonical concerns.
+
+The cleanup review found no functional defect. Two P2 record corrections are
+assigned to one fresh `gpt-5.6-terra` / `medium` implementer, no subagents:
+restore chronological placement of the cleanup finding and state precisely that
+message/type/control-flow/API behavior is unchanged while the private,
+non-contractual stack-frame function label follows the required rename.
+
+## Final Verification Cleanup Review Fix Start And Skill Applicability
+
+- At `2026-07-13T11:38:53Z`, the fresh existing implementer began this
+  records-only P2 correction in `.worktrees/T-0037e2-reusable-generation-stop`,
+  actual `gpt-5.6-terra` / `medium`, with no subagents. Ownership is only this
+  task record and the matching T-0037e2 work and review logs; source, tests,
+  `human-review-1-jul.md`, commits, pushes, and full verification remain
+  excluded.
+- Canonical skill applicability was recorded before record edits from the
+  session inventory, complete readable `/Users/armiol/.agents/skills`
+  entrypoint listing, `build-protocol/skills/EXPECTED_SKILLS.md`, and readable
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `receiving-code-review` to verify the two confirmed P2s against active
+  records and `verification-before-completion` for fresh focused evidence.
+  TDD/testing, debugging, TypeScript/API, Node/backend, architecture/planning,
+  review dispatch, worktree, and subagent skills are N/A: no runtime/test/API/
+  design change, dispatch, or worktree setup is authorized. Project protocol
+  and this records-only assignment govern.
+
+## Final Verification Cleanup Review Fix Evidence
+
+- This records-only pass moved the complete `Final Verification Cleanup Finding
+And Assignment` section to immediately precede `Final Verification Cleanup
+Fix Start And Skill Applicability` in the work-log chronology and replaced
+  active broad unchanged-runtime/call claims with the precise contract: error
+  type/message, lifecycle control flow/order, and API/public/generated behavior
+  are unchanged; the private Node `Error.stack` function-frame label changes
+  from `deliveryStopRetryRequiredError` to `deliveryStopRetryError` and is
+  non-contractual.
+- Focused Prettier, exact status/chronology/claim searches, records-only
+  inventory, and `git diff --check` are recorded for this pass. No source/test
+  change, full verification, commit, push, subagent, or change to
+  `human-review-1-jul.md` occurred. After this evidence, all three status
+  headers are set to `T-0037e2 final verification cleanup review fix requested`.
+
+Desktop rollout confirms the records fixer actual `gpt-5.6-terra` / `medium`.
+Coordinator verification passes chronology/claim lint, formatting, exact
+records-only scope, and diff hygiene. The committed correction is assigned to
+the four canonical concerns for final focused re-review.
+
+At `2026-07-13T11:45:03Z`, the final records re-review returned CLEAN in all
+four concerns, with TypeScript/API and reliability justified N/A for the
+records-only delta. Desktop metadata matches every profile and all agents are
+closed. Full `pnpm verify` is the sole remaining pre-merge gate.
+
+## Final Verification Coverage Finding And Assignment
+
+- Native `pnpm --config.verify-deps-before-run=false verify` passed generation,
+  generated/tooling typechecks, ESLint, cleanup enforcement, formatting, and
+  both ordinary and coverage test runs at 66 files / 1,523 tests. It then
+  exited `1` at the existing 90% branch-coverage threshold: 4,316 of 4,812
+  branches are covered (89.69%), so at least 15 additional branches must be
+  exercised.
+- The threshold and production behavior remain fixed. One fresh existing
+  implementer is assigned at explicit `gpt-5.6-terra` / `medium`, no
+  subagents, to add behavior-focused tests for at least 15 currently uncovered
+  T-0037e2 delivery-lifecycle branches. It owns only focused server tests and
+  these three durable records; production, public/generated/package/example
+  files and `human-review-1-jul.md` are excluded.
+- The implementer must run focused lifecycle tests and the standalone generated
+  coverage gate, plus focused lint, typecheck, formatting, status/scope, and
+  diff checks. Full `pnpm verify` remains a coordinator final gate after the
+  bounded test delta receives all four canonical review dispositions.
+
+## Final Verification Coverage Test Fix Start And Skill Applicability
+
+- At `2026-07-13T12:00:00Z`, the existing implementer began the assigned
+  test-only coverage repair in `.worktrees/T-0037e2-reusable-generation-stop`,
+  explicit and actual `gpt-5.6-terra` / `medium`, with no subagents. Ownership
+  is limited to focused `packages/server/test` lifecycle tests and these three
+  durable T-0037e2 records; production, thresholds, package/public/generated/
+  example files, commits, pushes, full `pnpm verify`, and
+  `human-review-1-jul.md` remain excluded.
+- Canonical skill applicability: the session inventory was checked and the
+  complete `test-driven-development` instructions were read and selected for
+  behavior-focused test additions. Debugging is not selected because the
+  failing condition is a known aggregate coverage gate, not unexplained runtime
+  behavior; architecture, API, worktree, review-dispatch, and subagent skills
+  are N/A for this bounded existing-test seam. Existing project protocol and
+  task scope govern.
+- Coordinator runtime check: Desktop rollout
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T12-51-02-019f5b50-fd61-7943-9aba-4cec3851ed28.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at `2026-07-13T11:51:04.997Z`,
+  matching the explicit implementer dispatch.
+
+## Final Verification Coverage Test Fix Failed Native Gate And Follow-Up
+
+- Native coordinator coverage after the bounded test additions passed all 66
+  files / 1,539 tests, but exited `1` because branch coverage remained
+  4,330/4,812 (89.98%), exactly one covered branch below the existing 90%
+  threshold.
+- The same existing implementer retains test-only ownership. Follow-up is
+  narrowed to one smallest coherent case for a definitely uncovered lifecycle
+  branch, proven first against focused LCOV counters, followed by focused tests
+  and a fresh native aggregate coverage request. Production, thresholds,
+  package/public/generated/example files, full `pnpm verify`, commits, pushes,
+  and `human-review-1-jul.md` remain excluded.
+
+## Final Verification Coverage Follow-Up Evidence
+
+- Added one coordinator behavior case for an invalid external worker whose
+  `start` access throws a string. The coordinator normalizes that value to
+  `Error("worker start rejected")` and preserves the same fault identity for a
+  later admission attempt.
+- Focused coverage passed 1 file / 46 tests before failing only the expected
+  whole-repository thresholds for the focused run. Its LCOV evidence at
+  `delivery-run-coordinator.ts:652` is `BRDA:652,60,0,15` for the Error path and
+  `BRDA:652,60,1,1` for the previously zero-hit non-Error path.
+- Focused regression now passes 3 files / 129 tests. Focused ESLint, strict
+  `pnpm tsc -b`, focused Prettier, and `git diff --check` pass. A fresh native
+  aggregate `test:coverage:generated` run is requested from the coordinator;
+  this execution surface cannot reliably complete the native listener suite.
+
+## Final Verification Coverage Coordinator Gate And Review Assignment
+
+- Native `pnpm --config.verify-deps-before-run=false
+test:coverage:generated` passes 66 files / 1,540 tests and the existing global
+  threshold with statements 95.24% (8,713/9,148), branches 90%
+  (4,331/4,812), functions 97.99% (2,299/2,346), and lines 95.28%
+  (8,540/8,963).
+- Coordinator pre-review lint passes focused ESLint, Prettier, synchronized
+  status/scope checks, public/generated/package/example no-delta scans, and
+  `git diff --check`. The immutable review endpoint is the three focused test
+  files plus these three records; production and coverage configuration are
+  unchanged.
+- Review assigns style/maintainability `gpt-5.6-terra` / `high`, documentation
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs `gpt-5.6-terra` / `high`, and
+  performance/reliability `gpt-5.6-terra` / `high`; read-only, bounded to the
+  coverage-test delta and affected lifecycle contracts, with no subagents.
+
+## Final Verification Coverage Review Results And Fix Assignment
+
+- Documentation returned P2: the recorded `12:00:00Z` implementation start is
+  later than the actual `11:51:04.997Z` runtime metadata and must be corrected
+  or explicitly qualified. TypeScript/API docs returned CLEAN/N/A for the
+  test-only delta.
+- Style/maintainability returned two P2 findings: extract the repeated unsafe
+  delivery-worker constructor/sequential factory and two-runtime setup into a
+  test-local fixture; complete the mandatory skill-check evidence with the
+  expected manifest, installed entrypoints, lock manifest, task-provided
+  skills, and skipped-skill dispositions.
+- Performance/reliability returned two P1 test gaps: selected-owner and whole-
+  generation aggregate-retirement tests must prove the returned operation waits
+  for a deferred sibling before preserving ordered failure identities; missing-
+  registration detach/rollback tests must seed and assert preservation of a
+  separate live owner's scopes, records, and configured count.
+- Desktop actual metadata matches every explicit dispatch: documentation
+  `gpt-5.6-luna` / `medium`; all other concerns `gpt-5.6-terra` / `high`. All
+  four reviewers used no subagents and are closed. The same existing
+  implementer resumes at explicit `gpt-5.6-terra` / `medium`, no subagents,
+  with the complete five-finding batch and test/record-only ownership.
+
+The attempted resume is rejected without accepting edits: Desktop runtime
+metadata changed that old thread to `gpt-5.6-sol` / `high` at
+`2026-07-13T12:16:13.535Z`, contrary to dispatch. The agent was closed before
+changing source or tests. One fresh existing implementer is therefore assigned
+the same complete batch at explicit `gpt-5.6-terra` / `medium`, no subagents.
+
+## Coverage Review Fix Implementation Start And Skill Applicability
+
+- Fresh existing implementer begins the complete five-finding review batch in
+  `.worktrees/T-0037e2-reusable-generation-stop`, owning only the three named
+  server test suites and these three durable T-0037e2 records. Production,
+  thresholds, public/generated/package/example files, commits, pushes,
+  aggregate coverage/full verify, and `human-review-1-jul.md` are excluded; no
+  subagents are used.
+- Accepted author agent `019f5b68-be14-71d1-a147-0cb5f02deaae` had explicit
+  dispatch `gpt-5.6-terra` / `medium`. Coordinator runtime check
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-16-58-019f5b68-be14-71d1-a147-0cb5f02deaae.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at
+  `2026-07-13T12:17:02.052Z`, matching dispatch. The earlier `12:00:00Z`
+  coverage-fix start is qualified as a coordinator log time, not this
+  implementer runtime start; the prior runtime record was
+  `2026-07-13T11:51:04.997Z`.
+- Canonical skill applicability before test edits used the exposed session
+  inventory, task prompt (no task-provided skill name/path),
+  `build-protocol/skills/EXPECTED_SKILLS.md`, full readable entrypoint command
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and readable `/Users/armiol/.agents/.skill-lock.json`; no source was
+  unreachable and installed entrypoints/lock provenance agree with the expected
+  manifest. Fully read/selected `test-driven-development`,
+  `javascript-testing-patterns`, and `verification-before-completion` for the
+  behavior-test, fixture, and evidence work. Expected worktree, planning, ADR,
+  advanced-types, Node/backend, review, and subagent skills are skipped with
+  metadata/path triage: the worktree already exists and scope has no planning,
+  architecture, public API/type, review dispatch, or delegation. Debugging,
+  security, API/design, and backend skills are N/A because findings are concrete
+  and no runtime/public behavior changes. Protocol/scope govern advisory skills.
+
+## Coverage Review Fix Evidence And Handback
+
+- Both aggregate-retirement cases now defer the second worker retirement and
+  prove that the operation remains unsettled after the first failure; once
+  released, each received `AggregateError` preserves the first and second exact
+  failure identities in order. The test-local worker owns the defer gate.
+- Missing-token detach/rollback each preserve an independently seeded live
+  registration with parked work: configured scopes, retained records, and
+  configured count are equal to their pre-rejection snapshot. A local fixture
+  now contains the unsafe constructor cast, sequential factory, and repeated
+  two-runtime setup; no production helper exists.
+- First post-assertion focused regression passed 2 files / 83 tests; required
+  focused regression passed 3 files / 129 tests. Focused ESLint first exposed
+  only the new `Promise.withResolvers<void>` generic at lines 322/394; changing
+  it to `undefined` and resolving explicitly produced green focused ESLint and
+  strict `pnpm tsc -b`, alongside the 129-test regression.
+- Fresh four-concern review handback is requested. Aggregate coverage/full
+  verify, commit, push, production/public/generated/package/example changes, and
+  `human-review-1-jul.md` remain excluded. Final focused Prettier, exact
+  status/scope/public/generated scans, and diff hygiene run after this update.
+
+- Final validation: changed-file Prettier passes; all three records have status
+  `T-0037e2 coverage review fixes requested`; exact diff scope is these three
+  records and the two assigned server test files. The public/generated/package/
+  example scan is empty and `git diff --check` passes. Handback is ready for the
+  fresh four-concern review wave.
+
+## Coverage Review Fix Coordinator Gate And Re-Review Assignment
+
+- Coordinator verification passes 3 files / 129 tests, focused ESLint, strict
+  `pnpm tsc -b`, changed-file Prettier, synchronized status/scope/public/
+  generated checks, and `git diff --check`.
+- Native aggregate coverage also exits `0`: 66 files / 1,540 tests; statements
+  95.24%, branches 90% (4,331/4,812), functions 97.99%, and lines 95.28%.
+- The committed fix endpoint is assigned to the same four explicit reviewer
+  profiles, read-only and no subagents, bounded to the five findings and their
+  test/record-only corrections.
+
+## Coverage Fix Re-Review Results And Records Assignment
+
+- Documentation, TypeScript/API docs, and performance/reliability returned
+  CLEAN, with public API/docs justified N/A. Style/maintainability returned one
+  P2 records-only finding: name accepted author agent
+  `019f5b68-be14-71d1-a147-0cb5f02deaae` beside its rollout path and explicit/
+  actual Terra Medium profile so ownership is unambiguous after the rejected
+  prior thread.
+- Desktop actual reviewer metadata matches every explicit profile; all four
+  reviewers used no subagents and are closed. One fresh existing implementer
+  receives only the three durable records at explicit `gpt-5.6-terra` /
+  `medium`, no subagents. Source/tests and all verification behavior remain
+  unchanged.
+
+## Coverage Author Record Fix Start And Skill Applicability
+
+- Fresh existing implementer starts the bounded records-only P2 correction in
+  `.worktrees/T-0037e2-reusable-generation-stop`, explicitly `gpt-5.6-terra` /
+  `medium`, with no subagents. Ownership is exactly this task record and the
+  matching T-0037e2 work and review logs; source, tests, full verification,
+  commits, pushes, and `human-review-1-jul.md` are excluded.
+- Canonical skill applicability completed before this record correction: checked
+  the exposed session inventory and task prompt, expected manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md`, readable entrypoints via
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and readable `/Users/armiol/.agents/.skill-lock.json`; no source was
+  unreachable. Fully read and selected `verification-before-completion` for
+  fresh formatting, scope, and diff evidence. TDD/testing, debugging,
+  TypeScript/API, Node/backend, architecture/planning, review dispatch,
+  worktree, and subagent skills are N/A because no runtime/test/API/design
+  change, dispatch, or worktree setup is authorized. Project protocol and this
+  records-only assignment govern.
+- Coordinator runtime check
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-30-02-019f5b74-b306-70f0-9009-e1e67372adf8.jsonl`
+  records this records-fix implementer's actual `gpt-5.6-terra` / `medium` at
+  `2026-07-13T12:30:05.232Z`, matching the explicit dispatch.
+
+## Coverage Author Record Fix Handback
+
+- Accepted coverage-fix author `019f5b68-be14-71d1-a147-0cb5f02deaae` is now
+  named beside rollout
+  `rollout-2026-07-13T13-16-58-019f5b68-be14-71d1-a147-0cb5f02deaae.jsonl` and
+  its explicit/actual `gpt-5.6-terra` / `medium` evidence, without changing the
+  rejected old-thread history or runtime behavior.
+- Focused Prettier, synchronized status/ownership searches, exact three-record
+  inventory, and `git diff --check` pass. No source/test change, test/full
+  verification, commit, push, subagent, or change to `human-review-1-jul.md`
+  occurred. This records-only correction is ready for review handback.
+
+## Coverage Author Record Fix Coordinator Gate
+
+- Coordinator verification passes focused Prettier, synchronized status and
+  ownership searches, exact three-record scope, and `git diff --check`.
+- The records-only correction is assigned to all four canonical concerns at
+  their explicit profiles, read-only and no subagents. TypeScript/API docs and
+  reliability may return justified N/A because source/tests/runtime are
+  unchanged.
+
+## Coverage Author Record Re-Review Results
+
+- Style/maintainability and documentation returned CLEAN. TypeScript/API docs
+  and performance/reliability returned CLEAN with justified N/A for the
+  records-only delta. The accepted author, rollout, explicit/actual profile,
+  chronology, status, and exact scope are unambiguous.
+- Desktop actual metadata matches all four explicit reviewer profiles; every
+  reviewer used no subagents and is closed. T-0037e2 now proceeds to its full
+  native final verification gate.
+
+## Final Verification Acceptance
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exits `0` at task
+  HEAD. Generation/checksums, generated/tooling typechecks, ESLint, cleanup
+  enforcement, formatting, ordinary tests (66 files / 1,540 tests), coverage
+  tests (66 files / 1,540 tests), TypeDoc/API export checks, Proto lint, and
+  generated-clean checks all pass.
+- Coverage is statements 95.24% (8,713/9,148), branches 90%
+  (4,331/4,812), functions 97.99% (2,299/2,346), and lines 95.28%
+  (8,540/8,963). TypeDoc/API checks cover 100 proto, 28 core, 205 server, 19
+  storage, 17 transport, and 3 testing exports.
+- All canonical review concerns are clean or justified N/A, security remains
+  deferred to T-0041, every subagent is closed, and no finding remains. The
+  task is complete and ready to merge into `main`.

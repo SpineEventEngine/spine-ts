@@ -159,6 +159,54 @@ describe("startup obligations", () => {
 });
 
 describe("EnvironmentDeliveryWorker", () => {
+  it("constructs production delivery from the captured runtime storage factory", async () => {
+    const capturedStorageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "CapturedFactory",
+      "type.example.dev/CapturedFactory",
+      capturedStorageFactory,
+    );
+    const lateAccessorFailure = new Error("descriptor storage factory was read late");
+    let lateAccessorCalls = 0;
+    const guardedDescriptor: ContextDeliveryDescriptor = Object.freeze({
+      get storageFactory(): ContextDeliveryDescriptor["storageFactory"] {
+        lateAccessorCalls += 1;
+        throw lateAccessorFailure;
+      },
+      startupScopes: target.value.startupScopes.bind(target.value),
+      storageContext: target.value.storageContext.bind(target.value),
+      endpoints: target.value.endpoints.bind(target.value),
+      onReady: target.value.onReady.bind(target.value),
+      transition: target.value.transition.bind(target.value),
+      replay: target.value.replay.bind(target.value),
+    });
+    const scope = runScope("captured-factory-owner", target.ready);
+    const worker = new EnvironmentDeliveryWorker();
+
+    expect(() => {
+      worker.add({
+        owner: scope.owner,
+        descriptor: guardedDescriptor,
+        storageFactory: capturedStorageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [scope],
+      });
+    }).not.toThrow();
+    expect(lateAccessorCalls).toBe(0);
+    await new Delivery({
+      context: target.context,
+      storageFactory: capturedStorageFactory,
+    }).inbox.receive(message(target.ready, "captured-row"));
+
+    await worker.start(Object.freeze({ scopes: Object.freeze([scope]) }), [target.ready.shard]);
+    expect(target.replayed).toEqual(["captured-row"]);
+    expect(lateAccessorCalls).toBe(0);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
   it("selects the exact owner when distinct storage runtimes have equal readiness", async () => {
     const firstStorage = new InMemoryStorageFactory();
     const secondStorage = new InMemoryStorageFactory();
@@ -170,6 +218,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: firstScope.owner,
       descriptor: first.value,
+      storageFactory: firstStorage,
       tenant: {},
       context: first.context,
       scopes: [firstScope],
@@ -177,6 +226,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: secondScope.owner,
       descriptor: second.value,
+      storageFactory: secondStorage,
       tenant: {},
       context: second.context,
       scopes: [secondScope],
@@ -201,6 +251,7 @@ describe("EnvironmentDeliveryWorker", () => {
       worker.add({
         owner: firstScope.owner,
         descriptor: first.value,
+        storageFactory: firstStorage,
         tenant: {},
         context: first.context,
         scopes: [firstScope],
@@ -237,21 +288,8 @@ describe("EnvironmentDeliveryWorker", () => {
   it("skips a selected owner already stopped before whole-generation stop", async () => {
     const firstRuntimeWorker = new LifecycleWorker();
     const secondRuntimeWorker = new LifecycleWorker();
-    const runtimeWorkers: DeliveryRunWorker[] = [firstRuntimeWorker, secondRuntimeWorker];
-    let nextWorker = 0;
-    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
-      readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
-    }) => EnvironmentDeliveryWorker;
-    const worker = new WorkerWithOptions({
-      createWorker() {
-        const selected = runtimeWorkers[nextWorker];
-        nextWorker += 1;
-        if (selected === undefined) {
-          throw new Error("Unexpected runtime worker creation.");
-        }
-        return selected;
-      },
-    });
+    const fixture = environmentDeliveryWorkerFixture(firstRuntimeWorker, secondRuntimeWorker);
+    const { worker } = fixture;
     const first = descriptor(
       "StopOnceFirst",
       "type.example.dev/StopOnceFirst",
@@ -264,20 +302,8 @@ describe("EnvironmentDeliveryWorker", () => {
     );
     const firstScope = runScope("stop-once-first", first.ready);
     const secondScope = runScope("stop-once-second", second.ready);
-    worker.add({
-      owner: firstScope.owner,
-      descriptor: first.value,
-      tenant: {},
-      context: first.context,
-      scopes: [firstScope],
-    });
-    worker.add({
-      owner: secondScope.owner,
-      descriptor: second.value,
-      tenant: {},
-      context: second.context,
-      scopes: [secondScope],
-    });
+    fixture.add(first, firstScope);
+    fixture.add(second, secondScope);
 
     worker.stopOwners([firstScope.owner.key]);
     worker.stop();
@@ -286,6 +312,127 @@ describe("EnvironmentDeliveryWorker", () => {
     expect(secondRuntimeWorker.stopCalls).toBe(1);
     await worker.awaitSettled();
     await worker.retire();
+  });
+
+  it("retires every selected owner before reporting multiple owner cleanup failures", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const firstFailure = new Error("first retirement failed");
+    const secondFailure = new Error("second retirement failed");
+    const releaseSecondRetirement = Promise.withResolvers<undefined>();
+    firstRuntimeWorker.retireFailures.push(firstFailure);
+    secondRuntimeWorker.retireFailures.push(secondFailure);
+    secondRuntimeWorker.retireGates.push(releaseSecondRetirement.promise);
+    const fixture = environmentDeliveryWorkerFixture(firstRuntimeWorker, secondRuntimeWorker);
+    const { worker } = fixture;
+    const first = descriptor(
+      "RetireFailureFirst",
+      "type.example.dev/RetireFailureFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "RetireFailureSecond",
+      "type.example.dev/RetireFailureSecond",
+      new InMemoryStorageFactory(),
+    );
+    const firstScope = runScope("retire-failure-first", first.ready);
+    const secondScope = runScope("retire-failure-second", second.ready);
+    fixture.add(first, firstScope);
+    fixture.add(second, secondScope);
+
+    const retiring = worker.retireOwners([firstScope.owner.key, secondScope.owner.key]);
+    let settled = false;
+    void retiring.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    releaseSecondRetirement.resolve(undefined);
+    const aggregate = await retiring.catch((error: unknown) => error);
+    expect(aggregate).toBeInstanceOf(AggregateError);
+    expect((aggregate as AggregateError).errors).toEqual([firstFailure, secondFailure]);
+    expect((aggregate as AggregateError).errors[0]).toBe(firstFailure);
+    expect((aggregate as AggregateError).errors[1]).toBe(secondFailure);
+
+    expect(firstRuntimeWorker.retireCalls).toBe(1);
+    expect(secondRuntimeWorker.retireCalls).toBe(1);
+    await expect(worker.retireOwners([firstScope.owner.key])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+  });
+
+  it("preserves a selected owner's exact retirement failure after retiring its routing state", async () => {
+    const runtimeWorker = new LifecycleWorker();
+    const failure = new Error("selected retirement failed");
+    runtimeWorker.retireFailures.push(failure);
+    const fixture = environmentDeliveryWorkerFixture(runtimeWorker);
+    const { worker } = fixture;
+    const selected = descriptor(
+      "SelectedRetireFailure",
+      "type.example.dev/SelectedRetireFailure",
+      new InMemoryStorageFactory(),
+    );
+    const selectedScope = runScope("selected-retire-failure", selected.ready);
+    fixture.add(selected, selectedScope);
+
+    await expect(worker.retireOwners([selectedScope.owner.key])).rejects.toBe(failure);
+    await expect(worker.retireOwners([selectedScope.owner.key])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+  });
+
+  it("awaits every generation worker retirement before reporting cleanup failures", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const firstFailure = new Error("first generation retirement failed");
+    const secondFailure = new Error("second generation retirement failed");
+    const releaseSecondRetirement = Promise.withResolvers<undefined>();
+    firstRuntimeWorker.retireFailures.push(firstFailure);
+    secondRuntimeWorker.retireFailures.push(secondFailure);
+    secondRuntimeWorker.retireGates.push(releaseSecondRetirement.promise);
+    const fixture = environmentDeliveryWorkerFixture(firstRuntimeWorker, secondRuntimeWorker);
+    const { worker } = fixture;
+    const first = descriptor(
+      "GenerationRetireFailureFirst",
+      "type.example.dev/GenerationRetireFailureFirst",
+      new InMemoryStorageFactory(),
+    );
+    const second = descriptor(
+      "GenerationRetireFailureSecond",
+      "type.example.dev/GenerationRetireFailureSecond",
+      new InMemoryStorageFactory(),
+    );
+    const firstScope = runScope("generation-retire-failure-first", first.ready);
+    const secondScope = runScope("generation-retire-failure-second", second.ready);
+    fixture.add(first, firstScope);
+    fixture.add(second, secondScope);
+
+    const retiring = worker.retire();
+    let settled = false;
+    void retiring.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    releaseSecondRetirement.resolve(undefined);
+    const aggregate = await retiring.catch((error: unknown) => error);
+    expect(aggregate).toBeInstanceOf(AggregateError);
+    expect((aggregate as AggregateError).errors).toEqual([firstFailure, secondFailure]);
+    expect((aggregate as AggregateError).errors[0]).toBe(firstFailure);
+    expect((aggregate as AggregateError).errors[1]).toBe(secondFailure);
+
+    expect(firstRuntimeWorker.retireCalls).toBe(1);
+    expect(secondRuntimeWorker.retireCalls).toBe(1);
   });
 });
 
@@ -2747,6 +2894,37 @@ function runScope(ownerKey: string, ready: DeliveryReady): DeliveryRunScope {
   return Object.freeze({ owner: Object.freeze({ key: ownerKey }), ready });
 }
 
+function environmentDeliveryWorkerFixture(...runtimeWorkers: readonly DeliveryRunWorker[]) {
+  let nextWorker = 0;
+  const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+    readonly createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+  }) => EnvironmentDeliveryWorker;
+  const worker = new WorkerWithOptions({
+    createWorker() {
+      const selected = runtimeWorkers[nextWorker];
+      nextWorker += 1;
+      if (selected === undefined) {
+        throw new Error("Unexpected runtime worker creation.");
+      }
+      return selected;
+    },
+  });
+
+  return {
+    worker,
+    add(descriptor: TestDescriptor, scope: DeliveryRunScope): void {
+      worker.add({
+        owner: scope.owner,
+        descriptor: descriptor.value,
+        storageFactory: descriptor.value.storageFactory,
+        tenant: {},
+        context: descriptor.context,
+        scopes: [scope],
+      });
+    },
+  };
+}
+
 type LifecycleOutcome = "FAILED" | "IDLE" | { readonly rejected: Error };
 type LifecycleResult = LifecycleOutcome | Promise<LifecycleOutcome>;
 
@@ -2757,6 +2935,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly awaitFailures: Error[] = [];
   readonly awaitGates: Promise<void>[] = [];
   readonly retireFailures: Error[] = [];
+  readonly retireGates: Promise<void>[] = [];
   readonly stopOwnerFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly retireOwnerFailures: Error[] = [];
@@ -2849,7 +3028,12 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
     this.retireCalls += 1;
     this.#events.push("retire");
     const failure = this.retireFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    const gate = this.retireGates.shift();
+    return (gate ?? Promise.resolve()).then(() => {
+      if (failure !== undefined) {
+        throw failure;
+      }
+    });
   }
 
   stopOwners(ownerKeys: readonly string[]): void {
