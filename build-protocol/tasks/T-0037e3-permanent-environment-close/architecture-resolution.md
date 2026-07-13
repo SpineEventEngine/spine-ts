@@ -1,6 +1,6 @@
 # T-0037e3 Architecture Resolution
 
-Status: Accepted; Slice 1 implementation assigned
+Status: Derived mirror of TASK.md — Final whole-task fix re-review assigned
 
 ## Resolution Summary
 

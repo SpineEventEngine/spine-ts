@@ -17,13 +17,7 @@ export class RetryableCloseGroup {
         continue;
       }
 
-      const close = closeMethod(closeable);
-      if (close === undefined) {
-        this.#closedIndexes.add(index);
-        continue;
-      }
-
-      await this.#closeOne(close, index, errors);
+      await this.#closeOne(closeable, index, errors);
     }
 
     if (errors.length > 0) {
@@ -31,8 +25,13 @@ export class RetryableCloseGroup {
     }
   }
 
-  async #closeOne(close: () => unknown, index: number, errors: unknown[]): Promise<void> {
+  async #closeOne(closeable: unknown, index: number, errors: unknown[]): Promise<void> {
     try {
+      const close = closeMethod(closeable);
+      if (close === undefined) {
+        this.#closedIndexes.add(index);
+        return;
+      }
       await close();
       this.#closedIndexes.add(index);
     } catch (error) {
@@ -42,11 +41,21 @@ export class RetryableCloseGroup {
 }
 
 export function collectCloseError(error: unknown, errors: unknown[]): void {
+  collect(error, errors, new Set());
+}
+
+function collect(error: unknown, errors: unknown[], ancestors: Set<AggregateError>): void {
   if (error instanceof AggregateError) {
-    const causes = error.errors as readonly unknown[];
-    for (const cause of causes) {
-      errors.push(cause);
+    if (ancestors.has(error)) {
+      errors.push(error);
+      return;
     }
+
+    ancestors.add(error);
+    for (const cause of error.errors as readonly unknown[]) {
+      collect(cause, errors, ancestors);
+    }
+    ancestors.delete(error);
     return;
   }
   errors.push(error);

@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final whole-task review assigned
+Status: Final whole-task fix re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -919,3 +919,48 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   and cross-slice consistency. Security remains deferred to T-0041.
 - Full `pnpm verify` remains reserved for the final acceptance gate after this
   whole-task review is clean.
+
+## Final Whole-Task Review Findings
+
+- `2026-07-13T15:48:45Z`: TypeScript/API is CLEAN. The complete final wave
+  yields five actionable items: two reliability P1 runtime boundaries, one
+  style P2 regression gap, and two docs/status corrections.
+- P1: `collectCloseError()` flattens only one `AggregateError` level. Recursively
+  flatten nested leaves in stable order with cycle protection and add a
+  multi-level regression.
+- P1: `closeMethod()` reads the `close` property outside the per-facility error
+  boundary. A throwing getter/proxy aborts later facility attempts as a raw
+  error. Move lookup into the indexed failure boundary, aggregate the failure,
+  continue later facilities, and cover retry behavior.
+- P2: after admitted facility close fails, assert attach/stop admission remains
+  permanently closed before retrying facilities. Use counted descriptors to
+  prove no work.
+- Docs/status: replace the active review-remit phrase assigning quiescence retry
+  ownership to T-0037e3 with retained-owner refusal/predecessor ownership; update
+  the architecture-resolution status from Slice 1 assignment to current final
+  review-fix phase or an explicit canonical-status mirror.
+- Desktop metadata matches style/API/reliability Terra High and documentation
+  Luna Medium. All reviewers used no subagents and are closed. One Terra Medium
+  implementer receives the full runtime/test/docs/record batch; full verify and
+  merge remain blocked.
+
+## Final Whole-Task Review-Fix Handback
+
+- Existing implementer assignment: expected explicit `gpt-5.6-terra` / `medium`,
+  no subagents. Desktop metadata at `2026-07-13T15:49:39.471Z` confirms actual
+  `gpt-5.6-terra` / `medium`.
+- `RetryableCloseGroup` now recursively flattens aggregate children in stable
+  depth-first order, preserves repeated leaves, and preserves the encountered
+  aggregate as the deterministic cause when an active aggregate cycle is
+  detected. Its per-index boundary contains `close` property lookup and
+  invocation, so a getter/proxy failure is aggregated, retryable, and does not
+  prevent later indexes. Facility-failure coverage proves permanent attach and
+  explicit-stop admission is closed before retry with zero descriptor work.
+- RED was 2/14 for wrapped nested causes and an escaping getter error. GREEN is
+  14/14 after the bounded close-group correction. The five focused lifecycle
+  files pass 183/183; native `server.test.ts` passes 21/21.
+- Generated typecheck, scoped ESLint, cleanup enforcement, six-file Prettier,
+  `docs:check`, and `git diff --check` pass. Status/ownership/public-surface
+  scans find no active T-0037e3 quiescence-retry remit or public contract change.
+- Exclusions remain intact. The verified six-file batch is assigned for final
+  whole-task fix re-review; full verify and merge remain blocked until clean.

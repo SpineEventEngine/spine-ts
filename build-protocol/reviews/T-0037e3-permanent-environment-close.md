@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task review assigned
+Status: Final whole-task fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -12,9 +12,10 @@ Derived status mirror: the canonical current state is the `Status` header in
 - One requirements splitter is assigned the architecture-significant permanent
   close resolution at explicit expected `gpt-5.6-sol` / `high`, no subagents.
   Its output is documentation-only and must preserve public compatibility,
-  D-0085 ordering, live-registration refusal, close/attach serialization,
-  quiescence retry ownership, exhaustive owned-facility close attempts, and
-  all explicit exclusions.
+  D-0085 ordering, live-registration refusal, close/attach serialization, and
+  all explicit exclusions. T-0037e3 refuses retained owners, while T-0037d,
+  T-0037e1, and T-0037e2 retain quiescence retry and retirement ownership;
+  T-0037e3 owns permanent admission and owned-facility teardown.
 - Coordinator runtime evidence:
   `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-49-59-019f5b86-f6c1-7962-a2d1-8072e13410fe.jsonl`
   records actual `gpt-5.6-sol / high` at `2026-07-13T12:50:02.268Z`,
@@ -680,3 +681,37 @@ Derived status mirror: the canonical current state is the `Status` header in
   must receive fresh style/maintainability, documentation, TypeScript/API docs,
   and performance/reliability dispositions before final verification. Security
   remains deferred to T-0041.
+
+## Final Whole-Task Review Results And Fix Assignment
+
+- `2026-07-13T15:48:45Z`: TypeScript/API is CLEAN. Style reports one P2,
+  documentation reports one P1 and one P2, and reliability reports two P1s.
+  Desktop metadata confirms documentation at Luna Medium and all other concerns
+  at Terra High. All reviewers used no subagents and are closed.
+- Runtime P1s: recursively flatten arbitrarily nested facility aggregates with
+  cycle protection; catch throwing `close` property access inside each indexed
+  facility boundary so later facilities continue and the failed entry retries.
+- Test P2: after facility failure, prove permanent attach/stop admission stays
+  closed before public facility retry.
+- Docs/status: correct active ownership remit so predecessor tasks own
+  quiescence retry, and synchronize the architecture-resolution status with the
+  canonical current phase.
+- One Terra Medium implementer receives the complete batch. Security remains
+  deferred; final verify and merge are blocked until re-review is clean.
+
+## Final Whole-Task Review-Fix Handback
+
+- Fix implementer is accepted at actual Terra Medium from Desktop metadata and
+  used no subagents.
+- Reliability P1s are resolved: recursive flattening preserves stable leaves,
+  duplicate occurrences, and a deterministic cycle cause; throwing close
+  property access is contained per index so later facilities continue and the
+  failed index retries. Style P2 is resolved by closed attach/stop assertions
+  with zero descriptor work after facility failure.
+- Documentation findings are resolved: active remit preserves T-0037d/e1/e2
+  quiescence-retry/retirement ownership, and architecture status is a derived
+  canonical mirror.
+- Coordinator evidence is RED 2/14, GREEN 14/14, focused lifecycle 183/183,
+  native server 21/21, generated typecheck, scoped lint/cleanup/Prettier,
+  `docs:check`, and diff hygiene. The six-file batch is assigned for fresh final
+  four-concern re-review; security remains deferred to T-0041.
