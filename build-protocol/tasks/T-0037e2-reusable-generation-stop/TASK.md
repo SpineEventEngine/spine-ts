@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 1 review wave 5 assigned
+Status: Slice 1 accepted; Slice 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -196,3 +196,17 @@ Wave 3 fixes preserve T-0037e1 duplicate-detach promise identity when a queued
 detach is blocked by rejected-stop ownership. The existing canonical detach
 operation now wins before creating an immediate stop-retry refusal. Focused
 RED/GREEN and coordinator verification passed; fresh review is assigned.
+
+## Slice 1 Acceptance
+
+At `2026-07-13T06:03:11Z`, Slice 1 closed after Wave 5 reported clean or
+justified N/A dispositions in all four canonical concerns. The accepted private
+foundation owns one serialized stop operation, keeps stable survivor handles
+and routes, retires before candidate startup, publishes once, reopens and
+settles buffered candidate work, resumes retained candidate-construction state,
+and preserves T-0037e1 recovery ownership and detach promise identity.
+
+Slice 2, Bounded Capture, Checkpoints, And Transition Failure Retry, is assigned
+to the same existing implementer at immutable and explicit `gpt-5.6-terra` /
+`medium`, no subagents. Its exact scope and exclusions remain those in the
+accepted architecture resolution; Slices 3--4 remain unauthorized.
