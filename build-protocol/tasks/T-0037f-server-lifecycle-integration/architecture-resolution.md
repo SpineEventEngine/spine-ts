@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 6 implementation assigned
+Status: Slice 6 review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1012,3 +1012,55 @@ smallest coherent implementation.
   surface checks, compatibility regression, final T-0037f focused/full gate,
   and durable completion records. Same Terra Medium implementer; no new runtime
   behavior or public contract may be invented.
+
+## Slice 6 Implementation Handback
+
+- `2026-07-13T23:04:08Z`: README and public TSDoc now expose only the accepted
+  lifecycle contract: recovery before intake; no listener after context-build
+  failure; ordered startup cleanup and cleanup-only continuation; terminal
+  same-instance failure cleanup; fresh caller-owned reuse; network/work safety
+  before dependency close; shared sibling isolation; owned-facility ordering;
+  unfinished-only retries; idempotency; and stable observable aggregation.
+  Private lifecycle operation names and topology remain absent.
+- The focused 3-file compatibility gate is 67/67, generated docs contain all
+  205 expected server exports, export/leak and all scoped static gates pass,
+  and generated artifacts remain ignored. No runtime, signature, option, root
+  export, or test changed.
+- Final full verify exposes a pre-existing cross-slice test-fixture mismatch:
+  4/1,595 tests fail because four service tests start `Server` with structural
+  fakes rather than built contexts. The failure reproduces 4/98 in isolation
+  and is outside the accepted Slice 6 file boundary. Architecture acceptance
+  remains blocked pending coordinator disposition; no scope expansion occurred.
+
+## Slice 6 Compatibility Fixture Disposition
+
+- `2026-07-13T23:07:21Z`: the accepted server lifecycle requires real built
+  contexts. Four older service tests bypass that contract with structural
+  fakes. Correct the tests within their service-test ownership: use direct
+  handler registration for structural service doubles or real built contexts
+  for transport/server coverage. Do not add a production escape hatch. Full
+  verify must pass before review assignment.
+
+## Slice 6 Service Fixture Fix Handback
+
+- `2026-07-13T23:14:17Z`: the four structural-double tests now exercise their
+  actual service-handler boundary directly. This preserves service error,
+  route-order, and tenant assertions without materializing fake lifecycle data
+  or changing server/runtime/public behavior. Existing real HTTP/gRPC server
+  coverage remains unchanged elsewhere in the same suite.
+- Isolated service tests pass 98/98, focused Slice 6 compatibility passes 67/67,
+  and full verify passes two 68-file / 1,595-test runs plus 95.31/90.15/98.1/
+  95.35 statement/branch/function/line coverage. Documentation, API/export,
+  type, lint, format, Proto, generated-clean, and diff gates pass. Review is
+  pending; no self-acceptance.
+- `2026-07-13T23:15:34Z`: exact final scope is the two Slice 6 documentation
+  paths, one authorized service test, and four durable records (7 total); all
+  four statuses are synchronized and no generated or unrelated path is present.
+
+## Slice 6 Coordinator Final Acceptance
+
+- `2026-07-13T23:20:14Z`: docs/TSDoc and service fixture compatibility pass an
+  independent full project verify: 1,595 native and coverage tests, all coverage
+  dimensions above 90%, 205 expected server exports, and every repository gate.
+  Actual Terra Medium implementer used no subagents and is closed. Public
+  signatures/exports/runtime remain unchanged; four final review lanes follow.

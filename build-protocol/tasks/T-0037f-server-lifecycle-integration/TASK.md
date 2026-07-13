@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 implementation assigned
+Status: Slice 6 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1108,3 +1108,76 @@ gate passes.
   observable README/TSDoc, API leak/compatibility closure, and final T-0037f
   verification is assigned to the same implementer at `gpt-5.6-terra` /
   medium, no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Implementation Handback
+
+- `2026-07-13T23:04:08Z`: RED documentation/public scan found the old flat
+  shutdown paragraph, missing README and `Server.start()` startup-recovery and
+  cleanup-only retry contracts, and lifecycle-section topology wording. The
+  same scan is GREEN after documentation-only edits. Public docs now describe
+  observable startup ordering, failed-start continuation and terminal state,
+  running close safety/order/retry, shared caller ownership/reuse, owned
+  environment closure, idempotency, and observable failure aggregation without
+  naming private lifecycle mechanisms.
+- Exact root/package exports and `index.test.ts` are unchanged, so no stronger
+  export test was required. Focused server/lifecycle/index tests pass 3 files /
+  67 tests. `docs:check:generated` reports all 205 expected server exports;
+  both typechecks, scoped ESLint, cleanup, Prettier, API-leak/export scans,
+  Proto lint/generated-clean, and diff checks pass. Generated artifacts remain
+  ignored and absent from status.
+- Required full `pnpm --config.verify-deps-before-run=false verify` is RED at
+  68 files: 1 failed / 67 passed, 4 failed / 1,591 passed tests. The four
+  failures in `spine-services.test.ts` pass structural context fakes into
+  `Server.start()` and reject with `Delivery access requires a built
+BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
+  Current `server.ts` changes are TSDoc-only, so this is an accepted-runtime
+  compatibility debt exposed by the final gate. Fixing the service fixture is
+  outside Slice 6 ownership and was not attempted. Coordinator direction is
+  required before acceptance; this remains implementation handback, not
+  self-acceptance.
+
+## Slice 6 Final-Gate Fixture Fix Assignment
+
+- `2026-07-13T23:07:21Z`: coordinator accepts/closes the docs implementer,
+  actual `gpt-5.6-terra` / medium, matching dispatch, no subagents. Focused
+  docs/API/type/static gates pass, but full verify is RED: 4/1,595 tests in
+  `spine-services.test.ts` pass structural fake contexts through `Server.start`.
+- Authorize only `packages/server/test/services/spine-services.test.ts` to
+  reconcile those four tests with the accepted built-context server contract.
+  Preserve each service-routing/error assertion using built contexts or direct
+  registered handlers as appropriate; do not weaken `Server`, add fake
+  materialization, or change public/runtime behavior. Same Terra Medium
+  implementer owns the correction and must rerun isolated plus full verify.
+
+## Slice 6 Service Fixture Fix Handback
+
+- `2026-07-13T23:14:17Z`: isolated RED reproduces the exact four failures in
+  `spine-services.test.ts` at 4 failed / 94 passed. They are service validation,
+  command-route selection, duplicate-route order, and query tenant handling;
+  none requires HTTP transport behavior. Each now calls the established
+  registered service handlers directly. A small plural-context command helper
+  preserves ordered multi-context routing without creating lifecycle state.
+  All original result/route/tenant assertions remain intact, while the many
+  unaffected real server/gRPC tests remain in the file.
+- Isolated GREEN is 98/98 and focused Slice 6 server/lifecycle/index is 67/67.
+  Generated docs include 205 expected server exports; both typechecks, scoped
+  ESLint, cleanup, Prettier, export/leak, Proto, generated-clean, and diff gates
+  pass. The full required verify completes both native and coverage runs at 68
+  files / 1,595 tests. Coverage is 95.31% statements, 90.15% branches, 98.1%
+  functions, and 95.35% lines. Generated artifacts remain ignored/untracked.
+  This is implementation handback, not self-acceptance.
+- `2026-07-13T23:15:34Z`: final scope/status audit reports exactly seven paths:
+  `server.ts` TSDoc, package README, `spine-services.test.ts`, and the four
+  T-0037f records; statuses are synchronized 4/4. Final lint/cleanup/format/
+  export/leak/generated/diff checks pass with no other tracked or untracked path.
+
+## Slice 6 Coordinator Final Gate And Review Assignment
+
+- `2026-07-13T23:20:14Z`: accepted/closed same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Coordinator full
+  verify independently exits 0: native and coverage each pass 68 files / 1,595
+  tests; coverage is 95.31/90.15/98.1/95.35 percent; all generation, type,
+  lint, cleanup, format, docs/API, Proto, and generated-clean gates pass.
+- Final Slice 6 review is assigned: documentation at `gpt-5.6-luna` / medium;
+  style, TypeScript/API docs, and performance/reliability at
+  `gpt-5.6-terra` / high; no subagents. Security remains deferred to T-0041.

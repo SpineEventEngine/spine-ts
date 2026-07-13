@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 implementation assigned
+Status: Slice 6 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -840,3 +840,57 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - API/docs remain N/A for Slice 5's zero production/public diff; security
   deferred. Slice 6 implementation is assigned at Terra Medium before fresh
   style, documentation, API, and reliability review.
+
+## Slice 6 Implementation Handback
+
+- `2026-07-13T23:04:08Z`: documentation RED/GREEN is complete. Review the
+  README and exported server TSDoc for observable-only startup recovery,
+  failed-start cleanup continuation/terminal behavior, running close safety and
+  order, sharing/ownership, retry/idempotency, and failure aggregation. No
+  runtime line, public signature, option, export, generated artifact, or test
+  changed; internal lifecycle names are absent from generated public docs.
+- Focused compatibility is 67/67; generated docs report 205 expected server
+  exports; both typechecks and scoped lint/cleanup/format/export/leak/Proto/diff
+  gates pass. Documentation, TypeScript/API docs, style, and reliability review
+  remain pending; security remains deferred to T-0041.
+- Full verify is not green: 4/1,595 native tests fail in the out-of-scope
+  `spine-services.test.ts` fake-context server helper, reproduced as 4/98 in
+  isolation. Review/coordinator must determine the separately owned fixture
+  correction before Slice 6 acceptance. This handback does not self-accept.
+
+## Slice 6 Pre-review Fixture Fix
+
+- `2026-07-13T23:07:21Z`: no reviewer wave starts while full verify is RED.
+  Coordinator authorizes one test-compatibility correction in
+  `spine-services.test.ts`; production/public surface remains frozen.
+- Dispatch same implementer at `gpt-5.6-terra` / medium, no subagents. After
+  isolated and full verify pass, commit one stable Slice 6 package and run
+  documentation (Luna Medium), style/API/reliability (Terra High). Security
+  remains deferred to T-0041.
+
+## Slice 6 Service Fixture Fix Handback
+
+- `2026-07-13T23:14:17Z`: review the bounded test-only correction that moves
+  four structural-double service tests from `Server.start()` to established
+  registered handler seams. Their original service result/routing/tenant
+  assertions are unchanged; no server weakening, fake lifecycle materialization,
+  new HTTP abstraction, production/public/export, or generated change occurs.
+- RED is isolated 4/98; GREEN is isolated 98/98 and focused Slice 6 67/67.
+  Full verify exits 0 with native and coverage runs both 68 files / 1,595 tests;
+  coverage exceeds 90% in every dimension. Generated docs report 205 expected
+  server exports, and all scoped/static/export/leak/Proto/generated/diff gates
+  pass. Fresh documentation, API, style, and reliability review remains pending;
+  security is deferred to T-0041. This is not self-acceptance.
+- `2026-07-13T23:15:34Z`: review scope is exactly seven paths: public TSDoc,
+  package README, the authorized service fixture test, and four synchronized
+  records. No generated output, runtime-code, export, signature, or unrelated
+  test change is present; final static and diff-integrity audits pass.
+
+## Slice 6 Final Review Assignment
+
+- `2026-07-13T23:20:14Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent full
+  verify passes all phases, two 1,595-test runs, coverage, and API/export gates.
+- Assign documentation reviewer at `gpt-5.6-luna` / medium and style,
+  TypeScript/API docs, performance/reliability at `gpt-5.6-terra` / high, all
+  no subagents, against the final Slice 6 package. Security deferred to T-0041.

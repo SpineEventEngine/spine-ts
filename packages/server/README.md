@@ -85,8 +85,8 @@ Current slice exposes:
   HTTP/2 listener lifecycle over `SpineServices`. The default host is
   local-only `127.0.0.1`; broad binding such as `0.0.0.0` is an explicit
   caller choice. `RunningServer.close()` stops network intake, closes active
-  HTTP/2 sessions, then closes owned contexts/resources and reports aggregate
-  close failures after attempting every close;
+  HTTP/2 sessions, waits until active work can no longer use its dependencies,
+  then closes contexts, resources, and any server-owned environment;
   and
 - `CommandRefusalError` for the current immediate business refusal path from
   command handlers to non-ok `CommandService.Post` `Ack` errors;
@@ -236,7 +236,8 @@ Current slice exposes:
   caller-supplied storage and transport before a server opens network intake.
   `close()` permanently closes an environment once it is no longer in use. An
   in-use close rejects non-destructively and performs no owned-facility
-  teardown; after admission, the environment cannot be reused.
+  teardown. A caller-owned environment remains open after its servers close and
+  may be used by a newly assembled server with fresh contexts.
   `Server` builds added `BoundedContextBuilder` values with the environment
   storage factory unless the builder already selected a local factory.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
@@ -871,8 +872,8 @@ server.baseUrl; // "http://127.0.0.1:8080"
 await server.close();
 ```
 
-`Server` reuses `SpineServices` directly and keeps ZeroMQ, local IPC endpoints,
-worker supervision, and retry policy out of the public API.
+`Server` reuses `SpineServices` directly and keeps deployment-specific transport
+adapters, supervision, and retry policy out of the public API.
 `Server.atPort(port)` binds to `127.0.0.1`; pass `{ host: "0.0.0.0" }` only
 when this process should accept non-local clients. The returned `RunningServer`
 exposes `host`, `port`, `baseUrl`, and an idempotent `close()`.
@@ -899,17 +900,42 @@ facilities for server assembly. `Server` accepts built contexts and
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
 more specific local factory first. This object is not a Java-style process-wide
-singleton, and it does not introduce endpoint topology or production worker
-topology.
+singleton.
 
-Shutdown is deterministic: the listener stops accepting new requests first,
-then active HTTP/2 sessions close, then owned contexts and explicit
-framework-owned resources close, then environment-owned facilities close when
-the server owns the environment. Resource cleanup continues after failures and
-throws one `AggregateError` containing every close failure. A later `close()`
-retry attempts only the close hooks that failed previously. Listener-based
-tests may fail with `EPERM` in managed sandboxes that block loopback binds;
-rerun those checks natively when verifying this lifecycle.
+Startup assembles added context builders and completes finite startup recovery
+for environment delivery before opening listener intake. A context assembly
+failure opens no listener and closes contexts already assembled by that
+attempt. If environment startup or listener open fails, cleanup closes acquired
+network resources first, waits until active work can no longer use the server's
+dependencies, closes contexts and explicit resources, then closes facilities
+when the environment is server-owned.
+
+If failed-start cleanup cannot yet complete safely, a later `start()` on the
+same `Server` is cleanup-only: it does not rebuild contexts or open a listener.
+That retry reports only current cleanup failures, without repeating the
+original startup failure or failures already reported. Once cleanup completes,
+the retry rejects instead of returning a fake `RunningServer`, and the same
+`Server` remains terminal. A newly assembled server with fresh contexts may
+reuse a caller-owned environment; a server-owned environment is permanently
+closed after its ordered cleanup completes.
+
+Running close is also ordered. The listener stops accepting new requests and
+active HTTP/2 sessions close first. Contexts and resources remain open until
+active work can no longer use them, then contexts and explicit resources close,
+followed by facilities when the server owns its environment. Closing one server
+that shares a caller-owned environment does not interrupt its siblings. The
+caller-owned environment and its facilities remain open and can later be used
+by a newly assembled server with fresh contexts.
+
+A network-close failure prevents dependency cleanup until a later `close()`
+retry completes network shutdown. Other failed closes retry only unfinished
+cleanup; successful hooks do not repeat. Concurrent calls share one in-flight
+close, and repeated calls after success are idempotent. Lifecycle failures may
+be arbitrary values. When multiple failures are combined, their observable
+phase order is stable and nested aggregates are flattened; an aggregate with no
+nested failures still remains a failure. Listener-based tests may fail with
+`EPERM` in managed sandboxes that block loopback binds; rerun those checks
+natively when verifying this lifecycle.
 
 ## Entity State Shell
 

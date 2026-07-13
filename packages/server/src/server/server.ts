@@ -19,7 +19,13 @@ const defaultPort = 0;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 
-/** Small JVM-familiar owner for real local Spine Connect/gRPC-compatible services. */
+/**
+ * Configures and starts local Spine Connect/gRPC-compatible services.
+ *
+ * A server assembles its bounded contexts and completes finite environment
+ * delivery recovery before accepting network requests. It also owns the
+ * ordered cleanup of contexts and resources added to this assembly.
+ */
 export class Server {
   readonly #host: string;
   readonly #port: number;
@@ -52,26 +58,48 @@ export class Server {
   /**
    * Add one bounded context or builder to expose through the Spine services.
    *
-   * Builders added here are assembled during {@link start} before listener
-   * open. They use {@link ServerEnvironment.storageFactory} unless
+   * Builders added here are assembled during {@link start} before startup
+   * recovery and listener open. They use
+   * {@link ServerEnvironment.storageFactory} unless
    * `withStorageFactory(...)` already selected a more specific local factory.
    *
    * The server owns added contexts for this assembly. When the returned
    * {@link RunningServer} closes, it closes every added context after network
-   * intake and active HTTP/2 sessions have stopped.
+   * intake and active HTTP/2 sessions stop and active work can no longer use
+   * the context.
    */
   add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
     return this;
   }
 
-  /** Add one explicitly owned framework closeable. */
+  /** Add a framework closeable owned by this server assembly. */
   addResource(resource: { close(): unknown }): this {
     this.#resources.push(resource);
     return this;
   }
 
-  /** Start the HTTP/2 listener and return its running lifecycle handle. */
+  /**
+   * Assemble contexts, complete finite startup recovery, and open the listener.
+   *
+   * Context assembly failure opens no listener and closes contexts assembled
+   * by that attempt. If environment startup or listener open fails, the server
+   * first closes acquired network resources, waits until active work can no
+   * longer use its dependencies, then closes contexts and explicit resources,
+   * followed by facilities of a server-owned environment.
+   *
+   * If that cleanup cannot yet complete safely, a later call on this same
+   * instance is cleanup-only: it does not assemble contexts or open a listener.
+   * The retry reports only current cleanup failures, without repeating the
+   * original startup failure or failures already reported. After cleanup
+   * completes, the attempt rejects instead of returning a {@link RunningServer},
+   * and this `Server` instance remains terminal.
+   *
+   * A newly assembled `Server` with fresh contexts may reuse a caller-owned
+   * environment after cleanup. A server-owned environment is permanently
+   * closed when its ordered startup cleanup completes. Concurrent calls share
+   * the same in-flight start or cleanup attempt.
+   */
   start(): Promise<RunningServer> {
     const current = this.#starting;
     if (current !== undefined) {
@@ -332,7 +360,7 @@ export interface ServerOptions {
   readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
   /** Service-level options for Command, Query, and Subscription routes. */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
-  /** Extra framework-owned closeables to close after network intake stops. */
+  /** Extra framework-owned closeables to close after contexts become safe to close. */
   readonly resources?: readonly { close(): unknown }[];
   /**
    * Server runtime environment. Supplied environments are caller-owned unless
@@ -340,7 +368,7 @@ export interface ServerOptions {
    * owns a local/test environment with in-memory defaults.
    */
   readonly environment?: ServerEnvironment;
-  /** Whether this server closes the environment after contexts and resources. */
+  /** Whether this server permanently closes the environment after contexts and resources. */
   readonly ownsEnvironment?: boolean;
 }
 
@@ -353,12 +381,21 @@ export interface RunningServer {
   /** Base URL for Connect gRPC-compatible clients. */
   readonly baseUrl: string;
   /**
-   * Stop intake, close sessions, then close owned contexts/resources/environment.
+   * Stop network intake and sessions, wait for active work to become safe, then
+   * close contexts, explicit resources, and any server-owned environment.
    *
-   * Repeated calls after a successful close are idempotent. Failed closes may
-   * be retried, and retries skip owned close hooks that already succeeded.
-   * Each attempt rejects with an `AggregateError` when any remaining owned
-   * close hook fails.
+   * A failure while closing the network prevents dependency cleanup until a
+   * later retry completes that phase. Closing one server that shares a
+   * caller-owned environment does not interrupt sibling servers, and the
+   * caller-owned environment and its facilities remain open. A server-owned
+   * environment closes only after its contexts and resources.
+   *
+   * Concurrent calls share one in-flight close. Repeated calls after a
+   * successful close are idempotent. After a failed close, a later call retries
+   * only unfinished cleanup. Failures may be arbitrary values. When multiple
+   * failures are combined, their observable phase order is stable and nested
+   * aggregates are flattened; an aggregate with no nested failures still
+   * remains a failure.
    */
   close(): Promise<void>;
 }
