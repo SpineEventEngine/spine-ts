@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Architecture final re-review assigned
+Status: Slice 1 implementation assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -254,3 +254,12 @@ Derived status mirror: the canonical current state is the `Status` header in
   documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only and no subagents.
+
+## Architecture Final Re-Review Results And Slice 1 Assignment
+
+- Style/maintainability, documentation, TypeScript/API docs, and performance/
+  reliability returned CLEAN. Actual profiles matched dispatch; no reviewer
+  used subagents and all are closed.
+- Architecture is accepted. Slice 1 is assigned to one fresh implementer at
+  explicit `gpt-5.6-terra` / `medium`, no subagents. Review is required after
+  focused verification before any later slice begins.

@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Architecture final re-review assigned
+Status: Slice 1 implementation assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -435,3 +435,17 @@ re-review: operative D-0085/D-0086 clauses are explicit, cancellation requires
 `!admitted && !completed`, stop-first waiter acceptance is present, and public
 wording requires non-destructive in-use rejection/no teardown plus README
 consistency. All four canonical concerns are reassigned.
+
+## Architecture Acceptance And Slice 1 Assignment
+
+- Final architecture re-review is CLEAN in all four concerns. Active authority,
+  `!admitted && !completed` cancellation, stop-first FIFO behavior, serial
+  release before facilities, and public docs/README requirements are consistent.
+  Every reviewer profile matched dispatch; no reviewer used subagents and all
+  are closed.
+- The architecture resolution is accepted. One fresh existing implementer is
+  assigned Slice 1 at explicit `gpt-5.6-terra` / `medium`, no subagents, owning
+  permanent admission/refusal/races, no-generation close, provisional stop/
+  waiter handling, facility phase separation, focused tests, public TSDoc and
+  matching server README wording, plus current records. Slices 2-3 remain
+  unauthorized until Slice 1 review is clean.

@@ -1,6 +1,6 @@
 # T-0037e3 Architecture Resolution
 
-Status: Architecture final re-review assigned
+Status: Accepted; Slice 1 implementation assigned
 
 ## Resolution Summary
 
