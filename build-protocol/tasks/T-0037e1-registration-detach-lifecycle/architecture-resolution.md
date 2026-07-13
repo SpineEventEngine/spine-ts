@@ -127,3 +127,17 @@ D-0085/D-0086 remain authoritative.
 Excluded: reusable generation stop, survivor rebind/transfer, permanent close,
 facilities, server/listener integration, public lifecycle controls, scheduling,
 monitor actions, topology, catch-up, adapters, T-0036 changes, and examples.
+
+## Slice 1 Recorded Outcome
+
+The implementation keeps the coordinator observer synchronous and package
+internal so an observer invariant error enters the coordinator's existing fault
+path at the recording point. `EnvironmentDeliveryRecords` is the single deep
+module mapping generation-local scope identity to the existing parked table;
+it extends configured units in first-registration order and exposes later
+atomic detach/retire selection-consumption primitives without retaining a
+separate cause history. Settlement change equality compares disposition, cause
+identity, progress counters, and per-failure message/error identity. The parked
+table retains at most one cause per configured unit so exact fulfillment can
+deterministically reselect the next configured rejected unit without an
+unbounded history.

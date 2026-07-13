@@ -2,7 +2,7 @@
 export class ParkedDeliveryObligations {
   readonly #configured = new Map<string, ConfiguredObligation>();
   readonly #records = new Map<string, MutableRecord>();
-  readonly #shared: ConfiguredObligation;
+  #shared: ConfiguredObligation;
 
   constructor(options: ParkedDeliveryObligationOptions) {
     for (const registration of options.registrations) {
@@ -46,7 +46,7 @@ export class ParkedDeliveryObligations {
     const configured = this.#configuredObligation(owner, obligation, units);
     const record = this.#record(configured, units);
     record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    selectCause(record, cause, firstUnit(units, configured.units), configured.units);
+    recordCauses(record, cause, units, configured.units);
   }
 
   parkFulfilledFailed(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
@@ -60,7 +60,17 @@ export class ParkedDeliveryObligations {
     const configured = this.#configuredObligation(sharedOwner, "shared", units);
     const record = this.#record(configured, units);
     record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    selectCause(record, cause, firstUnit(units, configured.units), configured.units);
+    recordCauses(record, cause, units, configured.units);
+  }
+
+  /** @internal Extend one live registration's exact configured unit domain in stable order. */
+  extendRegistration(token: string, obligation: string, units: readonly string[]): void {
+    this.#extendConfigured(registrationOwner(token), obligation, units);
+    this.#extendConfigured(generationOwner, "generation", units);
+    this.#shared = Object.freeze({
+      ...this.#shared,
+      units: Object.freeze(appendUnits(this.#shared.units, units)),
+    });
   }
 
   report(selections: readonly ParkedDeliveryObligationSelection[]): readonly unknown[] {
@@ -112,6 +122,25 @@ export class ParkedDeliveryObligations {
     );
   }
 
+  #extendConfigured(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
+    if (units.length === 0) {
+      return;
+    }
+    const key = recordKey(owner, obligation);
+    const existing = this.#configured.get(key);
+    if (existing === undefined) {
+      this.#addConfigured({ key, owner, obligation, units });
+      return;
+    }
+    this.#configured.set(
+      key,
+      Object.freeze({
+        ...existing,
+        units: Object.freeze(appendUnits(existing.units, units)),
+      }),
+    );
+  }
+
   #configuredObligation(
     owner: ParkedOwner,
     obligation: string,
@@ -143,11 +172,8 @@ export class ParkedDeliveryObligations {
       obligation: configured.obligation,
       units: orderUnits(units, configured.units),
       occurrences: 0,
-      cause: undefined,
-      causePresent: false,
-      causeUnit: "",
+      causes: new Map(),
       reportedSinceResolution: false,
-      reported: false,
     };
     this.#records.set(configured.key, record);
     return record;
@@ -160,8 +186,8 @@ export class ParkedDeliveryObligations {
     }
     const resolved = new Set(units);
     record.units = record.units.filter((unit) => !resolved.has(unit));
-    if (record.causePresent && resolved.has(record.causeUnit)) {
-      clearCause(record);
+    for (const unit of resolved) {
+      record.causes.delete(unit);
     }
     if (record.units.length === 0) {
       this.#records.delete(configured.key);
@@ -193,17 +219,19 @@ export class ParkedDeliveryObligations {
     causes: unknown[],
   ): void {
     const record = this.#records.get(configured.key);
+    if (record === undefined || selected === undefined) {
+      return;
+    }
+    const representative = representativeCause(record, configured.units);
     if (
-      record === undefined ||
-      selected === undefined ||
-      !record.causePresent ||
-      record.reported ||
-      !selected.has(record.causeUnit)
+      representative === undefined ||
+      representative.evidence.reported ||
+      !selected.has(representative.unit)
     ) {
       return;
     }
-    causes.push(record.cause);
-    record.reported = true;
+    causes.push(representative.evidence.cause);
+    representative.evidence.reported = true;
     record.reportedSinceResolution = true;
   }
 
@@ -244,13 +272,12 @@ export class ParkedDeliveryObligations {
     const target = this.#record(destination, source.units);
     target.occurrences = saturatingAdd(target.occurrences, source.occurrences);
     target.reportedSinceResolution ||= source.reportedSinceResolution;
-    if (!shouldReplaceCause(target, source, destination.units)) {
-      return;
+    for (const [unit, evidence] of source.causes) {
+      const existing = target.causes.get(unit);
+      if (existing === undefined || (existing.reported && !evidence.reported)) {
+        target.causes.set(unit, { ...evidence });
+      }
     }
-    target.cause = source.cause;
-    target.causePresent = true;
-    target.causeUnit = source.causeUnit;
-    target.reported = source.reported;
   }
 }
 
@@ -303,11 +330,13 @@ interface ConfiguredObligation {
 interface MutableRecord extends ConfiguredObligation {
   units: string[];
   occurrences: number;
-  cause: unknown;
-  causePresent: boolean;
-  causeUnit: string;
-  reported: boolean;
+  causes: Map<string, MutableCause>;
   reportedSinceResolution: boolean;
+}
+
+interface MutableCause {
+  cause: unknown;
+  reported: boolean;
 }
 
 interface Reclassification {
@@ -344,68 +373,50 @@ function orderUnits(units: readonly string[], configured: readonly string[]): st
   return configured.filter((unit) => selected.has(unit));
 }
 
-function firstUnit(units: readonly string[], configured: readonly string[]): string {
-  const first = orderUnits(units, configured)[0];
-  if (first === undefined) {
-    throw new Error("Parked delivery obligation requires at least one configured unit.");
-  }
-  return first;
+function appendUnits(existing: readonly string[], added: readonly string[]): string[] {
+  return Array.from(new Set([...existing, ...added]));
 }
 
-function selectCause(
+function recordCauses(
   record: MutableRecord,
   cause: unknown,
-  causeUnit: string,
+  units: readonly string[],
   configured: readonly string[],
 ): void {
-  if (
-    !record.causePresent ||
-    record.reported ||
-    configured.indexOf(causeUnit) < configured.indexOf(record.causeUnit)
-  ) {
-    record.cause = cause;
-    record.causePresent = true;
-    record.causeUnit = causeUnit;
-    record.reported = false;
+  for (const unit of orderUnits(units, configured)) {
+    const existing = record.causes.get(unit);
+    if (existing === undefined || existing.reported) {
+      record.causes.set(unit, { cause, reported: false });
+    }
   }
 }
 
-function clearCause(record: MutableRecord): void {
-  record.cause = undefined;
-  record.causePresent = false;
-  record.causeUnit = "";
-  record.reported = false;
-}
-
-function shouldReplaceCause(
-  target: MutableRecord,
-  source: MutableRecord,
+function representativeCause(
+  record: MutableRecord,
   configured: readonly string[],
-): boolean {
-  if (!source.causePresent) {
-    return false;
+): { readonly unit: string; readonly evidence: MutableCause } | undefined {
+  for (const unit of configured) {
+    if (!record.units.includes(unit)) {
+      continue;
+    }
+    const evidence = record.causes.get(unit);
+    if (evidence !== undefined) {
+      return { unit, evidence };
+    }
   }
-  if (!target.causePresent) {
-    return true;
-  }
-  if (target.reported) {
-    return !source.reported;
-  }
-  if (source.reported) {
-    return false;
-  }
-  return configured.indexOf(source.causeUnit) < configured.indexOf(target.causeUnit);
+  return undefined;
 }
 
 function reclassifiedSource(source: MutableRecord, units: readonly string[]): MutableRecord {
-  const hasCause = source.causePresent && units.includes(source.causeUnit);
+  const selected = new Set(units);
   return {
     ...source,
     units: [...units],
-    cause: hasCause ? source.cause : undefined,
-    causePresent: hasCause,
-    causeUnit: hasCause ? source.causeUnit : "",
-    reported: hasCause && source.reported,
+    causes: new Map(
+      Array.from(source.causes)
+        .filter(([unit]) => selected.has(unit))
+        .map(([unit, evidence]) => [unit, { ...evidence }] as const),
+    ),
   };
 }
 
@@ -422,12 +433,13 @@ function saturatingAdd(current: number, increment: number): number {
 }
 
 function snapshot(record: MutableRecord): ParkedDeliveryObligationRecord {
+  const representative = representativeCause(record, record.units);
   return Object.freeze({
     owner: record.owner,
     obligation: record.obligation,
     units: Object.freeze([...record.units]),
-    cause: record.cause,
-    hasCause: record.causePresent,
+    cause: representative?.evidence.cause,
+    hasCause: representative !== undefined,
     occurrences: record.occurrences,
     reportedSinceResolution: record.reportedSinceResolution,
   });

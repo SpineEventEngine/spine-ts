@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 settlement ownership assigned
+Status: Slice 1 focused verified; Round 1 review pending
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -32,6 +32,28 @@ splits this child into four sequential, independently reviewed TDD slices:
 One existing Terra Medium implementer is assigned Slice 1 only with sole write
 ownership, strict TDD, and no subagents. Later slices consume the reviewed
 foundation and are not part of the first review package.
+
+### Slice 1 Coordinator Findings
+
+Before packaging, the implementation owner must correct four foundation gaps:
+
+1. Settlement observation emits only genuinely new or changed evidence; an
+   identical repeated settlement must not emit again.
+2. The selected-owner barrier must propagate a terminal coordinator/observer
+   invariant fault instead of swallowing it as successful quiescence.
+3. Exact fulfilled re-evaluation must consume only its unit and retain a cause
+   for any other rejected unit still parked in the same obligation.
+4. The record owner must expose bounded atomic detach and retire selection/
+   consumption primitives required by later slices, not only separate select
+   and remove helpers that permit ordering mistakes.
+
+The same Terra Medium owner receives all four under strict TDD before Round 1.
+
+Disposition: corrected and focused verified. Settlement equality covers
+disposition, cause identity, progress counters, and failure identities; barrier
+faults propagate; parked evidence retains one bounded cause per configured unit;
+and the record owner now exposes atomic `detach(token)` / `retire()` operations
+with exact ownership counts and stable selection order.
 
 ## Objective
 
@@ -132,3 +154,19 @@ No reusable explicit generation stop, survivor rebind, scope transfer,
 candidate publication, permanent environment close, facility teardown,
 failed-start rollback, server/listener integration, retry timing, public
 monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
+
+## Slice 1 Implementation Record
+
+- `2026-07-13`: The sole existing Terra Medium implementer completed Slice 1
+  under strict focused TDD with no subagents. The coordinator now records each
+  settlement through an optional private observer and faults observably on an
+  observer invariant error. Its selected-owner barrier removes selected pending
+  scopes before and after awaiting the active turn plus its bounded successor,
+  while retaining configured, sibling, and settled state.
+- One private generation-local `EnvironmentDeliveryRecords` module maps exact
+  registered initial/dynamic scopes to `ParkedDeliveryObligations`; it holds no
+  second cause ledger. Rejection is bounded by the parked table, `PARKED`
+  remains cause-less operational work, `IDLE` consumes its exact unit, and
+  `STOPPED` is inert rather than successful re-evaluation. Its private atomic
+  record-consumption primitives are foundation only; environment lifecycle
+  detach/retry and attachment integration remain excluded for later slices.

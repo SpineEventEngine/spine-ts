@@ -300,6 +300,131 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.starts).toHaveLength(1);
   });
 
+  it("notifies a settlement observer once when rejected start evidence is recorded, never on reads", async () => {
+    const failure = new Error("worker start failed");
+    const configured = scope("first", 0, 1);
+    const observed: unknown[] = [];
+    const worker = new FakeRunWorker([Promise.reject(failure)]);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [configured],
+      worker,
+      onSettlement: (settlement) => observed.push(settlement),
+    });
+
+    await coordinator.start([configured]);
+    coordinator.settlement();
+    coordinator.settlement();
+
+    expect(observed).toEqual([
+      expect.objectContaining({
+        scope: configured,
+        disposition: "REJECTED",
+        cause: failure,
+      }),
+    ]);
+  });
+
+  it("emits only meaningful settlement changes", async () => {
+    const failure = new Error("worker start failed");
+    const changedFailure = new Error("worker start failed");
+    const configured = scope("first", 0, 1);
+    const observed: unknown[] = [];
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, rejected(0, 1, failure, { delivered: 1 })),
+      (obligation) => workerEvidence(obligation, rejected(0, 1, failure, { delivered: 1 })),
+      (obligation) => workerEvidence(obligation, rejected(0, 1, failure, { delivered: 2 })),
+      (obligation) => workerEvidence(obligation, rejected(0, 1, changedFailure, { delivered: 2 })),
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [configured],
+      worker,
+      onSettlement: (settlement) => observed.push(settlement),
+    });
+
+    await coordinator.start([configured]);
+    await coordinator.start([configured]);
+    await coordinator.start([configured]);
+    await coordinator.start([configured]);
+    await coordinator.start([configured]);
+
+    expect(observed).toMatchObject([
+      { disposition: "REJECTED", cause: failure, progress: { delivered: 1 } },
+      { disposition: "REJECTED", cause: failure, progress: { delivered: 2 } },
+      { disposition: "REJECTED", cause: changedFailure, progress: { delivered: 2 } },
+      { disposition: "IDLE", progress: { delivered: 0 } },
+    ]);
+  });
+
+  it("faults the coordinator when its settlement observer violates an invariant", async () => {
+    const failure = new Error("observer invariant failed");
+    const configured = scope("first", 0, 1);
+    const worker = new FakeRunWorker([
+      (obligation) => workerEvidence(obligation, fulfilled(0, 1, "IDLE")),
+    ]);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [configured],
+      worker,
+      onSettlement() {
+        throw failure;
+      },
+    });
+
+    await expect(coordinator.start([configured])).rejects.toBe(failure);
+    await expect(coordinator.start([configured])).rejects.toBe(failure);
+  });
+
+  it("barriers a selected owner through active and admitted successor work without removing siblings", async () => {
+    const selectedActive = deferred<DeliveryWorkerEvidence>();
+    const siblingActive = deferred<DeliveryWorkerEvidence>();
+    const selected = ownedScope("selected-owner", "selected", 0, 1);
+    const sibling = ownedScope("sibling-owner", "sibling", 0, 1);
+    const worker = new FakeRunWorker([selectedActive.promise, siblingActive.promise]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [selected, sibling], worker });
+
+    const running = coordinator.start([selected]);
+    coordinator.notify(sibling);
+    const barrier = coordinator.awaitOwnersBarrier([selected.owner.key]);
+    selectedActive.resolve(
+      workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 1, "IDLE")),
+    );
+    await until(() => worker.starts.length === 2);
+    siblingActive.resolve(
+      workerEvidence(entry(worker.starts, 1).obligation, fulfilled(0, 1, "IDLE")),
+    );
+
+    await Promise.all([running, barrier]);
+    expect(coordinator.settlement()).toEqual({
+      scopes: [
+        expect.objectContaining({ scope: selected, disposition: "IDLE" }),
+        expect.objectContaining({ scope: sibling, disposition: "IDLE" }),
+      ],
+      pending: [],
+    });
+    expect(coordinator.configuredScopeCount).toBe(2);
+  });
+
+  it("propagates an observer invariant fault through an active selected-owner barrier", async () => {
+    const active = deferred<DeliveryWorkerEvidence>();
+    const failure = new Error("observer invariant failed");
+    const selected = ownedScope("selected-owner", "selected", 0, 1);
+    const worker = new FakeRunWorker([active.promise]);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [selected],
+      worker,
+      onSettlement() {
+        throw failure;
+      },
+    });
+
+    const running = coordinator.start([selected]);
+    const barrier = coordinator.awaitOwnersBarrier([selected.owner.key]);
+    active.resolve(workerEvidence(entry(worker.starts, 0).obligation, fulfilled(0, 1, "IDLE")));
+
+    await expect(running).rejects.toBe(failure);
+    await expect(barrier).rejects.toBe(failure);
+  });
+
   it("keeps a synchronous worker start throw fatal", async () => {
     const failure = new Error("worker lifecycle invariant failed");
     const configured = scope("first", 0, 1);

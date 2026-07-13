@@ -22,12 +22,15 @@ export class DeliveryRunCoordinator {
   #finalized = false;
   #onReport: ((settlement: DeliveryRunSettlement) => Promise<void>) | undefined;
   #retirement: Promise<void> | undefined;
+  readonly #onSettlement: ((settlement: DeliveryScopeSettlement) => void) | undefined;
 
   constructor(options: {
     readonly scopes: readonly DeliveryRunScope[];
     readonly worker: DeliveryRunWorker;
+    readonly onSettlement?: (settlement: DeliveryScopeSettlement) => void;
   }) {
     this.#worker = options.worker;
+    this.#onSettlement = options.onSettlement;
     this.#configure(options.scopes);
     if (this.#configured.size === 0) {
       throw new Error("Delivery run coordinator requires at least one configured scope.");
@@ -99,6 +102,19 @@ export class DeliveryRunCoordinator {
         this.#settled.delete(key);
       }
     }
+  }
+
+  /** @internal Await retained work that could still start selected owners without reclaiming evidence. */
+  async awaitOwnersBarrier(ownerKeys: readonly string[]): Promise<void> {
+    const owners = new Set(ownerKeys);
+    this.#removePendingOwners(owners);
+    const active = this.#active;
+    await active;
+    const successor = this.#active;
+    if (successor !== undefined && successor !== active) {
+      await successor;
+    }
+    this.#removePendingOwners(owners);
   }
 
   settlement(): DeliveryRunSettlement {
@@ -247,7 +263,7 @@ export class DeliveryRunCoordinator {
     const attempted = new Set(shards.map((shard) => shard.key()));
     for (const scope of scopes) {
       if (attempted.has(scope.ready.shard.key())) {
-        this.#settled.set(scopeKey(scope), rejectedSettlement(scope, cause));
+        this.#recordSettlement(scope, rejectedSettlement(scope, cause));
       }
     }
     this.#parkPending(new Set(Array.from(attempted, (key) => ownerShardKey(owner, key))));
@@ -266,7 +282,7 @@ export class DeliveryRunCoordinator {
       }
       for (const scope of scopes) {
         if (scope.ready.shard.key() === shardKey) {
-          this.#settled.set(scopeKey(scope), shardSettlement(scope, shardEvidence));
+          this.#recordSettlement(scope, shardSettlement(scope, shardEvidence));
         }
       }
     }
@@ -279,6 +295,16 @@ export class DeliveryRunCoordinator {
         this.#pending.delete(key);
       }
     }
+  }
+
+  #recordSettlement(scope: DeliveryRunScope, settlement: DeliveryScopeSettlement): void {
+    const key = scopeKey(scope);
+    const previous = this.#settled.get(key);
+    this.#settled.set(key, settlement);
+    if (previous !== undefined && sameSettlement(previous, settlement)) {
+      return;
+    }
+    this.#onSettlement?.(cloneSettlement(settlement));
   }
 
   #removePendingOwners(owners: ReadonlySet<string>): void {
@@ -533,6 +559,36 @@ function requiredOwner(scopes: readonly DeliveryRunScope[]): DeliveryRunOwner {
 
 function cloneProgress(progress: DeliveryLoopProgress): DeliveryLoopProgress {
   return Object.freeze({ ...progress, failures: Object.freeze([...progress.failures]) });
+}
+
+function sameSettlement(previous: DeliveryScopeSettlement, next: DeliveryScopeSettlement): boolean {
+  return (
+    previous.disposition === next.disposition &&
+    Object.is(previous.cause, next.cause) &&
+    sameProgress(previous.progress, next.progress)
+  );
+}
+
+function sameProgress(
+  previous: DeliveryLoopProgress | undefined,
+  next: DeliveryLoopProgress | undefined,
+): boolean {
+  if (previous === undefined || next === undefined) {
+    return previous === next;
+  }
+  return (
+    previous.runs === next.runs &&
+    previous.processed === next.processed &&
+    previous.accepted === next.accepted &&
+    previous.delivered === next.delivered &&
+    previous.failed === next.failed &&
+    previous.failures.length === next.failures.length &&
+    previous.failures.every(
+      (failure, index) =>
+        Object.is(failure.message, next.failures[index]?.message) &&
+        Object.is(failure.error, next.failures[index]?.error),
+    )
+  );
 }
 
 function emptyProgress(): DeliveryLoopProgress {
