@@ -111,12 +111,15 @@ export class Server {
         "Server start cleanup failed while closing owned contexts/resources.",
       );
       if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
-        this.#failedStartCleanup = { closeGroup, ownsFailedStartRollback: true };
+        this.#failedStartCleanup = {
+          closeGroup,
+          failedStartRollback: { rejection: error },
+        };
       } else {
         try {
           await closeGroup.close();
         } catch (cleanupError) {
-          this.#failedStartCleanup = { closeGroup, ownsFailedStartRollback: false };
+          this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined };
           throw attachmentCleanupError(error, cleanupError);
         }
         this.#failedStartConsumed = true;
@@ -143,7 +146,7 @@ export class Server {
           ),
           network: { server: httpServer, sessions },
           attachment,
-          ownsFailedStartRollback: false,
+          failedStartRollback: undefined,
         };
         this.#failedStartCleanup = cleanup;
         return this.#cleanupFailedListenerStart(cleanup, error);
@@ -173,14 +176,23 @@ export class Server {
       throwCleanupErrors(errors);
     }
 
+    const failedStartRollback = cleanup.failedStartRollback;
     if (
-      cleanup.ownsFailedStartRollback &&
-      serverEnvironmentAccess.failedStartPending(this.#environment)
+      failedStartRollback !== undefined &&
+      serverEnvironmentAccess.failedStartRetryPending(
+        this.#environment,
+        failedStartRollback.rejection,
+      )
     ) {
       try {
         await serverEnvironmentAccess.retryFailedStart(this.#environment);
       } catch (error) {
-        if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+        if (
+          serverEnvironmentAccess.failedStartRetryPending(
+            this.#environment,
+            failedStartRollback.rejection,
+          )
+        ) {
           throw error;
         }
         collectCloseError(error, errors);
@@ -285,9 +297,13 @@ export class Server {
 
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
-  readonly ownsFailedStartRollback: boolean;
+  readonly failedStartRollback: FailedStartRollbackCapability | undefined;
   network?: FailedStartNetwork;
   attachment?: EnvironmentAttachmentHandle;
+}
+
+interface FailedStartRollbackCapability {
+  readonly rejection: unknown;
 }
 
 interface FailedStartNetwork {

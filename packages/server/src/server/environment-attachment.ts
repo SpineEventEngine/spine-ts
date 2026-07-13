@@ -212,7 +212,8 @@ export class EnvironmentAttachments {
 
   /** @internal Whether this exact attachment rejection owns failed-start rollback retry. */
   failedStartRetryPending(error: unknown): boolean {
-    return this.#failedRollback?.rejection === error;
+    const rollback = this.#failedRollback;
+    return rollback?.rejection !== undefined && rollback.rejection === error;
   }
 
   /** @internal Whether detach of this exact handle has established endpoint safety. */

@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 round-4 re-review assigned
+Status: Slice 3 round-5 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -780,3 +780,42 @@ smallest coherent implementation.
   and every scoped static/audit gate pass. The actual Terra Medium implementer
   used no subagents and is closed. Public and architectural surfaces remain
   unchanged; fresh whole-slice re-review follows.
+
+## Slice 3 Round-5 Capability Lifetime Clarification
+
+- `2026-07-13T21:07:28Z`: exact rejection identity is a live capability, not a
+  permanent boolean. Observation must require a present rollback and assigned
+  rejection. The `Server` cleanup record retains the originating rejection and
+  re-qualifies it before each rollback retry; once the original rollback clears,
+  that record advances only its own close group even if another rollback later
+  appears. No public state or Slice 4+ behavior is added.
+
+## Slice 3 Round-5 Resolution Handback
+
+- The exact rejection is a capability with the same lifetime as its active
+  `FailedStartRollback`. Optional absence is no longer interpreted as identity:
+  both rollback and assigned rejection must be present before equality can
+  grant retry authority.
+- Server cleanup stores `{ rejection }`, not copied authority. Before invoking
+  environment retry, and again after a retry rejection, it asks whether that
+  exact capability still owns the active rollback. An expired capability skips
+  environment work and reaches only its existing retryable close group.
+- Direct tests cover absent, in-flight/unassigned, exact assigned, and cleared
+  states. The deterministic A-clear/partial-close/B-new-owner transition proves
+  no authority transfer, cause crossing, duplicate successful close, rebuild,
+  attach, or listen. No package forwarding, public export, or Slice 4+ behavior
+  changes.
+- Focused RED/GREEN is 0/2 then 2/2 direct and 0/1 then 1/1 integration; the
+  six-file native gate is 188/188, with both typechecks and scoped lint/cleanup
+  passing before final handback audits.
+- `2026-07-13T21:16:46Z`: final typecheck/native/lint/cleanup/Prettier and exact
+  scope/status/public-leak/public-surface/diff gates pass. Eight changed paths
+  remain inside the established ten-path internal boundary; package forwarding
+  and fixture files remain unchanged.
+
+## Slice 3 Round-5 Coordinator Acceptance
+
+- `2026-07-13T21:19:35Z`: live rejection capability and sentinel guards pass
+  independent coordinator verification: both typechecks, 6 files / 188 tests,
+  and all scoped gates. Actual Terra Medium implementer used no subagents and
+  is closed. Public/architecture surfaces remain unchanged; re-review follows.

@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 round-4 re-review assigned
+Status: Slice 3 round-5 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -825,3 +825,45 @@ gate passes.
   Prettier, exact scope/status/public-leak/public-surface, and diff checks.
   Fresh whole-Slice 3 style/API/reliability re-review is assigned; docs N/A and
   security deferred.
+
+## Slice 3 Round-4 Re-review Findings
+
+- `2026-07-13T21:07:28Z`: actual `gpt-5.6-terra` / high reviewers report two
+  highs in one exact-ownership lifetime model; no subagents; all closed. Prior
+  initial/listener/contender ownership findings are otherwise resolved.
+- High: absent rollback and `undefined` error currently compare equal. Require
+  an active rollback with an assigned exact rejection before identity match.
+- High: snapshotting ownership into a readonly boolean lets it outlive the
+  original rollback and later adopt another server's rollback after partial
+  dependency close. Retain the exact rejection in the cleanup record and
+  revalidate it on every retry. Add sentinel and stale-owner transition tests.
+  Same Terra Medium implementer owns this bounded round-5 fix.
+
+## Slice 3 Round-5 Review-Fix Handback
+
+- `failedStartRetryPending` now requires both an active rollback and its
+  assigned rejection before exact identity comparison. Absent rollback and the
+  real in-flight/unassigned rollback sentinel return false; the assigned exact
+  owner returns true only until that rollback clears.
+- `FailedStartCleanup` now retains the originating rejection capability instead
+  of a permanent ownership boolean. Every cleanup retry and retry-error branch
+  revalidates that exact rejection. Once A's rollback clears, A advances only
+  its remaining close-group indexes even while B owns a new unsafe rollback.
+- Direct RED is 0/2 and focused integration RED is 0/1; minimal GREEN is 2/2
+  and 1/1. The six-file coordinator set passes 188/188. Both typechecks, scoped
+  ESLint, and cleanup enforcement pass before final synchronized format/audit
+  evidence.
+- `2026-07-13T21:16:46Z`: final formatted-tree verification passes both
+  typechecks, 6 files / 188 native tests, scoped ESLint, cleanup enforcement,
+  and exact ten-path Prettier. Audits report 8 changed paths inside the
+  ten-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-5 Coordinator Gate
+
+- `2026-07-13T21:19:35Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent verification passes
+  both typechecks, 6 files / 188 native tests, scoped lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff gates. Fresh whole-
+  Slice 3 style/API/reliability re-review is assigned; docs N/A, security
+  deferred.

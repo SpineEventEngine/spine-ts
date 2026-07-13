@@ -1945,6 +1945,43 @@ describe("attachment and last-detach linearization", () => {
     expect(activeRegistrationCount(attachments)).toBe(1);
   });
 
+  it("rejects an undefined failed-start sentinel without an active rollback", () => {
+    const attachments = new EnvironmentAttachments();
+
+    expect(attachments.failedStartRetryPending(undefined)).toBe(false);
+    expect(attachments.failedStartRetryPending(new Error("unrelated lifecycle fault"))).toBe(false);
+  });
+
+  it("rejects an undefined sentinel while rollback rejection is unassigned", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const failed = descriptor(
+      "RetryUnassignedSentinel",
+      "type.example.dev/RetryUnassignedSentinel",
+      new InMemoryStorageFactory(),
+    );
+    const startupFailure = new Error("unassigned sentinel startup failed");
+    const quiescenceFailure = new Error("unassigned sentinel remained unsafe");
+    const quiescence = Promise.withResolvers<undefined>();
+    worker.enqueue({ rejected: startupFailure });
+    worker.awaitGates.push(quiescence.promise);
+    const failedAttachment = attachments
+      .attach({ ownership: "caller", descriptors: [failed.value] })
+      .catch((error: unknown) => error);
+    await until(() => worker.awaitCalls === 1);
+
+    expect(attachments.failedStartPending).toBe(true);
+    expect(attachments.failedStartRetryPending(undefined)).toBe(false);
+
+    quiescence.reject(quiescenceFailure);
+    const ownerError = await failedAttachment;
+    expect(ownerError).toBeInstanceOf(AggregateError);
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(true);
+
+    await attachments.retryFailedStart();
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(false);
+  });
+
   it("qualifies failed-start retry by the exact rejected attachment", async () => {
     const worker = new LifecycleWorker();
     const attachments = new EnvironmentAttachments({ createWorker: () => worker });

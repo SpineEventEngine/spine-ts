@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 3 round-4 re-review assigned
+Status: Slice 3 round-5 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -586,3 +586,44 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   reviewers are assigned at `gpt-5.6-terra` / high with no subagents against
   the accepted Slice 2 baseline through the new round-4 commit. Documentation
   N/A; security deferred to T-0041.
+
+## Slice 3 Round-4 Re-review Result
+
+- `2026-07-13T21:07:28Z`: style/maintainability HIGH (undefined sentinel);
+  TypeScript/API docs HIGH (stale authority); performance/reliability HIGH
+  (same stale-authority transition). Actual `gpt-5.6-terra` / high, matching
+  dispatch; no subagents; all closed.
+- Require present/assigned rollback identity and retain/revalidate the original
+  rejection rather than a boolean. Cover no-rollback/in-flight sentinels plus:
+  owner rollback clears, owner close group stays partial, another server creates
+  rollback, original owner retries only its failed close indexes. Docs N/A;
+  security deferred.
+
+## Slice 3 Round-5 Review-Fix Handback
+
+- The sentinel high is addressed by requiring an active assigned rejection
+  before identity comparison. The stale-authority high is addressed by storing
+  the exact rejection capability and revalidating it for every environment
+  retry decision and retry rejection; no boolean authority survives rollback.
+- Direct RED proves both false-positive `undefined` states; integration RED
+  proves A coalesces onto B after A's rollback clears and dependency close is
+  partial. GREEN coverage proves A retries only its failed close index, B alone
+  progresses and reports B's cause, successful indexes stay exact-once, both
+  servers become terminal, and the sibling/generation remains usable.
+- Focused GREEN is 2/2 plus 1/1; the six-file coordinator gate is 188/188 with
+  both typechecks and scoped lint/cleanup passing. This remains implementation
+  handback for coordinator re-review, not self-acceptance; public API, docs,
+  Slice 4+, and running close remain excluded.
+- `2026-07-13T21:16:46Z`: final formatted-tree gate passes both typechecks, 6
+  files / 188 native tests, scoped ESLint, cleanup, exact ten-path Prettier,
+  eight-path-in-ten scope, 4/4 status, public-leak/public-surface, and diff-check
+  audits. Both corroborated highs are ready for coordinator re-review.
+
+## Slice 3 Round-5 Re-review Assignment
+
+- `2026-07-13T21:19:35Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  6 files / 188 tests, and all scoped gates pass independently.
+- Fresh whole-slice style, TypeScript/API docs, and performance/reliability run
+  at `gpt-5.6-terra` / high with no subagents against accepted Slice 2 through
+  the new round-5 commit. Documentation N/A; security deferred to T-0041.

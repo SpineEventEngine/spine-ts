@@ -1219,6 +1219,184 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("expires rollback authority before retrying a partial dependency close", async () => {
+    const fixture = await lifecycleFixture();
+    fixture.worker.release();
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.context)
+      .start();
+
+    const firstStartupFailure = new Error("expired authority startup failed");
+    const firstQuiescenceFailure = new Error("expired authority remained unsafe");
+    const firstResourceFailure = new Error("expired authority resource close failed");
+    const duplicateFirstClose = new Error("expired authority dependency closed more than once");
+    const firstStorage = new LifecycleTrackingStorageFactory([]);
+    const firstContext = await fixture
+      .createBuilder("LifecycleExpiredRollbackAuthority")
+      .withStorageFactory(firstStorage)
+      .buildAsync();
+    let successfulResourceCloses = 0;
+    const successfulResource = vi.fn(() => {
+      successfulResourceCloses += 1;
+      if (successfulResourceCloses > 1) {
+        throw duplicateFirstClose;
+      }
+    });
+    let retryingResourceCloses = 0;
+    const retryingResource = vi.fn(() => {
+      retryingResourceCloses += 1;
+      if (retryingResourceCloses === 1) {
+        throw firstResourceFailure;
+      }
+      if (retryingResourceCloses > 2) {
+        throw duplicateFirstClose;
+      }
+    });
+    const firstServer = Server.atPort(0, { environment: fixture.environment })
+      .add(firstContext)
+      .addResource({ close: successfulResource })
+      .addResource({ close: retryingResource });
+    fixture.worker.rejectNextStart(firstStartupFailure);
+    fixture.worker.failNextAwait(firstQuiescenceFailure);
+    const firstStarting = firstServer.start();
+    void firstStarting.catch(() => undefined);
+
+    const secondStartupFailure = new Error("new rollback owner startup failed");
+    const secondQuiescenceFailure = new Error("new rollback owner remained unsafe");
+    const secondRetryFailure = new Error("new rollback owner retry remained unsafe");
+    const secondStorage = new LifecycleTrackingStorageFactory([]);
+    const secondContext = await fixture
+      .createBuilder("LifecycleNewRollbackOwner")
+      .withStorageFactory(secondStorage)
+      .buildAsync();
+    const secondResource = vi.fn();
+    const secondServer = Server.atPort(0, { environment: fixture.environment })
+      .add(secondContext)
+      .addResource({ close: secondResource });
+    let secondStarting: Promise<unknown> | undefined;
+    let secondRetry: Promise<unknown> | undefined;
+    let firstRetry: Promise<unknown> | undefined;
+    let releaseSecondRetry: (() => void) | undefined;
+
+    try {
+      const firstStartError = await firstStarting.catch((error: unknown) => error);
+      expect(firstStartError).toBeInstanceOf(AggregateError);
+      expect((firstStartError as AggregateError).errors).toEqual([
+        firstStartupFailure,
+        firstQuiescenceFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(successfulResource).not.toHaveBeenCalled();
+      expect(retryingResource).not.toHaveBeenCalled();
+
+      const firstCleanupError = await firstServer.start().catch((error: unknown) => error);
+      expect(firstCleanupError).toBe(firstResourceFailure);
+      expect(firstCleanupError).not.toBe(firstStartError);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledOnce();
+      expect(
+        firstStorage.storages.every((storage) => firstStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+
+      fixture.worker.rejectNextStart(secondStartupFailure);
+      fixture.worker.failNextAwait(secondQuiescenceFailure);
+      secondStarting = secondServer.start();
+      const secondStartError = await secondStarting.catch((error: unknown) => error);
+      expect(secondStartError).toBeInstanceOf(AggregateError);
+      expect((secondStartError as AggregateError).errors).toEqual([
+        secondStartupFailure,
+        secondQuiescenceFailure,
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(secondResource).not.toHaveBeenCalled();
+      expect(secondStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+
+      const awaitCallsBeforeRetry = fixture.worker.awaitCalls;
+      releaseSecondRetry = fixture.worker.holdNextAwait(secondRetryFailure);
+      secondRetry = secondServer.start();
+      void secondRetry.catch(() => undefined);
+      await waitFor(() => fixture.worker.awaitCalls === awaitCallsBeforeRetry + 1);
+      firstRetry = firstServer.start();
+      void firstRetry.catch(() => undefined);
+
+      let firstRetrySettled = false;
+      let firstCompletion: unknown;
+      void firstRetry
+        .catch((error: unknown) => error)
+        .then((result) => {
+          firstCompletion = result;
+          firstRetrySettled = true;
+        });
+      await waitFor(() => firstRetrySettled);
+      expectDeferredCleanupCompletion(firstCompletion);
+      expect(firstCompletion).not.toBe(secondRetryFailure);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledTimes(2);
+      expect(
+        firstStorage.storages.every((storage) => firstStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(secondResource).not.toHaveBeenCalled();
+      expect(secondStorage.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+
+      const firstTerminal = await firstServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(firstTerminal);
+      expect(successfulResource).toHaveBeenCalledOnce();
+      expect(retryingResource).toHaveBeenCalledTimes(2);
+
+      const sessionDuringRetry = http2.connect(sibling.baseUrl);
+      sessionDuringRetry.on("error", () => undefined);
+      await once(sessionDuringRetry, "remoteSettings");
+      sessionDuringRetry.close();
+      await once(sessionDuringRetry, "close");
+
+      releaseSecondRetry();
+      releaseSecondRetry = undefined;
+      const secondRetryError = await secondRetry.catch((error: unknown) => error);
+      expect(secondRetryError).toBe(secondRetryFailure);
+      expect(secondRetryError).not.toBe(firstCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(secondResource).not.toHaveBeenCalled();
+
+      const secondCompletion = await secondServer.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(secondCompletion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(secondResource).toHaveBeenCalledOnce();
+      expect(
+        secondStorage.storages.every((storage) => secondStorage.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(fixture.worker.starts).toBe(3);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+
+      const secondTerminal = await secondServer.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(secondTerminal);
+
+      const sessionAfterRetry = http2.connect(sibling.baseUrl);
+      sessionAfterRetry.on("error", () => undefined);
+      await once(sessionAfterRetry, "remoteSettings");
+      sessionAfterRetry.close();
+      await once(sessionAfterRetry, "close");
+
+      await sibling.close();
+      await expect(fixture.environment.close()).resolves.toBeUndefined();
+    } finally {
+      releaseSecondRetry?.();
+      await firstStarting.catch(() => undefined);
+      await secondStarting?.catch(() => undefined);
+      await firstRetry?.catch(() => undefined);
+      await secondRetry?.catch(() => undefined);
+      await secondServer.start().catch(() => undefined);
+      await secondServer.start().catch(() => undefined);
+      await firstServer.start().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await firstContext.close().catch(() => undefined);
+      await secondContext.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("terminally rejects a consumed server after retrying immediate-safe cleanup", async () => {
     const events: string[] = [];
     const startupFailure = new Error("safe startup recovery failed");
