@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 coverage author record re-review assigned
+Status: T-0037e2 final verification
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1490,3 +1490,12 @@ is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
   documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only, records-only, and no subagents.
+
+## Coverage Author Record Re-Review Results
+
+- Style/maintainability: CLEAN, actual `gpt-5.6-terra` / `high`.
+- Documentation: CLEAN, actual `gpt-5.6-luna` / `medium`.
+- TypeScript/API docs: CLEAN/N/A, actual `gpt-5.6-terra` / `high`.
+- Performance/reliability: CLEAN/N/A, actual `gpt-5.6-terra` / `high`.
+- Every reviewer used no subagents and is closed. No finding remains; native
+  full verification is the sole pre-merge gate.
