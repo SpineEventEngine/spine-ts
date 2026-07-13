@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 Round 2 record finding assigned
+Status: Slice 2 Round 2 record fix verified; Round 3 review pending
 
 ### Slice 2 Round 1 Findings
 
@@ -18,6 +18,13 @@ One Terra Medium owner receives all four before Round 2.
 
 Disposition: all four Slice 2 Round 1 findings are corrected under strict TDD.
 Focused and affected regressions pass; Round 2 review is pending.
+
+### Slice 2 Round 2 Record Correction
+
+The active Slice 2 implementation evidence now records the post-fix focused
+119/119 and affected 217/217 results. Earlier timestamped 116/215 entries remain
+historical pre-fix evidence. This correction changes records only; Round 3
+documentation review is pending.
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -234,7 +241,7 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   package/root public export or public `ServerEnvironment` method, server
   wiring, reusable stop, permanent close, or later race policy was added;
   exported package-internal access methods remain intentional.
-- Focused evidence is 4 files / 116 tests and the affected T-0037a/b/c/d
-  regression is 7 files / 215 tests. Generated build typecheck passed. Final
+- Focused evidence is 4 files / 119 tests and the affected T-0037a/b/c/d
+  regression is 7 files / 217 tests. Generated build typecheck passed. Final
   lint/format/generated/diff/public scans are recorded in the work log. Full
   verification, commit, and push remain intentionally deferred.

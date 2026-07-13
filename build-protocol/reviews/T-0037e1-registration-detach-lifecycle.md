@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 Round 2 record finding assigned
+Status: Slice 2 Round 2 record fix verified; Round 3 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -14,6 +14,10 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Round 2 is code/API/reliability clean. Documentation alone found stale active
   TASK evidence counts; one Terra Medium record owner receives the correction.
   Round 3 and security remain pending.
+- `2026-07-13T02:32:54Z`: The active TASK evidence is corrected to focused
+  119/119 and affected 217/217 while historical pre-fix counts remain intact.
+  This record-only fix is ready for Round 3 documentation review; no behavioral
+  acceptance or new test claim is introduced.
 
 - Slice 2 implementer completed and was closed with matching Terra Medium
   metadata. Coordinator verification independently passes 215/215 and all
