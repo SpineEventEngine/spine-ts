@@ -68,6 +68,7 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
+import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -154,8 +155,15 @@ export interface DeliveryTenantScope {
 export interface ContextDeliveryDescriptor {
   readonly storageFactory: StorageFactory;
   startupScopes(): Promise<readonly DeliveryTenantScope[]>;
+  storageContext(scope: DeliveryTenantScope): StorageContext;
   endpoints(): readonly DeliveryEndpoint[];
+  replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void>;
   onReady(onReady: OnDeliveryReady): () => void;
+  transition(
+    scopes: readonly DeliveryReady[],
+    onReady: OnDeliveryReady,
+    options?: { readonly allowEmpty?: boolean },
+  ): Promise<void>;
 }
 
 interface RegistrationSnapshot {
@@ -370,25 +378,32 @@ export class BoundedContext {
       post: (event: Event) => this.#eventBus.post(event),
     });
     const deliveryReadiness = new DeliveryReadiness();
-    this.#processManagerInbox = new LocalProcessManagerInbox(
-      this.#snapshot.name.value,
-      deliveryReadiness,
-    );
-    this.#projectionInbox = new LocalProjectionInbox(this.#snapshot.name.value, deliveryReadiness);
-    eventSubscribers.set(this, (typeUrl, subscriber) =>
-      eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
-    );
     const tenantIndex = createTenantIndex({
       contextName: this.#snapshot.name.value,
       tenantMode: this.#snapshot.tenantMode,
       storageFactory,
     });
+    const keepTenant = (tenantId: string) => tenantIndex.keep(tenantId);
+    this.#processManagerInbox = new LocalProcessManagerInbox(
+      this.#snapshot.name.value,
+      deliveryReadiness,
+      keepTenant,
+    );
+    this.#projectionInbox = new LocalProjectionInbox(
+      this.#snapshot.name.value,
+      deliveryReadiness,
+      keepTenant,
+    );
+    eventSubscribers.set(this, (typeUrl, subscriber) =>
+      eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
+    );
     contextSystemPairings.set(this, createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
     contextDeliveryDescriptors.set(
       this,
       createDeliveryDescriptor(
+        this.#snapshot,
         storageFactory,
         tenantIndex,
         this.#processManagerInbox,
@@ -1432,6 +1447,7 @@ function cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex)
 }
 
 function createDeliveryDescriptor(
+  context: BoundedContextSnapshot,
   storageFactory: StorageFactory,
   tenantIndex: TenantIndex,
   processManagers: PmInbox,
@@ -1449,11 +1465,38 @@ function createDeliveryDescriptor(
         (await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })),
       );
     },
+    storageContext(scope: DeliveryTenantScope): StorageContext {
+      if (context.tenantMode === "single-tenant") {
+        if (scope.tenantId !== undefined) {
+          throw new Error(
+            `Single-tenant context "${context.name.value}" does not accept tenantId.`,
+          );
+        }
+        return Object.freeze({ name: context.name.value, multitenant: false });
+      }
+      const tenantId = scope.tenantId;
+      if (tenantId === undefined || tenantId.trim().length === 0) {
+        throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
+      }
+      return Object.freeze({ name: context.name.value, multitenant: true, tenantId });
+    },
     endpoints(): readonly DeliveryEndpoint[] {
       return Object.freeze([...processManagers.endpoints(), ...projections.endpoints()]);
     },
+    replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void> {
+      return message.label === "UPDATE_SUBSCRIBER"
+        ? projections.replay(message, tenantId)
+        : processManagers.replay(message, tenantId);
+    },
     onReady(onReady: (ready: DeliveryReady) => void): () => void {
       return readiness.onReady(onReady);
+    },
+    transition(
+      scopes: readonly DeliveryReady[],
+      onReady: OnDeliveryReady,
+      options?: { readonly allowEmpty?: boolean },
+    ): Promise<void> {
+      return readiness.transition(scopes, onReady, options);
     },
   });
 }

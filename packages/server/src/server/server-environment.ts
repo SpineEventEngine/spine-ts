@@ -11,6 +11,11 @@ import type {
 } from "@spine-ts/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
+import {
+  EnvironmentAttachments,
+  type EnvironmentAttachOptions,
+  type EnvironmentAttachmentHandle,
+} from "./environment-attachment.js";
 
 /** Deployment profile used by a small explicit server runtime environment. */
 export type ServerEnvironmentMode = "local" | "production";
@@ -101,6 +106,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
     );
+    environmentAttachments.set(this, new EnvironmentAttachments());
     Object.freeze(this);
   }
 
@@ -149,6 +155,34 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     return this.#close;
   }
 }
+
+interface ServerEnvironmentAccess {
+  attach(
+    environment: ServerEnvironment,
+    options: EnvironmentAttachOptions,
+  ): Promise<EnvironmentAttachmentHandle>;
+  retryFailedStart(environment: ServerEnvironment): Promise<void>;
+}
+
+const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+
+/** @internal Package-only environment delivery attachment access for later server lifecycle use. */
+export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
+  attach(environment: ServerEnvironment, options: EnvironmentAttachOptions) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
+    }
+    return attachments.attach(options);
+  },
+  retryFailedStart(environment: ServerEnvironment) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Rollback retry requires a ServerEnvironment instance."));
+    }
+    return attachments.retryFailedStart();
+  },
+});
 
 function ownedEnvironmentCloseables(
   options: ServerEnvironmentConstructorOptions,

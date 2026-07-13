@@ -7,12 +7,175 @@ import { describe, expect, it, vi } from "vitest";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
+import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("keeps one multitenant descriptor tenant before batch persistence", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const kept = Promise.withResolvers<undefined>();
+    const keep = vi.fn(() => kept.promise);
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inbox = new LocalProcessManagerInbox("Tasks", undefined, keep);
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(),
+    });
+
+    const receiving = inbox.receiveAll(
+      delivery,
+      ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
+      "tenant-dynamic",
+    );
+    await Promise.resolve();
+
+    expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+
+    kept.resolve(undefined);
+    await receiving;
+  });
+
+  it("exact-drains persisted batch rows before propagating a later write failure", async () => {
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inputs = ["persisted", "rejected"].map((targetId) =>
+      processInput(targetTypeUrl, targetId),
+    );
+    const first = inputs[0];
+    if (first === undefined) {
+      throw new Error("Expected one persisted batch input.");
+    }
+    const persisted = writtenResult(first, 1n).message;
+    const writeFailure = new Error("second write failed");
+    const drainMessage = vi.fn().mockResolvedValue({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+      failures: [],
+    });
+    const delivery = {
+      inbox: {
+        receive: vi
+          .fn()
+          .mockResolvedValueOnce({ outcome: "WRITTEN", message: persisted })
+          .mockRejectedValueOnce(writeFailure),
+        readMessage: () => Promise.resolve({ ...persisted, status: "DELIVERED" }),
+      },
+      drainMessage,
+    } as unknown as Delivery;
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(),
+    });
+
+    await expect(inbox.receiveAll(delivery, inputs)).rejects.toBe(writeFailure);
+    expect(drainMessage).toHaveBeenCalledOnce();
+    expect(drainMessage.mock.calls[0]?.[0]).toMatchObject({
+      inboxId: { targetId: "persisted" },
+    });
+  });
+
+  it("continues exact-draining persisted batch rows after an earlier drain fails", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const drainFailure = new Error("first drain failed");
+    const replayed: string[] = [];
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        replayed.push(message.inboxId.targetId);
+        return message.inboxId.targetId === "first"
+          ? Promise.reject(drainFailure)
+          : Promise.resolve();
+      },
+    });
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
+      ),
+    ).rejects.toBe(drainFailure);
+    expect(replayed).toEqual(["first", "second"]);
+  });
+
+  it("buffers persisted rows while direct drain ownership transfers", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalProcessManagerInbox("Tasks", readiness);
+    const replayStarted = Promise.withResolvers<undefined>();
+    const releaseReplay = Promise.withResolvers<undefined>();
+    const replayed: string[] = [];
+    const routed: unknown[] = [];
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      async replay(message) {
+        replayed.push(message.inboxId.targetId);
+        if (message.inboxId.targetId === "admitted") {
+          replayStarted.resolve(undefined);
+          await releaseReplay.promise;
+        }
+      },
+    });
+
+    const admitted = inbox.receive(delivery, processInput(targetTypeUrl, "admitted"), "tenant-a");
+    await replayStarted.promise;
+    const transition = readiness.transition(
+      [
+        {
+          tenantId: "tenant-a",
+          label: "HANDLE_COMMAND",
+          targetTypeUrl,
+          shard: ShardIndex.single(),
+        },
+      ],
+      (scope) => routed.push(scope),
+    );
+
+    await expect(
+      inbox.receiveAll(
+        delivery,
+        ["buffered-a", "buffered-b"].map((targetId) => processInput(targetTypeUrl, targetId)),
+        "tenant-a",
+      ),
+    ).resolves.toHaveLength(2);
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toEqual([]);
+
+    releaseReplay.resolve(undefined);
+    await Promise.all([admitted, transition]);
+    expect(routed).toHaveLength(1);
+
+    await expect(
+      inbox.receive(delivery, processInput(targetTypeUrl, "routed"), "tenant-a"),
+    ).resolves.toBeDefined();
+    expect(replayed).toEqual(["admitted"]);
+    expect(routed).toHaveLength(2);
+  });
+
   it("emits readiness after persistence before exact drain settles", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
@@ -1243,6 +1406,16 @@ describe("LocalProcessManagerInbox", () => {
     expect(ready).toEqual([]);
   });
 });
+
+function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
+  return {
+    inboxId: { targetId, targetTypeUrl },
+    signalId: `signal-${targetId}`,
+    label: "HANDLE_COMMAND",
+    status: "TO_DELIVER",
+    shard: ShardIndex.single(),
+  };
+}
 
 interface ForeignDeferred {
   readonly promise: Promise<never>;

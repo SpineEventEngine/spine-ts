@@ -6,6 +6,7 @@ import {
   configuredDeliveryEndpoint,
   coordinateLocalInboxHandoff,
   deliveryEndpoint,
+  deliveryReady,
   type DeliveryEndpoint,
   DeliveryReadiness,
   drainLocalInboxMessage,
@@ -20,16 +21,19 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #targets = new Map<string, ProjectionInboxTarget>();
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
+  readonly #keepTenant: (tenantId: string) => Promise<void>;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
+    keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
+    this.#keepTenant = keepTenant;
   }
 
   register(target: ProjectionInboxTarget): void {
@@ -72,6 +76,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    if (deliveryTenantId !== undefined) {
+      await this.#keepTenant(deliveryTenantId);
+    }
     const written = await delivery.inbox.receive({
       inboxId: input.inboxId,
       signalId: input.signalId,
@@ -84,26 +91,29 @@ export class LocalProjectionInbox implements ProjectionInbox {
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
 
-    if (written.outcome === "WRITTEN") {
-      const endpoint = configuredDeliveryEndpoint(
-        written.message,
-        this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
-      );
-      if (endpoint !== undefined) {
-        this.#readiness.notify(endpoint, deliveryTenantId);
-      }
-    }
+    const endpoint =
+      written.outcome === "WRITTEN"
+        ? configuredDeliveryEndpoint(
+            written.message,
+            this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
+          )
+        : undefined;
 
-    await drainLocalInboxMessage({
-      delivery,
-      received: written.message,
-      node: this.#contextName,
-      onReplay: (message) => this.#replay(message, deliveryTenantId),
-      replayFailureMessage: "Projection inbox replay failed.",
-      skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
-      unfinishedMessage:
-        "Projection inbox delivery did not reach the target row before the local drain finished.",
-    });
+    await this.#readiness
+      .claim(endpoint === undefined ? undefined : deliveryReady(endpoint, deliveryTenantId))
+      .complete(() =>
+        drainLocalInboxMessage({
+          delivery,
+          received: written.message,
+          node: this.#contextName,
+          onReplay: (message) => this.#replay(message, deliveryTenantId),
+          replayFailureMessage: "Projection inbox replay failed.",
+          skippedMessage:
+            "Projection inbox delivery was skipped before the target row was delivered.",
+          unfinishedMessage:
+            "Projection inbox delivery did not reach the target row before the local drain finished.",
+        }),
+      );
     return written.message;
   }
 
