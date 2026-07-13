@@ -1,19 +1,43 @@
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it, vi } from "vitest";
 
+import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
+import {
+  DeliveryReadiness,
+  type DeliveryReady,
+  type OnDeliveryReady,
+} from "../../src/context/local-inbox-handoff.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 
 describe("ServerEnvironment close", () => {
-  it("refuses an in-use environment without closing owned facilities", async () => {
+  it("queues close behind an attach and refuses without permanent admission or facility teardown", async () => {
     const delivery = { close: vi.fn() };
+    const attachStarted = Promise.withResolvers<undefined>();
+    const releaseAttach = Promise.withResolvers<undefined>();
     const environment = ServerEnvironment.local({ delivery, ownsDelivery: true });
-    const attachment = await serverEnvironmentAccess.attach(environment, {
+    const attaching = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
-      descriptors: [],
+      descriptors: [gatedDescriptor(attachStarted, releaseAttach)],
     });
-
-    await expect(environment.close()).rejects.toThrow(
-      "ServerEnvironment cannot close while it is in use.",
+    await attachStarted.promise;
+    const closing = environment.close();
+    let closeSettled = false;
+    void closing.then(
+      () => {
+        closeSettled = true;
+      },
+      () => {
+        closeSettled = true;
+      },
     );
+
+    await Promise.resolve();
+    expect(closeSettled).toBe(false);
+    releaseAttach.resolve(undefined);
+    const attachment = await attaching;
+
+    await expect(closing).rejects.toThrow("ServerEnvironment cannot close while it is in use.");
 
     expect(delivery.close).not.toHaveBeenCalled();
     await expect(
@@ -23,6 +47,22 @@ describe("ServerEnvironment close", () => {
       }),
     ).resolves.toBeDefined();
     await serverEnvironmentAccess.detach(environment, attachment);
+  });
+
+  it("rejects a close-first queued direct attach before claim, descriptor, or worker work", async () => {
+    const environment = ServerEnvironment.local();
+    const descriptors = countedDescriptors();
+    const stopping = serverEnvironmentAccess.stopDelivery(environment);
+    const closing = environment.close();
+    const attaching = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors,
+    });
+
+    await expect(closing).resolves.toBeUndefined();
+    await expect(attaching).rejects.toThrow("ServerEnvironment is closed.");
+    await expect(stopping).resolves.toBeUndefined();
+    expect(descriptors.enumerations).toBe(0);
   });
 
   it("permanently closes an owner-free environment and rejects later lifecycle admission", async () => {
@@ -60,6 +100,15 @@ describe("ServerEnvironment close", () => {
       ownsDelivery: true,
     });
     const closing = environment.close();
+    let closeSettled = false;
+    void closing.then(
+      () => {
+        closeSettled = true;
+      },
+      () => {
+        closeSettled = true;
+      },
+    );
     const stopping = serverEnvironmentAccess.stopDelivery(environment);
     const waiting = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
@@ -67,8 +116,16 @@ describe("ServerEnvironment close", () => {
     });
 
     await closeStarted.promise;
+    expect(closeSettled).toBe(false);
     await expect(stopping).rejects.toThrow("ServerEnvironment is closed.");
     await expect(waiting).rejects.toThrow("ServerEnvironment is closed.");
+    await expect(serverEnvironmentAccess.stopDelivery(environment)).rejects.toThrow(
+      "ServerEnvironment is closed.",
+    );
+    await expect(serverEnvironmentAccess.retryDeliveryStop(environment)).rejects.toThrow(
+      "ServerEnvironment is closed.",
+    );
+    expect(closeSettled).toBe(false);
     await expect(
       serverEnvironmentAccess.attach(environment, { ownership: "caller", descriptors: [] }),
     ).rejects.toThrow("ServerEnvironment is closed.");
@@ -91,3 +148,51 @@ describe("ServerEnvironment close", () => {
     await expect(stopping).resolves.toBeUndefined();
   });
 });
+
+function gatedDescriptor(
+  started: PromiseWithResolvers<undefined>,
+  release: PromiseWithResolvers<undefined>,
+): ContextDeliveryDescriptor {
+  const readiness = new DeliveryReadiness();
+  const ready: DeliveryReady = Object.freeze({
+    label: "UPDATE_SUBSCRIBER",
+    targetTypeUrl: "type.example.dev/EnvironmentCloseGate",
+    shard: ShardIndex.single(),
+  });
+
+  return Object.freeze({
+    storageFactory: new InMemoryStorageFactory(),
+    async startupScopes() {
+      started.resolve(undefined);
+      await release.promise;
+      return Object.freeze([Object.freeze({})]);
+    },
+    storageContext() {
+      return Object.freeze({ name: "environment-close-gate", multitenant: false });
+    },
+    endpoints: () => Object.freeze([ready]),
+    onReady: (onReady: OnDeliveryReady) => readiness.onReady(onReady),
+    transition: (
+      scopes: readonly DeliveryReady[],
+      onReady: OnDeliveryReady,
+      options?: { readonly allowEmpty?: boolean },
+    ) => readiness.transition(scopes, onReady, options),
+    replay: () => Promise.resolve(),
+  });
+}
+
+function countedDescriptors(): readonly ContextDeliveryDescriptor[] & {
+  readonly enumerations: number;
+} {
+  let enumerations = 0;
+  return Object.freeze({
+    get enumerations() {
+      return enumerations;
+    },
+    [Symbol.iterator]() {
+      enumerations += 1;
+      return [][Symbol.iterator]();
+    },
+    length: 0,
+  }) as unknown as readonly ContextDeliveryDescriptor[] & { readonly enumerations: number };
+}

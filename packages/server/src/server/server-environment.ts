@@ -149,6 +149,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Permanently close this environment after it is no longer in use.
    *
+   * After admission the environment is permanently closed and cannot be reused.
+   *
    * If the environment is in use, close rejects non-destructively and performs no owned-facility
    * teardown. Failed facility-close attempts may be retried; facilities that already closed
    * successfully are not closed again.

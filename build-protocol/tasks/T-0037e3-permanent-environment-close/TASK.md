@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 1 review assigned
+Status: Slice 1 fix re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -502,3 +502,56 @@ consistency. All four canonical concerns are reassigned.
   `git diff --check` pass.
 - Slice 1 is assigned to all four canonical reviewer concerns at their explicit
   profiles, read-only and no subagents. Slices 2-3 remain unauthorized.
+
+## Slice 1 Review Findings And Fix Assignment
+
+- Style/reliability P2: replace the sequential attach-first test with a truly
+  queued attach-first/close-second race proving close refusal leaves permanent
+  admission and facilities untouched. Add close-first/direct-attach-second
+  inner-guard coverage and prove new stop/retry-stop calls reject immediately
+  while a deferred facility keeps public close pending.
+- TypeScript/API P2: add the explicit public TSDoc sentence that after close
+  admission the environment is permanently closed and cannot be reused.
+- Documentation returned CLEAN. All reviewers matched explicit profiles, used
+  no subagents, and are closed. One fresh implementer receives the complete
+  test/TSDoc/record batch at explicit `gpt-5.6-terra` / `medium`, no subagents.
+
+## Slice 1 Review-Fix Handback
+
+- Existing implementer runtime acceptance: coordinator evidence at
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T15-17-20-019f5bd6-eea0-7fa0-a9a9-90515561b218.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at `2026-07-13T14:17:22.873Z`,
+  matching the explicit assignment; no subagents were used.
+- Freshly read/applied: `receiving-code-review`, `test-driven-development`, and
+  `verification-before-completion`. The direct-attach RED exposed descriptor
+  enumeration before the inner closed-state guard, so the narrow production
+  correction is authorized by the demonstrated defect.
+- Deterministic gated attach-first/close-second proves serial attach admission
+  wins and close refuses without permanent admission or facility teardown.
+  Close-first/direct-attach-second proves rejection before descriptor enumeration,
+  claim, or worker work. Deferred facility close keeps public close pending while
+  fresh stop/retry-stop calls reject. `close()` TSDoc now states permanent,
+  non-reusable admission.
+- Evidence: RED 4/5 then GREEN 5/5 in `environment-close.test.ts`; focused
+  lifecycle regression 3 files / 110 tests; native `server.test.ts` 21/21;
+  generated build typecheck, scoped ESLint, API docs, scoped Prettier, and
+  `git diff --check` pass. Full verify, commit, push, generated output, exports,
+  options, later slices, and protected human review remain excluded.
+- Complete Slice 1 review-fix handback requested. Documentation remains clean;
+  security stays deferred to T-0041.
+
+## Slice 1 Fix Coordinator Acceptance
+
+- `2026-07-13T14:27:18Z`: Coordinator verification accepts the complete fix
+  batch for independent re-review. The three non-network lifecycle files pass
+  110/110 tests. The combined four-file run was sandbox-limited only by
+  loopback `EPERM`; native `server.test.ts` passes 21/21.
+- Generated build typecheck, scoped ESLint, cleanup enforcement, API docs,
+  scoped Prettier, and `git diff --check` all pass.
+- Lightweight pre-review lint finds synchronized current status, one shared
+  closed-error source, no package/root export or TypeDoc leak for internal
+  admission state, and no active future scheduler, backoff, monitor, topology,
+  catch-up, or adapter overclaim. Historical superseded text remains outside
+  the active review state unless a current record claims it.
+- Slice 1 fix re-review is assigned. Later slices, full `pnpm verify`, and final
+  security review remain deferred to their accepted gates.

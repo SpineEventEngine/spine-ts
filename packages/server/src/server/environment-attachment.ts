@@ -234,6 +234,9 @@ export class EnvironmentAttachments {
   #queueAttachment(waiter: AttachmentWaiter): void {
     waiter.status = "queued";
     const attaching = this.#serial.then(async () => {
+      if (this.#permanentlyClosed) {
+        throw environmentClosedError();
+      }
       const admittedOptions: EnvironmentAttachOptions = Object.freeze({
         ownership: waiter.options.ownership,
         descriptors: waiter.snapshotDescriptors

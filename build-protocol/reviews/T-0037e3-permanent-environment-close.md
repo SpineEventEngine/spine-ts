@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 1 review assigned
+Status: Slice 1 fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -311,3 +311,54 @@ Derived status mirror: the canonical current state is the `Status` header in
   documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only, no subagents, and Slice 1 only.
+
+## Slice 1 Review Findings And Fix Assignment
+
+- Style/maintainability: P2 queued attach-first race coverage.
+- Documentation: CLEAN.
+- TypeScript/API docs: P2 explicit permanently-closed/no-reuse TSDoc sentence.
+- Performance/reliability: P2 close-first direct-attach inner guard and pending-
+  facility stop/retry-stop rejection coverage.
+- Every reviewer used no subagents and is closed. One fresh Terra Medium
+  implementer receives the complete bounded test/docs/record batch; later
+  slices remain unauthorized.
+
+## Slice 1 Review-Fix Handback
+
+- Existing implementer acceptance is explicit `gpt-5.6-terra` / `medium`, no
+  subagents. Coordinator runtime evidence at
+  `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T15-17-20-019f5bd6-eea0-7fa0-a9a9-90515561b218.jsonl`
+  records actual `gpt-5.6-terra` / `medium` at `2026-07-13T14:17:22.873Z`.
+- Fresh skills `receiving-code-review`, `test-driven-development`, and
+  `verification-before-completion` were read/applied. The close-first direct-
+  attach RED proved descriptor enumeration preceded the inner permanent-state
+  guard; the minimal guard-before-snapshot correction resolves that defect.
+- The gated attach-first/close-second test proves serial admission before
+  non-destructive close refusal. Close-first queued direct attach proves no
+  descriptor enumeration before rejection. Deferred facility close proves fresh
+  stop/retry-stop rejection while public close remains pending. Public `close()`
+  TSDoc now has the explicit permanent-close/no-reuse sentence.
+- Fresh evidence: RED 4/5 then GREEN 5/5; focused lifecycle 3 files / 110
+  tests; native `server.test.ts` 21/21; generated build typecheck, scoped ESLint,
+  API docs, scoped Prettier, and `git diff --check` pass. No full verify, commit,
+  push, generated output, exports/options, later-slice work, or protected human-
+  review access occurred.
+- Re-review is requested for the complete Slice 1 review-fix batch.
+  Documentation remains clean; security remains deferred to T-0041.
+
+## Slice 1 Fix Re-review Assignment
+
+- `2026-07-13T14:27:18Z`: Coordinator accepts the Terra Medium fix handback for
+  independent re-review. Fresh evidence is 110/110 non-network lifecycle tests
+  plus native `server.test.ts` 21/21; the combined sandbox run was limited only
+  by loopback `EPERM`.
+- Generated build typecheck, scoped ESLint, cleanup enforcement, API docs,
+  scoped Prettier, and whitespace checks pass.
+- Lightweight pre-review lint finds exact current status mirrors, no duplicated
+  permanent-close policy value, no package/root or TypeDoc leak of internal
+  admission state, and no active future-policy overclaim. Reviewers must ignore
+  historical superseded text unless the current task records or changed docs
+  claim it as active state.
+- Fresh review dispositions are required for style/maintainability,
+  documentation, TypeScript/API docs, and performance/reliability. Security is
+  deferred to T-0041 by the canonical protocol.
