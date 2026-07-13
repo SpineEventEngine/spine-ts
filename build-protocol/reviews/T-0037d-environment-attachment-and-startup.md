@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 Round 5 review in progress
+Status: Slice 3 Round 5 findings assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -601,3 +601,14 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   High, and reliability Terra High. Review is bounded to scoped owner removal,
   cleanup ordering/failure behavior, bounded retention, sibling preservation,
   test-only diagnostics, and current records. Security remains deferred.
+- `2026-07-13T00:05:09Z`: Round 5 is complete and every reviewer is closed;
+  actual runtime profiles match explicit dispatch. Documentation and API are
+  clean. Reliability reports a blocking dynamic-registration ownership gap:
+  post-open runtimes are configured outside the startup owner/scope snapshot and
+  can survive failed-start rollback. Style reports that the cleanup-failure fake
+  rejects without first modeling real permanent owner removal.
+- One Terra Medium owner receives both findings. Required evidence is a dynamic
+  zero-to-first readiness/startup-failure race with complete selected ownership
+  reclamation and sibling usability, plus a fake and assertion proving the
+  cleanup-failed selected owner remains permanently inert. Round 6 and security
+  remain pending.

@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 Round 5 review in progress
+Status: Slice 3 Round 5 findings assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -472,6 +472,24 @@ listener wiring, or cross-generation persistence is added.
 Style and reliability reported the same owner-retention defect; documentation
 reported the two record defects. TypeScript/API docs is clean. One existing
 Terra Medium owner receives the deduplicated batch under TDD before Round 5.
+
+### Slice 3 Round 5 Findings
+
+1. Registration rollback ownership must include dynamic zero-to-first runtimes
+   prepared after readiness opens. The current registration snapshots startup
+   owners/scopes before open, while its readiness callback can later configure a
+   fresh tenant owner directly. A concurrent startup failure then stops,
+   retires, and reclaims only the initial snapshot, leaving dynamic worker,
+   coordinator, overlap, and settlement state alive. Track every runtime through
+   the owning registration before notification and prove a dynamic-tenant/startup
+   failure race with sibling preservation and complete reclamation.
+2. Make the selected-owner cleanup-failure fake match the real adapter: owner
+   removal is permanent before an injected cleanup rejection is propagated.
+   Assert the failed owner cannot run afterward so the inert-cleanup reclamation
+   test proves safety, not accounting alone.
+
+Documentation and TypeScript/API docs are clean. One Terra Medium owner receives
+both findings under strict TDD before Round 6.
 
 ### Slice 3 Round 4 fix outcome
 
