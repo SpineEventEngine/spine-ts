@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 1 re-review assigned
+Status: Slice 2 implementation assigned
 
 ## Resolution Summary
 
@@ -505,3 +505,9 @@ smallest coherent implementation.
 - `2026-07-13T17:53:59Z`: fresh 5-file / 120-test and all scoped mechanical,
   status, scope, public-leak, and diff checks pass. A fresh whole-slice
   style/API/reliability re-review is assigned; later slices remain unauthorized.
+
+## Slice 1 Clean Closure
+
+- `2026-07-13T17:58:54Z`: all applicable Slice 1 re-review concerns are CLEAN
+  at required actual profiles. Slice 1 is accepted; Slice 2 alone is authorized
+  for Terra Medium TDD.

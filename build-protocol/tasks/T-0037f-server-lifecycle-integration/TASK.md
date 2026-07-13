@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 1 re-review assigned
+Status: Slice 2 implementation assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -391,3 +391,16 @@ gate passes.
 - The same style, API, and reliability reviewers receive a fresh whole-Slice 1
   package at their explicit Terra High profiles, no subagents. Documentation
   remains N/A and security deferred.
+
+## Slice 1 Clean Closure And Slice 2 Assignment
+
+- `2026-07-13T17:58:54Z`: style, TypeScript/API, and performance/reliability
+  re-review all return CLEAN at actual Terra High, matching explicit dispatch.
+  No validation gap remains. All reviewers used no subagents and are closed.
+- Slice 1 is accepted at `dc884b84`. Documentation remains N/A; security stays
+  deferred. One existing implementer receives Slice 2 only at explicit
+  `gpt-5.6-terra` / `medium`, no subagents.
+- Slice 2 owns caller-owned failed-start unsafe retention, cleanup-only retry
+  through the same existing `Server.start()`, cause-once behavior, deferred
+  context/resource cleanup after proven safety, and later fresh environment
+  reuse. Server-owned/listener retry and Slices 3--6 remain unauthorized.
