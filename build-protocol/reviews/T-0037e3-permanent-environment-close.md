@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Slice 3 review assigned
+Status: Slice 3 fix re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -624,3 +624,49 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Fresh style/maintainability, documentation, TypeScript/API docs, and
   performance/reliability dispositions are required. Security remains deferred
   to T-0041.
+
+## Slice 3 Review Results And Fix Assignment
+
+- `2026-07-13T15:33:26Z`: all four concerns identify or corroborate two P2
+  coverage gaps. Desktop metadata confirms documentation at Luna Medium and the
+  other concerns at Terra High. All reviewers used no subagents and are closed.
+- P2 flattening: raw facility errors cannot detect loss of nested
+  `AggregateError` flattening. Add nested leaves and assert final stable leaf
+  order across facility positions.
+- P2 ownership/non-closeable: closeable caller-owned coverage must span all four
+  positions; owned bare non-closeables must be tested separately because
+  unowned entries are filtered before the close group.
+- One Terra Medium implementer receives the complete test/record correction.
+  Runtime/public changes and security scope remain excluded.
+
+## Slice 3 Review-Fix Handback
+
+- Existing implementer profile is explicitly `gpt-5.6-terra` / `medium`; no
+  subagents. Runtime metadata is not exposed in this execution context, so this
+  handback does not claim actual-profile confirmation.
+- Finding dispositions: the nested-aggregate P2 is fixed by nested owned
+  facility failures and ordered leaf assertions; the caller-owned P2 is fixed
+  using four close-tracking closeables with false/default ownership; the owned
+  non-closeable P2 is fixed by a separate all-owned bare-fixture repeat-close
+  case. Retry/idempotency assertions remain present.
+- Sensitivity/GREEN: a temporary nested delivery-wrapper expectation failed
+  1/13 because `close()` exposes its leaf cause; after restoration the focused
+  close file passed 13/13. The focused lifecycle command then passed 3 files /
+  118 tests. Generated build typecheck, changed-file ESLint, and cleanup
+  enforcement exit 0.
+- Final formatting, diff, and exact-scope checks follow this log update. No
+  runtime/public/API/docs/Slice 3 expansion, server/listener work, generated
+  output, examples, commit, push, or `human-review-1-jul.md` access/change is
+  included. Scoped Prettier passed all four files, `git diff --check` passed,
+  and `git diff --name-only` contains exactly those four files. Review-fix
+  handback is ready; commit and push remain excluded.
+
+## Slice 3 Fix Re-review Assignment
+
+- `2026-07-13T15:39:08Z`: coordinator accepts the fix implementer at actual
+  Terra Medium and fresh 3-file / 118-test plus static-gate evidence. It used no
+  subagents.
+- Nested flattening, all-four caller-owned exclusion, and owned non-closeable
+  handling are now separate explicit tests. Fresh style/maintainability,
+  documentation, TypeScript/API docs, and performance/reliability dispositions
+  are required. Security remains deferred to T-0041.

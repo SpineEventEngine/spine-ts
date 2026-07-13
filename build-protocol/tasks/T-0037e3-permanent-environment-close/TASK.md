@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 3 review assigned
+Status: Slice 3 fix re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -855,3 +855,54 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   policy, and no future-policy overclaim.
 - The exact four-file Slice 3 batch is assigned to all four canonical review
   concerns. Security remains deferred to T-0041.
+
+## Slice 3 Review Findings And Fix Assignment
+
+- `2026-07-13T15:33:26Z`: the complete wave yields two deduplicated P2 coverage
+  findings. The flat-order test uses only raw errors, so it does not prove nested
+  facility `AggregateError` flattening. The caller-owned/non-closeable test
+  filters bare values before the close group, so it proves neither all-four
+  caller ownership nor owned non-closeable handling.
+- Required test-only correction: make one or more owned facilities throw nested
+  aggregates and assert ordered leaf causes; use close-tracking caller-owned
+  fixtures for delivery/tracer/transport/storage; test owned bare non-closeable
+  entries separately with successful idempotent close.
+- Desktop metadata matches all explicit profiles: style/API/reliability Terra
+  High and documentation Luna Medium. All reviewers used no subagents and are
+  closed. One Terra Medium implementer receives the complete fix; no runtime or
+  public change is authorized.
+
+## Slice 3 Review-Fix Handback
+
+- Existing implementer role, explicit required profile `gpt-5.6-terra` /
+  `medium`; no subagents. This execution context exposes the assignment profile
+  but no runtime-metadata record, so no actual-profile assertion is made here.
+- Finding dispositions: P2 nested-aggregate coverage accepted and fixed by
+  owned nested facility failures with ordered delivery, tracer, transport, and
+  storage leaf assertions; P2 caller-owned coverage accepted and fixed with
+  close-tracking fixtures in all four positions and false/default ownership;
+  P2 owned-non-closeable coverage accepted and fixed in a separate all-owned,
+  bare-fixture idempotency case.
+- Sensitivity/GREEN: a temporary expectation of the delivery wrapper failed
+  1/13 because the received aggregate held the delivery leaf; the leaf
+  expectation was restored and the file passed 13/13. Retry and completed-
+  facility idempotency coverage remain intact.
+- Commands/results: focused lifecycle `vitest run` for environment close,
+  attachment, and generation-stop passed 3 files / 118 tests; generated build
+  typecheck, changed-file ESLint, and cleanup enforcement exit 0. Scoped
+  Prettier, diff, and exact-scope evidence follow this record update.
+- Exclusions preserved: no runtime/public/API/docs/Slice 3 expansion, server or
+  listener work, generated output, examples, commit, push, or
+  `human-review-1-jul.md` access/change. Final scoped Prettier passed all four
+  assigned files, `git diff --check` passed, and the exact dirty scope is those
+  four files. Review-fix handback is ready; no commit or push is authorized.
+
+## Slice 3 Review-Fix Coordinator Gate
+
+- `2026-07-13T15:39:08Z`: Desktop metadata confirms the fix implementer at
+  actual `gpt-5.6-terra` / `medium`, matching explicit assignment, with no
+  subagents. Coordinator verification passes 3 files / 118 tests, generated
+  typecheck, scoped ESLint, cleanup enforcement, Prettier, and `git diff --check`.
+- The complete nested-flattening, all-four caller-owned, and owned
+  non-closeable test batch is accepted for four-concern re-review. No runtime or
+  public surface changed; security remains deferred to T-0041.

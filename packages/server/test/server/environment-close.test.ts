@@ -20,17 +20,20 @@ import {
 } from "../../src/server/server-environment.js";
 
 describe("ServerEnvironment close", () => {
-  it("attempts every owned facility and reports one flat failure aggregate in facility order", async () => {
+  it("flattens nested owned-facility failures in facility order and continues closing", async () => {
     const attempts: string[] = [];
     const deliveryError = new Error("delivery close failed");
     const tracerError = new Error("tracer close failed");
     const transportError = new Error("transport close failed");
     const storageError = new Error("storage close failed");
+    const deliveryFailure = new AggregateError([deliveryError], "delivery aggregate");
+    const tracerFailure = new AggregateError([tracerError], "tracer aggregate");
+    const storageFailure = new AggregateError([storageError], "storage aggregate");
     const environment = ServerEnvironment.local({
-      delivery: failingCloseable("delivery", deliveryError, attempts),
-      tracerFactory: failingCloseable("tracer", tracerError, attempts),
+      delivery: failingCloseable("delivery", deliveryFailure, attempts),
+      tracerFactory: failingCloseable("tracer", tracerFailure, attempts),
       transport: failingCloseable("transport", transportError, attempts) as SignalTransport,
-      storageFactory: failingCloseable("storage", storageError, attempts) as StorageFactory,
+      storageFactory: failingCloseable("storage", storageFailure, attempts) as StorageFactory,
       ownsDelivery: true,
       ownsTracerFactory: true,
       ownsTransport: true,
@@ -74,19 +77,38 @@ describe("ServerEnvironment close", () => {
     expect(attempts).toEqual(["delivery", "tracer", "transport", "storage", "tracer", "storage"]);
   });
 
-  it("does not close caller-owned or non-closeable selected facilities", async () => {
+  it("does not close caller-owned closeable facilities", async () => {
     const attempts: string[] = [];
     const environment = ServerEnvironment.local({
       delivery: successfulCloseable("delivery", attempts),
-      tracerFactory: {} as ServerEnvironmentCloseable,
-      transport: {} as SignalTransport,
-      storageFactory: {} as StorageFactory,
+      tracerFactory: successfulCloseable("tracer", attempts),
+      transport: successfulCloseable("transport", attempts) as SignalTransport,
+      storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
+      ownsTracerFactory: false,
+      ownsTransport: false,
+      ownsStorageFactory: false,
     });
 
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
     expect(attempts).toEqual([]);
+  });
+
+  it("ignores owned non-closeable facilities", async () => {
+    const environment = ServerEnvironment.local({
+      delivery: {} as ServerEnvironmentCloseable,
+      tracerFactory: {} as ServerEnvironmentCloseable,
+      transport: {} as SignalTransport,
+      storageFactory: {} as StorageFactory,
+      ownsDelivery: true,
+      ownsTracerFactory: true,
+      ownsTransport: true,
+      ownsStorageFactory: true,
+    });
+
+    await expect(environment.close()).resolves.toBeUndefined();
+    await expect(environment.close()).resolves.toBeUndefined();
   });
 
   it("queues close behind an attach and refuses without permanent admission or facility teardown", async () => {
@@ -486,7 +508,7 @@ function successfulCloseable(name: string, attempts: string[]): ServerEnvironmen
 
 function failingCloseable(
   name: string,
-  error: Error,
+  error: Error | AggregateError,
   attempts: string[],
 ): ServerEnvironmentCloseable {
   return {
