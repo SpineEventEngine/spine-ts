@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 3 review in progress
+Status: All slices clean; final verification in progress
 
 ### Slice 4 Round 2 Finding
 
@@ -20,6 +20,15 @@ Round 3 reviews the record-only correction frozen from `ab42b249` through
 `8e119579` in `.superpowers/sdd/review-ab42b249..8e119579.diff` (one commit,
 10,437 bytes). Explicit profiles remain style, TypeScript/API, and reliability
 `gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
+
+### Slice 4 Acceptance
+
+Round 3 is clean in all four canonical concerns and every reviewer is closed.
+Serial attachment admission, before/after-stop races, safe/unsafe queued attach
+behavior, stale/opaque handle behavior, two-way retry-state separation, runtime
+input snapshotting, and worker-construction recovery are accepted. All four
+T-0037e1 slices are clean; final child verification is now the only pre-merge
+gate.
 
 ### Slice 4 Round 1 Findings
 
