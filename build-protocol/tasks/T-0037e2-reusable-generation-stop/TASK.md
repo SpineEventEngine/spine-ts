@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification fix review assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -431,3 +431,30 @@ dispatched documentation `gpt-5.6-luna` / `medium` and style, TypeScript/API,
 and performance/reliability `gpt-5.6-terra` / `high` profiles; every reviewer
 is closed. All four T-0037e2 slices are accepted, and the full project gate is
 the only remaining pre-merge requirement.
+
+## Final Verification Fix Assignment
+
+The regenerated full gate exposed test-fixture type errors that incremental
+focused typechecking had not rebuilt: one throwing storage-factory getter lacks
+an explicit contract return, one snapshot-mutation fixture assigns an invalid
+delivery label, and one frozen descriptor fixture lacks explicit callback
+parameter types. A single existing implementer is assigned the bounded
+test-only correction at explicit `gpt-5.6-terra` / `medium`, no subagents. No
+production behavior, public API, generated artifact, or coverage threshold may
+change.
+
+## Final Verification Fix Handback
+
+The final-gate correction is fixture-only: the guarded throwing storage-factory
+getter now declares the descriptor contract, the mutable readiness regression
+uses a different supported label while retaining its original-snapshot
+expectation, and the frozen descriptor helper carries the exact tenant/readiness
+callback contracts without shadowing helper options. Forced post-proto build,
+strict test-tooling typecheck, focused tests, and the existing regression suite
+pass; exact evidence is recorded in the canonical work/review logs. Final
+verification fix review is requested.
+
+Coordinator verification independently passed strict test-tooling typechecking,
+162 lifecycle regression tests, focused formatting, exact scope, and diff
+hygiene. The committed fixture-only endpoint is assigned to the four canonical
+review concerns.

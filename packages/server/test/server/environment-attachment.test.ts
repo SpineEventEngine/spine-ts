@@ -169,7 +169,7 @@ describe("EnvironmentDeliveryWorker", () => {
     const lateAccessorFailure = new Error("descriptor storage factory was read late");
     let lateAccessorCalls = 0;
     const guardedDescriptor: ContextDeliveryDescriptor = Object.freeze({
-      get storageFactory() {
+      get storageFactory(): ContextDeliveryDescriptor["storageFactory"] {
         lateAccessorCalls += 1;
         throw lateAccessorFailure;
       },

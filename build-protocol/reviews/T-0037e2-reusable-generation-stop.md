@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification fix review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -909,3 +909,40 @@ Derived status mirror: the canonical current state is the `Status` header in
   generic family label and no contradictory exact model or reasoning value.
 - No finding remains. All T-0037e2 slices are review-clean; full verification
   is the only remaining pre-merge gate. Security remains deferred to T-0041.
+
+## Final Verification Finding
+
+- The final generated build typecheck exposed seven test-only diagnostics from
+  three fixture roots: a throwing getter without an explicit storage-factory
+  return contract, an unsupported mutated delivery label, and five implicit
+  callback parameter types in a frozen descriptor literal.
+- One existing `gpt-5.6-terra` / `medium` implementer, no subagents, receives
+  the bounded fixture-only correction. Production/public/generated behavior and
+  coverage policy remain unchanged. A focused four-concern review is required
+  before rerunning the full gate.
+
+## Final Verification Fix Evidence
+
+- The fixed/explicit `gpt-5.6-terra` / `medium` implementer, no subagents,
+  recorded canonical review/debugging/TDD/testing/typing/completion
+  applicability before test edits and verified all seven diagnostics against
+  the descriptor contracts and existing working fixture.
+- The correction changes only two test fixtures: an explicit throwing-getter
+  return contract, one supported mutable readiness label, and exact frozen
+  descriptor callback types with no options shadowing. No production, API,
+  generated, threshold, or runtime behavior changed.
+- Strict test-tooling typechecking and required post-proto forced generated
+  build pass. Focused tests pass 2 files / 102 tests and the existing regression
+  suite passes 5 files / 162 tests. Final verification fix review is requested;
+  formatting/status/scope/public/generated/diff evidence is recorded in the
+  canonical work log.
+
+## Final Verification Fix Review Assignment
+
+- Coordinator verification passed strict tooling typecheck, 5 files / 162
+  tests, focused formatting, exact test/record-only scope, synchronized status,
+  public/generated scans, and diff hygiene at `2026-07-13T10:44:00Z`.
+- Assigned explicit profiles are style/maintainability
+  `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+  TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, fixture-only, and no subagents.

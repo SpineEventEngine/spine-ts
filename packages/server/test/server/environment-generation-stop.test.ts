@@ -1,8 +1,15 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
-import { DeliveryReadiness, type DeliveryReady } from "../../src/context/local-inbox-handoff.js";
+import type {
+  ContextDeliveryDescriptor,
+  DeliveryTenantScope,
+} from "../../src/context/bounded-context.js";
+import {
+  DeliveryReadiness,
+  type DeliveryReady,
+  type OnDeliveryReady,
+} from "../../src/context/local-inbox-handoff.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
   DeliveryRunCoordinator,
@@ -2064,7 +2071,7 @@ describe("environment generation stop", () => {
     });
     const mutableReady = {
       tenantId: "tenant-original",
-      label: "UPDATE_SUBSCRIBER",
+      label: "UPDATE_SUBSCRIBER" as DeliveryReady["label"],
       targetTypeUrl,
       shard: ShardIndex.single(),
     } satisfies DeliveryReady;
@@ -2082,7 +2089,7 @@ describe("environment generation stop", () => {
 
     route.notify(target.value, mutableReady);
     mutableReady.tenantId = "tenant-mutated";
-    mutableReady.label = "MUTATED";
+    mutableReady.label = "HANDLE_COMMAND";
     mutableReady.targetTypeUrl = "type.example.dev/Mutated";
     route.rebind(
       (_descriptor, ready) => {
@@ -2353,7 +2360,7 @@ function descriptor(
           )
         : Promise.reject(failure);
     },
-    storageContext: (scope) => {
+    storageContext: (scope: DeliveryTenantScope) => {
       contextCalls += 1;
       const failure = contextFailures.shift();
       if (failure !== undefined) throw failure;
@@ -2369,15 +2376,19 @@ function descriptor(
       if (failure !== undefined) throw failure;
       return Object.freeze([ready]);
     },
-    onReady: (onReady) => readiness.onReady(onReady),
-    transition: (scopes, onReady, options) =>
+    onReady: (onReady: OnDeliveryReady) => readiness.onReady(onReady),
+    transition: (
+      scopes: readonly DeliveryReady[],
+      onReady: OnDeliveryReady,
+      transitionOptions?: { readonly allowEmpty?: boolean },
+    ) =>
       readiness.transition(
         scopes,
         (candidate) => {
           notifications += 1;
           return onReady(candidate);
         },
-        options,
+        transitionOptions,
       ),
     replay: () => Promise.resolve(),
   });
