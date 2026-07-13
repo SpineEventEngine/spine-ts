@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: All slices clean; final verification in progress
+Status: Final branch-coverage fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -294,3 +294,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   immutable role metadata. Slice 4 is accepted; no actionable findings remain
   across T-0037e1's reviewed slices. Final full verification and merge remain;
   security is deferred to final readiness.
+- Final verification found no behavior failure: 65 files / 1,481 tests pass.
+  Global branch coverage alone is 89.95% (4,138/4,600), two branches below the
+  required 90%. One Terra Medium owner receives two relevant validation-path
+  assertions (unknown registration removal and foreign-handle retry) without
+  production or threshold change. A focused four-concern review and full-gate
+  rerun remain required before merge.

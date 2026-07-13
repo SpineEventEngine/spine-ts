@@ -1,6 +1,15 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: All slices clean; final verification in progress
+Status: Final branch-coverage fix assigned
+
+### Final Verification Finding
+
+Full `pnpm verify` passes all 65 files / 1,481 tests but global branch coverage
+is 89.95% (4,138/4,600), below the required 90% by two covered branches. The
+current LCOV report identifies two existing relevant untested validation paths:
+unknown registration removal and foreign-handle `retryDetach()`. One Terra
+Medium owner receives the two behavior assertions before a focused review and
+full-gate rerun; no threshold or production behavior may be weakened.
 
 ### Slice 4 Round 2 Finding
 
