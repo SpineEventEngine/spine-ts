@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 1 review wave 1 assigned
+Status: Slice 1 review wave 2 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -55,3 +55,49 @@ Derived status mirror: the canonical current state is the `Status` header in
   role registry (`gpt-5.6-terra` / `medium`) plus the matching explicit spawn;
   the child reported no contradictory runtime value. No inherited parent
   default or unconfigured generic role was used.
+
+## Slice 1 Review Wave 1
+
+- Documentation: CLEAN. No status, chronology, scope, public-doc, export-claim,
+  future-policy, or unrelated-file defect.
+- Style/maintainability: P1. Retry restarts a half-closed stop because the
+  retained operation stores no transition progress; simultaneous retries do not
+  share one attempt.
+- TypeScript/API docs: P1. Same retained-operation retry defect. Additional P1:
+  stop admission bypasses existing failed-start rollback and unsafe-last-detach
+  recovery ownership.
+- Performance/reliability: P1. Simultaneous retry calls enqueue distinct serial
+  stops and can operate on two generations instead of sharing one exact attempt.
+- Deduplicated fix batch: (1) retain one stop operation/progress and atomically
+  coalesce a retry attempt; (2) refuse stop admission while T-0037e1 recovery
+  owns the generation. Return both to the resumed existing implementer before a
+  fresh four-lane wave.
+- Runtime-role acceptance: immutable lane profiles match every explicit
+  dispatch; no child reported contradictory metadata or spawned a subagent.
+- Wave 1 fixes are implemented by the resumed existing implementer at immutable
+  and explicit `gpt-5.6-terra` / `medium`. Focused RED/GREEN covers retained
+  construction retry/coalescing and both T-0037e1 recovery-owner refusals.
+  Mechanical verification remains pending before fresh review.
+- Coordinator fix audit added one P1 for call-time snapshots bypassing serial
+  attach/detach ordering. The resumed implementer moved recovery checks and the
+  generation/old/survivor snapshot into serialized admission; focused
+  RED/GREEN now covers queued attach survival and queued unsafe-detach refusal.
+  Fresh mechanical verification remains pending.
+- The final coordinator contract finding is fixed: ordinary stop after an
+  admitted rejection now refuses with a stable private explicit-retry message,
+  while duplicate running stop and coalesced explicit retry retain their prior
+  behavior. Focused RED/GREEN is recorded; verification remains pending.
+- Coordinator fix audit added one P1 to the same batch before acceptance:
+  generation/recovery ownership must be captured at serialized admission, not
+  synchronous API call time. Focused attach-before-stop and queued-unsafe-detach
+  regressions are required before Wave 1 fixes can be committed.
+- Coordinator contract audit requires ordinary stop after an admitted rejection
+  to return an explicit stop-retry-required refusal; only the dedicated retry
+  continuation may advance the retained operation. In-flight duplicate stop
+  calls must continue sharing the active attempt.
+- Wave 1 fixes and both coordinator audits passed independent focused,
+  public-index, typecheck, formatting, diff, status, inventory, and public-leak
+  checks at `2026-07-13T05:29:42Z`. The committed fix delta is assigned to fresh
+  Wave 2 style, documentation, TypeScript/API docs, and
+  performance/reliability review at their immutable explicit profiles, all
+  read-only and without subagents.

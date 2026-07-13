@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 1 review wave 1 assigned
+Status: Slice 1 review wave 2 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -164,3 +164,17 @@ applicability check and selected skill details are recorded in the canonical
 T-0037e2 work log; the review log mirrors this status without replacing
 accepted history. Coordinator verification and pre-review lint passed, so the
 four canonical reviewers are assigned against the committed Slice 1 package.
+
+Wave 1 fixes retain one resumable private stop operation and restore
+T-0037e1 recovery-owner precedence. Focused RED/GREEN evidence is appended to
+the canonical work log. Coordinator verification and pre-review lint passed;
+the committed fix delta is assigned to fresh four-lane review.
+
+The coordinator fix audit additionally requires stop selection to occur at
+serialized admission, so earlier queued attach/detach operations linearize
+first. This correction is implemented with focused RED/GREEN; verification and
+re-review remain.
+
+The final Wave 1 contract fix makes ordinary stop refuse after an admitted
+rejection with a private stable explicit-retry message; only explicit retry
+advances retained state. Focused RED/GREEN is recorded; verification remains.

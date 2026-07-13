@@ -253,15 +253,36 @@ export class EnvironmentAttachments {
   stopDelivery(): Promise<void> {
     const current = this.#stop;
     if (current !== undefined) {
+      if (current.status === "rejected") {
+        return Promise.reject(deliveryStopRetryRequiredError());
+      }
       return current.promise;
     }
-    const stop: GenerationStop = { promise: Promise.resolve(), status: "running" };
+    const stop: GenerationStop = {
+      admitted: false,
+      generation: undefined,
+      old: undefined,
+      survivors: undefined,
+      routes: undefined,
+      oldRetired: false,
+      candidateGeneration: undefined,
+      candidate: undefined,
+      prepared: 0,
+      published: false,
+      reopened: undefined,
+      drained: false,
+      promise: Promise.resolve(),
+      status: "running",
+      retrying: false,
+    };
     this.#stop = stop;
-    return this.#queueStop(stop);
+    return this.#queueStop(stop, false);
   }
 
-  #queueStop(stop: GenerationStop): Promise<void> {
-    const promise = this.#serial.then(() => this.#stopCurrentGeneration());
+  #queueStop(stop: GenerationStop, retrying: boolean): Promise<void> {
+    stop.status = "running";
+    stop.retrying = retrying;
+    const promise = this.#serial.then(() => this.#continueStop(stop));
     stop.promise = promise;
     this.#serial = promise.then(
       () => undefined,
@@ -283,47 +304,89 @@ export class EnvironmentAttachments {
 
   retryDeliveryStop(): Promise<void> {
     const stop = this.#stop;
+    if (stop?.status === "running" && stop.retrying) {
+      return stop.promise;
+    }
     if (stop === undefined || stop.status !== "rejected") {
       return Promise.reject(new Error("Environment has no failed delivery stop to retry."));
     }
-    return this.#queueStop(stop);
+    return this.#queueStop(stop, true);
   }
 
-  async #stopCurrentGeneration(): Promise<void> {
-    const generation = this.#registrations.generation;
-    if (generation === undefined) {
-      return;
+  async #continueStop(stop: GenerationStop): Promise<void> {
+    if (!stop.admitted) {
+      if (this.#failedRollback !== undefined) {
+        this.#refuseStop(stop, explicitRetryError());
+      }
+      if (this.#failedLastDetach !== undefined) {
+        this.#refuseStop(stop, detachRetryRequiredError());
+      }
+      const generation = this.#registrations.generation;
+      if (generation === undefined) {
+        return;
+      }
+      const old = this.#generations.get(generation);
+      if (old === undefined) {
+        this.#refuseStop(stop, new Error("Environment generation is not current."));
+      }
+      stop.generation = generation;
+      stop.old = old;
+      stop.survivors = Object.freeze([...this.#attached.values()]);
+      stop.admitted = true;
     }
-    const old = this.#generations.get(generation);
-    if (old === undefined) {
-      throw new Error("Environment generation is not current.");
+    const old = stop.old!;
+    const survivors = stop.survivors!;
+    stop.routes ??= survivors.map((survivor) => old.closeRegistration(survivor.claim.token));
+    if (!stop.oldRetired) {
+      await old.retire();
+      stop.oldRetired = true;
     }
-    const survivors = [...this.#attached.values()];
-    const routes = survivors.map((survivor) => old.closeRegistration(survivor.claim.token));
-    await old.retire();
-    const candidateGeneration: EnvironmentGeneration = Object.freeze({ generation: true });
-    const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
-    for (const survivor of survivors) {
+    if (stop.candidate === undefined) {
+      const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
+      stop.candidateGeneration = Object.freeze({ generation: true });
+      stop.candidate = candidate;
+    }
+    const candidate = stop.candidate;
+    const candidateGeneration = stop.candidateGeneration!;
+    while (stop.prepared < survivors.length) {
+      const survivor = survivors[stop.prepared]!;
       await candidate.attach(
         Object.freeze({ token: survivor.claim.token, generation: candidateGeneration }),
         survivor.descriptors,
         true,
         survivor.binding,
-        routes.shift(),
+        stop.routes[stop.prepared],
       );
+      stop.prepared += 1;
     }
-    this.#generations.delete(generation);
-    this.#generations.set(candidateGeneration, candidate);
-    this.#registrations.replace(candidateGeneration);
-    for (const survivor of survivors) {
-      survivor.generation = candidate;
-      survivor.binding.generation = candidateGeneration;
+    if (!stop.published) {
+      this.#generations.delete(stop.generation!);
+      this.#generations.set(candidateGeneration, candidate);
+      this.#registrations.replace(candidateGeneration);
+      for (const survivor of survivors) {
+        survivor.generation = candidate;
+        survivor.binding.generation = candidateGeneration;
+      }
+      stop.published = true;
     }
-    const reopened: DeliveryRunScope[] = [];
-    for (const survivor of survivors) {
-      reopened.push(...candidate.openRegistration(survivor.claim.token));
+    if (stop.reopened === undefined) {
+      const reopened: DeliveryRunScope[] = [];
+      for (const survivor of survivors) {
+        reopened.push(...candidate.openRegistration(survivor.claim.token));
+      }
+      stop.reopened = Object.freeze(reopened);
     }
-    await candidate.recoverReopened(reopened);
+    if (!stop.drained) {
+      await candidate.recoverReopened(stop.reopened);
+      stop.drained = true;
+    }
+  }
+
+  #refuseStop(stop: GenerationStop, error: Error): never {
+    if (this.#stop === stop) {
+      this.#stop = undefined;
+    }
+    throw error;
   }
 
   detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
@@ -573,8 +636,21 @@ interface RegistrationBinding {
 }
 
 interface GenerationStop {
+  admitted: boolean;
+  generation: EnvironmentGeneration | undefined;
+  old: DeliveryGeneration | undefined;
+  survivors: readonly AttachedHandle[] | undefined;
+  routes: readonly RegistrationReadiness[] | undefined;
+  oldRetired: boolean;
+  candidateGeneration: EnvironmentGeneration | undefined;
+  candidate: DeliveryGeneration | undefined;
+  prepared: number;
+  published: boolean;
+  reopened: readonly DeliveryRunScope[] | undefined;
+  drained: boolean;
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
+  retrying: boolean;
 }
 
 interface DetachHandleOperation {
@@ -1351,6 +1427,10 @@ function explicitRetryError(): Error {
 
 function detachRetryRequiredError(): Error {
   return new Error("Environment generation detach requires an explicit retry.");
+}
+
+function deliveryStopRetryRequiredError(): Error {
+  return new Error("Environment delivery stop requires an explicit retry.");
 }
 
 function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
