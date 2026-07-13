@@ -487,29 +487,50 @@ regressions, public-leak scans, typecheck/lint/format/diff, final verify.
 
 ### T-0037e3: Permanent Environment Close
 
-**Objective:** Implement live-registration close refusal and zero-registration
-permanent close with safe retirement and owned-facility teardown.
+**Objective:** Implement serialized live-registration/retained-owner close
+refusal and owner-free zero-registration/no-generation permanent admission,
+followed by ordered owned-facility teardown outside the lifecycle serial gate.
+
+**Integrated ownership outcome:** T-0037d owns failed-start generation
+retirement, T-0037e1 owns last-detach retirement, and T-0037e2 owns reusable-stop
+retirement. They preserve D-0085 stop/await/classify/consume-report/retire order,
+quiescence retention, safe slot clearing, and cause-once behavior. T-0037e3
+refuses those retained owners and adds no generation-retirement caller. This
+supersedes the former T-0037e3 current-generation retirement assignment because
+the integrated lifecycle exposes no owner-free state that can execute it.
 
 **TDD sequence:**
 
 1. Close with live registrations refuses before any lifecycle mutation.
-2. Close/attach race has one serialized winner.
-3. Zero-registration close permanently rejects later attachment/readiness,
-   retires the generation, clears only a quiescent slot, and attempts every
-   owned facility close once.
-4. Quiescence failure retains the slot, dependencies, and facilities and runs
-   no later phase; retry completes exactly once.
-5. Reporting/inert cleanup errors aggregate without skipping safe slot clearing
-   and remaining facility close attempts.
-6. Unreported causes surface once; reported unresolved causes do not resurface.
-7. Public docs, if changed, describe only independently observable
+2. Retained failed-start, unsafe last detach, and incomplete reusable stop each
+   refuse without permanent admission, generation/slot/dependency/facility, or
+   error-state mutation; the exact predecessor retry remains usable.
+3. Close/attach race has one serialized winner; owner-free close first
+   permanently rejects the later attach.
+4. Close first followed synchronously by eager `stopDelivery()` and an attach
+   waiter cancels that unadmitted stop, rejects/clears its waiters, commits
+   permanent admission, and releases `#serial` without awaiting the stop or any
+   facility.
+5. With an owned facility close held by a deterministic deferred promise, the
+   queued cancelled stop and waiter reject before that facility settles while
+   the coalesced public close attempt remains pending; a later attach rejects
+   from permanent state. Releasing the facility then lets close complete.
+6. Facility teardown outside `#serial` attempts every owned facility in stable
+   order, closes successful facilities exactly once, and retries only failed
+   facilities on a later public `close()` attempt.
+7. Existing T-0037d/e1/e2 tests remain authoritative for unsafe quiescence
+   retention, safe slot clearing after reporting/inert cleanup failure, and
+   unreported-versus-already-reported causes.
+8. Public docs, if changed, describe only independently observable
    `ServerEnvironment.close()` behavior and never internal stop.
 
 **Boundary:** no server/listener integration, ordinary detach, reusable stop,
-public lifecycle option, retry timing, or topology.
+failed-start rollback, generation retirement, parked-record handling, public
+lifecycle option, retry timing, or topology.
 
-**Focused gate:** permanent close/refusal/race/facility tests, T-0037d/e1/e2
-regressions, public API/docs checks, typecheck/lint/format/diff, final verify.
+**Focused gate:** permanent close/refusal/race/facility tests including deferred-
+facility/cancelled-stop settlement, T-0037d/e1/e2 regressions, static retirement-
+caller scans, public API/docs checks, typecheck/lint/format/diff, final verify.
 
 ### T-0037f: Server Lifecycle Integration
 

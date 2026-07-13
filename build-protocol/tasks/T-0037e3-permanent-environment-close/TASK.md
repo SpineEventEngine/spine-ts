@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Architecture fix re-review assigned
+Status: Architecture authority re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -17,9 +17,11 @@ derived mirrors and must agree before review.
 
 ## Architecture Assignment And Skill Applicability
 
-- Existing role: requirements splitter. Documentation-only ownership is limited
-  to this task, its architecture resolution, work log, and review log. Expected
-  dispatch was explicit `gpt-5.6-sol` / `high`; no subagents are permitted.
+- Existing role: requirements splitter. Initial documentation-only ownership was
+  limited to this task, its architecture resolution, work log, and review log;
+  the recorded authority turn expands only to the three named active authority
+  sections. Expected dispatch was explicit `gpt-5.6-sol` / `high`; no subagents
+  are permitted.
 - Coordinator runtime evidence: `/Users/armiol/.codex/sessions/2026/07/13/rollout-2026-07-13T13-49-59-019f5b86-f6c1-7962-a2d1-8072e13410fe.jsonl`
   records actual `gpt-5.6-sol / high` at `2026-07-13T12:50:02.268Z`,
   matching explicit dispatch.
@@ -36,9 +38,10 @@ derived mirrors and must agree before review.
   `wshobson/agents`, plus `codebase-design` and `domain-modeling` from
   `mattpocock/skills`; the directly relevant `codebase-design/DEEPENING.md` was
   also read. They govern the resolution's decision/consequence structure,
-  existing-seam depth, and precise lifecycle vocabulary. Accepted D-0085/D-0086
-  remain authoritative, so no decision-log or glossary file is created or
-  changed.
+  existing-seam depth, and precise lifecycle vocabulary. During the initial
+  pass, accepted D-0085/D-0086 remained authoritative without a decision-log or
+  glossary change; the later authority turn adds only their accepted active
+  outcome clarification and still creates no new decision or glossary.
 - Skipped `planning-with-files` because the protocol's assigned task/work/review
   records are the durable plan and ownership excludes its extra files;
   `epic-breakdown-advisor`, `decision-mapping`, and `user-story` because this is
@@ -64,6 +67,17 @@ derived mirrors and must agree before review.
   `receiving-code-review` to verify the complete finding batch against current
   ownership and `codebase-design` plus `DEEPENING.md` to keep the correction at
   the existing private seam. No new task-provided skill name/path was supplied.
+- Authority-turn runtime evidence: the same rollout records actual
+  `gpt-5.6-sol / high` at `2026-07-13T13:32:53.484Z`, matching explicit
+  dispatch. The resumed existing requirements splitter used no subagents.
+- Authority-turn skill applicability: the prior canonical manifest, installed-
+  entrypoint, lock, and skipped-disposition evidence remains controlling. Before
+  edits, fully read and selected `receiving-code-review` for the complete
+  authority/serial-phase batch, `architecture-decision-records` for narrowly
+  scoped accepted-outcome clarification, and `codebase-design` plus
+  `DEEPENING.md` for the existing serial/facility seam. Expanded ownership
+  permits only D-0085/D-0086 active outcome clarification and the named runtime/
+  completion-plan sections; no new decision or task-provided skill was added.
 
 Because permanent close changes the public `ServerEnvironment.close()`
 contract, close/attach serialization, retained-generation ownership boundary,
@@ -76,8 +90,8 @@ produce the smallest implementation-ready slices without reopening exclusions.
 ## Objective
 
 Implement serialized live-registration close refusal and owner-free,
-zero-registration permanent environment close with ordered owned-facility
-teardown.
+zero-registration permanent environment close with a short admission phase and
+ordered owned-facility teardown outside the lifecycle serial gate.
 
 ## Human-Imposed Requirements Ledger
 
@@ -118,7 +132,8 @@ any live registration it refuses before changing admission, stopping work,
 consuming records, clearing a slot, or closing facilities. With zero
 registrations it first proves that no current generation or retained lifecycle
 owner exists, then permanently closes attachment and explicit-stop admission
-and closes each owned facility. At the integrated T-0037d/e1/e2 boundary, the
+and releases `#serial`. The existing coalesced public close attempt then closes
+each owned facility outside that gate. At the integrated T-0037d/e1/e2 boundary, the
 only legal zero-registration/current-generation state is retained failed-start
 rollback; close returns that operation's existing explicit-retry-required error
 without mutation. Unsafe last detach and incomplete reusable stop retain live
@@ -126,8 +141,10 @@ registrations, so close returns the in-use error without mutation.
 
 A close that precedes eager provisional `stopDelivery()` allocation marks that
 unadmitted stop cancelled, rejects and clears its attachment waiters, and clears
-`#stop` without awaiting the stop promise queued behind close. Its queued turn
-later rejects through the existing stop promise and performs no lifecycle work.
+`#stop` without awaiting the stop promise, waiter settlement, or any facility.
+The admission callback returns and releases `#serial`; its queued stop turn then
+rejects through the existing stop promise and performs no lifecycle work even
+if facility settlement remains pending.
 An unrecognized zero-registration orphan generation is an invariant error
 before permanent admission. Permanent close does not invoke T-0037b or duplicate
 failed-start, detach, reusable-stop, generation, parked-record, or readiness
@@ -146,10 +163,12 @@ so predecessor causes are neither duplicated nor reordered across operations.
 ## Likely Files
 
 - `packages/server/src/server/server-environment.ts`
-- T-0037d/e1/e2 package-internal lifecycle and facility ownership modules
+- `packages/server/src/server/environment-attachment.ts`
 - `packages/server/src/server/retryable-close.ts` only if existing aggregation
   cannot express the required order without widening semantics
-- Focused environment close/refusal, facility, retry, and close/attach race tests
+- Focused environment close/refusal, facility, retry, close/attach, and
+  close/provisional-stop race tests; existing T-0037d/e1/e2 regressions remain
+  behavior authorities rather than production ownership
 - This child's future task/work/review records and narrow public docs if needed
 
 ## Focused Deterministic TDD
@@ -159,10 +178,14 @@ so predecessor causes are neither duplicated nor reordered across operations.
 - A close/attach race has one serialized winner: attach first causes refusal;
   zero-registration close first permanently rejects the attach.
 - A deterministic close-first/stop-second race includes an attach waiter:
-  close commits without awaiting the behind-it stop promise; the unadmitted stop
-  and waiter reject with the closed error; the queued stop turn performs no
-  lifecycle work; `#stop` stays clear; a later attach rejects from permanent
-  state.
+  admission commits and releases `#serial` without awaiting the behind-it stop,
+  waiter settlement, or facility; the unadmitted stop and waiter reject with the
+  closed error; the queued stop turn performs no lifecycle work; `#stop` stays
+  clear; a later attach rejects from permanent state.
+- Hold the first owned facility close on a deterministic deferred promise. The
+  cancelled stop and waiter must settle while the coalesced public close remains
+  pending, proving facility work is outside `#serial`; releasing the facility
+  then completes close.
 - Retained failed-start at zero registrations refuses through its existing
   explicit-retry-required channel. Unsafe last detach and incomplete reusable
   stop refuse through the in-use channel. Each refusal performs no permanent
@@ -207,14 +230,14 @@ Implementation-ready ownership, ordering, retry, error, public-boundary, risk,
 and three-slice TDD decisions are recorded in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/architecture-resolution.md`.
 
-The resolution keeps one private permanent-close operation in the existing
+The resolution keeps only a permanent-admission flag in the existing
 `EnvironmentAttachments` serial owner, requires an owner-free no-generation
-state before permanent admission, and consumes the existing
-`RetryableCloseGroup` for ordered exact-once facility success/retry. It adds no
-T-0037b caller and does not take over retained failed-start, detach, or reusable
-stop. No new public API, option, export, error type, decision, or speculative
-production module is planned. Architecture review-fix handback is requested;
-implementation has not started.
+state, and returns from admission/cancellation before the coalesced public close
+attempt invokes its existing `RetryableCloseGroup`. It adds no T-0037b caller,
+facility ledger, `EnvironmentClose` class, or takeover of retained failed-start,
+detach, or reusable stop. No new public API, option, export, error type, decision,
+or speculative production module is planned. Architecture authority review-fix
+handback is requested; implementation has not started.
 
 Splitter handback checks: Prettier write/check passed for the four owned
 Markdown records, `git diff --check` passed, all four status headers agree, and
@@ -284,3 +307,60 @@ generation state, specifies provisional-stop cancellation without serial
 deadlock, preserves exact internal channel semantics, and includes all retained-
 owner tests and public wording corrections. Focused docs/status lint and diff
 hygiene pass; all four canonical concerns are reassigned.
+
+## Architecture Re-Review Authority Findings
+
+- Documentation and style P1: the refined owner-free/no-generation model
+  matches integrated T-0037d/e1/e2 code, but active D-0085,
+  `RUNTIME_ARCHITECTURE.md`, and `PROJECT_COMPLETION_PLAN.md` still assign an
+  unreachable close-owned generation retirement/quiescence path to T-0037e3.
+  Reconcile those active internal ownership records without changing public
+  close behavior or predecessor guarantees.
+- Style P1: permanent admission/provisional-stop cancellation must be a short
+  serialized phase that releases `#serial` before `RetryableCloseGroup` facility
+  work. Facility teardown continues under the coalesced public close attempt;
+  otherwise the cancelled stop turn can be blocked indefinitely.
+- TypeScript/API docs and performance/reliability returned CLEAN. All reviewer
+  profiles matched dispatch, no reviewer used a subagent, and all are closed.
+- The same Sol High requirements splitter receives this authority/serial-phase
+  batch with expanded documentation ownership limited to D-0085/D-0086 active
+  outcome text, the T-0037e3 runtime-architecture/completion-plan sections, and
+  the four current task records. Implementation remains unauthorized.
+
+## Architecture Authority And Serial-Phase Handback
+
+- D-0085/D-0086 active outcome clarifications now supersede only the unreachable
+  former T-0037e3 current-generation retirement assignment. They preserve the
+  accepted ordering, unsafe retention, safe clearing, and cause-once rules in
+  T-0037d/e1/e2 predecessor owners and preserve public close behavior.
+- `RUNTIME_ARCHITECTURE.md` and the completion plan now assign T-0037e3 only
+  live/retained-owner refusal, owner-free zero-registration/no-generation
+  admission, provisional-stop cancellation, and subsequent facility teardown.
+- The implementation design uses one short
+  `EnvironmentAttachments.admitPermanentClose()` serial callback. It checks and
+  refuses owners, cancels only an eager unadmitted stop and its waiters, commits
+  permanent admission, then returns without awaiting stop/waiter/facility
+  promises. It stores no facility or public-attempt state.
+- The existing coalesced `ServerEnvironment.#close` attempt awaits that callback
+  and invokes `RetryableCloseGroup.close()` outside `#serial`. A deterministic
+  deferred-facility test requires the queued cancelled stop and waiter to settle
+  while public close is still pending, then close to finish when the facility is
+  released.
+- Primary risks are accidentally placing close-group settlement on `#serial`,
+  mutating admission before retained-owner refusal, or reintroducing a close-
+  owned generation caller. Slice ownership and focused/static tests explicitly
+  guard all three.
+- Status is `Architecture authority review-fix handback requested`. Exactly the
+  seven authorized documentation files are in scope; no implementation/tests,
+  full verify, commit, push, new decision, or protected human-review access is
+  authorized or performed.
+- Authority handback hygiene passed: Prettier write/check over all seven owned
+  records, `git diff --check`, synchronized four-record status headers, scoped
+  authority-claim scans, and short status containing exactly those seven files.
+
+Coordinator inspection accepts the authority/serial-phase batch for final
+architecture re-review. D-0085 ordering remains active in reachable predecessor
+owners, the former unreachable T-0037e3 assignment is explicitly superseded,
+and facility teardown begins only after the bounded admission callback releases
+`#serial`. All four canonical concerns are assigned against the seven-file
+documentation endpoint.

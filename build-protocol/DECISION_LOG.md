@@ -3707,6 +3707,24 @@ Consequences:
 - T-0035 changes no runtime behavior. Until the successor lands, runs remain
   explicitly started one-shot operations with no automatic restart guarantee.
 
+Active outcome clarification (2026-07-13): integrated T-0037d/e1/e2 ownership
+evidence supersedes D-0085's former assignment of current-generation retirement
+to zero-registration permanent close. Successful last detach already retires
+and clears its generation; unsafe last detach and incomplete reusable stop retain
+live registrations and their exact operation owners; failed-start rollback is
+the only legal zero-registration/current-generation state and remains owned by
+T-0037d until its explicit retry retires and clears that generation. Therefore
+T-0037e3 admits permanent close only when serialization observes zero
+registrations and no generation. It refuses every recognized retained owner and
+treats any otherwise orphan generation as an invariant failure before mutation.
+The accepted stop-before-await-before-classify-before-consume/report-before-
+retire/cleanup order, quiescence retention, safe slot clearing, and cause-once
+rules remain unchanged inside those predecessor owners. T-0037e3 adds no
+generation-retirement caller; after its short owner-free permanent-admission
+phase releases the lifecycle serial gate, the existing coalesced public close
+attempt performs ordered owned-facility teardown outside that gate. Public
+`ServerEnvironment.close()` behavior and all public exclusions remain unchanged.
+
 ## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
 
 Status: Accepted
@@ -3868,3 +3886,19 @@ Consequences:
   internals or combining server integration with obligation bookkeeping.
 - This decision changes sequencing and durable documentation only. It does not
   claim any T-0037 child behavior is implemented.
+
+Active outcome clarification (2026-07-13): the eight-child sequence remains
+accepted, but integrated ownership narrows the T-0037e3 child and supersedes its
+former place in the generation-retirement retry-owner enumeration. T-0037d owns
+failed-start generation retirement and retry, T-0037e1 owns last-detach
+retirement and retry, and T-0037e2 owns reusable-stop retirement and retry;
+T-0037f's accepted future server-cleanup assignments remain outside this
+clarification. T-0037e3 owns serialized live-registration/retained-owner refusal,
+owner-free zero-registration/no-generation permanent admission, cancellation of
+an eager unadmitted stop queued behind that admission, and the subsequent public
+close attempt's facility teardown. The admission/cancellation callback completes
+and releases `EnvironmentAttachments.#serial` before
+`RetryableCloseGroup.close()` starts, so a queued cancelled stop can run and
+reject even while facility settlement is pending. This clarification preserves
+D-0085 ordering in every generation owner and introduces no ninth child, public
+surface, or new lifecycle decision.

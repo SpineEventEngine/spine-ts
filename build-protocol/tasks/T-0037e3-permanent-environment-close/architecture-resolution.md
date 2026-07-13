@@ -1,37 +1,39 @@
 # T-0037e3 Architecture Resolution
 
-Status: Architecture fix re-review assigned
+Status: Architecture authority re-review assigned
 
 ## Resolution Summary
 
-Keep permanent close inside the existing `EnvironmentAttachments` lifecycle
+Keep permanent admission inside the existing `EnvironmentAttachments` lifecycle
 module and its existing serial gate. `ServerEnvironment.close()` remains the
-only public entry and delegates to that environment-owned operation before any
-owned facility closes. Add no public close variant, retry method, state query,
-option, error type, declaration, or export.
+only public entry. Its existing coalesced attempt first awaits one short package-
+internal permanent-admission callback and only then invokes its existing
+`RetryableCloseGroup` outside `#serial`. Add no public close variant, retry
+method, state query, option, error type, declaration, or export.
 
-One private `EnvironmentClose` operation record owns only permanent-close
-admission and the current facility-close attempt. It is a record local to
-`environment-attachment.ts`, not a new class or exported seam. The existing
-`RetryableCloseGroup` continues to own the ordered facility list and its
-successful-index retry checkpoints. `ServerEnvironment` supplies that one
-existing group to `EnvironmentAttachments` at construction; it does not
-interpret generation state or duplicate close phases.
+`EnvironmentAttachments` needs only a permanent-admission flag plus the existing
+provisional-stop cancellation state; do not add an `EnvironmentClose` class or
+facility ledger. The existing `ServerEnvironment.#close` promise remains the
+current public attempt owner. `RetryableCloseGroup` remains the sole ordered
+facility and successful-index retry owner. Neither facility ownership nor
+facility settlement enters `EnvironmentAttachments`.
 
 This is the smallest deep interface: public callers know only
 `close(): Promise<void>`, while registration admission, close/attach/stop
-ordering, retained-owner refusal, facility retry, and error ordering remain
-package-local.
+ordering and retained-owner refusal remain package-local to attachment
+lifecycle, while facility retry/error ordering remain package-local to the
+existing public close implementation.
 
 ## Evidence
 
 ### Accepted TypeScript Contract
 
-- D-0085 in `build-protocol/DECISION_LOG.md` requires a serialized live-
-  registration refusal, permanent zero-registration admission closure, the
-  authoritative stop/await/classify/consume-report/retire order, unsafe-slot
-  retention, and exact-once facility teardown on retry.
-- D-0086 assigns only permanent environment close to T-0037e3. T-0037d owns
+- D-0085's active outcome requires serialized live-registration/retained-owner
+  refusal and owner-free zero-registration/no-generation permanent admission.
+  Its authoritative stop/await/classify/consume-report/retire order, unsafe-slot
+  retention, and cause-once rules remain in the predecessor generation owners.
+- D-0086's active outcome assigns only owner-free permanent admission and
+  subsequent facility teardown to T-0037e3. T-0037d owns
   failed-start rollback, T-0037e1 owns detach and last-detach retry, T-0037e2
   owns reusable stop and fresh-generation transition, and T-0037f owns server,
   listener, context, and resource integration.
@@ -39,9 +41,8 @@ package-local.
   `packages/server/src/delivery/delivery-run-coordinator.ts` already closes
   admission, stops once, proves quiescence, invokes the caller's classification/
   consumption/report callback, attempts permanent worker retirement, and
-  exposes `replacementSafe`. T-0037e3 must invoke it only through the existing
-  `DeliveryGeneration.retire()` owner in
-  `packages/server/src/server/environment-attachment.ts`.
+  exposes `replacementSafe`. Integrated T-0037d/e1/e2 operations invoke it only
+  through `DeliveryGeneration.retire()`; T-0037e3 adds no caller.
 - `EnvironmentDeliveryRecords.retire()` is already the sole generation-wide
   selection/consumption path. `ParkedDeliveryObligations.report()` selects only
   unreported representative causes in configured order and marks them reported
@@ -54,8 +55,9 @@ package-local.
 - Current `ServerEnvironment.close()` directly calls the facility group and
   therefore bypasses `EnvironmentAttachments`. Current attach, detach,
   failed-start retry, and reusable stop already serialize through
-  `EnvironmentAttachments.#serial`; permanent close must join that gate rather
-  than add a second lock or promise queue.
+  `EnvironmentAttachments.#serial`; only permanent admission/cancellation joins
+  that gate. Facility work remains in `ServerEnvironment` after the serialized
+  callback resolves.
 - T-0037e1 and T-0037e2 architecture records establish the existing safe-slot
   clearing, same-operation retry, original-error-once, and attach ordering
   patterns. Permanent close consumes those patterns but creates no candidate,
@@ -124,9 +126,10 @@ Local evidence was inspected before design; no browsing was required.
   after which this environment can never accept another registration,
   explicit stop, generation, or replacement. No live readiness route exists at
   this point; a stale synchronous readiness callback remains a no-op.
-- **Proven quiescence**: `DeliveryGeneration.replacementSafe === true` after the
-  T-0037b primitive has completed stop and settlement. A stopped flag without
-  this postcondition is not sufficient.
+- **Proven quiescence**: predecessor-owned
+  `DeliveryGeneration.replacementSafe === true` after the T-0037b primitive has
+  completed stop and settlement. T-0037e3 observes only the resulting absent
+  generation; it does not establish this postcondition.
 - **Owned facility**: an entry already selected by
   `ownedEnvironmentCloseables()` from the existing ownership options. Close
   does not acquire ownership of caller-owned facilities.
@@ -142,17 +145,16 @@ glossary or decision record.
 `EnvironmentAttachments` owns semantic close state because it already owns the
 registration count, current generation slot, and lifecycle serial gate.
 `ServerEnvironment.#close` continues to coalesce one public attempt and clears
-its promise after rejection so the same public method is the retry entry. It is
-not the semantic state owner.
+its promise after rejection so the same public method is the retry entry.
+`EnvironmentAttachments` stores only whether permanent admission committed.
+`ServerEnvironment.#close` owns attempt coalescing, and its facility group owns
+all per-facility completion checkpoints. Do not copy attempt status, facility
+indexes, or owned-closeable lists into attachment lifecycle state.
 
-The private operation needs only these checkpoints:
-
-- permanent admission committed;
-- facilities complete; and
-- current attempt promise/status.
-
-The facility group remains the only per-facility completion ledger. Do not copy
-its indexes or owned-closeable list into `EnvironmentClose`.
+The exact new semantic field is `#permanentlyClosed = false`. Once set, it is
+never cleared. `admitPermanentClose()` returns an already-resolved promise
+without queueing another serial callback when this field is true; this is the
+facility-retry/idempotent-close path, not a second admission attempt.
 
 | State              | Attachment/explicit-stop admission | Generation                                          | Facilities                                               | Permitted next action                                        |
 | ------------------ | ---------------------------------- | --------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
@@ -161,23 +163,25 @@ its indexes or owned-closeable list into `EnvironmentClose`.
 | Closing facilities | Permanently closed                 | Absent                                              | Successful facilities closed; failed facilities retained | The same public `close()` retries only failed facilities     |
 | Closed             | Permanently closed                 | Absent                                              | Every owned facility closed                              | Repeated `close()` resolves; attach/explicit stop reject     |
 
-## Serialized Admission And Close/Attach Linearization
+## Serialized Permanent-Admission Phase And Linearization
 
-`EnvironmentAttachments.close()` enters the same `#serial` chain as attach,
-detach, failed-start retry, and reusable stop. It performs no facility work
-before serialized admission.
+One package-internal `EnvironmentAttachments.admitPermanentClose()` enters the
+same `#serial` chain as attach, detach, failed-start retry, and reusable stop.
+Its callback performs only the following bounded in-memory decisions; it never
+calls or awaits `RetryableCloseGroup` or any facility.
 
-1. At admission, check exact live-registration count first.
-2. If the count is non-zero, reject with one plain `Error` whose fixed message
-   is `ServerEnvironment cannot close while it is in use.` Do not create or
-   retain `EnvironmentClose`; do not close readiness/admission, stop work,
+1. Before queueing, return resolved if `#permanentlyClosed` is already true.
+2. In the first admission callback, check exact live-registration count first.
+3. If the count is non-zero, reject with one plain `Error` whose fixed message
+   is `ServerEnvironment cannot close while it is in use.` Do not commit
+   permanent admission; do not close readiness/admission, stop work,
    classify or consume records, clear a slot, or call any facility. The existing
    generation and registrations remain usable.
-3. With zero registrations, inspect retained owners before current-generation
+4. With zero registrations, inspect retained owners before current-generation
    reachability. A retained failed-start rollback receives the existing
    `Environment generation rollback requires an explicit retry.` rejection.
    Permanent close never advances that operation.
-4. Distinguish an eager T-0037e2 `#stop` with `admitted === false` from an
+5. Distinguish an eager T-0037e2 `#stop` with `admitted === false` from an
    admitted or retained stop. Because its queue position is after this close,
    it has no generation ownership. Add exactly
    `cancelledByClose: Error | undefined` to package-private `GenerationStop`.
@@ -186,21 +190,23 @@ before serialized admission.
    `Promise.allSettled()` to their promises as `waiterSettlement`, then mark
    each waiter complete and reject its gate with that same error. This order
    installs rejection observers before settlement. Clear `#stop` only when it
-   still identifies this provisional record. Do **not** await `stop.promise`
-   from close: its serial turn is behind close and doing so would deadlock
-   admission. When that queued turn arrives, `#continueStop()` checks the
-   cancellation reason before retained-owner or generation work, sets
-   `completed`, awaits only the waiter settlement, and throws that same closed
-   error through its existing local gate. The public stop promise therefore
-   rejects deterministically and its existing completion handler cannot restore
-   or retain `#stop`.
-5. Require both the current registration generation marker and generation map
+   still identifies this provisional record. The admission callback does
+   **not** await `stop.promise` or `waiterSettlement`: the stop's serial turn is
+   behind close, and waiting would deadlock or needlessly extend the gate. When
+   that queued turn arrives, `#continueStop()` checks the cancellation reason
+   before retained-owner or generation work, sets `completed`, awaits only the
+   already-observed waiter settlement, and throws that same closed error through
+   its existing local gate. The public stop promise therefore rejects
+   deterministically and its existing completion handler cannot restore or
+   retain `#stop`.
+6. Require both the current registration generation marker and generation map
    to be empty. A remaining generation without a recognized retained owner is
    an invariant error before permanent admission, not permission to call
    T-0037b.
-6. Create the private close record and commit permanent attachment and explicit-
-   stop admission closure. The commit is irreversible; readiness has no
-   rejectable channel and is handled separately below.
+7. Set `#permanentlyClosed = true`, closing attachment and explicit-stop
+   admission. The commit is irreversible; readiness has no rejectable channel
+   and is handled separately below. Return from the callback immediately so its
+   promise settles and the swallowed `#serial` tail is released.
 
 The serial admission order is the race linearization point:
 
@@ -213,14 +219,31 @@ The serial admission order is the race linearization point:
 - close invoked first and `stopDelivery()` invoked second cancels that stop's
   eager provisional record and all of its waiters as specified above. A later
   attach rejects from permanent-close state, not from stale `#stop`, and no
-  waiter remains pending. Close does not wait for the behind-it stop turn;
+  waiter remains pending. Admission returns without waiting for the behind-it
+  stop turn or facility settlement;
 - stop whose serial turn runs first either completes its no-generation no-op or
   becomes an admitted T-0037e2 owner. Close observes that completed state or
   refuses the live/retained owner; it never cancels an admitted stop.
 
-Duplicate in-flight public close calls share the existing public attempt
-promise. After a facility rejection, the next `close()` resumes the retained
-facility group; no `retryClose()` interface is added.
+## Serial Release And Public Facility Phase
+
+`ServerEnvironment.close()` composes the two existing owners in one coalesced
+public attempt:
+
+1. call and await `EnvironmentAttachments.admitPermanentClose()`;
+2. only after that promise settles successfully, call
+   `ServerEnvironment.#closeGroup.close()` outside attachment `#serial`;
+3. preserve the existing catch that clears `ServerEnvironment.#close` after any
+   refusal or facility rejection so explicit later `close()` retries remain the
+   only public retry entry.
+
+Duplicate in-flight public calls share `ServerEnvironment.#close`. Once
+permanent admission commits, a later attempt observes it as an idempotent
+admission success and retries only incomplete facility indexes. A queued
+cancelled stop may run concurrently with facility settlement because the close
+group promise is not assigned to `EnvironmentAttachments.#serial`. Facility work
+may begin before that queued stop turn executes, but cannot delay its execution
+or rejection through the serial chain.
 
 ## Closed Checks And Readiness Semantics
 
@@ -243,15 +266,15 @@ The internal channels are exact and intentionally different:
 
 ## Permanent Facility Close And Errors
 
-After permanent admission wins, no generation or parked record remains for
-T-0037e3 to retire, classify, consume, or report. Those actions completed in
-the predecessor owner, or close refused that retained owner. Permanent close
-therefore invokes neither `DeliveryGeneration.retire()` nor
-`DeliveryRunCoordinator.retire()` and creates no quiescence/reporting failure
+After the permanent-admission promise releases `#serial`, no generation or
+parked record remains for T-0037e3 to retire, classify, consume, or report. Those
+actions completed in the predecessor owner, or close refused that retained
+owner. Permanent close therefore invokes neither `DeliveryGeneration.retire()`
+nor `DeliveryRunCoordinator.retire()` and creates no quiescence/reporting failure
 branch.
 
-Attempt every owned facility through the existing close group in fixed
-delivery, tracer, transport, storage order. Facility semantics remain:
+The same coalesced public close attempt then invokes the existing close group in
+fixed delivery, tracer, transport, storage order. Facility semantics remain:
 
 - Facility failures retain existing owned-closeable order. Every owned facility
   receives one attempt in the first safe teardown pass. A successful close is
@@ -321,8 +344,9 @@ Ownership:
 
 Acceptance:
 
-- Public `ServerEnvironment.close()` delegates to the existing attachment owner
-  before its facility group and preserves duplicate-call promise identity.
+- Public `ServerEnvironment.close()` coalesces one attempt that first awaits the
+  package-internal permanent-admission promise and then invokes its existing
+  facility group outside `#serial`, preserving duplicate-call promise identity.
 - One live registration causes the exact plain in-use refusal before any
   readiness, worker, record, slot, or facility event; registration readiness
   and the current generation remain usable afterward.
@@ -334,22 +358,28 @@ Acceptance:
   idempotent. Stale `void` readiness is a no-op, not a rejection.
 - A deterministic close-first/stop-second race proves the eager unadmitted stop
   is marked cancelled with the closed error, every provisional attach waiter
-  rejects, close does not await the behind-it stop promise, the queued stop turn
-  rejects through its existing gate without lifecycle action, `#stop` remains
-  clear, and a later attach deterministically rejects from permanent-close
-  state.
+  rejects, admission does not await the behind-it stop or waiter-settlement
+  promise, the queued stop turn rejects through its existing gate without
+  lifecycle action, `#stop` remains clear, and a later attach deterministically
+  rejects from permanent-close state.
+- With the first owned facility held by a deterministic deferred promise, the
+  cancelled stop and waiter settle while public close remains pending. This
+  proves the permanent-admission callback released `#serial` before facility
+  work. Releasing the facility then completes close.
 
 Focused tests: public duplicate close, direct private registration refusal,
 attach-first and close-first barriers, close-first/provisional-stop-second plus
-waiter cleanup, no-generation close, exact later attach/stop/retry-stop closed
-checks, stale-readiness no-op, and unchanged existing facility ownership
-behavior.
+waiter cleanup, deferred-facility/cancelled-stop settlement ordering,
+no-generation close, exact later attach/stop/retry-stop closed checks, stale-
+readiness no-op, and unchanged existing facility ownership behavior.
 
 Risk: creating permanent state before the serialized live-count check would
-make refusal destructive. Mitigation: create `EnvironmentClose` only inside the
-zero-registration/no-generation serial admission step, explicitly cancel only
-an unadmitted later stop, and assert an empty lifecycle/facility event log on
-refusal.
+make refusal destructive; placing facility work in the callback would starve
+queued lifecycle turns. Mitigation: set only the permanent-admission flag inside
+the zero-registration/no-generation callback, explicitly cancel only an
+unadmitted later stop, return before close-group invocation, and assert empty
+lifecycle/facility events on refusal plus cancelled-stop settlement while a
+facility is deferred.
 
 Exclusions: current-generation retirement, parked-cause consumption, facility
 error retry, server/listener integration, public docs beyond narrow TSDoc.
@@ -417,7 +447,6 @@ stop, T-0037b retirement, parked-record semantics, or server cleanup.
 Ownership:
 
 - `packages/server/src/server/server-environment.ts`
-- `packages/server/src/server/environment-attachment.ts`
 - `packages/server/src/server/retryable-close.ts` only if focused RED evidence
   proves its existing ordered retry/flattening interface cannot be consumed
   without policy duplication
@@ -440,8 +469,9 @@ Acceptance:
   README terminology, examples, Protobuf, and generated tracked files remain
   unchanged except a narrowly justified existing `close()` TSDoc refinement.
 - Static caller scans prove only `EnvironmentAttachments` reaches
-  permanent facility close, no T-0037b primitive call was added, and server/
-  handoff code has no permanent-close shortcut.
+  permanent admission, only the coalesced `ServerEnvironment.close()` attempt
+  reaches `RetryableCloseGroup` after that promise, no T-0037b primitive call was
+  added, and server/handoff code has no permanent-close shortcut.
 
 Focused tests: all-four-facility failure/continuation, partial facility success
 plus retry, all-facility completion then idempotent close, caller-owned
@@ -494,6 +524,12 @@ or accepted T-0037d/e1/e2 semantic change.
   failed-start, unsafe last detach, and incomplete reusable stop, preserving the
   exact owner, admission, generation/slot, dependencies, facilities, and error
   state until that predecessor operation's existing retry completes.
+- Authority P1: D-0085/D-0086 active outcomes and the runtime/completion-plan
+  T-0037e3 sections now supersede the unreachable close-owned retirement branch
+  while preserving predecessor ordering and public behavior.
+- Serial-phase P1: permanent admission/cancellation returns and releases
+  `#serial` before the public attempt invokes `RetryableCloseGroup`; a deferred-
+  facility test requires the queued cancelled stop and waiter to settle first.
 
 No blocking architecture uncertainty remains. Other private helper spelling and
 test-fixture mechanics may vary, but implementation may not change the named

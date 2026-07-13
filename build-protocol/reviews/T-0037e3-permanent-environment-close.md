@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Architecture fix re-review assigned
+Status: Architecture authority re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -144,3 +144,61 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to the fixed
   state model and acceptance tests.
+
+## Architecture Re-Review Authority Findings
+
+- Documentation: P1 active specification ownership contradicts corrected
+  reachable state model.
+- Style/maintainability: same P1 plus P1 serial gate must be released after
+  permanent admission/cancellation and before facility teardown.
+- TypeScript/API docs: CLEAN. Performance/reliability: CLEAN.
+- Every reviewer used no subagents and is closed. Sol High authority
+  reconciliation is assigned over the bounded active spec sections and current
+  four records; implementation remains unauthorized.
+
+## Architecture Authority And Serial-Phase Resume
+
+- The same rollout records actual `gpt-5.6-sol / high` at
+  `2026-07-13T13:32:53.484Z`, matching explicit dispatch for the resumed
+  requirements splitter; no subagents were used.
+- Prior canonical skill applicability remains valid. The splitter fully read and
+  selected `receiving-code-review`, `architecture-decision-records`,
+  `codebase-design`, and `DEEPENING.md` before changing the expanded seven-file
+  documentation scope.
+
+## Architecture Authority And Serial-Phase Handback
+
+- Documentation authority P1: resolved. D-0085/D-0086 active outcomes, runtime
+  architecture, completion plan, and current task records now agree that
+  T-0037d/e1/e2 own all reachable generation retirement/quiescence/reporting.
+  T-0037e3 refuses their retained states and admits only zero registrations/no
+  generation. Former assignment text is explicitly superseded by integrated
+  ownership evidence without changing public behavior or predecessor ordering.
+- Style/maintainability serial P1: resolved. One bounded attachment callback
+  performs refusal, provisional-stop/waiter cancellation, and irreversible
+  permanent admission, then releases `#serial`. Only afterward does the existing
+  coalesced public close attempt invoke `RetryableCloseGroup` outside the gate.
+- Deterministic acceptance now defers one facility and proves the cancelled stop
+  and waiter settle while public close remains pending, then resolves the
+  facility and close. This directly guards against facility settlement starving
+  the queued serial turn.
+- Prior TypeScript/API and performance/reliability CLEAN dispositions remain
+  unchanged. Re-review should verify the reconciled authority text, serial-
+  release ordering, seven-file scope, and absence of public or T-0037b expansion.
+- Status is `Architecture authority review-fix handback requested`.
+  Implementation remains unauthorized; no tests/full verify, commit, push, new
+  decision, generated output, or protected human-review access occurred.
+- Handback hygiene passed across all seven owned records: Prettier write/check,
+  `git diff --check`, synchronized four-record statuses, scoped authority/phase
+  claim scans, and exact seven-file documentation-only short status. The
+  complete authority/serial-phase batch is ready for re-review.
+
+## Architecture Authority Coordinator Gate And Re-Review Assignment
+
+- Coordinator inspection and lightweight docs/status lint pass for the exact
+  seven-file authority reconciliation and serial-phase correction.
+- Assigned profiles are style/maintainability `gpt-5.6-terra` / `high`,
+  documentation `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, no subagents, and bounded to active
+  authority/phase consistency.
