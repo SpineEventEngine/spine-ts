@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 1 clean; Slice 2 non-last detach assigned
+Status: Slice 2 focused verified; Round 1 review pending
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -193,3 +193,30 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   `STOPPED` is inert rather than successful re-evaluation. Its private atomic
   record-consumption primitives are foundation only; environment lifecycle
   detach/retry and attachment integration remain excluded for later slices.
+
+## Slice 2 Implementation Record
+
+- `2026-07-13`: The existing implementer completed the non-last registration
+  detach/retry slice at explicit fixed `gpt-5.6-terra` / `medium`, with no
+  subagents. Private `serverEnvironmentAccess.detach()` / `retryDetach()` use
+  exact environment-owned handle identity and one per-handle `WeakMap`
+  operation. Concurrent duplicate detach shares its promise; retry is admitted
+  only after rejection and resumes persisted phase checkpoints.
+- Under the lifecycle serial gate, non-last detach closes only departing
+  readiness, stops and awaits its exact initial/dynamic owner set, establishes
+  the coordinator owner barrier, atomically detaches its delivery records,
+  attempts reporting once, permanently retires selected workers, removes
+  selected coordinator state, and then removes registration/configured overlap
+  state. Unsafe pre-barrier failures retain ownership and endpoints.
+  Post-barrier failures retain stable error identity/order while safe phases
+  continue; report and worker-retirement attempts are never repeated, while a
+  failed coordinator removal remains the only retryable cleanup phase.
+- Sibling generation identity, readiness, records, pending admission, workers,
+  and configured ownership remain usable. Ordinary last detach remains an
+  explicit unimplemented boundary and performs no lifecycle mutation. No
+  public method/export, server wiring, reusable stop, permanent close, or later
+  race policy was added.
+- Focused evidence is 4 files / 116 tests and the affected T-0037a/b/c/d
+  regression is 7 files / 215 tests. Generated build typecheck passed. Final
+  lint/format/generated/diff/public scans are recorded in the work log. Full
+  verification, commit, and push remain intentionally deferred.

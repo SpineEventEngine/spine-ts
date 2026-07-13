@@ -1,9 +1,14 @@
 # T-0037e1 Review Log
 
-Status: Slice 1 clean; Slice 2 non-last detach assigned
+Status: Slice 2 focused verified; Round 1 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
+
+- Slice 2 implementer completed and was closed with matching Terra Medium
+  metadata. Coordinator verification independently passes 215/215 and all
+  generated/type/lint/cleanup, format, and diff gates. The non-last detach slice
+  is ready for a committed Round 1 package; security/full verify remain deferred.
 
 - Security review is deferred to T-0041 unless explicitly requested.
 - Canonical task concerns remain code style/maintainability, documentation
@@ -91,3 +96,22 @@ Derived status mirror: the canonical current state is the `Status` header in
   102 tests, generated/type/lint/cleanup, repository format, generated
   cleanliness, diff/status, public/proto, and chronology scans. Round 2 review
   remains pending; no acceptance disposition is claimed.
+- `2026-07-13T01:56:50Z`: Slice 2 non-last detach/retry is focused verified and
+  ready for a fresh Round 1 package. The change is limited to private
+  environment attachment/access/record integration and focused tests. Current
+  evidence is 4 files / 116 tests, affected T-0037a/b/c/d regression 7 files /
+  215 tests, and generated build typecheck. Final static evidence is recorded
+  in the work log; full verify, commit, push, ordinary last detach, race policy,
+  reusable stop, permanent close, server wiring, and public lifecycle surface
+  remain excluded. Canonical style, documentation, TypeScript/API, and
+  performance/reliability dispositions are pending Round 1; security remains
+  deferred.
+- `2026-07-13T01:59:27Z`: Final package evidence is clean: focused 115/115,
+  affected T-0037a/b/c/d 214/214, generated/type/lint/cleanup, repository
+  format, generated cleanliness, diff/status, and private-surface scans all
+  pass. Slice 2 Round 1 remains pending; no review acceptance is claimed.
+- `2026-07-13T02:02:51Z`: A final architecture inspection adds deterministic
+  active-barrier, fixed non-last/sibling-reservation, and three-phase ordered
+  cleanup-failure coverage. Superseding evidence passes focused 116/116 and
+  affected T-0037a/b/c/d 215/215 plus the repeated generated/type/lint/cleanup,
+  format, and generated-cleanliness gates. Round 1 remains pending.

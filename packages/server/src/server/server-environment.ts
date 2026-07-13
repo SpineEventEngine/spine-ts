@@ -162,6 +162,11 @@ interface ServerEnvironmentAccess {
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle>;
   retryFailedStart(environment: ServerEnvironment): Promise<void>;
+  detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): Promise<void>;
+  retryDetach(
+    environment: ServerEnvironment,
+    attachment: EnvironmentAttachmentHandle,
+  ): Promise<void>;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
@@ -181,6 +186,20 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       return Promise.reject(new TypeError("Rollback retry requires a ServerEnvironment instance."));
     }
     return attachments.retryFailedStart();
+  },
+  detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Detach requires a ServerEnvironment instance."));
+    }
+    return attachments.detach(attachment);
+  },
+  retryDetach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
+    }
+    return attachments.retryDetach(attachment);
   },
 });
 

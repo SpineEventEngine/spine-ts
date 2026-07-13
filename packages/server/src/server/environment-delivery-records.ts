@@ -73,6 +73,13 @@ export class EnvironmentDeliveryRecords {
     return this.#obligations?.records() ?? Object.freeze([]);
   }
 
+  /** @internal Current registration-owned records for one opaque attachment handle. */
+  registrationRecords(token: string): readonly ParkedDeliveryObligationRecord[] {
+    return Object.freeze(
+      this.records().filter(({ owner }) => owner.kind === "registration" && owner.token === token),
+    );
+  }
+
   /** @internal Stable configured scope order for a registration. */
   configuredScopes(token: string): readonly DeliveryRunScope[] {
     return Object.freeze([...(this.#registrations.get(token)?.values() ?? [])]);
@@ -97,6 +104,26 @@ export class EnvironmentDeliveryRecords {
     if (orphaned.length > 0) {
       obligations.fulfilled({ kind: "generation" }, "generation", orphaned);
       for (const unit of orphaned) {
+        this.#scopes.delete(unit);
+      }
+    }
+    return causes;
+  }
+
+  /** @internal Remove failed-start ownership while retaining reported generation evidence. */
+  rollback(token: string): readonly unknown[] {
+    const registration = this.#registrations.get(token);
+    if (registration === undefined) {
+      throw new Error("Environment delivery registration is not configured.");
+    }
+    const units = [...registration.keys()];
+    const causes = this.#requireObligations().report([
+      { owner: { kind: "registration", token }, obligation: "delivery", units },
+    ]);
+    this.#requireObligations().removeRegistration(token);
+    this.#registrations.delete(token);
+    for (const unit of units) {
+      if (!this.#ownedByAnyRegistration(unit)) {
         this.#scopes.delete(unit);
       }
     }
@@ -150,6 +177,15 @@ export class EnvironmentDeliveryRecords {
   #ownedBySibling(token: string, unit: string): boolean {
     for (const [candidate, scopes] of this.#registrations) {
       if (candidate !== token && scopes.has(unit)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #ownedByAnyRegistration(unit: string): boolean {
+    for (const scopes of this.#registrations.values()) {
+      if (scopes.has(unit)) {
         return true;
       }
     }

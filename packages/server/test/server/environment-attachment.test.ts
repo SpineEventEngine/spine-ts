@@ -20,10 +20,11 @@ import {
   startupObligations,
   type EnvironmentGenerationWorker,
 } from "../../src/server/environment-attachment.js";
-import type {
-  DeliveryRunObligation,
-  DeliveryRunScope,
-  DeliveryRunWorker,
+import {
+  DeliveryRunCoordinator,
+  type DeliveryRunObligation,
+  type DeliveryRunScope,
+  type DeliveryRunWorker,
 } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
 import {
@@ -607,6 +608,493 @@ describe("ServerEnvironment attachment", () => {
     expect(attached?.scope.ready).toEqual(attaching.ready);
     expect(attached?.disposition).toBe("IDLE");
     expect(rejectedQueries).toBe(1);
+  });
+});
+
+describe("non-last registration detach", () => {
+  it("detaches one registration after selected-owner quiescence and keeps its sibling usable", async () => {
+    const events: string[] = [];
+    const worker = new LifecycleWorker(events);
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const departing = descriptor(
+      "DetachDeparting",
+      "type.example.dev/DetachDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "DetachSibling",
+      "type.example.dev/DetachSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", "IDLE");
+    const departingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+
+    await attachments.detach(departingHandle);
+
+    expect(worker.stoppedOwners).toEqual([["environment-owner-1"]]);
+    expect(worker.awaitedOwners).toEqual([["environment-owner-1"]]);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+    expect(configuredScopeCount(attachments)).toBe(1);
+    const startsAfterDetach = worker.starts;
+    await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+    await Promise.resolve();
+    expect(worker.starts).toBe(startsAfterDetach);
+
+    worker.enqueue("IDLE");
+    await sibling.readiness.claim(sibling.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === startsAfterDetach + 1);
+  });
+
+  it("reports notification rejection once after the selected-owner barrier", async () => {
+    const events: string[] = [];
+    const reported: unknown[][] = [];
+    const worker = new LifecycleWorker(events);
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report(causes) {
+        events.push("report");
+        reported.push([...causes]);
+        return Promise.resolve();
+      },
+    });
+    const departing = descriptor(
+      "DetachRejected",
+      "type.example.dev/DetachRejected",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "DetachRejectedSibling",
+      "type.example.dev/DetachRejectedSibling",
+      new InMemoryStorageFactory(),
+    );
+    const rejection = new Error("active notification rejected");
+    worker.enqueue("IDLE", "IDLE");
+    const departingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    const active = Promise.withResolvers<LifecycleOutcome>();
+    worker.enqueue(active.promise);
+
+    await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+    const detaching = attachments.detach(departingHandle);
+    await flushMicrotasks();
+    expect(reported).toEqual([]);
+    active.resolve({ rejected: rejection });
+
+    await detaching;
+
+    expect(reported).toEqual([[rejection]]);
+    expect(events.slice(2)).toEqual([
+      "start",
+      "stopOwners",
+      "awaitOwners",
+      "report",
+      "retireOwners",
+    ]);
+  });
+
+  it("fixes non-last classification and reserves one live sibling across unsafe retry", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const departing = descriptor(
+      "ReservedDeparting",
+      "type.example.dev/ReservedDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "ReservedSibling",
+      "type.example.dev/ReservedSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", "IDLE");
+    const departingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    const siblingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    const stopFailure = new Error("departing stop failed");
+    worker.stopOwnerFailures.push(stopFailure);
+
+    await expect(attachments.detach(departingHandle)).rejects.toBe(stopFailure);
+    await expect(attachments.detach(siblingHandle)).rejects.toThrow(
+      "Ordinary last registration detach is not implemented in this slice.",
+    );
+
+    await attachments.retryDetach(departingHandle);
+
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(worker.stoppedOwners).toEqual([["environment-owner-1"], ["environment-owner-1"]]);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+  });
+
+  it("validates opaque environment ownership and coalesces duplicate handle detach", async () => {
+    const environment = ServerEnvironment.local();
+    const foreignEnvironment = ServerEnvironment.local();
+    const first = descriptor(
+      "HandleFirst",
+      "type.example.dev/HandleFirst",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "HandleSibling",
+      "type.example.dev/HandleSibling",
+      new InMemoryStorageFactory(),
+    );
+    const foreign = descriptor(
+      "HandleForeign",
+      "type.example.dev/HandleForeign",
+      new InMemoryStorageFactory(),
+    );
+    const firstHandle = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [first.value],
+    });
+    const siblingHandle = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    const foreignHandle = await serverEnvironmentAccess.attach(foreignEnvironment, {
+      ownership: "caller",
+      descriptors: [foreign.value],
+    });
+    const forged = Object.freeze({ ...firstHandle });
+
+    await expect(serverEnvironmentAccess.detach(environment, forged)).rejects.toThrow(
+      "Environment attachment handle is not owned by this environment.",
+    );
+    await expect(serverEnvironmentAccess.detach(environment, foreignHandle)).rejects.toThrow(
+      "Environment attachment handle is not owned by this environment.",
+    );
+    await expect(serverEnvironmentAccess.retryDetach(environment, siblingHandle)).rejects.toThrow(
+      "Environment attachment has no failed detach to retry.",
+    );
+
+    const detaching = serverEnvironmentAccess.detach(environment, firstHandle);
+    expect(serverEnvironmentAccess.detach(environment, firstHandle)).toBe(detaching);
+    await expect(serverEnvironmentAccess.retryDetach(environment, firstHandle)).rejects.toThrow(
+      "Environment attachment detach has not rejected.",
+    );
+    await detaching;
+    await expect(serverEnvironmentAccess.detach(environment, firstHandle)).resolves.toBeUndefined();
+    await expect(
+      serverEnvironmentAccess.retryDetach(environment, firstHandle),
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not enter the ordinary last-registration lifecycle in this slice", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const only = descriptor(
+      "OnlyRegistration",
+      "type.example.dev/OnlyRegistration",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE");
+    const handle = await attachments.attach({ ownership: "caller", descriptors: [only.value] });
+
+    await expect(attachments.detach(handle)).rejects.toThrow(
+      "Ordinary last registration detach is not implemented in this slice.",
+    );
+
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(worker.stopOwnerCalls).toBe(0);
+    expect(worker.awaitOwnerCalls).toBe(0);
+    expect(worker.retiredOwners).toEqual([]);
+  });
+
+  it.each(["stop", "await"] as const)(
+    "retries only unfinished selected-owner phases after %s failure",
+    async (phase) => {
+      const worker = new LifecycleWorker();
+      const failure = new Error(`${phase} failed`);
+      const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+      const departing = descriptor(
+        `RetryDeparting-${phase}`,
+        `type.example.dev/RetryDeparting-${phase}`,
+        new InMemoryStorageFactory(),
+      );
+      const sibling = descriptor(
+        `RetrySibling-${phase}`,
+        `type.example.dev/RetrySibling-${phase}`,
+        new InMemoryStorageFactory(),
+      );
+      worker.enqueue("IDLE", "IDLE");
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [departing.value],
+      });
+      await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+      if (phase === "stop") {
+        worker.stopOwnerFailures.push(failure);
+      } else {
+        worker.awaitOwnerFailures.push(failure);
+      }
+
+      await expect(attachments.detach(handle)).rejects.toBe(failure);
+      expect(activeRegistrationCount(attachments)).toBe(2);
+      expect(worker.retiredOwners).toEqual([]);
+
+      await attachments.retryDetach(handle);
+
+      expect(worker.stopOwnerCalls).toBe(phase === "stop" ? 2 : 1);
+      expect(worker.awaitOwnerCalls).toBe(phase === "stop" ? 1 : 2);
+      expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+      expect(activeRegistrationCount(attachments)).toBe(1);
+    },
+  );
+
+  it.each(["report", "retire"] as const)(
+    "propagates one post-barrier %s failure after safe cleanup without repeating it on retry",
+    async (phase) => {
+      const worker = new LifecycleWorker();
+      const failure = new Error(`${phase} failed`);
+      let reportCalls = 0;
+      const attachments = new EnvironmentAttachments({
+        createWorker: () => worker,
+        report() {
+          reportCalls += 1;
+          return phase === "report" ? Promise.reject(failure) : Promise.resolve();
+        },
+      });
+      const departing = descriptor(
+        `CleanupDeparting-${phase}`,
+        `type.example.dev/CleanupDeparting-${phase}`,
+        new InMemoryStorageFactory(),
+      );
+      const sibling = descriptor(
+        `CleanupSibling-${phase}`,
+        `type.example.dev/CleanupSibling-${phase}`,
+        new InMemoryStorageFactory(),
+      );
+      const rejection = new Error("notification rejected");
+      worker.enqueue("IDLE", "IDLE", { rejected: rejection });
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [departing.value],
+      });
+      await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+      await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+      await until(() => worker.starts === 3);
+      await flushMicrotasks();
+      if (phase === "retire") {
+        worker.retireOwnerFailures.push(failure);
+      }
+
+      await expect(attachments.detach(handle)).rejects.toBe(failure);
+      expect(activeRegistrationCount(attachments)).toBe(1);
+      expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+
+      await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+      expect(reportCalls).toBe(1);
+      expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+    },
+  );
+
+  it("aggregates post-barrier failures in report, worker, coordinator order", async () => {
+    const worker = new LifecycleWorker();
+    const reportFailure = new Error("report failed");
+    const retireFailure = new Error("retire failed");
+    const coordinatorFailure = new Error("coordinator cleanup failed");
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report: () => Promise.reject(reportFailure),
+    });
+    const departing = descriptor(
+      "AggregateDeparting",
+      "type.example.dev/AggregateDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "AggregateSibling",
+      "type.example.dev/AggregateSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", "IDLE", { rejected: new Error("notification rejected") });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+    await flushMicrotasks();
+    worker.retireOwnerFailures.push(retireFailure);
+    const removeOwners = vi
+      .spyOn(DeliveryRunCoordinator.prototype, "removeOwners")
+      .mockRejectedValueOnce(coordinatorFailure);
+
+    await expect(attachments.detach(handle)).rejects.toMatchObject({
+      errors: [reportFailure, retireFailure, coordinatorFailure],
+    });
+    expect(activeRegistrationCount(attachments)).toBe(2);
+    await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(removeOwners).toHaveBeenCalledTimes(2);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+    removeOwners.mockRestore();
+  });
+
+  it("retries failed coordinator cleanup without repeating report or worker retirement", async () => {
+    const worker = new LifecycleWorker();
+    const coordinatorFailure = new Error("coordinator cleanup failed");
+    let reportCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report() {
+        reportCalls += 1;
+        return Promise.resolve();
+      },
+    });
+    const departing = descriptor(
+      "CoordinatorCleanupDeparting",
+      "type.example.dev/CoordinatorCleanupDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "CoordinatorCleanupSibling",
+      "type.example.dev/CoordinatorCleanupSibling",
+      new InMemoryStorageFactory(),
+    );
+    const rejection = new Error("notification rejected");
+    worker.enqueue("IDLE", "IDLE", { rejected: rejection });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+    await flushMicrotasks();
+    const removeOwners = vi
+      .spyOn(DeliveryRunCoordinator.prototype, "removeOwners")
+      .mockRejectedValueOnce(coordinatorFailure);
+
+    await expect(attachments.detach(handle)).rejects.toBe(coordinatorFailure);
+    expect(activeRegistrationCount(attachments)).toBe(2);
+    expect(reportCalls).toBe(1);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+
+    await attachments.retryDetach(handle);
+
+    expect(removeOwners).toHaveBeenCalledTimes(2);
+    expect(reportCalls).toBe(1);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    removeOwners.mockRestore();
+  });
+
+  it("consumes cause-less PARKED work without reporting it", async () => {
+    const worker = new LifecycleWorker();
+    let reportCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker: () => worker,
+      report() {
+        reportCalls += 1;
+        return Promise.resolve();
+      },
+    });
+    const departing = descriptor(
+      "ParkedDeparting",
+      "type.example.dev/ParkedDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "ParkedSibling",
+      "type.example.dev/ParkedSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("FAILED", "IDLE");
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    expect(handle.records()).toEqual([
+      expect.objectContaining({ hasCause: false, occurrences: 0 }),
+    ]);
+
+    await attachments.detach(handle);
+
+    expect(reportCalls).toBe(0);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+  });
+
+  it("includes a dynamically joined owner in selected-owner detach phases", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const departing = descriptor(
+      "DynamicDetachDeparting",
+      "type.example.dev/DynamicDetachDeparting",
+      new InMemoryStorageFactory(),
+      { tenants: ["tenant-initial"] },
+    );
+    const sibling = descriptor(
+      "DynamicDetachSibling",
+      "type.example.dev/DynamicDetachSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", "IDLE", "IDLE");
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    const dynamicReady = Object.freeze({ ...departing.ready, tenantId: "tenant-dynamic" });
+    await departing.readiness.claim(dynamicReady).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+
+    await attachments.detach(handle);
+
+    expect(worker.stoppedOwners).toEqual([["environment-owner-1", "environment-owner-3"]]);
+    expect(worker.awaitedOwners).toEqual([["environment-owner-1", "environment-owner-3"]]);
+    expect(worker.retiredOwners).toEqual([["environment-owner-1", "environment-owner-3"]]);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+  });
+
+  it("retains terminal generation faults across barrier retry without unsafe cleanup", async () => {
+    const worker = new LifecycleWorker();
+    const failure = new Error("terminal worker invariant failed");
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const departing = descriptor(
+      "FaultedDetachDeparting",
+      "type.example.dev/FaultedDetachDeparting",
+      new InMemoryStorageFactory(),
+    );
+    const sibling = descriptor(
+      "FaultedDetachSibling",
+      "type.example.dev/FaultedDetachSibling",
+      new InMemoryStorageFactory(),
+    );
+    worker.enqueue("IDLE", "IDLE");
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [departing.value],
+    });
+    await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
+    worker.startFailures.push(failure);
+    await departing.readiness.claim(departing.ready).complete(() => Promise.resolve());
+    await until(() => worker.starts === 3);
+    await flushMicrotasks();
+
+    await expect(attachments.detach(handle)).rejects.toBe(failure);
+    await expect(attachments.retryDetach(handle)).rejects.toBe(failure);
+
+    expect(worker.stopOwnerCalls).toBe(1);
+    expect(worker.awaitOwnerCalls).toBe(1);
+    expect(worker.retiredOwners).toEqual([]);
+    expect(activeRegistrationCount(attachments)).toBe(2);
   });
 });
 
@@ -1417,6 +1905,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly stopOwnerFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly retireOwnerFailures: Error[] = [];
+  readonly startFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
   readonly stoppedOwners: string[][] = [];
   readonly awaitedOwners: string[][] = [];
@@ -1454,6 +1943,10 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
     }
     this.starts += 1;
     this.#events.push("start");
+    const startFailure = this.startFailures.shift();
+    if (startFailure !== undefined) {
+      throw startFailure;
+    }
     const queued = this.#results.shift();
     if (queued === undefined) {
       return Promise.reject(new Error("Missing lifecycle worker result."));
@@ -1556,4 +2049,10 @@ async function until(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
   throw new Error("Condition was not observed.");
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await Promise.resolve();
+  }
 }

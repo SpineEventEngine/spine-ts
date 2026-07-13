@@ -149,3 +149,26 @@ both bounded waits. Parked reporting filters to selected, unreported per-unit
 causes before configured-order choice. Atomic record detach reclassifies the
 departing registration first, then reports/consumes only newly orphaned
 generation units, retaining earlier shared causes for later selection.
+
+## Slice 2 Recorded Outcome
+
+The accepted non-last sequence is implemented behind the package-private
+environment access seam. Exact handle identity is environment-owned, and one
+`WeakMap` operation retains the original promise/status plus generation-local
+detach checkpoints. Readiness closes before selected owners stop; worker
+quiescence and the coordinator selected-owner barrier precede any records,
+reporting, permanent retirement, or coordinator reclamation.
+
+After the barrier, `EnvironmentDeliveryRecords.detach(token)` is the sole
+ownership/cause classification operation. Reporting is marked attempted before
+awaiting the external callback, selected worker retirement is likewise a
+single inert attempt, and coordinator owner removal is retried until successful.
+Only successful coordinator reclamation removes configured owners, overlap
+domains, descriptors/runtimes, and registration ownership. This preserves the
+shared generation and all sibling state. Terminal coordinator faults remain
+terminal; ordinary worker rejection remains settlement evidence.
+
+Ordinary last detach is deliberately rejected before readiness or lifecycle
+mutation. Attach/last-detach race policy, authoritative last retirement,
+reusable stop, permanent close, facilities/server wiring, and public lifecycle
+surface remain assigned to later slices.
