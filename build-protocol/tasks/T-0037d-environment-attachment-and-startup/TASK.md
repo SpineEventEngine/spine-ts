@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Started: `2026-07-12T18:25:27Z`
 

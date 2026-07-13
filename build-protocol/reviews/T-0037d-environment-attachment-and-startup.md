@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Complete and merge-ready
+Status: Complete and integrated
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -706,3 +706,7 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   coverage, with all static/docs/Protobuf/generated gates clean. All required
   T-0037d review concerns are clean and closed. T-0037d is complete and
   merge-ready; final project security remains correctly deferred to T-0041.
+- `2026-07-13T00:43:48Z`: Merge `a3758741` is integrated and post-merge full
+  verification passes 1,434/1,434 in normal and coverage runs with every static,
+  docs/API, Protobuf, and generated gate clean. T-0037d remains review-clean,
+  complete, and integrated; security remains deferred to T-0041.
