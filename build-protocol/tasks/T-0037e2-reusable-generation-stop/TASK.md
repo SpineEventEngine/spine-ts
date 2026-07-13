@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Architecture resolution assigned
+Status: Architecture accepted; Slice 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -140,3 +140,18 @@ No registration detach, ordinary last-detach retirement, permanent environment
 close/refusal, facility teardown, failed-start rollback, server/listener close
 integration, public explicit-stop API/docs, retry timing, monitor/health/action
 surface, topology, adapter, catch-up path, or T-0036 change.
+
+## Architecture Resolution
+
+The implementation-ready private ownership model, ordered operation, failure/
+retry semantics, attach linearization, public boundary, risks, and four bounded
+TDD slices are recorded in
+[`architecture-resolution.md`](architecture-resolution.md).
+
+The resolution keeps `EnvironmentAttachments` as the sole lifecycle gate and
+adds one private environment-owned stop operation, one unpublished candidate,
+stable registration bindings committed at publication, separate route/transfer
+checkpoints, and explicit retry with no public token or export. Coordinator
+acceptance at `2026-07-13T04:49:19Z` authorized only Slice 1, the private stop
+foundation and complete happy path. The existing implementer is assigned at
+explicit `gpt-5.6-terra` / `medium` with no subagents.
