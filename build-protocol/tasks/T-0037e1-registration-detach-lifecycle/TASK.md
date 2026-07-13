@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 1 fixes verified; Round 2 review pending
+Status: Slice 4 Round 2 review in progress
 
 ### Slice 4 Round 1 Findings
 
@@ -29,6 +29,11 @@ descriptor-array copy. Initial worker-construction failure removes the claim
 and clears its matching empty registration slot. The active exclusion now
 reserves failed-start rollback implementation except for this coordination
 guard. Focused and static evidence is recorded in the work log.
+
+Round 2 reviews the complete fix frozen from `fb0650ae` through `1ab44524` in
+`.superpowers/sdd/review-fb0650ae..1ab44524.diff` (one commit, 32,260 bytes).
+Explicit profiles remain style, TypeScript/API, and reliability
+`gpt-5.6-terra` / `high`, plus documentation `gpt-5.6-luna` / `medium`.
 
 ### Slice 4 Coordinator Finding
 

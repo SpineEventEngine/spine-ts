@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 1 fixes verified; Round 2 review pending
+Status: Slice 4 Round 2 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -265,3 +265,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   formatting, generated cleanliness, diff hygiene, and public-surface scans.
   Round 2 is pending all four canonical concerns; security/full verify remain
   deferred.
+- Round 2 package is
+  `.superpowers/sdd/review-fb0650ae..1ab44524.diff` (one commit, 32,260 bytes).
+  Expected explicit profiles are style, TypeScript/API, and reliability
+  `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
+  read-only with no subagents. Review is bounded to the complete Round 1 fix;
+  historical superseded text is non-actionable unless currently claimed.
