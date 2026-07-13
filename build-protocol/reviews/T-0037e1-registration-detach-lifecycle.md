@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 3 Round 1 documentation fix assigned
+Status: Slice 3 Round 1 fix verified; Round 2 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -193,3 +193,11 @@ Derived status mirror: the canonical current state is the `Status` header in
   closed with matching immutable role metadata. One Terra Medium owner receives
   this complete one-finding batch before Round 2; security/full verify remain
   deferred.
+- `2026-07-13T03:03:37Z`: The active architecture no longer claims one
+  `retire()` method invocation. It documents repeated explicit entry after an
+  unsafe rejected attempt, one stop execution, and non-duplication of completed
+  checkpoints/phases. This record-only correction is ready for Round 2 review;
+  no behavior or test evidence changed.
+- `2026-07-13T03:04:39Z`: Targeted positive/negative wording scans, four-record
+  Prettier, exact status mirrors, and `git diff --check` pass. Round 2 review is
+  pending; no new behavioral acceptance is claimed.

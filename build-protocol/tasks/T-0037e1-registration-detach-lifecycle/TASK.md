@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 Round 1 documentation fix assigned
+Status: Slice 3 Round 1 fix verified; Round 2 review pending
 
 ### Slice 3 Round 1 Finding
 
@@ -10,6 +10,11 @@ and explicit detach retry re-enters the same coordinator retirement state
 machine. The stable guarantee is that stop executes once and completed
 checkpoints are not duplicated. One Terra Medium owner receives this record-only
 correction before Round 2.
+
+Disposition: corrected in the active architecture. Explicit retry after unsafe
+quiescence re-invokes `retire()` to re-enter the same coordinator retirement
+state machine; stop executes once and completed checkpoints/phases are not
+duplicated. No implementation or test behavior changed.
 
 ### Slice 2 Round 1 Findings
 

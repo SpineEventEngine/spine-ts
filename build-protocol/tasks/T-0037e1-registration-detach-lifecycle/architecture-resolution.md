@@ -81,12 +81,17 @@ authority to hide that fault.
 
 ## Ordinary Last Detach
 
-Last detach closes readiness and invokes existing `DeliveryRunCoordinator.retire`
-exactly once. Its callback consumes/reports all generation records. Preserve
-authoritative order: close admission/stop, await quiescence, classify,
-consume/report, permanently retire/clean up. If `replacementSafe` is true, a
-finally-equivalent path clears the generation map and matching empty
-registration slot before propagating reporting or inert-cleanup error.
+Last detach closes readiness and enters the existing
+`DeliveryRunCoordinator.retire()` retirement state machine. An unsafe
+quiescence rejection clears that attempt's rejected in-flight retirement
+promise; explicit detach retry invokes `retire()` again to re-enter the same
+checkpointed state machine. Stop executes once, and completed checkpoints and
+phases are not duplicated. The reporting callback consumes/reports all
+generation records. Preserve authoritative order: close admission/stop, await
+quiescence, classify, consume/report, permanently retire/clean up. If
+`replacementSafe` is true, a finally-equivalent path clears the generation map
+and matching empty registration slot before propagating reporting or
+inert-cleanup error.
 
 Unproved quiescence retains the generation slot, endpoint dependencies, and
 same detach operation; it performs no later phase. Explicit detach retry resumes
