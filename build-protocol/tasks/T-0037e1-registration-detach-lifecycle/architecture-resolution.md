@@ -168,10 +168,11 @@ domains, descriptors/runtimes, and registration ownership. This preserves the
 shared generation and all sibling state. Terminal coordinator faults remain
 terminal; ordinary worker rejection remains settlement evidence.
 
-Ordinary last detach is deliberately rejected before readiness or lifecycle
-mutation. Attach/last-detach race policy, authoritative last retirement,
-reusable stop, permanent close, facilities/server wiring, and public lifecycle
-surface remain assigned to later slices.
+At the Slice 2 boundary, ordinary last detach was deliberately rejected before
+readiness or lifecycle mutation. Slice 3 now implements authoritative last
+retirement as recorded below. Attach/last-detach race policy, reusable stop,
+permanent close, facilities/server wiring, and public lifecycle surface remain
+assigned to later slices.
 
 ## Slice 2 Round 1 Corrections
 
@@ -182,3 +183,27 @@ reclaims sibling work. The environment attachment handle is nominal through a
 module-private class private field while environment runtime ownership remains
 the authoritative `WeakMap` identity check. These package-internal exported
 access methods remain absent from package/root public exports.
+
+## Slice 3 Recorded Outcome
+
+The serialized detach operation fixes one handle classification as `last` or
+`non-last`. A sole live registration takes the last path; unresolved non-last
+reservation still protects its live sibling and does not become generation
+retirement accidentally.
+
+Last detach closes its readiness and invokes the existing coordinator
+retirement state machine. That primitive remains authoritative for admission
+closure/stop, active and worker quiescence, the callback that atomically retires
+all generation records and reports eligible causes, and permanent worker
+retirement. Quiescence failure leaves `replacementSafe` false, so no inner or
+outer registration/generation slot is cleared and explicit retry resumes the
+same stop/await checkpoints.
+
+After proven quiescence, report and inert worker-retirement failures still
+finalize the coordinator. A finally-equivalent environment path observes
+`replacementSafe`, removes the matching registration and generation entries,
+and clears the now-empty current generation slot before propagating the stable
+failure. Retry after safe cleanup is inert, and only a later attach constructs
+one fresh generation. Scope-less generations have no cause table and retire as
+an atomic no-record case. No attach race, unsafe queued-attach policy, reusable
+stop, permanent close, server/public wiring, or public export is added.

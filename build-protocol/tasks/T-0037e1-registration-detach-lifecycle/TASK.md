@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 2 clean; Slice 3 ordinary last detach assigned
+Status: Slice 3 focused verified; Round 1 review pending
 
 ### Slice 2 Round 1 Findings
 
@@ -250,8 +250,9 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   continue; report and worker-retirement attempts are never repeated, while a
   failed coordinator removal remains the only retryable cleanup phase.
 - Sibling generation identity, readiness, records, pending admission, workers,
-  and configured ownership remain usable. Ordinary last detach remains an
-  explicit unimplemented boundary and performs no lifecycle mutation. No
+  and configured ownership remain usable. At the Slice 2 boundary, ordinary
+  last detach remained explicitly unimplemented and performed no lifecycle
+  mutation. No
   package/root public export or public `ServerEnvironment` method, server
   wiring, reusable stop, permanent close, or later race policy was added;
   exported package-internal access methods remain intentional.
@@ -259,3 +260,27 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   regression is 7 files / 217 tests. Generated build typecheck passed. Final
   lint/format/generated/diff/public scans are recorded in the work log. Full
   verification, commit, and push remain intentionally deferred.
+
+## Slice 3 Implementation Record
+
+- `2026-07-13`: The existing Terra Medium owner implemented ordinary last
+  detach through the existing private handle/retry surface and the authoritative
+  `DeliveryRunCoordinator.retire()` primitive. Classification is fixed once as
+  `last` or `non-last` inside the serialized detach operation; accepted
+  non-last reservation behavior remains intact.
+- Last detach closes registration readiness, delegates stop/admission closure,
+  quiescence, all-generation record consumption/reporting, and permanent worker
+  retirement in D-0085 order. Unsafe quiescence leaves registration/generation
+  slots and endpoint ownership intact; retry re-enters the same coordinator
+  checkpoints without repeating stop or performing an implicit retry.
+- Once retirement is `replacementSafe`, a finally-equivalent outer path removes
+  the matching handle registration, generation map entry, and empty current
+  registration slot before propagating report or inert-retirement failure.
+  Those failures retain identity, are not replayed by retry, and one later
+  eligible attach creates exactly one fresh generation without old/new overlap.
+  A valid zero-scope last registration retires as a no-record generation.
+- Focused evidence is 4 files / 123 tests; the affected T-0037a/b/c/d/e1
+  regression is 7 files / 221 tests. Generated and tooling typechecks,
+  lint/cleanup, repository formatting, and generated cleanliness pass. Full
+  verification, commit, push, Slice 4 races, reusable stop, permanent close,
+  server/public integration, docs, and examples remain excluded.

@@ -136,6 +136,12 @@ export class EnvironmentDeliveryRecords {
 
   /** @internal Atomically select, report, and consume every generation record. */
   retire(): readonly unknown[] {
+    if (this.#obligations === undefined) {
+      this.#registrations.clear();
+      this.#scopes.clear();
+      this.#generationScopes.clear();
+      return Object.freeze([]);
+    }
     const obligations = this.#requireObligations();
     const units = [...this.#generationScopes.keys()];
     const selections: ParkedDeliveryObligationSelection[] = [];

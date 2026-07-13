@@ -213,7 +213,8 @@ export class EnvironmentAttachments {
       generation,
       operation: undefined,
       claimRemoved: false,
-      nonLast: false,
+      detachKind: undefined,
+      generationCleared: false,
     });
     return attachment;
   }
@@ -275,13 +276,26 @@ export class EnvironmentAttachments {
   }
 
   async #detachRegistration(attached: AttachedHandle): Promise<void> {
-    if (!attached.nonLast) {
+    if (attached.detachKind === undefined) {
       const liveRegistrations = this.#registrations.count - this.#nonLastDetachTokens.size;
-      if (liveRegistrations <= 1) {
-        throw new Error("Ordinary last registration detach is not implemented in this slice.");
+      if (this.#registrations.count === 1) {
+        attached.detachKind = "last";
+      } else if (liveRegistrations <= 1) {
+        throw new Error("Environment attachment cannot detach the reserved live registration.");
+      } else {
+        attached.detachKind = "non-last";
+        this.#nonLastDetachTokens.add(attached.claim.token);
       }
-      attached.nonLast = true;
-      this.#nonLastDetachTokens.add(attached.claim.token);
+    }
+    if (attached.detachKind === "last") {
+      try {
+        await attached.generation.retireRegistration(attached.claim.token);
+      } finally {
+        if (attached.generation.replacementSafe) {
+          this.#clearRetiredGeneration(attached);
+        }
+      }
+      return;
     }
     try {
       await attached.generation.detachRegistration(attached.claim.token);
@@ -291,6 +305,18 @@ export class EnvironmentAttachments {
         this.#nonLastDetachTokens.delete(attached.claim.token);
         attached.claimRemoved = true;
       }
+    }
+  }
+
+  #clearRetiredGeneration(attached: AttachedHandle): void {
+    if (!attached.claimRemoved) {
+      this.#registrations.remove(attached.claim.token);
+      attached.claimRemoved = true;
+    }
+    if (!attached.generationCleared) {
+      this.#generations.delete(attached.claim.generation);
+      this.#registrations.clear(attached.claim.generation);
+      attached.generationCleared = true;
     }
   }
 
@@ -406,7 +432,8 @@ interface AttachedHandle {
   readonly generation: DeliveryGeneration;
   operation: DetachHandleOperation | undefined;
   claimRemoved: boolean;
-  nonLast: boolean;
+  detachKind: "non-last" | "last" | undefined;
+  generationCleared: boolean;
 }
 
 interface DetachHandleOperation {
@@ -657,25 +684,35 @@ class DeliveryGeneration {
     throwFailures(failures, "Environment registration detach failed.");
   }
 
-  async retireFailedRegistration(token: string): Promise<void> {
+  async retireRegistration(token: string): Promise<void> {
     this.#registrations.get(token)?.readiness.fail();
     if (this.#coordinator === undefined) {
-      await this.#consumeRegistration(token, true);
-      this.#registrations.delete(token);
-      this.#retiredWithoutCoordinator = true;
-      this.#dropRetiredState();
+      try {
+        await this.#consumeRegistration(token, true);
+      } finally {
+        this.#registrations.delete(token);
+        this.#retiredWithoutCoordinator = true;
+        this.#dropRetiredState();
+      }
       return;
     }
     try {
       await this.#coordinator.retire(async () => {
-        await this.#consumeRegistration(token, true);
-        this.#registrations.delete(token);
+        try {
+          await this.#consumeRegistration(token, true);
+        } finally {
+          this.#registrations.delete(token);
+        }
       });
     } finally {
       if (this.replacementSafe) {
         this.#dropRetiredState();
       }
     }
+  }
+
+  async retireFailedRegistration(token: string): Promise<void> {
+    await this.retireRegistration(token);
   }
 
   #readiness(

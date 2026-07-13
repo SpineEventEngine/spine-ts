@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 2 clean; Slice 3 ordinary last detach assigned
+Status: Slice 3 focused verified; Round 1 review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -166,3 +166,15 @@ Derived status mirror: the canonical current state is the `Status` header in
   cleanup-failure coverage. Superseding evidence passes focused 116/116 and
   affected T-0037a/b/c/d 215/215 plus the repeated generated/type/lint/cleanup,
   format, and generated-cleanliness gates. Round 1 remains pending.
+- `2026-07-13T02:51:31Z`: Slice 3 ordinary last detach is ready for Round 1
+  review. The package is bounded to serialized last/non-last classification,
+  authoritative coordinator retirement, all-generation record consumption,
+  replacement-safe finally-equivalent slot clearing, unsafe quiescence retry,
+  zero-scope retirement, and focused tests. Current evidence is focused 123/123
+  and affected 221/221 plus generated/tooling typecheck, lint/cleanup, format,
+  and generated cleanliness. Attach races, queued-attach policy, reusable stop,
+  permanent close, server/public integration, security, and full verify remain
+  excluded; all four canonical review concerns are pending.
+- `2026-07-13T02:53:04Z`: Final pre-review diff/status/public-surface and
+  exclusion scans are clean; the package remains limited to seven assigned
+  private source/test/record files. Round 1 review is the next boundary.

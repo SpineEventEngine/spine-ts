@@ -772,7 +772,7 @@ describe("non-last registration detach", () => {
 
     await expect(attachments.detach(departingHandle)).rejects.toBe(stopFailure);
     await expect(attachments.detach(siblingHandle)).rejects.toThrow(
-      "Ordinary last registration detach is not implemented in this slice.",
+      "Environment attachment cannot detach the reserved live registration.",
     );
 
     await attachments.retryDetach(departingHandle);
@@ -839,27 +839,6 @@ describe("non-last registration detach", () => {
     await expect(
       serverEnvironmentAccess.retryDetach(environment, firstHandle),
     ).resolves.toBeUndefined();
-  });
-
-  it("does not enter the ordinary last-registration lifecycle in this slice", async () => {
-    const worker = new LifecycleWorker();
-    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
-    const only = descriptor(
-      "OnlyRegistration",
-      "type.example.dev/OnlyRegistration",
-      new InMemoryStorageFactory(),
-    );
-    worker.enqueue("IDLE");
-    const handle = await attachments.attach({ ownership: "caller", descriptors: [only.value] });
-
-    await expect(attachments.detach(handle)).rejects.toThrow(
-      "Ordinary last registration detach is not implemented in this slice.",
-    );
-
-    expect(activeRegistrationCount(attachments)).toBe(1);
-    expect(worker.stopOwnerCalls).toBe(0);
-    expect(worker.awaitOwnerCalls).toBe(0);
-    expect(worker.retiredOwners).toEqual([]);
   });
 
   it.each(["stop", "await"] as const)(
@@ -1143,6 +1122,243 @@ describe("non-last registration detach", () => {
     expect(worker.awaitOwnerCalls).toBe(1);
     expect(worker.retiredOwners).toEqual([]);
     expect(activeRegistrationCount(attachments)).toBe(2);
+  });
+});
+
+describe("ordinary last registration detach", () => {
+  it("retires a sole zero-scope registration as a no-record generation", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const empty = descriptor(
+      "EmptyLastDetach",
+      "type.example.dev/EmptyLastDetach",
+      new InMemoryStorageFactory(),
+      { tenants: [] },
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [empty.value],
+    });
+
+    await expect(attachments.detach(handle)).resolves.toBeUndefined();
+
+    expect(activeRegistrationCount(attachments)).toBe(0);
+    expect(configuredOwnerCount(attachments)).toBe(0);
+    expect(worker.stopCalls).toBe(0);
+    expect(worker.awaitCalls).toBe(0);
+    expect(worker.retireCalls).toBe(0);
+  });
+
+  it("retires the sole generation in D-0085 order and admits one fresh generation", async () => {
+    const events: string[] = [];
+    const rejection = new Error("last generation notification rejected");
+    const reported: unknown[][] = [];
+    const firstWorker = new LifecycleWorker(events);
+    const freshWorker = new LifecycleWorker(events);
+    const workers = [firstWorker, freshWorker];
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) {
+          throw new Error("Unexpected delivery generation.");
+        }
+        return worker;
+      },
+      report(causes) {
+        events.push("report");
+        reported.push([...causes]);
+        return Promise.resolve();
+      },
+    });
+    const retiring = descriptor(
+      "LastDetach",
+      "type.example.dev/LastDetach",
+      new InMemoryStorageFactory(),
+    );
+    const fresh = descriptor(
+      "LastDetachFresh",
+      "type.example.dev/LastDetachFresh",
+      new InMemoryStorageFactory(),
+    );
+    firstWorker.enqueue("IDLE", { rejected: rejection });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [retiring.value],
+    });
+    await retiring.readiness.claim(retiring.ready).complete(() => Promise.resolve());
+    await until(() => firstWorker.starts === 2);
+    await flushMicrotasks();
+
+    await attachments.detach(handle);
+
+    expect(events).toEqual(["start", "start", "stop", "await", "report", "retire"]);
+    expect(reported).toEqual([[rejection]]);
+    expect(activeRegistrationCount(attachments)).toBe(0);
+    expect(configuredOwnerCount(attachments)).toBe(0);
+    expect(configuredScopeCount(attachments)).toBe(0);
+    await retiring.readiness.claim(retiring.ready).complete(() => Promise.resolve());
+    await flushMicrotasks();
+    expect(firstWorker.starts).toBe(2);
+
+    freshWorker.enqueue("IDLE");
+    const freshHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [fresh.value],
+    });
+
+    expect(freshHandle.generation).not.toBe(handle.generation);
+    expect(factoryCalls).toBe(2);
+    expect(firstWorker.starts).toBe(2);
+    expect(freshWorker.starts).toBe(1);
+  });
+
+  it.each(["report", "retire"] as const)(
+    "clears the safe sole slot after %s failure and permits one fresh generation",
+    async (failureKind) => {
+      const events: string[] = [];
+      const rejection = new Error("last generation rejected");
+      const failure = new Error(`${failureKind} failed`);
+      const firstWorker = new LifecycleWorker(events);
+      const freshWorker = new LifecycleWorker(events);
+      if (failureKind === "retire") {
+        firstWorker.retireFailures.push(failure);
+      }
+      const workers = [firstWorker, freshWorker];
+      let factoryCalls = 0;
+      let reportCalls = 0;
+      const attachments = new EnvironmentAttachments({
+        createWorker() {
+          const worker = workers[factoryCalls];
+          factoryCalls += 1;
+          if (worker === undefined) {
+            throw new Error("Unexpected delivery generation.");
+          }
+          return worker;
+        },
+        report() {
+          reportCalls += 1;
+          events.push("report");
+          return failureKind === "report" ? Promise.reject(failure) : Promise.resolve();
+        },
+      });
+      const retiring = descriptor(
+        `LastDetach-${failureKind}`,
+        `type.example.dev/LastDetach-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const fresh = descriptor(
+        `LastDetachFresh-${failureKind}`,
+        `type.example.dev/LastDetachFresh-${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      firstWorker.enqueue("IDLE", { rejected: rejection });
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [retiring.value],
+      });
+      await retiring.readiness.claim(retiring.ready).complete(() => Promise.resolve());
+      await until(() => firstWorker.starts === 2);
+      await flushMicrotasks();
+
+      await expect(attachments.detach(handle)).rejects.toBe(failure);
+
+      expect(events).toEqual(["start", "start", "stop", "await", "report", "retire"]);
+      expect(activeRegistrationCount(attachments)).toBe(0);
+      expect(configuredOwnerCount(attachments)).toBe(0);
+      await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+      expect(reportCalls).toBe(1);
+      expect(firstWorker.stopCalls).toBe(1);
+      expect(firstWorker.awaitCalls).toBe(1);
+      expect(firstWorker.retireCalls).toBe(1);
+
+      freshWorker.enqueue("IDLE");
+      const freshHandle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [fresh.value],
+      });
+
+      expect(freshHandle.generation).not.toBe(handle.generation);
+      expect(factoryCalls).toBe(2);
+    },
+  );
+
+  it("retains an unsafe sole slot and retries quiescence without duplicate stop", async () => {
+    const events: string[] = [];
+    const rejection = new Error("last detach rejected work");
+    const quiescenceFailure = new Error("last detach quiescence unavailable");
+    const firstWorker = new LifecycleWorker(events);
+    const freshWorker = new LifecycleWorker(events);
+    const workers = [firstWorker, freshWorker];
+    let factoryCalls = 0;
+    let reportCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) {
+          throw new Error("Unexpected delivery generation.");
+        }
+        return worker;
+      },
+      report() {
+        reportCalls += 1;
+        events.push("report");
+        return Promise.resolve();
+      },
+    });
+    const retiring = descriptor(
+      "UnsafeLastDetach",
+      "type.example.dev/UnsafeLastDetach",
+      new InMemoryStorageFactory(),
+    );
+    const fresh = descriptor(
+      "UnsafeLastDetachFresh",
+      "type.example.dev/UnsafeLastDetachFresh",
+      new InMemoryStorageFactory(),
+    );
+    firstWorker.enqueue("IDLE", { rejected: rejection });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [retiring.value],
+    });
+    await retiring.readiness.claim(retiring.ready).complete(() => Promise.resolve());
+    await until(() => firstWorker.starts === 2);
+    await flushMicrotasks();
+    firstWorker.awaitFailures.push(quiescenceFailure);
+
+    await expect(attachments.detach(handle)).rejects.toMatchObject({
+      cause: quiescenceFailure,
+    });
+    await flushMicrotasks();
+
+    expect(events).toEqual(["start", "start", "stop", "await"]);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    expect(configuredOwnerCount(attachments)).toBe(1);
+    expect(reportCalls).toBe(0);
+    expect(firstWorker.retireCalls).toBe(0);
+
+    await attachments.retryDetach(handle);
+
+    expect(events).toEqual(["start", "start", "stop", "await", "await", "report", "retire"]);
+    expect(firstWorker.stopCalls).toBe(1);
+    expect(firstWorker.awaitCalls).toBe(2);
+    expect(reportCalls).toBe(1);
+    expect(firstWorker.retireCalls).toBe(1);
+    expect(activeRegistrationCount(attachments)).toBe(0);
+    await expect(attachments.retryDetach(handle)).resolves.toBeUndefined();
+    expect(firstWorker.stopCalls).toBe(1);
+    expect(firstWorker.retireCalls).toBe(1);
+
+    freshWorker.enqueue("IDLE");
+    const freshHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [fresh.value],
+    });
+
+    expect(freshHandle.generation).not.toBe(handle.generation);
+    expect(factoryCalls).toBe(2);
   });
 });
 
