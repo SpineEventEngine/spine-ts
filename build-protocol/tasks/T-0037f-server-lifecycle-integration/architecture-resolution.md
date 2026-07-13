@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 2 round-3 re-review assigned
+Status: Slice 2 round-4 re-review assigned
 
 ## Resolution Summary
 
@@ -612,3 +612,27 @@ smallest coherent implementation.
 
 - `2026-07-13T19:13:06Z`: focused verification passes; fresh applicable whole-
   slice re-review is assigned.
+
+## Slice 2 Round-4 Review-Fix
+
+- `2026-07-13T19:19:36Z`: terminal consumption must coincide with every fully
+  completed dependency cleanup path, before any original or retirement error
+  is surfaced.
+
+## Slice 2 Round-4 Review-Fix Handback
+
+- `2026-07-13T19:24:08Z`: the existing private terminal bit is now written at
+  the cleanup-completion boundary itself: after immediate-safe close success,
+  and together with retained-record clearing. Error selection and ordering run
+  afterward, so original, collected retirement, and cause-less completion paths
+  all leave the same server terminal without adding a public lifecycle state.
+- Direct prebuilt/non-idempotent tests prove both transitions and preserve fresh
+  separate-server caller-environment reuse. Slice 3+ seams remain unchanged.
+- `2026-07-13T19:25:29Z`: focused RED/GREEN is 13 pass / 2 expected fail, then
+  15/15 pass; the complete native gate is 5 files / 157 tests. Both typechecks
+  and all scoped mechanical, nine-path scope/status/leak, and diff checks pass.
+
+## Slice 2 Round-4 Coordinator Gate
+
+- `2026-07-13T19:26:55Z`: focused verification passes; fresh whole-slice
+  applicable re-review is assigned.

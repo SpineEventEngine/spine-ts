@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 2 round-3 re-review assigned
+Status: Slice 2 round-4 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -368,5 +368,38 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 
 - `2026-07-13T19:13:06Z`: accepted/closed implementer actual Terra Medium;
   both typechecks, 5 files / 155 tests, and all scoped gates pass.
+- Resume style/API/reliability at explicit Terra High, no subagents, against a
+  fresh whole Slice 2 package. Documentation N/A; security deferred.
+
+## Slice 2 Round-3 Re-review Findings
+
+- `2026-07-13T19:19:36Z`: corroborated terminal-consumption defect across all
+  concerns: immediate-safe successful cleanup and retained safe-with-final-
+  retirement-error cleanup leave the server restartable with closed
+  dependencies. Actual Terra High, no subagents, all closed.
+- Same Terra Medium implementer receives both branch fixes and direct terminal
+  tests. Applicable re-review pending; documentation N/A, security deferred.
+
+## Slice 2 Round-4 Review-Fix Handback
+
+- `2026-07-13T19:24:08Z`: the corroborated terminal-state finding is addressed
+  on both missing branches. Successful immediate-safe cleanup marks consumption
+  before the original error; successful retained cleanup marks consumption when
+  its record clears before collected safe retirement errors. The existing
+  cause-less completion path remains covered by the same assignment.
+- New direct tests prove non-idempotent context/resource dependencies are not
+  touched by later same-server starts and fresh caller-environment reuse occurs
+  only through a separately assembled server. Focused RED is 13/15 with exactly
+  the two accepted failures; GREEN is 15/15. Applicable re-review remains
+  coordinator-owned; docs are N/A, security deferred, and Slice 3+ excluded.
+- `2026-07-13T19:25:29Z`: both typechecks, native 5 files / 157 tests, scoped
+  lint/cleanup/Prettier, exact nine-path allowlist/status/public-leak audit, and
+  diff integrity pass. This synchronized handback is ready for coordinator-
+  owned re-review; no finding is self-accepted here.
+
+## Slice 2 Round-4 Re-review Assignment
+
+- `2026-07-13T19:26:55Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 157 tests, and all scoped gates pass.
 - Resume style/API/reliability at explicit Terra High, no subagents, against a
   fresh whole Slice 2 package. Documentation N/A; security deferred.

@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 round-3 re-review assigned
+Status: Slice 2 round-4 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -578,3 +578,40 @@ gate passes.
   subagents, closed. Both typechecks, 5 files / 155 native tests, and all scoped
   gates pass. Fresh whole-slice style/API/reliability re-review is assigned at
   Terra High; documentation N/A, security deferred.
+
+## Slice 2 Round-3 Re-review And Round-4 Fix
+
+- `2026-07-13T19:19:36Z`: all three reviewers corroborate one terminal-state
+  defect (style/reliability high, API medium), actual Terra High, no subagents,
+  all closed.
+- Set private consumption whenever dependency cleanup fully completes: after
+  immediate-safe cleanup succeeds before rethrowing the original error, and
+  after retained cleanup succeeds before surfacing any final retirement error.
+- Add direct terminal-rejection tests for both paths with non-idempotent
+  dependencies. Same Terra Medium implementer owns this final bounded fix.
+
+## Slice 2 Round-4 Review-Fix Handback
+
+- `2026-07-13T19:24:08Z`: private consumption now coincides with successful
+  dependency-group completion on every caller-owned failed-start path. An
+  immediate-safe success sets it before rethrowing the original startup error;
+  retained success sets it atomically with record clearing before any collected
+  safe retirement/cleanup error is surfaced. The cause-less path is preserved.
+- Two direct tests use prebuilt contexts, tracked storage, and non-idempotent
+  resources. They prove later same-server starts duplicate no close/build/
+  attach/listen work, while a separately assembled server with fresh
+  dependencies still reuses the caller-owned environment.
+- Round-4 RED is 13 pass / 2 expected fail; focused GREEN is 15/15. No public
+  surface, fixture installer, endpoint-safety, listener/server-owned retention,
+  or later-slice behavior changed.
+- `2026-07-13T19:25:29Z`: both typechecks, native 5 files / 157 tests, scoped
+  ESLint, cleanup enforcement, Prettier, exact nine-path allowlist/status/
+  public-leak audit, and `git diff --check` pass. The final diff contains 6
+  changed paths inside the 9-path allowlist.
+
+## Slice 2 Round-4 Coordinator Gate
+
+- `2026-07-13T19:26:55Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Both typechecks, 5 files / 157 tests, and all scoped gates
+  pass. Fresh whole-slice style/API/reliability re-review is assigned at Terra
+  High; documentation N/A, security deferred.

@@ -437,6 +437,202 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("terminally rejects after immediate-safe cleanup succeeds with the original failure", async () => {
+    const events: string[] = [];
+    const startupFailure = new Error("immediate-safe startup failed");
+    const duplicateResourceClose = new Error("immediate-safe resource closed twice");
+    const firstWorker = new HeldStartupWorker(events);
+    firstWorker.rejectNextStart(startupFailure);
+    const freshWorker = new HeldStartupWorker(events);
+    freshWorker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [firstWorker, freshWorker],
+      environment: { storageFactory, ownsStorageFactory: true },
+    });
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleImmediateSafeTerminal")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const builtStorageCount = storageFactory.storages.length;
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close");
+    let resourceCloses = 0;
+    const closeResource = vi.fn(() => {
+      resourceCloses += 1;
+      if (resourceCloses > 1) {
+        throw duplicateResourceClose;
+      }
+    });
+    const server = Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: closeResource });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+    let fresh: { close(): Promise<void> } | undefined;
+
+    try {
+      await firstWorker.startedWithin();
+      firstWorker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBe(startupFailure);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      await closeIfRunningServer(terminal).catch(() => undefined);
+      expectConsumedFailedStartServer(terminal);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const freshContext = await fixture
+        .createBuilder("LifecycleAfterImmediateSafeTerminal")
+        .withStorageFactory(storageFactory)
+        .buildAsync();
+      fresh = await Server.atPort(0, { environment: fixture.environment })
+        .add(freshContext)
+        .start();
+      expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(1);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+      await fresh.close();
+
+      expect(storageFactory.isOpen()).toBe(true);
+      await fixture.environment.close();
+    } finally {
+      closeContext.mockRestore();
+      firstWorker.release();
+      freshWorker.release();
+      await starting.catch(() => undefined);
+      await fresh?.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("terminally rejects after retained cleanup succeeds with a retirement failure", async () => {
+    const events: string[] = [];
+    const startupFailure = new Error("retained terminal startup failed");
+    const quiescenceFailure = new Error("retained terminal quiescence unavailable");
+    const retirementFailure = new Error("retained terminal retirement failed");
+    const duplicateResourceClose = new Error("retained terminal resource closed twice");
+    const firstWorker = new HeldStartupWorker(events);
+    firstWorker.rejectNextStart(startupFailure);
+    firstWorker.failNextAwait(quiescenceFailure);
+    firstWorker.failNextRetire(retirementFailure);
+    const freshWorker = new HeldStartupWorker(events);
+    freshWorker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [firstWorker, freshWorker],
+      environment: { storageFactory, ownsStorageFactory: true },
+    });
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleRetirementErrorTerminal")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const builtStorageCount = storageFactory.storages.length;
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close");
+    let resourceCloses = 0;
+    const closeResource = vi.fn(() => {
+      resourceCloses += 1;
+      if (resourceCloses > 1) {
+        throw duplicateResourceClose;
+      }
+    });
+    const server = Server.atPort(0, { environment: fixture.environment })
+      .add(context)
+      .addResource({ close: closeResource });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+    let fresh: { close(): Promise<void> } | undefined;
+
+    try {
+      await firstWorker.startedWithin();
+      firstWorker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        startupFailure,
+        expect.objectContaining({ cause: quiescenceFailure }),
+      ]);
+      expect(closeContext).not.toHaveBeenCalled();
+      expect(closeResource).not.toHaveBeenCalled();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(firstWorker.stopCalls).toBe(1);
+      expect(firstWorker.awaitCalls).toBe(1);
+      expect(firstWorker.retireCalls).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const cleanupFailure = await server.start().catch((error: unknown) => error);
+      expect(cleanupFailure).toBe(retirementFailure);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(
+        storageFactory.storages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(firstWorker.awaitCalls).toBe(2);
+      expect(firstWorker.retireCalls).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      await closeIfRunningServer(terminal).catch(() => undefined);
+      expectConsumedFailedStartServer(terminal);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const freshContext = await fixture
+        .createBuilder("LifecycleAfterRetirementErrorTerminal")
+        .withStorageFactory(storageFactory)
+        .buildAsync();
+      fresh = await Server.atPort(0, { environment: fixture.environment })
+        .add(freshContext)
+        .start();
+      expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(1);
+      expect(createHttp2Server).toHaveBeenCalledOnce();
+      await fresh.close();
+
+      expect(storageFactory.isOpen()).toBe(true);
+      await fixture.environment.close();
+    } finally {
+      closeContext.mockRestore();
+      firstWorker.release();
+      freshWorker.release();
+      await starting.catch(() => undefined);
+      await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
+      await fresh?.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("flattens nested retirement and dependency cleanup aggregates in stable order", async () => {
     const startupFailure = new Error("aggregate startup failed");
     const firstRetirementFailure = new Error("first worker retirement failed");

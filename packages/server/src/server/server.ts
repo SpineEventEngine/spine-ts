@@ -120,6 +120,7 @@ export class Server {
             this.#failedStartCleanup = { closeGroup };
             throw attachmentCleanupError(error, cleanupError);
           }
+          this.#failedStartConsumed = true;
         }
       }
       throw error;
@@ -181,11 +182,11 @@ export class Server {
 
     if (!closeFailed && this.#failedStartCleanup === cleanup) {
       this.#failedStartCleanup = undefined;
+      this.#failedStartConsumed = true;
     }
     if (errors.length > 0) {
       throwCleanupErrors(errors);
     }
-    this.#failedStartConsumed = true;
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
