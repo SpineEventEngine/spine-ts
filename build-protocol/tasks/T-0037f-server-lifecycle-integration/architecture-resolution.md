@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 3 implementation assigned
+Status: Slice 3 review assigned
 
 ## Resolution Summary
 
@@ -642,3 +642,23 @@ smallest coherent implementation.
 - `2026-07-13T19:31:28Z`: all applicable concerns are CLEAN at required actual
   profiles. Slice 2 is accepted; Slice 3 alone is authorized for Terra Medium
   TDD.
+
+## Slice 3 Implementation Handback
+
+- `2026-07-13T19:47:13Z`: the accepted failed-start record now covers both
+  no-handle server-owned attachment rollback and successful-attachment listener
+  failure. It retains only server orchestration facts: optional network owner,
+  optional exact handle, whether detach was attempted, and the existing
+  retryable dependency group.
+- `EnvironmentAttachments.endpointSafe()` is a read-only exact-handle view of
+  existing checkpoints: last detach uses `replacementSafe`; non-last detach
+  requires selected-owner quiescence and barrier (or completed registration
+  removal). Foreign handles retain existing rejection and no public export,
+  option, signature, or detached state hierarchy is added.
+- Initial errors flatten original-first with reached safe cleanup errors. A
+  retained retry omits original/reportable causes, performs no build/admission/
+  attach/listen work, closes only after safety, and terminally rejects after
+  record completion. Running-close changes remain assigned to later slices.
+- `2026-07-13T19:49:09Z`: both typechecks, native 5 files / 159 tests, scoped
+  lint/cleanup/format, exact nine-path scope/status/public-leak, and diff gates
+  pass at unchanged baseline HEAD `65384a9a`.

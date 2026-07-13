@@ -210,6 +210,21 @@ export class EnvironmentAttachments {
     return this.#failedRollback !== undefined;
   }
 
+  /** @internal Whether detach of this exact handle has established endpoint safety. */
+  endpointSafe(attachment: EnvironmentAttachmentHandle): boolean {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      throw new Error("Environment attachment handle is not owned by this environment.");
+    }
+    if (attached.detachKind === "last") {
+      return attached.generation.replacementSafe;
+    }
+    if (attached.detachKind === "non-last") {
+      return attached.generation.registrationEndpointSafe(attached.claim.token);
+    }
+    return false;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
       return Promise.reject(environmentClosedError());
@@ -1269,6 +1284,11 @@ class DeliveryGeneration {
 
   hasRegistration(token: string): boolean {
     return this.#registrations.has(token);
+  }
+
+  registrationEndpointSafe(token: string): boolean {
+    const state = this.#registrations.get(token);
+    return state === undefined || (state.detach?.quiescent === true && state.detach.barrier);
   }
 
   async attach(

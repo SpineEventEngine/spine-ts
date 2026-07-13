@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 3 implementation assigned
+Status: Slice 3 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -626,3 +626,34 @@ gate passes.
   quiescence gating, context/resource then permanent environment/facility order,
   exact retry/cause handling, and no caller-owned regression. Slices 4--6 remain
   unauthorized; documentation N/A and security deferred.
+
+## Slice 3 Implementation Handback
+
+- `2026-07-13T19:47:13Z`: server-owned attachment failure now places the owned
+  environment last in the existing retryable dependency group. Safe rollback
+  closes contexts/resources before permanent environment facilities; unsafe
+  rollback retains the same group and later `start()` delegates only to the
+  existing environment failed-start retry before closing it.
+- Listener bind failure now retains its network owner, exact opaque attachment
+  handle, detach-attempt fact, and the same dependency group. Cleanup closes
+  network first, detaches or retries the exact handle, consults one read-only
+  package-internal handle safety checkpoint after rejection, and enters later
+  closes only when safe. Complete cleanup consumes the same server and never
+  returns a synthetic running handle.
+- Strict RED/GREEN was 15/17 then 17/17 for the server-owned and listener cases.
+  The native five-file regression is 159/159; both typechecks and scoped
+  lint/cleanup pass before final synchronized format/scope/leak/diff gates.
+  Caller-owned Slice 2 behavior and terminal consumption remain covered;
+  running-close sharing/last-owned behavior, docs, and Slices 4--6 are unchanged.
+- `2026-07-13T19:49:09Z`: final tooling/generated typechecks, 5-file / 159-test
+  native gate, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 8 changed paths inside the 9-path allowlist, all four status
+  headers synchronized, no internal lifecycle name in the root/package surface,
+  and clean public-surface diff plus `git diff --check`.
+
+## Slice 3 Coordinator Gate And Review Assignment
+
+- `2026-07-13T19:51:16Z`: implementer actual Terra Medium, no subagents,
+  closed. Both typechecks, 5 files / 159 native tests, and all scoped gates pass.
+- Assign style/API/reliability at explicit Terra High, no subagents, against a
+  stable Slice 3 package. Documentation N/A; security deferred.

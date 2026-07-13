@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 3 implementation assigned
+Status: Slice 3 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -411,3 +411,31 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Slice 2 accepted. Slice 3 implementer assigned at explicit Terra Medium, no
   subagents. Style/API/reliability remain applicable after focused verification;
   documentation N/A unless active observable claims change; security deferred.
+
+## Slice 3 Implementation Handback
+
+- `2026-07-13T19:47:13Z`: server-owned pre-listener and post-attachment
+  listener failures now use one ordered retained cleanup mechanism. Unsafe
+  quiescence retains every dependency and generation/attachment owner; safe
+  completion closes context/resource then permanently owned environment
+  facilities even when retirement cleanup reports an error.
+- Focused RED was exactly 2 expected listener failures among 17 after the first
+  server-owned pair reached GREEN; final focused GREEN is 17/17 and the native
+  five-file regression is 159/159. Both typechecks, scoped ESLint, and cleanup
+  enforcement pass before the final synchronized mechanical rerun.
+- This is implementation handback, not self-review or acceptance. Applicable
+  style/API/reliability re-review remains coordinator-owned; documentation is
+  N/A because public observable claims did not change in this slice, security
+  remains deferred, and Slice 4+ running-close/public-doc work is excluded.
+- `2026-07-13T19:49:09Z`: both typechecks, 5 files / 159 native tests, scoped
+  lint/cleanup/Prettier, exact nine-path allowlist/status/public-leak, and diff
+  integrity pass. Eight paths changed within ownership; review may proceed from
+  this synchronized handback.
+
+## Slice 3 Review Assignment
+
+- `2026-07-13T19:51:16Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 159 tests, and all scoped gates pass.
+- Style/API/reliability assigned at explicit Terra High, no subagents.
+  Documentation N/A because no observable docs changed; security deferred.
+  Ignore superseded history unless current Slice 3 records revive it.

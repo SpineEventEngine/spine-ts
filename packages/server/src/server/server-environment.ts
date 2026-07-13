@@ -190,6 +190,7 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     attachment: EnvironmentAttachmentHandle,
   ): Promise<void>;
+  endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): boolean;
   stopDelivery(environment: ServerEnvironment): Promise<void>;
   retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
   installTestAttachments(
@@ -241,6 +242,13 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
     }
     return attachments.retryDetach(attachment);
+  },
+  endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
+    const attachments = environmentAttachments.get(environment);
+    if (attachments === undefined) {
+      throw new TypeError("Endpoint-safety observation requires a ServerEnvironment instance.");
+    }
+    return attachments.endpointSafe(attachment);
   },
   stopDelivery(environment: ServerEnvironment) {
     testAttachmentsInstallable.delete(environment);

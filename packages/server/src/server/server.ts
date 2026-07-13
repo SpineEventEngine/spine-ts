@@ -106,22 +106,20 @@ export class Server {
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
     } catch (error) {
-      if (!this.#ownsEnvironment) {
-        const closeGroup = new RetryableCloseGroup(
-          [...contexts, ...this.#resources],
-          "Server start cleanup failed while closing owned contexts/resources.",
-        );
-        if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
-          this.#failedStartCleanup = { closeGroup };
-        } else {
-          try {
-            await closeGroup.close();
-          } catch (cleanupError) {
-            this.#failedStartCleanup = { closeGroup };
-            throw attachmentCleanupError(error, cleanupError);
-          }
-          this.#failedStartConsumed = true;
+      const closeGroup = new RetryableCloseGroup(
+        [...contexts, ...this.#resources, ...(this.#ownsEnvironment ? [this.#environment] : [])],
+        "Server start cleanup failed while closing owned contexts/resources.",
+      );
+      if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+        this.#failedStartCleanup = { closeGroup, detachAttempted: false };
+      } else {
+        try {
+          await closeGroup.close();
+        } catch (cleanupError) {
+          this.#failedStartCleanup = { closeGroup, detachAttempted: false };
+          throw attachmentCleanupError(error, cleanupError);
         }
+        this.#failedStartConsumed = true;
       }
       throw error;
     }
@@ -136,14 +134,20 @@ export class Server {
       ...this.#resources,
       ...(this.#ownsEnvironment ? [this.#environment] : []),
     ];
-    const address = await listenOrCleanup(
-      httpServer,
-      sessions,
-      closeables,
-      this.#environment,
-      attachment,
-      this.#host,
-      this.#port,
+    const address = await listen(httpServer, this.#host, this.#port).catch(
+      async (error: unknown) => {
+        const cleanup: FailedStartCleanup = {
+          closeGroup: new RetryableCloseGroup(
+            closeables,
+            "Server start cleanup failed while closing owned contexts/resources.",
+          ),
+          network: { server: httpServer, sessions },
+          attachment,
+          detachAttempted: false,
+        };
+        this.#failedStartCleanup = cleanup;
+        return this.#cleanupFailedListenerStart(cleanup, error);
+      },
     );
     const host = typeof address.address === "string" ? address.address : this.#host;
 
@@ -161,7 +165,18 @@ export class Server {
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
     const errors: unknown[] = [];
 
-    if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+    if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
+      throwCleanupErrors(errors);
+    }
+
+    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
+      throwCleanupErrors(errors);
+    }
+
+    if (
+      cleanup.attachment === undefined &&
+      serverEnvironmentAccess.failedStartPending(this.#environment)
+    ) {
       try {
         await serverEnvironmentAccess.retryFailedStart(this.#environment);
       } catch (error) {
@@ -190,6 +205,79 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  async #cleanupFailedListenerStart(
+    cleanup: FailedStartCleanup,
+    startError: unknown,
+  ): Promise<never> {
+    const errors: unknown[] = [];
+
+    if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
+      throwListenerStartError(startError, errors);
+    }
+    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
+      throwListenerStartError(startError, errors);
+    }
+
+    let closeFailed = false;
+    try {
+      await cleanup.closeGroup.close();
+    } catch (error) {
+      closeFailed = true;
+      collectCloseError(error, errors);
+    }
+    if (!closeFailed && this.#failedStartCleanup === cleanup) {
+      this.#failedStartCleanup = undefined;
+      this.#failedStartConsumed = true;
+    }
+    throwListenerStartError(startError, errors);
+  }
+
+  async #closeFailedStartNetwork(cleanup: FailedStartCleanup, errors: unknown[]): Promise<boolean> {
+    const network = cleanup.network;
+    if (network === undefined) {
+      return true;
+    }
+    try {
+      await closeNetwork(network.server, network.sessions);
+      delete cleanup.network;
+      return true;
+    } catch (error) {
+      collectCloseError(error, errors);
+      return false;
+    }
+  }
+
+  async #advanceFailedStartAttachment(
+    cleanup: FailedStartCleanup,
+    errors: unknown[],
+  ): Promise<boolean> {
+    const attachment = cleanup.attachment;
+    if (attachment === undefined) {
+      return true;
+    }
+    try {
+      if (cleanup.detachAttempted) {
+        await serverEnvironmentAccess.retryDetach(this.#environment, attachment);
+      } else {
+        cleanup.detachAttempted = true;
+        await serverEnvironmentAccess.detach(this.#environment, attachment);
+      }
+      delete cleanup.attachment;
+      return true;
+    } catch (error) {
+      collectCloseError(error, errors);
+    }
+    try {
+      if (serverEnvironmentAccess.endpointSafe(this.#environment, attachment)) {
+        delete cleanup.attachment;
+        return true;
+      }
+    } catch (error) {
+      collectCloseError(error, errors);
+    }
+    return false;
+  }
+
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
@@ -199,6 +287,14 @@ export class Server {
 
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
+  network?: FailedStartNetwork;
+  attachment?: EnvironmentAttachmentHandle;
+  detachAttempted: boolean;
+}
+
+interface FailedStartNetwork {
+  readonly server: http2.Http2Server;
+  readonly sessions: Set<http2.ServerHttp2Session>;
 }
 
 /** Options for building a local Spine HTTP/2 service host. */
@@ -369,66 +465,6 @@ function listen(server: http2.Http2Server, host: string, port: number): Promise<
   });
 }
 
-async function listenOrCleanup(
-  server: http2.Http2Server,
-  sessions: Set<http2.ServerHttp2Session>,
-  closeables: readonly unknown[],
-  environment: ServerEnvironment,
-  attachment: EnvironmentAttachmentHandle,
-  host: string,
-  port: number,
-): Promise<AddressInfo> {
-  try {
-    return await listen(server, host, port);
-  } catch (error) {
-    await cleanupFailedStart(server, sessions, closeables, environment, attachment, error);
-    throw error;
-  }
-}
-
-async function cleanupFailedStart(
-  server: http2.Http2Server,
-  sessions: Set<http2.ServerHttp2Session>,
-  closeables: readonly unknown[],
-  environment: ServerEnvironment,
-  attachment: EnvironmentAttachmentHandle,
-  startError: unknown,
-): Promise<void> {
-  const errors: unknown[] = [];
-  let detachFailed = false;
-
-  try {
-    await closeNetwork(server, sessions);
-  } catch (error) {
-    collectCloseError(error, errors);
-  }
-
-  try {
-    await serverEnvironmentAccess.detach(environment, attachment);
-  } catch (error) {
-    detachFailed = true;
-    collectCloseError(error, errors);
-  }
-
-  if (!detachFailed) {
-    try {
-      await new RetryableCloseGroup(
-        closeables,
-        "Server start cleanup failed while closing owned contexts/resources.",
-      ).close();
-    } catch (error) {
-      collectCloseError(error, errors);
-    }
-  }
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      [startError, ...errors],
-      "Server start failed while opening listener and cleanup also failed.",
-    );
-  }
-}
-
 async function cleanupBuiltContexts(
   contexts: readonly BoundedContext[],
   startError: unknown,
@@ -468,6 +504,21 @@ function throwCleanupErrors(errors: readonly unknown[]): never {
     throw errors[0];
   }
   throw new AggregateError(errors, "Server deferred failed-start cleanup failed.");
+}
+
+function throwListenerStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
+  if (cleanupErrors.length === 0) {
+    throw startError;
+  }
+  const errors: unknown[] = [];
+  collectCloseError(startError, errors);
+  for (const error of cleanupErrors) {
+    collectCloseError(error, errors);
+  }
+  throw new AggregateError(
+    errors,
+    "Server start failed while opening listener and cleanup also failed.",
+  );
 }
 
 async function closeNetwork(

@@ -211,9 +211,188 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it("closes server-owned dependencies after safe startup rollback errors", async () => {
+    const events: string[] = [];
+    const startupFailure = new Error("owned startup recovery failed");
+    const retirementFailure = new Error("owned startup retirement failed");
+    const worker = new HeldStartupWorker(events);
+    worker.rejectNextStart(startupFailure);
+    worker.failNextRetire(retirementFailure);
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory,
+        ownsStorageFactory: true,
+        delivery: { close: () => events.push("delivery") },
+        ownsDelivery: true,
+      },
+    });
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleOwnedSafeStartup")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const closeBuiltContext = context.close.bind(context);
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== context) {
+        throw new Error("Unexpected context close in owned startup cleanup test.");
+      }
+      events.push("context");
+      return closeBuiltContext();
+    });
+    const server = Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(context)
+      .addResource({ close: () => events.push("resource") });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      await worker.startedWithin();
+      worker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([startupFailure, retirementFailure]);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "delivery",
+        "facility",
+      ]);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(storageFactory.isOpen()).toBe(false);
+      expect(storageFactory.closeCalls).toBe(1);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+    } finally {
+      closeContext.mockRestore();
+      worker.release();
+      await starting.catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
+  it("retains unsafe server-owned startup dependencies for cleanup-only retry", async () => {
+    const events: string[] = [];
+    const startupFailure = new Error("unsafe owned startup recovery failed");
+    const quiescenceFailure = new Error("unsafe owned startup quiescence unavailable");
+    const worker = new HeldStartupWorker(events);
+    worker.rejectNextStart(startupFailure);
+    worker.failNextAwait(quiescenceFailure);
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
+    const fixture = await lifecycleFixture({
+      events,
+      workers: [worker],
+      environment: {
+        storageFactory,
+        ownsStorageFactory: true,
+        delivery: { close: () => events.push("delivery") },
+        ownsDelivery: true,
+      },
+    });
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleOwnedUnsafeStartup")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const builtStorageCount = storageFactory.storages.length;
+    const closeBuiltContext = context.close.bind(context);
+    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+      this: BoundedContext,
+    ) {
+      if (this !== context) {
+        throw new Error("Unexpected context close in unsafe owned startup test.");
+      }
+      events.push("context");
+      return closeBuiltContext();
+    });
+    const closeResource = vi.fn(() => events.push("resource"));
+    const server = Server.atPort(0, {
+      environment: fixture.environment,
+      ownsEnvironment: true,
+    })
+      .add(context)
+      .addResource({ close: closeResource });
+    const starting = server.start();
+    void starting.catch(() => undefined);
+
+    try {
+      await worker.startedWithin();
+      worker.release();
+      const failure = await starting.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        startupFailure,
+        expect.objectContaining({ cause: quiescenceFailure }),
+      ]);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(true);
+      expect(events).toEqual(["recovery", "stop", "await"]);
+      expect(closeContext).not.toHaveBeenCalled();
+      expect(closeResource).not.toHaveBeenCalled();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "delivery",
+        "facility",
+      ]);
+      expect(worker.starts).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(2);
+      expect(worker.retireCalls).toBe(1);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(storageFactory.closeCalls).toBe(1);
+      expect(storageFactory.isOpen()).toBe(false);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+    } finally {
+      closeContext.mockRestore();
+      worker.release();
+      await starting.catch(() => undefined);
+      await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("detaches before eligible owned cleanup after listener bind failure", async () => {
     const blocker = await Server.atPort(0).start();
     const events: string[] = [];
+    const retirementFailure = new Error("listener cleanup retirement failed");
     const fixture = await lifecycleFixture({
       events,
       environment: {
@@ -221,6 +400,7 @@ describe("Server lifecycle integration", () => {
         ownsDelivery: true,
       },
     });
+    fixture.worker.failNextRetire(retirementFailure);
     const closeFixtureContext = fixture.context.close.bind(fixture.context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
       this: BoundedContext,
@@ -231,19 +411,24 @@ describe("Server lifecycle integration", () => {
       events.push("context");
       return closeFixtureContext();
     });
-    const starting = Server.atPort(blocker.port, {
+    const server = Server.atPort(blocker.port, {
       environment: fixture.environment,
       ownsEnvironment: true,
     })
       .add(fixture.context)
-      .addResource({ close: () => events.push("resource") })
-      .start();
+      .addResource({ close: () => events.push("resource") });
+    const starting = server.start();
     void starting.catch(() => undefined);
 
     try {
       await fixture.worker.startedWithin();
       fixture.worker.release();
-      await expect(starting).rejects.toMatchObject({ code: "EADDRINUSE" });
+      const failure = await starting.catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        expect.objectContaining({ code: "EADDRINUSE" }),
+        retirementFailure,
+      ]);
       expect(events).toEqual([
         "recovery",
         "stop",
@@ -253,6 +438,9 @@ describe("Server lifecycle integration", () => {
         "resource",
         "facility",
       ]);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
     } finally {
       closeContext.mockRestore();
       fixture.worker.release();
@@ -266,31 +454,40 @@ describe("Server lifecycle integration", () => {
     const blocker = await Server.atPort(0).start();
     const events: string[] = [];
     const quiescenceFailure = new Error("quiescence unavailable");
+    const storageFactory = new LifecycleTrackingStorageFactory(events);
     const fixture = await lifecycleFixture({
       events,
       awaitFailure: quiescenceFailure,
       environment: {
+        storageFactory,
+        ownsStorageFactory: true,
         delivery: { close: () => events.push("facility") },
         ownsDelivery: true,
       },
     });
-    const closeFixtureContext = fixture.context.close.bind(fixture.context);
+    await fixture.context.close();
+    const context = await fixture
+      .createBuilder("LifecycleUnsafeListenerCleanup")
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const builtStorageCount = storageFactory.storages.length;
+    const closeFixtureContext = context.close.bind(context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
       this: BoundedContext,
     ) {
-      if (this !== fixture.context) {
+      if (this !== context) {
         throw new Error("Unexpected context close in unsafe cleanup test.");
       }
       events.push("context");
       return closeFixtureContext();
     });
-    const starting = Server.atPort(blocker.port, {
+    const server = Server.atPort(blocker.port, {
       environment: fixture.environment,
       ownsEnvironment: true,
     })
-      .add(fixture.context)
-      .addResource({ close: () => events.push("resource") })
-      .start();
+      .add(context)
+      .addResource({ close: () => events.push("resource") });
+    const starting = server.start();
     void starting.catch(() => undefined);
 
     try {
@@ -304,10 +501,39 @@ describe("Server lifecycle integration", () => {
         expect.objectContaining({ cause: quiescenceFailure }),
       ]);
       expect(events).toEqual(["recovery", "stop", "await"]);
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
+      const completion = await server.start().catch((error: unknown) => error);
+      expectDeferredCleanupCompletion(completion);
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "facility",
+        "facility",
+      ]);
+      expect(fixture.worker.starts).toBe(1);
+      expect(fixture.worker.stopCalls).toBe(1);
+      expect(fixture.worker.awaitCalls).toBe(2);
+      expect(fixture.worker.retireCalls).toBe(1);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(1);
+      expect(storageFactory.isOpen()).toBe(false);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
     } finally {
       closeContext.mockRestore();
       fixture.worker.release();
       await starting.catch(() => undefined);
+      await context.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
       await blocker.close();
       fixture.dispose();
     }
