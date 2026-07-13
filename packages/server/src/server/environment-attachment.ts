@@ -77,6 +77,13 @@ export type EnvironmentAttachmentHandle = AttachedEnvironmentRegistration;
 export interface EnvironmentAttachmentsOptions {
   readonly createWorker?: () => EnvironmentGenerationWorker;
   readonly report?: (causes: readonly unknown[]) => Promise<void>;
+  readonly transitionFaults?: {
+    readonly onRoutePrepare?: (descriptor: ContextDeliveryDescriptor) => void;
+    readonly onScopeTransfer?: (
+      descriptor: ContextDeliveryDescriptor,
+      sources: readonly TransitionScopeSource[],
+    ) => void;
+  };
 }
 
 /** @internal Synchronous cardinality gate owned by one ServerEnvironment instance. */
@@ -149,6 +156,7 @@ export class EnvironmentAttachments {
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
   readonly #createWorker: () => EnvironmentGenerationWorker;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
+  readonly #transitionFaults: EnvironmentAttachmentsOptions["transitionFaults"];
   readonly #handles = new WeakMap<EnvironmentAttachmentHandle, AttachedHandle>();
   readonly #attached = new Map<string, AttachedHandle>();
   readonly #nonLastDetachTokens = new Set<string>();
@@ -160,6 +168,7 @@ export class EnvironmentAttachments {
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
     this.#report = options.report ?? (() => Promise.resolve());
+    this.#transitionFaults = options.transitionFaults;
   }
 
   /** @internal Bounded diagnostic cardinality for focused lifecycle verification. */
@@ -267,7 +276,9 @@ export class EnvironmentAttachments {
       oldRetired: false,
       candidateGeneration: undefined,
       candidate: undefined,
-      prepared: 0,
+      routeUnits: undefined,
+      routePrepared: 0,
+      scopes: new TransitionScopes(),
       published: false,
       reopened: undefined,
       drained: false,
@@ -339,7 +350,18 @@ export class EnvironmentAttachments {
     }
     const old = stop.old!;
     const survivors = stop.survivors!;
-    stop.routes ??= survivors.map((survivor) => old.closeRegistration(survivor.claim.token));
+    if (stop.routes === undefined) {
+      stop.routes = Object.freeze(
+        survivors.map((survivor) =>
+          old.closeRegistration(survivor.claim.token, (descriptor, ready) => {
+            stop.scopes.buffer(survivor.claim.token, descriptor, ready);
+          }),
+        ),
+      );
+      for (const survivor of survivors) {
+        old.captureTransition(survivor.claim.token, stop.scopes);
+      }
+    }
     if (!stop.oldRetired) {
       await old.retire();
       stop.oldRetired = true;
@@ -351,16 +373,50 @@ export class EnvironmentAttachments {
     }
     const candidate = stop.candidate;
     const candidateGeneration = stop.candidateGeneration!;
-    while (stop.prepared < survivors.length) {
-      const survivor = survivors[stop.prepared]!;
-      await candidate.attach(
-        Object.freeze({ token: survivor.claim.token, generation: candidateGeneration }),
-        survivor.descriptors,
-        true,
-        survivor.binding,
-        stop.routes[stop.prepared],
+    stop.routeUnits ??= Object.freeze(
+      survivors.flatMap((survivor, registration) =>
+        survivor.descriptors.map((descriptor) => ({
+          survivor,
+          descriptor,
+          readiness: stop.routes![registration]!,
+        })),
+      ),
+    );
+    while (stop.routePrepared < stop.routeUnits.length) {
+      const route = stop.routeUnits[stop.routePrepared]!;
+      this.#transitionFaults?.onRoutePrepare?.(route.descriptor);
+      const scopes = await candidate.prepareTransferredRoute(
+        Object.freeze({ token: route.survivor.claim.token, generation: candidateGeneration }),
+        route.descriptor,
+        route.readiness,
       );
-      stop.prepared += 1;
+      stop.scopes.capture(route.survivor.claim.token, route.descriptor, scopes, "startup");
+      stop.routePrepared += 1;
+    }
+    let transfer = stop.scopes.nextPending();
+    while (transfer !== undefined) {
+      const version = stop.scopes.begin(transfer);
+      const settling = candidate.recoverTransferred(
+        transfer.token,
+        transfer.descriptor,
+        transfer.ready,
+      );
+      let fault: unknown;
+      try {
+        this.#transitionFaults?.onScopeTransfer?.(
+          transfer.descriptor,
+          stop.scopes.sources(transfer),
+        );
+      } catch (error) {
+        fault = error;
+      }
+      await settling;
+      if (fault !== undefined) {
+        stop.scopes.reject(transfer);
+        throw fault;
+      }
+      stop.scopes.complete(transfer, version);
+      transfer = stop.scopes.nextPending();
     }
     if (!stop.published) {
       this.#generations.delete(stop.generation!);
@@ -681,7 +737,9 @@ interface GenerationStop {
   oldRetired: boolean;
   candidateGeneration: EnvironmentGeneration | undefined;
   candidate: DeliveryGeneration | undefined;
-  prepared: number;
+  routeUnits: readonly StopRoute[] | undefined;
+  routePrepared: number;
+  readonly scopes: TransitionScopes;
   published: boolean;
   reopened: readonly DeliveryRunScope[] | undefined;
   drained: boolean;
@@ -690,6 +748,127 @@ interface GenerationStop {
   retrying: boolean;
 }
 
+interface StopRoute {
+  readonly survivor: AttachedHandle;
+  readonly descriptor: ContextDeliveryDescriptor;
+  readonly readiness: RegistrationReadiness;
+}
+
+type TransitionScopeSource = "configured" | "startup" | "buffered" | "retained";
+
+interface TransitionScopeUnit {
+  readonly token: string;
+  readonly descriptor: ContextDeliveryDescriptor;
+  readonly ready: DeliveryReady;
+  readonly provenance: Set<TransitionScopeSource>;
+  version: number;
+  transferredVersion: number;
+  inFlightVersion: number | undefined;
+  dirtyDuringFlight: boolean;
+}
+
+class TransitionScopes {
+  readonly #registrations = new Map<
+    string,
+    Map<ContextDeliveryDescriptor, Map<string, TransitionScopeUnit>>
+  >();
+  readonly #ordered: TransitionScopeUnit[] = [];
+
+  capture(
+    token: string,
+    descriptor: ContextDeliveryDescriptor,
+    scopes: readonly DeliveryRunScope[],
+    source: TransitionScopeSource,
+  ): void {
+    for (const scope of scopes) {
+      this.#record(token, descriptor, scope.ready, source, false);
+    }
+  }
+
+  buffer(token: string, descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
+    this.#record(token, descriptor, ready, "buffered", true);
+  }
+
+  nextPending(): TransitionScopeUnit | undefined {
+    return this.#ordered.find(
+      ({ version, transferredVersion, inFlightVersion }) =>
+        inFlightVersion === undefined && transferredVersion < version,
+    );
+  }
+
+  begin(unit: TransitionScopeUnit): number {
+    if (unit.inFlightVersion !== undefined || unit.transferredVersion >= unit.version) {
+      throw new Error("Environment transition scope is not pending.");
+    }
+    unit.inFlightVersion = unit.version;
+    unit.dirtyDuringFlight = false;
+    return unit.inFlightVersion;
+  }
+
+  complete(unit: TransitionScopeUnit, version: number): void {
+    if (unit.inFlightVersion !== version) {
+      throw new Error("Environment transition scope checkpoint is not current.");
+    }
+    unit.transferredVersion = version;
+    unit.inFlightVersion = undefined;
+    unit.dirtyDuringFlight = false;
+  }
+
+  reject(unit: TransitionScopeUnit): void {
+    unit.inFlightVersion = undefined;
+    unit.dirtyDuringFlight = false;
+  }
+
+  sources(unit: TransitionScopeUnit): readonly TransitionScopeSource[] {
+    return Object.freeze(transitionSourceOrder.filter((source) => unit.provenance.has(source)));
+  }
+
+  #record(
+    token: string,
+    descriptor: ContextDeliveryDescriptor,
+    ready: DeliveryReady,
+    source: TransitionScopeSource,
+    dirty: boolean,
+  ): void {
+    const descriptors =
+      this.#registrations.get(token) ??
+      new Map<ContextDeliveryDescriptor, Map<string, TransitionScopeUnit>>();
+    const scopes = descriptors.get(descriptor) ?? new Map<string, TransitionScopeUnit>();
+    let unit = scopes.get(readyKey(ready));
+    if (unit === undefined) {
+      unit = {
+        token,
+        descriptor,
+        ready,
+        provenance: new Set(),
+        version: 1,
+        transferredVersion: 0,
+        inFlightVersion: undefined,
+        dirtyDuringFlight: false,
+      };
+      scopes.set(readyKey(ready), unit);
+      descriptors.set(descriptor, scopes);
+      this.#registrations.set(token, descriptors);
+      this.#ordered.push(unit);
+    } else if (dirty) {
+      if (unit.inFlightVersion !== undefined && !unit.dirtyDuringFlight) {
+        unit.version += 1;
+        unit.dirtyDuringFlight = true;
+      } else if (unit.inFlightVersion === undefined && unit.transferredVersion === unit.version) {
+        unit.version += 1;
+      }
+    }
+    unit.provenance.add(source);
+  }
+}
+
+const transitionSourceOrder: readonly TransitionScopeSource[] = Object.freeze([
+  "configured",
+  "startup",
+  "buffered",
+  "retained",
+]);
+
 interface DetachHandleOperation {
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
@@ -697,9 +876,10 @@ interface DetachHandleOperation {
 
 interface GenerationRegistration {
   readonly readiness: RegistrationReadiness;
-  readonly startupScopes: readonly DeliveryRunScope[];
+  startupScopes: readonly DeliveryRunScope[];
   readonly ownership: RegistrationOwnership;
-  readonly descriptors: readonly ContextDeliveryDescriptor[];
+  descriptors: readonly ContextDeliveryDescriptor[];
+  readonly scopeDescriptors: Map<string, ContextDeliveryDescriptor>;
   rollback?: RegistrationRollback;
   detach?: RegistrationDetach;
 }
@@ -816,6 +996,7 @@ class DeliveryGeneration {
       startupScopes: registration.scopes,
       ownership,
       descriptors,
+      scopeDescriptors: registrationScopeDescriptors(registration),
     });
     if (!transferred) {
       await this.#transition(registration, readiness);
@@ -825,6 +1006,62 @@ class DeliveryGeneration {
       binding,
       transferred ? registration.scopes : readiness.open(registration.scopes),
     );
+  }
+
+  async prepareTransferredRoute(
+    claim: EnvironmentRegistrationClaim,
+    descriptor: ContextDeliveryDescriptor,
+    readiness: RegistrationReadiness,
+  ): Promise<readonly DeliveryRunScope[]> {
+    this.#requireFresh([descriptor]);
+    const registration = await assembleRegistration([descriptor], (candidate, tenant) =>
+      this.#runtime(candidate, tenant),
+    );
+    let state = this.#registrations.get(claim.token);
+    if (state === undefined) {
+      state = {
+        readiness,
+        startupScopes: Object.freeze([]),
+        ownership: new RegistrationOwnership(),
+        descriptors: Object.freeze([]),
+        scopeDescriptors: new Map(),
+      };
+      this.#registrations.set(claim.token, state);
+    }
+    for (const runtime of registration.runtimes) {
+      this.#addRuntime(runtime);
+      state.ownership.add(runtime);
+    }
+    this.#deliveryRecords.register(claim.token, registration.scopes);
+    for (const scope of registration.scopes) {
+      state.scopeDescriptors.set(scopeKey(scope), descriptor);
+    }
+    state.startupScopes = appendScopes(state.startupScopes, registration.scopes);
+    state.descriptors = Object.freeze([...state.descriptors, descriptor]);
+    readiness.rebindDescriptor(
+      descriptor,
+      (candidate, ready) => this.#prepareReady(candidate, ready, state!.ownership, claim.token),
+      (scope) => this.#coordinator?.notify(scope),
+    );
+    return registration.scopes;
+  }
+
+  async recoverTransferred(
+    token: string,
+    descriptor: ContextDeliveryDescriptor,
+    ready: DeliveryReady,
+  ): Promise<void> {
+    const state = this.#registrations.get(token);
+    if (state === undefined) {
+      throw new Error("Environment registration is not active.");
+    }
+    const scope = this.#prepareReady(descriptor, ready, state.ownership, token);
+    const domains = [this.#overlapDomain(scope)];
+    const previouslyBlocked = this.#reportedFailures.overlaps(domains);
+    const settlement = await this.#start([scope]);
+    this.#reportedFailures.resolve(this.#resolvedDomains([scope], settlement));
+    const blocked = previouslyBlocked && this.#reportedFailures.overlaps(domains);
+    throwRejected(this.#deliveryRecords.registrationRecords(token), blocked);
   }
 
   async rollbackRegistration(token: string): Promise<void> {
@@ -996,12 +1233,38 @@ class DeliveryGeneration {
     this.#dropRetiredState();
   }
 
-  closeRegistration(token: string): RegistrationReadiness {
+  captureTransition(token: string, capture: TransitionScopes): void {
     const state = this.#registrations.get(token);
     if (state === undefined) {
       throw new Error("Environment registration is not active.");
     }
-    state.readiness.prepareTransition();
+    const pending = this.#coordinator?.settlement().pending ?? Object.freeze([]);
+    this.#captureScopes(
+      token,
+      state,
+      this.#deliveryRecords.configuredScopes(token),
+      "configured",
+      capture,
+    );
+    this.#captureScopes(token, state, state.startupScopes, "startup", capture);
+    this.#captureScopes(
+      token,
+      state,
+      this.#deliveryRecords.retainedScopes(token, pending),
+      "retained",
+      capture,
+    );
+  }
+
+  closeRegistration(
+    token: string,
+    onBuffered: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void,
+  ): RegistrationReadiness {
+    const state = this.#registrations.get(token);
+    if (state === undefined) {
+      throw new Error("Environment registration is not active.");
+    }
+    state.readiness.prepareTransition(onBuffered);
     return state.readiness;
   }
 
@@ -1119,6 +1382,10 @@ class DeliveryGeneration {
     this.#addRuntime(runtime);
     ownership.add(runtime);
     this.#deliveryRecords.register(token, runtime.scopes);
+    const state = this.#registrations.get(token);
+    for (const configured of runtime.scopes) {
+      state?.scopeDescriptors.set(scopeKey(configured), descriptor);
+    }
     const scope = runtime.scopes.find(
       ({ ready: candidate }) => readyKey(candidate) === readyKey(ready),
     );
@@ -1126,6 +1393,22 @@ class DeliveryGeneration {
       throw new Error("Environment readiness is outside the descriptor endpoint domain.");
     }
     return scope;
+  }
+
+  #captureScopes(
+    token: string,
+    state: GenerationRegistration,
+    scopes: readonly DeliveryRunScope[],
+    source: TransitionScopeSource,
+    capture: TransitionScopes,
+  ): void {
+    for (const scope of scopes) {
+      const descriptor = state.scopeDescriptors.get(scopeKey(scope));
+      if (descriptor === undefined) {
+        throw new Error("Environment transition scope has no descriptor route.");
+      }
+      capture.capture(token, descriptor, [scope], source);
+    }
   }
 
   #addRuntime(runtime: EnvironmentDeliveryRuntime): void {
@@ -1249,13 +1532,15 @@ class DeliveryGeneration {
 
 /** @internal Finite attachment-local bridge from descriptor transition to one generation. */
 export class RegistrationReadiness {
+  readonly #descriptors: readonly ContextDeliveryDescriptor[];
   readonly #canonical = new WeakMap<
     ContextDeliveryDescriptor,
     ReadonlyMap<string, DeliveryRunScope>
   >();
-  #onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope;
-  #onNotify: (scope: DeliveryRunScope) => void;
+  readonly #destinations = new WeakMap<ContextDeliveryDescriptor, ReadinessDestination>();
   readonly #buffered = new Map<string, DeliveryRunScope>();
+  #onTransition:
+    ((descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void) | undefined;
   #mode: "waiting" | "open" | "failed" = "waiting";
   #invalid = false;
 
@@ -1267,14 +1552,14 @@ export class RegistrationReadiness {
     onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
     onNotify: (scope: DeliveryRunScope) => void,
   ) {
+    this.#descriptors = Object.freeze(descriptors.map(({ descriptor }) => descriptor));
     for (const { descriptor, scopes } of descriptors) {
       this.#canonical.set(
         descriptor,
         new Map(scopes.map((scope) => [readyKey(scope.ready), scope])),
       );
+      this.#destinations.set(descriptor, { onPrepare, onNotify });
     }
-    this.#onPrepare = onPrepare;
-    this.#onNotify = onNotify;
   }
 
   notify(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
@@ -1283,10 +1568,22 @@ export class RegistrationReadiness {
     }
     if (this.#mode === "open") {
       try {
-        const scope = this.#onPrepare(descriptor, ready);
-        this.#onNotify(scope);
+        const destination = this.#destinations.get(descriptor);
+        if (destination === undefined) {
+          throw new Error("Registration readiness descriptor is not configured.");
+        }
+        const scope = destination.onPrepare(descriptor, ready);
+        destination.onNotify(scope);
       } catch {
         this.#mode = "failed";
+      }
+      return;
+    }
+    if (this.#onTransition !== undefined) {
+      try {
+        this.#onTransition(descriptor, ready);
+      } catch {
+        this.#invalid = true;
       }
       return;
     }
@@ -1301,12 +1598,16 @@ export class RegistrationReadiness {
   fail(): void {
     this.#mode = "failed";
     this.#buffered.clear();
+    this.#onTransition = undefined;
   }
 
-  prepareTransition(): void {
+  prepareTransition(
+    onBuffered: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void,
+  ): void {
     if (this.#mode !== "open") {
       throw new Error("Registration readiness is not open.");
     }
+    this.#onTransition = onBuffered;
     this.#mode = "waiting";
   }
 
@@ -1314,11 +1615,20 @@ export class RegistrationReadiness {
     onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
     onNotify: (scope: DeliveryRunScope) => void,
   ): void {
+    for (const descriptor of this.#descriptors) {
+      this.rebindDescriptor(descriptor, onPrepare, onNotify);
+    }
+  }
+
+  rebindDescriptor(
+    descriptor: ContextDeliveryDescriptor,
+    onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
+    onNotify: (scope: DeliveryRunScope) => void,
+  ): void {
     if (this.#mode !== "waiting") {
       throw new Error("Registration readiness is not prepared for transition.");
     }
-    this.#onPrepare = onPrepare;
-    this.#onNotify = onNotify;
+    this.#destinations.set(descriptor, { onPrepare, onNotify });
   }
 
   open(startup: readonly DeliveryRunScope[]): readonly DeliveryRunScope[] {
@@ -1338,9 +1648,18 @@ export class RegistrationReadiness {
       scopes.set(scopeKey(scope), scope);
     }
     this.#buffered.clear();
+    this.#onTransition = undefined;
     this.#mode = "open";
     return Object.freeze([...scopes.values()]);
   }
+}
+
+interface ReadinessDestination {
+  readonly onPrepare: (
+    descriptor: ContextDeliveryDescriptor,
+    ready: DeliveryReady,
+  ) => DeliveryRunScope;
+  readonly onNotify: (scope: DeliveryRunScope) => void;
 }
 
 interface AssembledRegistration {
@@ -1386,6 +1705,18 @@ async function assembleRegistration(
     runtimes: Object.freeze(runtimes),
     descriptors: Object.freeze(assembled),
   };
+}
+
+function registrationScopeDescriptors(
+  registration: AssembledRegistration,
+): Map<string, ContextDeliveryDescriptor> {
+  const descriptors = new Map<string, ContextDeliveryDescriptor>();
+  for (const { descriptor, scopes } of registration.descriptors) {
+    for (const scope of scopes) {
+      descriptors.set(scopeKey(scope), descriptor);
+    }
+  }
+  return descriptors;
 }
 
 /** @internal Converts one finite startup settlement into registration-scoped parked evidence. */
@@ -1513,6 +1844,17 @@ function readyScope(
       shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
     }),
   });
+}
+
+function appendScopes(
+  existing: readonly DeliveryRunScope[],
+  added: readonly DeliveryRunScope[],
+): readonly DeliveryRunScope[] {
+  const scopes = new Map(existing.map((scope) => [scopeKey(scope), scope]));
+  for (const scope of added) {
+    scopes.set(scopeKey(scope), scope);
+  }
+  return Object.freeze([...scopes.values()]);
 }
 
 function scopeKey(scope: DeliveryRunScope): string {

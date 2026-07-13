@@ -71,6 +71,21 @@ describe("EnvironmentDeliveryRecords", () => {
     ]);
   });
 
+  it("captures retained pending and parked scopes without consuming configured order", () => {
+    const first = scope("one", "First", 0);
+    const second = scope("one", "Second", 1);
+    const third = scope("one", "Third", 0);
+    const records = new EnvironmentDeliveryRecords();
+    const failure = new Error("second rejected");
+    records.register("registration-one", [first, second, third]);
+    records.observe(rejected(second, failure));
+    const before = records.records();
+
+    expect(records.retainedScopes("registration-one", [third, second])).toEqual([second, third]);
+    expect(records.configuredScopes("registration-one")).toEqual([first, second, third]);
+    expect(records.records()).toEqual(before);
+  });
+
   it("atomically detaches exact ownership and consumes only newly orphaned units", () => {
     const exclusive = scope("one", "Exclusive", 0);
     const shared = scope("shared", "Shared", 1);

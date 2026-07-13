@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 1 accepted; Slice 2 assigned
+Status: Slice 2A review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -195,3 +195,45 @@ Derived status mirror: the canonical current state is the `Status` header in
   public/source/test/generated exclusion, and diff checks. Fresh Wave 5 review
   is assigned to all four existing read-only lanes at immutable explicit
   profiles, no subagents.
+
+## Slice 2 Implementation Start
+
+- At `2026-07-13T06:07:25Z`, the existing implementer began only accepted
+  Slice 2 at clean HEAD `bb97aa64`, fixed and explicitly dispatched at
+  `gpt-5.6-terra` / `medium`, no subagents. The canonical work log records the
+  fresh skill inventory/selection, JVM source guardrail, one-owner/checkpoint
+  design constraint, exclusions, and TDD plan. No Slice 2 review package exists
+  until focused behavior and mechanical gates pass.
+
+## Slice 2 Bounded Implementer Handback
+
+- At `2026-07-13T06:23:22Z`, the implementer returned the bounded Slice 2 delta
+  for coordinator verification/review. Recorded RED/GREEN covers separate route
+  checkpoints, non-consuming retained capture, and four-provenance canonical
+  coalescing. Partial-transfer settlement/retry was validation-first GREEN
+  after the same checkpoint implementation; no RED was fabricated.
+- Current focused evidence is 20 / 20 stop-and-record tests; the combined stop,
+  records, T-0037d/e1, and public-index run is 4 files / 91 tests; generated
+  build typecheck and focused formatting passed before final evidence scans.
+- Review must account for the explicitly uncovered preflight boundary and
+  candidate-recovery rejection retry path recorded in the work log. A new
+  tenant/readiness key after capture is also not separately tested. No Slice 3
+  or Slice 4 behavior, public surface, generated change, commit, push, full
+  verify, or subagent is included.
+- Final implementer evidence at `2026-07-13T06:24:47Z` is 4 files / 91 tests,
+  generated-build typecheck, focused Prettier, exact status/inventory/public
+  scans, and diff hygiene all passing. The handback remains bounded and carries
+  the three explicit coverage gaps above into coordinator disposition.
+
+## Slice 2A Review Assignment
+
+- Coordinator verification and pre-review lint passed at
+  `2026-07-13T06:27:28Z`. This bounded package owns capture, separate route and
+  transfer checkpoints, retained-candidate progress, dirty re-admission, and
+  non-consuming retained-record selection.
+- Preflight-before-candidate, direct candidate-recovery rejection retry, and a
+  new post-capture readiness/tenant key remain mandatory Slice 2B after this
+  review. Their recorded absence is not itself a 2A finding unless current code
+  violates implemented behavior or makes 2B unsound.
+- Wave 1 assigns all four existing read-only lanes at immutable explicit
+  profiles, no subagents. Security remains deferred to T-0041.

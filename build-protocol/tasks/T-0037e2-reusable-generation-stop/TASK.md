@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 1 accepted; Slice 2 assigned
+Status: Slice 2A review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -210,3 +210,41 @@ Slice 2, Bounded Capture, Checkpoints, And Transition Failure Retry, is assigned
 to the same existing implementer at immutable and explicit `gpt-5.6-terra` /
 `medium`, no subagents. Its exact scope and exclusions remain those in the
 accepted architecture resolution; Slices 3--4 remain unauthorized.
+
+## Slice 2 Implementation Record
+
+At `2026-07-13T06:07:25Z`, the existing implementer began only accepted Slice
+2 at HEAD `bb97aa64`, fixed and explicitly dispatched at `gpt-5.6-terra` /
+`medium`, with no subagents. The fresh canonical skill-applicability check, JVM
+evidence, scope decisions, and TDD start are appended to the canonical work
+log. Slice 1 history remains accepted; old-retirement failure policy and racing
+attach behavior remain unauthorized Slices 3--4 work.
+
+At `2026-07-13T06:23:22Z`, the bounded Slice 2 pass was returned for
+coordinator review. It adds one private transition-scope owner, stable
+configured/startup/buffered/retained provenance coalescing, separate route and
+transfer checkpoints, retained-candidate retry, dirty-scope re-admission before
+publication, and a non-consuming retained-record capture. Focused and requested
+regression/type/format/scope checks are recorded in the canonical work log.
+
+The handback is intentionally explicit about two uncovered implementation
+edges and one test gap: descriptor fresh-snapshot/preflight failure still
+occurs after candidate construction; a candidate recovery promise rejection is
+not covered by the fault-seam settlement test; and a newly discovered tenant/
+readiness key after capture is not separately exercised. No additional
+abstraction or later-slice policy was added in this bounded pass.
+
+## Slice 2 Coordinator Disposition
+
+At `2026-07-13T06:27:28Z`, the coordinator accepted the handback as bounded
+Slice 2A, not complete Slice 2. Independent verification passed 4 files / 91
+tests, generated typecheck, formatting, pre-review status/public/inventory lint,
+and diff hygiene. Slice 2A owns capture, route and transfer checkpoints,
+retained-candidate progress, dirty-scope re-admission, and retained-record
+selection.
+
+Slice 2B remains required after 2A review closure: fresh descriptor snapshot/
+preflight must precede candidate storage, direct candidate-recovery rejection
+must clear and retry its in-flight unit on the same candidate, and a newly
+discovered readiness/tenant key after capture must be proven. This split keeps
+review bounded and waives no accepted Slice 2 requirement.

@@ -194,6 +194,179 @@ describe("environment generation stop", () => {
     await attachments.detach(secondHandle);
   });
 
+  it("retains a completed route checkpoint separately from canonical transfer", async () => {
+    const oldWorker = new ControlledWorker([], "route-old");
+    const candidateWorker = new ControlledWorker([], "route-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const routeFailure = new Error("second route preparation failed");
+    const routeAttempts: string[] = [];
+    const transferAttempts: string[] = [];
+    let failSecondRoute = true;
+    let factoryCalls = 0;
+    const storage = new InMemoryStorageFactory();
+    const first = descriptor("RouteFirst", "type.example.dev/RouteFirst", storage);
+    const second = descriptor("RouteSecond", "type.example.dev/RouteSecond", storage);
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onRoutePrepare(descriptor: ContextDeliveryDescriptor) {
+          routeAttempts.push(descriptor === first.value ? "first" : "second");
+          if (descriptor === second.value && failSecondRoute) {
+            failSecondRoute = false;
+            throw routeFailure;
+          }
+        },
+        onScopeTransfer(descriptor: ContextDeliveryDescriptor) {
+          transferAttempts.push(descriptor === first.value ? "first" : "second");
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value, second.value],
+    });
+    const oldGeneration = handle.generation;
+
+    await expect(attachments.stopDelivery()).rejects.toBe(routeFailure);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect(routeAttempts).toEqual(["first", "second"]);
+    expect(transferAttempts).toEqual([]);
+    expect(candidateWorker.starts).toBe(0);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect(factoryCalls).toBe(2);
+    expect(routeAttempts).toEqual(["first", "second", "second"]);
+    expect(transferAttempts).toEqual(["first", "second"]);
+    expect(candidateWorker.starts).toBe(2);
+    expect(handle.generation).not.toBe(oldGeneration);
+    await attachments.detach(handle);
+  });
+
+  it("coalesces configured startup buffered and retained provenance into one transfer", async () => {
+    const oldWorker = new ControlledWorker([], "capture-old");
+    const candidateWorker = new ControlledWorker([], "capture-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const oldSettlementGate = Promise.withResolvers<void>();
+    oldWorker.awaitGates.push(oldSettlementGate.promise);
+    const sources: string[][] = [];
+    let factoryCalls = 0;
+    const storage = new InMemoryStorageFactory();
+    const target = descriptor("Capture", "type.example.dev/Capture", storage);
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer(_descriptor, provenance) {
+          sources.push([...provenance]);
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    oldWorker.startFailures.push(new Error("park retained readiness"));
+    target.readiness.claim(target.ready);
+    await until(() => oldWorker.starts === 2);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stopping = attachments.stopDelivery();
+    await until(() => oldWorker.awaitCalls === 1);
+    target.readiness.claim(target.ready);
+    expect(candidateWorker.starts).toBe(0);
+    oldSettlementGate.resolve();
+    await stopping;
+
+    expect(sources).toEqual([["configured", "startup", "buffered", "retained"]]);
+    expect(candidateWorker.starts).toBe(1);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(handle);
+  });
+
+  it("settles a failed partial transfer and retries only its unpublished candidate unit", async () => {
+    const oldWorker = new ControlledWorker([], "transfer-old");
+    const candidateWorker = new ControlledWorker([], "transfer-candidate");
+    const firstGate = Promise.withResolvers<void>();
+    const secondGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(firstGate.promise, secondGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    const transferFailure = new Error("second canonical transfer failed");
+    const transferAttempts: string[] = [];
+    let failSecondTransfer = true;
+    let factoryCalls = 0;
+    const storage = new InMemoryStorageFactory();
+    const first = descriptor("TransferFirst", "type.example.dev/TransferFirst", storage);
+    const second = descriptor("TransferSecond", "type.example.dev/TransferSecond", storage);
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer(descriptor) {
+          const unit = descriptor === first.value ? "first" : "second";
+          transferAttempts.push(unit);
+          if (unit === "second" && failSecondTransfer) {
+            failSecondTransfer = false;
+            throw transferFailure;
+          }
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [first.value, second.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const stopping = attachments.stopDelivery();
+    let stopSettled = false;
+    void stopping.catch(() => {
+      stopSettled = true;
+    });
+    await until(() => candidateWorker.starts === 1);
+    firstGate.resolve();
+    await until(() => candidateWorker.starts === 2);
+    expect(stopSettled).toBe(false);
+    expect(handle.generation).toBe(oldGeneration);
+    secondGate.resolve();
+    await expect(stopping).rejects.toBe(transferFailure);
+    expect(stopSettled).toBe(true);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    second.readiness.claim(second.ready);
+    await Promise.resolve();
+    expect(candidateWorker.starts).toBe(2);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect(factoryCalls).toBe(2);
+    expect(transferAttempts).toEqual(["first", "second", "second"]);
+    expect(candidateWorker.targets).toEqual([
+      "type.example.dev/TransferFirst",
+      "type.example.dev/TransferSecond",
+      "type.example.dev/TransferSecond",
+    ]);
+    expect(handle.generation).not.toBe(oldGeneration);
+    await attachments.detach(handle);
+  });
+
   it("retains a queued detach while a rejected stop owns its frozen survivor", async () => {
     const oldWorker = new ControlledWorker([], "queued-stop-old");
     const candidateWorker = new ControlledWorker([], "queued-stop-candidate");
@@ -343,13 +516,16 @@ describe("environment generation stop", () => {
     expect(secondHandle.generation).toBe(oldGeneration);
     secondGate.resolve();
     await until(() => candidateWorker.starts === 3);
-    expect(firstHandle.generation).not.toBe(oldGeneration);
-    expect(secondHandle.generation).toBe(firstHandle.generation);
+    expect(firstHandle.generation).toBe(oldGeneration);
+    expect(secondHandle.generation).toBe(oldGeneration);
     expect(stopSettled).toBe(false);
     readinessGate.resolve();
     await stopping;
     expect(stopSettled).toBe(true);
-    expect(candidateWorker.targets.slice(0, 2).sort()).toEqual([
+    expect(firstHandle.generation).not.toBe(oldGeneration);
+    expect(secondHandle.generation).toBe(firstHandle.generation);
+    expect(candidateWorker.targets).toEqual([
+      "type.example.dev/BarrierFirst",
       "type.example.dev/BarrierFirst",
       "type.example.dev/BarrierSecond",
     ]);
@@ -439,6 +615,7 @@ function descriptor(
 
 class ControlledWorker implements EnvironmentGenerationWorker {
   readonly gates: Promise<void>[] = [];
+  readonly awaitGates: Promise<void>[] = [];
   readonly startFailures: Error[] = [];
   readonly awaitFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
@@ -500,7 +677,8 @@ class ControlledWorker implements EnvironmentGenerationWorker {
     this.awaitCalls += 1;
     this.#events.push(`${this.#name}:await`);
     const failure = this.awaitFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    if (failure !== undefined) return Promise.reject(failure);
+    return this.awaitGates.shift() ?? Promise.resolve();
   }
   retire(): Promise<void> {
     this.retireCalls += 1;
