@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
 import { DeliveryReadiness, type DeliveryReady } from "../../src/context/local-inbox-handoff.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
-import type { DeliveryRunObligation } from "../../src/delivery/delivery-run-coordinator.js";
+import {
+  DeliveryRunQuiescenceError,
+  type DeliveryRunObligation,
+} from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
 import {
   EnvironmentAttachments,
@@ -812,6 +815,196 @@ describe("environment generation stop", () => {
     await attachments.detach(handle);
   });
 
+  it("retains an unsafe synchronous stop failure for one explicit retry", async () => {
+    const events: string[] = [];
+    const oldWorker = new ControlledWorker(events, "unsafe-stop-old");
+    const candidateWorker = new ControlledWorker(events, "unsafe-stop-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const stopFailure = new Error("old generation stop failed");
+    oldWorker.stopFailures.push(stopFailure);
+    let factoryCalls = 0;
+    let routePreparations = 0;
+    let transfers = 0;
+    const target = descriptor(
+      "UnsafeStop",
+      "type.example.dev/UnsafeStop",
+      new InMemoryStorageFactory(),
+      { multitenant: true },
+    );
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onRoutePrepare() {
+          routePreparations += 1;
+        },
+        onScopeTransfer() {
+          transfers += 1;
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+    const preflightCalls = [
+      target.startupCalls,
+      target.contextCalls,
+      target.endpointCalls,
+      target.storageFactoryCalls,
+    ];
+    events.length = 0;
+
+    const stopping = attachments.stopDelivery();
+    expect(attachments.stopDelivery()).toBe(stopping);
+    const rejection = await stopping.catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(DeliveryRunQuiescenceError);
+    expect((rejection as DeliveryRunQuiescenceError).cause).toBe(stopFailure);
+    expect(events).toEqual(["unsafe-stop-old:stop"]);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 0, 0]);
+    expect(factoryCalls).toBe(1);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(candidateWorker.addCalls).toBe(0);
+    expect(candidateWorker.starts).toBe(0);
+    expect([
+      target.startupCalls,
+      target.contextCalls,
+      target.endpointCalls,
+      target.storageFactoryCalls,
+    ]).toEqual(preflightCalls);
+
+    target.readiness.claim(
+      Object.freeze({
+        ...target.ready,
+        tenantId: "tenant-buffered-while-stop-failed",
+      }),
+    );
+    expect(target.notifications).toBe(1);
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 0, 0]);
+    expect(factoryCalls).toBe(1);
+    expect([routePreparations, transfers]).toEqual([0, 0]);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+
+    expect(events).toEqual([
+      "unsafe-stop-old:stop",
+      "unsafe-stop-old:stop",
+      "unsafe-stop-old:await",
+      "unsafe-stop-old:retire",
+      "unsafe-stop-candidate:start",
+      "unsafe-stop-candidate:start",
+    ]);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([2, 1, 1]);
+    expect(factoryCalls).toBe(2);
+    expect(candidateWorker.addCalls).toBe(2);
+    expect(candidateWorker.addedTenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
+    expect(candidateWorker.starts).toBe(2);
+    expect(candidateWorker.tenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
+    expect([routePreparations, transfers]).toEqual([1, 2]);
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect([
+      target.startupCalls,
+      target.contextCalls,
+      target.endpointCalls,
+      target.storageFactoryCalls,
+    ]).toEqual([
+      preflightCalls[0]! + 1,
+      preflightCalls[1]! + 2,
+      preflightCalls[2]! + 2,
+      preflightCalls[3]! + 2,
+    ]);
+
+    target.readiness.claim(target.ready);
+    await until(() => candidateWorker.starts === 3);
+    expect(target.notifications).toBe(2);
+    await attachments.detach(handle);
+  });
+
+  it("retains an unsafe await-quiescence rejection after completed stop", async () => {
+    const events: string[] = [];
+    const oldWorker = new ControlledWorker(events, "unsafe-await-old");
+    const candidateWorker = new ControlledWorker(events, "unsafe-await-candidate");
+    const workers = [oldWorker, candidateWorker];
+    const awaitFailure = new Error("old generation quiescence failed");
+    oldWorker.awaitFailures.push(awaitFailure);
+    let factoryCalls = 0;
+    const target = descriptor(
+      "UnsafeAwait",
+      "type.example.dev/UnsafeAwait",
+      new InMemoryStorageFactory(),
+    );
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+    events.length = 0;
+
+    const stopping = attachments.stopDelivery();
+    expect(attachments.stopDelivery()).toBe(stopping);
+    const rejection = await stopping.catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(DeliveryRunQuiescenceError);
+    expect((rejection as DeliveryRunQuiescenceError).cause).toBe(awaitFailure);
+    expect(events).toEqual(["unsafe-await-old:stop", "unsafe-await-old:await"]);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 0]);
+    expect(factoryCalls).toBe(1);
+    expect(attachments.activeRegistrationCount).toBe(1);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(candidateWorker.addCalls).toBe(0);
+    expect(candidateWorker.starts).toBe(0);
+
+    target.readiness.claim(target.ready);
+    expect(target.notifications).toBe(1);
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 0]);
+    expect(factoryCalls).toBe(1);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+
+    expect(events).toEqual([
+      "unsafe-await-old:stop",
+      "unsafe-await-old:await",
+      "unsafe-await-old:await",
+      "unsafe-await-old:retire",
+      "unsafe-await-candidate:start",
+    ]);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 2, 1]);
+    expect(factoryCalls).toBe(2);
+    expect(candidateWorker.addCalls).toBe(1);
+    expect(candidateWorker.starts).toBe(1);
+    expect(handle.generation).not.toBe(oldGeneration);
+
+    target.readiness.claim(target.ready);
+    await until(() => candidateWorker.starts === 2);
+    expect(target.notifications).toBe(2);
+    await attachments.detach(handle);
+  });
+
   it("replaces one live multi-registration generation while preserving handle identity", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("First", "type.example.dev/First", storageFactory);
@@ -965,6 +1158,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly gates: Promise<void>[] = [];
   readonly awaitGates: Promise<void>[] = [];
   readonly startFailures: Error[] = [];
+  readonly stopFailures: Error[] = [];
   readonly awaitFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
   readonly targets: string[] = [];
@@ -1035,6 +1229,8 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   stop(): void {
     this.stopCalls += 1;
     this.#events.push(`${this.#name}:stop`);
+    const failure = this.stopFailures.shift();
+    if (failure !== undefined) throw failure;
   }
   awaitSettled(): Promise<void> {
     this.awaitCalls += 1;

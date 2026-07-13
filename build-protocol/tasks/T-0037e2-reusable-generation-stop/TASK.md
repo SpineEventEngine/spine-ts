@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2 accepted; Slice 3 assigned
+Status: Slice 3A review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -312,3 +312,14 @@ proves no late accessor call and successful replay from the captured factory.
 Dynamic tenant runtime creation remains live only before the runtime is formed;
 all runtime consumers use the frozen identity afterward. Coordinator review is
 requested with final evidence in the canonical logs.
+
+## Slice 3A Implementer Handback
+
+Focused environment tests now cover distinct unsafe synchronous stop and
+await-quiescence failures through the retained generation-stop owner. They
+prove no candidate phase before explicit retry, exact coordinator checkpoints,
+retained buffered readiness and endpoint dependencies, retry coalescing, one
+successful four-phase replacement, and continued use of the original handle
+and stable readiness route. Existing production checkpoint composition already
+satisfied the accepted behavior, so no production expansion was required.
+Coordinator review is requested; exact evidence is in the canonical work log.

@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 2 accepted; Slice 3 assigned
+Status: Slice 3A review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -458,6 +458,13 @@ Derived status mirror: the canonical current state is the `Status` header in
   assigned at explicit expected `gpt-5.6-terra` / `medium`, no subagents; its
   review waits for focused retirement-safety and error-ordering evidence.
 
+## Slice 3 Checkpoint Split
+
+- Slice 3A review will cover only unsafe stop/quiescence retention, completed-
+  phase retry checkpoints, no premature candidate work, and exact successful
+  continuation. Slice 3B replacement-safe error propagation and aggregation is
+  pending. This split changes no accepted contract.
+
 ## Slice 2B Review Wave 2 Fix Evidence
 
 - Focused RED exercised default production `EnvironmentDeliveryWorker`
@@ -473,3 +480,36 @@ Derived status mirror: the canonical current state is the `Status` header in
   generated-build typechecking; all three mirrors now request coordinator
   review. Final six-file formatting, public/generated exclusion, inventory, and
   diff hygiene passed and are recorded in the work log.
+
+## Slice 3A Implementer Evidence
+
+- Focused tests distinguish a synchronous old-worker stop throw from an
+  await-quiescence rejection. Both retain the old handle generation, live
+  registration, closed stable route, and original failure as the exact
+  `DeliveryRunQuiescenceError.cause`, while constructing no candidate and
+  refusing ordinary continuation until explicit retry.
+- Concurrent explicit retries share one promise. The stop-throw retry repeats
+  only the failed stop checkpoint; the await retry preserves completed stop and
+  repeats only quiescence. Each then retires once, prepares/routes and transfers
+  once per canonical unit, publishes, reopens, and leaves the original handle
+  and readiness callback usable. A buffered new-tenant fact also proves retained
+  endpoint dependencies and admission without another trigger.
+- The first complete focused test run passed 19 / 19. A stricter buffered-tenant
+  assertion then failed because it expected one candidate runtime although the
+  distinct tenant correctly requires its own runtime; the test was corrected,
+  not production. GREEN passed 19 / 19, followed by 5 files / 141 tests and
+  generated-build typechecking. Final format/status/public/inventory/diff gates
+  are recorded in the work log. No production, public, generated, Slice 3B/4,
+  commit, push, full-verify, or subagent change occurred.
+
+## Slice 3A Review Wave 1 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T08:00:35Z`: 5 files / 141 tests, generated-build typecheck,
+  focused Prettier, exact status/inventory, and diff hygiene.
+- Pre-review lint found a test/record-only delta with no public or future-policy
+  claim. Superseded history remains excluded unless active records claim it.
+- Existing explicit profiles are style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; all read-only and no-subagent.
