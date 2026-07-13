@@ -1523,6 +1523,7 @@ class DeliveryGeneration {
     const runtime = Object.freeze({
       owner,
       descriptor,
+      storageFactory,
       tenant,
       context,
       scopes: Object.freeze(endpoints.map((endpoint) => readyScope(owner, endpoint, tenant))),

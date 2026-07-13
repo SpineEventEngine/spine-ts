@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 2B review wave 2 assigned
+Status: Slice 2B review wave 3 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -407,3 +407,52 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
   TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
   `gpt-5.6-terra` / `high`; all lanes are read-only and no-subagent.
+
+## Slice 2B Review Wave 2 Results
+
+- Code style/maintainability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill
+  check reported; no subagent.
+- Documentation: CLEAN. Actual `gpt-5.6-luna` / `medium`; skill check reported;
+  no subagent.
+- Performance/reliability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- TypeScript/API docs: P1. Production `createDeliveryWorker()` bypasses the
+  captured snapshot and reads `runtime.descriptor.storageFactory` after
+  candidate construction. A changing accessor can split overlap-domain and
+  delivery storage identity; a fallible accessor can still reject late. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- The bounded fix is assigned to the same implementer at explicit expected
+  `gpt-5.6-terra` / `medium`, no subagents, with a production-worker regression
+  required before Wave 3.
+
+## Slice 2B Review Wave 2 Fix Evidence And Wave 3
+
+- RED proved the default production worker still invoked the guarded descriptor
+  factory accessor. GREEN carries the captured factory on the internal runtime,
+  uses it for production `Delivery`, and replays a row stored only in that
+  captured factory with zero descriptor-accessor calls.
+- Coordinator inspection and independent verification at
+  `2026-07-13T07:45:45Z` passed 4 files / 97 tests, generated-build typecheck,
+  focused Prettier, exact scope/status, public/generated exclusion, and diff
+  hygiene.
+- Pre-review lint found no active record or public-surface issue. Wave 3 uses
+  the existing explicit profiles: style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no-subagent.
+
+## Slice 2B Review Wave 2 Fix Evidence
+
+- Focused RED exercised default production `EnvironmentDeliveryWorker`
+  construction and failed because it consulted a guarded descriptor
+  `storageFactory` accessor after runtime creation.
+- GREEN carries the captured factory on the private runtime and makes default
+  `Delivery` construction consume that field. The production-path test observes
+  no late accessor call and replays a row stored only in the captured factory;
+  the complete 62-test attachment/production-worker file also passes.
+- At this RED/GREEN evidence point, final regression/type/format/status/public/
+  generated/inventory/diff evidence remained in progress and status stayed Wave
+  2 fixes assigned. Subsequent handback evidence passed 4 files / 97 tests and
+  generated-build typechecking; all three mirrors now request coordinator
+  review. Final six-file formatting, public/generated exclusion, inventory, and
+  diff hygiene passed and are recorded in the work log.

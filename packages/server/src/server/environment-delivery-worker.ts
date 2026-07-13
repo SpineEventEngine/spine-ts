@@ -1,4 +1,4 @@
-import type { StorageContext } from "@spine-ts/storage";
+import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
 import {
@@ -17,6 +17,7 @@ import { ShardIndex } from "../delivery/shard-index.js";
 export interface EnvironmentDeliveryRuntime {
   readonly owner: DeliveryRunOwner;
   readonly descriptor: ContextDeliveryDescriptor;
+  readonly storageFactory: StorageFactory;
   readonly tenant: DeliveryTenantScope;
   readonly context: StorageContext;
   readonly scopes: readonly DeliveryRunScope[];
@@ -143,7 +144,7 @@ interface EnvironmentDeliveryWorkerOptions {
 function createDeliveryWorker(runtime: EnvironmentDeliveryRuntime): DeliveryRunWorker {
   const delivery = new Delivery({
     context: runtime.context,
-    storageFactory: runtime.descriptor.storageFactory,
+    storageFactory: runtime.storageFactory,
   });
   const worker = new DeliveryWorker({
     delivery,

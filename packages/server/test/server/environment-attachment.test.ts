@@ -159,6 +159,54 @@ describe("startup obligations", () => {
 });
 
 describe("EnvironmentDeliveryWorker", () => {
+  it("constructs production delivery from the captured runtime storage factory", async () => {
+    const capturedStorageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "CapturedFactory",
+      "type.example.dev/CapturedFactory",
+      capturedStorageFactory,
+    );
+    const lateAccessorFailure = new Error("descriptor storage factory was read late");
+    let lateAccessorCalls = 0;
+    const guardedDescriptor: ContextDeliveryDescriptor = Object.freeze({
+      get storageFactory() {
+        lateAccessorCalls += 1;
+        throw lateAccessorFailure;
+      },
+      startupScopes: target.value.startupScopes,
+      storageContext: target.value.storageContext,
+      endpoints: target.value.endpoints,
+      onReady: target.value.onReady,
+      transition: target.value.transition,
+      replay: target.value.replay,
+    });
+    const scope = runScope("captured-factory-owner", target.ready);
+    const worker = new EnvironmentDeliveryWorker();
+
+    expect(() =>
+      worker.add({
+        owner: scope.owner,
+        descriptor: guardedDescriptor,
+        storageFactory: capturedStorageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [scope],
+      }),
+    ).not.toThrow();
+    expect(lateAccessorCalls).toBe(0);
+    await new Delivery({
+      context: target.context,
+      storageFactory: capturedStorageFactory,
+    }).inbox.receive(message(target.ready, "captured-row"));
+
+    await worker.start(Object.freeze({ scopes: Object.freeze([scope]) }), [target.ready.shard]);
+    expect(target.replayed).toEqual(["captured-row"]);
+    expect(lateAccessorCalls).toBe(0);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
   it("selects the exact owner when distinct storage runtimes have equal readiness", async () => {
     const firstStorage = new InMemoryStorageFactory();
     const secondStorage = new InMemoryStorageFactory();
@@ -170,6 +218,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: firstScope.owner,
       descriptor: first.value,
+      storageFactory: firstStorage,
       tenant: {},
       context: first.context,
       scopes: [firstScope],
@@ -177,6 +226,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: secondScope.owner,
       descriptor: second.value,
+      storageFactory: secondStorage,
       tenant: {},
       context: second.context,
       scopes: [secondScope],
@@ -201,6 +251,7 @@ describe("EnvironmentDeliveryWorker", () => {
       worker.add({
         owner: firstScope.owner,
         descriptor: first.value,
+        storageFactory: firstStorage,
         tenant: {},
         context: first.context,
         scopes: [firstScope],
@@ -267,6 +318,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: firstScope.owner,
       descriptor: first.value,
+      storageFactory: first.value.storageFactory,
       tenant: {},
       context: first.context,
       scopes: [firstScope],
@@ -274,6 +326,7 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.add({
       owner: secondScope.owner,
       descriptor: second.value,
+      storageFactory: second.value.storageFactory,
       tenant: {},
       context: second.context,
       scopes: [secondScope],

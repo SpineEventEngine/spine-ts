@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2B review wave 2 assigned
+Status: Slice 2B review wave 3 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -302,3 +302,13 @@ a fallible accessor cannot create a candidate and a two-tenant partial worker
 installation resumes on the exact retained candidate without duplicating the
 completed tenant or skipping the failed tenant. Final evidence is recorded in
 the canonical work/review logs; coordinator review is requested.
+
+## Slice 2B Review Wave 2 Fix Handback
+
+The private `EnvironmentDeliveryRuntime` now carries the descriptor snapshot's
+captured `StorageFactory`, and default production worker construction uses that
+field rather than re-reading the descriptor. A production-path regression
+proves no late accessor call and successful replay from the captured factory.
+Dynamic tenant runtime creation remains live only before the runtime is formed;
+all runtime consumers use the frozen identity afterward. Coordinator review is
+requested with final evidence in the canonical logs.
