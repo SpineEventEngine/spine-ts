@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 3 focused verified; Round 1 review pending
+Status: Slice 3 Round 1 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -178,3 +178,10 @@ Derived status mirror: the canonical current state is the `Status` header in
 - `2026-07-13T02:53:04Z`: Final pre-review diff/status/public-surface and
   exclusion scans are clean; the package remains limited to seven assigned
   private source/test/record files. Round 1 review is the next boundary.
+- Slice 3 Round 1 package is
+  `.superpowers/sdd/review-ed73178a..1d6c0f98.diff` (one commit, 39,063 bytes).
+  Expected explicit profiles are style, TypeScript/API, and reliability
+  `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
+  read-only with no subagents. Review is bounded to ordinary last-detach
+  classification/order, replacement-safe cleanup, unsafe retry, tests, records,
+  and private API claims; Slice 4 race policy remains excluded.

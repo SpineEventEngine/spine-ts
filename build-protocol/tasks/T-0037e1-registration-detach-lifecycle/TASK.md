@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 focused verified; Round 1 review pending
+Status: Slice 3 Round 1 review in progress
 
 ### Slice 2 Round 1 Findings
 
@@ -284,3 +284,8 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   lint/cleanup, repository formatting, and generated cleanliness pass. Full
   verification, commit, push, Slice 4 races, reusable stop, permanent close,
   server/public integration, docs, and examples remain excluded.
+- Slice 3 is frozen from assignment `ed73178a` through implementation
+  `1d6c0f98` in `.superpowers/sdd/review-ed73178a..1d6c0f98.diff` (one commit,
+  39,063 bytes). Round 1 explicitly assigns style, TypeScript/API, and
+  reliability to `gpt-5.6-terra` / `high`, and documentation to
+  `gpt-5.6-luna` / `medium`, each read-only with no subagents.
