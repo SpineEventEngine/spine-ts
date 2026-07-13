@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification cleanup fix review assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -587,3 +587,55 @@ At `2026-07-13T11:26:17Z`, the records re-review returned CLEAN for style and
 documentation and justified N/A for TypeScript/API and reliability because the
 delta is records-only. Desktop rollout metadata matches every explicit profile;
 all agents are closed. Full `pnpm verify` is again the sole pre-merge gate.
+
+The full gate now passes typechecking and ESLint but cleanup enforcement rejects
+the private five-component helper name `deliveryStopRetryRequiredError`. One
+fresh implementer receives the private rename-only fix at explicit
+`gpt-5.6-terra` / `medium`, no subagents; error text, callers, behavior, public
+surface, and generated output must remain unchanged.
+
+## Final Verification Cleanup Fix Start And Skill Applicability
+
+- At `2026-07-13T11:29:09Z`, the fresh existing implementer began in
+  `.worktrees/T-0037e2-reusable-generation-stop`, actual `gpt-5.6-terra` /
+  `medium`, with no subagents. Ownership is only
+  `packages/server/src/server/environment-attachment.ts` and these three
+  durable T-0037e2 records; `human-review-1-jul.md`, tests, public/generated
+  surfaces, commits, pushes, and full verification remain excluded.
+- Canonical skill applicability before the source edit: inspected the session
+  inventory, complete readable `/Users/armiol/.agents/skills` entrypoint list,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and
+  `/Users/armiol/.agents/.skill-lock.json`. Fully read and selected
+  `test-driven-development`, `systematic-debugging`, and
+  `verification-before-completion`: the assigned cleanup-enforcement failure
+  is the RED, its exact private-name diagnosis is the root cause, and fresh
+  focused evidence is required before handback. `javascript-testing-patterns`,
+  `typescript-advanced-types`, `nodejs-backend-patterns`, architecture/planning,
+  review, worktree, and subagent skills are N/A because no test-framework,
+  type/API, runtime behavior, architecture, review dispatch, worktree setup, or
+  delegation change is authorized. The inspected Spine JVM notes
+  `spine-server-runtime-and-bounded-context.md` and
+  `spine-routing-dispatch-and-delivery.md` confirm this is an internal delivery
+  naming-only correction, so they require no lifecycle or API change.
+
+## Final Verification Cleanup Fix Evidence
+
+- RED: `node scripts/check-cleanup-rules.mjs` exited `1` only for
+  `deliveryStopRetryRequiredError` at
+  `packages/server/src/server/environment-attachment.ts:2141` because it has
+  five semantic components. GREEN renames only that private helper and its four
+  call sites to `deliveryStopRetryError`; its error text and all call behavior
+  remain unchanged.
+- GREEN evidence: cleanup enforcement, focused source ESLint, and strict
+  tooling typecheck exit `0`; the required lifecycle suite passes 5 files /
+  162 tests; focused Prettier passes the source and all three records.
+- Exact scope/public/generated/status scans and `git diff --check` pass: the
+  changed inventory is only this source file and these three durable records;
+  there is no public/package/example/generated or untracked change. No full
+  verification, commit, push, test change, or change to
+  `human-review-1-jul.md` occurred.
+
+Desktop rollout confirms the cleanup owner actual `gpt-5.6-terra` / `medium`.
+Coordinator verification passes cleanup enforcement, source ESLint, strict
+typechecking, 162 lifecycle tests, formatting, exact scope, and diff hygiene.
+The committed private rename is assigned to the four canonical concerns.

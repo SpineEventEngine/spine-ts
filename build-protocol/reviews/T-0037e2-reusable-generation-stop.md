@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 final verification
+Status: T-0037e2 final verification cleanup fix review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1133,3 +1133,49 @@ Derived status mirror: the canonical current state is the `Status` header in
   `019f5b38-b394-7681-9a71-3f17d281f9c2`; no subagent; closed.
 - Active chronology and status are consistent. Full verification is the sole
   remaining pre-merge requirement; security remains deferred to T-0041.
+
+## Final Verification Cleanup Finding
+
+- Full verification now passes typechecking and ESLint but cleanup enforcement
+  rejects private five-component name `deliveryStopRetryRequiredError`.
+- One fresh `gpt-5.6-terra` / `medium` implementer, no subagents, receives the
+  single private rename and records. Error text/runtime/API/generated behavior
+  remain unchanged; focused four-concern review is required before another full
+  gate.
+
+## Final Verification Cleanup Fix Start And Skill Applicability
+
+- Fresh existing implementer began at `2026-07-13T11:29:09Z`, actual
+  `gpt-5.6-terra` / `medium`, no subagents. Before the source edit, canonical
+  skill applicability was checked against the session inventory, complete
+  readable `/Users/armiol/.agents/skills` listing, expected-skill manifest, and
+  installed lock manifest. Fully read `test-driven-development`,
+  `systematic-debugging`, and `verification-before-completion`; the recorded
+  cleanup-rule failure is RED, the five-component private helper is the
+  confirmed root cause, and focused evidence is required for GREEN. Other
+  testing/type/API/architecture/review/worktree/delegation skills are N/A for
+  this private naming-only correction; relevant Spine JVM notes confirm no
+  runtime, lifecycle, or public-contract change.
+
+## Final Verification Cleanup Fix Evidence
+
+- RED is the reproduced cleanup-rule rejection of private five-component name
+  `deliveryStopRetryRequiredError`; GREEN is only the declaration and its four
+  call sites renamed to `deliveryStopRetryError`. Error text, lifecycle order,
+  runtime behavior, tests, public surface, and generated output are unchanged.
+- Focused cleanup enforcement, source ESLint, strict tooling typecheck,
+  five-file lifecycle suite (5 files / 162 tests), and focused Prettier pass.
+  Exact scope/public/generated/status scans and `git diff --check` pass; only
+  the assigned source and three durable records changed, and public/package/
+  example/generated plus untracked scans are empty.
+
+## Final Verification Cleanup Fix Review Assignment
+
+- Fresh implementer Desktop actual `gpt-5.6-terra` / `medium` matches dispatch;
+  no subagent; closed. Coordinator verification passes cleanup enforcement,
+  source lint, strict typecheck, 5 files / 162 tests, formatting, scope, and
+  diff hygiene.
+- Assigned explicit profiles are style/maintainability
+  `gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+  TypeScript/API docs `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only, rename-only, and no subagents.

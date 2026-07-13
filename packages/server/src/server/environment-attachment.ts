@@ -314,7 +314,7 @@ export class EnvironmentAttachments {
     const current = this.#stop;
     if (current !== undefined) {
       if (current.status === "rejected") {
-        return Promise.reject(deliveryStopRetryRequiredError());
+        return Promise.reject(deliveryStopRetryError());
       }
       return current.promise;
     }
@@ -601,7 +601,7 @@ export class EnvironmentAttachments {
       return attached.operation.promise;
     }
     if (this.#rejectedStopOwns(attached)) {
-      return Promise.reject(deliveryStopRetryRequiredError());
+      return Promise.reject(deliveryStopRetryError());
     }
     if (this.#failedRollback !== undefined) {
       return Promise.reject(explicitRetryError());
@@ -617,7 +617,7 @@ export class EnvironmentAttachments {
       );
     }
     if (this.#rejectedStopOwns(attached)) {
-      return Promise.reject(deliveryStopRetryRequiredError());
+      return Promise.reject(deliveryStopRetryError());
     }
     const operation = attached.operation;
     if (operation === undefined) {
@@ -642,7 +642,7 @@ export class EnvironmentAttachments {
   #queueDetach(attached: AttachedHandle, previousOperation?: DetachHandleOperation): Promise<void> {
     const detaching = this.#serial.then(() => {
       if (this.#incompleteStopOwns(attached)) {
-        throw deliveryStopRetryRequiredError();
+        throw deliveryStopRetryError();
       }
       if (this.#failedRollback !== undefined) {
         attached.operation = previousOperation;
@@ -2138,7 +2138,7 @@ function detachRetryRequiredError(): Error {
   return new Error("Environment generation detach requires an explicit retry.");
 }
 
-function deliveryStopRetryRequiredError(): Error {
+function deliveryStopRetryError(): Error {
   return new Error("Environment delivery stop requires an explicit retry.");
 }
 
