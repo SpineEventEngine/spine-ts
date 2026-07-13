@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 round-2 re-review assigned
+Status: Slice 2 round-3 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -505,7 +505,7 @@ gate passes.
 - Medium: flatten an already aggregated attachment/start error before appending
   dependency-close errors, preserving original-first stable order.
 - Add direct same-server immediate-safe failed-index retry/record clearing and
-  safe rollback/reporting aggregate plus dependency-close aggregate coverage.
+  nested worker-retirement aggregate plus dependency-close aggregate coverage.
   The same Terra Medium implementer owns this bounded round.
 - `2026-07-13T18:16:55Z`: correction complete. Worker and helper shard
   parameters now use real `ShardIndex`; zero-message rejected startup evidence
@@ -523,9 +523,10 @@ gate passes.
   flattened into one stable original-first `AggregateError`. Original startup
   and already reported delivery causes are omitted from cleanup-only retry.
 - Direct RED/GREEN coverage proves cleanup-only retry, cause-once behavior,
-  completion error, record clearing through a later normal same-server start,
-  and flat ordered aggregation across safe rollback/reporting and dependency
-  close failures. Slice 3+ behavior and public surface remain unchanged.
+  completion error, terminal rejection of later same-server starts, fresh
+  separate-server reuse, and flat ordered aggregation across nested worker-
+  retirement and dependency-close failures. Slice 3+ behavior and public
+  surface remain unchanged.
 - `2026-07-13T18:57:02Z`: RED was 2 expected failures in 13 focused tests;
   GREEN is 13/13 and the full five-file gate is 155/155. Both typechecks,
   scoped ESLint/cleanup/Prettier, the exact nine-path allowlist/status/public-
@@ -539,3 +540,41 @@ gate passes.
   scoped lint/cleanup/Prettier, exact scope/status/leak, and diff checks pass.
 - Resume style/API/reliability at explicit Terra High against a fresh whole-
   Slice 2 package. Documentation N/A; security deferred.
+
+## Slice 2 Round-2 Re-review And Round-3 Fix
+
+- `2026-07-13T19:04:47Z`: reliability reports one high; style/API corroborate
+  the same contract issue as medium, and API adds one wording medium. All actual
+  profiles are Terra High, no subagents, all closed.
+- After failed-start cleanup completes, the consumed `Server` must reject later
+  normal `start()` attempts without rebuilding/reusing closed dependencies.
+  Environment reuse remains through a newly assembled server/fresh contexts.
+- Rename/narrow the pre-aggregated failure test and active records from
+  “reporting” to truthful nested retirement evidence. Add prebuilt/non-idempotent
+  dependency coverage for the terminal consumed-server guard.
+- Same Terra Medium implementer owns this bounded batch; later slices unchanged.
+
+## Slice 2 Round-3 Review-Fix Handback
+
+- `2026-07-13T19:09:35Z`: after a retained cleanup group fully closes and the
+  cause-less completion error is emitted, the same `Server` is privately
+  consumed. Every later `start()` rejects with one deterministic plain error
+  before cleanup selection, context build, attachment, or listener creation.
+- Direct coverage uses a prebuilt context and duplicate-close-rejecting
+  resources. It proves cleanup indexes close only as required, two later starts
+  duplicate no close/build/attach/listen work, and caller-environment reuse
+  succeeds only through a separately assembled server with fresh dependencies.
+- The aggregate test and active evidence now truthfully identify nested worker-
+  retirement failures; no reporter installer path or public surface was added.
+  Focused RED was 12/13 and focused GREEN is 13/13.
+- `2026-07-13T19:11:16Z`: both typechecks, the native 5-file / 155-test gate,
+  scoped ESLint, cleanup enforcement, Prettier, exact nine-path allowlist/
+  status/public-leak audit, and `git diff --check` pass. The final diff contains
+  6 changed paths inside the 9-path allowlist.
+
+## Slice 2 Round-3 Coordinator Gate
+
+- `2026-07-13T19:13:06Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Both typechecks, 5 files / 155 native tests, and all scoped
+  gates pass. Fresh whole-slice style/API/reliability re-review is assigned at
+  Terra High; documentation N/A, security deferred.

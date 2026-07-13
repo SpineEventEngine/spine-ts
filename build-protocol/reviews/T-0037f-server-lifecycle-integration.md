@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 2 round-2 re-review assigned
+Status: Slice 2 round-3 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -313,7 +313,7 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 
 - `2026-07-13T18:54:59Z`: both accepted round-2 findings are addressed. A
   failed immediate-safe close retains its exact retry group for cleanup-only
-  failed-index retry, and aggregation recursively flattens startup/reporting
+  failed-index retry, and aggregation recursively flattens startup/retirement
   causes before recursively flattened dependency-close causes.
 - New direct tests prove retry preservation, cause-once behavior, cleanup
   completion and record clearing, plus one flat stable ordered aggregate. The
@@ -332,6 +332,41 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 ## Slice 2 Round-2 Re-review Assignment
 
 - `2026-07-13T18:58:42Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 155 tests, and all scoped gates pass.
+- Resume style/API/reliability at explicit Terra High, no subagents, against a
+  fresh whole Slice 2 package. Documentation N/A; security deferred.
+
+## Slice 2 Round-2 Re-review Findings
+
+- `2026-07-13T19:04:47Z`: same-server normal restart after cleanup reuses
+  already-closed resources (reliability high, style/API medium). API medium:
+  “reporting” evidence is actually nested worker-retirement evidence. All
+  reviewers actual Terra High, no subagents, closed.
+- Same Terra Medium implementer receives terminal consumed-server guarding,
+  fresh-server reuse, prebuilt/non-idempotent coverage, and truthful retirement
+  naming/claims. Applicable re-review remains pending; docs N/A, security
+  deferred.
+
+## Slice 2 Round-3 Review-Fix Handback
+
+- `2026-07-13T19:09:35Z`: the accepted lifecycle finding is fixed with private
+  terminal consumption after cause-less failed-start cleanup completion. Two
+  later same-server starts reject before build/attach/listen and cannot close
+  the prebuilt context or non-idempotent resources again; fresh reuse is proven
+  only with a separate server and fresh dependencies.
+- The terminology finding is fixed without broadening the installer: the test
+  injects nested failures through worker `retire()` and names/asserts them as
+  retirement failures. Focused RED is 12 pass / 1 expected fail; GREEN is
+  13/13. Applicable re-review remains coordinator-owned; docs are N/A, security
+  deferred, and Slice 3+ remains excluded.
+- `2026-07-13T19:11:16Z`: both typechecks, native 5 files / 155 tests, scoped
+  lint/cleanup/Prettier, exact nine-path allowlist/status/public-leak audit, and
+  diff integrity pass. This synchronized package is ready for coordinator-owned
+  re-review; no finding is self-accepted by the implementer handback.
+
+## Slice 2 Round-3 Re-review Assignment
+
+- `2026-07-13T19:13:06Z`: accepted/closed implementer actual Terra Medium;
   both typechecks, 5 files / 155 tests, and all scoped gates pass.
 - Resume style/API/reliability at explicit Terra High, no subagents, against a
   fresh whole Slice 2 package. Documentation N/A; security deferred.

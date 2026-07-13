@@ -313,10 +313,11 @@ describe("Server lifecycle integration", () => {
     }
   });
 
-  it("retries failed immediate-safe cleanup without rebuilding or reattaching", async () => {
+  it("terminally rejects a consumed server after retrying immediate-safe cleanup", async () => {
     const events: string[] = [];
     const startupFailure = new Error("safe startup recovery failed");
     const cleanupFailure = new Error("resource cleanup failed");
+    const duplicateResourceClose = new Error("resource closed more than once");
     const firstWorker = new HeldStartupWorker(events);
     firstWorker.rejectNextStart(startupFailure);
     const freshWorker = new HeldStartupWorker(events);
@@ -328,32 +329,42 @@ describe("Server lifecycle integration", () => {
       environment: { storageFactory, ownsStorageFactory: true },
     });
     await fixture.context.close();
-    const contextBuilder = fixture
+    const context = await fixture
       .createBuilder("LifecycleSafeFailedStart")
-      .withStorageFactory(storageFactory);
+      .withStorageFactory(storageFactory)
+      .buildAsync();
+    const builtStorageCount = storageFactory.storages.length;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close");
-    const closeResource = vi.fn();
+    let successfulResourceCloses = 0;
+    const closeResource = vi.fn(() => {
+      successfulResourceCloses += 1;
+      if (successfulResourceCloses > 1) {
+        throw duplicateResourceClose;
+      }
+    });
     let failedResourceAttempts = 0;
     const failResource = vi.fn(() => {
       failedResourceAttempts += 1;
       if (failedResourceAttempts === 1) {
         throw cleanupFailure;
       }
+      if (failedResourceAttempts > 2) {
+        throw duplicateResourceClose;
+      }
     });
     const server = Server.atPort(0, { environment: fixture.environment })
-      .add(contextBuilder)
+      .add(context)
       .addResource({ close: closeResource })
       .addResource({ close: failResource });
     const starting = server.start();
     void starting.catch(() => undefined);
-    let restarted: { close(): Promise<void> } | undefined;
+    let fresh: { close(): Promise<void> } | undefined;
 
     try {
       expect(fixture.worker).toBe(firstWorker);
       await firstWorker.startedWithin();
       firstWorker.release();
       const failure = await starting.catch((error: unknown) => error);
-      const builtStorageCount = storageFactory.storages.length;
 
       expect(failure).toBeInstanceOf(AggregateError);
       expect((failure as AggregateError).errors).toEqual([startupFailure, cleanupFailure]);
@@ -382,12 +393,33 @@ describe("Server lifecycle integration", () => {
       expect(freshWorker.starts).toBe(0);
       expect(createHttp2Server).not.toHaveBeenCalled();
 
-      restarted = await server.start();
+      const firstTerminal = await server.start().catch((error: unknown) => error);
+      await closeIfRunningServer(firstTerminal).catch(() => undefined);
+      const secondTerminal = await server.start().catch((error: unknown) => error);
+      await closeIfRunningServer(secondTerminal).catch(() => undefined);
+
+      expectConsumedFailedStartServer(firstTerminal);
+      expectConsumedFailedStartServer(secondTerminal);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(closeResource).toHaveBeenCalledOnce();
+      expect(failResource).toHaveBeenCalledTimes(2);
+      expect(storageFactory.storages).toHaveLength(builtStorageCount);
+      expect(firstWorker.starts).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+      expect(createHttp2Server).not.toHaveBeenCalled();
+
+      const freshContext = await fixture
+        .createBuilder("LifecycleAfterConsumedFailedStart")
+        .withStorageFactory(storageFactory)
+        .buildAsync();
+      fresh = await Server.atPort(0, { environment: fixture.environment })
+        .add(freshContext)
+        .start();
+      expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
-      expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(createHttp2Server).toHaveBeenCalledOnce();
-      await restarted.close();
+      await fresh.close();
 
       expect(storageFactory.isOpen()).toBe(true);
       expect(storageFactory.closeCalls).toBe(0);
@@ -398,16 +430,17 @@ describe("Server lifecycle integration", () => {
       firstWorker.release();
       freshWorker.release();
       await starting.catch(() => undefined);
-      await restarted?.close().catch(() => undefined);
+      await fresh?.close().catch(() => undefined);
+      await context.close().catch(() => undefined);
       await fixture.environment.close().catch(() => undefined);
       fixture.dispose();
     }
   });
 
-  it("flattens safe attachment and dependency cleanup aggregates in stable order", async () => {
+  it("flattens nested retirement and dependency cleanup aggregates in stable order", async () => {
     const startupFailure = new Error("aggregate startup failed");
-    const reportingFailure = new Error("aggregate reporting failed");
-    const retirementFailure = new Error("aggregate retirement failed");
+    const firstRetirementFailure = new Error("first worker retirement failed");
+    const nestedRetirementFailure = new Error("nested worker retirement failed");
     const firstContextFailure = new Error("first context cleanup failed");
     const secondContextFailure = new Error("second context cleanup failed");
     const firstResourceFailure = new Error("first resource cleanup failed");
@@ -416,8 +449,11 @@ describe("Server lifecycle integration", () => {
     worker.rejectNextStart(startupFailure);
     worker.failNextRetire(
       new AggregateError(
-        [reportingFailure, new AggregateError([retirementFailure], "nested retirement")],
-        "post-quiescence failures",
+        [
+          firstRetirementFailure,
+          new AggregateError([nestedRetirementFailure], "nested worker retirement"),
+        ],
+        "worker retirement failures",
       ),
     );
     const fixture = await lifecycleFixture({ workers: [worker] });
@@ -469,8 +505,8 @@ describe("Server lifecycle integration", () => {
       expect(failure).toBeInstanceOf(AggregateError);
       expect((failure as AggregateError).errors).toEqual([
         startupFailure,
-        reportingFailure,
-        retirementFailure,
+        firstRetirementFailure,
+        nestedRetirementFailure,
         firstContextFailure,
         secondContextFailure,
         firstResourceFailure,
@@ -822,6 +858,16 @@ function expectDeferredCleanupCompletion(error: unknown): void {
   expect((error as Error).constructor).toBe(Error);
   expect((error as Error).message).toBe(
     "Server deferred cleanup completed after an earlier failed start.",
+  );
+  expect(Object.hasOwn(error as object, "cause")).toBe(false);
+}
+
+function expectConsumedFailedStartServer(error: unknown): void {
+  expect(error).toBeInstanceOf(Error);
+  expect(error).not.toBeInstanceOf(AggregateError);
+  expect((error as Error).constructor).toBe(Error);
+  expect((error as Error).message).toBe(
+    "Server cannot restart after failed-start cleanup has completed.",
   );
   expect(Object.hasOwn(error as object, "cause")).toBe(false);
 }

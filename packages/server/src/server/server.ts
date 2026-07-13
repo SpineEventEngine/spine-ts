@@ -30,6 +30,7 @@ export class Server {
   readonly #ownsEnvironment: boolean;
   #starting: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
+  #failedStartConsumed = false;
 
   /** Create a server builder. Prefer {@link Server.atPort} for the common case. */
   constructor(options: ServerOptions = {}) {
@@ -75,6 +76,11 @@ export class Server {
     const current = this.#starting;
     if (current !== undefined) {
       return current;
+    }
+    if (this.#failedStartConsumed) {
+      return Promise.reject(
+        new Error("Server cannot restart after failed-start cleanup has completed."),
+      );
     }
     const cleanup = this.#failedStartCleanup;
     const starting =
@@ -179,6 +185,7 @@ export class Server {
     if (errors.length > 0) {
       throwCleanupErrors(errors);
     }
+    this.#failedStartConsumed = true;
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 

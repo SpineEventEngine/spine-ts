@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 2 round-2 re-review assigned
+Status: Slice 2 round-3 re-review assigned
 
 ## Resolution Summary
 
@@ -588,3 +588,27 @@ smallest coherent implementation.
 
 - `2026-07-13T18:58:42Z`: all focused gates pass; fresh whole-slice applicable
   re-review is assigned.
+
+## Slice 2 Round-3 Review-Fix
+
+- `2026-07-13T19:04:47Z`: prevent normal restart of a consumed server after
+  failed-start cleanup, require newly assembled server reuse, and describe the
+  aggregate test truthfully as nested retirement evidence.
+
+## Slice 2 Round-3 Review-Fix Handback
+
+- `2026-07-13T19:09:35Z`: one private terminal bit now separates the consumed
+  post-cleanup server from the existing retained-cleanup checkpoint. It is set
+  only on the cause-less cleanup-completion path and is checked before any
+  build/attach/listen work; no restart semantics or public state are introduced.
+- Fresh caller-environment reuse remains a new `Server` plus fresh dependencies.
+  Nested aggregate evidence is worker-retirement evidence, not reporter-path
+  evidence; the package-internal installer seam remains unchanged.
+- `2026-07-13T19:11:16Z`: focused RED/GREEN is 12 pass / 1 expected fail, then
+  13/13 pass; the full native gate is 5 files / 155 tests. Both typechecks and
+  all scoped mechanical, nine-path status/scope/leak, and diff gates pass.
+
+## Slice 2 Round-3 Coordinator Gate
+
+- `2026-07-13T19:13:06Z`: focused verification passes; fresh applicable whole-
+  slice re-review is assigned.
