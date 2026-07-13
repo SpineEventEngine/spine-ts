@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final verification assigned
+Status: Complete; ready to merge
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -971,3 +971,14 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Coherent zero-message progress and package-internal evidence wording resolve
   both P2s. No public API/export/TypeDoc/Proto finding remains. Full task
   verification is assigned; security remains deferred to T-0041.
+
+## Final Task Gate
+
+- `2026-07-13T17:04:33Z`: full native `pnpm verify` passes. Both test modes
+  pass 67 files / 1,556 tests; coverage is 95.27% statements, 90.01% branches,
+  98.04% functions, and 95.30% lines. Typecheck, lint, cleanup, formatting,
+  TypeDoc/API export counts, Proto lint/checksums, and generated-clean checks
+  pass.
+- All applicable T-0037e3 review concerns are clean or concretely N/A, all
+  agents are closed, and no high-confidence correctness issue remains. Ready to
+  merge; security remains deferred to T-0041.

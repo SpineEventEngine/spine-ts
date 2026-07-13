@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final verification assigned
+Status: Complete; ready to merge
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -1248,3 +1248,19 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - The package-internal fixture now represents coherent zero-message progress,
   and no public export, TypeDoc, Proto, or compatibility concern remains. The
   full `pnpm verify` task gate is reassigned.
+
+## Final Verification Result
+
+- `2026-07-13T17:04:33Z`: full native
+  `pnpm --config.verify-deps-before-run=false verify` exits 0. Generated build
+  and tooling typechecks, ESLint, cleanup enforcement, Prettier, ordinary tests,
+  coverage tests, TypeDoc/API checks, Proto lint, and generated-clean checks all
+  pass.
+- Ordinary and coverage runs each pass 67 files / 1,556 tests. Coverage is
+  95.27% statements, 90.01% branches, 98.04% functions, and 95.30% lines.
+  TypeDoc contains the expected exports: proto 100, core 28, server 205,
+  storage 19, transport 17, and testing 3. Generated Proto output remains
+  ignored, untracked, and freshly regenerated.
+- T-0037e3 acceptance criteria, focused reviews, bounded final-gate fix review,
+  and final task gate are complete. The clean task branch is ready to merge;
+  security remains assigned to the final T-0041 release-readiness gate.
