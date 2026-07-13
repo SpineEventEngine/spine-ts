@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 Round 2 review in progress
+Status: Slice 4 Round 2 documentation fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -271,3 +271,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
   read-only with no subagents. Review is bounded to the complete Round 1 fix;
   historical superseded text is non-actionable unless currently claimed.
+- Round 2 disposition: style, TypeScript/API, and reliability are CLEAN.
+  Documentation alone finds architecture overstates API-time rejection for the
+  queued-admission race. It must record the temporary queued operation and its
+  restoration to no operation if failed-start rollback wins. All four agents
+  are closed; one Terra Medium record owner receives the sole correction before
+  Round 3. Security/full verify remain deferred.

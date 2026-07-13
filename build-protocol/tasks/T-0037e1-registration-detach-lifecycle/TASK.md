@@ -1,6 +1,14 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 4 Round 2 review in progress
+Status: Slice 4 Round 2 documentation fix assigned
+
+### Slice 4 Round 2 Finding
+
+Active architecture must distinguish API-time failed-start rejection from a
+detach already queued before rollback wins serial admission. The latter uses a
+temporary operation for duplicate promise coalescing, then restores the handle
+to no detach operation when blocked. One Terra Medium owner receives this sole
+record correction before Round 3.
 
 ### Slice 4 Round 1 Findings
 
