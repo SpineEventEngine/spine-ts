@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Slice 3 review clean; final verification in progress
+Status: Final gate stale expectation fix assigned
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -490,6 +490,17 @@ Terra Medium owner receives the deduplicated batch under TDD before Round 5.
 
 Documentation and TypeScript/API docs are clean. One Terra Medium owner receives
 both findings under strict TDD before Round 6.
+
+### Final Gate Finding
+
+The first full `pnpm verify` run exposed one deterministic stale repository
+routing expectation. T-0037d's accepted batch-ownership behavior exact-drains
+every already-persisted process-manager row after an earlier drain fails, and
+the focused handoff test proves both handlers run. The older repository test
+still expects only the failed target to run and the later durable row to remain
+pending. Reconcile that test with the implemented no-owner-gap contract and
+prove the later row is delivered while the batch call retains the first error.
+No production change is indicated by root-cause evidence.
 
 Round 5 implementer applicability check (`gpt-5.6-terra` / `medium`):
 `receiving-code-review` applies because this is a coordinator-reviewed finding

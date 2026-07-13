@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Slice 3 review clean; final verification in progress
+Status: Final gate stale expectation fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -658,3 +658,14 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   remains in live dynamic ownership, finite attribution, rollback/reclamation,
   inert cleanup, internal API, tests, or current records. Slice 3 review is
   closed. Final T-0037d verification is in progress; security remains T-0041.
+- `2026-07-13T00:26:47Z`: Final affected regression passes 576/576. Full
+  `pnpm verify` reaches tests after clean generated/type/lint/format gates and
+  fails one deterministic legacy repository assertion: current accepted batch
+  handoff runs both persisted targets after the first rejects, while the test
+  expects only the first and a pending second row. Exact isolated reproduction
+  confirms the mismatch.
+- Root-cause disposition: this is a stale test, not a production regression.
+  The reviewed T-0037d no-owner-gap behavior and focused process-manager test
+  explicitly require continued exact draining after an earlier failure while
+  propagating the first error. One Terra Medium owner receives the test-only
+  correction; a fresh four-lane review is required before final verify resumes.
