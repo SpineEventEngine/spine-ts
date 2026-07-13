@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification lint review fix assigned
+Status: T-0037e2 final verification
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -582,3 +582,8 @@ Desktop rollout confirms the records fixer actual `gpt-5.6-terra` / `medium`.
 Coordinator docs/status lint, focused formatting, exact records-only scope, and
 diff hygiene pass. The committed chronology correction is assigned to the four
 canonical concerns for final focused re-review.
+
+At `2026-07-13T11:26:17Z`, the records re-review returned CLEAN for style and
+documentation and justified N/A for TypeScript/API and reliability because the
+delta is records-only. Desktop rollout metadata matches every explicit profile;
+all agents are closed. Full `pnpm verify` is again the sole pre-merge gate.
