@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task Round 3 re-review assigned
+Status: Final whole-task Round 4 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -740,8 +740,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   preserves stable depth-first ordering, duplicate leaves, and path-local cycle
   detection for reused sibling aggregates.
 - Focused lifecycle suites pass 5 files / 184 tests. Generated build typecheck,
-  scoped ESLint, and cleanup enforcement pass. The bounded change leaves
-  malformed `AggregateError.errors` access behavior unchanged.
+  scoped ESLint, and cleanup enforcement pass. Iterable `AggregateError.errors`
+  causes retain the supported prior contract; malformed non-iterable or
+  throwing-accessor values are unsupported and outside accepted behavior.
 - Scope/exclusions: private runtime, focused test, task/work/review/derived
   status only; no public/API/Proto/generated/listener/security work, examples,
   protected human-review access, commit, push, full verify, or merge. Prettier,
@@ -780,8 +781,9 @@ Derived status mirror: the canonical current state is the `Status` header in
   nested/cyclic flattening wording. Existing deep-chain, cycle, duplicate,
   continuation, and retry coverage remains intact.
 - RED was 1/16: a `Set`-backed aggregate silently produced no failure. GREEN is
-  16/16 in the focused close suite. Malformed non-iterable/accessor behavior
-  remains intentionally outside this batch without a failing regression.
+  16/16 in the focused close suite. Iterable causes retain the supported prior
+  contract; malformed non-iterable or throwing-accessor values are unsupported
+  and outside accepted behavior without a failing regression.
 - Focused lifecycle, generated typecheck, scoped lint/cleanup/Prettier, diff,
   and docs/status evidence are recorded in the work log. No public/API/Proto/
   generated/listener/security work, protected human-review access, commit,
@@ -800,3 +802,41 @@ Derived status mirror: the canonical current state is the `Status` header in
   cycles, duplicates, order, continuation, and retry are ready for fresh
   style/maintainability, documentation, TypeScript/API docs, and
   performance/reliability dispositions. Security remains deferred.
+
+## Final Whole-Task Round 3 Re-review Results
+
+- `2026-07-13T16:23:33Z`: API and reliability return CLEAN. Style and docs each
+  report one docs/status P2. Desktop metadata confirms required profiles; all
+  reviewers used no subagents and are closed.
+- Fix only active wording: malformed non-iterable/accessor aggregate causes are
+  unsupported rather than guaranteed unchanged, and the architecture body must
+  mirror the current canonical phase.
+- One Terra Medium implementer receives the docs-only batch. Runtime, tests,
+  public API, and security scope are unchanged/deferred.
+
+## Final Whole-Task Round 4 Docs-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  Round 3 re-review dispositions are resolved: iterable causes preserve the
+  supported prior contract; malformed non-iterable or throwing-accessor values
+  are unsupported and outside accepted behavior, with no unchanged-behavior
+  guarantee.
+- The architecture record now has durable derived-mirror wording tied to the
+  canonical `TASK.md` status rather than an assertion that can stale after a
+  future review phase.
+- Documentation evidence: targeted active-claim/status `rg` scans, scoped
+  Prettier write/check on all four assigned records, `git diff --check`, and
+  exact four-record scope/status lint. `docs:check` is N/A because no API,
+  package, or generated documentation input changed.
+- Exclusions and handback: no runtime/test/public/API/Proto/generated/listener/
+  security/example or `human-review-1-jul.md` change; no commit, push, full
+  verify, or merge. Status: Round 4 docs-fix handback requested.
+
+## Final Whole-Task Round 4 Re-review Assignment
+
+- `2026-07-13T16:28:14Z`: coordinator accepts the Terra Medium implementer and
+  fresh docs/API/format/diff/status/claim/scope evidence. It used no subagents.
+- Iterable causes are the supported contract; malformed non-iterable or
+  throwing-accessor causes are explicitly unsupported. Architecture body and
+  derived header now follow canonical status without stale phase assertions.
+  Fresh four-concern dispositions are required; security remains deferred.

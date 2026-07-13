@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final whole-task Round 3 re-review assigned
+Status: Final whole-task Round 4 re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -994,8 +994,9 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   aggregate is traversed independently in sibling branches.
 - The regression proves delivery's deep failure is flattened, tracer/transport/
   storage continue, and the later public close retries delivery only after the
-  completed indexes remain closed. Aggregate `errors` access retains the prior
-  bounded behavior; malformed-access policy was not expanded without a RED.
+  completed indexes remain closed. Iterable `AggregateError.errors` causes
+  retain the supported prior contract; malformed non-iterable or
+  throwing-accessor values are unsupported and outside accepted behavior.
 - Fresh evidence: the five focused lifecycle suites pass 5 files / 184 tests;
   generated build typecheck, scoped ESLint, and cleanup enforcement pass.
   Scoped Prettier, `git diff --check`, synchronized-status, docs/status, and
@@ -1042,8 +1043,9 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   The nested/cyclic test now has an observable title and reuses one aggregate
   in two sibling branches, asserting its leaf twice in stable DFS order.
 - The existing 20,000-deep, cycle, duplicate-leaf, continuation, and
-  failed-index retry coverage remains in the focused close suite. Malformed
-  non-iterable/accessor behavior was deliberately not changed without a RED.
+  failed-index retry coverage remains in the focused close suite. Iterable
+  causes retain the supported prior contract; malformed non-iterable or
+  throwing-accessor values are unsupported and outside accepted behavior.
 - Focused lifecycle, generated typecheck, scoped lint/cleanup/Prettier, diff,
   and docs/status verification are recorded in the work and review logs.
   Exclusions remain public/API/Proto/generated/listener/security work,
@@ -1063,3 +1065,44 @@ current.` rather than the established explicit-retry rejection. GREEN checks
 - Iterable causes, sibling-shared aggregate traversal, observable naming, deep
   stack safety, cycles, duplicates, continuation, and retry are accepted for
   final four-concern Round 3 re-review.
+
+## Final Whole-Task Round 3 Re-review Findings
+
+- `2026-07-13T16:23:33Z`: TypeScript/API and performance/reliability are CLEAN;
+  style and documentation report two docs/status P2s. Runtime and tests are
+  clean.
+- Correct active records that claim malformed non-iterable/accessor
+  `AggregateError.errors` behavior was unchanged. State it is unsupported and
+  outside accepted behavior; iterable compatibility is the preserved contract.
+- Correct the architecture-resolution body sentence that still names Round 3
+  review-fix handback while the canonical phase is Round 4 docs fix.
+- Desktop metadata matches style/API/reliability Terra High and documentation
+  Luna Medium. All reviewers used no subagents and are closed. One Terra Medium
+  implementer receives the docs-only fix.
+
+## Final Whole-Task Round 4 Docs-Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  This documentation-only correction resolves both Round 3 re-review P2s:
+  iterable `AggregateError.errors` causes preserve the supported prior contract;
+  malformed non-iterable or throwing-accessor values are unsupported and outside
+  accepted behavior, with no unchanged-behavior guarantee.
+- The architecture resolution now uses a durable derived-status mirror of this
+  canonical `TASK.md` header rather than naming a stale Round 3 phase.
+- Exact validation is recorded in the work and review logs: targeted active-claim
+  and status `rg` scans, Prettier on these four records, `git diff --check`, and
+  exact four-record scope/status lint. `docs:check` is excluded as not warranted:
+  this batch changes no API/package documentation or generated documentation
+  inputs.
+- Exclusions: no runtime, test, public/API/Proto/generated, listener, security,
+  example, or `human-review-1-jul.md` change; no commit, push, full verify, or
+  merge. Status: Round 4 docs-fix handback requested.
+
+## Final Whole-Task Round 4 Coordinator Gate
+
+- `2026-07-13T16:28:14Z`: Desktop metadata confirms the implementer at actual
+  `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
+  Coordinator `docs:check`, scoped Prettier, status/claim lint, exact scope, and
+  `git diff --check` pass.
+- The four-record unsupported-input and durable status-mirror correction is
+  assigned for final four-concern Round 4 re-review. Runtime remains unchanged.
