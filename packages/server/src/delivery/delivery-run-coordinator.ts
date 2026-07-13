@@ -13,7 +13,12 @@ const synthesizedRetirementFailures = new WeakMap<AggregateError, readonly unkno
 
 /** @internal Ordered causes owned by this coordinator's retirement aggregation. */
 export function deliveryRunRetirementCauses(error: unknown): readonly unknown[] | undefined {
-  return error instanceof AggregateError ? synthesizedRetirementFailures.get(error) : undefined;
+  if (!(error instanceof AggregateError)) {
+    return undefined;
+  }
+  const causes = synthesizedRetirementFailures.get(error);
+  synthesizedRetirementFailures.delete(error);
+  return causes;
 }
 
 /** @internal Serializes finite worker starts for one delivery generation. */

@@ -372,13 +372,16 @@ export class EnvironmentAttachments {
       old.captureTransition(stop.scopes);
     }
     if (!stop.oldRetired) {
-      try {
-        await old.retire();
-      } catch (error) {
+      const retirement = await old.retire();
+      if (retirement.status === "failed") {
         if (!old.replacementSafe) {
-          throw error;
+          throw retirement.reason;
         }
-        stop.oldRetirement = { status: "retained", reason: error };
+        stop.oldRetirement = {
+          status: "retained",
+          reason: retirement.reason,
+          causes: retirement.causes,
+        };
       }
       stop.oldRetired = true;
     }
@@ -426,14 +429,14 @@ export class EnvironmentAttachments {
           transfer.descriptor,
           transfer.ready,
         );
-        let fault: unknown;
+        let fault: FailurePresence = { status: "none" };
         try {
           this.#transitionFaults?.onScopeTransfer?.(
             transfer.descriptor,
             stop.scopes.sources(transfer),
           );
         } catch (error) {
-          fault = error;
+          fault = { status: "retained", reason: error };
         }
         const failures: unknown[] = [];
         try {
@@ -441,12 +444,12 @@ export class EnvironmentAttachments {
         } catch (error) {
           failures.push(error);
         }
-        if (fault !== undefined) {
-          failures.push(fault);
+        if (fault.status === "retained") {
+          failures.push(fault.reason);
         }
         if (failures.length > 0) {
           stop.scopes.reject(transfer);
-          throwFailures(failures, "Environment candidate scope transfer failed.");
+          throwCurrentAggregation(failures);
         }
         stop.scopes.complete(transfer, version);
         transfer = stop.scopes.nextPending();
@@ -473,7 +476,7 @@ export class EnvironmentAttachments {
         stop.drained = true;
       }
     } catch (error) {
-      const failures = [...this.#takeOldRetirementCauses(stop), ...synthesizedCauses(error)];
+      const failures = [...this.#takeOldRetirementCauses(stop), ...currentAggregationCauses(error)];
       throwFailures(failures, "Environment delivery stop transition failed.");
     }
     stop.completed = true;
@@ -488,9 +491,9 @@ export class EnvironmentAttachments {
     if (stop.oldRetirement.status !== "retained") {
       return Object.freeze([]);
     }
-    const { reason } = stop.oldRetirement;
+    const { causes } = stop.oldRetirement;
     stop.oldRetirement = { status: "emitted" };
-    return deliveryRunRetirementCauses(reason) ?? Object.freeze([reason]);
+    return causes;
   }
 
   #refuseStop(stop: GenerationStop, error: Error): never {
@@ -805,11 +808,23 @@ interface GenerationStop {
 
 type OldRetirementResult =
   | { readonly status: "pending" }
-  | { readonly status: "retained"; readonly reason: unknown }
+  | {
+      readonly status: "retained";
+      readonly reason: unknown;
+      readonly causes: readonly unknown[];
+    }
   | { readonly status: "emitted" };
 
-type ReportFailure =
+type FailurePresence =
   { readonly status: "none" } | { readonly status: "retained"; readonly reason: unknown };
+
+type GenerationRetirementResult =
+  | { readonly status: "succeeded" }
+  | {
+      readonly status: "failed";
+      readonly reason: unknown;
+      readonly causes: readonly unknown[];
+    };
 
 interface StopRoute {
   readonly survivor: AttachedHandle;
@@ -1324,20 +1339,29 @@ class DeliveryGeneration {
     }
   }
 
-  async retire(): Promise<void> {
+  async retire(): Promise<GenerationRetirementResult> {
     const token = this.#registrations.keys().next().value as string | undefined;
     if (token === undefined) {
       this.#retiredWithoutCoordinator = true;
-      return;
+      return Object.freeze({ status: "succeeded" });
     }
-    if (this.#coordinator === undefined) {
-      await this.#consumeRegistration(token, true);
-      this.#retiredWithoutCoordinator = true;
-    } else {
-      await this.#coordinator.retire(() => this.#consumeRegistration(token, true));
+    try {
+      if (this.#coordinator === undefined) {
+        await this.#consumeRegistration(token, true);
+        this.#retiredWithoutCoordinator = true;
+      } else {
+        await this.#coordinator.retire(() => this.#consumeRegistration(token, true));
+      }
+    } catch (reason) {
+      return Object.freeze({
+        status: "failed",
+        reason,
+        causes: deliveryRunRetirementCauses(reason) ?? Object.freeze([reason]),
+      });
     }
     this.#registrations.clear();
     this.#dropRetiredState();
+    return Object.freeze({ status: "succeeded" });
   }
 
   captureTransition(capture: TransitionScopes): void {
@@ -1442,7 +1466,7 @@ class DeliveryGeneration {
     const causes = consumeGeneration
       ? this.#deliveryRecords.retire()
       : this.#deliveryRecords.rollback(token);
-    let reportFailure: ReportFailure = { status: "none" };
+    let reportFailure: FailurePresence = { status: "none" };
     try {
       if (causes.length > 0) {
         await this.#report(causes);
@@ -2035,22 +2059,41 @@ function throwFailures(failures: readonly unknown[], message: string): void {
     throw failures[0];
   }
   if (failures.length > 1) {
-    const causes = Object.freeze([...failures]);
-    const aggregate = new AggregateError(causes, message);
-    synthesizedEnvironmentFailures.set(aggregate, causes);
-    throw aggregate;
+    throw new AggregateError(failures, message);
   }
 }
 
-function synthesizedCauses(error: unknown): readonly unknown[] {
-  return (
-    deliveryRunRetirementCauses(error) ??
-    (error instanceof AggregateError ? synthesizedEnvironmentFailures.get(error) : undefined) ??
-    Object.freeze([error])
-  );
+const currentAggregationFailure = Symbol("currentAggregationFailure");
+
+interface CurrentAggregationFailure {
+  readonly [currentAggregationFailure]: true;
+  readonly causes: readonly unknown[];
 }
 
-const synthesizedEnvironmentFailures = new WeakMap<AggregateError, readonly unknown[]>();
+function throwCurrentAggregation(failures: readonly unknown[]): never {
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length > 1) {
+    throw Object.freeze({
+      [currentAggregationFailure]: true,
+      causes: Object.freeze([...failures]),
+    });
+  }
+  throw new Error("Environment transition aggregation requires at least one failure.");
+}
+
+function currentAggregationCauses(error: unknown): readonly unknown[] {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    currentAggregationFailure in error &&
+    (error as Partial<CurrentAggregationFailure>)[currentAggregationFailure] === true
+  ) {
+    return (error as CurrentAggregationFailure).causes;
+  }
+  return Object.freeze([error]);
+}
 
 function handle(
   claim: EnvironmentRegistrationClaim,

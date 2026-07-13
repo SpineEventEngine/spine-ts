@@ -5,6 +5,7 @@ import type { ContextDeliveryDescriptor } from "../../src/context/bounded-contex
 import { DeliveryReadiness, type DeliveryReady } from "../../src/context/local-inbox-handoff.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
+  DeliveryRunCoordinator,
   DeliveryRunQuiescenceError,
   type DeliveryRunObligation,
   type DeliveryRunScope,
@@ -1265,6 +1266,95 @@ describe("environment generation stop", () => {
     await attachments.detach(handle);
   });
 
+  it("retains an undefined transfer fault for explicit retry", async () => {
+    await expectRetainedTransitionFailure(undefined, "UndefinedTransferFault");
+  });
+
+  it("preserves a previously coordinator-synthesized aggregate as one later phase cause", async () => {
+    const reportFailure = new Error("historical coordinator report failure");
+    const retireFailure = new Error("historical coordinator retirement failure");
+    const worker = new ControlledWorker([], "historical-coordinator");
+    worker.retireFailures.push(retireFailure);
+    const configured: DeliveryRunScope = Object.freeze({
+      owner: Object.freeze({ key: "historical-coordinator-owner" }),
+      ready: Object.freeze({
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl: "type.example.dev/HistoricalCoordinator",
+        shard: ShardIndex.single(),
+      }),
+    });
+    const coordinator = new DeliveryRunCoordinator({ scopes: [configured], worker });
+    const historical = await coordinator
+      .retire(() => Promise.reject(reportFailure))
+      .catch((reason: unknown) => reason);
+
+    expect(historical).toBeInstanceOf(AggregateError);
+    const historicalCauses = (historical as AggregateError).errors;
+    expect(historicalCauses).toHaveLength(2);
+    expect(historicalCauses[0]).toBe(reportFailure);
+    expect(historicalCauses[1]).toBe(retireFailure);
+
+    await expectRetainedTransitionFailure(historical, "ReusedCoordinatorAggregate");
+  });
+
+  it("preserves a previously attachment-synthesized aggregate as one later phase cause", async () => {
+    const oldWorker = new ControlledWorker([], "historical-attachment-old");
+    const candidateWorker = new ControlledWorker([], "historical-attachment-candidate");
+    const candidateGate = Promise.withResolvers<void>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const recoveryFailure = new Error("historical candidate recovery failure");
+    const transferFailure = new Error("historical transfer fault");
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    let transferAttempts = 0;
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      transitionFaults: {
+        onScopeTransfer() {
+          transferAttempts += 1;
+          if (transferAttempts === 1) throw transferFailure;
+        },
+      },
+    });
+    const target = descriptor(
+      "HistoricalAttachment",
+      "type.example.dev/HistoricalAttachment",
+      new InMemoryStorageFactory(),
+    );
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    candidateGate.reject(recoveryFailure);
+    const historical = await stopping.catch((reason: unknown) => reason);
+
+    expect(historical).toBeInstanceOf(AggregateError);
+    const historicalCauses = (historical as AggregateError).errors;
+    expect(historicalCauses).toHaveLength(2);
+    expect(historicalCauses[0]).toBe(recoveryFailure);
+    expect(historicalCauses[1]).toBe(transferFailure);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await retry;
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    await attachments.detach(handle);
+
+    await expectRetainedTransitionFailure(historical, "ReusedAttachmentAggregate");
+  });
+
   it("uses one immutable readiness snapshot for transition capture and reopen", () => {
     const targetTypeUrl = "type.example.dev/MutableReadiness";
     const target = descriptor("MutableReadiness", targetTypeUrl, new InMemoryStorageFactory(), {
@@ -1725,4 +1815,58 @@ async function until(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
   throw new Error("Condition was not observed.");
+}
+
+async function expectRetainedTransitionFailure(reason: unknown, name: string): Promise<void> {
+  const oldWorker = new ControlledWorker([], `${name}-old`);
+  const candidateWorker = new ControlledWorker([], `${name}-candidate`);
+  const workers = [oldWorker, candidateWorker];
+  let factoryCalls = 0;
+  let transferAttempts = 0;
+  const attachments = new EnvironmentAttachments({
+    createWorker() {
+      const worker = workers[factoryCalls];
+      factoryCalls += 1;
+      if (worker === undefined) throw new Error("Unexpected generation worker.");
+      return worker;
+    },
+    transitionFaults: {
+      onScopeTransfer() {
+        transferAttempts += 1;
+        if (transferAttempts === 1) throw reason;
+      },
+    },
+  });
+  const target = descriptor(name, `type.example.dev/${name}`, new InMemoryStorageFactory());
+  const handle = await attachments.attach({
+    ownership: "caller",
+    descriptors: [target.value],
+  });
+  const oldGeneration = handle.generation;
+
+  const outcome = await attachments.stopDelivery().then(
+    () => Object.freeze({ status: "fulfilled" as const }),
+    (failure: unknown) => Object.freeze({ status: "rejected" as const, reason: failure }),
+  );
+
+  expect(outcome.status).toBe("rejected");
+  if (outcome.status === "rejected") {
+    expect(outcome.reason).toBe(reason);
+  }
+  expect(handle.generation).toBe(oldGeneration);
+  expect(factoryCalls).toBe(2);
+  expect(candidateWorker.addCalls).toBe(1);
+  expect(transferAttempts).toBe(1);
+  await expect(attachments.stopDelivery()).rejects.toThrow(
+    "Environment delivery stop requires an explicit retry.",
+  );
+
+  const retry = attachments.retryDeliveryStop();
+  expect(attachments.retryDeliveryStop()).toBe(retry);
+  await retry;
+  expect(handle.generation).not.toBe(oldGeneration);
+  expect(factoryCalls).toBe(2);
+  expect(candidateWorker.addCalls).toBe(1);
+  expect(transferAttempts).toBe(2);
+  await attachments.detach(handle);
 }

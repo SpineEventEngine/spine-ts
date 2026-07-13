@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3B review wave 2 assigned
+Status: Slice 3B review wave 3 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -349,8 +349,18 @@ added. Coordinator review is requested.
 The retained old-retirement outcome now has explicit pending, retained-reason,
 and emitted states, preserving every JavaScript rejection value including
 `undefined` exactly once. Report rejection identity is no longer coerced;
-only coordinator-owned aggregates carry flattening provenance, while exact
+only framework-synthesized coordinator/attachment aggregates carry flattening provenance, while exact
 phase-owned aggregates remain one cause. The stable route clones one immutable
 readiness snapshot for transition capture and reopen. Focused edge regressions
 and final verification are recorded in the canonical work/review logs;
 coordinator review is requested without Slice 4 or public/generated expansion.
+
+## Slice 3B Review Wave 2 Fix Handback
+
+Undefined transfer faults now use explicit retained presence and cannot publish
+the candidate before explicit retry. Coordinator retirement aggregation is
+captured into the current generation-retirement result, while attachment
+transfer aggregation uses a private current-catch outcome; previously returned
+aggregate objects are therefore exact later phase reasons. Focused reuse and
+same-candidate retry evidence is recorded in the canonical logs. Coordinator
+review is requested without Slice 4 or public/generated expansion.

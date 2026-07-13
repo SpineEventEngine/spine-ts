@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3B review wave 2 assigned
+Status: Slice 3B review wave 3 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -655,3 +655,56 @@ Derived status mirror: the canonical current state is the `Status` header in
   `gpt-5.6-terra` / `high`; read-only, no-subagent, and bounded to the fix
   delta. Superseded history remains non-actionable unless active records claim
   it.
+
+## Slice 3B Review Wave 2 Results
+
+- Style/maintainability: CLEAN. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Documentation: P2. Active task wording must include attachment-synthesized
+  aggregates as well as coordinator-synthesized aggregates. Actual
+  `gpt-5.6-luna` / `medium`; skill check reported; no subagent.
+- TypeScript/API docs: P2. Undefined transition faults are dropped, and global
+  WeakMap provenance can flatten a previously synthesized aggregate reused as
+  a later phase's exact cause. Actual `gpt-5.6-terra` / `high`; skill check
+  reported; no subagent.
+- Performance/reliability: P1. Undefined transfer fault can silently complete
+  and publish the stop. Prior identity, empty aggregate, bounded state, and
+  shared snapshot fixes were otherwise clean. Actual
+  `gpt-5.6-terra` / `high`; skill check reported; no subagent.
+- The complete fix batch is assigned to the same implementer at explicit
+  expected `gpt-5.6-terra` / `medium`, no subagents; Wave 3 waits for focused
+  undefined-fault and reused-provenance evidence.
+
+## Slice 3B Review Wave 2 Fix Evidence
+
+- Focused RED ran 29 stop tests / 3 failed: `throw undefined` silently
+  published, and previously coordinator- and attachment-synthesized aggregate
+  objects were each replaced by newly flattened aggregates.
+- GREEN retains transfer-fault presence explicitly. Coordinator ordered causes
+  are consumed immediately into the current generation-retirement result;
+  attachment multi-cause transfer failure is carried only through a private
+  current-catch outcome. Public aggregate objects receive no lasting
+  attachment classification and remain exact if reused later.
+- Focused GREEN passed 29 / 29. The requested five-file stop/coordinator/
+  records/attachment/public-index suite passed 151 / 151 and generated-build
+  typechecking passed. Both reuse regressions assert exact identity and cause
+  cardinality/order, first-attempt non-publication, one candidate factory, and
+  concurrent explicit-retry coalescing. Final format/status/scope/diff evidence
+  is recorded in the work log. No Slice 4, full verify, commit, push, public/
+  generated change, or subagent occurred; coordinator review is requested.
+- Fresh post-format verification at `2026-07-13T09:10:36Z` again passed 5 files
+  / 151 tests, generated-build typechecking, focused Prettier, synchronized
+  review-request status, exact six-file inventory, empty public/generated
+  inventory, operation-local provenance structure scan, and
+  `git diff --check`.
+
+## Slice 3B Review Wave 3 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T09:11:55Z`: 5 files / 151 tests, generated-build typecheck,
+  focused Prettier, exact status/scope, and diff hygiene.
+- Existing explicit profiles remain style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; read-only and no-subagent. Review is bounded to
+  undefined-fault presence and operation-local provenance fixes.
