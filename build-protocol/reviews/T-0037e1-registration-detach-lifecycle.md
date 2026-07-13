@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 4 focused verified; Round 1 review pending
+Status: Slice 4 Round 1 review in progress
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -239,3 +239,10 @@ Derived status mirror: the canonical current state is the `Status` header in
   229/229, generated/tooling typechecks, changed-file lint/format, generated
   cleanliness, diff hygiene, and package/root public-surface scans. Slice 4 is
   again ready for Round 1; all four canonical concerns remain pending.
+- Round 1 package is
+  `.superpowers/sdd/review-2c57d41c..71576629.diff` (two commits, 50,574 bytes).
+  Expected explicit profiles are style, TypeScript/API, and reliability
+  `gpt-5.6-terra` / `high`, and documentation `gpt-5.6-luna` / `medium`, each
+  read-only with no subagents. Review scope is serial claim/generation
+  admission, attach/detach ordering, safe/unsafe queued attach behavior, stale
+  handles, and two-way retry-state separation only.
