@@ -455,7 +455,7 @@ describe("environment generation stop", () => {
     await stopping;
 
     expect(sources).toEqual([["configured", "startup", "buffered", "retained"]]);
-    expect(candidateWorker.starts).toBe(1);
+    expect(candidateWorker.starts).toBe(2);
     expect(factoryCalls).toBe(2);
     await attachments.detach(handle);
   });
@@ -526,6 +526,7 @@ describe("environment generation stop", () => {
       "type.example.dev/TransferFirst",
       "type.example.dev/TransferSecond",
       "type.example.dev/TransferSecond",
+      "type.example.dev/TransferSecond",
     ]);
     expect(handle.generation).not.toBe(oldGeneration);
     await attachments.detach(handle);
@@ -579,6 +580,7 @@ describe("environment generation stop", () => {
     expect(factoryCalls).toBe(2);
     expect(candidateWorker.targets).toEqual([
       "type.example.dev/RecoveryFirst",
+      "type.example.dev/RecoverySecond",
       "type.example.dev/RecoverySecond",
       "type.example.dev/RecoverySecond",
     ]);
@@ -748,6 +750,7 @@ describe("environment generation stop", () => {
       "type.example.dev/BarrierFirst",
       "type.example.dev/BarrierSecond",
       "type.example.dev/BarrierFirst",
+      "type.example.dev/BarrierFirst",
     ]);
     expect(events.indexOf("old:retire")).toBeLessThan(events.indexOf("candidate:start"));
     expect(factoryCalls).toBe(2);
@@ -810,7 +813,7 @@ describe("environment generation stop", () => {
     newTenantGate.resolve();
     await stopping;
     expect(handle.generation).not.toBe(oldGeneration);
-    expect(candidateWorker.starts).toBe(2);
+    expect(candidateWorker.starts).toBe(3);
     expect(factoryCalls).toBe(2);
     await attachments.detach(handle);
   });
@@ -905,18 +908,23 @@ describe("environment generation stop", () => {
       "unsafe-stop-old:retire",
       "unsafe-stop-candidate:start",
       "unsafe-stop-candidate:start",
+      "unsafe-stop-candidate:start",
     ]);
     expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([2, 1, 1]);
     expect(factoryCalls).toBe(2);
     expect(candidateWorker.addCalls).toBe(2);
     expect(candidateWorker.addedTenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
-    expect(candidateWorker.starts).toBe(2);
-    expect(candidateWorker.tenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
+    expect(candidateWorker.starts).toBe(3);
+    expect(candidateWorker.tenants).toEqual([
+      undefined,
+      "tenant-buffered-while-stop-failed",
+      "tenant-buffered-while-stop-failed",
+    ]);
     expect([routePreparations, transfers]).toEqual([1, 2]);
     expect(handle.generation).not.toBe(oldGeneration);
 
     target.readiness.claim(target.ready);
-    await until(() => candidateWorker.starts === 3);
+    await until(() => candidateWorker.starts === 4);
     expect(target.notifications).toBe(2);
     await attachments.detach(handle);
   });
@@ -981,16 +989,286 @@ describe("environment generation stop", () => {
       "unsafe-await-old:await",
       "unsafe-await-old:retire",
       "unsafe-await-candidate:start",
+      "unsafe-await-candidate:start",
     ]);
     expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 2, 1]);
     expect(factoryCalls).toBe(2);
     expect(candidateWorker.addCalls).toBe(1);
-    expect(candidateWorker.starts).toBe(1);
+    expect(candidateWorker.starts).toBe(2);
     expect(handle.generation).not.toBe(oldGeneration);
 
     target.readiness.claim(target.ready);
-    await until(() => candidateWorker.starts === 2);
+    await until(() => candidateWorker.starts === 3);
     expect(target.notifications).toBe(2);
+    await attachments.detach(handle);
+  });
+
+  it.each(["report", "retire"] as const)(
+    "settles the published candidate before propagating replacement-safe %s failure",
+    async (failureKind) => {
+      const events: string[] = [];
+      const oldWorker = new ControlledWorker(events, `safe-${failureKind}-old`);
+      const candidateWorker = new ControlledWorker(events, `safe-${failureKind}-candidate`);
+      const oldFailure = new Error(`old generation ${failureKind} failed`);
+      const parkedFailure = new Error(`old generation ${failureKind} retained readiness`);
+      if (failureKind === "retire") {
+        oldWorker.retireFailures.push(oldFailure);
+      }
+      const candidateSettlement = Promise.withResolvers<void>();
+      const reopenedSettlement = Promise.withResolvers<void>();
+      const candidateStarted = Promise.withResolvers<void>();
+      const reopenedStarted = Promise.withResolvers<void>();
+      candidateWorker.gates.push(candidateSettlement.promise, reopenedSettlement.promise);
+      candidateWorker.onStarts.push(candidateStarted.resolve, reopenedStarted.resolve);
+      const workers = [oldWorker, candidateWorker];
+      let factoryCalls = 0;
+      let reportCalls = 0;
+      let routePreparations = 0;
+      const transferredSources: string[][] = [];
+      const target = descriptor(
+        `Safe${failureKind}`,
+        `type.example.dev/Safe${failureKind}`,
+        new InMemoryStorageFactory(),
+      );
+      const attachments = new EnvironmentAttachments({
+        createWorker() {
+          const worker = workers[factoryCalls];
+          factoryCalls += 1;
+          if (worker === undefined) throw new Error("Unexpected generation worker.");
+          return worker;
+        },
+        report() {
+          reportCalls += 1;
+          events.push(`safe-${failureKind}-old:report`);
+          return failureKind === "report" ? Promise.reject(oldFailure) : Promise.resolve();
+        },
+        transitionFaults: {
+          onRoutePrepare() {
+            routePreparations += 1;
+            events.push(`safe-${failureKind}:route`);
+            target.readiness.claim(target.ready);
+          },
+          onScopeTransfer(_descriptor, sources) {
+            transferredSources.push([...sources]);
+            events.push(`safe-${failureKind}:transfer`);
+          },
+        },
+      });
+      const handle = await attachments.attach({
+        ownership: "caller",
+        descriptors: [target.value],
+      });
+      const oldGeneration = handle.generation;
+      const retainedStarted = Promise.withResolvers<void>();
+      oldWorker.onStarts.push(retainedStarted.resolve);
+      oldWorker.startFailures.push(parkedFailure);
+      target.readiness.claim(target.ready);
+      await retainedStarted.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+      events.length = 0;
+
+      let propagated: unknown;
+      const stopping = attachments.stopDelivery();
+      const observed = stopping.catch((error: unknown) => {
+        propagated = error;
+        events.push(`safe-${failureKind}:propagate`);
+      });
+      expect(
+        await Promise.race([
+          candidateStarted.promise.then(() => "candidate" as const),
+          observed.then(() => "propagated" as const),
+        ]),
+      ).toBe("candidate");
+
+      expect(propagated).toBeUndefined();
+      expect(handle.generation).toBe(oldGeneration);
+      expect(factoryCalls).toBe(2);
+      expect(candidateWorker.starts).toBe(1);
+      expect(routePreparations).toBe(1);
+      expect(transferredSources).toEqual([["configured", "startup", "buffered", "retained"]]);
+      expect(events).toEqual([
+        `safe-${failureKind}-old:stop`,
+        `safe-${failureKind}-old:await`,
+        `safe-${failureKind}-old:report`,
+        `safe-${failureKind}-old:retire`,
+        `safe-${failureKind}:route`,
+        `safe-${failureKind}-candidate:start`,
+        `safe-${failureKind}:transfer`,
+      ]);
+
+      candidateSettlement.resolve();
+      expect(
+        await Promise.race([
+          reopenedStarted.promise.then(() => "reopened" as const),
+          observed.then(() => "propagated" as const),
+        ]),
+      ).toBe("reopened");
+
+      expect(propagated).toBeUndefined();
+      expect(handle.generation).not.toBe(oldGeneration);
+      expect(candidateWorker.starts).toBe(2);
+      expect(events.at(-1)).toBe(`safe-${failureKind}-candidate:start`);
+
+      reopenedSettlement.resolve();
+      await observed;
+
+      expect(propagated).toBe(oldFailure);
+      expect(events.at(-1)).toBe(`safe-${failureKind}:propagate`);
+      expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+      expect(reportCalls).toBe(1);
+      await expect(attachments.retryDeliveryStop()).rejects.toThrow(
+        "Environment has no failed delivery stop to retry.",
+      );
+
+      const usableStarted = Promise.withResolvers<void>();
+      candidateWorker.onStarts.push(usableStarted.resolve);
+      target.readiness.claim(target.ready);
+      await usableStarted.promise;
+      expect(candidateWorker.starts).toBe(3);
+      expect(target.notifications).toBe(3);
+      await attachments.detach(handle);
+    },
+  );
+
+  it("orders replacement-safe old causes before a transition failure and retries one candidate", async () => {
+    const events: string[] = [];
+    const oldWorker = new ControlledWorker(events, "combined-old");
+    const candidateWorker = new ControlledWorker(events, "combined-candidate");
+    const reportFailure = new Error("combined old report failed");
+    const retireFailure = new Error("combined old retirement failed");
+    const transitionFailure = new Error("combined candidate transfer failed");
+    const parkedFailure = new Error("combined retained readiness");
+    oldWorker.retireFailures.push(retireFailure);
+    const firstSettlement = Promise.withResolvers<void>();
+    const secondSettlement = Promise.withResolvers<void>();
+    const reopenedSettlement = Promise.withResolvers<void>();
+    const firstStarted = Promise.withResolvers<void>();
+    const secondStarted = Promise.withResolvers<void>();
+    const reopenedStarted = Promise.withResolvers<void>();
+    candidateWorker.gates.push(
+      firstSettlement.promise,
+      secondSettlement.promise,
+      reopenedSettlement.promise,
+    );
+    candidateWorker.onStarts.push(
+      firstStarted.resolve,
+      secondStarted.resolve,
+      reopenedStarted.resolve,
+    );
+    const workers = [oldWorker, candidateWorker];
+    let factoryCalls = 0;
+    let reportCalls = 0;
+    let routePreparations = 0;
+    let transferAttempts = 0;
+    const target = descriptor(
+      "CombinedFailure",
+      "type.example.dev/CombinedFailure",
+      new InMemoryStorageFactory(),
+    );
+    const attachments = new EnvironmentAttachments({
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+      report() {
+        reportCalls += 1;
+        events.push("combined-old:report");
+        return Promise.reject(reportFailure);
+      },
+      transitionFaults: {
+        onRoutePrepare() {
+          routePreparations += 1;
+          events.push("combined:route");
+          target.readiness.claim(target.ready);
+        },
+        onScopeTransfer() {
+          transferAttempts += 1;
+          events.push("combined:transfer");
+          if (transferAttempts === 1) throw transitionFailure;
+        },
+      },
+    });
+    const handle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [target.value],
+    });
+    const oldGeneration = handle.generation;
+    const retainedStarted = Promise.withResolvers<void>();
+    oldWorker.onStarts.push(retainedStarted.resolve);
+    oldWorker.startFailures.push(parkedFailure);
+    target.readiness.claim(target.ready);
+    await retainedStarted.promise;
+    await Promise.resolve();
+    await Promise.resolve();
+    events.length = 0;
+
+    let firstPropagated: unknown;
+    const stopping = attachments.stopDelivery();
+    const firstObserved = stopping.catch((error: unknown) => {
+      firstPropagated = error;
+      events.push("combined:propagate");
+    });
+    expect(
+      await Promise.race([
+        firstStarted.promise.then(() => "candidate" as const),
+        firstObserved.then(() => "propagated" as const),
+      ]),
+    ).toBe("candidate");
+    expect(firstPropagated).toBeUndefined();
+    expect(handle.generation).toBe(oldGeneration);
+
+    firstSettlement.resolve();
+    await firstObserved;
+
+    expect(firstPropagated).toBeInstanceOf(AggregateError);
+    expect((firstPropagated as AggregateError).errors).toEqual([
+      reportFailure,
+      retireFailure,
+      transitionFailure,
+    ]);
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect(routePreparations).toBe(1);
+    expect(transferAttempts).toBe(1);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+    expect(reportCalls).toBe(1);
+    await expect(attachments.stopDelivery()).rejects.toThrow(
+      "Environment delivery stop requires an explicit retry.",
+    );
+
+    const retry = attachments.retryDeliveryStop();
+    expect(attachments.retryDeliveryStop()).toBe(retry);
+    await secondStarted.promise;
+    expect(handle.generation).toBe(oldGeneration);
+    expect(factoryCalls).toBe(2);
+    expect(routePreparations).toBe(1);
+    expect(transferAttempts).toBe(2);
+    expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([1, 1, 1]);
+    expect(reportCalls).toBe(1);
+
+    secondSettlement.resolve();
+    expect(
+      await Promise.race([
+        reopenedStarted.promise.then(() => "reopened" as const),
+        retry.then(() => "resolved" as const),
+      ]),
+    ).toBe("reopened");
+
+    expect(handle.generation).not.toBe(oldGeneration);
+    expect(candidateWorker.starts).toBe(3);
+
+    reopenedSettlement.resolve();
+    await retry;
+
+    expect(factoryCalls).toBe(2);
+    const usableStarted = Promise.withResolvers<void>();
+    candidateWorker.onStarts.push(usableStarted.resolve);
+    target.readiness.claim(target.ready);
+    await usableStarted.promise;
+    expect(candidateWorker.starts).toBe(4);
     await attachments.detach(handle);
   });
 
@@ -1149,7 +1427,9 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly startFailures: Error[] = [];
   readonly stopFailures: Error[] = [];
   readonly awaitFailures: Error[] = [];
+  readonly retireFailures: Error[] = [];
   readonly awaitOwnerFailures: Error[] = [];
+  readonly onStarts: (() => void)[] = [];
   readonly targets: string[] = [];
   readonly tenants: (string | undefined)[] = [];
   readonly addFailures = new Map<number, Error>();
@@ -1182,6 +1462,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   ): Promise<DeliveryWorkerEvidence> {
     this.starts += 1;
     this.#events.push(`${this.#name}:start`);
+    this.onStarts.shift()?.();
     this.targets.push(...obligation.scopes.map((scope) => scope.ready.targetTypeUrl));
     this.tenants.push(...obligation.scopes.map((scope) => scope.ready.tenantId));
     const failure = this.startFailures.shift();
@@ -1231,7 +1512,8 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   retire(): Promise<void> {
     this.retireCalls += 1;
     this.#events.push(`${this.#name}:retire`);
-    return Promise.resolve();
+    const failure = this.retireFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
   stopOwners(_keys: readonly string[]): void {}
   awaitOwnersSettled(_keys: readonly string[]): Promise<void> {

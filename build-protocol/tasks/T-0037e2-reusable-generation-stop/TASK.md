@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 3A accepted; Slice 3B assigned
+Status: Slice 3B review wave 1 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -331,3 +331,15 @@ the pre-retry no-access guard and all observable lifecycle, candidate,
 publication, callback, and retry assertions remain. The fix is test/record-only;
 focused verification is recorded in the canonical logs and coordinator review
 is requested.
+
+## Slice 3B Implementer Handback
+
+The retained private stop now distinguishes unsafe retirement rejection from a
+replacement-safe finalized old result. Stable report/cleanup causes are retained
+once while the existing candidate phases finish, are ordered before any
+transition cause, and are not re-emitted after explicit continuation. Stable
+routes retain a bounded descriptor/readiness-key drain copy so publication and
+synchronous reopen are followed by awaited candidate admission before the old
+error propagates. Focused RED/GREEN and final evidence are in the canonical
+logs; no parallel retirement owner, public surface, or Slice 4 behavior was
+added. Coordinator review is requested.

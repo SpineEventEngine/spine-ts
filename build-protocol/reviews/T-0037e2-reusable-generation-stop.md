@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: Slice 3A accepted; Slice 3B assigned
+Status: Slice 3B review wave 1 assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -566,3 +566,36 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Slice 3A is accepted at `2026-07-13T08:13:19Z`. Slice 3B is assigned at
   explicit expected `gpt-5.6-terra` / `medium`, no subagents; review waits for
   focused replacement-safe error and settlement evidence.
+
+## Slice 3B Implementer Evidence
+
+- Separate report and permanent-retirement cases create retained old evidence,
+  then inject a supported readiness fact after descriptor snapshot and before
+  route rebind. Each observes the four-provenance transfer once, atomic
+  publication, route reopen, and a second gated candidate admission before the
+  exact original error propagates. The same handle/readiness works afterward.
+- A combined case observes `[report, retirement, transition]` cause order only
+  after the failed candidate admission settles. Concurrent explicit retry uses
+  the same candidate, repeats neither old retirement nor completed route work,
+  completes transfer/publication/reopen/drain, and does not emit observed old
+  causes again.
+- Focused RED first showed all three old failures propagating before candidate
+  work. A second RED showed propagation/resolution before the phase-4 route
+  drain. GREEN passed the complete stop file and then the requested five-file
+  suite at 144 tests; generated-build typechecking passed. Final format/status/
+  public/inventory/diff evidence is recorded in the work log. No coordinator
+  state-machine, public/generated, Slice 4, full-verify, commit, push, or
+  subagent change occurred. Coordinator review is requested.
+
+## Slice 3B Review Wave 1 Assignment
+
+- Coordinator inspection and independent verification passed at
+  `2026-07-13T08:27:49Z`: 5 files / 144 tests, generated-build typecheck,
+  focused Prettier, exact status/scope, and diff hygiene.
+- Pre-review lint found no public/generated/future-policy leakage or duplicate
+  retirement owner. Historical superseded text remains non-actionable unless
+  active Slice 3B records claim it.
+- Existing explicit profiles are style `gpt-5.6-terra` / `high`, docs
+  `gpt-5.6-luna` / `medium`, TypeScript/API docs
+  `gpt-5.6-terra` / `high`, and performance/reliability
+  `gpt-5.6-terra` / `high`; all read-only and no-subagent.

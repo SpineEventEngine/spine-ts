@@ -274,6 +274,8 @@ export class EnvironmentAttachments {
       survivors: undefined,
       routes: undefined,
       oldRetired: false,
+      oldFailure: undefined,
+      oldFailureObserved: false,
       candidateGeneration: undefined,
       candidate: undefined,
       routeUnits: undefined,
@@ -283,6 +285,7 @@ export class EnvironmentAttachments {
       published: false,
       reopened: undefined,
       drained: false,
+      completed: false,
       promise: Promise.resolve(),
       status: "running",
       retrying: false,
@@ -308,7 +311,14 @@ export class EnvironmentAttachments {
         }
       },
       () => {
-        stop.status = "rejected";
+        if (stop.completed) {
+          stop.status = "complete";
+          if (this.#stop === stop) {
+            this.#stop = undefined;
+          }
+        } else {
+          stop.status = "rejected";
+        }
       },
     );
     return stop.promise;
@@ -362,98 +372,123 @@ export class EnvironmentAttachments {
       old.captureTransition(stop.scopes);
     }
     if (!stop.oldRetired) {
-      await old.retire();
+      try {
+        await old.retire();
+      } catch (error) {
+        if (!old.replacementSafe) {
+          throw error;
+        }
+        stop.oldFailure = error;
+      }
       stop.oldRetired = true;
     }
-    stop.routeUnits ??= Object.freeze(
-      survivors.flatMap((survivor, registration) =>
-        survivor.descriptors.map((descriptor) => ({
-          survivor,
-          descriptor,
-          readiness: stop.routes![registration]!,
-        })),
-      ),
-    );
-    if (stop.routeSnapshots === undefined) {
-      const snapshots: DeliveryDescriptorSnapshot[] = [];
-      for (const route of stop.routeUnits) {
-        snapshots.push(await snapshotDescriptor(route.descriptor));
+    try {
+      stop.routeUnits ??= Object.freeze(
+        survivors.flatMap((survivor, registration) =>
+          survivor.descriptors.map((descriptor) => ({
+            survivor,
+            descriptor,
+            readiness: stop.routes![registration]!,
+          })),
+        ),
+      );
+      if (stop.routeSnapshots === undefined) {
+        const snapshots: DeliveryDescriptorSnapshot[] = [];
+        for (const route of stop.routeUnits) {
+          snapshots.push(await snapshotDescriptor(route.descriptor));
+        }
+        stop.routeSnapshots = Object.freeze(snapshots);
       }
-      stop.routeSnapshots = Object.freeze(snapshots);
-    }
-    if (stop.candidate === undefined) {
-      const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
-      stop.candidateGeneration = Object.freeze({ generation: true });
-      stop.candidate = candidate;
-    }
-    const candidate = stop.candidate;
-    const candidateGeneration = stop.candidateGeneration!;
-    while (stop.routePrepared < stop.routeUnits.length) {
-      const route = stop.routeUnits[stop.routePrepared]!;
-      const snapshot = stop.routeSnapshots[stop.routePrepared]!;
-      this.#transitionFaults?.onRoutePrepare?.(route.descriptor);
-      const scopes = await candidate.prepareTransferredRoute(
-        Object.freeze({ token: route.survivor.claim.token, generation: candidateGeneration }),
-        snapshot,
-        route.readiness,
-      );
-      stop.scopes.capture(route.survivor.claim.token, route.descriptor, scopes, "startup");
-      stop.routePrepared += 1;
-    }
-    let transfer = stop.scopes.nextPending();
-    while (transfer !== undefined) {
-      const version = stop.scopes.begin(transfer);
-      const settling = candidate.recoverTransferred(
-        transfer.token,
-        transfer.descriptor,
-        transfer.ready,
-      );
-      let fault: unknown;
-      try {
-        this.#transitionFaults?.onScopeTransfer?.(
-          transfer.descriptor,
-          stop.scopes.sources(transfer),
+      if (stop.candidate === undefined) {
+        const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
+        stop.candidateGeneration = Object.freeze({ generation: true });
+        stop.candidate = candidate;
+      }
+      const candidate = stop.candidate;
+      const candidateGeneration = stop.candidateGeneration!;
+      while (stop.routePrepared < stop.routeUnits.length) {
+        const route = stop.routeUnits[stop.routePrepared]!;
+        const snapshot = stop.routeSnapshots[stop.routePrepared]!;
+        this.#transitionFaults?.onRoutePrepare?.(route.descriptor);
+        const scopes = await candidate.prepareTransferredRoute(
+          Object.freeze({ token: route.survivor.claim.token, generation: candidateGeneration }),
+          snapshot,
+          route.readiness,
         );
-      } catch (error) {
-        fault = error;
+        stop.scopes.capture(route.survivor.claim.token, route.descriptor, scopes, "startup");
+        stop.routePrepared += 1;
       }
-      const failures: unknown[] = [];
-      try {
-        await settling;
-      } catch (error) {
-        failures.push(error);
+      let transfer = stop.scopes.nextPending();
+      while (transfer !== undefined) {
+        const version = stop.scopes.begin(transfer);
+        const settling = candidate.recoverTransferred(
+          transfer.token,
+          transfer.descriptor,
+          transfer.ready,
+        );
+        let fault: unknown;
+        try {
+          this.#transitionFaults?.onScopeTransfer?.(
+            transfer.descriptor,
+            stop.scopes.sources(transfer),
+          );
+        } catch (error) {
+          fault = error;
+        }
+        const failures: unknown[] = [];
+        try {
+          await settling;
+        } catch (error) {
+          failures.push(error);
+        }
+        if (fault !== undefined) {
+          failures.push(fault);
+        }
+        if (failures.length > 0) {
+          stop.scopes.reject(transfer);
+          throwFailures(failures, "Environment candidate scope transfer failed.");
+        }
+        stop.scopes.complete(transfer, version);
+        transfer = stop.scopes.nextPending();
       }
-      if (fault !== undefined) {
-        failures.push(fault);
+      if (!stop.published) {
+        this.#generations.delete(stop.generation!);
+        this.#generations.set(candidateGeneration, candidate);
+        this.#registrations.replace(candidateGeneration);
+        for (const survivor of survivors) {
+          survivor.generation = candidate;
+          survivor.binding.generation = candidateGeneration;
+        }
+        stop.published = true;
       }
-      if (failures.length > 0) {
-        stop.scopes.reject(transfer);
-        throwFailures(failures, "Environment candidate scope transfer failed.");
+      if (stop.reopened === undefined) {
+        const reopened: DeliveryRunScope[] = [];
+        for (const survivor of survivors) {
+          reopened.push(...candidate.openRegistration(survivor.claim.token));
+        }
+        stop.reopened = Object.freeze(reopened);
       }
-      stop.scopes.complete(transfer, version);
-      transfer = stop.scopes.nextPending();
+      if (!stop.drained) {
+        await candidate.recoverReopened(stop.reopened);
+        stop.drained = true;
+      }
+    } catch (error) {
+      const failures = [...this.#takeUnobservedOldFailures(stop), ...aggregateCauses(error)];
+      throwFailures(failures, "Environment delivery stop transition failed.");
     }
-    if (!stop.published) {
-      this.#generations.delete(stop.generation!);
-      this.#generations.set(candidateGeneration, candidate);
-      this.#registrations.replace(candidateGeneration);
-      for (const survivor of survivors) {
-        survivor.generation = candidate;
-        survivor.binding.generation = candidateGeneration;
-      }
-      stop.published = true;
+    stop.completed = true;
+    if (stop.oldFailure !== undefined && !stop.oldFailureObserved) {
+      stop.oldFailureObserved = true;
+      throw stop.oldFailure;
     }
-    if (stop.reopened === undefined) {
-      const reopened: DeliveryRunScope[] = [];
-      for (const survivor of survivors) {
-        reopened.push(...candidate.openRegistration(survivor.claim.token));
-      }
-      stop.reopened = Object.freeze(reopened);
+  }
+
+  #takeUnobservedOldFailures(stop: GenerationStop): readonly unknown[] {
+    if (stop.oldFailure === undefined || stop.oldFailureObserved) {
+      return Object.freeze([]);
     }
-    if (!stop.drained) {
-      await candidate.recoverReopened(stop.reopened);
-      stop.drained = true;
-    }
+    stop.oldFailureObserved = true;
+    return aggregateCauses(stop.oldFailure);
   }
 
   #refuseStop(stop: GenerationStop, error: Error): never {
@@ -750,6 +785,8 @@ interface GenerationStop {
   survivors: readonly AttachedHandle[] | undefined;
   routes: readonly RegistrationReadiness[] | undefined;
   oldRetired: boolean;
+  oldFailure: unknown | undefined;
+  oldFailureObserved: boolean;
   candidateGeneration: EnvironmentGeneration | undefined;
   candidate: DeliveryGeneration | undefined;
   routeUnits: readonly StopRoute[] | undefined;
@@ -759,6 +796,7 @@ interface GenerationStop {
   published: boolean;
   reopened: readonly DeliveryRunScope[] | undefined;
   drained: boolean;
+  completed: boolean;
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
   retrying: boolean;
@@ -1628,7 +1666,7 @@ export class RegistrationReadiness {
     ReadonlyMap<string, DeliveryRunScope>
   >();
   readonly #destinations = new WeakMap<ContextDeliveryDescriptor, ReadinessDestination>();
-  readonly #buffered = new Map<string, DeliveryRunScope>();
+  readonly #buffered = new Map<ContextDeliveryDescriptor, Map<string, DeliveryReady>>();
   #onTransition:
     ((descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void) | undefined;
   #mode: "waiting" | "open" | "failed" = "waiting";
@@ -1672,6 +1710,7 @@ export class RegistrationReadiness {
     if (this.#onTransition !== undefined) {
       try {
         this.#onTransition(descriptor, ready);
+        this.#buffer(descriptor, ready);
       } catch {
         this.#invalid = true;
       }
@@ -1682,7 +1721,7 @@ export class RegistrationReadiness {
       this.#invalid = true;
       return;
     }
-    this.#buffered.set(scopeKey(scope), scope);
+    this.#buffer(descriptor, scope.ready);
   }
 
   fail(): void {
@@ -1734,13 +1773,26 @@ export class RegistrationReadiness {
     for (const scope of startup) {
       scopes.set(scopeKey(scope), scope);
     }
-    for (const scope of this.#buffered.values()) {
-      scopes.set(scopeKey(scope), scope);
+    for (const [descriptor, readies] of this.#buffered) {
+      const destination = this.#destinations.get(descriptor);
+      if (destination === undefined) {
+        throw new Error("Registration readiness descriptor is not configured.");
+      }
+      for (const ready of readies.values()) {
+        const scope = destination.onPrepare(descriptor, ready);
+        scopes.set(scopeKey(scope), scope);
+      }
     }
     this.#buffered.clear();
     this.#onTransition = undefined;
     this.#mode = "open";
     return Object.freeze([...scopes.values()]);
+  }
+
+  #buffer(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
+    const readies = this.#buffered.get(descriptor) ?? new Map<string, DeliveryReady>();
+    readies.set(readyKey(ready), cloneReady(ready));
+    this.#buffered.set(descriptor, readies);
   }
 }
 
@@ -1977,6 +2029,10 @@ function throwFailures(failures: readonly unknown[], message: string): void {
   }
 }
 
+function aggregateCauses(error: unknown): readonly unknown[] {
+  return error instanceof AggregateError ? error.errors : Object.freeze([error]);
+}
+
 function handle(
   claim: EnvironmentRegistrationClaim,
   binding: RegistrationBinding,
@@ -2032,6 +2088,15 @@ function readyKey(scope: DeliveryReady): string {
     scope.shard.index,
     scope.shard.ofTotal,
   ]);
+}
+
+function cloneReady(ready: DeliveryReady): DeliveryReady {
+  return Object.freeze({
+    ...(ready.tenantId === undefined ? {} : { tenantId: ready.tenantId }),
+    label: ready.label,
+    targetTypeUrl: ready.targetTypeUrl,
+    shard: new ShardIndex(ready.shard.index, ready.shard.ofTotal),
+  });
 }
 
 function emptySettlement(): DeliveryRunSettlement {
