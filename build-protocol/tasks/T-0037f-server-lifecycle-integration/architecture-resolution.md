@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 5 round-3 re-review assigned
+Status: Slice 6 implementation assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1002,3 +1002,13 @@ smallest coherent implementation.
   pass both typechecks, 8 files / 360 tests, and all scoped coordinator gates.
   Actual Terra Medium implementer used no subagents and is closed. No behavior
   or architecture change; final test-validity re-review follows.
+
+## Slice 5 Acceptance And Slice 6 Boundary
+
+- `2026-07-13T22:53:21Z`: style and reliability are CLEAN at actual Terra High,
+  no subagents, closed. Last/owned active-work evidence is accepted at
+  `39c58aed`; no production/public delta was required.
+- Slice 6 owns only truthful observable lifecycle documentation, TSDoc/API
+  surface checks, compatibility regression, final T-0037f focused/full gate,
+  and durable completion records. Same Terra Medium implementer; no new runtime
+  behavior or public contract may be invented.
