@@ -1,6 +1,6 @@
 # T-0037d Review Log
 
-Status: Round 7 clean; final verification in progress
+Status: Complete and merge-ready
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037d-environment-attachment-and-startup/TASK.md`.
@@ -701,3 +701,8 @@ open | failed`, so thousands of distinct unknown facts fail closed before
   correction preserves the complete accepted batch contract and changes no
   production/public surface. Final T-0037d verification is in progress;
   security remains deferred to T-0041.
+- `2026-07-13T00:40:34Z`: Final affected verification passes 701/701 and full
+  `pnpm verify` passes 1,434/1,434 in normal and coverage runs at 90.08% branch
+  coverage, with all static/docs/Protobuf/generated gates clean. All required
+  T-0037d review concerns are clean and closed. T-0037d is complete and
+  merge-ready; final project security remains correctly deferred to T-0041.

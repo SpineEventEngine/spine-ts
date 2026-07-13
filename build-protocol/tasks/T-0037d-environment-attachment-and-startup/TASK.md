@@ -1,6 +1,6 @@
 # T-0037d: Environment Attachment And Startup
 
-Status: Round 7 clean; final verification in progress
+Status: Complete and merge-ready
 
 Started: `2026-07-12T18:25:27Z`
 
@@ -501,6 +501,17 @@ still expects only the failed target to run and the later durable row to remain
 pending. Reconcile that test with the implemented no-owner-gap contract and
 prove the later row is delivered while the batch call retains the first error.
 No production change is indicated by root-cause evidence.
+
+### Final Acceptance
+
+All three implementation slices and every required specialist review wave are
+clean. The final affected native gate passes 16 files and 701 tests. The full
+project gate passes 64 files and 1,434 tests in both normal and coverage runs at
+95.26% statements, 90.08% branches, 98.11% functions, and 95.30% lines. Node,
+generated/tooling typechecks, ESLint, cleanup enforcement, formatting, TypeDoc/
+API validation, Protobuf checksum/lint, and generated cleanliness all pass.
+T-0037d is complete and merge-ready with no public or serialized contract and
+no later detach/stop/close/listener behavior added.
 
 Final-gate implementer applicability (`gpt-5.6-terra` / `medium`):
 `systematic-debugging` applies to verify the full-gate failure and trace the
