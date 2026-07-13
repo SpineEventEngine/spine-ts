@@ -29,6 +29,7 @@ export class Server {
   readonly #environment: ServerEnvironment;
   readonly #ownsEnvironment: boolean;
   #starting: Promise<RunningServer> | undefined;
+  #failedStartCleanup: FailedStartCleanup | undefined;
 
   /** Create a server builder. Prefer {@link Server.atPort} for the common case. */
   constructor(options: ServerOptions = {}) {
@@ -75,7 +76,9 @@ export class Server {
     if (current !== undefined) {
       return current;
     }
-    const starting = this.#startOnce();
+    const cleanup = this.#failedStartCleanup;
+    const starting =
+      cleanup === undefined ? this.#startOnce() : this.#retryFailedStartCleanup(cleanup);
     this.#starting = starting;
     void starting.then(
       () => {
@@ -90,10 +93,23 @@ export class Server {
 
   async #startOnce(): Promise<RunningServer> {
     const contexts = await buildContexts(this.#contexts, this.#environment.storageFactory);
-    const attachment = await serverEnvironmentAccess.attach(this.#environment, {
-      ownership: this.#ownsEnvironment ? "server" : "caller",
-      descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
-    });
+    let attachment: EnvironmentAttachmentHandle;
+    try {
+      attachment = await serverEnvironmentAccess.attach(this.#environment, {
+        ownership: this.#ownsEnvironment ? "server" : "caller",
+        descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
+      });
+    } catch (error) {
+      if (!this.#ownsEnvironment && serverEnvironmentAccess.failedStartPending(this.#environment)) {
+        this.#failedStartCleanup = {
+          closeGroup: new RetryableCloseGroup(
+            [...contexts, ...this.#resources],
+            "Server start cleanup failed while closing owned contexts/resources.",
+          ),
+        };
+      }
+      throw error;
+    }
     const services = new SpineServices({
       contexts,
       ...this.#services,
@@ -127,11 +143,46 @@ export class Server {
     });
   }
 
+  async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
+    const errors: unknown[] = [];
+
+    if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+      try {
+        await serverEnvironmentAccess.retryFailedStart(this.#environment);
+      } catch (error) {
+        if (serverEnvironmentAccess.failedStartPending(this.#environment)) {
+          throw error;
+        }
+        collectCloseError(error, errors);
+      }
+    }
+
+    let closeFailed = false;
+    try {
+      await cleanup.closeGroup.close();
+    } catch (error) {
+      closeFailed = true;
+      collectCloseError(error, errors);
+    }
+
+    if (!closeFailed && this.#failedStartCleanup === cleanup) {
+      this.#failedStartCleanup = undefined;
+    }
+    if (errors.length > 0) {
+      throwCleanupErrors(errors);
+    }
+    throw new Error("Server deferred cleanup completed after an earlier failed start.");
+  }
+
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
     }
   }
+}
+
+interface FailedStartCleanup {
+  readonly closeGroup: RetryableCloseGroup;
 }
 
 /** Options for building a local Spine HTTP/2 service host. */
@@ -384,6 +435,13 @@ function toCleanupErrors(error: unknown): readonly unknown[] {
     return error.errors;
   }
   return [error];
+}
+
+function throwCleanupErrors(errors: readonly unknown[]): never {
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  throw new AggregateError(errors, "Server deferred failed-start cleanup failed.");
 }
 
 async function closeNetwork(

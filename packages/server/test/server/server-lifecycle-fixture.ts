@@ -9,6 +9,12 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { file_spine_options } from "@spine-ts/proto";
 import {
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+} from "@spine-ts/storage";
+import {
   BoundedContext,
   Projection,
   ServerEnvironment,
@@ -16,6 +22,7 @@ import {
 } from "../../src/index.js";
 import type { DeliveryRunObligation } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
+import type { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentGenerationWorker } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
@@ -37,12 +44,17 @@ export async function lifecycleFixture(
     readonly events?: string[];
     readonly environment?: ServerEnvironmentLocalOptions;
     readonly awaitFailure?: Error;
+    readonly worker?: HeldStartupWorker;
+    readonly createWorker?: () => EnvironmentGenerationWorker;
   } = {},
 ) {
   const events = options.events ?? [];
-  const worker = new HeldStartupWorker(events, options.awaitFailure);
+  const worker = options.worker ?? new HeldStartupWorker(events, options.awaitFailure);
   const environment = ServerEnvironment.local(options.environment);
-  serverEnvironmentAccess.installTestAttachments(environment, () => worker);
+  serverEnvironmentAccess.installTestAttachments(
+    environment,
+    options.createWorker ?? (() => worker),
+  );
   const registry = generatedRegistry([
     {
       entityType: LifecycleProjection,
@@ -58,11 +70,11 @@ export async function lifecycleFixture(
       ],
     },
   ]);
-  const createContext = (name: string) =>
+  const createBuilder = (name: string) =>
     BoundedContext.singleTenant(name)
       .withGeneratedRegistryRoot(registry.root)
-      .add(LifecycleProjection)
-      .buildAsync();
+      .add(LifecycleProjection);
+  const createContext = (name: string) => createBuilder(name).buildAsync();
   const context = await createContext("Lifecycle");
 
   return Object.freeze({
@@ -70,6 +82,7 @@ export async function lifecycleFixture(
     environment,
     events,
     worker,
+    createBuilder,
     createContext,
     dispose() {
       rmSync(registry.directory, { recursive: true, force: true });
@@ -81,7 +94,8 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #release = Promise.withResolvers<undefined>();
   readonly #started = Promise.withResolvers<undefined>();
   readonly #events: string[];
-  readonly #awaitFailure: Error | undefined;
+  readonly #startupFailures: Error[] = [];
+  readonly #awaitFailures: Error[] = [];
   #starts = 0;
   #stopCalls = 0;
   #awaitCalls = 0;
@@ -89,7 +103,9 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
 
   constructor(events: string[], awaitFailure?: Error) {
     this.#events = events;
-    this.#awaitFailure = awaitFailure;
+    if (awaitFailure !== undefined) {
+      this.#awaitFailures.push(awaitFailure);
+    }
   }
 
   get starts(): number {
@@ -127,44 +143,34 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     this.#release.resolve(undefined);
   }
 
+  rejectNextStart(error: Error): void {
+    this.#startupFailures.push(error);
+  }
+
+  failNextAwait(error: Error): void {
+    this.#awaitFailures.push(error);
+  }
+
   add(runtime: EnvironmentDeliveryRuntime): void {
     void runtime;
   }
 
   async start(
     obligation: DeliveryRunObligation,
-    shards: readonly { readonly index: number; readonly ofTotal: number }[],
+    shards: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence> {
     this.#starts += 1;
     this.#events.push("recovery");
     this.#started.resolve(undefined);
     await this.#release.promise;
+    const failure = this.#startupFailures.shift();
     return Object.freeze({
       obligation,
       shards: Object.freeze(
         shards.map((shard) =>
-          Object.freeze({
-            status: "fulfilled" as const,
-            shard,
-            obligation,
-            run: Object.freeze({
-              status: "IDLE" as const,
-              runs: 1,
-              processed: 0,
-              accepted: 0,
-              delivered: 0,
-              failed: 0,
-              failures: Object.freeze([]),
-            }),
-            progress: Object.freeze({
-              runs: 1,
-              processed: 0,
-              accepted: 0,
-              delivered: 0,
-              failed: 0,
-              failures: Object.freeze([]),
-            }),
-          }),
+          failure === undefined
+            ? fulfilledEvidence(shard, obligation)
+            : rejectedEvidence(shard, obligation, failure),
         ),
       ),
     });
@@ -178,9 +184,8 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   awaitSettled(): Promise<void> {
     this.#awaitCalls += 1;
     this.#events.push("await");
-    return this.#awaitFailure === undefined
-      ? Promise.resolve()
-      : Promise.reject(this.#awaitFailure);
+    const failure = this.#awaitFailures.shift();
+    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
   }
 
   retire(): Promise<void> {
@@ -203,6 +208,78 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
     void ownerKeys;
     return this.retire();
   }
+}
+
+export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
+  readonly storages: RecordStorage<unknown, Message>[] = [];
+  readonly #events: string[];
+  #closeCalls = 0;
+
+  constructor(events: string[]) {
+    super();
+    this.#events = events;
+  }
+
+  get closeCalls(): number {
+    return this.#closeCalls;
+  }
+
+  override createRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = super.createRecordStorage(context, recordSpec);
+    this.storages.push(storage);
+    return storage;
+  }
+
+  override close(): void {
+    this.#closeCalls += 1;
+    this.#events.push("facility");
+    super.close();
+  }
+}
+
+function fulfilledEvidence(shard: ShardIndex, obligation: DeliveryRunObligation) {
+  return Object.freeze({
+    status: "fulfilled" as const,
+    shard,
+    obligation,
+    run: Object.freeze({
+      status: "IDLE" as const,
+      runs: 1,
+      processed: 0,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+      failures: Object.freeze([]),
+    }),
+    progress: Object.freeze({
+      runs: 1,
+      processed: 0,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+      failures: Object.freeze([]),
+    }),
+  });
+}
+
+function rejectedEvidence(shard: ShardIndex, obligation: DeliveryRunObligation, cause: Error) {
+  return Object.freeze({
+    status: "rejected" as const,
+    shard,
+    obligation,
+    cause,
+    progress: Object.freeze({
+      runs: 1,
+      processed: 0,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+      failures: Object.freeze([]),
+    }),
+  });
 }
 
 function fixtureFile(descriptorSetBase64: string) {

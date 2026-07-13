@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 implementation assigned
+Status: Slice 2 review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -404,3 +404,51 @@ gate passes.
   through the same existing `Server.start()`, cause-once behavior, deferred
   context/resource cleanup after proven safety, and later fresh environment
   reuse. Server-owned/listener retry and Slices 3--6 remain unauthorized.
+
+## Slice 2 Implementation Handback
+
+- `2026-07-13T18:10:59Z`: Slice 2 is implemented within the three authorized
+  server internals, the existing focused integration test/fixture, and these
+  four records. `Server` retains actual built caller-owned failed-start
+  dependencies only while the environment's package-internal pending
+  observation says rollback is unfinished.
+- A later call to the same `Server.start()` coalesces as usual but enters only
+  `retryFailedStart`; it does not rebuild, attach, construct/listen, or repeat
+  stop. Once the environment clears its rollback slot, the retained
+  context/resource close group runs once, the private record clears, and the
+  call rejects with the cause-less plain deferred-cleanup completion error.
+- Direct integration evidence keeps real builder-created storage handles,
+  context, resource, and caller-owned storage facility open after unsafe
+  quiescence failure; observes no listener; then proves no new storage handles,
+  one retirement, one context/resource close, no caller-facility close, and no
+  repeated startup cause on cleanup retry. A distinct worker backs one later
+  fresh server generation only after old retirement.
+- Server-owned/listener retained cleanup, endpoint-safety observations,
+  shared/non-last, last/owned, public surface/docs, and Slices 3--6 remain
+  explicitly unimplemented.
+
+## Slice 2 Pre-review Tooling Fix
+
+- `2026-07-13T18:14:43Z`: coordinator `typecheck:tooling` fails TS2322 in the
+  focused fixture: evidence helpers weaken `ShardIndex`, and rejected worker
+  progress incorrectly uses a raw per-message failure for a worker-level start
+  rejection with zero processed messages.
+- The same Terra Medium implementer context receives a fixture-only correction:
+  preserve `ShardIndex`, keep the startup error as rejected-shard `cause`, and
+  report zero failed/empty failures in last safe progress. Rerun tooling and all
+  focused gates before review.
+
+## Slice 2 Coordinator Gate And Review Assignment
+
+- `2026-07-13T18:20:43Z`: the same implementer remains actual Terra Medium,
+  matching explicit dispatch, used no subagents, and is closed. Tooling and
+  generated typechecks pass; native focused regressions pass 5 files / 151
+  tests; lint, cleanup, Prettier, exact nine-path status/scope/public-leak, and
+  diff checks pass.
+- Style/maintainability, TypeScript/API docs, and performance/reliability are
+  assigned at explicit Terra High, no subagents. Documentation is N/A because
+  no observable README/TSDoc changed; security remains deferred.
+- `2026-07-13T18:16:55Z`: correction complete. Worker and helper shard
+  parameters now use real `ShardIndex`; zero-message rejected startup evidence
+  retains the error only as shard `cause` and reports zero failed messages with
+  frozen empty failures. Runtime behavior is unchanged.

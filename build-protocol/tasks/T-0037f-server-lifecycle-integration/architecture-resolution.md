@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 2 implementation assigned
+Status: Slice 2 review assigned
 
 ## Resolution Summary
 
@@ -511,3 +511,31 @@ smallest coherent implementation.
 - `2026-07-13T17:58:54Z`: all applicable Slice 1 re-review concerns are CLEAN
   at required actual profiles. Slice 1 is accepted; Slice 2 alone is authorized
   for Terra Medium TDD.
+
+## Slice 2 Implementation Handback
+
+- `2026-07-13T18:10:59Z`: the implementation follows the fixed Slice 2 seam:
+  `EnvironmentAttachments.failedStartPending` is a read-only projection of the
+  existing rollback owner, forwarded only through package-internal
+  `serverEnvironmentAccess`. It advances no state and enters no root export.
+- `Server` owns only one no-handle cleanup record containing the existing
+  retryable context/resource group. It consults pending state, delegates the
+  state transition to `retryFailedStart`, retains dependencies while unsafe,
+  and clears them only after environment safety and close-group completion.
+- No listener/session or successful attachment-handle continuation is added;
+  those remain Slice 3+. No architecture assumption or public contract changed.
+
+## Slice 2 Pre-review Tooling Fix
+
+- `2026-07-13T18:14:43Z`: tooling typecheck requires the focused worker fixture
+  to retain real `ShardIndex` evidence and zero-message rejected progress. This
+  is a test-contract correction only; Slice 2 behavior is unchanged.
+
+## Slice 2 Coordinator Gate
+
+- `2026-07-13T18:20:43Z`: tooling/generated typechecks, 5 files / 151 tests,
+  and all scoped mechanical/public-leak checks pass. Applicable Slice 2 review
+  concerns are assigned; later slices remain unauthorized.
+- `2026-07-13T18:16:55Z`: the fixture now satisfies that evidence contract
+  without changing server/environment architecture, runtime behavior, public
+  surface, or the later-slice boundary.

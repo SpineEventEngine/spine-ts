@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 2 implementation assigned
+Status: Slice 2 review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -194,3 +194,61 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   Medium, no subagents. Style/API/reliability remain applicable after focused
   Slice 2 verification; documentation is N/A unless active observable claims
   change. Security stays deferred.
+
+## Slice 2 Implementer Checkpoint
+
+- `2026-07-13T18:05:00Z`: Slice 2 is in strict RED/GREEN under the same existing
+  implementer, no subagents. Pass-specific skill and JVM guardrail evidence is
+  recorded in the work log. No implementation review disposition exists yet;
+  style/maintainability, TypeScript/API surface, and performance/reliability
+  remain pending after focused verification. Documentation remains N/A and
+  security deferred.
+- `2026-07-13T18:07:40Z`: focused RED is recorded in the work log. The failure
+  is the missing server-to-environment failed-start continuation, not a fixture
+  or listener-sandbox failure; the first rejection already demonstrated unsafe
+  dependency retention and zero listener construction. Review concerns remain
+  pending until GREEN and the required verification matrix complete.
+
+## Slice 2 Implementation Handback
+
+- `2026-07-13T18:10:59Z`: focused GREEN and 5-file / 151-test native regression
+  evidence are recorded in the work log. The implementation returns for the
+  orchestrator's applicable style/maintainability, TypeScript/API, and
+  performance/reliability review; this handback does not self-dispose them.
+- Review focus: confirm the pending query is read-only/package-internal; the
+  private no-handle record retains actual dependencies; unsafe retry never
+  enters the close group; safe retry does not rebuild/reattach/listen/re-stop;
+  completion clears the record and emits no original/reportable cause; and the
+  later caller-owned fresh generation starts only after old retirement.
+- Documentation remains N/A because Slice 2 changes no active README/TSDoc or
+  public contract. Security remains deferred. Server-owned/listener retained
+  cleanup, handle endpoint safety, sharing, last/owned behavior, and Slices 3--6
+  remain outside this review package.
+- `2026-07-13T18:13:07Z`: final implementer gate is complete: 5 files / 151
+  native tests and all generated typecheck, scoped lint, cleanup, Prettier,
+  exact nine-path status/scope/public-leak, and diff checks pass. Applicable
+  specialist review remains orchestrator-owned and pending after handback.
+
+## Slice 2 Pre-review Tooling Fix
+
+- `2026-07-13T18:14:43Z`: coordinator tooling typecheck finds one fixture
+  contract batch before review: weakened shard identity plus impossible raw
+  per-message failure evidence for a zero-message worker rejection.
+- The same Terra Medium implementer receives the fixture-only correction. No
+  review disposition exists yet; applicable Slice 2 concerns remain pending.
+
+## Slice 2 Review Assignment
+
+- `2026-07-13T18:20:43Z`: accepted/closed implementer actual Terra Medium;
+  tooling/generated typechecks, 5 files / 151 tests, and all scoped mechanical,
+  status/scope/leak/diff checks pass.
+- Style, API, and reliability are each assigned at explicit Terra High with no
+  subagents. Documentation is N/A; security deferred. Review only current Slice
+  2 claims and ignore superseded history unless active records revive it.
+- `2026-07-13T18:16:55Z`: fixture correction is ready for pre-review handback.
+  Tooling RED/GREEN and 5-file / 151-test native evidence are recorded in the
+  work log. Treat this as evidence-contract typing/data repair only; production
+  behavior and the existing Slice 2 review focus are unchanged.
+- `2026-07-13T18:19:13Z`: all required tooling/native/generated/lint/cleanup/
+  format/exact-scope/public-leak/diff gates pass. The corrected Slice 2 package
+  returns to the unchanged pending specialist pre-review boundary.

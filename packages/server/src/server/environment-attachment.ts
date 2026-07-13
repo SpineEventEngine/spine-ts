@@ -205,6 +205,11 @@ export class EnvironmentAttachments {
     return count;
   }
 
+  /** @internal Whether one failed attachment still owns an unfinished rollback. */
+  get failedStartPending(): boolean {
+    return this.#failedRollback !== undefined;
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
       return Promise.reject(environmentClosedError());
