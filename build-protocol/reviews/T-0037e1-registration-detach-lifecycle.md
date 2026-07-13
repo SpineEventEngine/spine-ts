@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Final branch-coverage fix assigned
+Status: Final coverage fix verified; review pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -300,3 +300,14 @@ Derived status mirror: the canonical current state is the `Status` header in
   assertions (unknown registration removal and foreign-handle retry) without
   production or threshold change. A focused four-concern review and full-gate
   rerun remain required before merge.
+- `2026-07-13T04:09:25Z`: The final coverage finding is corrected with assertions
+  only in the existing environment attachment test fixtures. Already-removed
+  registration rejection preserves the live sibling count/current generation;
+  foreign-environment detach retry rejects ownership and leaves both
+  environments in their existing no-failed-detach state. Environment passes
+  61/61, the focused four-file gate passes 135/135, and the standalone coverage
+  gate passes 65 files / 1,481 tests with branches exactly 90.00%
+  (4,140/4,600). Fresh LCOV gives one hit to each assigned validation branch.
+  Production, threshold, public API, and generated behavior are unchanged. The
+  fix is ready for focused review; full `pnpm verify`, commit, and push remain
+  unperformed.

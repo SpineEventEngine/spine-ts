@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Final branch-coverage fix assigned
+Status: Final coverage fix verified; review pending
 
 ### Final Verification Finding
 
@@ -10,6 +10,17 @@ current LCOV report identifies two existing relevant untested validation paths:
 unknown registration removal and foreign-handle `retryDetach()`. One Terra
 Medium owner receives the two behavior assertions before a focused review and
 full-gate rerun; no threshold or production behavior may be weakened.
+
+Disposition: verified with test-only behavior assertions in the existing
+environment attachment suite. Removing an already-removed registration now
+asserts the stable inactive-registration error while the live sibling count and
+generation remain usable. A foreign-environment `retryDetach()` now asserts the
+stable ownership error, followed by each environment's existing no-failed-
+detach behavior to prove neither was mutated. Focused environment tests pass
+61/61; the coordinator/parked/records/environment gate passes 135/135. The
+standalone coverage gate passes 65 files / 1,481 tests with global branch
+coverage exactly 90.00% (4,140/4,600), and LCOV records one hit on each formerly
+uncovered branch. Production source and coverage thresholds are unchanged.
 
 ### Slice 4 Round 2 Finding
 

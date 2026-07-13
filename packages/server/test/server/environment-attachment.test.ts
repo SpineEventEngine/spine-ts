@@ -66,6 +66,9 @@ describe("EnvironmentRegistrations", () => {
     const second = registrations.claim("caller");
 
     expect(registrations.remove(second.token)).toBe(1);
+    expect(() => registrations.remove(second.token)).toThrow(
+      "Environment registration is not active.",
+    );
     expect(registrations.count).toBe(1);
     expect(() => {
       registrations.clear(first.generation);
@@ -825,6 +828,12 @@ describe("non-last registration detach", () => {
     await expect(serverEnvironmentAccess.detach(environment, foreignHandle)).rejects.toThrow(
       "Environment attachment handle is not owned by this environment.",
     );
+    await expect(serverEnvironmentAccess.retryDetach(environment, foreignHandle)).rejects.toThrow(
+      "Environment attachment handle is not owned by this environment.",
+    );
+    await expect(
+      serverEnvironmentAccess.retryDetach(foreignEnvironment, foreignHandle),
+    ).rejects.toThrow("Environment attachment has no failed detach to retry.");
     await expect(serverEnvironmentAccess.retryDetach(environment, siblingHandle)).rejects.toThrow(
       "Environment attachment has no failed detach to retry.",
     );
