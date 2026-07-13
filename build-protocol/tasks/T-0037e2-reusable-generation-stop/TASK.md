@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification lint fix review assigned
+Status: T-0037e2 final verification lint review fix assigned
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -535,14 +535,50 @@ ordering, concurrency, or tests.
   required five-file lifecycle suite passed 5 files / 162 tests. Focused
   Prettier passed all six assigned files after formatting the work log.
 - Exact changed inventory is the three durable records plus the three assigned
-  source/test files only. Status mirrors are synchronized to this review
-  request; public/package/docs/examples/generated diff and untracked-generated
-  scans are empty, private stop-name scan outside assigned runtime/tests is
-  empty, and `git diff --check` exits 0. No subagent, commit, push, or full
-  `pnpm verify` was run.
+  source/test files only. At the implementer handback, status mirrors were
+  synchronized to `T-0037e2 final verification lint fix review requested`;
+  coordinator later advanced all headers to `T-0037e2 final verification lint
+fix review assigned` for reviewer dispatch. Public/package/docs/examples/
+  generated diff and untracked-generated scans are empty, private stop-name
+  scan outside assigned runtime/tests is empty, and `git diff --check` exits 0. No subagent, commit, push, or full `pnpm verify` was run in that
+  implementer handback/pass.
 
 Desktop rollout confirms the fresh lint owner actual
 `gpt-5.6-terra` / `medium`. Coordinator verification passes focused ESLint,
 strict typechecking, 162 lifecycle tests, formatting, exact scope, and diff
-hygiene. The committed lint endpoint is assigned to the four canonical review
-concerns.
+hygiene. Coordinator subsequently committed `dbe4df55` and successfully pushed
+it to `origin/task/T-0037e2-reusable-generation-stop`; the committed lint
+endpoint is assigned to the four canonical review concerns.
+
+The lint review found no source/test defect. Two P2 durable-record chronology
+claims must distinguish the implementer handback from the later coordinator
+commit/push and review assignment. One fresh implementer receives this
+records-only correction at explicit `gpt-5.6-terra` / `medium`, no subagents.
+
+## Final Verification Lint Review Records-Only Fix Start
+
+- Fresh existing implementer role: explicit actual profile `gpt-5.6-terra` /
+  `medium`; no subagents. Ownership is only this task record and the matching
+  T-0037e2 work and review logs. Source, tests, `human-review-1-jul.md`,
+  commits, pushes, and full verification remain excluded.
+- Canonical skill applicability before record corrections: fully read
+  `verification-before-completion`; it requires fresh focused evidence before
+  this pass can be handed back. TDD, systematic debugging, JavaScript testing,
+  advanced TypeScript, Node/backend, architecture/planning, review, worktree,
+  and subagent skills are N/A because no runtime/test/API/design change,
+  dispatch, or worktree setup is authorized. The project protocol and this
+  records-only assignment govern the correction.
+
+## Final Verification Lint Review Records-Only Fix Handback
+
+- After the focused record evidence, all three canonical status headers now
+  read `T-0037e2 final verification lint review fix requested`.
+- This implementer pass changed only the three durable T-0037e2 records. It
+  ran focused Prettier, exact status/chronology `rg` checks, exact diff-name
+  inventory, and `git diff --check`; no source/test change, full verification,
+  commit, push, or subagent occurred.
+
+Desktop rollout confirms the records fixer actual `gpt-5.6-terra` / `medium`.
+Coordinator docs/status lint, focused formatting, exact records-only scope, and
+diff hygiene pass. The committed chronology correction is assigned to the four
+canonical concerns for final focused re-review.
