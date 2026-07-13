@@ -1,6 +1,16 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Slice 3 clean; Slice 4 races and handle separation assigned
+Status: Slice 4 coordinator retry-separation fix assigned
+
+### Slice 4 Coordinator Finding
+
+An unresolved failed-start rollback must block detach of an existing sibling
+before a detach operation is created. Otherwise sibling last-detach can retire
+and clear the same generation while `#failedRollback` still owns its rollback,
+leaving two state machines over one generation and stale retry state. Detach
+must reject with failed-start explicit-retry behavior, `retryDetach()` must not
+adopt that rejection, and detach may begin only after `retryFailedStart()`
+finishes. One Terra Medium owner receives this regression and fix before review.
 
 ### Slice 3 Round 1 Finding
 
@@ -316,3 +326,34 @@ monitor/health/action API, topology, adapter, catch-up path, or T-0036 change.
   39,063 bytes). Round 1 explicitly assigns style, TypeScript/API, and
   reliability to `gpt-5.6-terra` / `high`, and documentation to
   `gpt-5.6-luna` / `medium`, each read-only with no subagents.
+
+## Slice 4 Implementation Record
+
+- `2026-07-13`: The existing fixed Terra Medium implementer completed final
+  Slice 4 under strict focused TDD with no subagents. Attachment registration
+  claim, current-generation lookup/creation, descriptor enumeration, storage/
+  route assembly, and worker creation now occur only after that attachment is
+  admitted by the lifecycle serial gate.
+- An attachment admitted first joins the current generation and makes a later
+  detach non-last. A last detach admitted first closes/stops the old generation;
+  queued attachment work remains untouched until retirement settles, then
+  creates exactly one fresh generation only after replacement-safe slot
+  clearing. Reporting or inert-retirement failure after replacement safety
+  still propagates from detach without blocking that queued fresh attachment.
+- Unsafe last-detach quiescence retains one detach-specific retry-required
+  state. Queued and later attachments reject before claim, descriptor/storage/
+  route work, or worker creation and never invoke retirement implicitly.
+  `retryDetach()` on the original handle resumes the coordinator checkpoints;
+  successful safe clearing removes the blocker and permits one later fresh
+  generation. A completed prior-generation handle stays inert and cannot alter
+  the fresh registration. Failed-start rollback and detach retain distinct
+  retry entry points and state machines in both directions.
+- RED ran 56 focused environment tests and produced the expected five race
+  failures. GREEN passes environment 56/56, focused coordinator/parked/records/
+  environment 130/130, and the canonical affected bounded-context/handoff/
+  coordinator/parked/environment regression 228/228. Generated build/tooling
+  typechecks and changed-file lint/format pass; final static/public-leak
+  evidence is recorded in the work log. Full verification, commit, and push
+  remain intentionally unrun. Reusable stop, survivor transfer/rebind,
+  permanent close, facilities/server integration, public APIs/exports,
+  examples, docs, and generated artifacts remain excluded.

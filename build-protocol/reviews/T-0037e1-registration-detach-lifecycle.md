@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Slice 3 clean; Slice 4 races and handle separation assigned
+Status: Slice 4 coordinator retry-separation fix assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -213,3 +213,20 @@ Derived status mirror: the canonical current state is the `Status` header in
 - Slice 4 is assigned to the existing Terra Medium implementer. It receives a
   fresh four-concern review after focused verification; security and full
   verification remain deferred until final child acceptance.
+- `2026-07-13T03:18:59Z`: Slice 4 is focused verified and ready for Round 1.
+  The package is bounded to serial-gate attachment claim/generation capture,
+  admitted-first sibling classification, last-detach-first fresh generation
+  sequencing, unsafe detach-retry-required blocking, replacement-safe cleanup
+  failure admission, stale prior-generation handle inertness, and failed-start/
+  detach retry-state separation. Strict RED observed five expected race
+  failures before production; GREEN passes environment 56/56, focused 130/130,
+  and affected 228/228 plus generated/tooling typecheck and changed-file
+  lint/format. Final static/public-leak evidence remains in the work log. All
+  four canonical review concerns are pending; security/full verify, reusable
+  stop, survivor transfer, permanent close, facilities/server integration,
+  public APIs/exports, docs/examples, commit, and push remain deferred.
+- Coordinator pre-review inspection found an unresolved failed-start rollback
+  can overlap sibling detach over the same generation, contrary to the claimed
+  two-way retry-state separation. One Terra Medium owner receives the complete
+  finding and regression before any Slice 4 review package is frozen. All four
+  canonical review concerns remain pending.
