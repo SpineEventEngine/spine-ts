@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 5 review assigned
+Status: Slice 5 round-2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -755,3 +755,44 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   They must test for vacuous fixtures/assertions and missing active-work/order
   paths. TypeScript/API docs N/A because no production/API/declaration diff;
   documentation N/A; security deferred; Slice 6 excluded.
+
+## Slice 5 Review Result
+
+- `2026-07-13T22:21:17Z`: style/maintainability reports four MEDIUM;
+  performance/reliability reports one HIGH and one MEDIUM, corroborating the
+  storage and session findings. Actual profiles are `gpt-5.6-terra` / high,
+  matching dispatch; no subagents; both closed.
+- Required test-only corrections: nonempty tracked context/storage with direct
+  close observation in two tests; session event presence before order compare;
+  finally before global/session/worker resources; concurrent fresh start while
+  old retirement is held to prove no overlap. API/docs N/A; security deferred.
+
+## Slice 5 Round-2 Review-Fix Handback
+
+- `2026-07-13T22:29:36Z`: existing implementer, actual explicit
+  `gpt-5.6-terra` / medium, no subagents, returns the complete test-only batch.
+  Active/unsafe contexts now own nonempty tracked storages and expose direct
+  context plus per-storage close facts; session presence is required; teardown
+  protection covers every acquired resource.
+- Caller-owned no-overlap evidence now holds old retirement while a fresh start
+  is submitted and proves that start remains unsettled with zero fresh-worker
+  starts until release. The fixture adds only that deterministic retirement
+  hold; production and public surfaces remain unchanged.
+- Review targets: verify non-vacuity and exact zero/one close counts, session
+  presence before ordering, cleanup on each setup failure window, and old/new
+  worker exclusion. RED/GREEN is 0/2→2/2 and 0/1→1/1; focused 6/6, integration
+  36/36, eight-file 360/360, and both typechecks pass. Final static/audit gate
+  follows. This is handback, not self-acceptance; API/docs remain N/A and
+  security deferred.
+- `2026-07-13T22:31:24Z`: final handback passes lint/cleanup, exact six-path
+  format/scope, synchronized 4/4 status, zero public leak, empty production and
+  public-surface diffs, and diff check. Fresh coordinator re-review is pending.
+
+## Slice 5 Round-2 Re-review Assignment
+
+- `2026-07-13T22:34:03Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  8 files / 360 tests, and all scoped gates pass independently.
+- Fresh style/maintainability and performance/reliability reviewers run at
+  `gpt-5.6-terra` / high, no subagents, against the corrected test-only package.
+  API/docs N/A for zero production/public diff; security deferred.

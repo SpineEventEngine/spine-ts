@@ -129,7 +129,7 @@ describe("Server lifecycle integration", () => {
     }
   });
 
-  it("reuses a caller-owned environment through a fresh server attachment", async () => {
+  it("blocks a fresh caller-owned generation until old retirement completes", async () => {
     const firstWorker = new HeldStartupWorker([]);
     const freshWorker = new HeldStartupWorker([]);
     firstWorker.release();
@@ -138,17 +138,54 @@ describe("Server lifecycle integration", () => {
     const firstStart = Server.atPort(0, { environment: fixture.environment })
       .add(fixture.context)
       .start();
+    let first: Awaited<ReturnType<Server["start"]>> | undefined;
+    let firstClose: Promise<void> | undefined;
+    let freshContext: BoundedContext | undefined;
+    let freshStart: Promise<Awaited<ReturnType<Server["start"]>>> | undefined;
+    let fresh: Awaited<ReturnType<Server["start"]>> | undefined;
+    let releaseRetirement: (() => void) | undefined;
 
     try {
-      const first = await firstStart;
+      first = await firstStart;
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(0);
-      await first.close();
+      freshContext = await fixture.createContext("LifecycleFresh");
+      releaseRetirement = firstWorker.holdNextRetire();
+      firstClose = first.close();
+      void firstClose.catch(() => undefined);
+      await waitFor(() => firstWorker.retireCalls === 1);
+      let firstCloseSettled = false;
+      void firstClose.then(
+        () => {
+          firstCloseSettled = true;
+        },
+        () => {
+          firstCloseSettled = true;
+        },
+      );
 
-      const freshContext = await fixture.createContext("LifecycleFresh");
-      const fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      freshStart = Server.atPort(0, { environment: fixture.environment }).add(freshContext).start();
+      void freshStart.catch(() => undefined);
+      let freshStartSettled = false;
+      void freshStart.then(
+        () => {
+          freshStartSettled = true;
+        },
+        () => {
+          freshStartSettled = true;
+        },
+      );
+      await nextTurn();
+
+      expect(firstCloseSettled).toBe(false);
+      expect(freshStartSettled).toBe(false);
+      expect(firstWorker.retireCalls).toBe(1);
+      expect(freshWorker.starts).toBe(0);
+
+      releaseRetirement();
+      releaseRetirement = undefined;
+      await firstClose;
+      fresh = await freshStart;
       await fresh.close();
 
       expect(firstWorker.starts).toBe(1);
@@ -157,10 +194,20 @@ describe("Server lifecycle integration", () => {
     } finally {
       firstWorker.release();
       freshWorker.release();
+      releaseRetirement?.();
+      await firstClose?.catch(() => undefined);
+      await first?.close().catch(() => undefined);
       await firstStart.then(
         (running) => running.close(),
         () => undefined,
       );
+      await freshStart?.then(
+        (running) => running.close(),
+        () => undefined,
+      );
+      await fresh?.close().catch(() => undefined);
+      await freshContext?.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -239,63 +286,94 @@ describe("Server lifecycle integration", () => {
         ownsDelivery: true,
       },
     });
-    const closeFixtureContext = fixture.context.close.bind(fixture.context);
-    const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
-      this: BoundedContext,
-    ) {
-      if (this !== fixture.context) {
-        throw new Error("Unexpected context close in active last-detach test.");
-      }
-      events.push("context");
-      return closeFixtureContext();
-    });
     const closeResource = vi.fn(() => events.push("resource"));
     let network: NetworkCloseProbe | undefined;
-    createHttp2Server.mockImplementationOnce((httpServer) => {
-      network = trackNetworkClose(httpServer);
-    });
-    const running = await Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
-      .add(fixture.context)
-      .addResource({ close: closeResource })
-      .start();
-    const session = http2.connect(running.baseUrl);
-    session.on("error", () => undefined);
-    session.on("close", () => events.push("session"));
-    await once(session, "remoteSettings");
-    const releaseActive = worker.holdNextStart("PAUSED");
-    const transportTopic = createTransportTopic({
-      signalKind: "event",
-      messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
-    });
-    const posting = fixture.postEvent(fixture.context, "active-last-close");
-    await posting;
-    await waitFor(() => worker.starts === 2);
-    const firstClose = running.close();
-    void firstClose.catch(() => undefined);
+    let context: BoundedContext | undefined;
+    let running: Awaited<ReturnType<Server["start"]>> | undefined;
+    let session: http2.ClientHttp2Session | undefined;
+    let sessionClosed = false;
+    let releaseActive: (() => void) | undefined;
+    let posting: Promise<void> | undefined;
+    let firstClose: Promise<void> | undefined;
+    let contextCloseCalls = 0;
+    let restoreContextClose: () => void = () => undefined;
 
     try {
+      await fixture.context.close();
+      context = await fixture
+        .createBuilder("LifecycleActiveLastClose")
+        .withStorageFactory(storageFactory)
+        .buildAsync();
+      const trackedStorages = [...storageFactory.storages];
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      const closeTrackedContext = context.close.bind(context);
+      const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+        this: BoundedContext,
+      ) {
+        if (this !== context) {
+          throw new Error("Unexpected context close in active last-detach test.");
+        }
+        contextCloseCalls += 1;
+        events.push("context");
+        return closeTrackedContext();
+      });
+      restoreContextClose = () => {
+        closeContext.mockRestore();
+      };
+      createHttp2Server.mockImplementationOnce((httpServer) => {
+        network = trackNetworkClose(httpServer);
+      });
+      running = await Server.atPort(0, {
+        environment: fixture.environment,
+        ownsEnvironment: true,
+      })
+        .add(context)
+        .addResource({ close: closeResource })
+        .start();
+      session = http2.connect(running.baseUrl);
+      session.on("error", () => undefined);
+      session.on("close", () => {
+        sessionClosed = true;
+        events.push("session");
+      });
+      await once(session, "remoteSettings");
+      releaseActive = worker.holdNextStart("PAUSED");
+      const transportTopic = createTransportTopic({
+        signalKind: "event",
+        messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
+      });
+      posting = fixture.postEvent(context, "active-last-close");
+      await posting;
+      await waitFor(() => worker.starts === 2);
+      firstClose = running.close();
+      void firstClose.catch(() => undefined);
       await waitFor(() => worker.stopCalls === 1);
       const concurrentClose = running.close();
 
       expect(concurrentClose).toBe(firstClose);
       expect(network?.calls()).toBe(1);
+      expect(sessionClosed).toBe(true);
+      expect(events).toContain("session");
+      expect(events).toContain("stop");
       expect(events.indexOf("session")).toBeLessThan(events.indexOf("stop"));
       expect(worker.starts).toBe(2);
       expect(worker.awaitCalls).toBe(0);
       expect(worker.retireCalls).toBe(0);
-      expect(closeContext).not.toHaveBeenCalled();
+      expect(contextCloseCalls).toBe(0);
       expect(closeResource).not.toHaveBeenCalled();
       expect(closeDelivery).not.toHaveBeenCalled();
-      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      expect(trackedStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(trackedStorages.every((storage) => storageFactory.closeCallsFor(storage) === 0)).toBe(
+        true,
+      );
       expect(storageFactory.isOpen()).toBe(true);
       await expect(
         fixture.environment.transport.publish({ topic: transportTopic, envelope: "active" }),
       ).resolves.toBeUndefined();
 
       releaseActive();
+      releaseActive = undefined;
       await Promise.all([firstClose, concurrentClose]);
       await running.close();
 
@@ -303,7 +381,11 @@ describe("Server lifecycle integration", () => {
       expect(worker.stopCalls).toBe(1);
       expect(worker.awaitCalls).toBe(1);
       expect(worker.retireCalls).toBe(1);
-      expect(closeContext).toHaveBeenCalledOnce();
+      expect(contextCloseCalls).toBe(1);
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      expect(trackedStorages.every((storage) => storageFactory.closeCallsFor(storage) === 1)).toBe(
+        true,
+      );
       expect(closeResource).toHaveBeenCalledOnce();
       expect(closeDelivery).toHaveBeenCalledOnce();
       expect(storageFactory.closeCalls).toBe(1);
@@ -320,13 +402,19 @@ describe("Server lifecycle integration", () => {
         "facility",
       ]);
     } finally {
-      releaseActive();
-      closeContext.mockRestore();
-      await posting.catch(() => undefined);
-      await running.close().catch(() => undefined);
-      await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
-      fixture.dispose();
+      releaseActive?.();
+      session?.destroy();
+      try {
+        await posting?.catch(() => undefined);
+        await firstClose?.catch(() => undefined);
+        await running?.close().catch(() => undefined);
+      } finally {
+        restoreContextClose();
+        await context?.close().catch(() => undefined);
+        await fixture.context.close().catch(() => undefined);
+        await fixture.environment.close().catch(() => undefined);
+        fixture.dispose();
+      }
     }
   });
 
@@ -348,21 +436,45 @@ describe("Server lifecycle integration", () => {
     });
     const closeResource = vi.fn(() => events.push("resource"));
     let network: NetworkCloseProbe | undefined;
-    createHttp2Server.mockImplementationOnce((httpServer) => {
-      network = trackNetworkClose(httpServer);
-    });
-    const running = await Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
-      .add(fixture.context)
-      .addResource({ close: closeResource })
-      .start();
     const quiescenceFailure = new Error("last generation remained active");
-    worker.failNextAwait(quiescenceFailure);
+    let context: BoundedContext | undefined;
+    let running: Awaited<ReturnType<Server["start"]>> | undefined;
     let releaseRetry: (() => void) | undefined;
+    let contextCloseCalls = 0;
+    let restoreContextClose: () => void = () => undefined;
 
     try {
+      await fixture.context.close();
+      context = await fixture
+        .createBuilder("LifecycleUnsafeLastDetach")
+        .withStorageFactory(storageFactory)
+        .buildAsync();
+      const trackedStorages = [...storageFactory.storages];
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      const closeTrackedContext = context.close.bind(context);
+      const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
+        this: BoundedContext,
+      ) {
+        if (this !== context) {
+          throw new Error("Unexpected context close in unsafe last-detach test.");
+        }
+        contextCloseCalls += 1;
+        return closeTrackedContext();
+      });
+      restoreContextClose = () => {
+        closeContext.mockRestore();
+      };
+      createHttp2Server.mockImplementationOnce((httpServer) => {
+        network = trackNetworkClose(httpServer);
+      });
+      running = await Server.atPort(0, {
+        environment: fixture.environment,
+        ownsEnvironment: true,
+      })
+        .add(context)
+        .addResource({ close: closeResource })
+        .start();
+      worker.failNextAwait(quiescenceFailure);
       const firstFailure = await running.close().catch((error: unknown) => error);
 
       expect(firstFailure).toMatchObject({ cause: quiescenceFailure });
@@ -370,9 +482,14 @@ describe("Server lifecycle integration", () => {
       expect(worker.stopCalls).toBe(1);
       expect(worker.awaitCalls).toBe(1);
       expect(worker.retireCalls).toBe(0);
+      expect(contextCloseCalls).toBe(0);
       expect(closeResource).not.toHaveBeenCalled();
       expect(closeDelivery).not.toHaveBeenCalled();
-      expect(storageFactory.storages.every((storage) => storage.isOpen())).toBe(true);
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      expect(trackedStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(trackedStorages.every((storage) => storageFactory.closeCallsFor(storage) === 0)).toBe(
+        true,
+      );
       expect(storageFactory.isOpen()).toBe(true);
 
       releaseRetry = worker.holdNextAwait();
@@ -390,15 +507,25 @@ describe("Server lifecycle integration", () => {
       expect(worker.stopCalls).toBe(1);
       expect(worker.awaitCalls).toBe(2);
       expect(worker.retireCalls).toBe(1);
+      expect(contextCloseCalls).toBe(1);
+      expect(trackedStorages.length).toBeGreaterThan(0);
+      expect(trackedStorages.every((storage) => storageFactory.closeCallsFor(storage) === 1)).toBe(
+        true,
+      );
       expect(closeResource).toHaveBeenCalledOnce();
       expect(closeDelivery).toHaveBeenCalledOnce();
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
       releaseRetry?.();
-      await running.close().catch(() => undefined);
-      await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
-      fixture.dispose();
+      try {
+        await running?.close().catch(() => undefined);
+      } finally {
+        restoreContextClose();
+        await context?.close().catch(() => undefined);
+        await fixture.context.close().catch(() => undefined);
+        await fixture.environment.close().catch(() => undefined);
+        fixture.dispose();
+      }
     }
   });
 

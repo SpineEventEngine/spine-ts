@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 5 review assigned
+Status: Slice 5 round-2 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -938,3 +938,39 @@ smallest coherent implementation.
   Actual Terra Medium implementer used no subagents and is closed. Production,
   public, and architecture surfaces are unchanged; maintainability and
   reliability review now validate that the evidence is non-vacuous.
+
+## Slice 5 Round-2 Evidence Clarification
+
+- `2026-07-13T22:21:17Z`: accepted behavior is unchanged, but evidence must use
+  nonempty tracked context storage, explicit session-event presence, teardown
+  protection before every external resource, and a concurrently blocked fresh
+  start during held old retirement. These are test/fixture corrections only;
+  no production, public, architecture, or Slice 6 change is authorized.
+
+## Slice 5 Round-2 Review-Fix Handback
+
+- `2026-07-13T22:29:36Z`: corrected evidence uses explicit tracked-storage
+  context construction, nonzero cardinality, exact context-close observation,
+  and per-storage zero/one close counts. Session presence is a required fact
+  before order comparison, and active-test cleanup protection begins before
+  every global spy, session, worker hold, post, and close operation.
+- A fixture-only held-retirement operation makes the no-overlap boundary
+  deterministic: a concurrent fresh attachment remains queued with zero fresh
+  worker starts until old retirement completes, then starts a distinct
+  generation. No lifecycle authority, production state, public surface, or
+  Slice 6 behavior changes.
+- RED/GREEN evidence is 0/2 to 2/2 for storage non-vacuity and 0/1 to 1/1 for
+  held retirement; corrected focused behavior is 6/6, integration 36/36, and
+  the architecture gate 8 files / 360 tests with both typechecks passing.
+  Coordinator re-review remains pending.
+- `2026-07-13T22:31:24Z`: lint, cleanup, exact six-path format/scope, 4/4
+  status, public-leak/public-surface, zero-production-diff, and diff-integrity
+  gates pass on the synchronized handback.
+
+## Slice 5 Round-2 Coordinator Acceptance
+
+- `2026-07-13T22:34:03Z`: non-vacuous storage/session/teardown/overlap evidence
+  passes independent verification: both typechecks, 8 files / 360 tests, and
+  all scoped gates. Actual Terra Medium implementer used no subagents and is
+  closed. Production/public/architecture surfaces remain unchanged; test-
+  validity re-review follows.

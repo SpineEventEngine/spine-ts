@@ -129,7 +129,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   readonly #startupFailures: Error[] = [];
   readonly #startAttempts: (() => Promise<DeliveryLoopStatus>)[] = [];
   readonly #awaitAttempts: (() => Promise<void>)[] = [];
-  readonly #retireFailures: Error[] = [];
+  readonly #retireAttempts: (() => Promise<void>)[] = [];
   #starts = 0;
   #stopCalls = 0;
   #awaitCalls = 0;
@@ -206,7 +206,15 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   }
 
   failNextRetire(error: Error): void {
-    this.#retireFailures.push(error);
+    this.#retireAttempts.push(() => Promise.reject(error));
+  }
+
+  holdNextRetire(): () => void {
+    const held = Promise.withResolvers<undefined>();
+    this.#retireAttempts.push(() => held.promise);
+    return () => {
+      held.resolve(undefined);
+    };
   }
 
   add(runtime: EnvironmentDeliveryRuntime): void {
@@ -249,8 +257,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
   retire(): Promise<void> {
     this.#retireCalls += 1;
     this.#events.push("retire");
-    const failure = this.#retireFailures.shift();
-    return failure === undefined ? Promise.resolve() : Promise.reject(failure);
+    return this.#retireAttempts.shift()?.() ?? Promise.resolve();
   }
 
   stopOwners(ownerKeys: readonly string[]): void {

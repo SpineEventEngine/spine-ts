@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 5 review assigned
+Status: Slice 5 round-2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1012,3 +1012,52 @@ gate passes.
   security deferred. Style/maintainability and performance/reliability review
   are assigned at `gpt-5.6-terra` / high, no subagents, with explicit test-
   validity scrutiny.
+
+## Slice 5 Review Findings And Round-2 Fix
+
+- `2026-07-13T22:21:17Z`: style and reliability reviewers, actual
+  `gpt-5.6-terra` / high, no subagents, are closed. Reliability reports one
+  high; style corroborates it and adds three medium evidence defects.
+- High: tracked-storage retention assertions are vacuous because the tested
+  prebuilt context did not use the tracking factory and `every()` saw an empty
+  array. Build tracked contexts, assert nonzero storage count, and observe
+  context/storage close directly in active and unsafe tests.
+- Medium: require the session-close event before comparing it to stop; move
+  `try/finally` before global spy/session/hold/event operations; and prove no
+  old/new overlap by starting the fresh server while retirement is held, not
+  after old close completes. Same Terra Medium implementer owns test-only fix.
+
+## Slice 5 Round-2 Review-Fix Handback
+
+- `2026-07-13T22:29:36Z`: active and unsafe last-close tests now build their
+  actual server contexts with `LifecycleTrackingStorageFactory`, assert a
+  nonzero storage snapshot before openness/close-count checks, and probe the
+  exact context close directly. Unsafe checkpoints prove zero context/storage
+  closes; successful completion proves one each.
+- The active test records and requires the session close event before comparing
+  it with stop. Its `try/finally` now encloses context-spy installation, server
+  and session acquisition, worker hold, event post, admission wait, and close;
+  cleanup uses optional handles and explicitly releases, destroys, awaits, and
+  restores every acquired resource.
+- Caller-owned reuse now holds the old worker's retirement, starts the fresh
+  server concurrently, and proves both the fresh start promise and fresh worker
+  remain unstarted until old retirement releases. The distinct generation then
+  starts and closes normally, preserving the no-overlap claim.
+- Strict non-vacuity RED is 0/2 (`expected 0 to be greater than 0`) then GREEN
+  2/2. Concurrent-generation RED is 0/1 on missing `holdNextRetire`, followed
+  by minimal fixture GREEN 1/1. Corrected Slice 5 is 6/6, full integration
+  36/36, and the eight-file gate 360/360; both typechecks pass. Production and
+  public diffs remain empty. Final synchronized static/audit evidence follows;
+  this is review handback, not self-acceptance.
+- `2026-07-13T22:31:24Z`: final synchronized tree passes 8 files / 360 tests,
+  both typechecks, scoped ESLint, cleanup enforcement, exact six-path Prettier
+  and scope, 4/4 status, zero internal-name leak, empty production/public
+  diffs, and `git diff --check`.
+
+## Slice 5 Round-2 Coordinator Gate
+
+- `2026-07-13T22:34:03Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 8 files / 360 tests, lint/cleanup/Prettier, exact scope/status/
+  leak/surface/diff checks, and zero production diff. Fresh style/reliability
+  re-review is assigned at Terra High; API/docs N/A, security deferred.
