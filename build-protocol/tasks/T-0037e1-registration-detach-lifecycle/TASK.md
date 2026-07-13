@@ -1,6 +1,6 @@
 # T-0037e1: Registration Detach Lifecycle
 
-Status: Architecture boundary resolution in progress
+Status: Slice 1 settlement ownership assigned
 
 Started: `2026-07-13T00:46:22Z`
 
@@ -19,6 +19,19 @@ therefore assigned a milestone-boundary architecture pass with expected and
 explicit `gpt-5.6-sol` / `high`, read-only ownership, and no subagents. It must
 consume the accepted task/completion plan and relevant Spine JVM server evidence
 without reopening completed T-0037b/c/d or later e2/e3/f policy.
+
+The accepted bounded design is recorded in `architecture-resolution.md`. It
+splits this child into four sequential, independently reviewed TDD slices:
+
+1. coordinator settlement observation, selected-owner barrier, and one private
+   generation-local delivery-record owner;
+2. non-last registration detach and retry;
+3. ordinary last-detach authoritative retirement and retry;
+4. attach/detach races, handle validation, and failed-start separation.
+
+One existing Terra Medium implementer is assigned Slice 1 only with sole write
+ownership, strict TDD, and no subagents. Later slices consume the reviewed
+foundation and are not part of the first review package.
 
 ## Objective
 

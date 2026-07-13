@@ -1,6 +1,6 @@
 # T-0037e1 Review Log
 
-Status: Architecture boundary resolution in progress
+Status: Slice 1 settlement ownership assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e1-registration-detach-lifecycle/TASK.md`.
@@ -19,3 +19,10 @@ Derived status mirror: the canonical current state is the `Status` header in
   the model pool reported temporary capacity; it produced no accepted design.
   A replacement requirements-splitter dispatch keeps the identical role,
   profile, and bounded read-only assignment.
+- The replacement completed and was closed with matching explicit Sol High
+  metadata. Its accepted bounded design is recorded in
+  `architecture-resolution.md`; no blocker or public-contract decision remains.
+- Slice 1 is assigned at expected explicit Terra Medium. Its future review is
+  bounded to settlement observation, selected-owner barrier, generation-local
+  parked ownership, dynamic scopes, bounds, and sibling preservation. Detach,
+  last-retirement, and race APIs remain later slices.
