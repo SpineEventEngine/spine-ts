@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 2 round-4 re-review assigned
+Status: Slice 3 implementation assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -615,3 +615,14 @@ gate passes.
   subagents, closed. Both typechecks, 5 files / 157 tests, and all scoped gates
   pass. Fresh whole-slice style/API/reliability re-review is assigned at Terra
   High; documentation N/A, security deferred.
+
+## Slice 2 Clean Closure And Slice 3 Assignment
+
+- `2026-07-13T19:31:28Z`: style/API/reliability all return CLEAN at actual
+  Terra High, matching dispatch; no subagents; all closed; no bounded validation
+  gap remains. Slice 2 endpoint `df109b31` is accepted.
+- One existing Terra Medium implementer receives Slice 3 only: server-owned
+  startup failure and post-attachment listener failure cleanup/retention,
+  quiescence gating, context/resource then permanent environment/facility order,
+  exact retry/cause handling, and no caller-owned regression. Slices 4--6 remain
+  unauthorized; documentation N/A and security deferred.
