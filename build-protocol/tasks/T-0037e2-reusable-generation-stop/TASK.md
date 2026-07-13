@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: Slice 2B review wave 3 assigned
+Status: Slice 2 accepted; Slice 3 assigned
 
 Started: `2026-07-13T04:26:45Z`
 
