@@ -1,6 +1,6 @@
 # T-0037e2: Reusable Generation Stop
 
-Status: T-0037e2 final verification
+Status: Complete; ready to merge
 
 Started: `2026-07-13T04:26:45Z`
 
@@ -946,3 +946,18 @@ the same complete batch at explicit `gpt-5.6-terra` / `medium`, no subagents.
 - Desktop actual metadata matches all four explicit reviewer profiles; every
   reviewer used no subagents and is closed. T-0037e2 now proceeds to its full
   native final verification gate.
+
+## Final Verification Acceptance
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exits `0` at task
+  HEAD. Generation/checksums, generated/tooling typechecks, ESLint, cleanup
+  enforcement, formatting, ordinary tests (66 files / 1,540 tests), coverage
+  tests (66 files / 1,540 tests), TypeDoc/API export checks, Proto lint, and
+  generated-clean checks all pass.
+- Coverage is statements 95.24% (8,713/9,148), branches 90%
+  (4,331/4,812), functions 97.99% (2,299/2,346), and lines 95.28%
+  (8,540/8,963). TypeDoc/API checks cover 100 proto, 28 core, 205 server, 19
+  storage, 17 transport, and 3 testing exports.
+- All canonical review concerns are clean or justified N/A, security remains
+  deferred to T-0041, every subagent is closed, and no finding remains. The
+  task is complete and ready to merge into `main`.

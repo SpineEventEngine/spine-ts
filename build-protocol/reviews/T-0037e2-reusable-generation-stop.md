@@ -1,6 +1,6 @@
 # T-0037e2 Review Log
 
-Status: T-0037e2 final verification
+Status: Complete; ready to merge
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e2-reusable-generation-stop/TASK.md`.
@@ -1499,3 +1499,13 @@ is assigned the unchanged complete batch at explicit `gpt-5.6-terra` /
 - Performance/reliability: CLEAN/N/A, actual `gpt-5.6-terra` / `high`.
 - Every reviewer used no subagents and is closed. No finding remains; native
   full verification is the sole pre-merge gate.
+
+## Final Verification Acceptance
+
+- Native full verify exits `0`: generation, typechecks, lint/cleanup,
+  formatting, 66 files / 1,540 ordinary tests, 66 files / 1,540 coverage tests,
+  TypeDoc/API exports, Proto lint, and generated-clean checks pass.
+- Global coverage is 95.24% statements, 90% branches (4,331/4,812), 97.99%
+  functions, and 95.28% lines. No review finding remains; all agents are closed
+  and security remains deferred to T-0041.
+- T-0037e2 is accepted and ready to merge.
