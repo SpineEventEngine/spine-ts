@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Slice 1 Round 2 re-review assigned
+Status: Slice 2 implementation assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -668,3 +668,17 @@ consistency. All four canonical concerns are reassigned.
 - The exact five-file Round 2 replacement is assigned to all four canonical
   re-review concerns. Security remains deferred to T-0041; later slices and full
   `pnpm verify` remain unauthorized.
+
+## Slice 1 Round 2 Clean Closure
+
+- `2026-07-13T14:54:55Z`: all four fresh Round 2 concerns are CLEAN. Desktop
+  metadata confirms style, TypeScript/API, and reliability at actual
+  `gpt-5.6-terra` / `high`, and documentation at actual `gpt-5.6-luna` /
+  `medium`. All reviewers used no subagents and are closed.
+- Slice 1 acceptance is complete: permanent admission/refusal, both close-first
+  attachment queue paths, call-time snapshot preservation, pending-facility
+  behavior, public wording, and focused verification are accepted. Security
+  remains deferred to T-0041.
+- Slice 2 is now authorized for retained failed-start, unsafe last-detach, and
+  incomplete reusable-stop refusal/retry reachability proof. It must not take
+  over predecessor retirement or retry ownership.
