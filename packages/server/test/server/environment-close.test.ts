@@ -67,6 +67,33 @@ describe("ServerEnvironment close", () => {
     expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
   });
 
+  it("flattens a deep aggregate chain without blocking later facilities or completed-index retries", async () => {
+    const attempts: string[] = [];
+    const leaf = new Error("deep delivery close failed once");
+    let failure: unknown = leaf;
+    for (let depth = 0; depth < 20_000; depth += 1) {
+      failure = new AggregateError([failure], "deep aggregate");
+    }
+    const environment = ServerEnvironment.local({
+      delivery: failingOnceCloseable("delivery", failure as AggregateError, attempts),
+      tracerFactory: successfulCloseable("tracer", attempts),
+      transport: successfulCloseable("transport", attempts) as SignalTransport,
+      storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
+      ownsDelivery: true,
+      ownsTracerFactory: true,
+      ownsTransport: true,
+      ownsStorageFactory: true,
+    });
+
+    const firstFailure = await environment.close().catch((error: unknown) => error);
+
+    expect(firstFailure).toBeInstanceOf(AggregateError);
+    expect((firstFailure as AggregateError).errors).toEqual([leaf]);
+    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+    await expect(environment.close()).resolves.toBeUndefined();
+    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage", "delivery"]);
+  });
+
   it("retries only facilities that previously failed and leaves completed facilities idempotent", async () => {
     const attempts: string[] = [];
     const tracerError = new Error("tracer close failed once");

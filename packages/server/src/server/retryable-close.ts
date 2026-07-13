@@ -41,25 +41,42 @@ export class RetryableCloseGroup {
 }
 
 export function collectCloseError(error: unknown, errors: unknown[]): void {
-  collect(error, errors, new Set());
-}
+  const ancestors = new Set<AggregateError>();
+  const work: AggregateTraversalFrame[] = [{ type: "visit", error }];
 
-function collect(error: unknown, errors: unknown[], ancestors: Set<AggregateError>): void {
-  if (error instanceof AggregateError) {
-    if (ancestors.has(error)) {
-      errors.push(error);
-      return;
+  while (work.length > 0) {
+    const frame = work.pop();
+    if (frame === undefined) {
+      continue;
     }
 
-    ancestors.add(error);
-    for (const cause of error.errors as readonly unknown[]) {
-      collect(cause, errors, ancestors);
+    if (frame.type === "leave") {
+      ancestors.delete(frame.aggregate);
+      continue;
     }
-    ancestors.delete(error);
-    return;
+
+    if (!(frame.error instanceof AggregateError)) {
+      errors.push(frame.error);
+      continue;
+    }
+
+    if (ancestors.has(frame.error)) {
+      errors.push(frame.error);
+      continue;
+    }
+
+    ancestors.add(frame.error);
+    work.push({ type: "leave", aggregate: frame.error });
+    const causes = frame.error.errors as readonly unknown[];
+    for (let index = causes.length - 1; index >= 0; index -= 1) {
+      work.push({ type: "visit", error: causes[index] });
+    }
   }
-  errors.push(error);
 }
+
+type AggregateTraversalFrame =
+  | { readonly type: "visit"; readonly error: unknown }
+  | { readonly type: "leave"; readonly aggregate: AggregateError };
 
 function closeMethod(closeable: unknown): (() => unknown) | undefined {
   if (typeof closeable !== "object" || closeable === null) {

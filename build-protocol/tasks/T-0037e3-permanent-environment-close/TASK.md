@@ -1,6 +1,6 @@
 # T-0037e3: Permanent Environment Close
 
-Status: Final whole-task fix re-review assigned
+Status: Final whole-task Round 2 re-review assigned
 
 Started: `2026-07-13T12:48:44Z`
 
@@ -964,3 +964,54 @@ current.` rather than the established explicit-retry rejection. GREEN checks
   scans find no active T-0037e3 quiescence-retry remit or public contract change.
 - Exclusions remain intact. The verified six-file batch is assigned for final
   whole-task fix re-review; full verify and merge remain blocked until clean.
+
+## Final Whole-Task Fix Re-review Finding
+
+- `2026-07-13T16:03:35Z`: style/maintainability and documentation are CLEAN.
+  TypeScript/API and performance/reliability independently report one P1: the
+  recursive aggregate walker can overflow the JavaScript call stack for a deep
+  acyclic chain, escape the per-index handler, and abort later facilities.
+- Required correction: replace recursion with an explicit depth-first work
+  stack while preserving stable order, duplicate leaves, and path-local cycle
+  detection. Add a deep-chain regression proving later-facility continuation
+  and failed-index retry.
+- Desktop metadata matches style/API/reliability Terra High and documentation
+  Luna Medium. All reviewers used no subagents and are closed. One Terra Medium
+  implementer receives the complete runtime/test/record batch.
+
+## Final Whole-Task Round 2 Fix Handback
+
+- Existing implementer role; explicit required profile `gpt-5.6-terra` /
+  `medium`; no subagents. This handback changes only the private close-group
+  traversal, its focused environment-close regression, and these durable task,
+  work, review, and derived-status records.
+- RED: the new 20,000-level acyclic `AggregateError` chain failed 1/15 with
+  `RangeError: Maximum call stack size exceeded`, escaping the facility-close
+  aggregate before later facilities could run. GREEN: explicit visit/leave
+  depth-first frames flatten the same chain to its leaf; the focused close suite
+  passes 15/15. Enter/leave frames preserve stable depth-first ordering,
+  duplicate leaves, and path-local active-ancestor cycle detection, so a shared
+  aggregate is traversed independently in sibling branches.
+- The regression proves delivery's deep failure is flattened, tracer/transport/
+  storage continue, and the later public close retries delivery only after the
+  completed indexes remain closed. Aggregate `errors` access retains the prior
+  bounded behavior; malformed-access policy was not expanded without a RED.
+- Fresh evidence: the five focused lifecycle suites pass 5 files / 184 tests;
+  generated build typecheck, scoped ESLint, and cleanup enforcement pass.
+  Scoped Prettier, `git diff --check`, synchronized-status, docs/status, and
+  exact-scope scans pass; the scope is exactly these six assigned files.
+- Exclusions remain: no public/API/Proto/generated/listener/security work,
+  examples, `human-review-1-jul.md` access, commit, push, full verify, merge,
+  or architecture-policy change. Round 2 handback is requested for the existing
+  final review concerns.
+
+## Final Whole-Task Round 2 Coordinator Gate
+
+- `2026-07-13T16:09:23Z`: Desktop metadata confirms the implementer at actual
+  `gpt-5.6-terra` / `medium`, matching explicit assignment, with no subagents.
+  Coordinator verification passes 5 files / 184 tests, native server 21/21,
+  generated typecheck, scoped ESLint, cleanup enforcement, `docs:check`,
+  Prettier, and `git diff --check`.
+- Lightweight lint finds four synchronized status mirrors, exact six-file scope,
+  no duplicate/public policy leak, and no active future-policy overclaim. The
+  iterative deep-chain batch is assigned for final four-concern re-review.

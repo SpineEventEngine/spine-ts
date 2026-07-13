@@ -1,6 +1,6 @@
 # T-0037e3 Review Log
 
-Status: Final whole-task fix re-review assigned
+Status: Final whole-task Round 2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037e3-permanent-environment-close/TASK.md`.
@@ -715,3 +715,45 @@ Derived status mirror: the canonical current state is the `Status` header in
   native server 21/21, generated typecheck, scoped lint/cleanup/Prettier,
   `docs:check`, and diff hygiene. The six-file batch is assigned for fresh final
   four-concern re-review; security remains deferred to T-0041.
+
+## Final Whole-Task Fix Re-review Results
+
+- `2026-07-13T16:03:35Z`: style and documentation return CLEAN. API and
+  reliability report one shared P1. Desktop metadata confirms required actual
+  profiles; all reviewers used no subagents and are closed.
+- P1: recursive nested-aggregate flattening is not stack-safe. Replace it with
+  an explicit depth-first work stack retaining path-local cycle detection,
+  duplicate leaf occurrences, and stable order. Prove a deep chain cannot abort
+  later facilities and retries only the failed index.
+- One Terra Medium implementer receives the full fix. Final verify, merge, and
+  security review remain blocked/deferred as assigned.
+
+## Final Whole-Task Round 2 Fix Handback
+
+- Existing implementer role, explicit `gpt-5.6-terra` / `medium`, no subagents.
+  The confirmed P1 is fixed at the existing private `RetryableCloseGroup` seam:
+  a visit/leave work stack replaces recursive flattening.
+- RED: the deterministic 20,000-level acyclic aggregate regression failed 1/15
+  with a stack-overflow `RangeError`, escaping indexed close handling. GREEN:
+  the focused close suite passes 15/15. The regression proves flat leaf output,
+  later facility continuation, and failed-index-only retry; the implementation
+  preserves stable depth-first ordering, duplicate leaves, and path-local cycle
+  detection for reused sibling aggregates.
+- Focused lifecycle suites pass 5 files / 184 tests. Generated build typecheck,
+  scoped ESLint, and cleanup enforcement pass. The bounded change leaves
+  malformed `AggregateError.errors` access behavior unchanged.
+- Scope/exclusions: private runtime, focused test, task/work/review/derived
+  status only; no public/API/Proto/generated/listener/security work, examples,
+  protected human-review access, commit, push, full verify, or merge. Prettier,
+  diff, docs/status, and exact-scope checks pass; all four status mirrors agree.
+  Fresh final concern dispositions remain required.
+
+## Final Whole-Task Round 2 Re-review Assignment
+
+- `2026-07-13T16:09:23Z`: coordinator accepts the Terra Medium implementer and
+  fresh 184-test, native server 21-test, docs/typecheck/lint/cleanup/format/diff
+  evidence. It used no subagents.
+- The iterative traversal preserves stable order, duplicate leaves, path-local
+  cycles, deep-chain continuation, and failed-index retry. Fresh
+  style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability dispositions are required. Security remains deferred.
