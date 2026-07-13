@@ -406,6 +406,7 @@ class RunningHttp2Server implements RunningServer {
       this.#networkClosed = true;
     }
     const detachErrors: unknown[] = [];
+    let detachRejected = false;
     if (!this.#attachmentDetached) {
       try {
         if (serverEnvironmentAccess.detachRetryPending(this.#environment, this.#attachment)) {
@@ -415,14 +416,15 @@ class RunningHttp2Server implements RunningServer {
         }
         this.#attachmentDetached = true;
       } catch (error) {
-        collectCloseError(error, detachErrors);
+        detachRejected = true;
+        collectRunningCloseError(error, detachErrors);
       }
-      if (detachErrors.length > 0) {
+      if (detachRejected) {
         let endpointSafe = false;
         try {
           endpointSafe = serverEnvironmentAccess.endpointSafe(this.#environment, this.#attachment);
         } catch (error) {
-          collectCloseError(error, detachErrors);
+          collectRunningCloseError(error, detachErrors);
         }
         if (!endpointSafe) {
           throwRunningDetachErrors(detachErrors);
@@ -432,16 +434,16 @@ class RunningHttp2Server implements RunningServer {
     try {
       await this.#closeGroup.close();
     } catch (error) {
-      if (detachErrors.length === 0) {
+      if (!detachRejected) {
         throw error;
       }
-      collectCloseError(error, detachErrors);
+      collectRunningCloseError(error, detachErrors);
       throw new AggregateError(
         detachErrors,
         "Server close failed while detaching delivery and closing owned contexts/resources.",
       );
     }
-    if (detachErrors.length > 0) {
+    if (detachRejected) {
       throwRunningDetachErrors(detachErrors);
     }
   }
@@ -578,6 +580,14 @@ function throwRunningDetachErrors(errors: readonly unknown[]): never {
     throw errors[0];
   }
   throw new AggregateError(errors, "Server close failed while detaching delivery.");
+}
+
+function collectRunningCloseError(error: unknown, errors: unknown[]): void {
+  const previousCount = errors.length;
+  collectCloseError(error, errors);
+  if (errors.length === previousCount) {
+    errors.push(error);
+  }
 }
 
 async function closeNetwork(

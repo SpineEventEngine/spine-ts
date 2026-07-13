@@ -353,6 +353,95 @@ describe("Server lifecycle integration", () => {
     }
   });
 
+  it.each([
+    {
+      kind: "empty",
+      createFailure: () => new AggregateError([], "empty selected-owner settlement"),
+    },
+    {
+      kind: "nested-empty",
+      createFailure: () =>
+        new AggregateError(
+          [new AggregateError([], "nested empty settlement")],
+          "nested-empty selected-owner settlement",
+        ),
+    },
+  ])("retains unsafe shared detach after $kind aggregate rejection", async ({ createFailure }) => {
+    const worker = new HeldStartupWorker([]);
+    worker.release();
+    const storageFactory = new LifecycleTrackingStorageFactory([]);
+    const fixture = await lifecycleFixture({
+      workers: [worker],
+      environment: { storageFactory, ownsStorageFactory: true },
+    });
+    await fixture.context.close();
+    const sibling = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.createBuilder("LifecycleEmptyAggregateSibling"))
+      .start();
+    const siblingStorages = [...storageFactory.storages];
+    const resourceClose = vi.fn();
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer);
+    });
+    const departing = await Server.atPort(0, { environment: fixture.environment })
+      .add(fixture.createBuilder("LifecycleEmptyAggregateDeparting"))
+      .addResource({ close: resourceClose })
+      .start();
+    const departingStorages = storageFactory.storages.filter(
+      (storage) => !siblingStorages.includes(storage),
+    );
+    const settlementFailure = createFailure();
+    worker.failNextAwait(settlementFailure);
+    let releaseRetry: (() => void) | undefined;
+
+    try {
+      const firstFailure = await departing.close().catch((error: unknown) => error);
+
+      expect(resourceClose).not.toHaveBeenCalled();
+      expect(firstFailure).toBe(settlementFailure);
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(1);
+      expect(worker.retireCalls).toBe(0);
+      expect(departingStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(siblingStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+      await expectConnectable(sibling);
+
+      releaseRetry = worker.holdNextAwait();
+      const firstRetry = departing.close();
+      void firstRetry.catch(() => undefined);
+      await waitFor(() => worker.awaitCalls === 2);
+      const concurrentRetry = departing.close();
+      expect(concurrentRetry).toBe(firstRetry);
+      releaseRetry();
+      releaseRetry = undefined;
+      await Promise.all([firstRetry, concurrentRetry]);
+      await departing.close();
+
+      expect(network?.calls()).toBe(1);
+      expect(worker.stopCalls).toBe(1);
+      expect(worker.awaitCalls).toBe(2);
+      expect(worker.retireCalls).toBe(1);
+      expect(resourceClose).toHaveBeenCalledOnce();
+      expect(
+        departingStorages.every((storage) => storageFactory.closeCallsFor(storage) === 1),
+      ).toBe(true);
+      expect(siblingStorages.every((storage) => storage.isOpen())).toBe(true);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+      await expectConnectable(sibling);
+    } finally {
+      releaseRetry?.();
+      await departing.close().catch(() => undefined);
+      await sibling.close().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
+      fixture.dispose();
+    }
+  });
+
   it("continues shared dependency cleanup after safe detach cleanup failure", async () => {
     const worker = new HeldStartupWorker([]);
     worker.release();

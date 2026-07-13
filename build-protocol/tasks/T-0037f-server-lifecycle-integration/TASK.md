@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 4 review assigned
+Status: Slice 4 round-2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -918,3 +918,45 @@ gate passes.
 - Fresh Slice 4 style/maintainability, TypeScript/API docs, and performance/
   reliability review is assigned at `gpt-5.6-terra` / high, no subagents.
   Documentation N/A; security deferred; Slice 5+ excluded.
+
+## Slice 4 Review Findings And Round-2 Fix
+
+- `2026-07-13T21:44:09Z`: style, API, and reliability corroborate one high.
+  Actual reviewers ran `gpt-5.6-terra` / high, used no subagents, and are closed.
+- High: recursive flattening of an empty or nested-empty `AggregateError`
+  produces zero causes, so `detachErrors.length` can falsely mean detach
+  succeeded, bypass endpoint safety, close dependencies, and resolve while the
+  exact detach remains unfinished. Track rejection independently, preserve the
+  empty aggregate as an observable failure, and add unsafe shared-detach
+  coverage. Same Terra Medium implementer owns this bounded fix.
+
+## Slice 4 Round-2 Review-Fix Handback
+
+- `2026-07-13T21:48:04Z`: running close now tracks the detach rejection as an
+  explicit control fact independent of recursively flattened reporting causes.
+  Empty and nested-empty aggregates are preserved by exact identity when
+  flattening contributes no leaves; endpoint safety is still queried after
+  every rejection.
+- Deterministic shared non-last tests prove both aggregate forms keep the
+  departing context/resource open while unsafe, preserve sibling connectivity,
+  sibling storage, and the caller-owned facility, then coalesce the exact
+  detach retry and close departing dependencies once after quiescence.
+- Strict RED is 0/2 because the resource closed after both unsafe aggregate
+  rejections. Minimal GREEN is 2/2; full integration is 31/31; the five-file
+  Slice 4 gate is 178/178. Both typechecks and scoped lint/cleanup pass before
+  final formatted-tree audits.
+- No retryable-close helper, environment lifecycle file, fixture, public API,
+  Slice 5/6 behavior, or protected file changed. This is coordinator review
+  handback, not self-acceptance; no commit/push/merge occurred.
+- `2026-07-13T21:49:38Z`: final formatted-tree gate passes both typechecks,
+  5 files / 178 tests, scoped ESLint, cleanup enforcement, exact ten-path
+  Prettier, six-path-in-ten scope, 4/4 synchronized status, zero-match internal
+  leak, unchanged public surface, and clean diff check.
+
+## Slice 4 Round-2 Coordinator Gate
+
+- `2026-07-13T21:51:58Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 5 files / 178 tests, lint/cleanup/Prettier, exact scope/status/
+  public-leak/public-surface, and diff checks. Fresh Slice 4 style/API/
+  reliability re-review is assigned; docs N/A, security deferred.

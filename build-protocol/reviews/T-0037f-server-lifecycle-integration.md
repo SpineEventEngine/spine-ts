@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 4 review assigned
+Status: Slice 4 round-2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -672,3 +672,40 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   at `gpt-5.6-terra` / high with no subagents against `0a5814a5..HEAD` after the
   implementation commit. Documentation N/A; security deferred; Slice 5+
   excluded.
+
+## Slice 4 Review Result
+
+- `2026-07-13T21:44:09Z`: style/maintainability HIGH; TypeScript/API docs HIGH;
+  performance/reliability HIGH. All corroborate the same empty-aggregate defect.
+  Actual profiles are `gpt-5.6-terra` / high, matching dispatch; no subagents;
+  all closed.
+- Require an explicit detach-failed checkpoint and preserve empty aggregate
+  rejection when flattening yields no leaves. Add unsafe shared non-last detach
+  coverage. Documentation N/A; security deferred; Slice 5+ excluded.
+
+## Slice 4 Round-2 Review-Fix Handback
+
+- `2026-07-13T21:48:04Z`: existing implementer, actual explicit
+  `gpt-5.6-terra` / medium, no subagents, separates detach rejection control
+  from flattened report causes and preserves exact empty/nested-empty aggregate
+  identity when no leaves exist.
+- Direct review target: verify endpoint safety cannot be bypassed by zero
+  flattened leaves; unsafe shared dependencies/facilities remain open; exact
+  retry and coalescing resume once; and non-empty stable aggregation remains
+  unchanged. No retryable-close helper or public/later-slice surface changed.
+- Strict focused evidence is 0/2 RED then 2/2 GREEN; integration is 31/31 and
+  the five-file gate is 178/178, with both typechecks and scoped lint/cleanup
+  clean before final formatting/audits. This is review handback, not
+  self-acceptance.
+- `2026-07-13T21:49:38Z`: final handback verification passes native 178/178,
+  both typechecks, lint/cleanup/format, exact scope/status/public-leak/public-
+  surface, and diff gates. Fresh coordinator review remains pending.
+
+## Slice 4 Round-2 Re-review Assignment
+
+- `2026-07-13T21:51:58Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Both typechecks,
+  5 files / 178 tests, and all scoped gates pass independently.
+- Fresh Slice 4 style, TypeScript/API docs, and performance/reliability run at
+  `gpt-5.6-terra` / high with no subagents against accepted Slice 3 through the
+  new round-2 commit. Documentation N/A; security deferred; Slice 5+ excluded.

@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 4 review assigned
+Status: Slice 4 round-2 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -864,3 +864,34 @@ smallest coherent implementation.
   Terra Medium implementer used no subagents and is closed. The accepted
   architecture boundary remains non-last shared running close only; fresh
   applicable review follows.
+
+## Slice 4 Round-2 Error-Presence Clarification
+
+- `2026-07-13T21:44:09Z`: flattened leaf count is reporting data, not the
+  detach-rejection checkpoint. Running close must retain an explicit failure
+  fact and preserve an empty aggregate when no leaf causes exist. Endpoint
+  safety is required after every rejected detach regardless of cause count.
+  No public API, last-detach policy, or Slice 5+ behavior changes.
+
+## Slice 4 Round-2 Review-Fix Handback
+
+- `2026-07-13T21:48:04Z`: the implementation now separates `detachRejected`
+  control state from `detachErrors` reporting order. Recursive flattening is
+  unchanged for non-empty causes; a no-leaf result retains the exact original
+  aggregate so rejection cannot become success.
+- Endpoint-safety gating, ordinary-versus-retry detach selection, network
+  checkpointing, and the existing retryable dependency group remain the only
+  lifecycle mechanisms. The correction is local to `RunningHttp2Server`; no
+  structured helper or lifecycle authority expansion was required.
+- RED/GREEN is 0/2 then 2/2, integration 31/31, and the architecture five-file
+  gate 178/178. Fresh coordinator review remains pending.
+- `2026-07-13T21:49:38Z`: final typecheck/native/lint/cleanup/Prettier and exact
+  scope/status/public-leak/public-surface/diff gates pass on six changed paths
+  inside the ten-path boundary.
+
+## Slice 4 Round-2 Coordinator Acceptance
+
+- `2026-07-13T21:51:58Z`: explicit failure-presence control and empty-aggregate
+  preservation pass independent verification: both typechecks, 5 files / 178
+  tests, and all scoped gates. Actual Terra Medium implementer used no
+  subagents and is closed. Architecture remains unchanged; re-review follows.
