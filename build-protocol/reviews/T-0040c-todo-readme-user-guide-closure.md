@@ -272,6 +272,25 @@ links/imports, and future-policy overclaim.
 - Fresh type/build/docs/lint/format/generated/diff checks passed. A fresh
   baseline-to-endpoint package and all four specialist lanes remain required.
 
+## 2026-07-14 - Specialist Wave 5 Assignment
+
+- Endpoint: `6f55ae21` (`Bound to-do client diagnostics`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..6f55ae21.diff`.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Final full-milestone re-review within each original concern, focused on the
+  accepted Wave 4 bounds and seeded query workflow. Preserve the recorded
+  app-owned-relative-import adjudication unless new repository evidence changes
+  ownership. Read-only; no Git mutation, installs, duplicate test runs, or
+  subagents; superseded historical text is inactive.
+
 ## Skill Applicability
 
 - Reviewers use session inventory, expected-skill manifest, readable installed
