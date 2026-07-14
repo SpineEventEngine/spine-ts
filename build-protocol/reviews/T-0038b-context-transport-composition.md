@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 P2 fixes coordinator-verified; rereview endpoint pending
+Status: Slice 2 style/docs rereview assigned
 
 ## Scope
 
@@ -357,3 +357,12 @@ Status: Slice 2 P2 fixes coordinator-verified; rereview endpoint pending
   server exports, canonical generated-clean, root/status, and diff.
 - Rereview only style/maintainability and documentation. API and reliability
   clean results remain applicable; security remains deferred.
+
+## Slice 2 P2 Rereview Dispatch
+
+- Baseline `d4debde8`; corrected endpoint `adefe8c8`; package
+  `.superpowers/sdd/review-d4debde8..adefe8c8.diff` (three commits, 25,092
+  bytes).
+- Style/maintainability assigned at explicit `gpt-5.6-terra` / high;
+  documentation assigned at explicit `gpt-5.6-luna` / medium; both no
+  subagents. Scope is P2 resolution and concrete regressions only.

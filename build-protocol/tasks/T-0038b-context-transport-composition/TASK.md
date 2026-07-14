@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 P2 fixes coordinator-verified; rereview endpoint pending
+Status: Slice 2 style/docs rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -574,3 +574,12 @@ work until Slice 1 focused verification and relevant review are clean.
 - Inspection confirms one private phase-advancement owner, caller-specific
   network/error framing, deterministic-order public TSDoc, and no behavior or
   public-surface expansion.
+
+## Slice 2 P2 Rereview Assignment
+
+- Corrected endpoint `adefe8c8`; package
+  `.superpowers/sdd/review-d4debde8..adefe8c8.diff` from prior endpoint
+  `d4debde8`, three commits and 25,092 bytes.
+- Assigned only affected existing roles: style/maintainability at explicit
+  `gpt-5.6-terra` / high and documentation at explicit `gpt-5.6-luna` / medium,
+  both no subagents. Prior API/reliability clean results remain applicable.
