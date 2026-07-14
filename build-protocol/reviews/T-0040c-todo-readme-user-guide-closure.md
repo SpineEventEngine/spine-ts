@@ -388,6 +388,17 @@ links/imports, and future-policy overclaim.
   semantics, >16-row evidence, diagnostic naming, and stale-status correction.
   Read-only; no Git mutation, installs, duplicate tests, or subagents;
   historical superseded text is inactive.
+- The first parallel dispatch reached the execution surface's active-thread
+  capacity after starting three lanes. Explicit dispatch fields and immutable
+  Desktop role metadata agree for those lanes: style agent
+  `019f629d-d422-7611-abd0-f3faae32e903` is actual `gpt-5.6-terra` /
+  high; documentation agent `019f629d-d7c9-73a2-b668-5a28e3056c21` is
+  actual `gpt-5.6-luna` / medium; TypeScript/API docs agent
+  `019f629d-d076-75d3-acfb-923639f4d50b` is actual `gpt-5.6-terra` /
+  high. All three were closed after result capture. The unstarted
+  performance/reliability lane retains its recorded explicit
+  `gpt-5.6-terra` / high assignment and will run separately; no partial wave
+  is accepted before that result is collected.
 
 ## Skill Applicability
 
