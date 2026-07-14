@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 pre-review duplicated-constant fix assigned
+Status: Slice 3 pre-review lint correction green; review packaging ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -849,3 +849,46 @@ after child and transports closed.`
   native child-process proof, and update all three durable records. No
   production, public API, documentation, topology, or timing-policy change is
   authorized.
+
+## Slice 3 Pre-Review Lint Correction
+
+- Actual immutable execution metadata remained the existing implementer at
+  explicit `gpt-5.6-terra` / medium reasoning. No subagent was dispatched or
+  used. Receiving-review, TDD and its required references, JavaScript testing,
+  error-handling, and verification-before-completion instructions were fully
+  applied to this bounded correction.
+- The parent fixture is now the single source for `adapterIdentity` and
+  `transportTimeoutMs`. It passes canonical string values through
+  `SPINE_T0038B_ADAPTER_IDENTITY` and
+  `SPINE_T0038B_TRANSPORT_TIMEOUT_MS` alongside the existing IPC directory.
+  The child contains no fallback/default copy. At process entry it requires all
+  three values, rejects a non-normalized or syntax-invalid adapter identity,
+  and accepts the timeout only as a canonical positive decimal safe integer.
+  The effective values and timing remain unchanged.
+- Strict TDD evidence is exact. Changing the parent-owned identity and passing
+  both variables first produced the expected command request/reply timeout at
+  2000 ms because the old child ignored the environment (`1` failed, `2`
+  skipped); consuming the required values restored GREEN (`1` passed, `2`
+  skipped). A malformed-identity boundary test initially exposed a too-long
+  diagnostic fixture path; after correcting that test harness, the accepted
+  RED reached child readiness instead of refusing surrounding whitespace (`1`
+  failed, `3` skipped), then passed with strict identity validation. The
+  timeout RED likewise reached readiness for `2e3` (`1` failed, `4` skipped),
+  then passed with canonical decimal parsing.
+- Fresh unrestricted native result is one file and `5/5` tests after the
+  restricted sandbox refused the fixture's IPC bind with `Operation not
+permitted`: same-host command/event
+  behavior, both boundary refusals, setup-failure cleanup, and pre-removal IPC
+  leak detection. Tooling typecheck, scoped ESLint for both fixtures, and exact
+  fixture Prettier pass. Exact record formatting, duplicate/private-path and
+  protected-path scans, `git diff --check`, and expected five-path status/diff
+  also pass. Correction paths are only
+  `packages/server/test/server/server-context-transport-cross-process.test.ts`,
+  `packages/server/test/server/server-context-transport-child.mjs`, and these
+  three durable records. Endpoint cleanup, docs, production, server lifecycle,
+  public API, examples, Protobuf, topology, and unrelated work are preserved;
+  no commit was created.
+- Coordinator inspection confirmed the child has no fallback copy and validates
+  both parent-owned values before transport construction. The independent
+  unrestricted native rerun passed the complete child-process file with `5/5`
+  tests. The pre-review finding is accepted as resolved.

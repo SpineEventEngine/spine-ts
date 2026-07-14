@@ -20,13 +20,9 @@ import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/tran
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 
-const ipcDirectory = process.env.SPINE_T0038B_IPC_DIRECTORY;
-if (ipcDirectory === undefined) {
-  throw new Error("SPINE_T0038B_IPC_DIRECTORY is required.");
-}
-
-const adapterIdentity = "t0038b-context-transport";
-const transportTimeoutMs = 2_000;
+const ipcDirectory = requiredEnvironment("SPINE_T0038B_IPC_DIRECTORY");
+const adapterIdentity = adapterIdentityEnvironment("SPINE_T0038B_ADAPTER_IDENTITY");
+const transportTimeoutMs = positiveIntegerEnvironment("SPINE_T0038B_TRANSPORT_TIMEOUT_MS");
 const inboundEventEntityId = "cross-process-inbound-event";
 const { AggregateStateSchema, ProjectionStateSchema, SingularSetOnceStateSchema } =
   fixtureSchemas();
@@ -242,4 +238,34 @@ function safeMessage(error) {
     .replaceAll(ipcDirectory, "<ipc-directory>")
     .replace(/[\r\n\t]+/gu, " ")
     .slice(0, 240);
+}
+
+function requiredEnvironment(name) {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${name} is required.`);
+  }
+  return value;
+}
+
+function adapterIdentityEnvironment(name) {
+  const value = requiredEnvironment(name);
+  if (value.trim() !== value || !/^[A-Za-z0-9._-]+$/u.test(value)) {
+    throw new Error(
+      `${name} must contain only letters, numbers, dots, underscores, or hyphens without surrounding whitespace.`,
+    );
+  }
+  return value;
+}
+
+function positiveIntegerEnvironment(name) {
+  const source = requiredEnvironment(name);
+  if (!/^[1-9][0-9]*$/u.test(source)) {
+    throw new Error(`${name} must be a canonical positive decimal integer.`);
+  }
+  const value = Number(source);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${name} must be a safe positive integer.`);
+  }
+  return value;
 }

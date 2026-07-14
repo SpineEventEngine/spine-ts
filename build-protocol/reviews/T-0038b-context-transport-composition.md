@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 pre-review duplicated-constant fix assigned
+Status: Slice 3 pre-review lint correction green; review packaging ready
 
 ## Scope
 
@@ -556,3 +556,37 @@ Status: Slice 3 pre-review duplicated-constant fix assigned
   must agree. The same explicit Terra Medium implementer is assigned a bounded
   parent-to-child environment handoff with child-boundary validation and native
   proof. Review packaging waits for that correction.
+
+## Slice 3 Pre-Review Lint Correction Handback
+
+- Actual implementation metadata matches dispatch: existing implementer,
+  explicit `gpt-5.6-terra` / medium; no subagents. Receiving-review, strict TDD
+  and required references, JavaScript testing, error-handling, and verification
+  instructions were applied.
+- Finding resolved: the parent owns the only adapter identity and transport
+  timeout values and passes them via environment. The child requires and
+  validates both at entry, with no duplicate fallback: identity is already
+  normalized and uses the accepted character set; timeout is a canonical
+  positive decimal safe integer. The existing 2000 ms value and all transport
+  behavior are unchanged.
+- RED/GREEN proof is behavior-based. A deliberately changed parent identity
+  first timed out command routing while the child ignored the environment, then
+  passed after consumption. Whitespace identity and exponent-form timeout each
+  reached child readiness before their strict parsers and exited with named
+  boundary diagnostics afterward. A too-long temporary path found during the
+  first boundary RED was corrected before accepting evidence.
+- Unrestricted native fixture result is `5/5` after the restricted sandbox
+  refused the fixture's IPC bind with `Operation not permitted`. Tooling
+  typecheck, scoped ESLint for the two
+  fixture files, exact five-path Prettier, `git diff --check`, expected
+  five-path status/diff, and protected/private/duplicate scans pass. Authorized
+  paths are the two fixture files and all three records only. No endpoint
+  cleanup, production, docs, public API, server lifecycle, examples, Protobuf,
+  topology, timing policy, unrelated work, or commit was changed.
+- Remaining uncertainty is only specialist review disposition and subsequent
+  coordinator-owned full verification; the previously documented same-host
+  limitation remains unchanged.
+- Coordinator inspection confirmed the parent is the sole source and child
+  validation precedes transport construction. The independent unrestricted
+  native rerun passed `5/5`; the pre-review finding is closed and reviewer
+  dispatch is authorized.

@@ -28,7 +28,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const transportTimeoutMs = 2_000;
 const phaseTimeoutMs = 5_000;
 const shutdownGraceMs = 1_000;
-const adapterIdentity = "t0038b-context-transport";
+const adapterIdentity = "t0038b-parent-context-transport";
 const commandEntityId = "cross-process-command";
 const inboundEventEntityId = "cross-process-inbound-event";
 const childPath = fileURLToPath(new URL("./server-context-transport-child.mjs", import.meta.url));
@@ -105,6 +105,12 @@ interface ChildCloseResult {
   readonly exitState: ChildExitState;
   readonly forcedTermination: boolean;
 }
+interface ChildBoundaryResult {
+  readonly diagnostics: string;
+  readonly exitState: ChildExitState;
+  readonly outcome: "exited" | "ready";
+  readonly stderr: string;
+}
 interface CleanupResult {
   readonly childExitCode: number | null;
   readonly childExitSignal: string | null;
@@ -173,6 +179,26 @@ describe("Server context transport across Node processes", () => {
       ipcDirectoryRemoved: true,
     });
   }, 20_000);
+
+  it("rejects a non-normalized adapter identity at the child boundary", async () => {
+    const result = await runChildBoundary({
+      SPINE_T0038B_ADAPTER_IDENTITY: ` ${adapterIdentity} `,
+    });
+
+    expect(result.outcome).toBe("exited");
+    expect(result.exitState.code).toBe(1);
+    expect(`${result.diagnostics} ${result.stderr}`).toContain("SPINE_T0038B_ADAPTER_IDENTITY");
+  });
+
+  it("rejects a non-decimal transport timeout at the child boundary", async () => {
+    const result = await runChildBoundary({
+      SPINE_T0038B_TRANSPORT_TIMEOUT_MS: "2e3",
+    });
+
+    expect(result.outcome).toBe("exited");
+    expect(result.exitState.code).toBe(1);
+    expect(`${result.diagnostics} ${result.stderr}`).toContain("SPINE_T0038B_TRANSPORT_TIMEOUT_MS");
+  });
 
   it("cleans created resources when fixture setup fails", async () => {
     let setupResources: FixtureSetupResources | undefined;
@@ -283,7 +309,9 @@ class CrossProcessFixture {
         cwd: process.cwd(),
         env: {
           ...process.env,
+          SPINE_T0038B_ADAPTER_IDENTITY: adapterIdentity,
           SPINE_T0038B_IPC_DIRECTORY: ipcDirectory,
+          SPINE_T0038B_TRANSPORT_TIMEOUT_MS: String(transportTimeoutMs),
         },
         serialization: "json",
         stdio: ["ignore", "ignore", "pipe", "ipc"],
@@ -637,6 +665,73 @@ async function withinPhase<Value>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function runChildBoundary(
+  environment: Readonly<Record<string, string>>,
+): Promise<ChildBoundaryResult> {
+  const ipcDirectory = await mkdtemp(path.join(tmpdir(), "szb-"));
+  await chmod(ipcDirectory, 0o700);
+  const child = fork(childPath, [], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      SPINE_T0038B_ADAPTER_IDENTITY: adapterIdentity,
+      SPINE_T0038B_IPC_DIRECTORY: ipcDirectory,
+      SPINE_T0038B_TRANSPORT_TIMEOUT_MS: String(transportTimeoutMs),
+      ...environment,
+    },
+    serialization: "json",
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
+  const trackedChild = trackChild(child);
+  let diagnostics = "";
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => {
+    stderr = `${stderr}${String(chunk)}`.slice(-1_024);
+  });
+  const ready = new Promise<"ready">((resolve) => {
+    child.on("message", (message) => {
+      if (isRecord(message) && message.type === "ready") {
+        resolve("ready");
+      }
+      if (
+        isRecord(message) &&
+        message.type === "failure" &&
+        typeof message.phase === "string" &&
+        typeof message.message === "string"
+      ) {
+        diagnostics = `${message.phase}: ${message.message}`;
+      }
+    });
+  });
+
+  let outcome: ChildBoundaryResult["outcome"];
+  try {
+    outcome = await withinPhase(
+      Promise.race([ready, trackedChild.exit.then(() => "exited" as const)]),
+      phaseTimeoutMs,
+      "child environment boundary",
+    );
+  } finally {
+    if (trackedChild.state() === undefined) {
+      child.kill("SIGTERM");
+      try {
+        await withinPhase(trackedChild.exit, shutdownGraceMs, "boundary child shutdown");
+      } catch {
+        child.kill("SIGKILL");
+        await trackedChild.exit;
+      }
+    }
+    await rm(ipcDirectory, { recursive: true, force: true });
+  }
+
+  return {
+    diagnostics,
+    exitState: await trackedChild.exit,
+    outcome,
+    stderr,
+  };
 }
 
 function trackChild(child: ChildProcess): TrackedChild {
