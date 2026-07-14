@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 1 findings accepted — fixes assigned
+Status: Review round 1 fixes verified — round 2 assignment pending
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -258,3 +258,35 @@ may change. No subagents; coordinator retains Git and independent review.
   and matched every explicit spawn field.
 - The complete accepted batch returns to the existing implementer, immutable
   `gpt-5.6-terra` / medium, docs/records only, no subagents.
+
+## Review Round 1 Fix Handback
+
+- `README.md` no longer lists semantic-tag consumption as excluded. Current
+  descriptor-derived command-assignee and event-receiver tag consumption is
+  preserved as implemented; only application-owned semantic-tag registration
+  or handler materialization remains in the release exclusions.
+- `packages/server/README.md` now has one production-exclusion statement that
+  retains transport topology, broker/process supervision, production delivery
+  and retry policy, retry monitors/workers, backoff/scheduler ownership,
+  durable catch-up storage/projection catch-up through inbox storage, production
+  storage adapters, and the no-future-policy commitment.
+- No source, example, dependency, export, generated, user-guide, or unrelated
+  documentation path changed. Focused evidence is recorded in the work and
+  review logs.
+- Exact-path Prettier, semantic-tag/future-policy/duplicate/status scans, and
+  `git diff --check` passed. `pnpm docs:check` reported expected exports
+  `100/28/205/19/17/3`.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Coordinator Verification After Review Round 1
+
+- Confirmed D-0069 semantic-tag routing remains described as implemented while
+  only application-owned registration/materialization remains excluded.
+- Confirmed the server production exclusions are one statement retaining every
+  unique boundary and the no-future-policy qualifier.
+- `docs:check` passed with TypeDoc export counts `100/28/205/19/17/3`.
+- Exact-path Prettier, semantic-tag/duplicate/future-policy/status scans,
+  conflict checks, and baseline/current diff-whitespace checks passed.
+- The round 1 fixes are accepted for a fresh independent review wave. Full
+  `pnpm verify` remains reserved for final task closure.

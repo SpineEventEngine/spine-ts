@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 1 findings accepted — fixes assigned
+Status: Review round 1 fixes verified — round 2 assignment pending
 
 ## Review Scope
 
@@ -129,3 +129,27 @@ no reviewer result has yet been accepted.
   that metadata does not conflict with the orchestrator-facing runtime record.
 - Both findings are technically accepted and assigned together to the existing
   implementer (`gpt-5.6-terra` / medium), docs/records only, no subagents.
+
+## Review Round 1 Fix Handback
+
+- P1 fixed in `README.md`: implemented descriptor-derived semantic-tag routing
+  consumption is no longer called a release exclusion; the remaining wording
+  is limited to application-owned registration/materialization.
+- P2 fixed in `packages/server/README.md`: the duplicate adjacent production
+  lists are one statement retaining delivery/retry policy, monitors/workers,
+  backoff/scheduler ownership, topology, supervision, catch-up, adapters, and
+  no future-policy commitment.
+- Author checks passed: exact-path Prettier, focused wording/duplicate/status
+  scans, `git diff --check`, and `pnpm docs:check` with expected export counts
+  `100/28/205/19/17/3`.
+- No reviewer is active. Coordinator focused verification remains pending
+  before any rereview disposition.
+
+## Coordinator Verification After Review Round 1
+
+Both accepted findings are resolved in the current diff. Coordinator evidence:
+`docs:check` counts `100/28/205/19/17/3`; exact-path Prettier; focused
+semantic-tag, duplicate-exclusion, future-policy, and equal-status scans;
+conflict scan; and current/baseline `git diff --check`. No reviewer is active.
+The fixes may proceed to a fresh four-concern review wave; security remains
+deferred to T-0041 and full verify remains the final task gate.

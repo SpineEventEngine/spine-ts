@@ -1092,12 +1092,10 @@ original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates the row label,
 pending `TO_DELIVER` status, tenant, payload/schema, target type URL, and
 routed target ID.
-Transport topology, broker/process supervision, production delivery policy,
-retry monitors/workers, durable catch-up storage/projection catch-up through
-inbox storage, and production storage adapters are outside the initial release.
-Full production supervision, backoff/scheduler ownership, topology, production
-adapters, catch-up storage, and retry policy are exclusions, with no future
-policy committed.
+Transport topology, broker/process supervision, production delivery and retry
+policy, retry monitors/workers, backoff/scheduler ownership, durable catch-up
+storage/projection catch-up through inbox storage, and production storage
+adapters are outside the initial release; no future policy is committed.
 This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;

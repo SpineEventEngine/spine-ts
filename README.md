@@ -20,9 +20,9 @@ authentication, tracing, health-check, process-supervision, or multi-host
 transport recipe. The initial release excludes durable production storage
 adapters, remote/multi-host transport adapters, broker or worker process
 supervision, deployment/authentication/tracing/health hardening, retained
-attempt/update replay policy, semantic-tag consumption in runtime
-handler/routing registries, and broader production verification. These are
-release exclusions, not commitments to a future policy or implementation.
+attempt/update replay policy, application-owned semantic-tag registration or
+handler materialization, and broader production verification. These are release
+exclusions, not commitments to a future policy or implementation.
 
 ## Workspace
 
