@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Integrated matrix refresh green; review packaging ready
+Status: Integrated capability review findings assigned
 
 Task: T-0038 Accepted Capability Audit
 

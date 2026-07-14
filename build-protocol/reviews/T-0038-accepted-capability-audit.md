@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability review wave assigned
+Status: Integrated capability review findings assigned
 
 ## Review Scope
 
@@ -300,3 +300,29 @@ findings at `2026-07-14T01:23:48Z`.
 - Focused taxonomy/route, synchronized-status, stale-evidence, exact four-file
   Prettier, generated-path, four-file scope, `git diff --check`, and status
   checks pass. No review disposition is added; reviewer dispatch remains next.
+
+## Integrated Capability Review Result
+
+- `2026-07-14T09:15:44Z`: documentation reviewer actual immutable Luna Medium;
+  style, TypeScript/API docs, and reliability reviewers actual immutable Terra
+  High. Explicit dispatch profiles matched, all skill checks completed, no
+  subagents were used, and all reviewers are closed. The resumed close request
+  for the completed style reviewer returned `not found`, so no live reviewer
+  remains on this surface.
+- Performance/reliability: CLEAN with no actionable finding.
+- Documentation P2: active status mirrors disagree between the matrix and the
+  three T-0038 records.
+- TypeScript/API docs P2: the manifest-exported generated registry support
+  subpath is not package-internal. Its generated-code data types must be
+  distinguished from `HandlerRegistryIngestor` and
+  `HandlerRegistryIngestionError`, which are intentionally public from the
+  package root despite sharing the implementation module.
+- Style/maintainability P2: the unqualified active `Current State` above is
+  stale because both framework children are integrated and the matrix is
+  refreshed. Current action is this complete finding batch, affected rereview,
+  and parent final verification.
+- Assign all accepted findings together to the existing Terra Medium matrix
+  author, no subagents, with the matrix and three T-0038 records as the complete
+  write scope. Rerun style, documentation, and TypeScript/API lanes after local
+  acceptance; retain the clean reliability disposition unless the fix changes
+  its evidence.

@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability review wave assigned
+Status: Integrated capability review findings assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -421,3 +421,33 @@ superseded by the independent review result above.
 - Focused taxonomy/route, synchronized-status, row-21 stale-evidence, exact
   four-file Prettier, generated-path, four-file scope, `git diff --check`, and
   status checks pass. Full verify was not run.
+
+## Integrated Capability Review Result
+
+- `2026-07-14T09:15:44Z`: the complete four-lane wave is collected. The
+  documentation reviewer ran at actual immutable `gpt-5.6-luna` / medium;
+  style/maintainability, TypeScript/API docs, and performance/reliability ran at
+  actual immutable `gpt-5.6-terra` / high. Every dispatch named the model and
+  reasoning explicitly, every reviewer performed the assigned skill check and
+  used no subagents, and every reviewer is closed; the resumed close call for
+  the already-completed style reviewer returned `not found`, confirming no live
+  reviewer remains in this execution surface.
+- Performance/reliability is CLEAN: integrated T-0038a/T-0038b behavior,
+  lifecycle, cross-process, and pending-gate evidence is accurate.
+- Accepted P2 documentation/status finding: the four active status mirrors
+  disagree, with the matrix still claiming review packaging is ready while the
+  task/work/review records say the review wave is assigned. Synchronize them to
+  the current fix assignment and subsequent review-ready state.
+- Accepted P2 TypeScript/API finding: the intentionally exported
+  `@spine-ts/server/internal/generated-handler-registry` generated-code subpath
+  is mislabeled `package-internal`. Distinguish its generated-consumer support
+  types from the separate root-public `HandlerRegistryIngestor` and
+  `HandlerRegistryIngestionError` symbols that share the source module.
+- Accepted P2 style/status finding: the review log's unqualified `Current
+State` still says T-0038a/T-0038b are pending. Rewrite or explicitly
+  supersede it so the active path is finding correction, affected rereview,
+  and parent final verification.
+- Return this complete bounded batch to the same Terra Medium matrix author.
+  Ownership remains the matrix plus these three T-0038 records only; no
+  runtime, tests, public docs, examples, child records, generated output, or Git
+  operations are delegated.
