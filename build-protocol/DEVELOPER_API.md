@@ -477,13 +477,21 @@ await running.close();
 ```
 
 `ServerOptions.host` defaults to local-only `127.0.0.1`; broader binding such
-as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent and stops
-the HTTP/2 listener before closing active sessions and then owned
-contexts/resources. If one close fails, the server still attempts every
-remaining close and rejects with an aggregate failure. This API reuses
-`SpineServices` directly and keeps ZeroMQ, IPC endpoints, worker supervision,
-durable scheduling, broad resource ownership, and any singleton
-`ServerEnvironment` out of the public surface.
+as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent: it stops
+listener intake and sessions, closes context transport intake and accepted work,
+then detaches delivery before closing contexts, resources, and any
+server-owned environment. A failed close retains unfinished phases for a later
+retry.
+
+`ServerEnvironment` is a supported public server-assembly value. Use
+`ServerEnvironment.local()` for local/in-memory defaults or
+`ServerEnvironment.production(...)` with deployment facilities, then supply it
+to `Server` when the caller owns that environment. A caller-owned environment
+remains open when one attached server closes and can be reused after detach;
+`ServerEnvironment.close()` permanently closes an unused environment and
+rejects non-destructively while it is in use. The public lifecycle does not
+provide a delivery scheduler, monitor, retry policy, worker supervision,
+topology policy, or internal lifecycle controls.
 
 ## Validation API
 

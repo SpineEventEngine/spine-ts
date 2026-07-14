@@ -6,7 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0037b at safe-stop commit `4adb0b4f`
+Active implementation frontier: T-0039a canonical specification and status reconciliation
 
 ## Purpose
 
@@ -86,6 +86,13 @@ later branch lines. Dirty or scratch-only worktrees are preserved archival
 state. Do not merge, rebase, delete, or repair them during the critical path.
 Handle optional archival cleanup only after release, with a separate explicit
 maintenance task.
+
+## Current Execution Status
+
+Current status: T-0038 is complete, integrated, post-merge verified, and
+pushed. T-0039a is the active implementation frontier for canonical
+specification and durable-status reconciliation. The dated Starting State above
+is historical plan-creation context.
 
 ## Initial Release Scope
 

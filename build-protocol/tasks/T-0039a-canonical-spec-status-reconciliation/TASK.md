@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Author assigned
+Status: Coordinator pre-review findings assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -96,19 +96,29 @@ exclusions without rewriting public package documentation or user guidance.
 
 ## Skill Applicability Check
 
-- Session inventory, `build-protocol/skills/EXPECTED_SKILLS.md`, readable user
-  skill entrypoints, and installed lock are the required evidence sources.
-- Selected/read for orchestration: `subagent-driven-development`,
-  `requesting-code-review`, `receiving-code-review`,
-  `verification-before-completion`, and `using-git-worktrees`.
-- `doc-coauthoring` is skipped because its interactive drafting flow conflicts
-  with this autonomous factual reconciliation. ADR creation is N/A because
-  accepted decisions are only receiving outcome annotations. Runtime/TDD/
-  TypeScript implementation skills are N/A unless inventory reveals a code
-  defect, which must be routed rather than absorbed here.
-- No server runtime/API code changes are planned, so new Spine JVM source
-  inspection is N/A; accepted T-0037/T-0038 implementation records are the
-  evidence for observable lifecycle wording.
+- Canonical sources checked: session skill inventory, readable
+  `~/.agents/skills/*/SKILL.md` entrypoints, and
+  `build-protocol/skills/EXPECTED_SKILLS.md`. No separate installed-lock file
+  was found; the manifest fallback applies.
+- `verification-before-completion` is applicable and was read before this
+  handback. `receiving-code-review` was read; it is N/A until confirmed review
+  findings are returned. `doc-coauthoring` is N/A because its interactive
+  drafting workflow conflicts with this autonomous factual reconciliation.
+- Expected-skill manifest dispositions: `subagent-driven-development` N/A
+  (subagents prohibited); `using-git-worktrees` N/A (the coordinator already
+  assigned this worktree); `requesting-code-review` N/A (coordinator-owned);
+  `planning-with-files` N/A (one bounded task already has durable records);
+  `architecture-decision-records` N/A (outcome annotations do not create or
+  alter decisions); `typescript-advanced-types` and `nodejs-backend-patterns`
+  N/A (no TypeScript/runtime change).
+- `tdd`, `test-driven-development`, JavaScript testing, error-handling,
+  debugging, API-design, architecture, security, accessibility, performance,
+  web, and artifact-generation skills are N/A: this task changes no runtime,
+  test, public signature, security behavior, web surface, or artifact. A
+  discovered runtime contradiction would be routed rather than absorbed here.
+- No new Spine JVM inspection is applicable: the wording records already
+  accepted and integrated T-0036/T-0037/T-0038b evidence without changing
+  server semantics.
 
 ## Immediate Next Action
 
@@ -153,3 +163,36 @@ inventory. Run focused docs/status lint before any reviewer assignment.
 - The author may edit only the inventoried canonical/status surfaces plus the
   three T-0039a records. It must report every changed path and every inspected
   candidate left unchanged with a reason.
+
+## Author Handback
+
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents were dispatched or used.
+- Reconciled the authorized lifecycle, API, decision-outcome, plan/frontier,
+  bootstrap, T-0038b, and matrix claims. No runtime or public export changed.
+- Focused status, wording, matrix, link, formatting, generated-path, scope,
+  and whitespace checks are recorded in the work log, including all twelve
+  changed paths and exact command evidence. Coordinator review is the remaining
+  task phase.
+
+## Coordinator Pre-Review Findings
+
+- `2026-07-14T10:14:44Z`: author actual immutable profile matched explicit
+  `gpt-5.6-terra` / medium, used no subagents, and is closed. Coordinator
+  inspection accepts the 12-path scope, lifecycle/API reconciliation,
+  31/25/4/0/1/1/0 matrix taxonomy, synchronized statuses, Prettier, and diff
+  integrity.
+- Fix three record-only findings before reviewer packaging:
+  1. The matrix still says T-0038 remains open for rereview/final verification
+     and repeats that final acceptance is pending. T-0038 is complete,
+     integrated, verified, and pushed; remove those stale current claims while
+     retaining T-0042 release proof.
+  2. The T-0039a task/work/review skill records say no installed lock was
+     found, but `/Users/armiol/.agents/.skill-lock.json` exists and is readable.
+     Inspect it and record the actual lock evidence.
+  3. D-0086's outcome says all eight children were pushed. The integrated/
+     verified outcome is durable, but current remote and T-0037a records do not
+     establish that child task ref. Remove the unsupported `pushed` claim;
+     remote synchronization is not part of D-0086's semantic outcome.
+- Resume the same Terra Medium author for these records only. Preserve all
+  accepted lifecycle/API/status/matrix changes and exact counts/routes.

@@ -3724,6 +3724,14 @@ phase releases the lifecycle serial gate, the existing coalesced public close
 attempt performs ordered owned-facility teardown outside that gate. Public
 `ServerEnvironment.close()` behavior and all public exclusions remain unchanged.
 
+Final implementation outcome (2026-07-14): T-0036 supplied the bounded
+package-internal delivery evidence; T-0037a through T-0037f integrated the
+environment-owned readiness, recovery, detach, reuse, permanent-close, and
+server lifecycle in that order. T-0038b then integrated same-host context
+transport composition into the established server ordering. These outcomes add
+no public scheduler, monitor, retry-timing, topology, adapter, or supervision
+policy.
+
 ## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
 
 Status: Accepted
@@ -3908,3 +3916,10 @@ completes and releases `EnvironmentAttachments.#serial` before
 reject even while facility settlement is pending. This clarification preserves
 D-0085 ordering in every generation owner and introduces no ninth child, public
 surface, or new lifecycle decision.
+
+Final implementation outcome (2026-07-14): all eight children are complete,
+merged, post-merge verified, and pushed. Together with T-0036 they implement
+D-0085's environment-owned bounded delivery lifecycle; integrated T-0038b
+uses that completed lifecycle for same-host context transport composition.
+The child sequence remains historical decomposition, not a public API or a
+commitment to excluded policy.

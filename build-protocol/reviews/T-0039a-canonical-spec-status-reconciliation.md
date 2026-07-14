@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Author assigned
+Status: Coordinator pre-review findings assigned
 
 ## Review Scope
 
@@ -37,3 +37,39 @@ Status: Author assigned
 - Public TypeScript signatures/exports, package/API docs, runtime/tests,
   examples, Protobuf, generated output, and historical event entries are out of
   scope. T-0037 active headers are already reconciled.
+
+## Canonical Skill-Applicability Check
+
+- Checked the session inventory, readable `~/.agents/skills` entrypoints, and
+  `build-protocol/skills/EXPECTED_SKILLS.md`; no separate installed-lock file
+  was found, so manifest fallback applies.
+- `verification-before-completion` is applicable and read. Receiving-review is
+  N/A until a confirmed finding arrives. Interactive doc coauthoring is N/A for
+  an autonomous factual reconciliation.
+- All expected skills are N/A for this author handback except verification:
+  subagent/worktree/review-request workflows are coordinator-owned or
+  prohibited; planning/ADR skills do not fit an existing bounded record update;
+  TypeScript/Node/TDD/testing/debugging/security/performance/web skills do not
+  fit a Markdown-only change. A material finding may change the relevant
+  reviewer applicability later.
+
+## Author Handback
+
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.
+- Documentation is relevant for coordinator review. Style is relevant to
+  canonical-record consistency; TypeScript/API docs is N/A because no public
+  TypeScript signature, export, TSDoc, or package/API reference changed.
+  Performance/reliability is relevant only to verify lifecycle claims and
+  exclusions. Security remains deferred to T-0041.
+- Exact changed-path, evidence, and command handback is in
+  `build-protocol/work-logs/T-0039a.md`; this review record remains pending
+  coordinator review.
+
+## Coordinator Pre-Review Findings
+
+- `2026-07-14T10:14:44Z`: author profile/scope accepted; exact taxonomy,
+  statuses, formatting, and diff integrity pass. No reviewer is assigned yet.
+- Correct stale T-0038 matrix closure prose, false missing installed-lock
+  evidence, and unsupported D-0086 all-children-pushed wording before packaging.
+  The same Terra Medium author owns the complete record-only batch.
