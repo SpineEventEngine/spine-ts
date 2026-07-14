@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final style rereview assigned
+Status: Final style rereview finding accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -445,3 +445,14 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Assign style/maintainability at explicit Terra High, read-only/no subagents.
   Documentation, API, and reliability retain clean unaffected results; security
   remains deferred to T-0041.
+
+## Final Style Rereview Result
+
+- `2026-07-14T11:26:27Z`: style returned one P2 and was closed. The corrected
+  disposition handbacks say no concern is pending even though the accepted style
+  finding is still awaiting this final rereview; the top summary also lacks that
+  temporal qualifier.
+- Resume the same Terra Medium implementer. Change only current disposition/
+  handback wording to distinguish zero stale `pending relevance` claims from the
+  style finding pending final rereview. Preserve all clean concern results and
+  historical entries.
