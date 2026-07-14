@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 4 fixes verified - re-review pending
+Status: Wave 5 finding accepted - fix pending
 
 Baseline: `526b7b4d`
 
@@ -297,6 +297,19 @@ links/imports, and future-policy overclaim.
   TypeScript/API docs agent `019f6283-2196-7922-b9f6-cbc712949656` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f6283-2a12-77a3-aaa5-cd116b4e846f` is actual `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 5 Results
+
+- Style/maintainability: clean.
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: one accepted finding. Add a finite ordered
+  `ResponseFormat.limit` to broad guide queries and independently cap
+  decoded/logged rows with explicit omission reporting and oversized-response
+  evidence.
+- All Wave 5 reviewers were closed. The single fix returns to existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
 
 ## Skill Applicability
 

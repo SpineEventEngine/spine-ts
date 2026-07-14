@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 4 fixes verified; re-review pending
+Status: In progress - Wave 5 finding accepted; fix pending
 
 Started: `2026-07-14`
 
@@ -433,3 +433,13 @@ install` reported all eight workspace projects already up to date;
 - Server shutdown and copied-module cleanup left no temporary file or IPv4
   listener. Fresh tooling/build types, docs/API, focused ESLint, format,
   generated-clean, and diff checks passed.
+
+## 2026-07-14 - Specialist Wave 5 Finding
+
+- Style/maintainability, documentation completeness, and TypeScript/API docs are
+  clean.
+- Performance/reliability found one accepted guide-query bound: all-row and
+  column-filter requests need a finite ordered `ResponseFormat.limit`, and
+  decode/log handling needs an independent cap plus omitted-row reporting.
+  Keep exact-ID as the deterministic seeded-row proof and add oversized-response
+  evidence for the verbatim guide decoder.
