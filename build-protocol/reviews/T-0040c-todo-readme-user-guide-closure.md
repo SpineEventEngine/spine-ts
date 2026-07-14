@@ -558,6 +558,7 @@ links/imports, and future-policy overclaim.
   `019f62bc-319e-7da1-8d14-0b4c6ef262f3` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f62bc-505d-7922-b151-16682f38338d` is actual
-  `gpt-5.6-terra` / high. The unstarted style lane retains its explicit
-  `gpt-5.6-terra` / high assignment and will use the first freed slot. No
-  partial wave is accepted.
+  `gpt-5.6-terra` / high. After documentation closed, the style lane was
+  dispatched as agent `019f62bd-6c41-7c11-8657-2e879e0aadde`; explicit
+  dispatch fields and immutable Desktop role metadata agree on actual
+  `gpt-5.6-terra` / high. No partial wave is accepted.
