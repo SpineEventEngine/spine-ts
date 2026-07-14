@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Main back-merge clean; matrix refresh assigned next
+Status: Integrated capability matrix refresh assigned
 
 ## Review Scope
 
@@ -219,3 +219,14 @@ findings at `2026-07-14T01:23:48Z`.
   zero unmerged paths, five parent artifacts preserved, accurate staged
   records, no conflict marker, and no whitespace error. The no-commit merge is
   accepted for commit; capability matrix refresh remains separate.
+
+## Integrated Matrix Refresh Assignment
+
+- Existing implementer role, explicit `gpt-5.6-terra` / medium, no subagents,
+  owns matrix plus three parent records only. Required current state is 31 rows:
+  25 IMPLEMENTED, four DOCUMENTED_EXCLUSION, zero STALE_DOC_STATUS, one
+  EXAMPLE_GAP, one SECURITY_GATE, zero FRAMEWORK_DEFECT.
+- Rows 30/31 must cite the integrated source/tests/docs from T-0038a/T-0038b;
+  routed findings retain T-0040 and T-0041 only. Parent final verify remains
+  pending. Review dispatch follows focused static acceptance and a committed
+  matrix endpoint.

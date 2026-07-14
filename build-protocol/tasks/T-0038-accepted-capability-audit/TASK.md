@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Main back-merge clean; matrix refresh assigned next
+Status: Integrated capability matrix refresh assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -331,3 +331,17 @@ superseded by the independent review result above.
   actual parent/source hashes, zero conflicts/unmerged paths, preserved parent
   artifacts, and clean staged records. The merge may be committed; matrix
   refresh is next.
+
+## Integrated Matrix Refresh Assignment
+
+- Existing implementer role at explicit `gpt-5.6-terra` / medium, no
+  subagents, owns only `INITIAL_RELEASE_CAPABILITY_MATRIX.md` and the three
+  T-0038 records.
+- Replace rows 30/31's superseded defect evidence with exact integrated source,
+  behavior tests, docs, and `IMPLEMENTED` classification; remove T-0038a/b from
+  routed findings; retain only the T-0040 example gap and T-0041 security gate.
+  Expected strict counts become 31 rows: 25 implemented, four exclusions, zero
+  stale-doc, one example gap, one security gate, zero framework defects.
+- Preserve pending parent final verify and T-0042 release proof. Run focused
+  taxonomy/route/export/status/docs lint, exact formatting, and diff checks;
+  do not edit runtime, public docs, child records, examples, or generated files.
