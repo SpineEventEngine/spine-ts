@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 reviewer wave assigned
+Status: Slice 1 reliability findings accepted; fix assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -305,3 +305,21 @@ work until Slice 1 focused verification and relevant review are clean.
   `gpt-5.6-terra` / high; performance/reliability `gpt-5.6-terra` / high.
 - Documentation remains N/A because the slice changes no public or observable
   documentation. Security remains deferred to T-0041.
+
+## Slice 1 Review Wave Result
+
+- Style/maintainability and TypeScript/API docs returned clean. Actual immutable
+  role metadata matched explicit dispatch at `gpt-5.6-terra` / high; both used
+  no subagents and were closed.
+- Performance/reliability returned two accepted findings at actual immutable
+  `gpt-5.6-terra` / high, no subagents, then was closed.
+- P1: partial binding open followed by cleanup failure masks the primary
+  registration error and loses the only retryable close capability. Preserve
+  primary-first failure order and retain an internal, non-root cleanup
+  capability that Slice 2 server lifecycle can checkpoint and retry.
+- P2: the focused recording responder keeps command intake after handle close.
+  Make responder close remove only its registration idempotently and prove
+  command and event intake cannot reach retired registrations.
+- The same implementer is resumed for this complete bounded batch at explicit
+  `gpt-5.6-terra` / medium, no subagents. Public root exports and Slice 2 server
+  lifecycle remain unchanged in this fix.

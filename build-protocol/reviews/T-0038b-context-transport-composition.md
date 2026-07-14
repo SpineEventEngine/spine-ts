@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 reviewer wave assigned
+Status: Slice 1 reliability findings accepted; fix assigned
 
 ## Scope
 
@@ -124,3 +124,25 @@ Status: Slice 1 reviewer wave assigned
 - Prompts are bounded to Slice 1 and must ignore superseded historical text
   unless current records or changed active docs claim it. Documentation is N/A;
   security is deferred to T-0041.
+
+## Slice 1 Reviewer Results
+
+- Style/maintainability: CLEAN. Reviewer
+  `019f5e8a-a99c-7401-971c-bca6b26c4c38`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- TypeScript/API docs: CLEAN. Reviewer
+  `019f5e8a-ad5f-70c1-80fc-74e45251dd98`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed. Internal composition remains
+  outside package root and Node `Buffer` matches server runtime typings.
+- Performance/reliability: two accepted findings. Reviewer
+  `019f5e8a-affc-7c93-a658-e961038fed1a`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- P1: partial open plus close failure loses retry ownership and masks the
+  registration failure. Required fix: primary-first combined failure and an
+  internal retained cleanup capability that can be retried without public API
+  leakage; regression must prove later cleanup and re-open.
+- P2: recording command responder close is a no-op. Required fix: per-handle
+  idempotent removal and post-close command/event refusal evidence.
+- Documentation: N/A, unchanged internal-only behavior. Security: deferred to
+  T-0041. Existing implementer fix dispatch is explicit
+  `gpt-5.6-terra` / medium, no subagents.
