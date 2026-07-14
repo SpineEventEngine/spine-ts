@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Complete; integrated and post-merge verified; remote sync pending
+Status: Complete; integrated, post-merge verified, and synchronized to origin
 
 ## Review Scope
 
@@ -506,3 +506,9 @@ findings at `2026-07-14T01:23:48Z`.
   API export counts, and generated-clean evidence as the task gate.
 - Review remains closed and every reviewer remains closed. Remote synchronization
   is the only remaining T-0038 closure action.
+
+## Remote Closure
+
+- `2026-07-14T09:55:26Z`: task closure `29db55b5` is on the remote task branch;
+  merge `6488bfa9` and integration record `485ad938` are on `origin/main`.
+- Review, verification, integration, and remote synchronization are closed.

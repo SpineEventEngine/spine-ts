@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Complete; integrated and post-merge verified; remote sync pending
+Status: Complete; integrated, post-merge verified, and synchronized to origin
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -666,3 +666,13 @@ verify` task gate next. Do not mark T-0038 complete before fresh full-gate
   and diff gates pass. Root status contains only the untouched user-owned
   `human-review-1-jul.md` file. Push of updated `main` and durable remote-sync
   recording remain.
+
+## Remote Synchronization
+
+- `2026-07-14T09:55:26Z`: completed task ref
+  `origin/task/T-0038-accepted-capability-audit` contains task closure
+  `29db55b5`. `origin/main` contains merge `6488bfa9` and integration record
+  `485ad938` after successful push.
+- This remote-state record is the final T-0038 closure commit and is pushed to
+  `origin/main` immediately after commit. T-0038 is durably closed; T-0039a is
+  the next coherent milestone.
