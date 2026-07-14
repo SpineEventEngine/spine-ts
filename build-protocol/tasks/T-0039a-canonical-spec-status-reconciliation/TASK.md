@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final affected-lane rereview assigned
+Status: Final rereview finding accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -334,3 +334,14 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   Terra High, read-only/no subagents. TypeScript/API docs retains its clean
   wave-3 result because the public-contract surface is unchanged. Security
   remains deferred to T-0041.
+
+## Final Affected-Lane Rereview Result
+
+- `2026-07-14T10:59:03Z`: documentation and reliability are clean and closed.
+  Style found one active-vs-historical contradiction in D-0086: the July 13
+  clarification is labeled `Active` and calls T-0037f future immediately before
+  the July 14 final implementation outcome. Style reviewer is closed.
+- Preserve the clarification as historical evidence, label it explicitly
+  historical/superseded in implementation status, and replace `future` with
+  then-pending wording. Resume the same Terra Medium implementer; no decision,
+  runtime, public API, or other surface changes.

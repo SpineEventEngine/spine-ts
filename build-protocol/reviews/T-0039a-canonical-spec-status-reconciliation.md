@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final affected-lane rereview assigned
+Status: Final rereview finding accepted
 
 ## Review Scope
 
@@ -217,3 +217,14 @@ Status: Final affected-lane rereview assigned
 - TypeScript/API docs is not rerun: its wave-3 result is clean and the fix
   changes no public-contract/API surface. Historical superseded text remains
   non-active; security remains deferred to T-0041.
+
+## Final Affected-Lane Rereview Results
+
+- Documentation, Luna Medium: clean and closed.
+- Performance/reliability, Terra High: clean and closed.
+- Style/maintainability, Terra High: P1 D-0086's July 13 clarification is still
+  labeled active and calls T-0037f future, conflicting with the immediately
+  following final implementation outcome. Reviewer closed.
+- Accepted fix: mark the clarification historical/superseded in implementation
+  status and use then-pending wording while preserving its evidence. Rerun the
+  same three affected lanes; API retains its clean wave-3 result.
