@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final clean-wave assignment
+Status: Final glossary finding accepted
 
 ## Review Scope
 
@@ -251,3 +251,13 @@ Status: Final clean-wave assignment
   `gpt-5.6-terra` / high. Read-only/no subagents.
 - TypeScript/API docs retains its clean wave-3 result because the historical
   decision-label fix changes no public-contract surface. Security is deferred.
+
+## Final Clean-Wave Results
+
+- Style/maintainability, Terra High: clean and closed.
+- Performance/reliability, Terra High: clean and closed.
+- Documentation, Luna Medium: P2 glossary `Server` description uses `runtime
+supervisor`, conflicting with the explicit production process-supervision
+  exclusion. Reviewer closed.
+- Accepted fix: use factual gRPC service-host/server-lifecycle-owner wording.
+  Rerun docs and style only; API and reliability retain clean results.

@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final clean-wave assignment
+Status: Final glossary finding accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -371,3 +371,13 @@ inventory. Run focused docs/status lint before any reviewer assignment.
 - Assign documentation at explicit Luna Medium and style/reliability at explicit
   Terra High, read-only/no subagents. API retains its clean unaffected result;
   security remains deferred to T-0041.
+
+## Final Clean-Wave Result
+
+- `2026-07-14T11:08:35Z`: style and reliability are clean and closed.
+  Documentation found one P2 terminology collision: the active glossary calls
+  `Server` a runtime supervisor although production process supervision is
+  explicitly excluded. Documentation reviewer is closed.
+- Replace that glossary phrase with `gRPC service host and server lifecycle
+owner`. Resume the same Terra Medium implementer for this line and the three
+  records only. Rerun documentation and style; API/reliability stay clean.
