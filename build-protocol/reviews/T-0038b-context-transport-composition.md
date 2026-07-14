@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 coordinator teardown corrections assigned
+Status: Slice 3 adapter endpoint cleanup authorized; fix assigned
 
 ## Scope
 
@@ -451,3 +451,51 @@ Status: Slice 3 coordinator teardown corrections assigned
   primary-first diagnostics and bounded termination.
 - Same implementer fix dispatch is explicit `gpt-5.6-terra` / medium, no
   subagents. Reviewer dispatch remains pending corrected local gates.
+
+## Slice 3 Teardown Correction Disposition
+
+- Actual implementer metadata: existing implementer, explicit
+  `gpt-5.6-terra` / medium; no subagent dispatch. Receiving-code-review and
+  strict TDD were applied before implementation. JavaScript testing,
+  error-handling, systematic-debugging, and verification-before-completion
+  guidance materially produced deterministic fault injection, shared bounded
+  cleanup, primary-first sanitized diagnostics, root-cause isolation, and the
+  refusal to claim a false GREEN.
+- Setup finding is corrected in the harness. All post-`mkdtemp()` setup is now
+  inside an ownership boundary; any created parent transport and child are
+  cleaned with bounded termination, the IPC directory is recursively removed
+  and confirmed absent, and cleanup failures follow the original setup error.
+  Focused test evidence observes the surviving resources themselves, not call
+  counts alone.
+- Retained-entry detection is corrected in the harness. Normal close inspects
+  only after parent/child transport shutdown and child exit, records a retained
+  count, always recursively removes, and verifies `ENOENT`. The narrow injected
+  retained-file test passes.
+- Review cannot yet be dispatched as clean. The real native proof now detects
+  two persistent ZeroMQ endpoint pathnames and fails `1/3`; both new correction
+  tests pass. A minimal native probe proves that `zeromq@6.5.0` leaves a bound
+  IPC pathname after socket `close()` for at least one second and also after
+  `unbind()`. The current adapter has no endpoint unlink ownership on close.
+  Hiding those paths before inspection would defeat the accepted reviewer
+  finding, while fixing their actual owner would violate the committed
+  no-production-change scope.
+- Mechanical evidence otherwise passes: generated build/tooling typecheck,
+  scoped ESLint, cleanup enforcement, exact Prettier, docs/API check with 205
+  server exports, generated-clean, diff whitespace, expected status/diff,
+  protected-path, private-import, and public-root scans. The correction changed
+  only the cross-process fixture test and these three records. Full verify was
+  correctly not rerun. Pre-review status is `NEEDS_CONTEXT` pending a
+  coordinator scope decision; no reviewer wave, production/docs change, Slice
+  1/2 expansion, commit, or parent T-0038 closure occurred.
+
+## Slice 3 Adapter Cleanup Authorization
+
+- Coordinator accepts a production reliability defect in the ZeroMQ adapter:
+  socket close and explicit unbind leave adapter-bound deterministic endpoint
+  pathnames.
+- Authorized correction unlinks only successfully bound publisher/replier IPC
+  paths after socket close, preserves retry ownership on non-`ENOENT` failures,
+  and proves publisher/replier cleanup plus connect-only non-ownership. No
+  public export or policy change.
+- Existing implementer continues at explicit `gpt-5.6-terra` / medium, no
+  subagents. Reviewer dispatch remains pending a green native proof.

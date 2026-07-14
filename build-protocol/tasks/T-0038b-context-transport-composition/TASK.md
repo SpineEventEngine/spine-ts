@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 coordinator teardown corrections assigned
+Status: Slice 3 adapter endpoint cleanup authorized; fix assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -710,3 +710,70 @@ work until Slice 1 focused verification and relevant review are clean.
   primary-first combined diagnostics.
 - Resume the same implementer at explicit `gpt-5.6-terra` / medium, no
   subagents. Change only the cross-process harness and these records.
+
+### Correction implementation and native boundary finding
+
+- The existing implementer ran at the immutable assigned profile
+  `gpt-5.6-terra` / medium. No subagent was dispatched. Canonical skill
+  applicability was rechecked before correction: receiving-code-review and
+  strict TDD governed the accepted finding batch; JavaScript testing and error
+  handling patterns governed fault injection, bounded cleanup, and
+  primary-first diagnostics; systematic debugging governed the unexpected
+  native teardown RED; verification-before-completion prevents a clean handback
+  while that RED remains.
+- `CrossProcessFixture.create()` now owns every resource created after
+  `mkdtemp()` until fixture construction succeeds. A setup rejection closes an
+  available parent transport, requests bounded child shutdown and escalates to
+  termination when necessary, recursively removes the IPC directory, confirms
+  `ENOENT`, and rethrows the original setup error first with sanitized cleanup
+  failures following it. The setup and normal teardown paths share child-exit
+  and directory-removal helpers instead of duplicating the complete close state
+  machine.
+- Normal teardown now inspects the IPC directory only after the parent
+  transport is closed and the child has completed its own server/environment/
+  transport shutdown and exited. A retained count is recorded as a cleanup
+  failure; recursive removal and the final `ENOENT` check still run.
+- Strict TDD evidence: the setup fault-injection test first failed because the
+  injected setup error escaped without cleanup aggregation, then passed after
+  the ownership boundary was implemented. The retained-entry test first failed
+  because the inspection helper did not exist, then passed after implementation
+  and proves both leak reporting and unconditional removal. The focused file now
+  reports `2/3` passing: both correction tests pass, while the real cross-process
+  proof correctly fails with `Cross-process IPC directory retained 2 entries
+after child and transports closed.`
+- Systematic native diagnosis showed this is not a timing race: a minimal
+  `zeromq@6.5.0` publisher bind/close retained its IPC pathname at 0, 10, 100,
+  500, and 1000 ms, and explicit `unbind()` also retained the pathname. Current
+  `ZeroMqSignalTransport.close()` closes native sockets but does not unlink its
+  deterministic bound endpoint files. Therefore the accepted leak assertion
+  cannot pass honestly within the committed restriction to change only the
+  cross-process harness and records; deleting endpoint files in the fixture
+  before inspection would hide the exact leak the finding requires it to
+  detect. A coordinator decision is required to permit the smallest transport
+  adapter ownership fix or to redefine the retained-endpoint expectation.
+- Green non-native gates at this boundary: generated build plus tooling
+  typecheck; scoped ESLint; cleanup enforcement; exact Prettier; `docs:check`
+  with 205 server exports; and canonical generated-clean. The final full verify
+  was intentionally not rerun. Diff/status, private-import, public-root, and
+  protected-scope scans passed. Correction-owned paths are the cross-process
+  fixture test and these three records only. Slice 3 status is `NEEDS_CONTEXT`;
+  no docs, production, Slice 1/2, commit, or parent T-0038 closure work was
+  added by this correction.
+
+## Slice 3 Adapter Cleanup Authorization
+
+- Coordinator accepts the native root-cause evidence and keeps the retained
+  endpoint criterion unchanged.
+- Authorize the smallest production correction in
+  `packages/transport/src/zeromq/signal-transport.ts`: track only IPC paths this
+  transport successfully binds, close sockets, unlink owned paths on handle or
+  transport close, ignore `ENOENT`, attempt all cleanup, and retain failed
+  unlink ownership for close retry. Never unlink connect-only subscriber or
+  requester paths and add no public API.
+- Add focused publisher/replier endpoint cleanup and retry regressions in the
+  existing ZeroMQ transport test, then rerun the corrected cross-process proof.
+  This scope expansion is coordinator-authorized as the mandatory seam required
+  by the accepted no-socket-file-leak criterion.
+- Resume the same implementer at explicit `gpt-5.6-terra` / medium, no
+  subagents. Docs, server lifecycle, examples, topology, and retry timing policy
+  remain unchanged.
