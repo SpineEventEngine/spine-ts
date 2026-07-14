@@ -1,6 +1,6 @@
 # T-0038a: Canonical Fallback Type URLs
 
-Status: Framed; implementation assigned
+Status: Independent review assigned
 
 Started: `2026-07-14T01:50:36Z`
 
@@ -111,7 +111,82 @@ every accepted Spine-option, default, and valid custom fallback result.
   before governed actions. Server/JVM inspection is N/A because no server code
   changes.
 
+## Implementer Skill Applicability Record
+
+- `2026-07-14`: Existing implementer, expected profile `gpt-5.6-terra` /
+  medium, no subagents. This bounded runtime bugfix requires
+  `test-driven-development`, `implement`, and `verification-before-completion`;
+  all were read before the RED test. `typescript-advanced-types` is N/A: the
+  change has no advanced type-level logic. Server/JVM inspection is N/A because
+  no server code changes.
+- Acceptance focus: for a no-option schema, public fallback input `""`,
+  whitespace-only, `"/"`, and `"///"` must deterministically throw the same
+  `TypeError`; a file option must bypass malformed unused fallback input; valid
+  canonical and regression paths must remain exact.
+
+## Implementer TDD Record
+
+- RED: after normal `proto:generate` and generated build prerequisites,
+  `corepack pnpm exec vitest run packages/core/test/index.test.ts --passWithNoTests`
+  collected 30 tests and failed the four required table cases. Each failure was
+  `AssertionError: expected function to throw an error, but it didn't` at the
+  public `getTypeUrlPrefix(AnySchema, fallbackPrefix)` assertion; 26 tests
+  passed. An initial pre-build attempt could not resolve ignored
+  `@spine-ts/proto` entrypoints and is excluded from behavioral evidence.
+- GREEN: the same focused command reported `1 passed`, `34 passed (34)` after
+  one existing prefix-selection owner strips trailing `/` separators, rejects
+  empty or whitespace-containing remaining fallback values with
+  `TypeError: Fallback type URL prefix must be non-empty and contain no whitespace.`,
+  and leaves a present Spine file option ahead of fallback validation.
+- Docs are deliberately narrow: public option/function TSDoc and core README
+  state trailing-separator normalization and empty/whitespace rejection only.
+  No packing or registry custom-fallback option was added.
+
+## Implementer Handoff
+
+- Status: `DONE_WITH_CONCERNS`. Changed paths are exactly the three assigned
+  records plus `packages/core/src/index.ts`, `packages/core/test/index.test.ts`,
+  and `packages/core/README.md`; no user-owned root file was read or changed.
+- Fresh focused evidence: `corepack pnpm typecheck:build:generated` exited 0;
+  `corepack pnpm exec vitest run packages/core/test/index.test.ts --passWithNoTests`
+  exited 0 with `1 passed`, `34 passed (34)`; scoped ESLint exited 0;
+  `corepack pnpm docs:check:generated` exited 0 and retained 28 expected core
+  exports; exact-six-file Prettier exited 0; and
+  `corepack pnpm proto:check-generated` exited 0 with ignored, untracked,
+  freshly regenerated outputs.
+- `git diff --check` exited 0; `git status --short` and `git diff --name-only`
+  list only the six assigned paths; the public-export diff contains no added or
+  removed `export` declaration. No full `pnpm verify`, commit, push, merge, or
+  reviewer dispatch was performed, per assignment.
+- Actual runtime profile metadata is not surfaced to this implementer context.
+  The dispatched expectation is `gpt-5.6-terra` / medium; no subagents were
+  spawned. The orchestrator must perform immutable-metadata acceptance and the
+  pending recorded reviewer dispositions. No code-behavior uncertainty remains
+  within the focused evidence; those process gates are the remaining concern.
+
 ## Immediate Next Action
 
 Dispatch the Terra Medium implementer for strict RED/GREEN and narrow docs,
 then run focused coordinator verification and all relevant reviewers.
+
+## Coordinator Pre-review Finding
+
+- `2026-07-14T01:59:03Z`: accept/close actual Terra Medium implementer from
+  explicit dispatch plus immutable role metadata, no subagents. Coordinator
+  rerun passes 34/34 core tests, generated build, scoped ESLint, docs/API with
+  28 core exports, generated-clean, Prettier, and diff integrity.
+- Before review, synchronize all three status headers; add the promised explicit
+  `deriveTypeUrl()` throw contract for a selected malformed custom fallback;
+  and repair awkward multi-line inline-code spans in durable RED/GREEN evidence
+  without changing behavior or evidence.
+
+## Independent Review Assignment
+
+- `2026-07-14T02:02:08Z`: accept/close actual `gpt-5.6-terra` / medium
+  implementer from explicit dispatch plus immutable role metadata, no
+  subagents. Fresh coordinator gate passes 34/34 tests, generated build,
+  TypeDoc/API with 28 core exports, formatting, status, and diff checks.
+- Assign documentation at explicit `gpt-5.6-luna` / medium and style,
+  TypeScript/API docs, and performance/reliability at explicit
+  `gpt-5.6-terra` / high. All are read-only, no subagents. Security remains
+  deferred to T-0041; full verify remains reserved for clean final acceptance.

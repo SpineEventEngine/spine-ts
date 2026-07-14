@@ -35,6 +35,7 @@ import {
   createValidationError,
   createSpineCoreRegistry,
   deriveTypeUrl,
+  getTypeUrlPrefix,
   packAny,
   packCommand,
   packEvent,
@@ -103,6 +104,34 @@ describe("@spine-ts/core type registry", () => {
   it("uses the documented fallback prefix when a file has no Spine prefix option", () => {
     expect(DEFAULT_TYPE_URL_PREFIX).toBe("type.googleapis.com");
     expect(deriveTypeUrl(AnySchema)).toBe("type.googleapis.com/google.protobuf.Any");
+  });
+
+  it.each(["", " \t\n", "/", "///"])(
+    "rejects malformed custom fallback prefix %j for schemas without a Spine option",
+    (fallbackPrefix) => {
+      const message = "Fallback type URL prefix must be non-empty and contain no whitespace.";
+
+      expect(() => getTypeUrlPrefix(AnySchema, fallbackPrefix)).toThrow(new TypeError(message));
+      expect(() => deriveTypeUrl(AnySchema, { fallbackPrefix })).toThrow(new TypeError(message));
+    },
+  );
+
+  it("canonicalizes valid custom fallback prefixes for schemas without a Spine option", () => {
+    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test" })).toBe(
+      "type.example.test/google.protobuf.Any",
+    );
+    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test/" })).toBe(
+      "type.example.test/google.protobuf.Any",
+    );
+    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test///" })).toBe(
+      "type.example.test/google.protobuf.Any",
+    );
+  });
+
+  it("uses a Spine file option before considering an unused custom fallback", () => {
+    expect(deriveTypeUrl(FieldPathSchema, { fallbackPrefix: "///" })).toBe(
+      "type.spine.io/spine.base.FieldPath",
+    );
   });
 
   it("registers schemas and looks them up by full name, type URL, and schema identity", () => {
@@ -177,6 +206,20 @@ describe("@spine-ts/core type registry", () => {
 
     expect(metadata.typeUrl).toBe("type.example.test/spine.base.FieldPath");
     expect(metadata.typeUrlPrefix).toBe("type.example.test");
+  });
+
+  it("keeps default registry derivation and explicit valid registry URLs canonical", () => {
+    const defaultRegistry = new TypeRegistry();
+    const explicitRegistry = new TypeRegistry();
+
+    expect(defaultRegistry.register(AnySchema).typeUrl).toBe(
+      "type.googleapis.com/google.protobuf.Any",
+    );
+    expect(
+      explicitRegistry.register(AnySchema, {
+        typeUrl: "type.example.test/google.protobuf.Any",
+      }).typeUrl,
+    ).toBe("type.example.test/google.protobuf.Any");
   });
 
   it("exposes descriptor-backed metadata and option helpers", () => {
@@ -495,6 +538,12 @@ describe("@spine-ts/core validation facade", () => {
 });
 
 describe("@spine-ts/core envelope packing", () => {
+  it("keeps packing for schemas without a Spine option on the default canonical URL", () => {
+    const packed = packAny(AnySchema, create(AnySchema));
+
+    expect(packed.typeUrl).toBe("type.googleapis.com/google.protobuf.Any");
+  });
+
   it("packs Any values with Spine type URLs and Protobuf-ES binary payloads", () => {
     const message = create(FieldPathSchema, { fieldName: ["task", "id"] });
 
