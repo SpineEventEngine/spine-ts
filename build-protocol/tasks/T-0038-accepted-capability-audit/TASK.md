@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Review-summary fix ready for focused style/docs acceptance
+Status: Review-summary focused style/docs acceptance assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -614,3 +614,11 @@ for main integration` although its durable integration record and ancestry
 - Focused status/current-summary, taxonomy/route, exact four-file Prettier,
   generated-path, scope, and `git diff --check` checks pass. No full verify,
   commit, or out-of-scope change occurred.
+
+## Review-Summary Focused Acceptance Assignment
+
+- `2026-07-14T09:43:34Z`: coordinator accepts endpoint `2a5062e3` after fresh
+  active-summary/status, taxonomy/route, exact scope, Prettier, and diff checks.
+- Resume style at explicit Terra High and documentation at explicit Luna Medium,
+  read-only and no subagents, for the two top-level review-log summaries only.
+  All matrix content and prior API/reliability dispositions remain accepted.

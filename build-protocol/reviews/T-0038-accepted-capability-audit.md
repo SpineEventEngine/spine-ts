@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Review-summary fix ready for focused style/docs acceptance
+Status: Review-summary focused style/docs acceptance assigned
 
 ## Review Scope
 
@@ -470,3 +470,13 @@ findings at `2026-07-14T01:23:48Z`.
 - Four statuses agree. Focused status/current-summary, taxonomy/route, exact
   four-file Prettier, generated-path, scope, and `git diff --check` checks pass;
   matrix content is unchanged and no full verify or commit occurred.
+
+## Review-Summary Focused Acceptance Assignment
+
+- `2026-07-14T09:43:34Z`: accepted endpoint `2a5062e3`; fresh coordinator
+  checks confirm the active summaries/status, exact taxonomy/routes, scope,
+  formatting, and whitespace integrity.
+- Resume style/maintainability at explicit `gpt-5.6-terra` / high and
+  documentation at explicit `gpt-5.6-luna` / medium. Both are read-only, no
+  subagents, and limited to Concern Dispositions plus Current State. API and
+  reliability remain CLEAN; security remains deferred.

@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Review-summary fix ready for focused style/docs acceptance
+Status: Review-summary focused style/docs acceptance assigned
 
 Task: T-0038 Accepted Capability Audit
 
