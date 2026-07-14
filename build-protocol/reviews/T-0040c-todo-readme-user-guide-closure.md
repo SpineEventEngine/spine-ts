@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Specialist Wave 8 assigned at `26b24495`
+Status: Wave 8 complete - one subscription-timeout docs correction pending
 
 Baseline: `526b7b4d`
 
@@ -483,3 +483,28 @@ links/imports, and future-policy overclaim.
   `019f62b0-ee25-75e1-8a30-48bbc2235311`; explicit dispatch fields and
   immutable Desktop role metadata agree on actual `gpt-5.6-terra` / high.
   No partial wave is accepted before all four results are collected.
+
+## 2026-07-14 - Specialist Wave 8 Results
+
+- Style/maintainability: clean.
+- TypeScript/API docs: clean.
+- Documentation completeness and performance/reliability: one deduplicated P1
+  finding. A client-side timeout can win after `Subscribe` persisted a
+  server-generated opaque ID but before the response arrives. The client then
+  cannot explicitly cancel that unknown ID, so the guide must not imply
+  immediate cancellation covers this path.
+- Coordinator adjudication: do not add a correlated/client-generated ID seam.
+  The preserved Spine Protobuf contract owns ID creation on the server, and
+  T-0040c excludes framework/public-contract changes. The accepted service
+  bounds never-activated records with configurable inactive expiry, default 30
+  seconds. Existing tests prove abandoned process-local and durable recovered
+  records expire before activation without attaching delivery.
+- Accepted correction: state exactly that successful creation is canceled
+  explicitly and client signal/session/iterator resources close immediately,
+  while a creation timeout before receiving the handle relies on bounded server
+  inactive-TTL cleanup. Remove any broader cleanup implication.
+- All Wave 8 reviewers were closed. Return this documentation correction and
+  focused existing-expiry verification to existing `implementer` agent
+  `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected explicit
+  `gpt-5.6-terra` / medium, no subagents or Git mutation. A fresh immutable
+  endpoint and all four lanes remain required.

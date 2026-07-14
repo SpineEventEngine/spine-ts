@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Specialist Wave 8 assigned at `26b24495`
+Status: In progress - Wave 8 subscription-timeout docs correction pending
 
 Started: `2026-07-14`
 
@@ -594,3 +594,27 @@ completes"` against the old pending-read pattern. It exited 1: the focused
   with all 372 expected curated exports, generated-clean verification, and
   `git diff --check` passed. A fresh baseline-to-endpoint review package and
   all four specialist lanes remain required before the full task gate.
+
+## 2026-07-14 - Specialist Wave 8 Finding And Adjudication
+
+- Style/maintainability and TypeScript/API docs are clean. Documentation and
+  performance/reliability independently found the same ambiguous
+  subscription-creation timeout.
+- If `Subscribe` persists its record but its response does not reach the
+  client before the guide's one-second bound, the client has no returned
+  subscription ID to cancel. Immediate HTTP/2 session abort cannot prove that
+  server record was removed.
+- This does not require a new public seam. The preserved Spine Protobuf contract
+  intentionally makes `SubscriptionId` server-generated and says clients
+  generally do not construct `Subscription` directly. The accepted service
+  owns never-activated records with a configurable inactive TTL, default 30
+  seconds, and existing service tests prove abandoned and durable recovered
+  records expire without attaching delivery.
+- Correct the guide to distinguish immediate client-side cleanup and explicit
+  cancellation after successful creation from bounded server TTL cleanup when
+  creation times out before returning the opaque handle. Do not promise
+  cancellation of an unknown ID, add a client-owned ID contract, or change
+  runtime/Protobuf behavior in this documentation slice.
+- Return this bounded correction and focused existing-expiry verification to
+  the existing `implementer`, explicit `gpt-5.6-terra` / medium, no
+  subagents or Git mutation.
