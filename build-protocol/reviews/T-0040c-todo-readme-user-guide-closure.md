@@ -116,6 +116,25 @@ links/imports, and future-policy overclaim.
 - Fresh focused build/docs/lint/format/generated/diff checks passed. A new
   baseline-to-endpoint package and all four specialist lanes are required.
 
+## 2026-07-14 - Specialist Wave 2 Assignment
+
+- Endpoint: `fa4b0af9` (`Complete executable to-do guide examples`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..fa4b0af9.diff`.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, expected explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, expected
+  explicit `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected explicit `gpt-5.6-terra` /
+  high.
+- Each lane re-reviews the full baseline-to-endpoint milestone within its
+  original bounded concern, with special attention to the Wave 1 corrections.
+  Reviewers remain read-only, may not mutate Git or spawn subagents, and ignore
+  historical superseded text unless current state claims it active.
+
 ## Skill Applicability
 
 - Reviewers use session inventory, expected-skill manifest, readable installed
