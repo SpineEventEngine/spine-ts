@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Coordinator pre-review findings assigned
+Status: Pre-review ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -98,12 +98,15 @@ exclusions without rewriting public package documentation or user guidance.
 
 - Canonical sources checked: session skill inventory, readable
   `~/.agents/skills/*/SKILL.md` entrypoints, and
-  `build-protocol/skills/EXPECTED_SKILLS.md`. No separate installed-lock file
-  was found; the manifest fallback applies.
+  `build-protocol/skills/EXPECTED_SKILLS.md`.
+  `/Users/armiol/.agents/.skill-lock.json` exists, was read directly, and
+  records the expected source repository and installed `skillPath` evidence for
+  all eight manifest skills.
 - `verification-before-completion` is applicable and was read before this
-  handback. `receiving-code-review` was read; it is N/A until confirmed review
-  findings are returned. `doc-coauthoring` is N/A because its interactive
-  drafting workflow conflicts with this autonomous factual reconciliation.
+  handback. `receiving-code-review` was read and applied to the confirmed
+  coordinator pre-review batch. `doc-coauthoring` is N/A because its
+  interactive drafting workflow conflicts with this autonomous factual
+  reconciliation.
 - Expected-skill manifest dispositions: `subagent-driven-development` N/A
   (subagents prohibited); `using-git-worktrees` N/A (the coordinator already
   assigned this worktree); `requesting-code-review` N/A (coordinator-owned);
@@ -196,3 +199,15 @@ inventory. Run focused docs/status lint before any reviewer assignment.
      remote synchronization is not part of D-0086's semantic outcome.
 - Resume the same Terra Medium author for these records only. Preserve all
   accepted lifecycle/API/status/matrix changes and exact counts/routes.
+
+## Pre-Review Fix Handback
+
+- The complete coordinator batch is resolved on the five authorized records:
+  stale T-0038 matrix closure prose was corrected, installed-lock evidence was
+  read and recorded, and D-0086 no longer overclaims child-ref pushes.
+- Fresh focused checks preserve `31/25/4/0/1/1/0`, 29 em-dash routes plus
+  T-0040/T-0041, equal active statuses, exact five-path scope, formatting,
+  generated-path cleanliness, and diff integrity. No full verify, reviewer,
+  commit, or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.

@@ -133,15 +133,11 @@ scope, and `git diff --check` checks pass.
 | To-do child-process/local-IPC composition and acceptance are absent | T-0040 | Add the public-API-only example harness/test over the integrated framework behavior. |
 | Final project-wide security review has not occurred                 | T-0041 | Execute the final security gate after docs/example closure.                          |
 
-T-0038b child-record reconciliation is complete. T-0038 remains open for
-focused style/docs rereview and reserved final verification; T-0042 owns final
-release proof.
+T-0038b child-record reconciliation is complete. T-0038 is complete,
+integrated, post-merge verified, and pushed; T-0042 owns final release proof.
 
 ## Pending Closure Evidence (Not Classified)
 
-- T-0038 final acceptance still requires the reserved full
-  `pnpm --config.verify-deps-before-run=false verify` execution and coverage
-  proof after both framework children are integrated.
 - T-0042 owns final release proof, tracked-state confirmation, integration,
   remote synchronization, and project closure.
 - The generated wildcard exports are inventoried at the manifest-entry level;

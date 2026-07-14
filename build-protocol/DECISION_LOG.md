@@ -3918,7 +3918,7 @@ D-0085 ordering in every generation owner and introduces no ninth child, public
 surface, or new lifecycle decision.
 
 Final implementation outcome (2026-07-14): all eight children are complete,
-merged, post-merge verified, and pushed. Together with T-0036 they implement
+merged, and post-merge verified. Together with T-0036 they implement
 D-0085's environment-owned bounded delivery lifecycle; integrated T-0038b
 uses that completed lifecycle for same-host context transport composition.
 The child sequence remains historical decomposition, not a public API or a

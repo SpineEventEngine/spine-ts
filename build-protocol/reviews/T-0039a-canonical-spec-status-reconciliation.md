@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Coordinator pre-review findings assigned
+Status: Pre-review ready
 
 ## Review Scope
 
@@ -41,11 +41,13 @@ Status: Coordinator pre-review findings assigned
 ## Canonical Skill-Applicability Check
 
 - Checked the session inventory, readable `~/.agents/skills` entrypoints, and
-  `build-protocol/skills/EXPECTED_SKILLS.md`; no separate installed-lock file
-  was found, so manifest fallback applies.
-- `verification-before-completion` is applicable and read. Receiving-review is
-  N/A until a confirmed finding arrives. Interactive doc coauthoring is N/A for
-  an autonomous factual reconciliation.
+  `build-protocol/skills/EXPECTED_SKILLS.md`.
+  `/Users/armiol/.agents/.skill-lock.json` exists, was read directly, and
+  contains the expected source repository and installed `skillPath` evidence
+  for all eight manifest skills.
+- `verification-before-completion` is applicable and read. Receiving-review was
+  read and applied to the confirmed coordinator pre-review batch. Interactive
+  doc coauthoring is N/A for an autonomous factual reconciliation.
 - All expected skills are N/A for this author handback except verification:
   subagent/worktree/review-request workflows are coordinator-owned or
   prohibited; planning/ADR skills do not fit an existing bounded record update;
@@ -73,3 +75,15 @@ Status: Coordinator pre-review findings assigned
 - Correct stale T-0038 matrix closure prose, false missing installed-lock
   evidence, and unsupported D-0086 all-children-pushed wording before packaging.
   The same Terra Medium author owns the complete record-only batch.
+
+## Pre-Review Fix Handback
+
+- All three confirmed record findings are resolved without changing runtime,
+  public API, decision history, matrix taxonomy/routes, or any path outside the
+  five-file batch.
+- Fresh focused checks passed: stale-current/lock evidence, exact taxonomy and
+  routing, active-status equality, five-path Prettier, generated/scope scan, and
+  `git diff --check`. The package is ready for coordinator pre-review lint and
+  reviewer dispatch.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.
