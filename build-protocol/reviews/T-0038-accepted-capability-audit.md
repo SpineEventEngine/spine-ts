@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability review fixes ready for affected rereview
+Status: Integrated capability affected rereview assigned
 
 ## Review Scope
 
@@ -356,3 +356,19 @@ findings at `2026-07-14T01:23:48Z`.
   docs-overclaim, exact four-file Prettier, generated-path, scope, and
   `git diff --check` checks pass. Reliability remains CLEAN and no full verify,
   commit, or out-of-scope change occurred.
+
+## Integrated Capability Affected Rereview Assignment
+
+- `2026-07-14T09:24:10Z`: accepted fix endpoint `359af4a6`; coordinator checks
+  confirm exact taxonomy/routes, ten-entry export inventory, synchronized
+  status, exact scope, Prettier, and whitespace integrity.
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high, scoped
+  to the stale-current-state and status corrections plus matrix readability.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium, scoped to
+  current-vs-historical state and synchronized active claims.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high, scoped
+  to the generated-code support subpath, same-module root exports, and exact
+  API-checker claims.
+- All reviewers are read-only, may not spawn subagents, and must report skill
+  applicability plus actual immutable role metadata. Performance/reliability
+  remains CLEAN and security remains deferred to T-0041.

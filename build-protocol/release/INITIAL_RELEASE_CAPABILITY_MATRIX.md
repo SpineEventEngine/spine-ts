@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Integrated capability review fixes ready for affected rereview
+Status: Integrated capability affected rereview assigned
 
 Task: T-0038 Accepted Capability Audit
 

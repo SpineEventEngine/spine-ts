@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability review fixes ready for affected rereview
+Status: Integrated capability affected rereview assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -486,3 +486,17 @@ State` still says T-0038a/T-0038b are pending. Rewrite or explicitly
 - Focused taxonomy/route, ten-entry export inventory, active-status/stale-state,
   docs-overclaim, exact four-file Prettier, generated-path, four-file scope, and
   `git diff --check` checks pass. No full verify or commit was performed.
+
+## Integrated Capability Affected Rereview Assignment
+
+- `2026-07-14T09:24:10Z`: coordinator inspection accepts fix endpoint
+  `359af4a6`. Fresh checks prove 31 rows with exact `25/4/0/1/1/0`
+  classifications, 29 em-dash routes plus T-0040/T-0041, ten manifest exports
+  and ten inventory rows, synchronized active status, exact four-file scope,
+  Prettier, and `git diff --check`.
+- Rerun only the affected existing roles: style/maintainability and
+  TypeScript/API docs at explicit `gpt-5.6-terra` / high; documentation at
+  explicit `gpt-5.6-luna` / medium. All are read-only, no subagents, scoped to
+  the accepted P2 corrections and current matrix truth. The prior clean
+  performance/reliability disposition remains valid because no behavior or
+  reliability evidence changed. Security remains deferred to T-0041.
