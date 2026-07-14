@@ -903,16 +903,24 @@ more specific local factory first. This object is not a Java-style process-wide
 singleton.
 
 Startup assembles added context builders and completes finite startup recovery
-for environment delivery before opening listener intake. A context assembly
-failure opens no listener and closes contexts already assembled by that
-attempt. If environment startup or listener open fails, cleanup closes acquired
-network resources first, waits until active work can no longer use the server's
-dependencies, closes contexts and explicit resources, then closes facilities
-when the environment is server-owned. If network cleanup fails, it is a hard
-gate: a cleanup-only `start()` retry must complete it before contexts, explicit
-resources, or environment facilities close; all remain open until then. An
-initial rejection combines the original startup or listener failure first with
-reached cleanup failures in stable phase order.
+for environment delivery. It then opens every built context's command/event
+transport intake sequentially in deterministic input order before creating the
+HTTP server or opening listener intake. All contexts must succeed; a context
+assembly or transport-intake failure opens no listener. Accepted transported
+commands enter the owning context's command bus once, while accepted events
+enter its event bus once before normal repository/projection fan-out. Native
+child-process coverage proves this same-host behavior with separate ZeroMQ
+transport instances.
+
+If environment startup, context transport intake, or listener open fails,
+cleanup closes acquired network resources and context intake first, waits until
+accepted work can no longer use the server's dependencies, closes contexts and
+explicit resources, then closes facilities when the environment is
+server-owned. Network and context-intake cleanup are hard gates: a cleanup-only
+`start()` retry must complete them before contexts, explicit resources, or
+environment facilities close; all remain open until then. An initial rejection
+combines the original startup or listener failure first with reached cleanup
+failures in stable phase order.
 
 If failed-start cleanup cannot yet complete safely, a later `start()` on the
 same `Server` is cleanup-only: it does not rebuild contexts or open a listener.
@@ -924,22 +932,22 @@ reuse a caller-owned environment; a server-owned environment is permanently
 closed after its ordered cleanup completes.
 
 Running close is also ordered. The listener stops accepting new requests and
-active HTTP/2 sessions close first. Contexts and resources remain open until
-active work can no longer use them, then contexts and explicit resources close,
-followed by facilities when the server owns its environment. Closing one server
-that shares a caller-owned environment does not interrupt its siblings. The
-caller-owned environment and its facilities remain open and can later be used
-by a newly assembled server with fresh contexts.
+active HTTP/2 sessions close first. Context transport intake then closes and
+drains accepted work before environment delivery detaches. Only then do
+contexts and explicit resources close, followed by facilities when the server
+owns its environment. Closing one server that shares a caller-owned environment
+or transport does not interrupt its siblings. Caller-owned facilities remain
+open and can later be used by a newly assembled server with fresh contexts.
 
-A network-close failure prevents dependency cleanup until a later `close()`
-retry completes network shutdown. Other failed closes retry only unfinished
-cleanup; successful hooks do not repeat. Concurrent calls share one in-flight
-close, and repeated calls after success are idempotent. Lifecycle failures may
-be arbitrary values. When multiple failures are combined, their observable
-phase order is stable and nested aggregates are flattened; an aggregate with no
-nested failures still remains a failure. Listener-based tests may fail with
-`EPERM` in managed sandboxes that block loopback binds; rerun those checks
-natively when verifying this lifecycle.
+A network- or context-intake-close failure prevents dependency cleanup until a
+later `close()` retry completes that gate. Other failed closes retry only
+unfinished cleanup; successful hooks do not repeat. Concurrent calls share one
+in-flight close, and repeated calls after success are idempotent. Lifecycle
+failures may be arbitrary values. When multiple failures are combined, their
+observable phase order is stable and nested aggregates are flattened; an
+aggregate with no nested failures still remains a failure. Listener-based tests
+may fail with `EPERM` in managed sandboxes that block loopback binds; rerun
+those checks natively when verifying this lifecycle.
 
 ## Entity State Shell
 

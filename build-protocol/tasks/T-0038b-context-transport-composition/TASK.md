@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 adapter endpoint cleanup authorized; fix assigned
+Status: Slice 3 adapter endpoint cleanup green; pre-review handback ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -777,3 +777,61 @@ after child and transports closed.`
 - Resume the same implementer at explicit `gpt-5.6-terra` / medium, no
   subagents. Docs, server lifecycle, examples, topology, and retry timing policy
   remain unchanged.
+
+## Slice 3 Adapter Cleanup Implementation
+
+- Actual immutable execution metadata remained the existing implementer at
+  explicit `gpt-5.6-terra` / medium reasoning. No subagent was dispatched or
+  used. Canonical skill applicability was recorded before implementation:
+  receiving-code-review validated the authorized owner and scope; TDD plus its
+  required test/mocking/refactoring references governed vertical RED/GREEN;
+  JavaScript testing patterns governed native Vitest fault injection;
+  error-handling patterns governed stable aggregation and retained retry
+  ownership; verification-before-completion governed the final evidence. The
+  Node backend skill was N/A because this correction changes no server or HTTP
+  behavior.
+- The authorized production correction is in
+  `packages/transport/src/zeromq/signal-transport.ts` with the package-internal,
+  non-root filesystem boundary
+  `packages/transport/src/zeromq/endpoint-files.ts`. Only successfully bound
+  Publisher and Reply paths are owned. Subscriber and Request sockets remain
+  connect-only and own no filesystem path. Native socket close is recorded
+  before pathname removal; `ENOENT` completes ownership, while another unlink
+  failure retains only that pathname for a later close and never closes the
+  native socket twice. Concurrent calls share each close attempt. Transport
+  close attempts every active handle and publisher in stable insertion order,
+  preserving exact single failures and stable aggregate ordering.
+- A successful Publisher bind publishes cleanup ownership before any later
+  closed-state setup failure. In-flight publisher and responder binds are
+  awaited by close, so a close/setup race cannot lose a newly bound pathname.
+  Publisher setup reports the original setup error first if immediate cleanup
+  also fails. No public export, package export, callback, timing, topology, or
+  retry-policy surface was added.
+- Strict TDD evidence was observed, not inferred. Publisher cleanup RED left
+  `se-p-...sock`; GREEN removed it after transport close. Replier cleanup RED
+  left `sc-r-...sock`; GREEN removed it after registration close. The unlink
+  retry RED left both owned paths after the first failure instead of attempting
+  the publisher; GREEN left only the failed replier path, then removed it on
+  retry. Existing connect-only non-ownership was separately characterized
+  GREEN. Strengthened native cases cover two stable failures and retry,
+  concurrent close promise identity, `ENOENT`, and a publisher bind/close race.
+  The focused ZeroMQ file passes `18/18`.
+- The corrected child-process proof passes `3/3`; its normal teardown observes
+  an empty IPC directory after parent/child transport close and child exit,
+  before recursive directory removal. The focused native transport/runtime/
+  context/bus/server gate passes 13 files and `182/182` tests.
+- Fresh non-full gates pass: generated build and tooling typechecks; scoped
+  ESLint after one lint-only unnecessary-cast correction; cleanup enforcement;
+  exact changed-file Prettier; `docs:check` with unchanged 17 transport and 205
+  server exports; canonical generated-clean; no public-root/internal-helper
+  leak; no child private-source import; no package-export, protected-path, or
+  `human-review-1-jul.md` change; `git diff --check`; and expected status/diff.
+  Full verify remains intentionally deferred until review. No docs, server
+  lifecycle, example, Protobuf, topology, retry timing, commit, or parent T-0038
+  closure work was added.
+- Coordinator acceptance inspected the final ownership/retry state machine and
+  reran the two native acceptance files together. ZeroMQ adapter and
+  child-process teardown behavior passed `2` files and `21/21` tests, including
+  pre-removal directory emptiness. `git diff --check` also passed. Slice 3 is
+  accepted as an implementation endpoint and is ready for the complete
+  specialist review wave.

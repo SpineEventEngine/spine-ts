@@ -73,7 +73,7 @@ describe("ContextTransport", () => {
       message: create(ProjectionStateSchema, { id: "task-1" }),
     });
 
-    const result = await transport.request<typeof command, unknown>({
+    const result = await transport.request<typeof command, unknown, "command">({
       topic: requireFirst(transport.responders()).topic,
       envelope: command,
     });

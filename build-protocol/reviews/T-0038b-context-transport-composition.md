@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 adapter endpoint cleanup authorized; fix assigned
+Status: Slice 3 adapter endpoint cleanup green; pre-review handback ready
 
 ## Scope
 
@@ -499,3 +499,49 @@ Status: Slice 3 adapter endpoint cleanup authorized; fix assigned
   public export or policy change.
 - Existing implementer continues at explicit `gpt-5.6-terra` / medium, no
   subagents. Reviewer dispatch remains pending a green native proof.
+
+## Slice 3 Adapter Cleanup Pre-Review Handback
+
+- Actual implementation metadata matches dispatch: existing implementer,
+  explicit `gpt-5.6-terra` / medium, no subagents. Receiving-review, strict TDD
+  and required references, JavaScript testing, error-handling details, and
+  verification-before-completion were applied and recorded. Node backend
+  patterns were concretely N/A because no server/API behavior changed.
+- Authorized owner fix is bounded to
+  `packages/transport/src/zeromq/signal-transport.ts`, package-internal
+  `packages/transport/src/zeromq/endpoint-files.ts`, and focused
+  `packages/transport/test/zeromq/signal-transport.test.ts`. Only Publisher and
+  Reply sockets acquire a filesystem path after successful bind. Subscriber and
+  Request sockets remain non-owning connectors. The helper is absent from root
+  and `./zeromq` exports.
+- RED/GREEN evidence is exact: publisher and replier pathnames each survived
+  their original close before their respective fixes; fail-once unlink then
+  proved the original close aborted before publisher cleanup and could not
+  retry the replier path. GREEN separates socket retirement from pathname
+  ownership, attempts every resource in stable order, retains only failed
+  pathname removal, shares concurrent attempts, and retries without a second
+  native close. `ENOENT`, two-failure aggregate order, connect-only sibling
+  preservation, and successful-bind/close-race cleanup have native coverage.
+  Adapter result is `18/18`.
+- The accepted harness criterion is now GREEN without weakening: child-process
+  proof `3/3` observes zero entries after both transports close and child exit,
+  before recursive directory removal and final `ENOENT`. Focused native
+  transport/runtime/context/routing/bus/server result is 13 files and
+  `182/182` tests.
+- Mechanical evidence passes generated build/tooling typechecks, scoped ESLint,
+  cleanup enforcement, exact Prettier, docs/API with unchanged 17 transport and
+  205 server exports, canonical generated-clean, public-root/declaration,
+  package-export, child-private-import and protected-path scans,
+  `git diff --check`, and expected status/diff. One unnecessary generic cast was
+  removed after the initial scoped lint run; no behavioral change followed.
+  Full verify is intentionally deferred until review.
+- No public API/docs, server lifecycle, example, Protobuf, topology, retry
+  timing, commit, or parent T-0038 closure change occurred. Existing dirty
+  Slice 3 harness/docs work was preserved. Remaining uncertainty is reviewer
+  disposition plus the already documented same-host/local-only limitation;
+  security review remains deferred to T-0041.
+- Coordinator acceptance inspected the completed cleanup ownership and retry
+  paths, then reran the ZeroMQ adapter and child-process proof natively. Both
+  files passed with `21/21` tests, and `git diff --check` passed. No pre-review
+  finding was introduced; the implementation endpoint may now be committed and
+  packaged for the complete four-lane review wave.
