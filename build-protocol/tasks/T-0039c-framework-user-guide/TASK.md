@@ -1,0 +1,131 @@
+# T-0039c: Framework User Guide Closure
+
+Status: Author assigned
+
+Started: `2026-07-14T13:03:12Z`
+
+Baseline commit: `aaa31116`
+
+Branch: `task/T-0039c-framework-user-guide`
+
+Worktree: `.worktrees/T-0039c-framework-user-guide`
+
+Dependency: T-0039b complete, merged, post-merge verified, remotely
+synchronized, and cleaned up.
+
+## Objective
+
+Make `docs/USER_GUIDE.md` sufficient for a new framework user to model, build,
+run, validate, observe, test, and close a supported Spine TS server application
+without reading internal source.
+
+## Human-Imposed Requirements Ledger
+
+- Continue autonomously until project completion or a real protocol blocker.
+- Keep this slice limited to the framework user guide and its durable records;
+  T-0040 owns local multi-process example behavior and example-specific docs.
+- Preserve accepted DDD, Spine Protobuf/type-URL, public API, generated-output,
+  review, logging, verification, worktree, push, and cleanup requirements.
+- Ordinary application code uses bare decorators and generated domain messages.
+  It must not use framework `Command`/`Event` envelopes, `packCommand()` or
+  `packEvent()` in handlers, schema-bearing decorators, aggregate `@Apply`,
+  manual transaction controls, internal IDs/default-target extraction, handler
+  materializers, or internal lifecycle APIs.
+- Public guide claims describe observable current behavior and explicit initial-
+  release exclusions without promising future retry, monitoring, supervision,
+  topology, health, catch-up, import, or legacy compatibility policy.
+- Public snippets use package imports. Illustrative generated/application
+  packages must be identified as consumer substitutions, and practical snippets
+  must compile or be explicitly labeled with their required fixture inputs.
+- Use focused checks in inner loops and reserve full `pnpm verify` for final and
+  post-merge gates.
+- Run only existing relevant review concerns; per-task security remains deferred
+  to T-0041.
+- Explicitly dispatch child model/reasoning, prohibit child subagents, push the
+  completed branch and verified `main`, and remove the clean merged worktree.
+- Never read, edit, stage, delete, or use `human-review-1-jul.md`.
+
+## Required User Journey
+
+1. Install dependencies and generate Protobuf-ES output.
+2. Model IDs, state, commands, and events with accepted Spine conventions.
+3. Write bare-decorated aggregate, process-manager, and projection handlers with
+   valid explicit return types.
+4. Generate and load the framework-owned handler registry.
+5. Assemble storage, bounded contexts, and `ServerEnvironment`.
+6. Start and close `Server` with correct startup, ownership, and retry-safe close
+   expectations.
+7. Post commands and distinguish immediate acknowledgement from asynchronous
+   framework work.
+8. Query and subscribe to state through supported service/client paths.
+9. Handle validation failures and business refusal without internal envelopes.
+10. Test through `@spine-ts/testing` and real Connect/gRPC clients.
+11. Understand at-least-once/replay-safe delivery expectations, local IPC trust
+    boundaries, initial-release exclusions, and non-production adapters.
+
+## Acceptance Criteria
+
+- The guide follows the required journey in a discoverable order and uses one
+  coherent generated application vocabulary instead of implementation history.
+- Every practical command, import, code fence, and link is current and either
+  executable/typeable or explicitly identifies fixture/consumer substitutions.
+- Handler examples use only bare `@Assign`, `@Command`, `@React`, and
+  `@Subscribe` as appropriate, with generated domain-message inputs/returns and
+  no framework-owned materialization or transaction control.
+- Generated registry, bounded-context async assembly, storage/environment
+  selection, server startup/recovery/listener ordering, caller/server/facility
+  ownership, retry-safe close, and shutdown ordering match current public APIs.
+- Command acknowledgement/asynchronous work, query/subscription behavior,
+  validation/refusal semantics, testing seams, delivery guarantees, and ZeroMQ
+  trust/limitation wording match current code and canonical docs.
+- Legacy/internal compatibility APIs are omitted from the user journey or
+  identified narrowly as non-application surfaces; `IMPORT_EVENT` and import
+  buses are not recommended.
+- The guide does not claim future policy or expose internal coordinator,
+  obligation, generation, cursor, endpoint, raw callback, or lifecycle controls.
+- Focused snippet/end-user scans, docs/API checks, links, formatting, diff, and
+  every relevant review concern are clean before the final full gate.
+
+## Scope
+
+- Primary write scope: `docs/USER_GUIDE.md` and these three T-0039c records.
+- A focused documentation/snippet assertion may change only when needed to
+  prevent a concrete user-guide regression.
+- Exclude runtime source, public exports, package manifests, dependencies,
+  Protobuf contracts, generated output, package READMEs, example source/docs,
+  canonical architecture/specification, and historical-log rewrites.
+
+## Risk Assumptions
+
+- The existing 1,340-line guide mixes historical slice inventories with user
+  guidance; preserving every section would preserve contradictions. Prefer a
+  coherent supported journey while retaining only useful current limitations.
+- Package imports for consumer-generated schemas/domain modules are illustrative
+  and must be labeled because those packages do not resolve in this workspace.
+- `docs:check` verifies API coverage but not prose or every snippet; focused
+  end-user and identifier/import audits remain necessary.
+- T-0040 may refine example-specific commands later. This task documents the
+  current framework workflow without claiming unfinished multi-process example
+  behavior.
+
+## Planning Disposition
+
+- No requirements splitter: this task changes no architecture, domain model,
+  public/serialized contract, transaction, concurrency, or idempotency rule.
+  The completion plan already supplies the exact user journey and prohibitions.
+- One Terra Medium implementer owns the bounded guide rewrite. Coordinator owns
+  commits, independent review, full gates, merge, push, and cleanup.
+
+## Author Assignment
+
+- Existing role: implementer.
+- Explicit immutable profile: `gpt-5.6-terra` / medium.
+- Write ownership: `docs/USER_GUIDE.md` and these three records only; focused
+  guide assertion only after recording a concrete need.
+- Read current public package docs, `DEVELOPER_API.md`,
+  `RUNTIME_ARCHITECTURE.md`, and public source/tests as factual evidence.
+- No subagents. No commit, merge, push, worktree, or other Git mutation.
+- Required handback: changed paths, journey coverage, evidence for lifecycle/
+  handler/testing/delivery claims, practical versus illustrative snippet
+  disposition, focused command results, exclusions, uncertainty, skills used,
+  and actual immutable runtime profile.
