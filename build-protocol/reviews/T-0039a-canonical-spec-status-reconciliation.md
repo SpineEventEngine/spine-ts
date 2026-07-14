@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review wave 3 finding accepted
+Status: Review wave 3 fix handback ready
 
 ## Review Scope
 
@@ -195,3 +195,14 @@ Status: Review wave 3 finding accepted
 - Accepted fix: change that single active exclusion block to present release
   scope with no future policy commitment. Rerun docs/style/reliability only;
   API is unaffected and retains its clean wave-3 result.
+
+## Review Wave 3 Fix Handback
+
+- The sole accepted finding is resolved in the active delivery exclusion block
+  without changing supported behavior, event-import text, prior fixes, public
+  API, or any out-of-scope path.
+- Fresh evidence covers the bounded not-yet/future-work scan, required positive
+  exclusions, four-path Prettier and scope, `docs:check`, synchronized statuses,
+  generated-path cleanliness, and `git diff --check`.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. The package is ready for coordinator rereview.

@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review wave 3 finding accepted
+Status: Review wave 3 fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -312,3 +312,15 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   `not yet`/future-policy promise. Resume the existing Terra Medium implementer.
 - After the fix, rerun documentation, style, and reliability. API remains clean
   and is unaffected because no public-contract surface changes.
+
+## Review Wave 3 Fix Handback
+
+- The single active delivery exclusion block now states present initial-release
+  scope for projection catch-up, retry monitor/counter policy beyond the
+  internal gate, retained raw error details, production supervision, and
+  transport topology, with no future policy commitment.
+- Supported handoff/drain/loop behavior, event-import wording, all prior fixes,
+  and every other file are preserved. Focused four-path evidence is recorded in
+  the work log.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.

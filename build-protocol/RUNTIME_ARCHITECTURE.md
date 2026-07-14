@@ -344,18 +344,18 @@ delivery worker boundary:
 
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
-handoffs, one direct drain call, and a closeable loop owner. It does not yet
-implement a generic repository delivery engine, projection catch-up through
-inbox storage, retry monitors, public or production retry-attempt counter
-policy beyond the internal retained-attempt gate, retained raw delivery error
-details, production worker supervision, or transport-backed topology. Event
-import and aggregate importers are removed from the active plan by upstream ADR
-0001 D1. Aggregate `@React` handlers, when present, use ordinary
-generated-reactor transaction semantics rather than event-sourcing
-applier/import delivery. `IMPORT_EVENT` is no longer a supported public
-delivery label for new inbox writes; stored/wire legacy rows using it are
-recognized only as deprecated compatibility data and fail closed before
-delivery.
+handoffs, one direct drain call, and a closeable loop owner. The initial release
+excludes a generic repository delivery engine, projection catch-up through
+inbox storage, retry monitors, public or production retry-attempt counter policy
+beyond the internal retained-attempt gate, retained raw delivery error details,
+production worker supervision, and transport-backed topology. These exclusions
+make no future policy commitment. Event import and aggregate importers are
+removed from the active plan by upstream ADR 0001 D1. Aggregate `@React`
+handlers, when present, use ordinary generated-reactor transaction semantics
+rather than event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer
+a supported public delivery label for new inbox writes; stored/wire legacy rows
+using it are recognized only as deprecated compatibility data and fail closed
+before delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
