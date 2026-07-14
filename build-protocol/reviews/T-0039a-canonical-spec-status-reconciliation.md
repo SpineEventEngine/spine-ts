@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Complete; merged and post-merge verified; remote closure pending
+Status: Complete; merged, post-merge verified, and pushed
 
 ## Review Scope
 
@@ -381,3 +381,11 @@ supervisor`, conflicting with the explicit production process-supervision
   protected user-owned untracked file remains.
 - Every task reviewer is closed and every per-task concern is clean. Remote
   closure is the only remaining T-0039a step.
+
+## Remote Closure
+
+- `2026-07-14T11:43:45Z`: origin confirms task branch `7a000941` and main
+  integration record `0f3fbb74`. This final closure record will be pushed before
+  the clean worktree is removed.
+- T-0039a has no open reviewer, finding, verification, merge, or remote-ref
+  obligation. Security remains a project-level T-0041 gate.

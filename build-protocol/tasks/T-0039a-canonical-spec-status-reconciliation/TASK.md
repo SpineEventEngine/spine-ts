@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Complete; merged and post-merge verified; remote closure pending
+Status: Complete; merged, post-merge verified, and pushed
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -517,3 +517,12 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Root tracked state and diff integrity are clean; only the protected untracked
   user file remains. Push `main`, record remote refs, then remove the clean task
   worktree.
+
+## Remote Closure
+
+- `2026-07-14T11:43:45Z`: pushed the completed task branch and verified
+  `refs/heads/task/T-0039a-canonical-spec-status-reconciliation` at
+  `7a0009417f1c3a83db0f3df8c6c56a1541a6b48e`.
+- Pushed integration record `0f3fbb7461b66cbcac53721585c944f640488e8d`
+  and verified `refs/heads/main` at that commit. Final remote-closure record is
+  ready to commit and push before worktree cleanup.
