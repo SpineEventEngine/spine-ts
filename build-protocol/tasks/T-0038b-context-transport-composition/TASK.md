@@ -908,3 +908,7 @@ permitted`: same-host command/event
   reviewers to ignore historical or superseded text unless the current task,
   work/review logs, or changed active documentation claims it as current.
   Security remains deferred to T-0041.
+- The first documentation response is not accepted despite a CLEAN substantive
+  result because it reported actual model/reasoning metadata as unavailable.
+  That reviewer is closed and the same role is redispatched at explicit
+  `gpt-5.6-luna` / medium with the metadata acceptance requirement restated.

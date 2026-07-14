@@ -604,3 +604,14 @@ Status: Slice 3 specialist review wave assigned
   canonical skill applicability and actual runtime metadata. Prompts ignore
   historical superseded text unless current records or changed active docs
   claim it. Security remains deferred to T-0041.
+
+## Slice 3 Documentation Redispatch
+
+- Documentation reviewer `019f5f0b-3c41-70b0-9ba6-c13e7e6ad284` returned a
+  substantive CLEAN result and completed the skill check, but explicitly
+  reported actual runtime model/reasoning metadata as unavailable. The result
+  is rejected by the orchestrator acceptance gate and the reviewer is closed.
+- The same existing documentation role is redispatched read-only at explicit
+  `gpt-5.6-luna` / medium, no subagents, against the same immutable package.
+  The replacement must confirm the immutable runtime profile exposed by its
+  role configuration; the first result is not counted as a clean lane.
