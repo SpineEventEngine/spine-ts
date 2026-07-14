@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Independent review wave 3 assigned
+Status: Review wave 3 finding accepted
 
 ## Review Scope
 
@@ -183,3 +183,15 @@ Status: Independent review wave 3 assigned
 - Scope is the refreshed milestone package and current claims, including
   resolution of both earlier waves. Historical superseded text remains
   non-active; security remains deferred to T-0041.
+
+## Review Wave 3 Results
+
+- Documentation, Luna Medium: clean and closed.
+- TypeScript/API docs, Terra High: clean and closed.
+- Performance/reliability, Terra High: clean and closed.
+- Style/maintainability, Terra High: P1 active `does not yet implement` wording
+  still frames excluded projection catch-up, retry-monitor, supervision, and
+  topology policy as future delivery. Reviewer closed.
+- Accepted fix: change that single active exclusion block to present release
+  scope with no future policy commitment. Rerun docs/style/reliability only;
+  API is unaffected and retains its clean wave-3 result.

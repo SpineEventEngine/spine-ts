@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Independent review wave 3 assigned
+Status: Review wave 3 finding accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -301,3 +301,14 @@ inventory. Run focused docs/status lint before any reviewer assignment.
 - Rerun all four concerns read-only: explicit Terra High
   style/API/reliability and explicit Luna Medium documentation, no subagents.
   Security remains deferred to T-0041.
+
+## Review Wave 3 Result
+
+- `2026-07-14T10:49:43Z`: documentation, TypeScript/API docs, and
+  performance/reliability are clean and closed. Style found the sole remaining
+  active `does not yet implement` formulation in the delivery exclusion block.
+- Replace that formulation with present release scope and explicit no-future-
+  policy wording. The bounded canonical scan found no other unresolved
+  `not yet`/future-policy promise. Resume the existing Terra Medium implementer.
+- After the fix, rerun documentation, style, and reliability. API remains clean
+  and is unaffected because no public-contract surface changes.
