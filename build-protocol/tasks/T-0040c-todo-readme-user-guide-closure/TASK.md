@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Specialist Wave 9 assigned at `fa5c1bad`
+Status: In progress - Specialist Wave 9 clean; full task gate pending
 
 Started: `2026-07-14`
 
@@ -664,3 +664,15 @@ activation|expires abandoned inactive subscriptions before activation"`.
   passed. No generation staging directory remains.
 - A committed immutable endpoint, fresh baseline package, and all four
   specialist lanes remain required before the full task gate.
+
+## 2026-07-14 - Specialist Wave 9 Clean Closure
+
+- Style/maintainability, documentation completeness, TypeScript/API docs, and
+  performance/reliability all returned clean against the immutable
+  baseline-to-`fa5c1bad` package.
+- The clean wave accepts the early pending-read rejection observer, bounded
+  query/diagnostic semantics, exact-ID causality, deterministic client cleanup,
+  and the explicit inactive-TTL boundary for an ambiguous subscription creation
+  timeout.
+- All Wave 9 reviewers are closed. Security remains deferred to T-0041. The
+  full native task `pnpm verify` gate is next.
