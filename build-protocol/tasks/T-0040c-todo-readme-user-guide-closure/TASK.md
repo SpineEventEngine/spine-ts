@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 4 findings adjudicated; fix wave pending
+Status: In progress - Wave 4 fixes verified; re-review pending
 
 Started: `2026-07-14`
 
@@ -387,3 +387,49 @@ install` reported all eight workspace projects already up to date;
   private `@spine-ts/example-todo` package and own their generated/compiled
   artifacts; framework dependencies use public package exports. Adding an
   exported example subpath would create the public contract this task forbids.
+
+## 2026-07-14 - Specialist Wave 4 Fix Evidence
+
+- `inspectTaskListRows()` now inspects and retains at most 16 rows, enough for
+  the existing three-row corrupt prefix before the exact target. Diagnostic IDs
+  remain independently capped at four. Finite counters distinguish unavailable
+  inspected rows, omitted diagnostic rows, and omitted response rows.
+- `sanitizeSmokeValue()` slices string input to 256 characters before its
+  character loop and still caps emitted diagnostics at 64 characters.
+- Focused TDD RED failed 2/3: the old decoder retained 100 rows instead of 16,
+  and the old sanitizer traversed 1,000 controls to reveal a hidden suffix.
+  GREEN passed 3/3 with the oversized response and long-control-ID regressions,
+  while retaining absent, mismatched, malformed matching-type, and valid-later
+  row coverage.
+- The query guide now seeds via package smoke, requires the printed task ID in
+  `SPINE_TODO_TASK_ID`, validates the variable before creating a session, and
+  uses the ID in the exact filter. UUID-scoped query IDs avoid reuse, and the
+  module requires that all-row, exact-ID, and `open_task_count = 1` results each
+  contain the seeded task.
+- Query decoding now catches malformed matching-type wire bytes and skips them
+  alongside absent, mismatched, and undefined rows. App-owned `../dist/**`
+  imports remain unchanged and no export subpath was added.
+- Exact native reader workflow passed. Package smoke produced
+  `smoke-289ab6f7-2e60-4bde-bae2-b144b62ba764`; the saved query module returned
+  that same row from all three query shapes, and the saved subscription module
+  delivered its exact UUID-backed row. Running the extracted query block
+  without `SPINE_TODO_TASK_ID` exited 1 with its documented validation error.
+- A temporary check containing the guide decoder verbatim returned only the
+  valid row after absent, mismatched, and malformed matching-type rows. The
+  temporary saved modules/check were removed with no repository residue.
+- `typecheck:build`, `typecheck:tooling`, focused ESLint/Prettier, `docs:check`
+  with 372 expected exports, and generated-clean passed. Server `SIGINT` left
+  no `127.0.0.1:8080` listener. Final diff checks are recorded in the work log;
+  full `pnpm verify` remains the coordinator gate.
+
+## 2026-07-14 - Coordinator Wave 4 Fix Verification
+
+- Native focused verification passed 2 files / 29 tests, including oversized
+  response retention/omission and bounded long-control sanitizer input.
+- The exact documented native workflow passed: package smoke seeded one UUID
+  task; the saved query module returned that task in all, exact-ID, and
+  `open_task_count = 1` results; the saved subscription received its own row.
+  Missing `SPINE_TODO_TASK_ID` failed with the documented validation error.
+- Server shutdown and copied-module cleanup left no temporary file or IPv4
+  listener. Fresh tooling/build types, docs/API, focused ESLint, format,
+  generated-clean, and diff checks passed.

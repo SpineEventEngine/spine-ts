@@ -56,16 +56,29 @@ Every `TaskList` projection row has the task ID as its projection ID. The
 following complete ESM client factors the shared client, target, read, and
 decode setup while executing all-row, exact-ID, and declared-column queries.
 First run `pnpm typecheck:build` from the repository root, then save the module
-as `examples/todo/scripts/query-client.mjs`. With `pnpm --filter
-@spine-ts/example-todo start` running in another terminal, execute it from the
-repository root with:
+as `examples/todo/scripts/query-client.mjs`. Start `pnpm --filter
+@spine-ts/example-todo start` in terminal one. In terminal two, seed one open
+task and copy the task ID printed after `to-do smoke ok:`:
 
 ```bash
-pnpm --filter @spine-ts/example-todo exec node scripts/query-client.mjs
+pnpm --filter @spine-ts/example-todo smoke
 ```
+
+Pass that complete ID as `SPINE_TODO_TASK_ID` when running the saved query
+module from the repository root. For example, replace `smoke-...` below with
+the ID just printed:
+
+```bash
+SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-ts/example-todo exec node scripts/query-client.mjs
+```
+
+The seeded row appears in the all-row and exact-ID results. Because smoke
+creates one unfinished task, it also appears in the `open_task_count = 1`
+column-filter result.
 
 ```js
 import { log } from "node:console";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
@@ -90,6 +103,11 @@ import { SignalMetadata } from "@spine-ts/server";
 import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
+const taskId = process.env.SPINE_TODO_TASK_ID?.trim();
+if (taskId === undefined || taskId === "") {
+  throw new Error("Set SPINE_TODO_TASK_ID to the complete task ID printed by package smoke.");
+}
+const querySuffix = randomUUID();
 const session = new Http2SessionManager(baseUrl);
 const transport = createGrpcTransport({ baseUrl, sessionManager: session });
 const queries = createClient(QueryService, transport);
@@ -99,19 +117,21 @@ const actorContext = metadata.actorContext({
 });
 
 try {
-  const all = await readTaskLists(taskListQuery("query-all", { case: "includeAll", value: true }));
+  const all = await readTaskLists(
+    taskListQuery(`query-all-${querySuffix}`, { case: "includeAll", value: true }),
+  );
   const exact = await readTaskLists(
-    taskListQuery("query-task-1", {
+    taskListQuery(`query-exact-${querySuffix}`, {
       case: "filters",
       value: create(TargetFiltersSchema, {
         idFilter: {
-          id: [packAny(StringValueSchema, create(StringValueSchema, { value: "task-1" }))],
+          id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
         },
       }),
     }),
   );
   const oneOpenTask = await readTaskLists(
-    taskListQuery("query-one-open-task", {
+    taskListQuery(`query-one-open-task-${querySuffix}`, {
       case: "filters",
       value: create(TargetFiltersSchema, {
         filter: [
@@ -130,9 +150,18 @@ try {
     }),
   );
 
+  requireTask(all, "all-row query");
+  requireTask(exact, "exact-ID query");
+  requireTask(oneOpenTask, "open_task_count query");
   log({ all, exact, oneOpenTask });
 } finally {
   session.abort();
+}
+
+function requireTask(lists, label) {
+  if (!lists.some((list) => list.id === taskId)) {
+    throw new Error(`${label} did not return the requested smoke task.`);
+  }
 }
 
 function taskListQuery(id, criterion) {
@@ -160,9 +189,13 @@ function decodeTaskLists(response) {
     if (row.state === undefined) {
       continue;
     }
-    const list = unpackAny(row.state, TaskListSchema);
-    if (list !== undefined) {
-      lists.push(list);
+    try {
+      const list = unpackAny(row.state, TaskListSchema);
+      if (list !== undefined) {
+        lists.push(list);
+      }
+    } catch {
+      // Skip malformed matching-type bytes just like absent or mismatched rows.
     }
   }
   return lists;

@@ -3,7 +3,9 @@ import type { QueryResponse } from "@spine-ts/proto/generated/spine/client/query
 
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
+const maxInspectedRows = 16;
 const maxDiagnosticRows = 4;
+const maxDiagnosticInputLength = 256;
 const maxDiagnosticLength = 64;
 
 export interface InspectedTaskListRows {
@@ -14,8 +16,10 @@ export interface InspectedTaskListRows {
 export function inspectTaskListRows(response: QueryResponse): InspectedTaskListRows {
   const taskLists: TaskList[] = [];
   let unavailableRows = 0;
+  const inspectedRows = response.message.slice(0, maxInspectedRows);
+  const omittedResponseRows = Math.max(0, response.message.length - inspectedRows.length);
 
-  for (const row of response.message) {
+  for (const row of inspectedRows) {
     if (row.state === undefined) {
       unavailableRows += 1;
       continue;
@@ -35,12 +39,15 @@ export function inspectTaskListRows(response: QueryResponse): InspectedTaskListR
   const diagnostics = taskLists
     .slice(0, maxDiagnosticRows)
     .map((taskList) => sanitizeSmokeValue(taskList.id));
-  const omittedRows = Math.max(0, taskLists.length - maxDiagnosticRows);
+  const omittedDiagnosticRows = Math.max(0, taskLists.length - maxDiagnosticRows);
   if (unavailableRows > 0) {
     diagnostics.push(`<${String(unavailableRows)} unavailable rows>`);
   }
-  if (omittedRows > 0) {
-    diagnostics.push(`<${String(omittedRows)} rows omitted>`);
+  if (omittedDiagnosticRows > 0) {
+    diagnostics.push(`<${String(omittedDiagnosticRows)} diagnostic rows omitted>`);
+  }
+  if (omittedResponseRows > 0) {
+    diagnostics.push(`<${String(omittedResponseRows)} response rows omitted>`);
   }
 
   return { diagnostics, taskLists };
@@ -48,7 +55,8 @@ export function inspectTaskListRows(response: QueryResponse): InspectedTaskListR
 
 export function sanitizeSmokeValue(value: unknown): string {
   let cleaned = "";
-  for (const character of String(value)) {
+  const boundedValue = String(value).slice(0, maxDiagnosticInputLength);
+  for (const character of boundedValue) {
     const code = character.charCodeAt(0);
     cleaned += code <= 31 || code === 127 ? " " : character;
   }
