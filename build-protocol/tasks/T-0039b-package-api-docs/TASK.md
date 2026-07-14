@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 3 assigned
+Status: Review round 3 findings accepted — fixes assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -374,3 +374,27 @@ may change. No subagents; coordinator retains Git and independent review.
   historical text unless current records or changed docs activate it.
 - Recheck testing-package substitutions and environment-vs-facility ownership.
   Collect the full wave before adjudication. Security remains T-0041.
+
+## Independent Review Round 3 Results
+
+- Style/maintainability, documentation completeness, and
+  performance/reliability: clean.
+- TypeScript/API docs found four accepted P2 defects:
+  1. The core `packCommand()` / `packEvent()` fence uses eight undeclared
+     caller-owned IDs, contexts, schemas, and messages. Make its fixture inputs
+     explicit or label it clearly as a non-executable fragment.
+  2. Active server fences similarly hide dispatcher/envelope, stand state,
+     lifecycle entity/environment, entity-state, and transition inputs. Make
+     each fence self-contained or explicitly declare/label required fixture
+     values without converting framework-only APIs into end-user guidance.
+  3. The real exported subpath
+     `@spine-ts/server/internal/generated-handler-registry` is undocumented.
+     Document it narrowly as generated-artifact-only/package-internal and not
+     an application API; do not add it to the root API or TypeDoc surface.
+  4. The server README still calls scheduler/retry/recovery/catch-up/storage
+     exclusions “open production gaps.” Replace that with initial-release
+     exclusions and no future-policy commitment.
+- All reviewers used the explicit immutable profiles recorded in the Desktop
+  runtime: docs Luna/medium; other lanes Terra/high. Every reviewer is closed.
+- Return the complete four-item docs-only batch to the existing implementer,
+  `gpt-5.6-terra` / medium, no subagents.

@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 3 assigned
+Status: Review round 3 findings accepted — fixes assigned
 
 ## Review Scope
 
@@ -223,3 +223,19 @@ T-0041 and full verify remains final-only.
   historical text ignored unless current records/docs activate it. Recheck both
   round 2 fixes and collect the full wave before adjudication. Security remains
   deferred to T-0041.
+
+## Independent Review Round 3 Results
+
+- Style/maintainability (`gpt-5.6-terra` / high): clean.
+- Documentation completeness (`gpt-5.6-luna` / medium): clean.
+- Performance/reliability (`gpt-5.6-terra` / high): clean.
+- TypeScript/API docs (`gpt-5.6-terra` / high): four accepted P2 findings:
+  undeclared caller-owned inputs in the core envelope-helper fence; undeclared
+  or implicit fixture inputs across active server fences; undocumented
+  generated-artifact-only
+  `@spine-ts/server/internal/generated-handler-registry`; and stale “open
+  production gaps” wording for release exclusions.
+- The complete wave was collected before adjudication, every explicit profile
+  matched immutable Desktop runtime metadata, and every reviewer is closed.
+  Assign all four docs-only fixes together to the existing implementer
+  (`gpt-5.6-terra` / medium), no subagents. Security remains T-0041.
