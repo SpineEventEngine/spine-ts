@@ -290,6 +290,13 @@ links/imports, and future-policy overclaim.
   app-owned-relative-import adjudication unless new repository evidence changes
   ownership. Read-only; no Git mutation, installs, duplicate test runs, or
   subagents; superseded historical text is inactive.
+- Explicit dispatch and immutable Desktop metadata agree for Wave 5:
+  style agent `019f6283-1a67-7883-8fc7-76b9321806dc` is actual
+  `gpt-5.6-terra` / high; documentation agent
+  `019f6283-163c-7c10-a45f-abe13cc808c7` is actual `gpt-5.6-luna` / medium;
+  TypeScript/API docs agent `019f6283-2196-7922-b9f6-cbc712949656` is actual
+  `gpt-5.6-terra` / high; performance/reliability agent
+  `019f6283-2a12-77a3-aaa5-cd116b4e846f` is actual `gpt-5.6-terra` / high.
 
 ## Skill Applicability
 
