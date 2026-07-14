@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 coordinator-verified; review endpoint pending
+Status: Slice 1 reviewer wave assigned
 
 ## Scope
 
@@ -110,3 +110,17 @@ Status: Slice 1 coordinator-verified; review endpoint pending
   relevant and pending an immutable review package. Documentation is N/A
   because no observable/public documentation changed. Security is deferred to
   T-0041.
+
+## Slice 1 Reviewer Dispatch
+
+- Endpoint: `b2a6e7e1`; baseline/frame: `ae8f0f09`; package:
+  `.superpowers/sdd/review-ae8f0f09..b2a6e7e1.diff` (one commit, 46,562 bytes).
+- Style/maintainability: assigned existing role, explicit expected
+  `gpt-5.6-terra` / `high`, no subagents.
+- TypeScript/API docs: assigned existing role, explicit expected
+  `gpt-5.6-terra` / `high`, no subagents.
+- Performance/reliability: assigned existing role, explicit expected
+  `gpt-5.6-terra` / `high`, no subagents.
+- Prompts are bounded to Slice 1 and must ignore superseded historical text
+  unless current records or changed active docs claim it. Documentation is N/A;
+  security is deferred to T-0041.
