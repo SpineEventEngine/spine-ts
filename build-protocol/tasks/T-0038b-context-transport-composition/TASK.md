@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 review clean; final task verification pending
+Status: Complete; accepted for main integration
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1197,3 +1197,17 @@ duplicate control was not applied within the bounded quiet window.` This
   concerns are clean. Security remains intentionally deferred to T-0041.
   T-0038b now requires only coordinator-owned final native verification and
   closure records.
+
+## Final Task Verification
+
+- Unrestricted full `pnpm --config.verify-deps-before-run=false verify` exits
+  `0`. Ordinary and coverage phases each pass `71` files and `1642/1642` tests.
+  Coverage is `95.38%` statements, `90.12%` branches, `98.22%` functions, and
+  `95.4%` lines.
+- Generated build/tooling typechecks, ESLint, cleanup enforcement, exact
+  formatting, TypeDoc/API checks, Proto lint/checksum/generated checks, and
+  generated-clean all pass. Expected exports remain `205` server and `17`
+  transport. No generated output is tracked.
+- All T-0038b acceptance criteria and four canonical review concerns are
+  satisfied. Security remains intentionally deferred to T-0041. The task is
+  complete and accepted for main integration.
