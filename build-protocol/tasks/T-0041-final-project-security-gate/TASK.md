@@ -316,3 +316,13 @@ example.
   a held directory descriptor, so substitution after the final recheck cannot
   be eliminated. Deployments must use a canonical path under a parent that is
   not attacker-writable.
+
+## Security Fix Implementation Dispatch
+
+- Resume existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` with
+  explicit expected `gpt-5.6-terra` / medium, no subagents and no Git mutation.
+- The same owner executes three sequential TDD slices: `SF-007`; `SF-008` plus
+  `SF-009`; then corrected `SF-010`. It owns the affected production sources,
+  behavior tests, public TSDoc/docs, security artifacts, and durable records.
+- Each slice must show the focused red/green evidence before the next slice;
+  generated Protobuf output remains untracked.
