@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Integrated — remote synchronization pending
+Status: Complete — remotely synchronized
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -481,3 +481,12 @@ may change. No subagents; coordinator retains Git and independent review.
   generated-clean gates all passed on the merge result.
 - The completed task branch is already pushed at `dea9a362`; verified `main`
   push and remote-state recording remain.
+
+## Remote Closure
+
+- Confirmed `origin/task/T-0039b-package-api-docs` at
+  `dea9a3625683fb7af79f854114cf12875b075280`.
+- Confirmed verified `origin/main` integration at
+  `81ab149229f73c5967ef042949dee4077403c328` before this closure record.
+- No task tag was created. T-0039b is durably complete; only the final closure
+  commit push and clean merged-worktree removal remain mechanical cleanup.
