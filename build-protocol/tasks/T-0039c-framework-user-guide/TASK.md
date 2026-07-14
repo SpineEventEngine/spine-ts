@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Coordinator pre-review findings assigned
+Status: Second coordinator pre-review finding assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -167,3 +167,47 @@ without reading internal source.
   scope is the guide, these three records, and only the plan's three stale
   current-status statements. Full verification, review, Git mutation,
   integration, push, and cleanup remain coordinator-owned.
+
+## Pre-Review Fix Implementation
+
+- Reconciled sections 2 and 3 around one generated consumer vocabulary:
+  `TaskId`, aggregate state `Task`, process-manager state `TaskWorkflow`,
+  projection state `TaskList`, and the exact commands/events used by handlers.
+- Updated aggregate, process-manager, and projection ID generics and schemas to
+  those modeled messages. Bare decorators, explicit generated domain-message
+  returns, public package imports, and consumer-substitution boundaries remain
+  intact.
+- Updated only the completion plan's three assigned current-status statements
+  to the T-0039c framework-user-guide pre-review-fix frontier.
+- Focused validation passed for the final assigned scope. Full verification and
+  specialist review remain coordinator-owned.
+
+## Pre-Review Fix Handback
+
+- Changed paths: `docs/USER_GUIDE.md`; the task, work, and review records for
+  T-0039c; and only the three assigned current-status statements in
+  `PROJECT_COMPLETION_PLAN.md`.
+- Sections 2 and 3 now form one coherent typeable consumer example whose
+  modeled messages, generated schemas/types, entity ID generics, handler
+  inputs, and explicit generated returns agree.
+- Exact focused command evidence, exclusions, and remaining uncertainty are
+  recorded in the work log. No runtime, package, Proto source, generated
+  output, example, canonical specification, or historical-plan packet changed.
+- Skills used for this fix: doc-coauthoring for reader-facing vocabulary
+  reconciliation and verification-before-completion for fresh handback
+  evidence.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Second Coordinator Pre-Review Finding
+
+- At `2026-07-14T13:22:15Z`, the renewed journey audit found that the aggregate,
+  process-manager, and projection examples emit or consume messages but never
+  demonstrate updating their modeled entity state. A reader following the
+  fragment could therefore persist only default state and would not learn the
+  public protected draft-state API needed for the query/subscription journey.
+- The same existing implementer is assigned this one guide correction with
+  explicit immutable `gpt-5.6-terra` / medium dispatch and no subagents. Use
+  the current modeled schemas and framework-owned transaction boundary; do not
+  add manual transaction controls, default-route ID extraction, internal APIs,
+  runtime changes, or new scope.

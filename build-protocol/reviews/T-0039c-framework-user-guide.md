@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Coordinator pre-review findings assigned
+Status: Second coordinator pre-review finding assigned
 
 ## Review Scope
 
@@ -73,3 +73,41 @@ Status: Coordinator pre-review findings assigned
   immutable `gpt-5.6-terra` / medium, no subagents, and the bounded expanded
   write scope recorded in the task/work logs. The four specialist review lanes
   remain pending until the fix and renewed coordinator pre-review gate pass.
+
+## Pre-Review Fix Implementation
+
+- The candidate guide now declares every entity state, command, and event used
+  by the handler fragment, and the generated imports/classes use those exact
+  message and schema names with generated `TaskId` entity IDs.
+- The three assigned completion-plan statements now identify T-0039c as the
+  current framework-user-guide pre-review-fix frontier; historical and later
+  packet text was not changed.
+- No reviewer has run. Focused fix verification passed before renewed
+  coordinator pre-review.
+
+## Pre-Review Fix Handback
+
+- The complete accepted pre-review batch is implemented across the five
+  authorized paths. The guide coherence finding is addressed by one exact
+  modeled/generated vocabulary and generated-message ID generics; the status
+  finding is addressed by only the three assigned completion-plan statements.
+- Exact-path format, model/import/identifier, prohibited end-user,
+  future-policy, link, status/frontier, docs/API, generated-clean, scope, and
+  diff-integrity checks passed. Full `pnpm verify` and all four specialist
+  review lanes remain pending coordinator work.
+- Remaining uncertainty is limited to the explicitly illustrative consumer
+  packages, which cannot be compiled in this workspace; their required
+  substitutions and fixture boundary remain explicit.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Second Coordinator Pre-Review Finding
+
+- `2026-07-14T13:22:15Z`: reviewer dispatch remains blocked. The renewed local
+  audit accepted one documentation/API-usability finding: all three handler
+  families must demonstrate state mutation through the supported protected
+  draft-state seam so the modeled state, query, and subscription journey is
+  behaviorally meaningful.
+- The same existing implementer receives this complete one-item batch with
+  explicit immutable `gpt-5.6-terra` / medium and no subagents. No specialist
+  reviewer has run yet.
