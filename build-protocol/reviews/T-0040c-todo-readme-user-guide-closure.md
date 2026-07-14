@@ -53,6 +53,31 @@ links/imports, and future-policy overclaim.
 - Exact install/build/start/smoke/test evidence and focused type, lint, format,
   docs, generated-clean, and diff checks are recorded in the task/work logs.
 
+## 2026-07-14 - Specialist Wave 1 Assignment
+
+- Endpoint: `fde98797` (`Document runnable to-do workflows`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..fde98797.diff`.
+- Code style/maintainability: existing
+  `style_maintainability_reviewer`, expected explicit `gpt-5.6-terra` / high.
+  Scope is the bounded smoke/package-script maintainability and changed-doc
+  structure, duplication, naming, and clarity.
+- Documentation completeness: existing `documentation_reviewer`, expected
+  explicit `gpt-5.6-luna` / medium. Scope is a fresh-reader runbook audit of
+  exact commands, links, demonstrated behavior, lifecycle, and limitations.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit `gpt-5.6-terra` / high. Scope is public imports, generated-client
+  shapes, package/export boundaries, declarations, and claims against the real
+  API.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected explicit `gpt-5.6-terra` /
+  high. Scope is bounded waits/diagnostics, process/listener/session/timer
+  cleanup, deterministic smoke behavior, and local multi-process claims.
+- Every reviewer is read-only, may not mutate Git or spawn subagents, and must
+  report only concrete milestone-scoped defects. Historical superseded text is
+  non-active unless the current task/work status or changed public docs claim it
+  as active.
+
 ## Skill Applicability
 
 - Reviewers use session inventory, expected-skill manifest, readable installed
