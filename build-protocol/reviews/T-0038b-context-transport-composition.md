@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 targeted specialist rereview assigned
+Status: Slice 3 targeted rereview P2 fixes assigned
 
 ## Scope
 
@@ -700,3 +700,22 @@ Status: Slice 3 targeted specialist rereview assigned
 - All are read-only, bounded to accepted fixes, and use no subagents. Prompts
   retain the superseded-history rule. TypeScript/API remains CLEAN; security
   remains deferred to T-0041.
+
+## Slice 3 Targeted Rereview Results
+
+- Documentation: CLEAN. Reviewer
+  `019f5f1f-39f6-7a52-8dda-d9b39cba66b1`, actual immutable
+  `gpt-5.6-luna` / medium, no subagents, closed.
+- Style/maintainability: accepted P2. Reviewer
+  `019f5f1f-36ad-7a11-b5ba-e4de82cb7633`, actual immutable
+  `gpt-5.6-terra` / high, no subagents, closed. Move the internal test seam
+  below the file's primary public factory declaration.
+- Performance/reliability: accepted P2. Reviewer
+  `019f5f1f-3d32-7e90-8938-9f6bb0fbb465`, actual immutable
+  `gpt-5.6-terra` / high, no subagents, closed. Exact-three polling can miss a
+  fast fourth observation; use at-least-three admission, immediate over-count
+  failure, and deterministic injection after the parent starts its quiet
+  window.
+- Every reviewer completed the skill check. One existing implementer fix pass
+  is explicit `gpt-5.6-terra` / medium with no subagents. API remains CLEAN;
+  security remains deferred to T-0041.

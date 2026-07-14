@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 targeted specialist rereview assigned
+Status: Slice 3 targeted rereview P2 fixes assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -995,3 +995,15 @@ permitted`: same-host command/event
   roles at explicit `gpt-5.6-terra` / high; documentation uses the existing
   role at explicit `gpt-5.6-luna` / medium. All are read-only with no
   subagents. TypeScript/API remains clean and is not repeated.
+
+## Slice 3 Targeted Rereview Findings
+
+- Documentation is CLEAN. Style accepted one P2: move the package-internal
+  native socket test seam below the primary public factory declaration.
+  Reliability accepted one P2: the delayed-fourth proof can jump from fewer
+  than three to four observations and time out while waiting for exact equality.
+- The same implementer is resumed at explicit immutable `gpt-5.6-terra` /
+  medium, no subagents. It must make duplicate injection deterministic relative
+  to the parent entering its quiet window, fail immediately above three, retain
+  the existing real transport proof, move the declaration, update all records,
+  and rerun the native affected files.
