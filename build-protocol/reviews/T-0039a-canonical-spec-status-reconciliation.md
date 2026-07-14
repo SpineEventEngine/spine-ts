@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Independent review assigned
+Status: Review findings accepted
 
 ## Review Scope
 
@@ -103,3 +103,22 @@ Status: Independent review assigned
   startup/recovery/close/retry ordering and bounded-policy claims.
 - All are read-only, no subagents, and must report canonical skill
   applicability plus actual immutable profile. Security remains deferred.
+
+## Review Wave 1 Results
+
+- `2026-07-14T10:27:00Z`: all four reviewers completed and were closed.
+- Documentation, Luna Medium: P1 stale current/future lifecycle paragraph at
+  `RUNTIME_ARCHITECTURE.md:28-41`.
+- Performance/reliability, Terra High: same P1, independently confirmed against
+  implemented server ordering and lifecycle tests.
+- TypeScript/API docs, Terra High: P1 package-internal `parked` result and
+  adjacent handoff/run vocabulary leak in observable lifecycle wording.
+- Style/maintainability, Terra High: P2 ambiguous `T-0037a through T-0037f`
+  outcome range and P2 stale completion-plan top-level execution status.
+- The explicit dispatch fields matched immutable role metadata. Child-facing
+  session identity did not expose the profile labels separately; the
+  orchestrator accepts the runtime role metadata as the actual profile record.
+- Accepted deduplicated batch: replace the stale paragraph; express startup
+  recovery only as finite observable completion/rejection; name the exact eight
+  D-0086 children; and set the plan status to current execution. Rerun all four
+  concerns because the fixes touch each lane's claim surface.

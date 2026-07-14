@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Independent review assigned
+Status: Review findings accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -222,3 +222,21 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   explicit `gpt-5.6-terra` / high; documentation at explicit
   `gpt-5.6-luna` / medium. All are read-only, no subagents, and limited to the
   milestone diff/current claims. Security remains deferred to T-0041.
+
+## Independent Review Findings
+
+- `2026-07-14T10:27:00Z`: all four reviewers completed and were closed. The
+  explicit dispatch fields and immutable role metadata confirm the assigned
+  Terra High style/API/reliability and Luna Medium documentation profiles; the
+  child-facing session identity did not expose the profile labels separately.
+- Accept one deduplicated four-item batch:
+  1. Replace the stale pre-T-0037 architecture paragraph that still calls the
+     integrated delivery-registration and ordered-close lifecycle future work.
+  2. Remove the package-internal `parked`/handoff/run vocabulary from the
+     observable environment lifecycle wording.
+  3. Replace the ambiguous `T-0037a through T-0037f` outcome range with the
+     exact eight D-0086 children.
+  4. Change the completion plan's stale top-level `Ready for execution` status
+     to the current in-execution state.
+- Resume the existing Terra Medium implementer for this complete documentation
+  batch. Preserve all accepted exclusions and the twelve-path task boundary.
