@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review wave 2 fix handback ready
+Status: Independent review wave 3 assigned
 
 ## Review Scope
 
@@ -172,3 +172,14 @@ Status: Review wave 2 fix handback ready
   concerns.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Review Wave 3 Assignment
+
+- `2026-07-14T10:43:37Z`: accepted fix endpoint `6b70e254`; focused
+  coordinator evidence is clean.
+- Style/maintainability, TypeScript/API docs, and performance/reliability:
+  existing roles, explicit `gpt-5.6-terra` / high. Documentation: existing
+  role, explicit `gpt-5.6-luna` / medium. Read-only/no subagents.
+- Scope is the refreshed milestone package and current claims, including
+  resolution of both earlier waves. Historical superseded text remains
+  non-active; security remains deferred to T-0041.

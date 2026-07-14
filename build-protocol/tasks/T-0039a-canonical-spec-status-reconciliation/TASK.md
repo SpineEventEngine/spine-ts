@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review wave 2 fix handback ready
+Status: Independent review wave 3 assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -292,3 +292,12 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   the work log. No runtime/public API or historical event text changed.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Independent Review Wave 3 Assignment
+
+- `2026-07-14T10:43:37Z`: coordinator accepted fix endpoint `6b70e254` after
+  implementation-backed transport checks, active-policy scans, five-path
+  Prettier, `docs:check`, status/scope/generated checks, and `git diff --check`.
+- Rerun all four concerns read-only: explicit Terra High
+  style/API/reliability and explicit Luna Medium documentation, no subagents.
+  Security remains deferred to T-0041.
