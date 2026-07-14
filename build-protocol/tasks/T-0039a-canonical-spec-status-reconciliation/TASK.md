@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review fix handback ready
+Status: Independent rereview assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -254,3 +254,13 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   recorded in the work log. No full verify or mutating Git operation was run.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Independent Rereview Assignment
+
+- `2026-07-14T10:33:44Z`: coordinator accepted the six-path fix at endpoint
+  `86efa4af` after exact status/phrase/scope checks, six-path Prettier,
+  `docs:check`, generated cleanliness, and `git diff --check`.
+- Rerun all four concerns against the original baseline because the revised
+  lifecycle and status wording intersects each prior lane: explicit Terra High
+  style/API/reliability and explicit Luna Medium documentation. Read-only, no
+  subagents; security remains deferred to T-0041.

@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review fix handback ready
+Status: Independent rereview assigned
 
 ## Review Scope
 
@@ -133,3 +133,14 @@ Status: Review fix handback ready
   `docs:check`, generated-path cleanliness, and `git diff --check`.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. The package is ready for coordinator rereview.
+
+## Review Wave 2 Assignment
+
+- `2026-07-14T10:33:44Z`: accepted fix endpoint `86efa4af`; focused
+  coordinator evidence is clean.
+- Style/maintainability, TypeScript/API docs, and performance/reliability:
+  existing roles, explicit `gpt-5.6-terra` / high. Documentation: existing
+  role, explicit `gpt-5.6-luna` / medium. All are read-only/no subagents and
+  limited to the refreshed milestone package/current claims.
+- Historical superseded text remains non-active unless current records or
+  changed canonical docs claim it. Security remains deferred to T-0041.
