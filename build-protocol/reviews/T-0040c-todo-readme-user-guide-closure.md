@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 8 fix coordinator-verified - fresh re-review pending
+Status: Specialist Wave 9 assigned at `fa5c1bad`
 
 Baseline: `526b7b4d`
 
@@ -519,3 +519,35 @@ links/imports, and future-policy overclaim.
 - Fresh sequential type/build/docs/format/generated/diff checks passed with no
   retained generation staging directory. A committed endpoint, fresh package,
   and all four specialist lanes remain required.
+
+## 2026-07-14 - Specialist Wave 9 Assignment
+
+- Endpoint: `fa5c1bad` (`Clarify timed-out subscription cleanup`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..fa5c1bad.diff` (35 commits, 172,385
+  bytes).
+- Lightweight pre-review lint passed: synchronized Wave 9 status, clean
+  baseline diff, no retained generation staging or tracked generated output,
+  no new public export/declaration, no duplicate executable policy source, no
+  stale active path, and no future-production overclaim.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high.
+  Review final lifecycle wording, immediate-observer/test idiom, smoke/private
+  seam, names, duplication, constants, and repository conventions.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium. Review the exact reader workflow and especially
+  successful cancellation versus ambiguous-timeout inactive-TTL cleanup,
+  bounds, links, limitations, and current status truth.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high. Verify `Subscription`/ID ownership,
+  `SpineServicesOptions.inactiveTtlMs`, generated client shapes, Any/query
+  handling, app-owned boundaries, and unchanged public exports.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high.
+  Regress creation-timeout ownership, inactive expiry, early-read rejection,
+  all deadlines/bounds, iterator/cancel/abort/session cleanup, causality, and
+  finite resources.
+- Read-only, milestone-scoped lanes: no edits, Git mutation, installs, repeated
+  recorded tests, or subagents. Ignore superseded history unless current
+  status/public docs claim it. Preserve the app-owned relative-import and
+  server-owned opaque-ID adjudications absent new evidence.

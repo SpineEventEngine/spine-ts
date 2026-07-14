@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 8 docs correction coordinator-verified; fresh re-review pending
+Status: In progress - Specialist Wave 9 assigned at `fa5c1bad`
 
 Started: `2026-07-14`
 
