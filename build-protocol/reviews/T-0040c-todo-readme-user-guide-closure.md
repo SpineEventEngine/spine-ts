@@ -236,6 +236,13 @@ links/imports, and future-policy overclaim.
   special attention to every Wave 3 correction. Read-only; no Git mutation,
   installs, duplicate test runs, or subagents; historical superseded text is
   inactive unless current records/docs claim it.
+- Explicit dispatch and immutable Desktop metadata agree for Wave 4:
+  style agent `019f6275-524f-7132-a41e-4d566937ff5a` is actual
+  `gpt-5.6-terra` / high; documentation agent
+  `019f6275-4ee1-7ff1-9ac7-7b28e18409b4` is actual `gpt-5.6-luna` / medium;
+  TypeScript/API docs agent `019f6275-4b1b-70b1-b284-75af9570c3e2` is actual
+  `gpt-5.6-terra` / high; performance/reliability agent
+  `019f6275-4727-78b3-b8bf-5c46cf54b12d` is actual `gpt-5.6-terra` / high.
 
 ## Skill Applicability
 
