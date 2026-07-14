@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final two-lane rereview assigned
+Status: Final review-disposition finding accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -407,3 +407,13 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Assign documentation at explicit Luna Medium and style at explicit Terra High,
   read-only/no subagents. API and reliability retain clean unaffected results;
   security remains deferred to T-0041.
+
+## Final Two-Lane Rereview Result
+
+- `2026-07-14T11:19:16Z`: documentation is clean and closed. Style found one
+  P2 durable-record defect: the review log's top concern dispositions still use
+  pre-review `pending relevance` wording despite completed clean waves. Style
+  reviewer is closed.
+- Update only the current disposition summary and these records: docs/API/
+  reliability are relevant and clean; style is relevant with this finding
+  accepted. Resume the same Terra Medium implementer, then rerun style only.

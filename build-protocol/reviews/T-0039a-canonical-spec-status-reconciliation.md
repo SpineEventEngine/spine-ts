@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final two-lane rereview assigned
+Status: Final review-disposition finding accepted
 
 ## Review Scope
 
@@ -12,13 +12,13 @@ Status: Final two-lane rereview assigned
 
 ## Concern Dispositions
 
-- Style/maintainability: pending relevance after changed-file inventory.
-- Documentation: relevant; review canonical truth, active-vs-historical state,
-  exclusions, links, and scope.
-- TypeScript/API docs: pending relevance; no public TypeScript/API surface is
-  owned, but changed contract wording may need a bounded disposition.
-- Performance/reliability: pending relevance; lifecycle/delivery claims must
-  match implemented reliability behavior without future-policy overclaim.
+- Style/maintainability: relevant; final two-lane rereview found one accepted
+  current-disposition bookkeeping defect.
+- Documentation: relevant and clean in the final two-lane rereview.
+- TypeScript/API docs: relevant and clean in wave 3; later fixes did not change
+  the public-contract/API surface.
+- Performance/reliability: relevant and clean in the final clean wave; later
+  fixes changed only historical/glossary/status wording.
 - Security: deferred to T-0041 by protocol.
 
 ## Expected Profiles
@@ -285,3 +285,11 @@ supervisor`, conflicting with the explicit production process-supervision
   Read-only/no subagents.
 - API and reliability retain clean unaffected results. Historical superseded
   text remains non-active; security remains deferred to T-0041.
+
+## Final Two-Lane Rereview Results
+
+- Documentation, Luna Medium: clean and closed.
+- Style/maintainability, Terra High: P2 top concern dispositions still said
+  `pending relevance` after the lanes became relevant and clean. Reviewer closed.
+- Accepted fix: make the top summary current without rewriting historical wave
+  evidence. Rerun style only; docs/API/reliability retain clean results.
