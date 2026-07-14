@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Author assigned
+Status: Coordinator pre-review fixes assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -123,3 +123,62 @@ surface and accepted initial-release exclusions.
 - Required handback: changed paths, each reconciled claim and implementation/
   export evidence, focused commands/results, skipped candidates/reasons,
   uncertainty, skill applicability, and actual immutable runtime profile.
+
+## Author Handback
+
+- Changed paths: `README.md`, `packages/core/README.md`,
+  `packages/proto/README.md`, `packages/server/README.md`,
+  `packages/storage/README.md`, `packages/transport/README.md`,
+  `packages/testing/README.md`, `docs/api/README.md`, and the three T-0039b
+  records.
+- Reconciled claims: root/package ownership follows each package manifest and
+  root export surface; lifecycle prose retains only observable `Server`,
+  `RunningServer`, and `ServerEnvironment` startup/close/ownership behavior;
+  ZeroMQ remains adapter-scoped, trusted same-host IPC with no exactly-once,
+  durable-redelivery, retry, restart, or remote-delivery guarantee; release
+  exclusions make no future-policy commitment; legacy `IMPORT_EVENT`, `@Apply`,
+  and transaction wording is compatibility/framework-only and does not direct
+  applications to use it.
+- Evidence: `pnpm docs:check` reported the expected TypeDoc export counts
+  `100/28/205/19/17/3`; focused package metadata/root-export tests passed
+  `7` files / `71` tests; `pnpm typecheck:build` and
+  `pnpm typecheck:generated` passed after producing this worktree's required
+  local build outputs; exact-path Prettier, phrase/import/end-user scans, and
+  Markdown-target scan passed.
+- No public TSDoc or focused assertion changed: existing declarations already
+  describe the generated TypeDoc surface, and no documentation-only regression
+  needed a durable test.
+- Skipped: full `pnpm verify` (reserved by the task for final/post-merge gates),
+  runtime tests (no runtime change), TDD/debugging/security/web/artifact skills
+  (no concrete defect or matching scope), and `doc-coauthoring`'s interactive
+  loop (incompatible with this autonomous factual reconciliation).
+- Uncertainty: no public snippet compiler covers the documentation-only
+  `@example/tasks-proto` illustrative package imports; the required scan proves
+  they are package imports rather than private relative paths. Coordinator
+  review remains required.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
+  no subagents.
+
+## Coordinator Pre-Review Round 1
+
+The focused local docs/status lint accepted the changed-path scope, equal
+durable statuses, diff whitespace, release-exclusion wording, and absence of
+private source/generated imports. It found this complete bounded fix batch:
+
+1. The `packAny()` example builds an empty `Command` and therefore throws
+   `ValidationException` with three violations before packing. Use a valid
+   public `@spine-ts/proto` message so the shown default validation path runs.
+2. The API overview's `RunningServer.close()` paragraph omits context transport
+   drain and environment-delivery detach/quiescence, and its statement that
+   cleanup continues after every close failure contradicts the public hard gate
+   for network/context-intake failures. Reconcile it with the final observable
+   lifecycle in `DEVELOPER_API.md` and `RunningServer` TSDoc.
+3. `@example/tasks-proto` is intentionally an illustrative consumer-generated
+   package but no such workspace package exists. State that substitution once
+   before its first use so snippets do not imply a shipped dependency, while
+   retaining package-only imports and leaving T-0040 example ownership intact.
+
+Fix assignment returns to the existing implementer context with its immutable
+`gpt-5.6-terra` / medium profile. Scope remains these docs and durable records;
+no source, exports, generated output, dependencies, user guide, or example app
+may change. No subagents; coordinator retains Git and independent review.
