@@ -52,54 +52,288 @@ unchanged.
 
 ## Query task lists
 
-Every `TaskList` projection row has the task ID as its projection ID. Build a
-generated `Query` whose target type is `deriveTypeUrl(TaskListSchema)`, and use
-one of these criteria shapes:
+Every `TaskList` projection row has the task ID as its projection ID. The
+following complete ESM client assumes it is saved under `examples/todo/scripts/`
+after `pnpm typecheck:build`. It factors the shared client, target, read, and
+decode setup while executing all-row, exact-ID, and declared-column queries:
 
-```ts
-// all task-list rows
-criterion: { case: "includeAll", value: true }
+```js
+import { log } from "node:console";
+import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 
-// one exact row ID
-criterion: {
-  case: "filters",
-  value: create(TargetFiltersSchema, {
-    idFilter: {
-      id: [packAny(StringValueSchema, create(StringValueSchema, { value: "task-1" }))],
-    },
-  }),
+import { create } from "@bufbuild/protobuf";
+import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
+import { UserIdSchema } from "@spine-ts/proto";
+import {
+  CompositeFilter_CompositeOperator,
+  CompositeFilterSchema,
+  Filter_Operator,
+  FilterSchema,
+  TargetFiltersSchema,
+  TargetSchema,
+} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
+import { SignalMetadata } from "@spine-ts/server";
+
+import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
+
+const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
+const session = new Http2SessionManager(baseUrl);
+const transport = createGrpcTransport({ baseUrl, sessionManager: session });
+const queries = createClient(QueryService, transport);
+const metadata = new SignalMetadata();
+const actorContext = metadata.actorContext({
+  actor: create(UserIdSchema, { value: "todo-query-user" }),
+});
+
+try {
+  const all = await readTaskLists(taskListQuery("query-all", { case: "includeAll", value: true }));
+  const exact = await readTaskLists(
+    taskListQuery("query-task-1", {
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        idFilter: {
+          id: [packAny(StringValueSchema, create(StringValueSchema, { value: "task-1" }))],
+        },
+      }),
+    }),
+  );
+  const oneOpenTask = await readTaskLists(
+    taskListQuery("query-one-open-task", {
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        filter: [
+          create(CompositeFilterSchema, {
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["open_task_count"] },
+                value: packAny(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
+                operator: Filter_Operator.EQUAL,
+              }),
+            ],
+            operator: CompositeFilter_CompositeOperator.ALL,
+          }),
+        ],
+      }),
+    }),
+  );
+
+  log({ all, exact, oneOpenTask });
+} finally {
+  session.abort();
 }
 
-// rows whose declared proto column open_task_count equals one
-criterion: {
-  case: "filters",
-  value: create(TargetFiltersSchema, {
-    filter: [create(CompositeFilterSchema, {
-      filter: [create(FilterSchema, {
-        fieldPath: { fieldName: ["open_task_count"] },
-        value: packAny(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
-        operator: Filter_Operator.EQUAL,
-      })],
-      operator: CompositeFilter_CompositeOperator.ALL,
-    })],
-  }),
+function taskListQuery(id, criterion) {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: id }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskListSchema),
+      criterion,
+    }),
+    context: actorContext,
+  });
+}
+
+async function readTaskLists(query) {
+  const response = await withTimeout(queries.read(query), `query ${query.id?.value}`, 1_000);
+  if (response.response?.status?.status.case !== "ok") {
+    throw new Error(`Query ${query.id?.value ?? "<missing>"} was not acknowledged.`);
+  }
+  return decodeTaskLists(response);
+}
+
+function decodeTaskLists(response) {
+  const lists = [];
+  for (const row of response.message) {
+    if (row.state === undefined) {
+      continue;
+    }
+    const list = unpackAny(row.state, TaskListSchema);
+    if (list !== undefined) {
+      lists.push(list);
+    }
+  }
+  return lists;
+}
+
+async function withTimeout(promise, label, timeoutMs) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 ```
 
-Use `QueryService.Read`, unpack each returned row state with
-`unpackAny(row.state, TaskListSchema)`, and poll only to a deadline when waiting
-for a projection consequence. See the runnable smoke and
-[`black-box.test.ts`](test/black-box.test.ts) for complete imports and requests.
+An OK command Ack does not make projection delivery synchronous. When a query
+waits for a command consequence, repeat the bounded read only until an overall
+deadline, as the checked-in smoke does.
 
 ## Subscribe safely
 
-For a live view, create a `Topic` with the same `TaskList` target, call
-`SubscriptionService.Subscribe`, and pass the returned subscription to
-`activate()`. Start consuming the async iterator before posting the command
-whose update you need. Bound activation/next calls with an abort signal or a
-deadline. Cleanup has three parts: abort the stream, call `cancel(subscription)`,
-then call `iterator.return?.()` (or let `for await` finish). If the client owns
-an `Http2SessionManager`, call `session.abort()` in `finally` too.
+For a live view, create a `Topic` with the same `TaskList` target, subscribe,
+and activate the returned subscription. This complete ESM example also assumes
+it is saved under `examples/todo/scripts/`. It starts the iterator read before
+posting the command, bounds every remote wait, decodes one projection update,
+and owns cancellation, iterator, abort-signal, and HTTP/2 session cleanup:
+
+```js
+import { log } from "node:console";
+import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
+
+import { create } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
+import { deriveTypeUrl, packCommand, unpackAny } from "@spine-ts/core";
+import { UserIdSchema } from "@spine-ts/proto";
+import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import {
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { SignalMetadata } from "@spine-ts/server";
+
+import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
+import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
+
+const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
+const session = new Http2SessionManager(baseUrl);
+const transport = createGrpcTransport({ baseUrl, sessionManager: session });
+const commands = createClient(CommandService, transport);
+const subscriptions = createClient(SubscriptionService, transport);
+const metadata = new SignalMetadata();
+const actorContext = metadata.actorContext({
+  actor: create(UserIdSchema, { value: "todo-subscription-user" }),
+});
+const target = create(TargetSchema, {
+  type: deriveTypeUrl(TaskListSchema),
+  criterion: { case: "includeAll", value: true },
+});
+
+try {
+  const subscription = await withTimeout(
+    subscriptions.subscribe(
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: `topic-${Date.now()}` }),
+        target,
+        context: actorContext,
+      }),
+    ),
+    "subscription creation",
+    1_000,
+  );
+  const stream = new AbortController();
+  const iterator = subscriptions
+    .activate(subscription, { signal: stream.signal })
+    [Symbol.asyncIterator]();
+  let pendingUpdate;
+  let canceled = false;
+
+  try {
+    pendingUpdate = withTimeout(iterator.next(), "subscription update", 1_000);
+    const ack = await withTimeout(
+      commands.post(createTaskCommand(`subscription-task-${Date.now()}`)),
+      "CreateTask acknowledgement",
+      1_000,
+    );
+    if (ack.status?.status.case !== "ok") {
+      throw new Error("CreateTask was not acknowledged.");
+    }
+
+    const delivered = await pendingUpdate;
+    pendingUpdate = undefined;
+    if (delivered.done === true) {
+      throw new Error("Subscription ended before delivering an update.");
+    }
+    const list = taskListFrom(delivered.value);
+    if (list === undefined) {
+      throw new Error("Subscription update did not contain TaskList state.");
+    }
+    log(`subscription update: ${list.id}`);
+
+    const cancel = await withTimeout(
+      subscriptions.cancel(subscription),
+      "subscription cancellation",
+      1_000,
+    );
+    if (cancel.status?.status.case !== "ok") {
+      throw new Error("Subscription cancellation was not acknowledged.");
+    }
+    canceled = true;
+    stream.abort();
+    await withTimeout(
+      iterator.return?.() ?? Promise.resolve({ done: true }),
+      "iterator return",
+      1_000,
+    );
+  } finally {
+    await pendingUpdate?.catch(() => undefined);
+    if (!canceled) {
+      await withTimeout(subscriptions.cancel(subscription), "subscription cleanup", 1_000).catch(
+        () => undefined,
+      );
+    }
+    stream.abort();
+    await withTimeout(
+      iterator.return?.() ?? Promise.resolve({ done: true }),
+      "iterator cleanup",
+      1_000,
+    ).catch(() => undefined);
+  }
+} finally {
+  session.abort();
+}
+
+function createTaskCommand(taskId) {
+  return packCommand({
+    id: metadata.commandId(`command-${taskId}`),
+    context: metadata.commandContext({ actorContext }),
+    schema: CreateTaskSchema,
+    message: create(CreateTaskSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
+      title: "Observe the subscription",
+    }),
+  });
+}
+
+function taskListFrom(update) {
+  const entityUpdate =
+    update.update.case === "entityUpdates" ? update.update.value.update[0] : undefined;
+  if (entityUpdate?.kind.case !== "state") {
+    return undefined;
+  }
+  return unpackAny(entityUpdate.kind.value, TaskListSchema);
+}
+
+async function withTimeout(promise, label, timeoutMs) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+```
 
 The smoke deliberately does not subscribe; the black-box suite is the
 subscription acceptance proof. Active streams and queued updates are

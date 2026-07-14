@@ -1,3 +1,7 @@
+import { log } from "node:console";
+import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
+
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -153,6 +157,3 @@ function sanitize(value) {
   cleaned = cleaned.trim();
   return cleaned === "" ? "<blank>" : cleaned.slice(0, maxDiagnosticLength);
 }
-import { log } from "node:console";
-import process from "node:process";
-import { clearTimeout, setTimeout } from "node:timers";

@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - specialist findings accepted; fix wave pending
+Status: In progress - Wave 1 fixes verified; re-review pending
 
 Started: `2026-07-14`
 
@@ -189,7 +189,7 @@ verify` remains the coordinator gate.
 ## 2026-07-14 - Coordinator Pre-Review Verification
 
 - Re-ran every documented reader command from the task worktree. `pnpm
-  install` reported all eight workspace projects already up to date;
+install` reported all eight workspace projects already up to date;
   `pnpm typecheck:build` passed; the exact terminal-one server and terminal-two
   smoke workflow passed against `127.0.0.1:8080`; and the server left no IPv4
   listener after `SIGINT`.
@@ -216,3 +216,37 @@ verify` remains the coordinator gate.
   reader-owned setup implicit.
 - Add a complete bounded subscription example with generated request/client
   setup, iterator consumption, cancellation, abort, and session cleanup.
+
+## 2026-07-14 - Specialist Wave 1 Fix Evidence
+
+- Moved the smoke program's three Node built-in imports into its header import
+  group; behavior and public/package surfaces are unchanged.
+- Replaced fragmentary query guidance with one complete factored ESM client for
+  all-row, exact-ID, and `open_task_count` column-filter reads. Its decoder
+  skips absent row state and accepts only a defined `unpackAny()` result.
+- Added one complete ESM subscription client using public/generated imports and
+  compiled example schemas. It builds the `Topic`, starts a bounded iterator
+  read before posting `CreateTask`, decodes the delivered `TaskList`, awaits
+  cancellation and iterator return, aborts the stream, and aborts its explicit
+  HTTP/2 session in outer `finally` cleanup.
+- Fresh `typecheck:build` and `docs:check` passed. Both guide JS modules parsed
+  and then executed against the native local server: the query module completed
+  all three reads and the subscription module printed its generated task ID.
+  The exact package smoke printed `to-do smoke ok`; native
+  `examples/todo/test/black-box.test.ts` passed 26/26 tests.
+- The server was stopped with `SIGINT`; a subsequent exact IPv4 listener check
+  returned no `127.0.0.1:8080` listener. Focused final format, generated-clean,
+  and diff checks are recorded in the work log. Full `pnpm verify` remains the
+  coordinator gate.
+
+## 2026-07-14 - Coordinator Wave 1 Fix Verification
+
+- Extracted both JavaScript modules directly from the changed guide and ran
+  them against a freshly started native server. The query module completed
+  all/ID/column reads, the subscription module received a real projected task,
+  and the package smoke still observed its own projected row.
+- Stopped the server, removed both extracted verification modules, and confirmed
+  no IPv4 listener remained on `127.0.0.1:8080`.
+- Fresh `typecheck:build`, `docs:check`, focused smoke ESLint, `format:check`,
+  `proto:check-generated`, and `git diff --check` passed. The corrected batch
+  is ready for a fresh immutable endpoint and all four specialist lanes.

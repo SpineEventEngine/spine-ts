@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 1 findings accepted - fix wave pending
+Status: Wave 1 fixes verified - re-review pending
 
 Baseline: `526b7b4d`
 
@@ -104,6 +104,17 @@ links/imports, and future-policy overclaim.
   will be fixed by the original implementation context, existing
   `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
   explicit `gpt-5.6-terra` / medium, with no subagents or Git mutation.
+
+## 2026-07-14 - Wave 1 Fix Acceptance
+
+- The resumed implementation assignment retained explicit
+  `gpt-5.6-terra` / medium dispatch context and immutable Desktop role
+  metadata; the agent was closed after result capture.
+- Coordinator inspection and native execution confirmed the import grouping,
+  optional/mismatched state guards, complete query clients, and bounded
+  subscription lifecycle corrections.
+- Fresh focused build/docs/lint/format/generated/diff checks passed. A new
+  baseline-to-endpoint package and all four specialist lanes are required.
 
 ## Skill Applicability
 
