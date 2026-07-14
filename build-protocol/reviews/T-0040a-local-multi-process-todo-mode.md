@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 3 complete - one accepted layout fix pending
+Status: Wave 4 fixes verified - awaiting reviewer Wave 5
 
 Baseline: `24d1ef37`
 
@@ -378,3 +378,96 @@ review concerns against a fresh package.
   tooling TypeScript project. Runtime fixture behavior is unchanged.
 - The accepted Wave 3 finding is resolved. Commit this endpoint and run every
   canonical reviewer concern against one fresh Wave 4 package.
+
+## Reviewer Wave 4 Assignments
+
+Fix endpoint: `005fadb3`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..005fadb3.diff` (138,415 bytes)
+
+The pre-review docs/status lint corrected the stale review header left after
+fix verification but missed stale task/work Wave 3 headers; the Wave 4
+documentation reviewer caught that gap. The constant, internal-import/public-
+leak, generated-tracking, and future-policy scans were clean. Security remains
+deferred to T-0041.
+
+Dispatch all four existing, read-only, no-subagent concerns with explicit
+immutable profiles:
+
+- `style_maintainability_reviewer`: `gpt-5.6-terra` / high. Recheck the moved
+  test layout, fixture readability, naming, typed casts, discovery configuration,
+  and all prior concrete maintainability findings.
+- `documentation_reviewer`: `gpt-5.6-luna` / medium. Recheck current statuses,
+  evidence, comments, limitation wording, and historical-path accuracy without
+  demanding T-0040c guide work.
+- `typescript_api_docs_reviewer`: `gpt-5.6-terra` / high. Recheck public-only
+  imports, dependency placement, generated/runtime type agreement, the moved
+  test's state casts, and accidental public or TypeDoc leakage.
+- `performance_reliability_reviewer`: `gpt-5.6-terra` / high. Recheck all
+  process, socket, timer, deadline, cleanup, retry, and force-termination paths
+  after the move and every prior reliability correction.
+
+Scope each concern to the package and affected paths. Ignore historical or
+superseded text unless current status records or changed public docs claim it
+as active. Findings must be concrete, actionable, line-specific, and include
+the smallest defensible correction. Actual IDs and immutable runtime metadata
+will be recorded before accepting the complete wave.
+
+## Reviewer Wave 4 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch fields and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6158-daa8-7d80-ba21-50ac274d70ec`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6159-02f0-73a0-847e-f4d510f4b75b`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6159-2624-74e2-9692-9bec9f2fddde`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high. The child shell did
+  not expose model metadata, but the selected Desktop role's immutable runtime
+  profile supplies the required actual metadata.
+- Performance/reliability: agent
+  `019f6159-4bec-78f2-81a9-d46b04fb552d`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted and deduplicated findings:
+
+1. **P2, current status:** task and work-log headers still described Wave 3
+   after Wave 4 dispatch. Advance all current mirrors with each review stage.
+2. **P2, generated optional state:** two `NonNullable` casts erase the generated
+   `state?: Any` contract before `unpackAny()`. Narrow absent state explicitly,
+   preserve `<unreadable>` diagnostics, and add a focused row-without-state
+   assertion so observation does not turn valid incomplete rows into a
+   `TypeError`.
+3. **P2, duplicated timeout policy:** the worker hard-codes its lifecycle IPC
+   send timeout to the same one-second value owned by the parent fixture. Pass
+   the parent value through a validated environment variable and use it for
+   the worker timer and diagnostic.
+4. **P2, post-ready crash diagnosis:** `#throwChildFailure()` always says the
+   child exited before readiness, even after a ready message. Select wording
+   from current ready state and add a controlled post-ready-exit assertion.
+
+Everything else was clean: moved-test discovery and typed linting, public-only
+imports, dependency placement, internal-option removal, path/timer cancellation,
+query bounds and pacing, startup/shutdown serialization, cleanup aggregation,
+phase budgets, force termination, and local-only documentation scope. Return
+this complete batch to the same Terra Medium implementer, verify natively,
+commit, and rerun all four concerns.
+
+## Wave 4 Fix Verification - 2026-07-14
+
+- The same immutable Terra Medium implementer resolved all four accepted
+  findings with two focused behavior tests and no public/framework/dependency
+  change; no subagents.
+- Coordinator source inspection confirmed explicit optional-state narrowing,
+  one parent-owned control timeout, ready-before-exit ordering in the controlled
+  worker, readiness-aware diagnostics, and preserved cleanup ownership.
+- Native affected regression passed 7 files and all 112 tests in 25.84 seconds.
+  Both no-emit TypeScript checks, full lint and cleanup enforcement, repository
+  formatting, diff whitespace, and generated tracking passed.
+- The status-lint assignment wording now accurately records its missed headers
+  instead of overclaiming a clean mirror check. Every Wave 4 finding is
+  resolved. Commit this endpoint and run all four canonical concerns against a
+  fresh Wave 5 package.

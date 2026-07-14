@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer wave 3 layout fix and focused validation complete
+Status: In progress - reviewer Wave 4 fixes verified; awaiting Wave 5
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -383,6 +383,45 @@ examples/todo/test/local-multi-process.test.ts` listed zero tests. Discovery
   historical evidence paths did not change. Actual immutable implementation
   metadata remains existing role `implementer`, model `gpt-5.6-terra`,
   reasoning `medium`; no subagents.
+
+### Reviewer Wave 4 Fixes - 2026-07-14
+
+- Generated query rows now explicitly narrow an absent optional `state` before
+  unpacking. `findTaskList()` skips absent state and returns `undefined`; row
+  diagnostics retain `<unreadable>`. A focused generated `QueryResponse` row
+  without state proves the lookup is handled without throwing.
+- The parent remains the sole owner of the one-second `controlTimeoutMs`
+  policy. It passes the decimal value through
+  `SPINE_TODO_MULTI_PROCESS_CONTROL_TIMEOUT_MS`; the worker validates it with
+  `positiveIntegerEnvironment()` and uses that value for its lifecycle-send
+  timer and diagnostic. No second timeout literal remains in the worker.
+- The controlled `exit-after-ready` worker mode sends `ready`, then exits with
+  code 23 without `stopped`. Parent failure diagnostics now select `before
+readiness` or `after readiness` from observed lifecycle state. The existing
+  pre-ready proof remains green, and the new proof verifies the post-ready
+  wording plus listener and IPC-directory cleanup without forced termination.
+- Optional-state RED command: `pnpm
+--config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "handles a query row without
+state as unreadable"`; 1 test failed and 12 were skipped because unpacking an
+  absent state attempted to read `typeUrl`. The same command passed 1 test with
+  12 skipped after explicit narrowing.
+- Post-ready RED command: `pnpm
+--config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "reports a child exit after
+readiness"`; 1 test failed and 13 were skipped because the unchanged worker
+  rejected the mode and the parent reported an exit before readiness. The same
+  command passed 1 test with 13 skipped after the worker and diagnostic fix.
+- Native focused GREEN passed 1 file and 14 tests in 25.07 seconds. The native
+  post-format rerun passed all 14 tests in 27.56 seconds. The native seven-file
+  affected regression passed all 112 tests in 26.41 seconds.
+- Both TypeScript no-emit checks, focused ESLint, cleanup enforcement,
+  generated-output cleanliness, timeout-ownership scan, and public/internal
+  boundary scan passed. Formatting and diff-whitespace checks are recorded in
+  the work log after final evidence formatting.
+- Actual immutable implementation metadata remains existing role
+  `implementer`, model `gpt-5.6-terra`, reasoning `medium`. No subagents were
+  dispatched and no Git mutation was performed.
 
 ## Skill Applicability
 

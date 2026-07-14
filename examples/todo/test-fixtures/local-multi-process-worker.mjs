@@ -10,6 +10,7 @@ import { createTodoContext } from "@spine-ts/example-todo";
 
 const ipcDirectory = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_IPC_DIRECTORY");
 const adapterIdentity = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_ADAPTER_IDENTITY");
+const controlTimeoutMs = positiveIntegerEnvironment("SPINE_TODO_MULTI_PROCESS_CONTROL_TIMEOUT_MS");
 const requestTimeoutMs = positiveIntegerEnvironment("SPINE_TODO_MULTI_PROCESS_REQUEST_TIMEOUT_MS");
 const receiveTimeoutMs = positiveIntegerEnvironment("SPINE_TODO_MULTI_PROCESS_RECEIVE_TIMEOUT_MS");
 const workerMode = workerModeEnvironment();
@@ -57,6 +58,10 @@ try {
       { type: "ready", pid: process.pid, host: running.host, port: running.port },
       "ready control",
     );
+    if (workerMode === "exit-after-ready") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      process.exit(23);
+    }
   }
 } catch (error) {
   if (!stopRequested) {
@@ -132,8 +137,8 @@ async function sendControl(message, phase) {
     let settled = false;
     const timeout = setTimeout(() => {
       settled = true;
-      reject(new Error(`${phase} timed out after 1000ms.`));
-    }, 1000);
+      reject(new Error(`${phase} timed out after ${String(controlTimeoutMs)}ms.`));
+    }, controlTimeoutMs);
     try {
       process.send(message, (error) => {
         if (settled) {
@@ -213,7 +218,13 @@ function positiveIntegerEnvironment(name) {
 
 function workerModeEnvironment() {
   const value = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_WORKER_MODE");
-  const allowed = new Set(["default", "ignore-stop", "no-ready", "pending-startup"]);
+  const allowed = new Set([
+    "default",
+    "exit-after-ready",
+    "ignore-stop",
+    "no-ready",
+    "pending-startup",
+  ]);
   if (!allowed.has(value)) {
     throw new Error("SPINE_TODO_MULTI_PROCESS_WORKER_MODE has an unknown value.");
   }

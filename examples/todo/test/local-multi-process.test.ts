@@ -12,6 +12,7 @@ import { deriveTypeUrl, packCommand, unpackAny } from "@spine-ts/core";
 import { UserIdSchema } from "@spine-ts/proto";
 import {
   QueryIdSchema,
+  QueryResponseSchema,
   QuerySchema,
   type Query,
   type QueryResponse,
@@ -84,7 +85,7 @@ interface FixtureSetupResources {
 }
 
 type ChildCloseResource = "running server" | "environment" | "transport";
-type WorkerMode = "default" | "ignore-stop" | "no-ready" | "pending-startup";
+type WorkerMode = "default" | "exit-after-ready" | "ignore-stop" | "no-ready" | "pending-startup";
 
 interface FixtureCreateOptions {
   readonly workerPath?: string;
@@ -104,6 +105,13 @@ interface TrackedChild {
 }
 
 describe("local multi-process to-do mode", () => {
+  it("handles a query row without state as unreadable", () => {
+    const response = create(QueryResponseSchema, { message: [{}] });
+
+    expect(() => findTaskList(response, "missing-task-list")).not.toThrow();
+    expect(findTaskList(response, "missing-task-list")).toBeUndefined();
+  });
+
   it("stops waiting for a path at its own deadline", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "stmp-path-wait-"));
     const marker = path.join(directory, "late-marker");
@@ -206,6 +214,42 @@ describe("local multi-process to-do mode", () => {
       expect(primaryFailure?.message).toContain("child exited before readiness");
       expect(cleanup.listenerClosed).toBe(true);
       expect(cleanup.ipcDirectoryRemoved).toBe(true);
+    },
+    outerTestTimeoutMs,
+  );
+
+  it(
+    "reports a child exit after readiness and removes acquired local resources",
+    async () => {
+      let resources: FixtureSetupResources | undefined;
+      const fixture = await LocalMultiProcessFixture.create({
+        workerMode: "exit-after-ready",
+        afterResourcesAcquired: (acquired) => {
+          resources = acquired;
+        },
+      });
+      let primaryFailure: Error | undefined;
+      let cleanup: CleanupResult | undefined;
+
+      try {
+        await fixture.ready();
+        await requireSetupResources(resources).childExit;
+        await fixture.readTaskListEventually();
+      } catch (error) {
+        primaryFailure = asError(error);
+      } finally {
+        cleanup = await fixture.close(primaryFailure);
+      }
+
+      expect(primaryFailure?.message).toContain("child exited after readiness");
+      expect(primaryFailure?.message).not.toContain("before readiness");
+      expect(cleanup).toEqual({
+        childExitCode: 23,
+        childExitSignal: null,
+        forcedTermination: false,
+        listenerClosed: true,
+        ipcDirectoryRemoved: true,
+      });
     },
     outerTestTimeoutMs,
   );
@@ -525,6 +569,7 @@ class LocalMultiProcessFixture {
         env: {
           ...process.env,
           SPINE_TODO_MULTI_PROCESS_ADAPTER_IDENTITY: adapterIdentity,
+          SPINE_TODO_MULTI_PROCESS_CONTROL_TIMEOUT_MS: String(controlTimeoutMs),
           SPINE_TODO_MULTI_PROCESS_IPC_DIRECTORY: ipcDirectory,
           SPINE_TODO_MULTI_PROCESS_REQUEST_TIMEOUT_MS: String(requestTimeoutMs),
           SPINE_TODO_MULTI_PROCESS_RECEIVE_TIMEOUT_MS: String(receiveTimeoutMs),
@@ -690,11 +735,12 @@ class LocalMultiProcessFixture {
       }
       const list = findTaskList(response, "local-multi-process-task");
       lastRowIds = response.message
-        .map(
-          (message) =>
-            unpackAny(message.state as NonNullable<typeof message.state>, TaskListSchema)?.id ??
-            "<unreadable>",
-        )
+        .map((message) => {
+          if (message.state === undefined) {
+            return "<unreadable>";
+          }
+          return unpackAny(message.state, TaskListSchema)?.id ?? "<unreadable>";
+        })
         .join(",");
       if (list !== undefined && isExpectedTaskList(list)) {
         return list;
@@ -811,8 +857,9 @@ class LocalMultiProcessFixture {
     const exitState = this.#trackedChild.state();
     if (exitState !== undefined && !this.#stopped) {
       const stderr = sanitize(this.#stderr, this.#ipcDirectory);
+      const readiness = this.#ready === undefined ? "before readiness" : "after readiness";
       throw new Error(
-        `Local multi-process child exited before readiness during ${phase}: code ${String(exitState.code)}, ` +
+        `Local multi-process child exited ${readiness} during ${phase}: code ${String(exitState.code)}, ` +
           `signal ${String(exitState.signal)}${stderr === "" ? "." : `; stderr ${stderr}.`}`,
       );
     }
@@ -972,7 +1019,9 @@ function createTaskListQuery(): Query {
 
 function findTaskList(response: QueryResponse, id: string): TaskList | undefined {
   return response.message
-    .map((message) => unpackAny(message.state as NonNullable<typeof message.state>, TaskListSchema))
+    .map((message) =>
+      message.state === undefined ? undefined : unpackAny(message.state, TaskListSchema),
+    )
     .find((list) => list?.id === id);
 }
 
