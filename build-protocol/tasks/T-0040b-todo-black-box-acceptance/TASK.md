@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: In progress - Wave 3 status fix applied; final docs review pending
+Status: Accepted - final task gate passed; integration pending
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -345,6 +345,32 @@ examples/todo/test/black-box.test.ts -t "rejects a remote command"` failed
   documentation checks are clean.
 - No implementation behavior changes. Run one final documentation-only review
   of the stable mirror, then proceed to the full task gate if clean.
+
+## Final Review Closure
+
+- Final documentation Wave 4 is clean; agent
+  `019f6226-9f98-7b42-b51c-081f3fcb8e38` is closed. The stable chronological
+  Assignment State, aligned headers, evidence, scope, links, limitations, and
+  future-policy boundaries are truthful.
+- Final concern dispositions: style/maintainability clean (Wave 2),
+  documentation clean (Wave 4), TypeScript/API docs clean (Wave 1, retained for
+  unaffected fixes), and performance/reliability clean (Wave 3). Security
+  remains deferred to T-0041 by protocol.
+- No reviewer or implementer remains open. Run the full native task gate before
+  marking acceptance complete.
+
+## Final Task Gate
+
+- Native `pnpm --config.verify-deps-before-run=false verify` passed at the final
+  reviewed branch state.
+- Ordinary and coverage runs each passed 72 files / 1,667 tests. Coverage is
+  95.38% statements, 90.12% branches, 98.22% functions, and 95.40% lines.
+- Node/version check, Proto generation/checksums, build/tooling TypeScript,
+  ESLint/cleanup, formatting, TypeDoc/API export checks, Proto lint, and
+  generated-clean all passed. Generated output remains ignored and untracked.
+- All acceptance criteria and canonical review dispositions are satisfied.
+  Integrate into `main`, rerun the post-merge full gate, synchronize both refs,
+  and remove the clean merged worktree.
 
 ## Skill Applicability
 
