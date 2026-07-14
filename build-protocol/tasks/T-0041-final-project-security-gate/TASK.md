@@ -268,10 +268,13 @@ example.
 - `SF-009`: every storage query receives the 1,000-row safety cap when the wire
   format/limit is absent or zero; explicit positive ordered limits remain
   unchanged. No Protobuf change and no new client requirement.
-- `SF-010`: reject symlinks root-to-leaf, require final POSIX effective-UID
-  ownership and exact `0700`, capture component identities, and recheck before
-  native bind/connect. Do not claim impossible pathname race elimination or
-  apply POSIX checks on non-POSIX hosts.
+- `SF-010`: reject the final-directory symlink and attacker-substitutable
+  ancestor aliases, but admit root-owned aliases in root-owned non-writable
+  parents such as macOS `/var` and `/tmp`. Canonicalize once, create missing
+  components without recursive `mkdir`, require final POSIX effective-UID
+  ownership and exact `0700`, then recheck canonical identity immediately
+  before native bind/connect. Do not claim impossible pathname race elimination
+  or POSIX ownership enforcement on non-POSIX hosts.
 
 ## Security Fix Implementer Assignment
 
@@ -280,3 +283,36 @@ example.
   mutation.
 - TDD order: `SF-007`; `SF-008` plus `SF-009`; then `SF-010`. Update source,
   behavior tests, public TSDoc/docs, security artifacts, and durable records.
+
+## IPC Architecture Validation Finding
+
+- Native macOS evidence shows `os.tmpdir()` resolves through `/var`, while
+  `/var` and `/tmp` are root-owned system symlinks to `/private/...`.
+- Literal rejection of every ancestor symlink would break existing supported
+  local IPC and example/test paths. The same splitter must revise only this
+  path rule before implementation; final-directory non-link, ownership, mode,
+  identity recheck, and honest TOCTOU limits remain binding.
+
+## IPC Architecture Correction Accepted
+
+- The resumed splitter was explicitly dispatched as the existing
+  `requirements_splitter` with expected `gpt-5.6-sol` / high; immutable runtime
+  metadata confirms actual `gpt-5.6-sol` / high. It changed no files or Git
+  state, spawned no children, and is closed.
+- Walk the lexical path with `lstat`. On POSIX, an ancestor symlink is accepted
+  only when the link and its non-group/world-writable containing directory are
+  root-owned; the final component may never be a link.
+- Pin the deepest existing component by followed `dev`/`ino` plus `realpath`,
+  append and create missing components one at a time, and discard the original
+  alias. Every endpoint and cleanup path uses the completed canonical path.
+- The final directory must be owned by the effective POSIX user with exact
+  `0700`. Immediately before each native bind/connect, repeat canonical-path,
+  type, ownership, mode, and identity checks, then derive and use the endpoint
+  without an intervening `await`.
+- Non-POSIX hosts still reject a final link, canonicalize once, create
+  components non-recursively, require a directory, and recheck stable identity
+  where available; docs must not claim portable UID or mode enforcement.
+- Residual risk remains explicit: pathname-based ZeroMQ cannot bind relative to
+  a held directory descriptor, so substitution after the final recheck cannot
+  be eliminated. Deployments must use a canonical path under a parent that is
+  not attacker-writable.

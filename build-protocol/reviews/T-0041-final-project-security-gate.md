@@ -165,3 +165,29 @@ tracked generated output, dependency-audit freshness, and diff integrity.
 - One existing implementer receives the complete finding batch and executes
   three sequential slices. Canonical concern review and security re-review wait
   for the full fix endpoint and focused verification.
+
+## IPC Architecture Validation Finding
+
+- Literal root-to-leaf link rejection conflicts with standard macOS `/var` and
+  `/tmp` system symlinks and would break current IPC tests/configuration.
+- Reopen only the `SF-010` path algorithm with the same splitter before
+  implementation. Do not weaken final-directory ownership/mode/non-link checks
+  or claim complete pathname-race elimination.
+
+## Corrected IPC Architecture Disposition
+
+- Existing splitter `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4` was resumed with
+  explicit expected `gpt-5.6-sol` / high; immutable runtime metadata confirms
+  actual `gpt-5.6-sol` / high. It remained read-only, spawned no children, and
+  is closed.
+- `SF-010` now permits only immutable root-owned POSIX ancestor aliases whose
+  root-owned containing directory is not group/world writable, preserving
+  standard macOS `/var` and `/tmp` aliases without accepting user-replaceable
+  redirects.
+- Preparation pins the followed existing anchor by `dev`/`ino` and `realpath`,
+  creates missing components non-recursively, rejects a final link, validates
+  final effective-UID ownership plus exact `0700`, and discards the lexical
+  alias. Endpoint derivation and cleanup use only the canonical path.
+- Each native bind/connect receives an immediate canonical-path, final-object,
+  ownership, mode, and identity recheck. Non-POSIX behavior and the residual
+  pathname race are documented without overclaiming portable guarantees.
