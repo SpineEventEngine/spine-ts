@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated matrix refresh green; review packaging ready
+Status: Integrated capability review wave assigned
 
 ## Review Scope
 
@@ -272,6 +272,19 @@ findings at `2026-07-14T01:23:48Z`.
   all four are synchronized. The matrix remains exactly 31/25/4/0/1/1/0 with
   routes 29 em dashes, one T-0040, and one T-0041. Reviewer packaging is
   authorized; parent full verify remains pending.
+
+## Integrated Capability Reviewer Dispatch
+
+- Baseline `eae95a3e`; endpoint `0ddfb3ad`; package
+  `.superpowers/sdd/review-eae95a3e..0ddfb3ad.diff` (three commits, 79232
+  bytes).
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high.
+- All are read-only, no subagents, and limited to matrix/current active
+  evidence. Superseded historical prose is ignored unless current state claims
+  it. Security remains deferred to T-0041.
 
 ## Matrix Pre-Review Fix Handback
 

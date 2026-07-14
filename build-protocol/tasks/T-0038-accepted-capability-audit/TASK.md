@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated matrix refresh green; review packaging ready
+Status: Integrated capability review wave assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -393,6 +393,17 @@ superseded by the independent review result above.
   assignment. All four active headers are now synchronized to review-ready.
   Counts/routes, rows 30/31, pending parent verify/T-0042, and four-file scope
   remain unchanged.
+
+## Integrated Capability Review Assignment
+
+- Baseline `eae95a3e`; matrix endpoint `0ddfb3ad`; package
+  `.superpowers/sdd/review-eae95a3e..0ddfb3ad.diff` (`3` commits, `79232`
+  bytes).
+- Existing style/maintainability, TypeScript/API docs, and
+  performance/reliability roles use explicit `gpt-5.6-terra` / high;
+  documentation uses explicit `gpt-5.6-luna` / medium. All are read-only,
+  matrix-scoped, no subagents, and must ignore superseded historical prose
+  unless current matrix/records claim it. Security remains deferred to T-0041.
 
 ## Matrix Pre-Review Fix Handback
 
