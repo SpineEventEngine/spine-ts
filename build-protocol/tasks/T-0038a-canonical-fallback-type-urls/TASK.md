@@ -1,6 +1,6 @@
 # T-0038a: Canonical Fallback Type URLs
 
-Status: Complete; final task verification passed, merge pending
+Status: Complete; merged and post-merge verified
 
 Started: `2026-07-14T01:50:36Z`
 
@@ -270,6 +270,14 @@ every accepted Spine-option, default, and valid custom fallback result.
   with 28 core and all other expected exports, Proto checks, and
   generated-clean pass. T-0038a is accepted for merge; security remains owned
   by T-0041.
+
+## Main Integration
+
+- `2026-07-14T02:25:44Z`: merged to `main` as `6b5c1904`. Post-merge full
+  verify exits 0 with 68 files / 1,610 tests in both native and coverage runs,
+  95.31/90.16/98.1/95.35 percent coverage, all expected exports, and every
+  repository gate. T-0038a is fully integrated; T-0038b may branch from this
+  updated `main`.
 
 ## Round-2 Status Fix Handback
 

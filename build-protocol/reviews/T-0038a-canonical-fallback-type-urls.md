@@ -1,6 +1,6 @@
 # T-0038a Review Log
 
-Status: Complete; final task verification passed, merge pending
+Status: Complete; merged and post-merge verified
 
 ## Scope
 
@@ -190,6 +190,13 @@ Status: Complete; final task verification passed, merge pending
   TypeScript/API docs, and reliability are CLEAN or justified N/A; no critical
   or high-confidence correctness finding remains. Security is deferred to
   T-0041. Accept for merge.
+
+## Main Integration Verification
+
+- `2026-07-14T02:25:44Z`: merged as `6b5c1904`; post-merge full verify exits 0
+  with 68 files / 1,610 native and coverage tests, 95.31/90.16/98.1/95.35
+  percent coverage, all expected exports, and every repository gate. All child
+  review concerns remain closed; security remains scheduled for T-0041.
 
 ## Round-2 Status Fix Handback
 
