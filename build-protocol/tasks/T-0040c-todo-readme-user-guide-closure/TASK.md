@@ -712,7 +712,8 @@ activation|expires abandoned inactive subscriptions before activation"`.
   `task/T-0040c-todo-readme-user-guide-closure` to `origin` at
   `c8398a0bc1876e1639e25fa2d63c711dd4987ec9`.
 - Pushed verified `main` integration/status state to `origin` at
-  `7f9f595eb3cc33b8ed294a2e88f7237b810cec65`; `git ls-remote`
-  confirmed both refs.
+  `7f9f595eb3cc33b8ed294a2e88f7237b810cec65` before this closure
+  record; `git ls-remote` confirmed both refs. This final closure history is
+  then pushed on `main`.
 - T-0040c is durably closed. The clean merged worktree and local task branch
   may now be removed; T-0041 is active.

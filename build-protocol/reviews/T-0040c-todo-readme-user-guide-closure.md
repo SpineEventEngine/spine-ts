@@ -598,7 +598,8 @@ links/imports, and future-policy overclaim.
 
 ## 2026-07-14 - Remote Review Closure
 
-- Completed task endpoint `c8398a0b` and verified `main` state
-  `7f9f595e` were pushed to `origin` and confirmed by exact remote refs.
+- Completed task endpoint `c8398a0b` and verified pre-closure `main` state
+  `7f9f595e` were pushed to `origin` and confirmed by exact remote refs;
+  the final closure history is then pushed on `main`.
 - No review finding, participant, task gate, post-merge gate, or remote action
   remains open for T-0040c.
