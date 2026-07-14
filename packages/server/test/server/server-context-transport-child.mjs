@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import process from "node:process";
+import { setTimeout } from "node:timers";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -23,6 +24,9 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const ipcDirectory = requiredEnvironment("SPINE_T0038B_IPC_DIRECTORY");
 const adapterIdentity = adapterIdentityEnvironment("SPINE_T0038B_ADAPTER_IDENTITY");
 const transportTimeoutMs = positiveIntegerEnvironment("SPINE_T0038B_TRANSPORT_TIMEOUT_MS");
+const commandDuplicateDelayMs = optionalPositiveIntegerEnvironment(
+  "SPINE_T0038B_COMMAND_DUPLICATE_DELAY_MS",
+);
 const inboundEventEntityId = "cross-process-inbound-event";
 const { AggregateStateSchema, ProjectionStateSchema, SingularSetOnceStateSchema } =
   fixtureSchemas();
@@ -30,6 +34,11 @@ const { AggregateStateSchema, ProjectionStateSchema, SingularSetOnceStateSchema 
 class TaskAggregate extends Aggregate {
   assignTask(command) {
     observe("command-handled", "command", command.id);
+    if (commandDuplicateDelayMs !== undefined) {
+      setTimeout(() => {
+        observe("command-handled", "command", command.id);
+      }, commandDuplicateDelayMs);
+    }
     return packEvent({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
@@ -268,4 +277,8 @@ function positiveIntegerEnvironment(name) {
     throw new Error(`${name} must be a safe positive integer.`);
   }
   return value;
+}
+
+function optionalPositiveIntegerEnvironment(name) {
+  return process.env[name] === undefined ? undefined : positiveIntegerEnvironment(name);
 }

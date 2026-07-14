@@ -845,10 +845,13 @@ more specific local factory first.
 After recovery, `Server.start()` opens built contexts' command/event transport
 intake sequentially in deterministic input order. Every context must succeed
 before the HTTP server is created or its listener opens. Accepted transported
-commands enter the owning command bus once; accepted events enter the owning
-event bus once and then follow ordinary projection/subscriber fan-out. Native
-child-process coverage proves this behavior between separate same-host ZeroMQ
-transport instances.
+commands enter the owning command bus; accepted events enter the owning event
+bus and then follow ordinary projection/subscriber fan-out. Native child-process
+coverage exercises this behavior between separate same-host ZeroMQ transport
+instances. It waits through bounded observation and quiet windows for command
+handling and, for one fixed transported event, checks one observation from each
+matching projection. That bounded check is not a general exactly-once delivery
+guarantee for durable redelivery, retries, process restarts, or remote transport.
 
 Closing a running server is idempotent and follows the JVM-familiar order: stop
 network intake and active HTTP/2 sessions, close context transport intake and
@@ -946,10 +949,12 @@ binding types, broker topology, process supervision, delivery retries, or
 server-owned handler materialization. Native tests prove same-host `ipc://`
 publish/subscribe, request/reply, runtime command/event callbacks, and a public
 `Server` child process that handles a transported command, projects its emitted
-event, and fans one fixed transported event out exactly once to each matching
-projection. Managed sandboxes may reject `ipc://` binds with `EPERM`, so live
-IPC verification can require native filesystem/socket permissions outside the
-sandbox.
+event, and checks during bounded observation and quiet windows that one fixed
+transported event produces one observation from each matching projection. This
+test evidence is not a general exactly-once guarantee for durable redelivery,
+retries, process restarts, or remote transport. Managed sandboxes may reject
+`ipc://` binds with `EPERM`, so live IPC verification can require native
+filesystem/socket permissions outside the sandbox.
 
 The ZeroMQ `SignalTransport` uses Node's V8 serializer internally, so its local
 IPC frames are trusted runtime data, not an untrusted network protocol. Use this

@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 specialist findings assigned for one fix pass
+Status: Slice 3 specialist fixes green; targeted rereview ready
 
 ## Scope
 
@@ -642,3 +642,49 @@ Status: Slice 3 specialist findings assigned for one fix pass
   collected before assignment. One fix pass returns all findings to the same
   existing implementer at explicit `gpt-5.6-terra` / medium, no subagents.
   Security remains deferred to T-0041.
+
+## Slice 3 Specialist Fix Handback
+
+- Actual author metadata is immutable existing implementer,
+  `gpt-5.6-terra` / medium, no subagents. Receiving-review verification preceded
+  implementation; strict vertical TDD, JavaScript async/timer testing,
+  primary-first cleanup aggregation, systematic debugging for unexpected native
+  and static outcomes, and fresh completion verification were applied.
+- Style P1 is fixed through the smallest package-internal native socket access:
+  failed `Reply.bind()` closes the unowned socket before handle publication. If
+  close also throws, one aggregate retains bind first and close second. The
+  corrected RED observed zero close calls (`1` failed, `18` skipped); GREEN is
+  `1/1`. An unreliable duplicate native bind/subclass spy was explicitly not
+  accepted as RED evidence after investigation of ZeroMQ's bind behavior and
+  non-configurable base `Socket.close`. No internal access leaks from package
+  exports; docs check still reports `17` transport exports.
+- Reliability P1 is fixed by tracking Subscriber opens across asynchronous IPC
+  preparation. Close waits for settlement; a resumed post-close open closes the
+  connector, rejects, and starts no receive loop. Deterministic RED saw close
+  settle before release (`1` failed, `19` skipped); GREEN waits and observes no
+  later sibling publications (`1/1`).
+- Reliability P2 is fixed with a shared `200 ms` bounded quiet window after the
+  three expected command observations. Child-only delayed-control injection at
+  `100 ms` made RED resolve three observations (`1` failed, `5` skipped); GREEN
+  rejects the fourth (`1/1`). The real cross-process proof remains unchanged in
+  substance and payload envelopes still cross ZeroMQ only.
+- Documentation P2 is fixed in USER_GUIDE, architecture README, and server
+  README: one-per-projection language is explicitly the fixed event's bounded
+  observation result, not a general durable redelivery/retry/restart/remote
+  exactly-once guarantee.
+- Native adapter and child files pass `20/20` and `6/6`. Generated build/tooling
+  typechecks, scoped ESLint, cleanup rules, exact Prettier, and docs/API pass;
+  server exports remain `205`. The author corrected one type narrowing, one
+  explicit Node timer import, and one line-length finding before accepting those
+  gates. Canonical generated-clean, export/private/protected scans, exact
+  ten-file Prettier, `git diff --check`, and expected ten-path status/diff pass.
+- Scope is exactly adapter/test, two cross-process fixture files, three reviewed
+  docs, and all three records. No public API/export, endpoint-cleanup regression,
+  server production lifecycle, topology, retry policy, example, Protobuf,
+  unrelated change, or commit is included. Remaining disposition is specialist
+  re-review and coordinator full verification; security stays deferred to
+  T-0041 and same-host/local-only limits remain.
+- Coordinator inspection and an independent unrestricted native rerun accepted
+  every correction. The adapter and child-process files passed together with
+  `26/26` tests. Style, documentation, and performance/reliability require
+  targeted rereview; the clean TypeScript/API disposition remains applicable.

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "../../src/zeromq/index.js";
+import { zeroMqSocketAccess } from "../../src/zeromq/signal-transport.js";
 
 const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
@@ -103,6 +104,53 @@ describe("ZeroMQ SignalTransport", () => {
     });
   });
 
+  it("closes a replier after bind failure and preserves cleanup failure second", async () => {
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.DuplicateResponderCleanupTask",
+    });
+    const subscription = createTransportSubscription({
+      subscriberId: "duplicate-command-worker",
+      topic,
+      mode: "competing-consumer",
+    });
+
+    const bindFailure = new Error("injected responder bind failure");
+    const bind = vi.spyOn(zeroMqSocketAccess, "bindReply").mockRejectedValue(bindFailure);
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const nativeClose = zeroMqSocketAccess.close.bind(zeroMqSocketAccess);
+        const closeFailure = new Error("injected failed-bind replier close failure");
+        const close = vi.spyOn(zeroMqSocketAccess, "close").mockImplementation((socket) => {
+          nativeClose(socket);
+          throw closeFailure;
+        });
+
+        try {
+          let failure: unknown;
+          try {
+            await transport.respond(subscription, () => ({ accepted: false }));
+          } catch (error) {
+            failure = error;
+          }
+
+          expect(bind).toHaveBeenCalledTimes(1);
+          expect(close).toHaveBeenCalledTimes(1);
+          expect(failure).toBeInstanceOf(AggregateError);
+          const errors = (failure as AggregateError).errors;
+          expect(errors).toHaveLength(2);
+          expect(errors[0]).toBe(bindFailure);
+          expect(errors[1]).toBe(closeFailure);
+        } finally {
+          close.mockRestore();
+        }
+      });
+    } finally {
+      bind.mockRestore();
+    }
+  });
+
   it("connects subscribers without binding the publish endpoint", async () => {
     const topic = createTransportTopic({
       signalKind: "event",
@@ -143,6 +191,73 @@ describe("ZeroMQ SignalTransport", () => {
 
       await handle.close();
     });
+  });
+
+  it("waits for a racing subscriber open and retires it before close settles", async () => {
+    const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+    let preparationStarted!: () => void;
+    let releasePreparation!: () => void;
+    const started = new Promise<void>((resolve) => {
+      preparationStarted = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    const prepare = vi
+      .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+      .mockImplementationOnce(async (ipcDirectory) => {
+        preparationStarted();
+        await released;
+        await prepareIpcDirectory(ipcDirectory);
+      });
+
+    try {
+      await withSharedZeroMqTransports(async (publisherTransport, subscriberTransport) => {
+        const topic = createTransportTopic({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.ClosingSubscriberSetupTask",
+        });
+        const subscription = createTransportSubscription({
+          subscriberId: "closing-projection-worker",
+          topic,
+        });
+        const received: string[] = [];
+        const subscribe = subscriberTransport.subscribe<{ readonly taskId: string }, "event">(
+          subscription,
+          (operation) => {
+            received.push(operation.envelope.taskId);
+          },
+        );
+        await started;
+
+        let closeSettled = false;
+        const close = subscriberTransport.close().finally(() => {
+          closeSettled = true;
+        });
+
+        try {
+          await waitFor(0);
+          expect(closeSettled).toBe(false);
+
+          releasePreparation();
+          await expect(subscribe).rejects.toThrow("ZeroMQ signal transport is closed.");
+          await close;
+
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            await publisherTransport.publish({ topic, envelope: { taskId: "retired" } });
+            await waitFor(publishCadenceMs);
+          }
+          await waitFor(100);
+
+          expect(received).toEqual([]);
+        } finally {
+          releasePreparation();
+          await Promise.allSettled([subscribe, close]);
+        }
+      });
+    } finally {
+      prepare.mockRestore();
+    }
   });
 
   it("leaves sibling-owned pathnames intact when connect-only sockets close", async () => {

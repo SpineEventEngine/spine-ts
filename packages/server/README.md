@@ -907,10 +907,13 @@ for environment delivery. It then opens every built context's command/event
 transport intake sequentially in deterministic input order before creating the
 HTTP server or opening listener intake. All contexts must succeed; a context
 assembly or transport-intake failure opens no listener. Accepted transported
-commands enter the owning context's command bus once, while accepted events
-enter its event bus once before normal repository/projection fan-out. Native
-child-process coverage proves this same-host behavior with separate ZeroMQ
-transport instances.
+commands enter the owning context's command bus, while accepted events enter
+its event bus before normal repository/projection fan-out. Native child-process
+coverage exercises this same-host behavior with separate ZeroMQ transport
+instances. It waits through bounded observation and quiet windows and, for one
+fixed transported event, checks one observation from each matching projection.
+That bounded check is not a general exactly-once guarantee for durable
+redelivery, retries, process restarts, or remote transport.
 
 If environment startup, context transport intake, or listener open fails,
 cleanup closes acquired network resources and context intake first, waits until

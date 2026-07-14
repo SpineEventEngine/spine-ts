@@ -710,9 +710,12 @@ of framework APIs. Native tests prove publish/subscribe, request/reply, and
 `RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. A
 public-package Node child-process proof additionally assembles a `Server` with
 real aggregate/projection repositories: a parent command is handled in the
-child, its emitted event reaches projection behavior, and one fixed parent
-event reaches each matching child projection exactly once. The parent and child
-own separate adapter instances over one private same-host IPC directory.
+child, its emitted event reaches projection behavior, and bounded observation
+and quiet windows check one observation from each matching child projection for
+one fixed parent event. The parent and child own separate adapter instances over
+one private same-host IPC directory. This bounded test does not establish a
+general exactly-once guarantee for durable redelivery, retries, process
+restarts, or remote transport.
 
 The implementation does not add remote transport, broker topology, worker
 registration handshakes, delivery retries, process supervision, or broad health

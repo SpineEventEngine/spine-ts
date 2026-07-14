@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 specialist findings assigned for one fix pass
+Status: Slice 3 specialist fixes green; targeted rereview ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -926,3 +926,63 @@ permitted`: same-host command/event
   fix assignment. Required regressions cover failed responder bind cleanup,
   close-vs-subscribe, and delayed duplicate command observations; docs must
   state the proof scope without changing accepted behavior or future policy.
+
+## Slice 3 Specialist Review Fix Handback
+
+- Actual immutable execution metadata is the existing implementer at explicit
+  `gpt-5.6-terra` / medium, with no subagents dispatched or used. The accepted
+  complete batch was evaluated with `receiving-code-review`; strict `tdd` and
+  `test-driven-development` plus test/mocking/refactoring/anti-pattern
+  references; `javascript-testing-patterns` including async/timer guidance;
+  `error-handling-patterns` including TypeScript async and stable aggregation;
+  `systematic-debugging` for unexpected native-test and static-check results;
+  and `verification-before-completion`.
+- Failed responder setup now binds and closes through a package-internal native
+  socket boundary that is absent from `@spine-ts/transport` and
+  `@spine-ts/transport/zeromq` exports. A bind rejection closes the newly
+  created `Reply` before any ownership handle exists. If native close also
+  rejects, diagnostics are `AggregateError([bindFailure, closeFailure])`, with
+  the original bind failure first. Corrected RED was one failure with `18`
+  skipped because close was called zero times; GREEN was `1/1` with `18`
+  skipped. An initial duplicate-bind/prototype-spy attempt was rejected as
+  evidence after systematic debugging showed the native duplicate bind was not
+  a deterministic failure injector and `Socket.close` is inherited and
+  non-configurable.
+- Subscriber opens are now tracked before asynchronous IPC-directory
+  preparation. Transport close waits for every open to settle; an open that
+  resumes after close retires its just-created connector, rejects as closed,
+  starts no receive loop, and observes no later sibling publication. RED was
+  one failure with `19` skipped because close settled while preparation was
+  blocked; GREEN was `1/1` with `19` skipped.
+- Command proof now waits the same bounded `200 ms` quiet window used by the
+  fixed inbound-event proof after exactly three observations. A child-fixture
+  fault injects one duplicate command observation after `100 ms`; RED resolved
+  with the first three observations instead of rejecting (`1` failed, `5`
+  skipped), and GREEN rejects the delayed fourth (`1/1`, `5` skipped). Generated
+  command/event payloads still cross ZeroMQ only; the fault is bounded test
+  control observation.
+- `docs/USER_GUIDE.md`, `docs/architecture/README.md`, and
+  `packages/server/README.md` now describe the fixed event's one-per-projection
+  observations only within bounded observation/quiet windows and explicitly
+  disclaim a general exactly-once guarantee for durable redelivery, retries,
+  process restarts, or remote transport.
+- Unrestricted native suites pass: ZeroMQ adapter `20/20`, child-process proof
+  `6/6`. Generated build and tooling typechecks, scoped ESLint, cleanup rules,
+  exact Prettier, and docs/API checks pass; docs retain `17` transport and `205`
+  server exports. Typecheck first exposed an optional-handle callback capture,
+  scoped lint required explicit `node:timers`, and cleanup enforcement found one
+  overlong diagnostic; each was corrected without behavioral or policy change.
+  Canonical generated-clean, root/private/protected scans, exact ten-file record
+  formatting, `git diff --check`, and expected ten-path diff/status pass.
+- Authorized changed paths are
+  `packages/transport/src/zeromq/signal-transport.ts`,
+  `packages/transport/test/zeromq/signal-transport.test.ts`, both cross-process
+  fixture files, the three active docs, and these three durable records. No
+  public API/export, topology, retry policy, example, Protobuf, unrelated file,
+  or commit change is included. Remaining uncertainty is specialist re-review
+  and coordinator-owned full verification; same-host/local-only and T-0041
+  security limitations remain unchanged.
+- Coordinator inspected all four corrections and independently reran the two
+  native files together. Adapter and child-process behavior passed `2` files
+  and `26/26` tests. The complete finding batch is accepted as fixed and ready
+  for targeted rereview.

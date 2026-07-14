@@ -46,6 +46,19 @@ const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
 const unsafeModeMask = 0o077;
 
+/** @internal Package-private native socket boundary used by deterministic cleanup tests. */
+export const zeroMqSocketAccess = {
+  async bindReply(socket: Reply, address: string): Promise<void> {
+    await socket.bind(address);
+  },
+  close(socket: Socket): void {
+    socket.close();
+  },
+  async prepareIpcDirectory(ipcDirectory: string): Promise<void> {
+    await ensurePrivateIpcDirectory(ipcDirectory);
+  },
+};
+
 /** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
 export function createZeroMqTransport(
   config: ZeroMqAdapterConfig,
@@ -62,6 +75,7 @@ class ZeroMqSignalTransport implements SignalTransport {
   readonly #publishers = new Map<string, BoundPublisher>();
   readonly #publisherBinds = new Map<string, Promise<BoundPublisher>>();
   readonly #responderBinds = new Set<Promise<TransportSubscriptionHandle>>();
+  readonly #subscriberOpens = new Set<Promise<TransportSubscriptionHandle>>();
   readonly #activeHandles = new Set<ActiveHandle>();
   #closed = false;
   #close: Promise<void> | undefined;
@@ -89,7 +103,21 @@ class ZeroMqSignalTransport implements SignalTransport {
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
     this.#requireOpen();
-    await ensurePrivateIpcDirectory(this.#config.ipcDirectory);
+    const open = this.#openSubscriber(subscription, handler);
+    this.#subscriberOpens.add(open);
+
+    try {
+      return await open;
+    } finally {
+      this.#subscriberOpens.delete(open);
+    }
+  }
+
+  async #openSubscriber<Envelope, Kind extends TransportSignalKind>(
+    subscription: TransportSubscription<Kind>,
+    handler: PublishTransportHandler<Envelope, Kind>,
+  ): Promise<TransportSubscriptionHandle<Kind>> {
+    await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
 
     const subscriber = new Subscriber({
       linger: closeDelayMs,
@@ -101,16 +129,40 @@ class ZeroMqSignalTransport implements SignalTransport {
       handler: handler as PublishTransportHandler,
     };
 
-    subscriber.subscribe(subscription.topic.routing.routingKey);
-    subscriber.connect(endpoint.address);
+    let handle: ZeroMqSubscriptionHandle<Kind> | undefined;
 
-    const handle = new ZeroMqSubscriptionHandle(subscription, subscriber, undefined, () => {
-      this.#activeHandles.delete(handle);
-    });
-    this.#activeHandles.add(handle);
-    void this.#runSubscriber(subscriber, entry, handle);
+    try {
+      subscriber.subscribe(subscription.topic.routing.routingKey);
+      subscriber.connect(endpoint.address);
 
-    return handle;
+      const openedHandle = new ZeroMqSubscriptionHandle(subscription, subscriber, undefined, () => {
+        this.#activeHandles.delete(openedHandle);
+      });
+      handle = openedHandle;
+
+      if (this.#closed) {
+        throw new Error("ZeroMQ signal transport is closed.");
+      }
+
+      this.#activeHandles.add(openedHandle);
+      void this.#runSubscriber(subscriber, entry, openedHandle);
+
+      return openedHandle;
+    } catch (error) {
+      try {
+        if (handle === undefined) {
+          zeroMqSocketAccess.close(subscriber);
+        } else {
+          await handle.close();
+        }
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "ZeroMQ subscriber setup and cleanup failed.",
+        );
+      }
+      throw error;
+    }
   }
 
   async request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
@@ -176,7 +228,19 @@ class ZeroMqSignalTransport implements SignalTransport {
     };
 
     const endpoint = endpointFor(this.#config, subscription.topic, "request");
-    await replier.bind(endpoint.address);
+    try {
+      await zeroMqSocketAccess.bindReply(replier, endpoint.address);
+    } catch (error) {
+      try {
+        zeroMqSocketAccess.close(replier);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "ZeroMQ responder bind and cleanup failed.",
+        );
+      }
+      throw error;
+    }
 
     const handle = new ZeroMqSubscriptionHandle(subscription, replier, endpoint.filePath, () => {
       this.#activeHandles.delete(handle);
@@ -345,7 +409,11 @@ class ZeroMqSignalTransport implements SignalTransport {
     this.#closed = true;
     const failures: unknown[] = [];
 
-    await Promise.allSettled([...this.#publisherBinds.values(), ...this.#responderBinds]);
+    await Promise.allSettled([
+      ...this.#publisherBinds.values(),
+      ...this.#responderBinds,
+      ...this.#subscriberOpens,
+    ]);
 
     for (const handle of [...this.#activeHandles]) {
       await captureCleanupFailure(() => handle.close(), failures);

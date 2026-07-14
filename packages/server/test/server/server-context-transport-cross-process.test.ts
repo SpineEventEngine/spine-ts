@@ -28,6 +28,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const transportTimeoutMs = 2_000;
 const phaseTimeoutMs = 5_000;
 const shutdownGraceMs = 1_000;
+const observationQuietMs = 200;
 const adapterIdentity = "t0038b-parent-context-transport";
 const commandEntityId = "cross-process-command";
 const inboundEventEntityId = "cross-process-inbound-event";
@@ -84,6 +85,7 @@ interface FixtureCreateOptions {
     transport: SignalTransport,
     ipcDirectory: string,
   ) => Promise<void>;
+  readonly commandDuplicateDelayMs?: number;
 }
 interface FixtureSetupResources {
   readonly ipcDirectory: string;
@@ -188,6 +190,21 @@ describe("Server context transport across Node processes", () => {
     expect(result.outcome).toBe("exited");
     expect(result.exitState.code).toBe(1);
     expect(`${result.diagnostics} ${result.stderr}`).toContain("SPINE_T0038B_ADAPTER_IDENTITY");
+  });
+
+  it("rejects a delayed fourth command observation", async () => {
+    const fixture = await CrossProcessFixture.create({ commandDuplicateDelayMs: 100 });
+
+    try {
+      await fixture.ready();
+      await fixture.requestCommand(createTaskCommand());
+
+      await expect(fixture.observeCommand(commandEntityId)).rejects.toThrow(
+        "expected exactly 3 observations but received 4",
+      );
+    } finally {
+      await fixture.close();
+    }
   });
 
   it("rejects a non-decimal transport timeout at the child boundary", async () => {
@@ -310,6 +327,11 @@ class CrossProcessFixture {
         env: {
           ...process.env,
           SPINE_T0038B_ADAPTER_IDENTITY: adapterIdentity,
+          ...(options.commandDuplicateDelayMs === undefined
+            ? {}
+            : {
+                SPINE_T0038B_COMMAND_DUPLICATE_DELAY_MS: String(options.commandDuplicateDelayMs),
+              }),
           SPINE_T0038B_IPC_DIRECTORY: ipcDirectory,
           SPINE_T0038B_TRANSPORT_TIMEOUT_MS: String(transportTimeoutMs),
         },
@@ -382,13 +404,19 @@ class CrossProcessFixture {
         ).length === 3,
       "command handling and projection observation",
     );
+    await waitFor(observationQuietMs);
 
-    return this.#observations
-      .filter(
-        (observation) => observation.source === "command" && observation.entityId === entityId,
-      )
-      .map((observation) => observation.behavior)
-      .sort();
+    const observations = this.#observations.filter(
+      (observation) => observation.source === "command" && observation.entityId === entityId,
+    );
+    if (observations.length !== 3) {
+      throw new Error(
+        "Cross-process command observation expected exactly 3 observations but received " +
+          `${String(observations.length)} during the bounded quiet window.`,
+      );
+    }
+
+    return observations.map((observation) => observation.behavior).sort();
   }
 
   async publishEventUntilObserved(event: Event, entityId: string): Promise<ObservationBehavior[]> {
@@ -406,7 +434,7 @@ class CrossProcessFixture {
       );
       await waitFor(20);
       if (this.#inboundObservations(entityId).length >= 2) {
-        await waitFor(200);
+        await waitFor(observationQuietMs);
         break;
       }
       this.#throwChildFailure("inbound event observation");
