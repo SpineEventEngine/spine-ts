@@ -1,6 +1,6 @@
 # T-0038a: Canonical Fallback Type URLs
 
-Status: Round-2 style re-review assigned
+Status: Complete; final task verification passed, merge pending
 
 Started: `2026-07-14T01:50:36Z`
 
@@ -251,6 +251,25 @@ every accepted Spine-option, default, and valid custom fallback result.
 - Assign style/maintainability only at explicit Terra High, read-only, no
   subagents. Docs/reliability remain CLEAN; API remains CLEAN/N/A; security is
   deferred to T-0041.
+
+## Round-2 Style Re-review Result
+
+- `2026-07-14T02:19:03Z`: style/maintainability CLEAN at actual Terra High,
+  matching explicit immutable-role dispatch; no subagents; reviewer closed.
+- All concerns are now CLEAN or justified N/A: style CLEAN, documentation CLEAN,
+  TypeScript/API docs CLEAN/N/A for later record-only deltas, reliability CLEAN,
+  security deferred to T-0041. Proceed to final full verification.
+
+## Final Task Verification
+
+- `2026-07-14T02:22:05Z`: full
+  `pnpm --config.verify-deps-before-run=false verify` exits 0. Native and
+  coverage phases each pass 68 files / 1,610 tests; coverage is 95.31%
+  statements, 90.16% branches, 98.1% functions, and 95.35% lines.
+- Both typechecks, ESLint, cleanup enforcement, formatting, TypeDoc/API checks
+  with 28 core and all other expected exports, Proto checks, and
+  generated-clean pass. T-0038a is accepted for merge; security remains owned
+  by T-0041.
 
 ## Round-2 Status Fix Handback
 
