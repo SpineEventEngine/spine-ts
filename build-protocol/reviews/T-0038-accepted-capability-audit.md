@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Row 23 style/docs rereview assigned
+Status: Row 23 review-summary finding assigned
 
 ## Review Scope
 
@@ -430,3 +430,17 @@ findings at `2026-07-14T01:23:48Z`.
   current-vs-historical truth and T-0039 ownership wording only.
 - Both are read-only, no subagents, and must report skill applicability. API
   and reliability remain CLEAN; security remains deferred to T-0041.
+
+## Row 23 Focused Rereview Result
+
+- `2026-07-14T09:38:57Z`: style reviewer
+  `019f5ff1-db74-7472-9111-fd3eba354f4e`, actual immutable Terra High, and
+  documentation reviewer `019f5ff2-0154-7292-954a-b814df4e44fa`, actual
+  immutable Luna Medium, are closed. Both explicit dispatches matched, skill
+  checks completed, and no subagents were used.
+- Row 23, T-0039a routing, ancestry/evidence, exact taxonomy/routes,
+  synchronized headers, and pending parent/T-0042 gates are accepted.
+- Deduplicated P2: the active Concern Dispositions and Current State near the
+  top of this file still name completed child integration, local fix acceptance,
+  and API rereview as future steps. Resume the same Terra Medium author to
+  replace those two summaries and synchronize parent handback/status only.

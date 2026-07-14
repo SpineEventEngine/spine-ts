@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Row 23 style/docs rereview assigned
+Status: Row 23 review-summary finding assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -566,3 +566,20 @@ for main integration` although its durable integration record and ancestry
   medium. Both are read-only, no subagents, and limited to row 23's truthful
   stale-status classification/routing plus current counts/status. API and
   reliability remain CLEAN; security remains deferred to T-0041.
+
+## Row 23 Focused Rereview Result
+
+- `2026-07-14T09:38:57Z`: style reviewer
+  `019f5ff1-db74-7472-9111-fd3eba354f4e` at immutable Terra High and
+  documentation reviewer `019f5ff2-0154-7292-954a-b814df4e44fa` at immutable
+  Luna Medium are closed, completed skill checks, and used no subagents.
+- Both accepted row 23, T-0039a ownership, ancestry/evidence, exact taxonomy/
+  routes, synchronized headers, and pending parent/T-0042 gates. Their one
+  deduplicated P2 is limited to the review log: its active Concern Dispositions
+  still say rereview follows child integration, and Current State still includes
+  completed local acceptance and API rereview.
+- Resume the same Terra Medium author for the review log's two top-level
+  summaries plus synchronized parent status/handback records. State that API
+  and reliability are CLEAN, row 23 style/docs rereview produced this summary
+  fix, and only focused style/docs acceptance then parent final verification
+  remain. Preserve matrix row/count/route content.
