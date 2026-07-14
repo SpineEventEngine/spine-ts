@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 late-ack receipt assertion P2 assigned
+Status: Slice 3 receipt assertion green; final reliability rereview ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1159,3 +1159,32 @@ duplicate control was not applied within the bounded quiet window.` This
 - Same implementer resumes explicit `gpt-5.6-terra` / medium, no subagents, to
   capture/assert classifier invocation in the one parent test and update the
   three records. No fixture behavior or production change is authorized.
+
+## Slice 3 Late-Ack Receipt Assertion Handback
+
+- `2026-07-14`: Actual immutable execution metadata remained the existing
+  implementer at explicit `gpt-5.6-terra` / medium; no subagents were
+  dispatched or used. Receiving-code-review, TDD and required references,
+  JavaScript testing, and verification-before-completion were applied.
+- Assertion-first native RED added one-count and finite-timestamp checks while
+  the classifier still discarded its argument. The barrier rejection occurred
+  but the receipt collection was empty, producing `1` failed and `6` skipped
+  with `expected [] to have a length of 1`.
+- GREEN captures the classifier's real `receivedAt` argument, retains the
+  existing `Number.MAX_SAFE_INTEGER` return, and asserts after the expected
+  barrier rejection that exactly one finite receipt timestamp was observed.
+  Focused native GREEN is `1` passed with `6` skipped; the complete native file
+  is `7/7`.
+- This distinguishes late classification from a missing acknowledgment without
+  changing the fixture, child, production behavior, control flow, or timing.
+  Tooling typecheck, scoped one-file ESLint, cleanup enforcement, exact
+  four-file Prettier, `git diff --check`, and exact four-path protected-scope/
+  status/diff checks pass.
+- Changed paths are only the parent cross-process test and these three records.
+  The receipt-assertion P2 is fixed and ready for coordinator handback.
+  Remaining uncertainty is coordinator acceptance/final verification and the
+  existing same-host/T-0041 limitation.
+- Coordinator inspected the exact-one finite receipt assertion and
+  independently reran the unrestricted native child-process file. All `7/7`
+  tests passed. The assertion P2 is accepted as fixed and ready for final
+  reliability rereview.

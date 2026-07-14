@@ -225,8 +225,12 @@ describe("Server context transport across Node processes", () => {
   });
 
   it("rejects a processed acknowledgment classified after the quiet deadline", async () => {
+    const receivedAtValues: number[] = [];
     const fixture = await CrossProcessFixture.create({
-      classifyDuplicateCommandObservationAppliedAt: () => Number.MAX_SAFE_INTEGER,
+      classifyDuplicateCommandObservationAppliedAt: (receivedAt) => {
+        receivedAtValues.push(receivedAt);
+        return Number.MAX_SAFE_INTEGER;
+      },
       injectCommandDuplicateInQuietWindow: true,
     });
 
@@ -237,6 +241,8 @@ describe("Server context transport across Node processes", () => {
       await expect(fixture.observeCommand(commandEntityId)).rejects.toThrow(
         "Cross-process command duplicate control was not applied within the bounded quiet window.",
       );
+      expect(receivedAtValues).toHaveLength(1);
+      expect(Number.isFinite(receivedAtValues[0] ?? Number.NaN)).toBe(true);
     } finally {
       await fixture.close();
     }

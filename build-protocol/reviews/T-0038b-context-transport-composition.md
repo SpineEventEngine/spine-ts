@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 late-ack receipt assertion P2 assigned
+Status: Slice 3 receipt assertion green; final reliability rereview ready
 
 ## Scope
 
@@ -883,3 +883,28 @@ received 4` rather than the asserted late-ack barrier diagnostic.
 - Same existing implementer assignment is explicit `gpt-5.6-terra` / medium,
   no subagents, parent test plus records only. All other dispositions remain
   CLEAN; security remains deferred.
+
+## Slice 3 Late-Ack Receipt Assertion Evidence
+
+- `2026-07-14`: Actual author metadata matches the immutable assignment:
+  existing implementer, explicit `gpt-5.6-terra` / medium, no subagents.
+  Receiving-code-review, TDD/references, JavaScript testing, and
+  verification-before-completion were applied.
+- Focused native RED is `1` failed with `6` skipped. The expected barrier error
+  was followed by an assertion failure because no classifier argument had been
+  captured: `expected [] to have a length of 1`.
+- Focused native GREEN is `1/1` with `6` skipped. The test captures the real
+  classifier `receivedAt`, preserves the deterministic late return value, and
+  asserts exactly one finite timestamp after the rejection. The full native
+  child-process file passes `7/7`, proving this is receipt-plus-late-
+  classification evidence rather than the shared missing-ack diagnostic alone.
+- Fresh tooling typecheck, scoped test ESLint, cleanup enforcement, exact
+  four-file Prettier, `git diff --check`, protected-scope scans, and exact
+  four-path status/diff pass. Fixture/child/production behavior and timing are
+  unchanged.
+- Diff scope is exactly the parent cross-process test and all three records.
+  The accepted assertion P2 is fixed; coordinator acceptance/final
+  verification remains, with existing same-host/T-0041 limitations unchanged.
+- Coordinator inspection and an independent unrestricted native rerun accepted
+  the receipt assertion at `7/7` tests. Only the reliability lane requires
+  final rereview; all other clean dispositions remain applicable.
