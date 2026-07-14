@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Independent rereview assigned
+Status: Review wave 2 findings accepted
 
 ## Review Scope
 
@@ -144,3 +144,18 @@ Status: Independent rereview assigned
   limited to the refreshed milestone package/current claims.
 - Historical superseded text remains non-active unless current records or
   changed canonical docs claim it. Security remains deferred to T-0041.
+
+## Review Wave 2 Results
+
+- `2026-07-14T10:38:53Z`: TypeScript/API docs and
+  performance/reliability are clean; both reviewers are closed.
+- Documentation, Luna Medium: P1 active `RUNTIME_ARCHITECTURE.md` requirements
+  still promise broker restart handling, distributed replacement, supervised
+  modes, and worker health/readiness.
+- Style/maintainability, Terra High: P2 active `DEVELOPER_API.md` and
+  `RUNTIME_ARCHITECTURE.md` delivery prose still calls excluded scheduler,
+  supervision, cancellation, and retry-monitor policy later/future work.
+- Deduplicated accepted batch: describe only current same-host behavior and
+  explicitly exclude these policies from the release without committing to a
+  future design. Rerun all four lanes after the fix because both canonical
+  public-contract and reliability-policy documents change.

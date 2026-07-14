@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Independent rereview assigned
+Status: Review wave 2 findings accepted
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -264,3 +264,17 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   lifecycle and status wording intersects each prior lane: explicit Terra High
   style/API/reliability and explicit Luna Medium documentation. Read-only, no
   subagents; security remains deferred to T-0041.
+
+## Review Wave 2 Findings
+
+- `2026-07-14T10:38:53Z`: all four reviewers completed and were closed. API
+  and reliability were clean; documentation and style independently identified
+  active future-policy promises outside the accepted release scope.
+- Accept one bounded batch across `RUNTIME_ARCHITECTURE.md` and
+  `DEVELOPER_API.md`: replace broker-restart/distributed-transport,
+  supervised-process/worker-health, later scheduler stack, and future
+  supervision/cancellation/retry-monitor commitments with concise current
+  same-host behavior plus explicit release exclusions and no future policy
+  commitment.
+- Resume the existing Terra Medium implementer. Preserve current observable
+  transport/delivery behavior and do not invent a replacement policy.
