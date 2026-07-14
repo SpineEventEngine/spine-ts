@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review wave 2 findings accepted
+Status: Review wave 2 fix handback ready
 
 ## Review Scope
 
@@ -159,3 +159,16 @@ Status: Review wave 2 findings accepted
   explicitly exclude these policies from the release without committing to a
   future design. Rerun all four lanes after the fix because both canonical
   public-contract and reliability-policy documents change.
+
+## Review Wave 2 Fix Handback
+
+- The complete accepted batch is resolved within the two canonical policy docs
+  and these three records. The wording preserves implemented same-host behavior
+  and turns speculative production/distributed requirements into explicit
+  release exclusions without selecting a future replacement.
+- Fresh focused evidence covers active policy claims, five-path Prettier and
+  scope, `docs:check`, synchronized statuses, generated-path cleanliness, and
+  `git diff --check`. The package is ready for coordinator rereview of all four
+  concerns.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.

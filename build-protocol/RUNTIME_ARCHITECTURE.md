@@ -95,13 +95,10 @@ interface SignalTransport {
 }
 ```
 
-The final interface will be refined during implementation, but it must:
-
-- represent command, event, query, subscription, system, and delivery topics;
-- hide socket types and ZeroMQ-specific envelopes;
-- support local process discovery or explicit process registration;
-- support graceful close and broker restart handling;
-- allow later replacement with another local IPC or distributed transport.
+The implemented abstraction hides socket types and ZeroMQ-specific envelopes,
+supports adapter-neutral command/event request and publication flows, and owns
+graceful handle closure. The same interface is used by the in-process adapter
+and the same-host ZeroMQ adapter.
 
 T-0016f adds the first executable server-side bridge over this abstraction.
 `RuntimeTransportBinding.open()` consumes a `ServerRuntimeRoutingPlan`, a
@@ -115,41 +112,24 @@ registrations before the runtime. It deliberately does not own the transport
 instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
 delivery attempts, retry work, or create a JVM-style server environment.
 
-## ZeroMQ Local Broker
+## ZeroMQ Same-Host Adapter
 
-ZeroMQ is used only for local IPC between Node.js processes on one host.
-
-The broker adapter may choose more than one ZeroMQ socket pattern:
-
-- Pub/sub is natural for event fan-out by type URL and semantic tag.
-- Command handling requires exactly one effective command dispatcher per command
-  type; the adapter may implement this with broker-managed routing, worker
-  registration, and load balancing rather than pure pub/sub.
-- Query handling follows the gRPC `QueryService` contract; internally it may
-  use request/reply to a read-side worker or process-local stand access.
-- Subscription streaming follows `SubscriptionService`; internally it may use
-  pub/sub for read-side updates plus a subscription registry.
-
-The public framework model still describes publishers and subscribers. The
-adapter chooses socket topology based on bus semantics.
+ZeroMQ provides local IPC between application-composed Node.js processes on one
+host. The adapter uses request/reply for command routing and publish/subscribe
+for event fan-out while keeping endpoint and socket details outside domain,
+repository, and service APIs. Query and subscription behavior remains exposed
+through the existing gRPC-compatible services rather than a promised transport
+broker topology.
 
 ## Process Model
 
-The framework must support these modes:
-
-- single-process mode for tests and simple development;
-- multi-process local mode with a broker and role-specific workers;
-- supervised mode where the main process starts and monitors broker/workers;
-- externally supervised mode where process manager tooling starts workers.
-
-Each worker process must declare:
-
-- bounded context name;
-- tenant mode;
-- role;
-- handled signal types;
-- supported entity/repository types;
-- health and readiness state.
+The supported runtime scope is single-process execution and application-composed
+local multi-process execution over the same-host transport adapter. The
+framework does not start, restart, supervise, or health-check brokers or worker
+processes and does not require public worker declarations. Distributed
+transport, production topology, process supervision, restart handling, and
+health/readiness policy are outside the initial release; no future design for
+those policies is committed.
 
 ## Bus Semantics
 
@@ -314,8 +294,8 @@ delivery worker boundary:
   stale owner continues running after losing renewal, endpoint callback side
   effects are at-least-once/replay-safe: later final fencing can prevent stale
   finalization, but it cannot uninvoke a callback that already ran. Broader
-  production supervision, cancellation, and retry-monitor policy remains future
-  work. The run returns
+  production supervision, cancellation, and retry-monitor policy are outside
+  the initial release, with no future design committed. The run returns
   simple counts plus
   per-message failures and releases the shard in a `finally` path;
 - Package-internal loop code repeats those direct drains for one shard. Renewal

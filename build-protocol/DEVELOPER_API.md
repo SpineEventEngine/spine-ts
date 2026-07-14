@@ -258,7 +258,8 @@ delivery APIs such as `Delivery`, `DeliveryLoop`, `OnDeliveryMessage`, direct
 `onMessage` examples, or their direct-drain option/result types as stable
 application API.
 
-The public slice is intentionally smaller than the later scheduler/retry stack:
+The public slice excludes scheduler, retry-timing, and retry-monitor policy;
+those policies are outside the initial release and no future stack is committed:
 
 - `Inbox` is the low-level durable delivery storage primitive in this slice. It
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
@@ -340,7 +341,8 @@ compare-and-set using the storage clock as abandoned-work recovery. If a stale
 owner continues after losing renewal, endpoint callback side effects are
 at-least-once/replay-safe: later final fencing can prevent stale finalization,
 but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy remains future work.
+supervision, cancellation, and retry-monitor policy are outside the initial
+release, with no future design committed.
 
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and

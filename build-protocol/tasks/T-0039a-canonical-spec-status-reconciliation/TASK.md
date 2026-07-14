@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review wave 2 findings accepted
+Status: Review wave 2 fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -278,3 +278,17 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   commitment.
 - Resume the existing Terra Medium implementer. Preserve current observable
   transport/delivery behavior and do not invent a replacement policy.
+
+## Review Wave 2 Fix Handback
+
+- The accepted policy-wording batch is implemented in the two canonical docs
+  plus these three records. Current scope is adapter-neutral single-process and
+  application-composed same-host multi-process command/event transport;
+  production/distributed topology, supervision, restart, worker declaration,
+  health/readiness, scheduler, cancellation, and retry-monitor policy are
+  explicit release exclusions with no future design commitment.
+- Focused active-claim scans, five-path formatting/scope, `docs:check`, status
+  equality, generated-path cleanliness, and `git diff --check` are recorded in
+  the work log. No runtime/public API or historical event text changed.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.
