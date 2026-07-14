@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security architecture split accepted; artifacts and final review pending
+Status: Security artifacts verified; dedicated final review assigned
 
 Baseline: `39f2c6f7`
 
@@ -74,3 +74,40 @@ tracked generated output, dependency-audit freshness, and diff integrity.
   production-code changes, subagents, or Git mutation.
 - The dedicated `security_reviewer` remains pending until the artifact commit
   and focused mechanical checks are complete.
+
+## Coordinator Artifact Verification - Finding Batch 1
+
+- `TM-002` through `TM-011` were assigned to different hypotheses than the
+  accepted splitter result. Stable IDs must preserve this order: tenant
+  identity binding, tenant propagation/isolation, malformed schema/`Any`,
+  exposed intake, subscriptions, delivery retry/retention, local IPC,
+  generated-module execution, dependencies, sensitive diagnostics, lifecycle
+  cleanup, and regex/analyzer work.
+- The scope says consumers own all persistence, but the accepted boundary says
+  consumers own production persistence adapters/deployment while framework
+  storage and tenant behavior remain in scope.
+- The compact threat table does not yet expose each hypothesis's asset,
+  investigation/status, and realistic prerequisite clearly enough to satisfy
+  the accepted artifact contract.
+- Return this complete batch to the same implementer context before artifact
+  commit and dedicated security review.
+
+## Finding Batch 1 Resolution
+
+- Same implementer agent `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, immutable
+  actual `gpt-5.6-terra` / medium, restored the exact stable threat mapping,
+  narrowed persistence ownership, and expanded required threat fields.
+- Coordinator re-read the corrected artifacts and reran the focused pre-review
+  lint. Prettier, docs/TypeDoc/API checks, status and policy scans, secret and
+  public-leak scans, generated tracking, stable-ID scan, and diff integrity are
+  clean.
+- The implementer is closed. Dedicated security review may proceed from the
+  committed artifact endpoint.
+
+## Dedicated Security Reviewer Assignment
+
+- Existing `security_reviewer`, expected explicit `gpt-5.6-terra` / high,
+  read-only against the immutable review package, no subagents or Git mutation.
+- Review the whole release surface through the bounded `TM-*` hypotheses and
+  report concrete findings only. Historical superseded text is inactive unless
+  a current task/status record or changed public doc claims it as active.

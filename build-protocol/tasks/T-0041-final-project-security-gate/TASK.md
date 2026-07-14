@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security artifacts assigned
+Status: In progress - security review assigned
 
 Started: `2026-07-14`
 
@@ -167,11 +167,17 @@ example.
   context-to-storage, persisted-record replay, framework-to-handler,
   same-host ZeroMQ IPC, source-to-generator, generated-module import,
   dependency installation, and diagnostics-to-consumer output.
-- Investigation uses stable `TM-001` through `TM-012` hypotheses covering
-  tenant identity binding/isolation, malformed schemas and `Any` payloads,
-  exposed unbounded intake, subscriptions, delivery retries, local IPC,
-  generated-module execution, supply chain, sensitive diagnostics, lifecycle
-  cleanup, and regex/analysis work.
+- Investigation preserves this exact stable hypothesis mapping:
+  `TM-001` tenant identity/auth binding; `TM-002` tenant
+  propagation/isolation; `TM-003` malformed `Any`/schema/type URL; `TM-004`
+  exposed HTTP/2/transport intake and payload/session/runtime growth; `TM-005`
+  subscription/filter/slow-consumer exhaustion; `TM-006` delivery retry,
+  retained attempt, corrupt-row, and lease work; `TM-007` local IPC spoofing,
+  injection, oversized V8 frames, and endpoint manipulation; `TM-008`
+  generated-root/module execution; `TM-009` dependency/install supply chain;
+  `TM-010` sensitive error/stack/payload diagnostics; `TM-011`
+  listener/session/subscription/worker/storage cleanup; and `TM-012`
+  regex/analyzer disproportionate work.
 - No hypothesis is pre-adjudicated as a finding. In particular, network intake,
   trusted local IPC, and generated-module execution depend on documented trust
   and exposure assumptions. No further Sol High escalation is currently
@@ -188,3 +194,40 @@ example.
 - Preserve stable `TM-*` identifiers, classify dependency reachability and
   install-script risk, distinguish deployment residuals from framework defects,
   and anchor every security claim to repository evidence.
+
+## Security Artifact Author Runtime Metadata
+
+- Existing `implementer` agent `019f62d7-31cc-7c13-a0b1-61d25dff9e23` was
+  dispatched with explicit model `gpt-5.6-terra` and explicit reasoning
+  `medium`.
+- Immutable runtime metadata confirms actual `gpt-5.6-terra` / `medium`.
+- The author owns only the two security artifacts and necessary T-0041 task/work
+  evidence entries, has no subagents, and must not mutate Git state.
+
+## Initial Artifact Evidence
+
+- The threat model and security findings report now exist under
+  `build-protocol/security/`; both retain the dedicated security review and
+  task completion as pending.
+- Focused Prettier checks on the artifacts and T-0041 task/work records, plus
+  `git diff --check`, passed after artifact formatting. See
+  `build-protocol/work-logs/T-0041.md` for the exact command and result.
+
+## Artifact Finding Batch 1 Fix
+
+- Assigned coordinator findings are corrected in the owned artifact set: the
+  exact stable TM mapping is restored, persistence ownership is narrowed to
+  production adapters/deployment, and each threat row now carries asset,
+  prerequisite/abuse path, control/evidence, investigation/status, and
+  conditional severity.
+- Dedicated security review and task completion remain pending.
+
+## Dedicated Security Review Assignment
+
+- Existing `security_reviewer`, expected explicit `gpt-5.6-terra` / high,
+  read-only against the committed baseline-to-artifact package, no subagents or
+  Git mutation.
+- Adjudicate every `TM-*` hypothesis and `SF-*` disposition across the complete
+  project scope. Report only repository-grounded findings with prerequisites,
+  boundary/asset, severity/confidence, evidence, current control, and smallest
+  correction.
