@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Framework children planned; T-0038a pending
+Status: Framework children integrated; main back-merge assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -307,3 +307,12 @@ superseded by the independent review result above.
 - T-0038 final verify and T-0042 release proof are unclassified pending closure
   evidence. Parent closure waits for both framework children and matrix rerun/
   re-review.
+
+## Framework Children Integration
+
+- T-0038a and T-0038b are complete, independently reviewed, full-verified,
+  merged to `main`, post-merge full-verified, and pushed to `origin`.
+- Back-merge current `main` at `fedae6aa` into this clean parent branch without
+  committing first. Preserve the audit matrix/records, inspect any conflicts,
+  run standalone merge-integrity review, then commit only after a clean result.
+  The parent matrix refresh follows that integration checkpoint.

@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Framework children planned; T-0038a pending
+Status: Framework children integrated; main back-merge assigned
 
 ## Review Scope
 
@@ -189,3 +189,12 @@ findings at `2026-07-14T01:23:48Z`.
   packing and implicit registry paths remains unchanged compatibility evidence.
 - No other classification, route, export entry, or capability evidence changed.
   Re-review remains pending after framework-child integration and parent refresh.
+
+## Main Back-Merge Assignment
+
+- Source `main` is `fedae6aa`; parent endpoint before merge is `9addd3b0`.
+  Both framework children are integrated and verified on the source.
+- Back-merge without commit, inspect conflicts/unmerged paths, and dispatch one
+  existing style/maintainability reviewer at explicit `gpt-5.6-terra` / high,
+  read-only with no subagents, for merge integrity only. Matrix capability
+  review remains a separate parent-refresh gate.
