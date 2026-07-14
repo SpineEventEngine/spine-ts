@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 5 fix verified; final re-review pending
+Status: In progress - Wave 6 findings accepted; fix pending
 
 Started: `2026-07-14`
 
@@ -480,3 +480,14 @@ install` reported all eight workspace projects already up to date;
   generated-clean, and diff checks passed.
 - Server shutdown and saved-module cleanup left no temporary repository file or
   IPv4 listener. The single Wave 5 fix is ready for final all-lane re-review.
+
+## 2026-07-14 - Specialist Wave 6 Findings
+
+- TypeScript/API docs is clean.
+- Require the smoke-seeded task only from exact-ID results; broad and column
+  results are bounded pages that may legitimately omit it when more than 16
+  equal-column rows exist. Add >16-row evidence and update prose.
+- Rename/in-line smoke timeout diagnostics so unavailable/omitted counters are
+  not mislabeled as row IDs.
+- Correct the review log's historical `Reviewers: not assigned` line so it
+  cannot contradict active/final reviewer assignments.

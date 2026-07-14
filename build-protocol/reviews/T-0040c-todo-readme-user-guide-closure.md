@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 5 fix verified - final re-review pending
+Status: Wave 6 findings accepted - fix pending
 
 Baseline: `526b7b4d`
 
@@ -39,7 +39,8 @@ links/imports, and future-policy overclaim.
   or review-log ownership. Explicit dispatch and immutable Desktop metadata
   agree for agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, actual
   `gpt-5.6-terra` / medium.
-- Reviewers: not assigned.
+- Reviewers: not assigned at initial implementation dispatch; superseded by the
+  dated specialist-wave assignments below.
 
 ## 2026-07-14 - Pre-Review Lint
 
@@ -344,6 +345,21 @@ links/imports, and future-policy overclaim.
   TypeScript/API docs agent `019f6290-ed69-7b00-85bc-a2dc51af5f21` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f6290-f82a-7103-961b-4707914a7693` is actual `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 6 Results
+
+- TypeScript/API docs: clean.
+- Performance/reliability and style/maintainability: one deduplicated accepted
+  finding. Broad/column 16-row pages may omit the seeded row under ordering
+  ties; require it only from exact-ID and add >16-row evidence.
+- Style/maintainability: one additional accepted finding. Rename or inline the
+  smoke's mixed row/unavailable/omission diagnostics instead of labeling them
+  `lastRowIds` / `last rows`.
+- Documentation completeness: one accepted stale-log finding. The initial
+  `Reviewers: not assigned` line is now explicitly historical/superseded.
+- All Wave 6 reviewers were closed. The accepted batch returns to existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
 
 ## Skill Applicability
 
