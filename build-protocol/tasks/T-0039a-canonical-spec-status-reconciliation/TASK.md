@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final temporal-disposition fix handback ready
+Status: Final style rereview reassigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -474,3 +474,11 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. `receiving-code-review` and
   `verification-before-completion` were read and applied.
+
+## Final Style Rereview Reassignment
+
+- `2026-07-14T11:30:27Z`: coordinator accepted endpoint `8aa1b7fd` after exact
+  three-path formatting, current disposition/handback/status, scope/generated,
+  and `git diff --check` evidence.
+- Reassign style/maintainability at explicit Terra High, read-only/no subagents.
+  Documentation/API/reliability remain clean; security stays deferred.
