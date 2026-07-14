@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 11 fixes verified - Wave 12 pending
+Status: Complete - all concerns clean; final task gate passed
 
 Baseline: `24d1ef37`
 
@@ -60,7 +60,9 @@ overstate future production policy.
 - Reviewer wave 10: complete and closed; all accepted findings are fixed and
   coordinator-verified.
 - Reviewer wave 11: complete and closed; both deduplicated findings are fixed
-  and coordinator-verified. Wave 12 is pending for affected concerns.
+  and coordinator-verified.
+- Reviewer wave 12: complete and closed; style and TypeScript/API docs are
+  clean. Documentation and reliability retain clean Wave 11 dispositions.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -921,6 +923,83 @@ subagents or Git mutation. Wave 12 remains required for affected concerns.
 - Wave 11 is fully fixed and verified. Wave 12 reruns style/maintainability and
   TypeScript/API docs. Documentation and reliability retain their clean Wave 11
   dispositions because these fixes do not affect their concerns.
+
+## Reviewer Wave 12 Assignments - 2026-07-14
+
+Fix endpoint: `db0389dc`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..db0389dc.diff` (258,289 bytes)
+
+Pre-review lint found current status mirrors, post-removal retained-entry
+collection, clean callback/skills paths, bounded policy owners, no internal or
+public leak, no tracked generated output, and no production-policy overclaim.
+
+- Dispatch existing `style_maintainability_reviewer`, expected immutable
+  `gpt-5.6-terra` / high, read-only and no subagents.
+- Dispatch existing `typescript_api_docs_reviewer`, expected immutable
+  `gpt-5.6-terra` / high, read-only and no subagents.
+- Documentation rerun: N/A. Its Wave 11 result is clean and the fix changes no
+  documentation, claims, package metadata, or status semantics beyond recording
+  the review cycle.
+- Performance/reliability rerun: N/A. Its Wave 11 result is clean and the fix
+  applies the requested post-removal listing plus parameter-only renames without
+  changing lifecycle, timing, concurrency, cleanup order, or resource ownership.
+
+Scope both active lanes to the package, complete ledger, affected paths, and
+their distinct concerns. Regress post-removal diagnostics, worker callback
+names, all prior findings, status accuracy, and public boundaries. Ignore
+superseded history unless current records or changed public docs claim it
+active.
+
+Explicit dispatch fields and immutable Desktop role metadata agree:
+
+- Style/maintainability: `019f61d4-1d25-7712-a8ed-c14e4974df04`, existing
+  `style_maintainability_reviewer`, actual `gpt-5.6-terra` / high.
+- TypeScript/API docs: `019f61d4-4238-7292-b9a7-16414f080d66`, existing
+  `typescript_api_docs_reviewer`, actual `gpt-5.6-terra` / high.
+
+Complete affected-lane results and closure remain pending; do not return a
+partial wave to implementation.
+
+## Reviewer Wave 12 Results - 2026-07-14
+
+Both read-only reviewers completed without subagents and were closed. Explicit
+dispatch and immutable Desktop role metadata agreed:
+
+- Style/maintainability: `019f61d4-1d25-7712-a8ed-c14e4974df04`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- TypeScript/API docs: `019f61d4-4238-7292-b9a7-16414f080d66`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high, clean.
+
+The style reviewer confirmed the post-removal proof, nested test cleanup,
+worker callback names, bounded diagnostic/query/deadline paths, and intentional
+parent transport stimulus are clean. Its sole P2 comment read the frozen
+package's pre-dispatch task header (`Wave 12 pending`) as current. The live task,
+work-log, and review-log headers all already said Wave 12 active when the result
+was collected. Under the assignment's historical-text rule, the package line is
+superseded review evidence rather than active state, so the comment is rejected
+without a fix or rerun.
+
+Final concern dispositions:
+
+- Style/maintainability: clean after evidence-based adjudication.
+- Documentation: clean in Wave 11; Wave 12 rerun N/A because fixes changed no
+  docs, claims, package metadata, or status semantics beyond cycle records.
+- TypeScript/API docs: clean in Wave 12.
+- Performance/reliability: clean in Wave 11; Wave 12 rerun N/A because fixes
+  changed neither lifecycle, timing, concurrency, cleanup order, nor ownership.
+
+Every canonical concern is clean. Proceed to the full native task gate.
+
+## Final Task Gate - 2026-07-14T18:19:08Z
+
+- Native full `pnpm verify` passed with 72 files and 1,661 tests in both
+  ordinary and coverage runs; branch coverage is 90.12%.
+- Typechecks, lint/cleanup, format, TypeDoc/API exports, Proto lint/checksums,
+  generated-clean checks, and diff whitespace passed.
+- All participants are closed. Review is complete and T-0040a is accepted for
+  integration.
 
 ## Reviewer Wave 10 Results - 2026-07-14
 

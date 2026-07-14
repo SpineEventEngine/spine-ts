@@ -1,8 +1,10 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - Wave 11 fixes verified; Wave 12 pending
+Status: Accepted - final task gate passed; integration pending
 
 Started: `2026-07-14T14:20:28Z`
+
+Accepted: `2026-07-14T18:19:08Z`
 
 Baseline commit: `24d1ef37`
 
@@ -705,6 +707,24 @@ retained after normal recursive removal"`. It exited `1`; 1 test failed and 18
   enforcement, formatting, callback scan, and `git diff --check` passed.
 - Every Wave 11 finding is resolved. Commit the fix/evidence batch and rerun the
   affected canonical concerns in Wave 12.
+
+### Final Task Gate - 2026-07-14
+
+- Every canonical concern is clean: style/maintainability and TypeScript/API
+  docs closed in Wave 12; documentation and performance/reliability retain
+  their clean Wave 11 dispositions with concrete unaffected-rerun reasons.
+  Every participant is closed and no child remains active.
+- Native `pnpm --config.verify-deps-before-run=false verify` exited `0`.
+  Ordinary and coverage runs each passed 72 files and 1,661 tests. Coverage was
+  95.38% statements, 90.12% branches, 98.22% functions, and 95.40% lines.
+- Node/version, both TypeScript layers, ESLint, cleanup enforcement, Prettier,
+  TypeDoc, API export checks, Proto generation/lint/checksums, and generated
+  cleanliness passed. TypeDoc verified 100 proto, 28 core, 205 server, 19
+  storage, 17 transport, and 3 testing exports.
+- Final `git diff --check` passed. Generated outputs are ignored, untracked, and
+  freshly regenerated; `git ls-files` found none under package/example
+  generated paths. Only the three closure records remain to commit before
+  integration.
 
 ## Skill Applicability
 
