@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability affected rereview assigned
+Status: Integrated capability rereview finding assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -500,3 +500,26 @@ State` still says T-0038a/T-0038b are pending. Rewrite or explicitly
   the accepted P2 corrections and current matrix truth. The prior clean
   performance/reliability disposition remains valid because no behavior or
   reliability evidence changed. Security remains deferred to T-0041.
+
+## Integrated Capability Affected Rereview Result
+
+- `2026-07-14T09:29:07Z`: reviewers
+  `019f5ff1-db74-7472-9111-fd3eba354f4e`,
+  `019f5ff2-0154-7292-954a-b814df4e44fa`, and
+  `019f5ff2-3cbe-74b1-b997-26921d7d007c` are closed and used no subagents.
+  Immutable role configuration plus explicit spawn fields establish actual
+  Terra High style/API and Luna Medium documentation profiles; the reviewers'
+  own text interfaces could not introspect those immutable names.
+- Documentation and TypeScript/API docs are CLEAN. The generated-support
+  subpath distinction, root-public ingestor/error exports, active `Current
+State`, status mirrors, and pending-gate wording are accepted. The earlier
+  performance/reliability CLEAN disposition remains applicable.
+- Accepted style P2: T-0038b's task/work headers still say `Complete; accepted
+for main integration` although its durable integration record and ancestry
+  prove the merge/post-merge gate completed. This is a concrete stale current
+  status claim.
+- Do not edit T-0038b child records in this audit parent: the task scope routes
+  documentation/status reconciliation to T-0039a. Resume the same Terra Medium
+  matrix author to classify row 23 as `STALE_DOC_STATUS`, route it to T-0039,
+  cite the exact child headers/integration record, update counts/routes, and
+  preserve all other rows and accepted evidence.

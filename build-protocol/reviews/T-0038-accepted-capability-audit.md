@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability affected rereview assigned
+Status: Integrated capability rereview finding assigned
 
 ## Review Scope
 
@@ -372,3 +372,21 @@ findings at `2026-07-14T01:23:48Z`.
 - All reviewers are read-only, may not spawn subagents, and must report skill
   applicability plus actual immutable role metadata. Performance/reliability
   remains CLEAN and security remains deferred to T-0041.
+
+## Integrated Capability Affected Rereview Result
+
+- `2026-07-14T09:29:07Z`: documentation reviewer
+  `019f5ff2-0154-7292-954a-b814df4e44fa` is CLEAN at immutable Luna Medium;
+  TypeScript/API reviewer `019f5ff2-3cbe-74b1-b997-26921d7d007c` is CLEAN at
+  immutable Terra High. Style reviewer
+  `019f5ff1-db74-7472-9111-fd3eba354f4e` returned one P2 at immutable Terra
+  High. Every model/reasoning field was explicit at spawn, all skill checks
+  completed, no subagents were used, and all three reviewers are closed.
+- Accepted P2: current T-0038b task/work headers stop at accepted-for-main-
+  integration despite their own completed integration record and main ancestry.
+  This is a real stale active-status claim, but T-0038's scope/routing rule
+  assigns its correction to T-0039a rather than this parent's four-file scope.
+- Resume the same Terra Medium matrix author to change row 23 from
+  `IMPLEMENTED` to `STALE_DOC_STATUS`, route T-0039, cite exact evidence, and
+  update taxonomy/routes. Rerun style and documentation only; API and
+  reliability remain CLEAN unless the fix crosses their concerns.
