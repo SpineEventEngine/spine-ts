@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Complete; reviewed and final task verified; awaiting main integration
+Status: Complete; merged and post-merge verified; remote closure pending
 
 ## Review Scope
 
@@ -370,3 +370,14 @@ supervisor`, conflicting with the explicit production process-supervision
 - Final tracked/untracked inspection and `git diff --check` were clean. The
   sandbox-only `EPERM` listener/IPC attempt is superseded by the successful
   authorized native run. T-0039a is accepted for main integration.
+
+## Post-Merge Gate
+
+- `2026-07-14T11:42:30Z`: merged as `d9d1f491` and reran the complete native
+  gate on `main`. Ordinary and coverage suites each passed `71` files / `1,642`
+  tests at `95.38/90.12/98.22/95.4` percent coverage.
+- All generated typechecks, lint/cleanup/format, docs/API, Proto, and
+  generated-clean checks passed. Root tracked state/diff are clean; only the
+  protected user-owned untracked file remains.
+- Every task reviewer is closed and every per-task concern is clean. Remote
+  closure is the only remaining T-0039a step.

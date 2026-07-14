@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Complete; reviewed and final task verified; awaiting main integration
+Status: Complete; merged and post-merge verified; remote closure pending
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -505,3 +505,15 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - The first sandboxed verify failed only because loopback and ZeroMQ IPC binds
   returned `EPERM`; the authorized native rerun passed without repository
   changes. T-0039a is accepted for main integration.
+
+## Main Integration
+
+- `2026-07-14T11:42:30Z`: merged the completed task branch into `main` as
+  `d9d1f49169baf0bf1d7807de17c613c7c2f3964f` without touching the user-owned
+  root file.
+- Native post-merge full verify passed ordinary and coverage phases at `71`
+  files / `1,642` tests each with `95.38/90.12/98.22/95.4` percent coverage.
+  All type/lint/cleanup/format/docs/API/Proto/generated-clean gates passed.
+- Root tracked state and diff integrity are clean; only the protected untracked
+  user file remains. Push `main`, record remote refs, then remove the clean task
+  worktree.
