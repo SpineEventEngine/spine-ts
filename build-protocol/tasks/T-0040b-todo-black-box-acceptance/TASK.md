@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: In progress - Wave 2 fixes verified; final targeted re-review pending
+Status: In progress - Wave 3 status fix applied; final docs review pending
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -331,6 +331,20 @@ examples/todo/test/black-box.test.ts -t "rejects a remote command"` failed
   their stricter remaining-deadline logic. Native affected regression passed 3
   files / 66 tests; tooling typecheck, full lint/generated build/cleanup,
   format, generated-clean, and `git diff --check` passed independently.
+
+## Targeted Reviewer Wave 3 Results
+
+- Performance/reliability is clean and its agent is closed. It confirmed every
+  direct RPC bound, controlled timeout proof, remaining-deadline reads,
+  subscription/session/server ownership, causal activation, and sentinel
+  ordering.
+- Documentation found only one P2 dynamic mirror contradiction: the early
+  Assignment State said all reviewers were closed while Wave 3 was active. Its
+  agent is closed. Replace that brittle claim with a stable pointer to the
+  chronological assignment/runtime/result records below; all substantive
+  documentation checks are clean.
+- No implementation behavior changes. Run one final documentation-only review
+  of the stable mirror, then proceed to the full task gate if clean.
 
 ## Skill Applicability
 

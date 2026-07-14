@@ -1,6 +1,6 @@
 # T-0040b Review Log
 
-Status: Wave 2 fixes verified - final targeted package pending
+Status: Wave 3 status fix applied - final docs review pending
 
 Baseline: `acd9f05c`
 
@@ -41,8 +41,8 @@ tracking, and future-policy overclaim.
   evidence. Explicit dispatch fields and immutable Desktop metadata agree on
   agent `019f61ea-2cff-7731-88c6-6c5c0f610b45`, actual `gpt-5.6-terra` /
   medium. No subagents or Git mutation.
-- Reviewers: Wave 1 and targeted Wave 2 completed; all assigned reviewer agents
-  are closed.
+- Reviewers: chronological assignments, runtime metadata, results, and closure
+  state are recorded by wave below; the latest wave governs current state.
 
 ## Coordinator Pre-Review Findings
 
@@ -211,6 +211,50 @@ commits)
 - Final targeted re-review reruns documentation and performance/reliability.
   Style and TypeScript/API clean dispositions remain current because the fix is
   mechanical test-only deadline enforcement with no public contract change.
+
+## Targeted Reviewer Wave 3 Assignments
+
+Endpoint: `422790f2`
+
+Package: `.superpowers/sdd/review-acd9f05c..422790f2.diff` (85,982 bytes, three
+commits)
+
+- Existing `documentation_reviewer`, expected explicit `gpt-5.6-luna` /
+  medium: verify the corrected assignment mirror, active statuses, deadline
+  evidence, and prior documentation closure.
+- Existing `performance_reliability_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: verify complete direct-RPC bounds, controlled timeout
+  proof, existing causal ordering, and cleanup.
+- Both assignments are read-only, no-subagent, package-scoped, and ignore
+  superseded history unless current state claims it active. Live IDs/profile
+  metadata are recorded below. At dispatch, complete results remained pending;
+  they are recorded below.
+- Style and TypeScript/API are not rerun for the concrete unaffected reasons
+  already recorded above.
+
+### Wave 3 Runtime Metadata
+
+- Existing `documentation_reviewer` agent
+  `019f6223-0e2f-74d2-ab28-a0dc38df097b`: explicit `gpt-5.6-luna` / medium;
+  immutable Desktop metadata agrees; result recorded below; agent closed.
+- Existing `performance_reliability_reviewer` agent
+  `019f6223-123b-7392-9514-a48b87e20675`: explicit `gpt-5.6-terra` / high;
+  immutable Desktop metadata agrees; clean result recorded below; agent closed.
+
+## Targeted Reviewer Wave 3 Results
+
+- Documentation: one P2 dynamic Assignment State contradiction; every
+  substantive documentation/status/scope claim is otherwise clean; agent
+  closed.
+- Performance/reliability: clean. Direct RPC bounds, controlled timeout proof,
+  remaining-deadline eventual reads, resource cleanup, activation causality,
+  and sentinel ordering are sound; agent closed.
+
+### Coordinator Disposition
+
+- Replace the dynamic "all reviewers closed" mirror with a stable direction to
+  the chronological wave records and rerun documentation only. This is a
+  coordinator-owned status correction with no implementation behavior change.
 
 ## Skill Applicability
 
