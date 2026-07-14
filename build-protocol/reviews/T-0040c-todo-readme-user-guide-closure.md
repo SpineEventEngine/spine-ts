@@ -134,6 +134,13 @@ links/imports, and future-policy overclaim.
   original bounded concern, with special attention to the Wave 1 corrections.
   Reviewers remain read-only, may not mutate Git or spawn subagents, and ignore
   historical superseded text unless current state claims it active.
+- Explicit dispatch fields and immutable Desktop role metadata agree for Wave
+  2: style agent `019f6253-c7bc-7121-884b-0387513c4ba3` is actual
+  `gpt-5.6-terra` / high; documentation agent
+  `019f6253-cb9a-7372-a6ed-727728c578cb` is actual `gpt-5.6-luna` / medium;
+  TypeScript/API docs agent `019f6253-d1b4-7a62-9c67-8ddd62a12311` is actual
+  `gpt-5.6-terra` / high; performance/reliability agent
+  `019f6253-cee1-7263-89ca-8562bc5776a5` is actual `gpt-5.6-terra` / high.
 
 ## Skill Applicability
 
