@@ -53,9 +53,16 @@ unchanged.
 ## Query task lists
 
 Every `TaskList` projection row has the task ID as its projection ID. The
-following complete ESM client assumes it is saved under `examples/todo/scripts/`
-after `pnpm typecheck:build`. It factors the shared client, target, read, and
-decode setup while executing all-row, exact-ID, and declared-column queries:
+following complete ESM client factors the shared client, target, read, and
+decode setup while executing all-row, exact-ID, and declared-column queries.
+First run `pnpm typecheck:build` from the repository root, then save the module
+as `examples/todo/scripts/query-client.mjs`. With `pnpm --filter
+@spine-ts/example-todo start` running in another terminal, execute it from the
+repository root with:
+
+```bash
+pnpm --filter @spine-ts/example-todo exec node scripts/query-client.mjs
+```
 
 ```js
 import { log } from "node:console";
@@ -183,13 +190,23 @@ deadline, as the checked-in smoke does.
 ## Subscribe safely
 
 For a live view, create a `Topic` with the same `TaskList` target, subscribe,
-and activate the returned subscription. This complete ESM example also assumes
-it is saved under `examples/todo/scripts/`. It starts the iterator read before
-posting the command, bounds every remote wait, decodes one projection update,
-and owns cancellation, iterator, abort-signal, and HTTP/2 session cleanup:
+and activate the returned subscription. First run `pnpm typecheck:build` from
+the repository root, then save this complete ESM module as
+`examples/todo/scripts/subscription-client.mjs`. With `pnpm --filter
+@spine-ts/example-todo start` running in another terminal, execute it from the
+repository root with:
+
+```bash
+pnpm --filter @spine-ts/example-todo exec node scripts/subscription-client.mjs
+```
+
+It starts the iterator read before posting the command, applies the delivery
+deadline after that post, decodes one exact-ID projection update, and owns
+cancellation, iterator, abort-signal, and HTTP/2 session cleanup:
 
 ```js
 import { log } from "node:console";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
@@ -224,7 +241,8 @@ const metadata = new SignalMetadata();
 const actorContext = metadata.actorContext({
   actor: create(UserIdSchema, { value: "todo-subscription-user" }),
 });
-const taskId = `subscription-task-${Date.now()}`;
+const suffix = randomUUID();
+const taskId = `subscription-task-${suffix}`;
 const target = create(TargetSchema, {
   type: deriveTypeUrl(TaskListSchema),
   criterion: {
@@ -241,7 +259,7 @@ try {
   const subscription = await withTimeout(
     subscriptions.subscribe(
       create(TopicSchema, {
-        id: create(TopicIdSchema, { value: `topic-${Date.now()}` }),
+        id: create(TopicIdSchema, { value: `subscription-topic-${suffix}` }),
         target,
         context: actorContext,
       }),
@@ -249,17 +267,19 @@ try {
     "subscription creation",
     1_000,
   );
-  const stream = new AbortController();
-  const iterator = subscriptions
-    .activate(subscription, { signal: stream.signal })
-    [Symbol.asyncIterator]();
+  let stream;
+  let iterator;
   let pendingUpdate;
   let canceled = false;
 
   try {
-    pendingUpdate = withTimeout(iterator.next(), "subscription update", 1_000);
+    stream = new AbortController();
+    iterator = subscriptions
+      .activate(subscription, { signal: stream.signal })
+      [Symbol.asyncIterator]();
+    pendingUpdate = iterator.next();
     const ack = await withTimeout(
-      commands.post(createTaskCommand(taskId)),
+      commands.post(createTaskCommand(taskId, suffix)),
       "CreateTask acknowledgement",
       1_000,
     );
@@ -267,7 +287,7 @@ try {
       throw new Error("CreateTask was not acknowledged.");
     }
 
-    const delivered = await pendingUpdate;
+    const delivered = await withTimeout(pendingUpdate, "subscription update", 1_000);
     pendingUpdate = undefined;
     if (delivered.done === true) {
       throw new Error("Subscription ended before delivering an update.");
@@ -296,27 +316,34 @@ try {
       "iterator return",
       1_000,
     );
+    iterator = undefined;
   } finally {
-    await pendingUpdate?.catch(() => undefined);
+    stream?.abort();
     if (!canceled) {
       await withTimeout(subscriptions.cancel(subscription), "subscription cleanup", 1_000).catch(
         () => undefined,
       );
     }
-    stream.abort();
-    await withTimeout(
-      iterator.return?.() ?? Promise.resolve({ done: true }),
-      "iterator cleanup",
-      1_000,
-    ).catch(() => undefined);
+    if (pendingUpdate !== undefined) {
+      await withTimeout(pendingUpdate, "pending subscription read cleanup", 1_000).catch(
+        () => undefined,
+      );
+    }
+    if (iterator !== undefined) {
+      await withTimeout(
+        iterator.return?.() ?? Promise.resolve({ done: true }),
+        "iterator cleanup",
+        1_000,
+      ).catch(() => undefined);
+    }
   }
 } finally {
   session.abort();
 }
 
-function createTaskCommand(taskId) {
+function createTaskCommand(taskId, commandSuffix) {
   return packCommand({
-    id: metadata.commandId(`command-${taskId}`),
+    id: metadata.commandId(`subscription-command-${commandSuffix}`),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {

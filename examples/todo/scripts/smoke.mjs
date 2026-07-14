@@ -1,4 +1,5 @@
 import { log } from "node:console";
+import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 import { pathToFileURL } from "node:url";
@@ -7,7 +8,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
 import { UserIdSchema } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import {
@@ -21,14 +22,13 @@ import { SignalMetadata } from "@spine-ts/server";
 import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
+import { inspectTaskListRows, sanitizeSmokeValue } from "../dist/src/smoke-task-lists.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
 const commandTimeoutMs = 1_000;
 const queryDeadlineMs = 5_000;
 const queryRetryDelayMs = 50;
-const maxDiagnosticRows = 4;
-const maxDiagnosticLength = 64;
-const suffix = `${Date.now()}-${process.pid}`;
+const suffix = randomUUID();
 const taskId = `smoke-${suffix}`;
 const session = new Http2SessionManager(baseUrl);
 const transport = createGrpcTransport({ baseUrl, sessionManager: session });
@@ -52,7 +52,7 @@ async function main() {
     );
     if (acknowledgement.status?.status.case !== "ok") {
       throw new Error(
-        `CreateTask acknowledgement was ${sanitize(acknowledgement.status?.status.case ?? "missing")}.`,
+        `CreateTask acknowledgement was ${sanitizeSmokeValue(acknowledgement.status?.status.case ?? "missing")}.`,
       );
     }
 
@@ -103,7 +103,7 @@ async function readTaskListEventually(id, context) {
   }
 
   throw new Error(
-    `TaskList ${sanitize(id)} was not observed after ${queryDeadlineMs}ms (${attempts} reads); ` +
+    `TaskList ${sanitizeSmokeValue(id)} was not observed after ${queryDeadlineMs}ms (${attempts} reads); ` +
       `last rows [${lastRowIds(lastResponse).join(", ")}].`,
   );
 }
@@ -130,41 +130,6 @@ function lastRowIds(response) {
   return inspectTaskListRows(response).diagnostics;
 }
 
-export function inspectTaskListRows(response) {
-  const taskLists = [];
-  let unavailableRows = 0;
-
-  for (const row of response?.message ?? []) {
-    if (row.state === undefined) {
-      unavailableRows += 1;
-      continue;
-    }
-    try {
-      const taskList = unpackAny(row.state, TaskListSchema);
-      if (taskList === undefined) {
-        unavailableRows += 1;
-        continue;
-      }
-      taskLists.push(taskList);
-    } catch {
-      unavailableRows += 1;
-    }
-  }
-
-  const diagnostics = taskLists
-    .slice(0, maxDiagnosticRows)
-    .map((taskList) => sanitize(taskList.id));
-  const omittedRows = Math.max(0, taskLists.length - maxDiagnosticRows);
-  if (unavailableRows > 0) {
-    diagnostics.push(`<${unavailableRows} unavailable rows>`);
-  }
-  if (omittedRows > 0) {
-    diagnostics.push(`<${omittedRows} rows omitted>`);
-  }
-
-  return { diagnostics, taskLists };
-}
-
 async function withTimeout(promise, label, timeoutMs) {
   let timeout;
   try {
@@ -184,14 +149,4 @@ async function withTimeout(promise, label, timeoutMs) {
 
 function delay(timeoutMs) {
   return new Promise((resolve) => setTimeout(resolve, timeoutMs));
-}
-
-function sanitize(value) {
-  let cleaned = "";
-  for (const character of String(value)) {
-    const code = character.charCodeAt(0);
-    cleaned += code <= 31 || code === 127 ? " " : character;
-  }
-  cleaned = cleaned.trim();
-  return cleaned === "" ? "<blank>" : cleaned.slice(0, maxDiagnosticLength);
 }

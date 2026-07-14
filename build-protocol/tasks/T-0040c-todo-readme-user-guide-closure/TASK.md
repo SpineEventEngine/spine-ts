@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 3 findings accepted; fix wave pending
+Status: In progress - Wave 3 fixes verified; re-review pending
 
 Started: `2026-07-14`
 
@@ -319,3 +319,56 @@ install` reported all eight workspace projects already up to date;
 - Keep the subscription read pending before unrelated/target posts, but start
   its delivery timeout only after posting the target so unrelated projection
   latency cannot consume the target's budget.
+
+## 2026-07-14 - Specialist Wave 3 Fix Evidence
+
+- Replaced the test-only executable-MJS import and erased cast with the typed,
+  package-private `src/smoke-task-lists.ts` seam. It is compiled by the existing
+  example build and imported by the smoke from `dist/src`; it is not exported
+  from the package root.
+- Focused RED failed because the new typed seam did not yet exist. GREEN passed
+  after extraction and now proves absent state, a mismatched `Any`, matching
+  `TaskList` type URL with invalid wire bytes, and a valid later target produce
+  only the valid list plus `<3 unavailable rows>` diagnostics.
+- Smoke task and command IDs now share a `randomUUID()` suffix. The guide's
+  task, exact-ID topic, and command IDs likewise share one collision-resistant
+  per-run suffix.
+- The guide query and subscription modules now name exact suggested files and
+  commands, require `pnpm typecheck:build`, and require the example server in a
+  second terminal. The subscription cleanup scope begins immediately after a
+  successful subscribe, so activation or iterator setup failure still aborts
+  the stream when present and performs bounded cancellation and iterator/read
+  cleanup before the outer session abort.
+- The causal black-box test starts raw `iterator.next()` before both posts and
+  applies its 500 ms delivery timeout only after the target post. Failure
+  cleanup aborts and cancels before boundedly awaiting a pending raw read; the
+  unrelated row is still proven projected before the target command.
+- Verification passed: smoke unit regression 1/1; native black-box 26/26;
+  `typecheck:build`; `typecheck:tooling`; focused ESLint and Prettier; and
+  `docs:check` with all 372 curated package exports. `proto:check-generated`
+  reports ignored, untracked, freshly generated output.
+- Exact native server/package smoke and both verbatim guide modules passed. The
+  smoke printed its UUID-backed task, all/ID/column queries exited 0, and the
+  exact-ID subscription printed its matching UUID-backed task. Server `SIGINT`
+  left no `127.0.0.1:8080` listener. The initial sandbox black-box run failed
+  only with `listen EPERM`; its approved native rerun passed.
+- No activation-failure fault-injection script was added: the lifecycle branch
+  is documentation-only, and adding a redundant executable fixture would
+  exceed this batch. Native success exercises the same cancellation/session
+  path; a missed attachment remains a bounded failure with no invented
+  readiness acknowledgement. Full `pnpm verify` remains the coordinator gate.
+
+## 2026-07-14 - Coordinator Wave 3 Fix Verification
+
+- Native focused suites passed 2 files / 27 tests, including matching-type
+  malformed bytes and the corrected unrelated-update timing.
+- Copied both guide blocks to their exact documented filenames and ran the exact
+  documented pnpm-filtered Node commands against a fresh native server. Query,
+  exact-ID subscription, and package smoke all exited 0.
+- Confirmed the subscription cleanup structurally enters its inner `finally`
+  for activation or iterator setup failure after a subscription exists; cancel,
+  stream abort, pending-read bound, iterator return, and session abort remain
+  owned.
+- Server shutdown and copied-module cleanup left no temporary repository file or
+  IPv4 listener. Fresh tooling/build types, docs/API, focused ESLint, format,
+  generated-clean, and diff checks passed.

@@ -178,10 +178,10 @@ describe("@spine-ts/example-todo", () => {
         signal: stream.signal,
       });
       const iterator = updates[Symbol.asyncIterator]();
-      let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
+      let rawUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
-        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
+        rawUpdate = iterator.next();
         await postRemoteCommand(
           commands,
           createTaskCommand(
@@ -202,13 +202,17 @@ describe("@spine-ts/example-todo", () => {
           createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
           "standalone command acknowledgement",
         );
+        const delivered = await withTimeout(
+          rawUpdate,
+          "standalone server subscription update",
+          500,
+        );
+        rawUpdate = undefined;
         const response = await readRemoteEventually(
           queries,
           createTaskListQuery(),
           (candidate) => taskTitle(candidate, "task-standalone") === "Standalone",
         );
-        const delivered = await nextUpdate;
-        nextUpdate = undefined;
         if (delivered.done === true) {
           throw new Error("Expected standalone server subscription update.");
         }
@@ -238,13 +242,18 @@ describe("@spine-ts/example-todo", () => {
         expect(cancel.status?.status.case).toBe("ok");
         expect(settled.done).toBe(true);
       } finally {
-        await nextUpdate?.catch(() => undefined);
+        stream.abort();
         await withTimeout(
           subscriptions.cancel(subscription),
           "standalone subscription cancellation cleanup",
           500,
         ).catch(() => undefined);
-        stream.abort();
+        await withTimeout(
+          rawUpdate ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "standalone pending subscription read cleanup",
+          500,
+        ).catch(() => undefined);
         await withTimeout(
           iterator.return?.() ??
             Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),

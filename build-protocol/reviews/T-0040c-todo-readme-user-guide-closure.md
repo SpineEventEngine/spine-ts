@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 3 findings accepted - fix wave pending
+Status: Wave 3 fixes verified - re-review pending
 
 Baseline: `526b7b4d`
 
@@ -208,6 +208,16 @@ links/imports, and future-policy overclaim.
 - All Wave 3 reviewers were closed. One complete fix batch returns to existing
   `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
   explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
+
+## 2026-07-14 - Wave 3 Fix Acceptance
+
+- The resumed implementation context retained the explicit immutable
+  `gpt-5.6-terra` / medium profile and was closed after result capture.
+- Coordinator inspection and native evidence accepted the typed private
+  decoder, malformed-wire regression, delayed delivery timeout, activation
+  cleanup scope, UUID identities, and exact guide save/run commands.
+- Fresh type/build/docs/lint/format/generated/diff checks passed. A fresh
+  baseline-to-endpoint package and all four specialist lanes remain required.
 
 ## Skill Applicability
 
