@@ -1945,6 +1945,95 @@ describe("attachment and last-detach linearization", () => {
     expect(activeRegistrationCount(attachments)).toBe(1);
   });
 
+  it("rejects an undefined failed-start sentinel without an active rollback", () => {
+    const attachments = new EnvironmentAttachments();
+
+    expect(attachments.failedStartRetryPending(undefined)).toBe(false);
+    expect(attachments.failedStartRetryPending(new Error("unrelated lifecycle fault"))).toBe(false);
+  });
+
+  it("rejects an undefined sentinel while rollback rejection is unassigned", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const failed = descriptor(
+      "RetryUnassignedSentinel",
+      "type.example.dev/RetryUnassignedSentinel",
+      new InMemoryStorageFactory(),
+    );
+    const startupFailure = new Error("unassigned sentinel startup failed");
+    const quiescenceFailure = new Error("unassigned sentinel remained unsafe");
+    const quiescence = Promise.withResolvers<undefined>();
+    worker.enqueue({ rejected: startupFailure });
+    worker.awaitGates.push(quiescence.promise);
+    const failedAttachment = attachments
+      .attach({ ownership: "caller", descriptors: [failed.value] })
+      .catch((error: unknown) => error);
+    await until(() => worker.awaitCalls === 1);
+
+    expect(attachments.failedStartPending).toBe(true);
+    expect(attachments.failedStartRetryPending(undefined)).toBe(false);
+
+    quiescence.reject(quiescenceFailure);
+    const ownerError = await failedAttachment;
+    expect(ownerError).toBeInstanceOf(AggregateError);
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(true);
+
+    await attachments.retryFailedStart();
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(false);
+  });
+
+  it("qualifies failed-start retry by the exact rejected attachment", async () => {
+    const worker = new LifecycleWorker();
+    const attachments = new EnvironmentAttachments({ createWorker: () => worker });
+    const sibling = descriptor(
+      "RetryProvenanceSibling",
+      "type.example.dev/RetryProvenanceSibling",
+      new InMemoryStorageFactory(),
+    );
+    const owner = descriptor(
+      "RetryProvenanceOwner",
+      "type.example.dev/RetryProvenanceOwner",
+      new InMemoryStorageFactory(),
+    );
+    const blocked = descriptor(
+      "RetryProvenanceBlocked",
+      "type.example.dev/RetryProvenanceBlocked",
+      new InMemoryStorageFactory(),
+    );
+    const startupFailure = new Error("retry provenance startup failed");
+    const quiescenceFailure = new Error("retry provenance remained unsafe");
+    worker.enqueue("IDLE", { rejected: startupFailure });
+    const siblingHandle = await attachments.attach({
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    worker.awaitOwnerFailures.push(quiescenceFailure);
+
+    const ownerError = await attachments
+      .attach({ ownership: "caller", descriptors: [owner.value] })
+      .catch((error: unknown) => error);
+    const blockedError = await attachments
+      .attach({ ownership: "caller", descriptors: [blocked.value] })
+      .catch((error: unknown) => error);
+
+    expect(ownerError).toBeInstanceOf(AggregateError);
+    expect((ownerError as AggregateError).errors).toEqual([startupFailure, quiescenceFailure]);
+    expect(blockedError).toMatchObject({
+      message: "Environment generation rollback requires an explicit retry.",
+    });
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(true);
+    expect(attachments.failedStartRetryPending(blockedError)).toBe(false);
+    expect(blocked.enumerations).toBe(0);
+    expect(blocked.storageContexts).toBe(0);
+    expect(blocked.transitions).toBe(0);
+
+    await attachments.retryFailedStart();
+    expect(attachments.failedStartRetryPending(ownerError)).toBe(false);
+    expect(attachments.failedStartRetryPending(blockedError)).toBe(false);
+    expect(activeRegistrationCount(attachments)).toBe(1);
+    await attachments.detach(siblingHandle);
+  });
+
   it("blocks sibling detach until failed-start rollback is explicitly retried", async () => {
     const worker = new LifecycleWorker();
     const attachments = new EnvironmentAttachments({ createWorker: () => worker });

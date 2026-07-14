@@ -1039,23 +1039,16 @@ describe("SpineServices", () => {
       stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
       readVersioned: () => Promise.reject(new Error("storage details")),
     });
-    const server = await startServices(readFailureContext);
+    const commandHandlers = registeredCommandHandlers(readFailureContext);
+    const queryHandlers = registeredQueryHandlers(readFailureContext);
 
-    try {
-      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
-      const commandClient = createClient(CommandService, transport);
-      const queryClient = createClient(QueryService, transport);
+    const ack = await commandHandlers.post(create(CommandSchema));
+    const response = await queryHandlers.read(createQuery("task-1"));
 
-      const ack = await commandClient.post(create(CommandSchema));
-      const response = await queryClient.read(createQuery("task-1"));
-
-      expect(ack.status?.status.case).toBe("error");
-      expect(errorMessage(ack.status?.status)).toBe("Command message type is required.");
-      expect(response.response?.status?.status.case).toBe("error");
-      expect(responseErrorMessage(response)).toBe("Query read failed.");
-    } finally {
-      await server.close();
-    }
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorMessage(ack.status?.status)).toBe("Command message type is required.");
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe("Query read failed.");
   });
 
   it("returns stable errors for include-all read failures", async () => {
@@ -1314,19 +1307,13 @@ describe("SpineServices", () => {
         return Promise.resolve();
       },
     });
-    const server = await startServices(wrongContext, acceptedContext);
+    const handlers = registeredCommandHandlersFor([wrongContext, acceptedContext]);
 
-    try {
-      const client = createClient(CommandService, createGrpcTransport({ baseUrl: server.baseUrl }));
+    const ack = await handlers.post(createProjectionCommand("command-routed"));
 
-      const ack = await client.post(createProjectionCommand("command-routed"));
-
-      expect(ack.status?.status.case).toBe("ok");
-      expect(wrongPosts).toEqual([]);
-      expect(acceptedPosts).toEqual(["command-routed"]);
-    } finally {
-      await server.close();
-    }
+    expect(ack.status?.status.case).toBe("ok");
+    expect(wrongPosts).toEqual([]);
+    expect(acceptedPosts).toEqual(["command-routed"]);
   });
 
   it("uses the first registered command route for duplicate service routes", async () => {
@@ -1346,19 +1333,13 @@ describe("SpineServices", () => {
         return Promise.resolve();
       },
     });
-    const server = await startServices(firstContext, secondContext);
+    const handlers = registeredCommandHandlersFor([firstContext, secondContext]);
 
-    try {
-      const client = createClient(CommandService, createGrpcTransport({ baseUrl: server.baseUrl }));
+    const ack = await handlers.post(createProjectionCommand("command-first-route"));
 
-      const ack = await client.post(createProjectionCommand("command-first-route"));
-
-      expect(ack.status?.status.case).toBe("ok");
-      expect(firstPosts).toEqual(["command-first-route"]);
-      expect(secondPosts).toEqual([]);
-    } finally {
-      await server.close();
-    }
+    expect(ack.status?.status.case).toBe("ok");
+    expect(firstPosts).toEqual(["command-first-route"]);
+    expect(secondPosts).toEqual([]);
   });
 
   it("rejects subscription tenant mismatches contractually", async () => {
@@ -1507,34 +1488,20 @@ describe("SpineServices", () => {
         });
       },
     });
-    const singleServer = await startServices(singleTenant);
-    const multiServer = await startServices(multitenant);
+    const singleHandlers = registeredQueryHandlers(singleTenant);
+    const multiHandlers = registeredQueryHandlers(multitenant);
 
-    try {
-      const singleClient = createClient(
-        QueryService,
-        createGrpcTransport({ baseUrl: singleServer.baseUrl }),
-      );
-      const multiClient = createClient(
-        QueryService,
-        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
-      );
+    const inapplicable = await singleHandlers.read(
+      createQuery("task-1", tenantEmail("tenant@example.test")),
+    );
+    const accepted = await multiHandlers.read(
+      createQuery("task-1", tenantDomain("tenant.example")),
+    );
 
-      const inapplicable = await singleClient.read(
-        createQuery("task-1", tenantEmail("tenant@example.test")),
-      );
-      const accepted = await multiClient.read(
-        createQuery("task-1", tenantDomain("tenant.example")),
-      );
-
-      expect(inapplicable.response?.status?.status.case).toBe("error");
-      expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
-      expect(accepted.response?.status?.status.case).toBe("ok");
-      expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
-    } finally {
-      await multiServer.close();
-      await singleServer.close();
-    }
+    expect(inapplicable.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+    expect(accepted.response?.status?.status.case).toBe("ok");
+    expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
   });
 
   it("treats include-all query tenant domain and email variants as present", async () => {
@@ -4589,12 +4556,19 @@ function registeredCommandHandlers(
   context: BoundedContext,
   options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
 ) {
+  return registeredCommandHandlersFor([context], options);
+}
+
+function registeredCommandHandlersFor(
+  contexts: readonly BoundedContext[],
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
   let handlers:
     | {
         post(command: ReturnType<typeof createProjectionCommand>): Promise<Ack>;
       }
     | undefined;
-  const services = new SpineServices({ contexts: [context], ...options });
+  const services = new SpineServices({ contexts, ...options });
 
   services.register({
     service(schema: unknown, implementation: unknown) {

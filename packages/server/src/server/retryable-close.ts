@@ -66,8 +66,13 @@ export function collectCloseError(error: unknown, errors: unknown[]): void {
     }
 
     ancestors.add(frame.error);
-    work.push({ type: "leave", aggregate: frame.error });
     const causes = [...(frame.error.errors as Iterable<unknown>)];
+    if (causes.length === 0) {
+      ancestors.delete(frame.error);
+      errors.push(frame.error);
+      continue;
+    }
+    work.push({ type: "leave", aggregate: frame.error });
     for (let index = causes.length - 1; index >= 0; index -= 1) {
       work.push({ type: "visit", error: causes[index] });
     }

@@ -1,8 +1,35 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Candidate; not started
+Status: Complete; final task verification passed, merge pending
+
+Started: `2026-07-13T17:10:59Z`
+
+Baseline commit: `fac6aaad`
+
+Branch: `task/T-0037f-server-lifecycle-integration`
+
+Worktree: `.worktrees/T-0037f-server-lifecycle-integration`
 
 Dependency: T-0037e3 complete and integrated. Final T-0037 implementation child.
+
+This `Status` header is canonical for T-0037f. Its work/review logs are derived
+mirrors and must agree before review.
+
+## Architecture Assignment
+
+- Existing role: requirements splitter, explicit expected `gpt-5.6-sol` /
+  `high`, no subagents. This milestone changes public server lifecycle
+  semantics and integrates concurrency/idempotency boundaries, so selective
+  deep planning is required before implementation.
+- Documentation-only ownership: this TASK, a new architecture-resolution file,
+  `build-protocol/work-logs/T-0037f.md`, and
+  `build-protocol/reviews/T-0037f-server-lifecycle-integration.md`. Production,
+  tests, public exports, commits, pushes, merge, generated output, and
+  `human-review-1-jul.md` are excluded.
+- Required output: reconcile the detailed accepted ledger with actual current
+  server/environment code, relevant Spine JVM `core-jvm/server` evidence, and
+  D-0085/D-0086; produce the smallest coherent TDD slices, explicit ownership,
+  focused gates, risk assumptions, and unchanged public-contract boundary.
 
 ## Objective
 
@@ -179,3 +206,1186 @@ No retry delay/backoff/jitter/timer selection, public monitoring/actions,
 process supervision, topology/adapters, `CATCH_UP` delivery, legacy
 `IMPORT_EVENT` support, committed generated artifacts, example changes, or
 T-0036 redesign belongs here.
+
+## Architecture Handback
+
+The accepted ledger remains authoritative and is resolved in
+`architecture-resolution.md` against integrated source, tests, D-0085/D-0086,
+current architecture/API docs, and relevant Spine JVM notes/source.
+
+### Current-Code Reconciliation
+
+- `Server.start()` still has no environment attachment. It builds contexts,
+  creates services/HTTP/2 state, and opens the listener directly.
+- `RunningHttp2Server.close()` still owns a flat network-then-closeables flow
+  and carries no `EnvironmentAttachmentHandle`.
+- T-0037d/e1/e2/e3 are integrated behind `serverEnvironmentAccess`: attach and
+  startup recovery, failed-start retry, detach/retry, reusable stop, and
+  permanent close must be orchestrated, not reimplemented.
+- `boundedContextAccess.delivery(context)` already provides the exact built-
+  context descriptor required by attach, including actual storage, tenants,
+  endpoints, replay, transition, and readiness.
+- `RetryableCloseGroup` already owns ordered all-hook attempts and successful-
+  index retry. It remains the context/resource/environment cleanup owner.
+
+### Demonstrated Integration Block And Resolution
+
+The current detach access returns only `Promise<void>`, although a rejection
+may occur either before endpoint safety or after quiescence/barrier during
+reporting or inert cleanup. T-0037f cannot satisfy both “retain every endpoint
+dependency while unsafe” and “continue later closes after safe errors” from
+that promise alone.
+
+Add only package-internal read-only observations of existing lifecycle state:
+
+- whether T-0037d still retains failed-start rollback after a rejected attach;
+  and
+- whether one exact attachment handle has crossed its non-last selected-owner
+  quiescence/barrier or last-detach replacement-safe checkpoint.
+
+No query advances lifecycle state or enters the public/root surface. Do not
+classify safety by arbitrary error type/message and do not copy lifecycle
+checkpoints into `Server`.
+
+### Fixed Existing-Method Retry Semantics
+
+A failed start that cannot finish cleanup retains the actual built contexts,
+resources, optional listener/session state, and optional attachment handle in
+one server-private cleanup record. A later call to that same existing
+`Server.start()` retries only the retained cleanup. It does not build, attach,
+or listen and cannot return a fake running server. When cleanup succeeds, it
+rejects one cause-less plain cleanup-completed error and clears the retry
+record; it never re-surfaces the original startup or already reported delivery
+cause. A newly assembled server may later reuse a caller-owned environment with
+fresh contexts. A server-owned environment is permanently closed.
+
+### Ordered TDD Slices
+
+1. Recovery-before-listener and normal attach/detach close order.
+2. Caller-owned failed-start unsafe retention, cleanup-only retry, cause-once
+   behavior, and later fresh server/environment reuse.
+3. Server-owned startup plus post-attachment listener-failure cleanup,
+   quiescence gating, and owned facility order.
+4. Shared non-last running close, selected-owner safety, sibling isolation, and
+   registration-scoped retry.
+5. Last-detach/owned close, active-work safety, no post-stop `PAUSED` start,
+   safe-error continuation, and exact-once retry.
+6. Observable README/TSDoc, root-export/API leak closure, compatibility suite,
+   and final full verification.
+
+Each slice is a separate review-sized RED/GREEN package. The exact production,
+test, documentation ownership, focused commands, acceptance criteria, risk
+assumptions, and exclusions are in `architecture-resolution.md`.
+
+### Architecture Acceptance Gate
+
+The splitter assignment explicitly required `gpt-5.6-sol` / `high` and no
+subagents. This runtime did not expose independently verifiable actual model
+and reasoning metadata. The orchestrator must confirm both actual fields before
+accepting this handback; no implementation dispatch should begin before that
+gate passes.
+
+### Architecture Acceptance
+
+- `2026-07-13T17:26:43Z`: Desktop runtime metadata confirms requirements
+  splitter `019f5c76-8ecc-7de0-a5e2-85cb656545c8` at actual
+  `gpt-5.6-sol` / `high`, matching explicit dispatch. It used no subagents and
+  is closed.
+- Coordinator formatting, status, exact four-file ownership, and diff checks
+  pass. After worktree setup, generated build typecheck and all five existing
+  server/environment suites pass 5 files / 160 tests with native listener
+  access.
+- The architecture is accepted. One existing implementer receives Slice 1 only
+  at explicit expected `gpt-5.6-terra` / `medium`, no subagents. Later slices
+  remain unauthorized until Slice 1 TDD, focused verification, and applicable
+  review concerns are clean.
+
+## Slice 1 Implementation Handback
+
+- `2026-07-13T17:37:37Z`: Slice 1 implements only recovery-before-listener and
+  normal happy-path shutdown. `Server.start()` now derives the built-context
+  descriptors, attaches them with the existing ownership mode, awaits finite
+  recovery, and only then creates/listens on HTTP/2. The successful opaque
+  attachment handle is retained by the running server.
+- Normal close now preserves the required order: network intake/sessions,
+  existing attachment detach, contexts/resources, and only then an owned
+  environment. Caller-owned environments are excluded from the final close
+  group; a repeated successful close stays inert.
+- RED/GREEN: the new deterministic integration test first failed twice with
+  `Attached startup recovery did not begin.` because the baseline never
+  attached contexts. After the minimal server orchestration change, it passes
+  recovery hold/release, host/port/base URL compatibility, normal detach/close
+  order, caller-owned environment reuse, and repeated-close behavior.
+- No Slice 2+ failed-start continuation, endpoint-safety observations, public
+  API/options/exports, README, generated, Proto, example, delivery, commit,
+  push, or merge change was made. Listener-error cleanup performs only the
+  existing normal detach needed to retain the pre-existing listener-failure
+  compatibility behavior; retained failed-start retry and unsafe-state logic
+  remain later-slice work.
+
+## Slice 1 Coordinator Gate And Review Assignment
+
+- `2026-07-13T17:38:37Z`: Desktop metadata confirms implementer
+  `019f5c85-56d7-7251-8231-a18906d8f175` at actual `gpt-5.6-terra` / `medium`,
+  matching explicit dispatch. It used no subagents and is closed.
+- Coordinator native focused gate passes 5 files / 114 tests, generated build
+  typecheck, scoped ESLint, cleanup enforcement, Prettier, `git diff --check`,
+  exact eight-file scope/status lint, and public-leak scans.
+- Style/maintainability, TypeScript/API docs, and performance/reliability are
+  assigned in parallel at explicit Terra High, no subagents. Documentation is
+  N/A because Slice 1 changes no observable README/TSDoc claim; Slice 6 owns the
+  final lifecycle docs. Security remains deferred to T-0041.
+
+## Slice 1 Review Findings And Fix Assignment
+
+- `2026-07-13T17:44:01Z`: all three reviewers ran at actual
+  `gpt-5.6-terra` / `high`, matching explicit dispatch, with no subagents;
+  TypeScript/API is CLEAN. Style reports one high and one medium;
+  performance/reliability reports one high. All are closed.
+- High: listener-failure cleanup currently continues into contexts/resources/
+  owned environment after a rejected detach, which may close endpoint
+  dependencies before quiescence. Stop later cleanup on detach rejection in
+  this slice; retained retry remains later-slice work.
+- High: concurrent `Server.start()` calls can build/attach independently.
+  Coalesce one in-flight start and prove both callers receive the same result.
+- Medium: narrow the test installer to the required worker factory and reject
+  replacement after lifecycle use or a prior install.
+- Required coverage: directly observe no listener construction/open before
+  recovery; instrument actual context/resource/owned-facility order and
+  caller-owned reuse; prove concurrent close coalesces to one detach; and prove
+  listener-bind failure detaches before eligible owned cleanup without tearing
+  down after unsafe detach failure.
+- The same existing Terra Medium implementer context receives the complete
+  batch with unchanged Slice 1 ownership. Focused verification and fresh
+  applicable re-review are required.
+
+## Slice 1 Review-Fix Handback
+
+- `2026-07-13T17:51:28Z`: all accepted findings are implemented within the
+  existing eight-file scope. Listener-failure cleanup now treats detach
+  rejection as a hard gate and aggregates the listener plus detach failures
+  without closing contexts, resources, or an owned environment beneath
+  unproved quiescence.
+- Concurrent `Server.start()` calls now return one in-flight promise and share
+  one build, attachment, listener, and `RunningServer` result. The in-flight
+  slot clears after settlement, preserving the existing sequential-call
+  boundary outside this slice. Concurrent successful close already coalesced;
+  direct coverage now proves one exact detach.
+- The deterministic installer now accepts only a worker factory and consumes a
+  one-time pre-lifecycle eligibility token. A second install, any install after
+  attachment/detach/stop/retry use, and any install after permanent-close
+  admission reject. It remains package-internal and absent from root exports.
+- Direct tests now observe zero HTTP/2 construction before recovery release,
+  instrument a real context plus resource and owned facility order, reuse one
+  caller-owned environment through a fresh context/server attachment, cover
+  concurrent start/close, and exercise safe and unsafe real listener-bind
+  cleanup. Retained failed-start cleanup retry and endpoint-safety observation
+  remain explicitly unimplemented.
+
+## Slice 1 Review-Fix Coordinator Gate
+
+- `2026-07-13T17:53:59Z`: the resumed implementer remains actual Terra Medium,
+  used no subagents, and is closed. Coordinator native focused tests pass
+  5 files / 120 tests; generated typecheck, scoped ESLint, cleanup, Prettier,
+  exact eight-file scope/status/public-leak lint, and diff checks pass.
+- The same style, API, and reliability reviewers receive a fresh whole-Slice 1
+  package at their explicit Terra High profiles, no subagents. Documentation
+  remains N/A and security deferred.
+
+## Slice 1 Clean Closure And Slice 2 Assignment
+
+- `2026-07-13T17:58:54Z`: style, TypeScript/API, and performance/reliability
+  re-review all return CLEAN at actual Terra High, matching explicit dispatch.
+  No validation gap remains. All reviewers used no subagents and are closed.
+- Slice 1 is accepted at `dc884b84`. Documentation remains N/A; security stays
+  deferred. One existing implementer receives Slice 2 only at explicit
+  `gpt-5.6-terra` / `medium`, no subagents.
+- Slice 2 owns caller-owned failed-start unsafe retention, cleanup-only retry
+  through the same existing `Server.start()`, cause-once behavior, deferred
+  context/resource cleanup after proven safety, and later fresh environment
+  reuse. Server-owned/listener retry and Slices 3--6 remain unauthorized.
+
+## Slice 2 Implementation Handback
+
+- `2026-07-13T18:10:59Z`: Slice 2 is implemented within the three authorized
+  server internals, the existing focused integration test/fixture, and these
+  four records. `Server` retains actual built caller-owned failed-start
+  dependencies only while the environment's package-internal pending
+  observation says rollback is unfinished.
+- A later call to the same `Server.start()` coalesces as usual but enters only
+  `retryFailedStart`; it does not rebuild, attach, construct/listen, or repeat
+  stop. Once the environment clears its rollback slot, the retained
+  context/resource close group runs once, the private record clears, and the
+  call rejects with the cause-less plain deferred-cleanup completion error.
+- Direct integration evidence keeps real builder-created storage handles,
+  context, resource, and caller-owned storage facility open after unsafe
+  quiescence failure; observes no listener; then proves no new storage handles,
+  one retirement, one context/resource close, no caller-facility close, and no
+  repeated startup cause on cleanup retry. A distinct worker backs one later
+  fresh server generation only after old retirement.
+- Server-owned/listener retained cleanup, endpoint-safety observations,
+  shared/non-last, last/owned, public surface/docs, and Slices 3--6 remain
+  explicitly unimplemented.
+
+## Slice 2 Pre-review Tooling Fix
+
+- `2026-07-13T18:14:43Z`: coordinator `typecheck:tooling` fails TS2322 in the
+  focused fixture: evidence helpers weaken `ShardIndex`, and rejected worker
+  progress incorrectly uses a raw per-message failure for a worker-level start
+  rejection with zero processed messages.
+- The same Terra Medium implementer context receives a fixture-only correction:
+  preserve `ShardIndex`, keep the startup error as rejected-shard `cause`, and
+  report zero failed/empty failures in last safe progress. Rerun tooling and all
+  focused gates before review.
+
+## Slice 2 Coordinator Gate And Review Assignment
+
+- `2026-07-13T18:20:43Z`: the same implementer remains actual Terra Medium,
+  matching explicit dispatch, used no subagents, and is closed. Tooling and
+  generated typechecks pass; native focused regressions pass 5 files / 151
+  tests; lint, cleanup, Prettier, exact nine-path status/scope/public-leak, and
+  diff checks pass.
+- Style/maintainability, TypeScript/API docs, and performance/reliability are
+  assigned at explicit Terra High, no subagents. Documentation is N/A because
+  no observable README/TSDoc changed; security remains deferred.
+
+## Slice 2 Review Findings And Fix Assignment
+
+- `2026-07-13T18:28:02Z`: all three Terra High reviewers match explicit
+  dispatch, used no subagents, and are closed. They corroborate one high;
+  style also reports two medium findings.
+- High: when caller-owned rollback is already safe as `attach()` rejects, close
+  built contexts/resources immediately and aggregate cleanup failures with the
+  original startup error; do not leak or rebuild them.
+- Medium: the read-only `failedStartPending()` observation must not consume the
+  pristine test-installer token. Medium: consolidate fixture worker/factory
+  configuration so returned evidence always describes the installed worker.
+- Required coverage: immediate-safe rollback cleanup/reuse; concurrent cleanup-
+  retry coalescing; repeated environment retry failure; context/resource partial
+  close failure, failed-index-only retry, aggregation, cause-once behavior, and
+  cleanup-record clearing.
+- The same Terra Medium implementer receives the complete batch with unchanged
+  Slice 2 ownership. Later slices remain unauthorized.
+
+## Slice 2 Review-Fix Handback
+
+- `2026-07-13T18:37:05Z`: the complete accepted batch is implemented within
+  the existing Slice 2 paths. A caller-owned attach rejection whose rollback
+  is already safe immediately closes the actual context/resource group; any
+  close causes are flattened after the original startup failure. That one-shot
+  cleanup is not retained and performs no rebuild or listener construction.
+- `failedStartPending()` now only reads attachment state and preserves pristine
+  installer eligibility. The lifecycle fixture accepts one snapshotted worker
+  sequence; its returned first worker and installed generation factory now
+  share that authoritative source.
+- Direct tests cover immediate safe cleanup and caller-environment reuse,
+  concurrent retained-retry coalescing, repeated unsafe environment retry,
+  original/reportable cause-once behavior, and partial context/resource close
+  failure with successful-index preservation and failed-index-only retry.
+- Server-owned/listener retention, handle endpoint safety, later slices,
+  public/docs changes, and all other exclusions remain untouched.
+
+## Slice 2 Review-Fix Coordinator Gate
+
+- `2026-07-13T18:40:27Z`: the resumed implementer remains actual Terra Medium,
+  used no subagents, and is closed. Tooling/generated typechecks, native
+  5 files / 154 tests, scoped lint/cleanup/Prettier, exact scope/status/leak,
+  and diff checks pass.
+- The same style/API/reliability reviewers receive a fresh whole-Slice 2
+  package at explicit Terra High, no subagents. Documentation remains N/A.
+
+## Slice 2 Re-review Findings And Round-2 Fix
+
+- `2026-07-13T18:46:44Z`: style is CLEAN; API and reliability corroborate one
+  high, and API reports one medium. All actual profiles are Terra High,
+  matching dispatch; no subagents; all closed.
+- High: if immediate-safe dependency cleanup fails, retain that same
+  `RetryableCloseGroup` so the next same-server `start()` retries only failed
+  indexes and never rebuilds/reattaches/listens over an open dependency.
+- Medium: flatten an already aggregated attachment/start error before appending
+  dependency-close errors, preserving original-first stable order.
+- Add direct same-server immediate-safe failed-index retry/record clearing and
+  nested worker-retirement aggregate plus dependency-close aggregate coverage.
+  The same Terra Medium implementer owns this bounded round.
+- `2026-07-13T18:16:55Z`: correction complete. Worker and helper shard
+  parameters now use real `ShardIndex`; zero-message rejected startup evidence
+  retains the error only as shard `cause` and reports zero failed messages with
+  frozen empty failures. Runtime behavior is unchanged.
+
+## Slice 2 Round-2 Review-Fix Handback
+
+- `2026-07-13T18:54:59Z`: both accepted findings are implemented within the
+  existing Slice 2 paths. Immediate-safe dependency-close failure now retains
+  the exact retryable close group; the next same-server `start()` is cleanup
+  only, retries failed indexes only, preserves successful indexes, and clears
+  the record only after complete cleanup.
+- Attachment/start and dependency-close aggregate trees are recursively
+  flattened into one stable original-first `AggregateError`. Original startup
+  and already reported delivery causes are omitted from cleanup-only retry.
+- Direct RED/GREEN coverage proves cleanup-only retry, cause-once behavior,
+  completion error, terminal rejection of later same-server starts, fresh
+  separate-server reuse, and flat ordered aggregation across nested worker-
+  retirement and dependency-close failures. Slice 3+ behavior and public
+  surface remain unchanged.
+- `2026-07-13T18:57:02Z`: RED was 2 expected failures in 13 focused tests;
+  GREEN is 13/13 and the full five-file gate is 155/155. Both typechecks,
+  scoped ESLint/cleanup/Prettier, the exact nine-path allowlist/status/public-
+  leak audit, and `git diff --check` pass; 7 changed paths are within the
+  9-path allowlist.
+
+## Slice 2 Round-2 Coordinator Gate
+
+- `2026-07-13T18:58:42Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Tooling/generated typechecks, 5 files / 155 native tests,
+  scoped lint/cleanup/Prettier, exact scope/status/leak, and diff checks pass.
+- Resume style/API/reliability at explicit Terra High against a fresh whole-
+  Slice 2 package. Documentation N/A; security deferred.
+
+## Slice 2 Round-2 Re-review And Round-3 Fix
+
+- `2026-07-13T19:04:47Z`: reliability reports one high; style/API corroborate
+  the same contract issue as medium, and API adds one wording medium. All actual
+  profiles are Terra High, no subagents, all closed.
+- After failed-start cleanup completes, the consumed `Server` must reject later
+  normal `start()` attempts without rebuilding/reusing closed dependencies.
+  Environment reuse remains through a newly assembled server/fresh contexts.
+- Rename/narrow the pre-aggregated failure test and active records from
+  “reporting” to truthful nested retirement evidence. Add prebuilt/non-idempotent
+  dependency coverage for the terminal consumed-server guard.
+- Same Terra Medium implementer owns this bounded batch; later slices unchanged.
+
+## Slice 2 Round-3 Review-Fix Handback
+
+- `2026-07-13T19:09:35Z`: after a retained cleanup group fully closes and the
+  cause-less completion error is emitted, the same `Server` is privately
+  consumed. Every later `start()` rejects with one deterministic plain error
+  before cleanup selection, context build, attachment, or listener creation.
+- Direct coverage uses a prebuilt context and duplicate-close-rejecting
+  resources. It proves cleanup indexes close only as required, two later starts
+  duplicate no close/build/attach/listen work, and caller-environment reuse
+  succeeds only through a separately assembled server with fresh dependencies.
+- The aggregate test and active evidence now truthfully identify nested worker-
+  retirement failures; no reporter installer path or public surface was added.
+  Focused RED was 12/13 and focused GREEN is 13/13.
+- `2026-07-13T19:11:16Z`: both typechecks, the native 5-file / 155-test gate,
+  scoped ESLint, cleanup enforcement, Prettier, exact nine-path allowlist/
+  status/public-leak audit, and `git diff --check` pass. The final diff contains
+  6 changed paths inside the 9-path allowlist.
+
+## Slice 2 Round-3 Coordinator Gate
+
+- `2026-07-13T19:13:06Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Both typechecks, 5 files / 155 native tests, and all scoped
+  gates pass. Fresh whole-slice style/API/reliability re-review is assigned at
+  Terra High; documentation N/A, security deferred.
+
+## Slice 2 Round-3 Re-review And Round-4 Fix
+
+- `2026-07-13T19:19:36Z`: all three reviewers corroborate one terminal-state
+  defect (style/reliability high, API medium), actual Terra High, no subagents,
+  all closed.
+- Set private consumption whenever dependency cleanup fully completes: after
+  immediate-safe cleanup succeeds before rethrowing the original error, and
+  after retained cleanup succeeds before surfacing any final retirement error.
+- Add direct terminal-rejection tests for both paths with non-idempotent
+  dependencies. Same Terra Medium implementer owns this final bounded fix.
+
+## Slice 2 Round-4 Review-Fix Handback
+
+- `2026-07-13T19:24:08Z`: private consumption now coincides with successful
+  dependency-group completion on every caller-owned failed-start path. An
+  immediate-safe success sets it before rethrowing the original startup error;
+  retained success sets it atomically with record clearing before any collected
+  safe retirement/cleanup error is surfaced. The cause-less path is preserved.
+- Two direct tests use prebuilt contexts, tracked storage, and non-idempotent
+  resources. They prove later same-server starts duplicate no close/build/
+  attach/listen work, while a separately assembled server with fresh
+  dependencies still reuses the caller-owned environment.
+- Round-4 RED is 13 pass / 2 expected fail; focused GREEN is 15/15. No public
+  surface, fixture installer, endpoint-safety, listener/server-owned retention,
+  or later-slice behavior changed.
+- `2026-07-13T19:25:29Z`: both typechecks, native 5 files / 157 tests, scoped
+  ESLint, cleanup enforcement, Prettier, exact nine-path allowlist/status/
+  public-leak audit, and `git diff --check` pass. The final diff contains 6
+  changed paths inside the 9-path allowlist.
+
+## Slice 2 Round-4 Coordinator Gate
+
+- `2026-07-13T19:26:55Z`: resumed implementer actual Terra Medium, no
+  subagents, closed. Both typechecks, 5 files / 157 tests, and all scoped gates
+  pass. Fresh whole-slice style/API/reliability re-review is assigned at Terra
+  High; documentation N/A, security deferred.
+
+## Slice 2 Clean Closure And Slice 3 Assignment
+
+- `2026-07-13T19:31:28Z`: style/API/reliability all return CLEAN at actual
+  Terra High, matching dispatch; no subagents; all closed; no bounded validation
+  gap remains. Slice 2 endpoint `df109b31` is accepted.
+- One existing Terra Medium implementer receives Slice 3 only: server-owned
+  startup failure and post-attachment listener failure cleanup/retention,
+  quiescence gating, context/resource then permanent environment/facility order,
+  exact retry/cause handling, and no caller-owned regression. Slices 4--6 remain
+  unauthorized; documentation N/A and security deferred.
+
+## Slice 3 Implementation Handback
+
+- `2026-07-13T19:47:13Z`: server-owned attachment failure now places the owned
+  environment last in the existing retryable dependency group. Safe rollback
+  closes contexts/resources before permanent environment facilities; unsafe
+  rollback retains the same group and later `start()` delegates only to the
+  existing environment failed-start retry before closing it.
+- Listener bind failure now retains its network owner, exact opaque attachment
+  handle, detach-attempt fact, and the same dependency group. Cleanup closes
+  network first, detaches or retries the exact handle, consults one read-only
+  package-internal handle safety checkpoint after rejection, and enters later
+  closes only when safe. Complete cleanup consumes the same server and never
+  returns a synthetic running handle.
+- Strict RED/GREEN was 15/17 then 17/17 for the server-owned and listener cases.
+  The native five-file regression is 159/159; both typechecks and scoped
+  lint/cleanup pass before final synchronized format/scope/leak/diff gates.
+  Caller-owned Slice 2 behavior and terminal consumption remain covered;
+  running-close sharing/last-owned behavior, docs, and Slices 4--6 are unchanged.
+- `2026-07-13T19:49:09Z`: final tooling/generated typechecks, 5-file / 159-test
+  native gate, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 8 changed paths inside the 9-path allowlist, all four status
+  headers synchronized, no internal lifecycle name in the root/package surface,
+  and clean public-surface diff plus `git diff --check`.
+
+## Slice 3 Coordinator Gate And Review Assignment
+
+- `2026-07-13T19:51:16Z`: implementer actual Terra Medium, no subagents,
+  closed. Both typechecks, 5 files / 159 native tests, and all scoped gates pass.
+- Assign style/API/reliability at explicit Terra High, no subagents, against a
+  stable Slice 3 package. Documentation N/A; security deferred.
+
+## Slice 3 Review Findings And Fix Assignment
+
+- `2026-07-13T19:59:08Z`: reliability high; style/API clean with focused gaps.
+  All actual Terra High, no subagents, closed.
+- Preserve an exact attachment after a safe detach error: safety permits
+  dependency close, but the retained record must survive until `retryDetach()`
+  completes inert cleanup. Do not terminally consume/clear it early.
+- Add caller-owned non-last safe-error/sibling/eventual removal, network-close
+  hard-gate, owned partial close failed-index retry, foreign/pre-detach safety
+  observation, listener-retry terminal rejection, and exact original error
+  identity coverage. Same Terra Medium implementer owns the complete batch.
+
+## Slice 3 Review-Fix Handback
+
+- `2026-07-13T20:09:14Z`: endpoint safety now authorizes dependency close
+  without discarding unfinished exact detach ownership. A safe rejected handle
+  remains in the server-private cleanup record; record clearing and terminal
+  consumption require both successful dependency-group completion and later
+  `retryDetach()` success. That retry performs no rebuild, attach, listen, or
+  duplicate dependency close and then emits the cause-less completion error.
+- Direct coverage adds shared caller-owned non-last safe-error cleanup with a
+  live usable sibling and no generation retirement on inert retry; network-close
+  hard gating; server-owned context/resource/environment-facility failed-index
+  retry; foreign/pre-detach read-only safety; completion-then-terminal behavior;
+  and exact original listener-error identity first in aggregation.
+- Strict RED was 20/21 after correcting one harness assumption about memoized
+  `BoundedContext.close()` outcomes; only premature safe-detach consumption
+  failed. Focused GREEN is 21/21 and the native five-file gate is 163/163.
+  Both typechecks, scoped ESLint, and cleanup enforcement pass before final
+  synchronized formatting/scope/status/leak/diff verification.
+- `2026-07-13T20:10:56Z`: final tooling/generated typechecks, native 5 files /
+  163 tests, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 6 changed paths inside the 9-path allowlist, all statuses
+  synchronized, no internal-name/root/package leak, and clean public-surface
+  diff plus `git diff --check`.
+
+## Slice 3 Review-Fix Coordinator Gate
+
+- `2026-07-13T20:12:47Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 163 tests, and all scoped gates pass.
+- Fresh whole-Slice 3 style/API/reliability re-review assigned at explicit
+  Terra High, no subagents. Documentation N/A; security deferred.
+
+## Slice 3 Re-review Findings And Round-2 Fix
+
+- `2026-07-13T20:18:47Z`: reliability high: attempted detach is not always a
+  retry-owned operation when another failed-start rollback blocks admission.
+  Style medium: shorten a five-component test helper. API is CLEAN. All actual
+  Terra High, no subagents, closed.
+- Add exact-handle read-only `detachRetryPending`; choose detach versus
+  retryDetach from environment-owned operation state. Add cross-server blocked-
+  admission regression and shorten the helper. Same Terra Medium implementer.
+
+## Slice 3 Round-2 Review-Fix Handback
+
+- `2026-07-13T20:24:18Z`: package-internal `detachRetryPending` now reads only
+  whether the exact handle owns a rejected detach operation. Server cleanup
+  chooses `retryDetach()` only for that state and otherwise calls ordinary
+  `detach()`. The copied `detachAttempted` fact is removed from failed-start
+  records and cleanup paths.
+- Cross-server coverage proves a listener cleanup retained at network close can
+  have ordinary detach blocked by another server's unsafe failed-start rollback;
+  after rollback-only cleanup clears, the same listener server calls ordinary
+  detach, removes its exact non-last registration, closes dependencies once,
+  preserves the sibling/current generation, completes, and becomes terminal.
+  The focused helper is now `failListenerNetwork`.
+- Strict RED is 20/22: missing observation plus nonexistent detach retry.
+  Focused GREEN is 22/22 and native five-file regression is 164/164. Both
+  typechecks, scoped ESLint, and cleanup enforcement pass before final
+  synchronized format/scope/status/public-leak/diff gates.
+- `2026-07-13T20:26:17Z`: final tooling/generated typechecks, native 5 files /
+  164 tests, scoped ESLint, cleanup enforcement, and nine-path Prettier pass.
+  Exact audit finds 8 changed paths inside the 9-path allowlist, all statuses
+  synchronized, no internal-name root/package leak, and clean public-surface
+  diff plus `git diff --check`.
+
+## Slice 3 Round-2 Coordinator Gate
+
+- `2026-07-13T20:27:48Z`: accepted/closed implementer actual Terra Medium;
+  both typechecks, 5 files / 164 tests, all scoped gates pass. Fresh whole-slice
+  style/API/reliability re-review assigned at Terra High; docs N/A.
+
+## Slice 3 Round-2 Re-review Findings
+
+- `2026-07-13T20:33:31Z`: style/maintainability and TypeScript/API docs are
+  CLEAN. Performance/reliability reports one high-confidence ownership defect.
+  All actual reviewers ran Terra High, used no subagents, and are closed.
+- High: after a listener-failure record completes its exact detach, it consults
+  environment-wide `failedStartPending` and may retry another server's unsafe
+  failed-start rollback. Retain exact rollback provenance so only its owning
+  record invokes `retryFailedStart()`; add the concurrent shared-environment
+  regression without completing the rollback owner first. The same Terra
+  Medium implementation context receives this bounded fix.
+
+## Slice 3 Round-3 Review-Fix Handback
+
+- Each private `FailedStartCleanup` now records whether that exact server
+  cleanup owns failed-start rollback. Only an owning record may invoke
+  `retryFailedStart()`; listener cleanup and immediate-safe dependency retry
+  records never adopt ambient rollback state from another server.
+- The deterministic shared caller-environment regression holds B's unsafe
+  rollback retry while A finishes its already-safe exact detach. A completes
+  and terminally consumes only its own cleanup, B alone receives its exact
+  retry cause, B alone later clears rollback and closes its dependencies, and
+  the sibling generation remains usable throughout.
+- Strict focused RED is 0/1 at A's settlement barrier against unchanged
+  production; minimal GREEN is 1/1. The established native Slice 3 regression
+  passes 5 files / 165 tests; both typechecks, scoped ESLint, and cleanup
+  enforcement pass. Final synchronized format/scope/status/public-leak/diff
+  evidence is recorded at handback completion.
+- `2026-07-13T20:44:56Z`: final formatted-tree verification passes both
+  typechecks, 5 files / 165 native tests, scoped ESLint, cleanup enforcement,
+  and exact nine-path Prettier. Audits report 7 changed paths inside the
+  nine-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-3 Coordinator Gate
+
+- `2026-07-13T20:48:57Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching explicit dispatch, with no subagents.
+  Coordinator verification passes both typechecks, 5 files / 165 native tests,
+  scoped ESLint, cleanup enforcement, Prettier, scope/status/public-leak, and
+  diff gates. Fresh whole-Slice 3 style/API/reliability re-review is assigned;
+  documentation is N/A and security remains deferred.
+
+## Slice 3 Round-3 Re-review Findings
+
+- `2026-07-13T20:52:15Z`: all three actual `gpt-5.6-terra` / high reviewers
+  corroborate one high-confidence finding, used no subagents, and are closed.
+  Both prior listener-detach findings are resolved; no other defects reported.
+- High: a fresh server whose attachment is blocked by another server's pending
+  rollback can still infer ownership from ambient `failedStartPending`. Make
+  rollback ownership exact to the failed attachment attempt and add the
+  deterministic owner-B/blocked-C regression. The same `gpt-5.6-terra` /
+  medium implementer receives this bounded round-4 fix.
+
+## Slice 3 Round-4 Review-Fix Handback
+
+- `EnvironmentAttachments.failedStartRetryPending(error)` is a package-internal
+  read-only exact-error observation. It is true only when the active retryable
+  failed-start rollback originated the same attachment rejection and becomes
+  false when that rollback clears. `Server` uses it only when creating its
+  private cleanup record; ambient pending state remains progress-only.
+- Direct contract coverage distinguishes B's owning failed attachment error
+  from C's later pre-claim admission rejection. The three-server integration
+  proves C closes its never-attached context/resource dependencies once,
+  becomes terminal, neither joins nor receives B's held retry cause, and does
+  no build/attach/listen retry while B alone retries and clears rollback. The
+  shared sibling generation remains usable throughout.
+- Strict RED is 0/1 direct plus 0/1 native integration; minimal GREEN is 1/1
+  plus 1/1. The established five-file Slice 3 gate, including direct attachment
+  coverage, passes 167/167. Both typechecks, scoped ESLint, and cleanup
+  enforcement pass before final synchronized format/audit evidence.
+- `2026-07-13T21:00:38Z`: final formatted-tree verification passes both
+  typechecks, 5 files / 167 native tests, scoped ESLint, cleanup enforcement,
+  and exact ten-path Prettier. Audits report 9 changed paths inside the justified
+  ten-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-4 Coordinator Gate
+
+- `2026-07-13T21:02:54Z`: accepted/closed same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent gate
+  passes both typechecks, 6 files / 185 native tests, scoped ESLint, cleanup,
+  Prettier, exact scope/status/public-leak/public-surface, and diff checks.
+  Fresh whole-Slice 3 style/API/reliability re-review is assigned; docs N/A and
+  security deferred.
+
+## Slice 3 Round-4 Re-review Findings
+
+- `2026-07-13T21:07:28Z`: actual `gpt-5.6-terra` / high reviewers report two
+  highs in one exact-ownership lifetime model; no subagents; all closed. Prior
+  initial/listener/contender ownership findings are otherwise resolved.
+- High: absent rollback and `undefined` error currently compare equal. Require
+  an active rollback with an assigned exact rejection before identity match.
+- High: snapshotting ownership into a readonly boolean lets it outlive the
+  original rollback and later adopt another server's rollback after partial
+  dependency close. Retain the exact rejection in the cleanup record and
+  revalidate it on every retry. Add sentinel and stale-owner transition tests.
+  Same Terra Medium implementer owns this bounded round-5 fix.
+
+## Slice 3 Round-5 Review-Fix Handback
+
+- `failedStartRetryPending` now requires both an active rollback and its
+  assigned rejection before exact identity comparison. Absent rollback and the
+  real in-flight/unassigned rollback sentinel return false; the assigned exact
+  owner returns true only until that rollback clears.
+- `FailedStartCleanup` now retains the originating rejection capability instead
+  of a permanent ownership boolean. Every cleanup retry and retry-error branch
+  revalidates that exact rejection. Once A's rollback clears, A advances only
+  its remaining close-group indexes even while B owns a new unsafe rollback.
+- Direct RED is 0/2 and focused integration RED is 0/1; minimal GREEN is 2/2
+  and 1/1. The six-file coordinator set passes 188/188. Both typechecks, scoped
+  ESLint, and cleanup enforcement pass before final synchronized format/audit
+  evidence.
+- `2026-07-13T21:16:46Z`: final formatted-tree verification passes both
+  typechecks, 6 files / 188 native tests, scoped ESLint, cleanup enforcement,
+  and exact ten-path Prettier. Audits report 8 changed paths inside the
+  ten-path allowlist, 4/4 synchronized handback statuses, no internal-name or
+  public-surface leak, and clean `git diff --check`.
+
+## Slice 3 Round-5 Coordinator Gate
+
+- `2026-07-13T21:19:35Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent verification passes
+  both typechecks, 6 files / 188 native tests, scoped lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff gates. Fresh whole-
+  Slice 3 style/API/reliability re-review is assigned; docs N/A, security
+  deferred.
+
+## Slice 3 Clean Closure And Slice 4 Assignment
+
+- `2026-07-13T21:24:28Z`: whole-Slice 3 style/maintainability, TypeScript/API
+  docs, and performance/reliability are CLEAN. Actual reviewers ran
+  `gpt-5.6-terra` / high, matching dispatch, used no subagents, and are closed.
+  Documentation was N/A and security remains deferred to T-0041.
+- Slice 3 is accepted at `71c7a9aa` with both typechecks, 6 files / 188 tests,
+  and all scoped gates clean. Slice 4 shared non-last running close is assigned
+  to the same existing implementer at `gpt-5.6-terra` / medium, no subagents.
+  It must preserve sibling generation/readiness/work/facilities, retry only the
+  departing handle and failed close indexes, and never retire shared state.
+
+## Slice 4 Implementation Handback
+
+- `2026-07-13T21:33:11Z`: `RunningHttp2Server.close()` now checkpoints one
+  successful network close, chooses ordinary detach versus exact rejected
+  `retryDetach`, and consults exact-handle endpoint safety before dependency
+  teardown. Unsafe quiescence retains the exact attachment and every departing
+  dependency; safe post-barrier failure permits the existing retryable close
+  group while retaining unfinished detach cleanup.
+- Shared non-last evidence proves A-only network/session, owner, context, and
+  resource shutdown; B remains connectable with open dependencies/facilities,
+  and a third server joins the same generation. Concurrent/repeated close is
+  coalesced/inert, successful hooks and close indexes do not repeat, and a
+  network-close failure gates detach and all dependencies until network retry.
+- Strict RED: unsafe retry failed 0/1 by timing out before a second quiescence
+  attempt; safe post-barrier cleanup failed 0/1 because the retirement cause
+  surfaced alone and dependencies were skipped. Minimal GREEN passes both 1/1,
+  the focused integration file 29/29, and the architecture five-file gate
+  176/176. Both typechecks and scoped lint/cleanup pass; final formatted-tree
+  audits are recorded in the synchronized handback records.
+- Production changes remain in `server.ts`; no environment lifecycle access,
+  fixture, public API, last/owned active-work behavior, or documentation was
+  changed. This is implementation handback for coordinator review, not
+  acceptance, and no commit/push/merge was performed.
+- `2026-07-13T21:35:09Z`: final formatted-tree gate passes both typechecks,
+  5 files / 176 native tests, scoped ESLint, cleanup enforcement, exact
+  ten-path Prettier, six-path-in-ten scope, 4/4 synchronized status,
+  zero-match internal-name leak scan, unchanged public surface, and clean diff
+  check.
+
+## Slice 4 Coordinator Gate And Review Assignment
+
+- `2026-07-13T21:38:45Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Coordinator reruns
+  pass both typechecks, 5 files / 176 native tests, scoped lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff gates.
+- Fresh Slice 4 style/maintainability, TypeScript/API docs, and performance/
+  reliability review is assigned at `gpt-5.6-terra` / high, no subagents.
+  Documentation N/A; security deferred; Slice 5+ excluded.
+
+## Slice 4 Review Findings And Round-2 Fix
+
+- `2026-07-13T21:44:09Z`: style, API, and reliability corroborate one high.
+  Actual reviewers ran `gpt-5.6-terra` / high, used no subagents, and are closed.
+- High: recursive flattening of an empty or nested-empty `AggregateError`
+  produces zero causes, so `detachErrors.length` can falsely mean detach
+  succeeded, bypass endpoint safety, close dependencies, and resolve while the
+  exact detach remains unfinished. Track rejection independently, preserve the
+  empty aggregate as an observable failure, and add unsafe shared-detach
+  coverage. Same Terra Medium implementer owns this bounded fix.
+
+## Slice 4 Round-2 Review-Fix Handback
+
+- `2026-07-13T21:48:04Z`: running close now tracks the detach rejection as an
+  explicit control fact independent of recursively flattened reporting causes.
+  Empty and nested-empty aggregates are preserved by exact identity when
+  flattening contributes no leaves; endpoint safety is still queried after
+  every rejection.
+- Deterministic shared non-last tests prove both aggregate forms keep the
+  departing context/resource open while unsafe, preserve sibling connectivity,
+  sibling storage, and the caller-owned facility, then coalesce the exact
+  detach retry and close departing dependencies once after quiescence.
+- Strict RED is 0/2 because the resource closed after both unsafe aggregate
+  rejections. Minimal GREEN is 2/2; full integration is 31/31; the five-file
+  Slice 4 gate is 178/178. Both typechecks and scoped lint/cleanup pass before
+  final formatted-tree audits.
+- No retryable-close helper, environment lifecycle file, fixture, public API,
+  Slice 5/6 behavior, or protected file changed. This is coordinator review
+  handback, not self-acceptance; no commit/push/merge occurred.
+- `2026-07-13T21:49:38Z`: final formatted-tree gate passes both typechecks,
+  5 files / 178 tests, scoped ESLint, cleanup enforcement, exact ten-path
+  Prettier, six-path-in-ten scope, 4/4 synchronized status, zero-match internal
+  leak, unchanged public surface, and clean diff check.
+
+## Slice 4 Round-2 Coordinator Gate
+
+- `2026-07-13T21:51:58Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 5 files / 178 tests, lint/cleanup/Prettier, exact scope/status/
+  public-leak/public-surface, and diff checks. Fresh Slice 4 style/API/
+  reliability re-review is assigned; docs N/A, security deferred.
+
+## Slice 4 Clean Closure And Slice 5 Assignment
+
+- `2026-07-13T21:55:10Z`: Slice 4 style/maintainability, TypeScript/API docs,
+  and performance/reliability are CLEAN. Actual reviewers ran
+  `gpt-5.6-terra` / high, matching dispatch, no subagents, all closed. The
+  empty/nested-empty aggregate high is resolved; docs N/A, security deferred.
+- Slice 4 is accepted at `72e41729` with both typechecks, 5 files / 178 tests,
+  and all scoped gates. Slice 5 last-detach/owned close and active-work safety
+  is assigned to the same implementer at `gpt-5.6-terra` / medium, no
+  subagents. Slice 6 docs/compatibility remains excluded.
+
+## Slice 5 Implementation Handback
+
+- `2026-07-13T22:09:18Z`: direct integration now drives a real post-start
+  durable event into a held worker run, begins owned last close with an open
+  HTTP/2 session, and proves network/session close and stop admission precede
+  settlement. Transport, record storage, context, resource, and owned
+  facilities stay open until the run returns `PAUSED`; no successor starts.
+- Unsafe last quiescence retains every owned dependency and coalesces an exact
+  detach retry without repeating network close or stop. Safe nested retirement,
+  context/resource, and facility failures flatten in stable phase order; retry
+  touches only failed indexes. Empty and nested-empty last-retirement failures
+  retain exact observable presence. Fresh caller-owned reuse uses a distinct
+  worker generation and proves no overlap.
+- The first executable active-work probe was RED 0/1 because the new fixture
+  event producer and entity identity differed, so repository routing prevented
+  delivery admission. Correcting that test fixture made the probe GREEN 1/1;
+  the accepted Slice 4 running-close state machine then passed every corrected
+  Slice 5 branch unchanged. No truthful production defect was found, so
+  `server.ts` and lifecycle authority files are intentionally unchanged.
+- Focused Slice 5 evidence is 6/6; full integration is 36/36; the architecture
+  eight-file native gate is 360/360. Both typechecks pass. Final static,
+  formatting, scope/status/leak/surface, and diff evidence follows in the work
+  and review logs. This is implementation handback, not self-acceptance; no
+  commit/push/merge or Slice 6/protected-file work occurred.
+- `2026-07-13T22:12:10Z`: final synchronized tree passes 8 files / 360 tests,
+  both typechecks, scoped ESLint, cleanup enforcement, exact six-path Prettier
+  and scope audit, 4/4 status, zero internal-name leak, unchanged public
+  surface, and `git diff --check`.
+
+## Slice 5 Coordinator Gate And Review Assignment
+
+- `2026-07-13T22:14:51Z`: accepted/closed implementer actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent gate
+  passes both typechecks, 8 files / 360 native tests, lint/cleanup/Prettier,
+  exact scope/status/public-leak/public-surface, and diff checks.
+- Test-only slice: TypeScript/API docs N/A because production declarations and
+  public surface are unchanged; documentation N/A because Slice 6 is excluded;
+  security deferred. Style/maintainability and performance/reliability review
+  are assigned at `gpt-5.6-terra` / high, no subagents, with explicit test-
+  validity scrutiny.
+
+## Slice 5 Review Findings And Round-2 Fix
+
+- `2026-07-13T22:21:17Z`: style and reliability reviewers, actual
+  `gpt-5.6-terra` / high, no subagents, are closed. Reliability reports one
+  high; style corroborates it and adds three medium evidence defects.
+- High: tracked-storage retention assertions are vacuous because the tested
+  prebuilt context did not use the tracking factory and `every()` saw an empty
+  array. Build tracked contexts, assert nonzero storage count, and observe
+  context/storage close directly in active and unsafe tests.
+- Medium: require the session-close event before comparing it to stop; move
+  `try/finally` before global spy/session/hold/event operations; and prove no
+  old/new overlap by starting the fresh server while retirement is held, not
+  after old close completes. Same Terra Medium implementer owns test-only fix.
+
+## Slice 5 Round-2 Review-Fix Handback
+
+- `2026-07-13T22:29:36Z`: active and unsafe last-close tests now build their
+  actual server contexts with `LifecycleTrackingStorageFactory`, assert a
+  nonzero storage snapshot before openness/close-count checks, and probe the
+  exact context close directly. Unsafe checkpoints prove zero context/storage
+  closes; successful completion proves one each.
+- The active test records and requires the session close event before comparing
+  it with stop. Its `try/finally` now encloses context-spy installation, server
+  and session acquisition, worker hold, event post, admission wait, and close;
+  cleanup uses optional handles and explicitly releases, destroys, awaits, and
+  restores every acquired resource.
+- Caller-owned reuse now holds the old worker's retirement, starts the fresh
+  server concurrently, and proves both the fresh start promise and fresh worker
+  remain unstarted until old retirement releases. The distinct generation then
+  starts and closes normally, preserving the no-overlap claim.
+- Strict non-vacuity RED is 0/2 (`expected 0 to be greater than 0`) then GREEN
+  2/2. Concurrent-generation RED is 0/1 on missing `holdNextRetire`, followed
+  by minimal fixture GREEN 1/1. Corrected Slice 5 is 6/6, full integration
+  36/36, and the eight-file gate 360/360; both typechecks pass. Production and
+  public diffs remain empty. Final synchronized static/audit evidence follows;
+  this is review handback, not self-acceptance.
+- `2026-07-13T22:31:24Z`: final synchronized tree passes 8 files / 360 tests,
+  both typechecks, scoped ESLint, cleanup enforcement, exact six-path Prettier
+  and scope, 4/4 status, zero internal-name leak, empty production/public
+  diffs, and `git diff --check`.
+
+## Slice 5 Round-2 Coordinator Gate
+
+- `2026-07-13T22:34:03Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 8 files / 360 tests, lint/cleanup/Prettier, exact scope/status/
+  leak/surface/diff checks, and zero production diff. Fresh style/reliability
+  re-review is assigned at Terra High; API/docs N/A, security deferred.
+
+## Slice 5 Round-2 Re-review Finding
+
+- `2026-07-13T22:40:14Z`: reliability CLEAN; style reports one MEDIUM. Actual
+  reviewers ran Terra High, no subagents, both closed.
+- Medium: two safe-failure tests still install prototype-wide context-close
+  spies and start servers before entering `try/finally`. Move every acquisition
+  into protected blocks with optional handles so setup/start failure always
+  restores spies and disposes fixtures. Same Terra Medium implementer owns the
+  test-only round-3 fix; production/public diff remains forbidden.
+
+## Slice 5 Round-3 Review-Fix Handback
+
+- `2026-07-13T22:44:54Z`: both safe-failure scenarios now enter `try` before
+  fixture acquisition, prototype spy installation, or server start. Optional
+  fixture/running-server handles and nested teardown ensure server close, spy
+  restoration, context/environment cleanup, and fixture disposal are attempted
+  even when setup or start rejects.
+- This is a test-hygiene correction with all accepted assertions unchanged; no
+  runtime RED was manufactured and production/public diffs remain empty.
+  Focused affected cases pass 3/3, corrected Slice 5 passes 6/6, full
+  integration passes 36/36, the eight-file gate passes 360/360, and both
+  typechecks pass. Final synchronized static/audit evidence follows; this is
+  implementation handback, not self-acceptance.
+- `2026-07-13T22:47:22Z`: final synchronized tree passes scoped ESLint,
+  cleanup enforcement, exact five-path Prettier/scope, 4/4 status, zero public
+  internal-name leak, empty production/public-surface diffs, and
+  `git diff --check`.
+
+## Slice 5 Round-3 Coordinator Gate
+
+- `2026-07-13T22:49:43Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Independent gate passes both
+  typechecks, 8 files / 360 tests, all scoped checks/audits, and zero production
+  or public diff. Fresh style/reliability re-review is assigned at Terra High;
+  API/docs N/A, security deferred.
+
+## Slice 5 Clean Closure And Slice 6 Assignment
+
+- `2026-07-13T22:53:21Z`: style/maintainability and performance/reliability are
+  CLEAN. Actual reviewers ran `gpt-5.6-terra` / high, matching dispatch, no
+  subagents, both closed. Reliability passes bounded 360/360 and randomized
+  integration 36/36; all prior evidence findings are resolved.
+- Slice 5 is accepted at `39c58aed` with zero production/public diff. Slice 6
+  observable README/TSDoc, API leak/compatibility closure, and final T-0037f
+  verification is assigned to the same implementer at `gpt-5.6-terra` /
+  medium, no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Implementation Handback
+
+- `2026-07-13T23:04:08Z`: RED documentation/public scan found the old flat
+  shutdown paragraph, missing README and `Server.start()` startup-recovery and
+  cleanup-only retry contracts, and lifecycle-section topology wording. The
+  same scan is GREEN after documentation-only edits. Public docs now describe
+  observable startup ordering, failed-start continuation and terminal state,
+  running close safety/order/retry, shared caller ownership/reuse, owned
+  environment closure, idempotency, and observable failure aggregation without
+  naming private lifecycle mechanisms.
+- Exact root/package exports and `index.test.ts` are unchanged, so no stronger
+  export test was required. Focused server/lifecycle/index tests pass 3 files /
+  67 tests. `docs:check:generated` reports all 205 expected server exports;
+  both typechecks, scoped ESLint, cleanup, Prettier, API-leak/export scans,
+  Proto lint/generated-clean, and diff checks pass. Generated artifacts remain
+  ignored and absent from status.
+- Required full `pnpm --config.verify-deps-before-run=false verify` is RED at
+  68 files: 1 failed / 67 passed, 4 failed / 1,591 passed tests. The four
+  failures in `spine-services.test.ts` pass structural context fakes into
+  `Server.start()` and reject with `Delivery access requires a built
+BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
+  Current `server.ts` changes are TSDoc-only, so this is an accepted-runtime
+  compatibility debt exposed by the final gate. Fixing the service fixture is
+  outside Slice 6 ownership and was not attempted. Coordinator direction is
+  required before acceptance; this remains implementation handback, not
+  self-acceptance.
+
+## Slice 6 Final-Gate Fixture Fix Assignment
+
+- `2026-07-13T23:07:21Z`: coordinator accepts/closes the docs implementer,
+  actual `gpt-5.6-terra` / medium, matching dispatch, no subagents. Focused
+  docs/API/type/static gates pass, but full verify is RED: 4/1,595 tests in
+  `spine-services.test.ts` pass structural fake contexts through `Server.start`.
+- Authorize only `packages/server/test/services/spine-services.test.ts` to
+  reconcile those four tests with the accepted built-context server contract.
+  Preserve each service-routing/error assertion using built contexts or direct
+  registered handlers as appropriate; do not weaken `Server`, add fake
+  materialization, or change public/runtime behavior. Same Terra Medium
+  implementer owns the correction and must rerun isolated plus full verify.
+
+## Slice 6 Service Fixture Fix Handback
+
+- `2026-07-13T23:14:17Z`: isolated RED reproduces the exact four failures in
+  `spine-services.test.ts` at 4 failed / 94 passed. They are service validation,
+  command-route selection, duplicate-route order, and query tenant handling;
+  none requires HTTP transport behavior. Each now calls the established
+  registered service handlers directly. A small plural-context command helper
+  preserves ordered multi-context routing without creating lifecycle state.
+  All original result/route/tenant assertions remain intact, while the many
+  unaffected real server/gRPC tests remain in the file.
+- Isolated GREEN is 98/98 and focused Slice 6 server/lifecycle/index is 67/67.
+  Generated docs include 205 expected server exports; both typechecks, scoped
+  ESLint, cleanup, Prettier, export/leak, Proto, generated-clean, and diff gates
+  pass. The full required verify completes both native and coverage runs at 68
+  files / 1,595 tests. Coverage is 95.31% statements, 90.15% branches, 98.1%
+  functions, and 95.35% lines. Generated artifacts remain ignored/untracked.
+  This is implementation handback, not self-acceptance.
+- `2026-07-13T23:15:34Z`: final scope/status audit reports exactly seven paths:
+  `server.ts` TSDoc, package README, `spine-services.test.ts`, and the four
+  T-0037f records; statuses are synchronized 4/4. Final lint/cleanup/format/
+  export/leak/generated/diff checks pass with no other tracked or untracked path.
+
+## Slice 6 Coordinator Final Gate And Review Assignment
+
+- `2026-07-13T23:20:14Z`: accepted/closed same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Coordinator full
+  verify independently exits 0: native and coverage each pass 68 files / 1,595
+  tests; coverage is 95.31/90.15/98.1/95.35 percent; all generation, type,
+  lint, cleanup, format, docs/API, Proto, and generated-clean gates pass.
+- Final Slice 6 review is assigned: documentation at `gpt-5.6-luna` / medium;
+  style, TypeScript/API docs, and performance/reliability at
+  `gpt-5.6-terra` / high; no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Final Review Findings And Fix Assignment
+
+- `2026-07-13T23:28:49Z`: style CLEAN; documentation reports two MEDIUM; API
+  and reliability corroborate one HIGH. Documentation actual
+  `gpt-5.6-luna` / medium; others actual `gpt-5.6-terra` / high; matching
+  dispatch, no subagents, all closed.
+- High: `RetryableCloseGroup` flattens `AggregateError([])` to zero causes,
+  resolves dependency close, and prevents retry, contradicting the accepted
+  arbitrary-failure docs. Preserve no-leaf aggregates in generic close
+  collection and prove explicit-resource failure plus failed-index retry.
+- Medium docs: state that startup cleanup network failure gates all later
+  dependency/facility cleanup until cleanup-only `start()` retry; state that
+  initial startup/listener rejection combines original plus reached cleanup
+  failures in stable phase order. Same Terra Medium implementer owns this batch.
+
+## Slice 6 Final Review-Fix Handback
+
+- `2026-07-13T23:39:27Z`: strict RED used the new explicit-resource running-
+  close cases for empty and nested-empty aggregates. Both cases observed a
+  resolved first close (`undefined`) instead of an `AggregateError`, proving
+  the failed resource was not retained for retry. The minimal generic fix
+  preserves the original aggregate only when recursive traversal contributes
+  no leaf cause; non-empty flattening, cycle handling, stable order, arbitrary
+  values, and failed-index retry behavior remain unchanged. Focused GREEN is
+  2/2; full lifecycle GREEN is 38/38.
+- Public README and `Server.start()` TSDoc now state the startup network-cleanup
+  hard gate and initial original-first, stable phase-order aggregation. The
+  cleanup-only retry wording continues to exclude already reported/original
+  causes. No export, signature, generated source, or service fixture changed.
+- Focused server/lifecycle/index passes 3 files / 69 tests (the prior 67 plus
+  the two new aggregate cases); the unchanged service suite passes 98/98.
+  Generated docs include all 205 expected server exports. Both typechecks,
+  scoped ESLint, cleanup, Proto lint, and generated-clean gates pass. Full
+  verify passes native and coverage runs at 68 files / 1,597 tests with
+  95.3/90.13/98.1/95.34 statement/branch/function/line coverage. Final exact
+  format/scope/status/export/leak/diff audits follow before coordinator review;
+  this is implementation handback, not self-acceptance.
+- `2026-07-13T23:39:27Z`: final exact audit passes eight-path Prettier and
+  scope, 4/4 synchronized status, zero public internal-name leak, unchanged
+  package/root exports and service fixture, no generated/untracked output, and
+  clean `git diff --check`.
+
+## Slice 6 Final Fix Coordinator Gate
+
+- `2026-07-13T23:46:55Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify exits
+  0: native and coverage each pass 68 files / 1,597 tests; coverage is
+  95.3/90.13/98.1/95.34 percent; all generation, type, lint, cleanup, format,
+  docs/API, Proto, and generated-clean gates pass.
+- Fresh final re-review: documentation Luna Medium; style/API/reliability Terra
+  High; no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Final Re-review Findings And Round-2 Fix
+
+- `2026-07-13T23:53:02Z`: documentation CLEAN; API CLEAN; style MEDIUM + LOW;
+  reliability MEDIUM. Actual Luna Medium/Terra High profiles match dispatch,
+  no subagents, all closed.
+- Medium reliability: whole-traversal no-leaf fallback preserves an outer
+  close-group wrapper instead of the original inner empty aggregate at a second
+  failed-start aggregation boundary. Preserve each empty aggregate when visited
+  during recursive traversal; add failed-start empty/nested-empty explicit-
+  resource identity/order/retry evidence.
+- Medium style: protect the new running-close regression fixture/server before
+  acquisition. Low: remove `collectRunningCloseError` fallback now redundant
+  with the shared collector. Same Terra Medium implementer owns this batch.
+
+## Slice 6 Final Round-2 Review-Fix Handback
+
+- `2026-07-14T00:03:15Z`: strict focused RED is 4 failed / 1 passed with 36
+  skipped. Nested and multiple-empty running close returned their outer resource
+  aggregates, while both failed-start cases returned the close-group wrapper
+  after second-stage flattening. Minimal GREEN preserves a zero-cause aggregate
+  at the exact traversal visit, removes the obsolete whole-traversal and local
+  running fallbacks, and passes the same focused selection 5/5.
+- Failed-start coverage proves original startup identity first, then exact empty
+  resource identities; cleanup-only retry closes only the failed resource index,
+  does not repeat successful resources or worker lifecycle hooks, opens no
+  listener, completes cause-less, and leaves the server terminal. Running-close
+  setup now enters `try` before fixture/server acquisition, with optional and
+  independent teardown. Existing nested-empty last/shared assertions now
+  truthfully expect the exact inner failure; full lifecycle passes 41/41.
+- Focused server/lifecycle/index passes 3 files / 72 tests; the unchanged service
+  suite passes 98/98. Docs remain unchanged and pass the 6/6 observable scan;
+  generated docs report 205 expected server exports. Both typechecks and scoped
+  lint/cleanup/Proto/generated gates pass. Full verify exits 0 with native and
+  coverage runs at 68 files / 1,600 tests and 95.31/90.15/98.1/95.35 percent
+  statement/branch/function/line coverage. Final seven-path format/scope/status/
+  export/leak/diff audits follow; this is handback, not self-acceptance.
+- `2026-07-14T00:04:51Z`: final audit passes exact seven-path Prettier/scope,
+  4/4 synchronized handback status, zero public internal-name leak, unchanged
+  README/package/root exports/service fixture, generated-clean verification,
+  and `git diff --check`.
+
+## Slice 6 Final Round-2 Coordinator Gate
+
+- `2026-07-14T00:09:10Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify passes
+  native and coverage at 68 files / 1,600 tests, 95.31/90.15/98.1/95.35
+  coverage, 205 server exports, and all repository gates.
+- Final round-2 re-review: documentation Luna Medium; style/API/reliability
+  Terra High; no subagents. Security deferred to T-0041.
+
+## Slice 6 Final Round-2 Re-review Finding
+
+- `2026-07-14T00:15:14Z`: docs/API/style CLEAN; reliability LOW. Actual
+  Luna Medium/Terra High profiles match dispatch, no subagents, all closed.
+- Low: failed-start regression stores its initial `start()` outcome only inside
+  the assertion block. If it unexpectedly returns a `RunningServer`, teardown
+  starts again and cannot close the original listener. Retain the initial
+  outcome in an optional handle, close it when successful, and run cleanup-only
+  retry only after rejection. Same Terra Medium implementer owns test-only fix.
+
+## Slice 6 Final Round-3 Review-Fix Handback
+
+- `2026-07-14T00:23:26Z`: structural RED reports all five required teardown
+  safeguards absent: outer first outcome, exact first running handle, rejection
+  provenance, exact-handle close, and rejection-only retry. The corrected scan
+  passes 6/6, including closure of an unexpected running cleanup result.
+- The failed-start regression now retains settlement outside the assertion
+  block. Unexpected initial success closes that exact `RunningServer` and skips
+  cleanup-only retry. Rejection alone enables retry; any unexpectedly successful
+  retry result is closed. Worker release, settlement, first server, retry server,
+  context, environment, and fixture disposal are independently guarded.
+- Affected cases pass 2/2; lifecycle passes 41/41; server/lifecycle/index passes
+  72/72; unchanged service tests pass 98/98. Both typechecks, final scoped
+  ESLint, cleanup, formatting, generated-clean, and full verify pass. Full native
+  and coverage runs are 68 files / 1,600 tests with 95.31/90.15/98.1/95.35
+  percent coverage. Exact five-path zero-production/docs/public/generated scope
+  audits follow. This is handback, not self-acceptance.
+- `2026-07-14T00:23:26Z`: final audit passes exact five-path Prettier/scope,
+  4/4 synchronized handback status, 6/6 teardown ownership, zero production/
+  docs/public/service diff, zero internal-name leak, generated-clean, and
+  `git diff --check`.
+
+## Slice 6 Final Round-3 Coordinator Gate
+
+- `2026-07-14T00:30:14Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify passes
+  native and coverage at 68 files / 1,600 tests, all coverage dimensions above
+  90%, 205 server exports, and every repository gate.
+- Test/records-only round: docs and TypeScript/API docs N/A because README,
+  TSDoc, production, declarations, and exports are unchanged and previously
+  CLEAN. Assign style and reliability at Terra High; security deferred.
+
+## Slice 6 Final Round-3 Re-review Finding
+
+- `2026-07-14T00:34:20Z`: reliability CLEAN; style LOW. Actual Terra High,
+  no subagents, both closed.
+- Low: cleanup and terminal retry outcomes in the failed-start regression remain
+  block-local. Retain each exact outcome in optional outer handles and close any
+  unexpected `RunningServer` in teardown, just like the initial outcome. Same
+  Terra Medium implementer owns the test-only round-4 fix. Use focused inner
+  gates; reserve full verify for clean final pre-merge acceptance.
+
+## Slice 6 Final Round-4 Review-Fix Handback
+
+- `2026-07-14T00:40:29Z`: the parameterized failed-start regression now retains
+  initial, cleanup-only, and terminal outcomes plus every exact unexpectedly
+  successful `RunningServer`. Teardown closes those exact handles and starts a
+  cleanup continuation only after an initial rejection and only when no cleanup
+  attempt was retained. No production, docs, public, service, or generated file
+  changed.
+- Structural baseline RED reports eight missing retention/teardown properties;
+  the working-tree scan passes 9/9. Affected cases pass 2/2, lifecycle passes
+  41/41, repeated server/lifecycle/index passes 72/72, and services pass 98/98.
+  Both typechecks, scoped ESLint, cleanup enforcement, and scoped Prettier pass.
+  Full verify is intentionally reserved for coordinator acceptance.
+- Final audit passes exact five-path scope, 4/4 synchronized status, zero
+  production/docs/public/export/service diff, generated-clean, scoped Prettier,
+  and `git diff --check`.
+
+## Slice 6 Final Round-4 Re-review Assignment
+
+- `2026-07-14T00:45:54Z`: coordinator accepts and closes the same implementer,
+  actual `gpt-5.6-terra` / medium matching explicit dispatch, with no
+  subagents. The coordinator-focused gate passes both typechecks, scoped
+  ESLint/cleanup/diff checks, and 3 files / 72 tests.
+- Documentation and TypeScript/API docs are N/A for this wave because the
+  round-4 delta changes no documentation, production source, declaration,
+  export, or public contract, and both prior lanes are CLEAN. Assign the
+  existing style/maintainability and performance/reliability reviewers at
+  explicit `gpt-5.6-terra` / high, no subagents. Security remains deferred to
+  T-0041. Full `pnpm verify` remains reserved for the clean final pre-merge
+  gate.
+
+## Slice 6 Final Round-4 Re-review Result
+
+- `2026-07-14T00:50:19Z`: style/maintainability CLEAN and performance/
+  reliability CLEAN; both agents are closed and used no subagents. Explicit
+  dispatch selected `gpt-5.6-terra` / high, matching the spawn runtime's
+  immutable role metadata for both existing reviewer types.
+- Review confirms exact settlement retention, exact successful-handle close,
+  rejection-gated cleanup, no substitute cleanup attempt, and independently
+  reached teardown. The four records are synchronized and truthful. Docs/API
+  remain N/A for zero corresponding delta; security remains deferred to T-0041.
+  Proceed to the final full project gate.
+
+## Final Task Verification
+
+- `2026-07-14T00:53:29Z`: `pnpm --config.verify-deps-before-run=false verify`
+  exits 0. Native and coverage phases each pass 68 files / 1,600 tests; coverage
+  is 95.31% statements, 90.15% branches, 98.1% functions, and 95.35% lines.
+- Both typechecks, ESLint, cleanup enforcement, formatting, TypeDoc/API checks
+  with all 205 expected server exports, Proto lint/checksum checks, and
+  generated-clean verification pass. All T-0037f acceptance criteria and
+  relevant review concerns are satisfied. Merge and post-merge verification
+  remain; final security review is intentionally owned by T-0041.

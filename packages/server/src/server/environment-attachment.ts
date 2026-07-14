@@ -205,6 +205,41 @@ export class EnvironmentAttachments {
     return count;
   }
 
+  /** @internal Whether one failed attachment still owns an unfinished rollback. */
+  get failedStartPending(): boolean {
+    return this.#failedRollback !== undefined;
+  }
+
+  /** @internal Whether this exact attachment rejection owns failed-start rollback retry. */
+  failedStartRetryPending(error: unknown): boolean {
+    const rollback = this.#failedRollback;
+    return rollback?.rejection !== undefined && rollback.rejection === error;
+  }
+
+  /** @internal Whether detach of this exact handle has established endpoint safety. */
+  endpointSafe(attachment: EnvironmentAttachmentHandle): boolean {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      throw new Error("Environment attachment handle is not owned by this environment.");
+    }
+    if (attached.detachKind === "last") {
+      return attached.generation.replacementSafe;
+    }
+    if (attached.detachKind === "non-last") {
+      return attached.generation.registrationEndpointSafe(attached.claim.token);
+    }
+    return false;
+  }
+
+  /** @internal Whether this exact handle owns a rejected detach operation. */
+  detachRetryPending(attachment: EnvironmentAttachmentHandle): boolean {
+    const attached = this.#handles.get(attachment);
+    if (attached === undefined) {
+      throw new Error("Environment attachment handle is not owned by this environment.");
+    }
+    return attached.operation?.status === "rejected";
+  }
+
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
       return Promise.reject(environmentClosedError());
@@ -871,12 +906,15 @@ export class EnvironmentAttachments {
         mode: remaining === 0 ? "generation" : "registration",
         inFlight: undefined,
         retry: undefined,
+        rejection: undefined,
       };
       this.#failedRollback = rollback;
       try {
         await this.#continueRollback(rollback);
       } catch (rollbackError) {
-        throw failedStartError(startError, rollbackError);
+        const rejection = failedStartError(startError, rollbackError);
+        rollback.rejection = rejection;
+        throw rejection;
       }
       throw startError;
     }
@@ -934,6 +972,7 @@ interface FailedStartRollback {
   mode: "registration" | "generation";
   inFlight: Promise<undefined> | undefined;
   retry: Promise<undefined> | undefined;
+  rejection: AggregateError | undefined;
 }
 
 interface AttachedHandle {
@@ -1264,6 +1303,11 @@ class DeliveryGeneration {
 
   hasRegistration(token: string): boolean {
     return this.#registrations.has(token);
+  }
+
+  registrationEndpointSafe(token: string): boolean {
+    const state = this.#registrations.get(token);
+    return state === undefined || (state.detach?.quiescent === true && state.detach.barrier);
   }
 
   async attach(
