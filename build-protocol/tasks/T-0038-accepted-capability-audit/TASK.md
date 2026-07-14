@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Complete; accepted for main integration
+Status: Complete; integrated and post-merge verified; remote sync pending
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -655,3 +655,14 @@ verify` task gate next. Do not mark T-0038 complete before fresh full-gate
   concrete stale status, example, and security obligations are durably routed
   to T-0039, T-0040, and T-0041. All participating subagents are closed. The
   task is complete and accepted for main integration.
+
+## Main Integration
+
+- `2026-07-14T09:54:21Z`: merge commit `6488bfa9` integrates T-0038 into
+  `main`. Native post-merge full verify exits `0`: ordinary and coverage phases
+  each pass 71 files and 1,642/1,642 tests at 95.38/90.12/98.22/95.4 percent
+  coverage.
+- Post-merge type/build/lint/cleanup/format, TypeDoc/API, Proto, generated-clean,
+  and diff gates pass. Root status contains only the untouched user-owned
+  `human-review-1-jul.md` file. Push of updated `main` and durable remote-sync
+  recording remain.

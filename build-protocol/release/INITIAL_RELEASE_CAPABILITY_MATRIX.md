@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: T-0038 complete; routed closure work remains in T-0039/T-0040/T-0041
+Status: T-0038 integrated and post-merge verified; remote sync pending
 
 Task: T-0038 Accepted Capability Audit
 
