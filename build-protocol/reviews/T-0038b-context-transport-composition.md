@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 late-ack regression green; reliability rereview ready
+Status: Slice 3 final reliability rereview assigned
 
 ## Scope
 
@@ -862,3 +862,12 @@ received 4` rather than the asserted late-ack barrier diagnostic.
   the deterministic late classification at `7/7` tests. Only the
   performance/reliability lane requires final rereview; all other clean
   dispositions remain.
+
+## Slice 3 Late-Ack Final Rereview Dispatch
+
+- Baseline `d9c21256`; endpoint `3d8cd3a6`; package
+  `.superpowers/sdd/review-d9c21256..3d8cd3a6.diff` (three commits, 21739
+  bytes).
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high,
+  read-only, no subagents, limited to deterministic late-ack coverage and the
+  adjacent barrier. Other lanes remain CLEAN; security remains deferred.

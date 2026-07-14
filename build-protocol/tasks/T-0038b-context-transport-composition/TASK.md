@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 late-ack regression green; reliability rereview ready
+Status: Slice 3 final reliability rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1146,3 +1146,6 @@ duplicate control was not applied within the bounded quiet window.` This
   independently reran the unrestricted native child-process file. All `7/7`
   tests passed. The late-ack P2 is accepted as fixed and ready for
   reliability-only rereview.
+- Final package is `.superpowers/sdd/review-d9c21256..3d8cd3a6.diff` (`3`
+  commits, `21739` bytes). The existing performance/reliability role is
+  dispatched read-only at explicit `gpt-5.6-terra` / high, no subagents.
