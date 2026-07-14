@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 final round-4 re-review assigned
+Status: Complete; final task verification passed, merge pending
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1366,3 +1366,26 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
   explicit `gpt-5.6-terra` / high, no subagents. Security remains deferred to
   T-0041. Full `pnpm verify` remains reserved for the clean final pre-merge
   gate.
+
+## Slice 6 Final Round-4 Re-review Result
+
+- `2026-07-14T00:50:19Z`: style/maintainability CLEAN and performance/
+  reliability CLEAN; both agents are closed and used no subagents. Explicit
+  dispatch selected `gpt-5.6-terra` / high, matching the spawn runtime's
+  immutable role metadata for both existing reviewer types.
+- Review confirms exact settlement retention, exact successful-handle close,
+  rejection-gated cleanup, no substitute cleanup attempt, and independently
+  reached teardown. The four records are synchronized and truthful. Docs/API
+  remain N/A for zero corresponding delta; security remains deferred to T-0041.
+  Proceed to the final full project gate.
+
+## Final Task Verification
+
+- `2026-07-14T00:53:29Z`: `pnpm --config.verify-deps-before-run=false verify`
+  exits 0. Native and coverage phases each pass 68 files / 1,600 tests; coverage
+  is 95.31% statements, 90.15% branches, 98.1% functions, and 95.35% lines.
+- Both typechecks, ESLint, cleanup enforcement, formatting, TypeDoc/API checks
+  with all 205 expected server exports, Proto lint/checksum checks, and
+  generated-clean verification pass. All T-0037f acceptance criteria and
+  relevant review concerns are satisfied. Merge and post-merge verification
+  remain; final security review is intentionally owned by T-0041.

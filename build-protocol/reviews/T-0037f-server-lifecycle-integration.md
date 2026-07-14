@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 final round-4 re-review assigned
+Status: Complete; final task verification passed, merge pending
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -1059,3 +1059,28 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   fresh round-4 package. Security remains deferred to T-0041. Review only the
   active test teardown and current records; superseded historical text is not
   active unless these records claim it.
+
+## Slice 6 Final Round-4 Re-review Result
+
+- `2026-07-14T00:50:19Z`: style/maintainability CLEAN; performance/reliability
+  CLEAN. Both agents are closed and used no subagents. Explicit Terra High
+  dispatch matches the spawn runtime's immutable actual model/reasoning
+  metadata for both existing role types.
+- Confirmed: all three exact settlements survive teardown; each exact
+  unexpected running handle closes; cleanup remains rejection-gated; no
+  substitute cleanup attempt is introduced; remaining teardown is independent.
+  Current records are synchronized and truthful. Documentation and API are N/A
+  for zero corresponding delta after prior CLEAN results. Security is deferred
+  to T-0041. Final full verification is now the only acceptance gate.
+
+## Final Acceptance Gate
+
+- `2026-07-14T00:53:29Z`: full `pnpm verify` exits 0 with 68 files / 1,600
+  native tests and 68 files / 1,600 coverage tests. Coverage is 95.31%
+  statements, 90.15% branches, 98.1% functions, and 95.35% lines.
+- All type, lint, cleanup, format, docs/API, Proto, export, and generated-clean
+  checks pass; the server API contains all 205 expected exports. Style,
+  documentation, TypeScript/API docs, and performance/reliability have clean or
+  justified N/A final dispositions. No critical or high-confidence correctness
+  finding remains. Security is deferred to the final T-0041 gate. Accept for
+  merge and post-merge verification.
