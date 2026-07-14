@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: Complete locally - integrated and post-merge verified; remote sync pending
+Status: Complete - integrated, post-merge verified, and remotely synchronized
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -381,6 +381,15 @@ examples/todo/test/black-box.test.ts -t "rejects a remote command"` failed
   lint/cleanup, format, docs/API, Proto, and generated-clean gates passed.
 - Local implementation and integration are complete. Remote synchronization and
   clean merged-worktree removal remain before durable task closure.
+
+## Remote Closure
+
+- Pushed `task/T-0040b-todo-black-box-acceptance` to `origin` at
+  `53881256d629f6693ead2b3f49a4a497938891c2`.
+- Pushed integrated `main` to `origin` at
+  `da793703ef18fef73ae1853b5b2e1404372a7d0f` before this remote-closure record.
+- T-0040b is durably closed. Remove its clean merged worktree/local branch and
+  continue with T-0040c.
 
 ## Skill Applicability
 

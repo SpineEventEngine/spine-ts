@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: T-0040b integrated and post-merge verified; remote closure pending
+Status: In execution at T-0040c to-do README and user-guide closure
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0040b remote closure; T-0040c is next
+Active implementation frontier: T-0040c to-do README and user-guide closure
 
 ## Purpose
 
@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0040b is accepted, integrated, and post-merge verified at
-`1708a900`; remote synchronization and clean worktree removal remain before
-T-0040c begins. The dated Starting State above is historical plan-creation
-context.
+Current status: T-0040b is complete, integrated, post-merge verified, and
+remotely synchronized. T-0040c to-do README and user-guide closure is the active
+implementation frontier. The dated Starting State above is historical
+plan-creation context.
 
 ## Initial Release Scope
 
