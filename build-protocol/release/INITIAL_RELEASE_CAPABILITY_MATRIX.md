@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: All T-0038 review concerns clean; final verification pending
+Status: T-0038 complete; routed closure work remains in T-0039/T-0040/T-0041
 
 Task: T-0038 Accepted Capability Audit
 

@@ -1,8 +1,10 @@
 # T-0038: Accepted Capability Audit
 
-Status: All T-0038 review concerns clean; final verification pending
+Status: Complete; accepted for main integration
 
 Started: `2026-07-14T00:59:38Z`
+
+Completed: `2026-07-14T09:49:58Z`
 
 Baseline commit: `75340852`
 
@@ -637,3 +639,19 @@ for main integration` although its durable integration record and ancestry
 - Run the reserved native full `pnpm --config.verify-deps-before-run=false
 verify` task gate next. Do not mark T-0038 complete before fresh full-gate
   evidence is recorded.
+
+## Final Task Verification
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exits `0`.
+  Ordinary and coverage phases each pass 71 files and 1,642/1,642 tests.
+- Coverage is 95.38% statements, 90.12% branches, 98.22% functions, and 95.4%
+  lines. TypeScript build/tooling checks, ESLint, cleanup enforcement, exact
+  formatting, TypeDoc/API checks, Proto checksum/lint/generated checks, and
+  generated-clean all pass.
+- TypeDoc/API expected-root counts remain 100 proto, 28 core, 205 server, 19
+  storage, 17 transport, and 3 testing. `git diff --check` passes and the task
+  worktree is clean after ignored generated output regeneration.
+- T-0038 acceptance criteria are satisfied: no framework defect remains; the
+  concrete stale status, example, and security obligations are durably routed
+  to T-0039, T-0040, and T-0041. All participating subagents are closed. The
+  task is complete and accepted for main integration.
