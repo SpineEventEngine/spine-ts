@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final style rereview finding accepted
+Status: Final temporal-disposition fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -427,8 +427,9 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Documentation is relevant and clean in the final two-lane rereview; API is
   relevant and clean in wave 3 with later changes unaffected; reliability is
   relevant and clean in the final clean wave with later changes unaffected;
-  style is relevant with the disposition finding accepted. No active concern
-  remains pending in the top summary.
+  style is relevant with its accepted disposition finding pending final style
+  rereview. Stale pre-review `pending relevance` wording is absent from the top
+  summary.
 - Exact three-path Prettier, status/disposition scans, scope/generated checks,
   and `git diff --check` passed. Historical wave entries and every other file
   remain unchanged. No docs check, full verify, or mutating Git operation was
@@ -456,3 +457,20 @@ owner`. Resume the same Terra Medium implementer for this line and the three
   handback wording to distinguish zero stale `pending relevance` claims from the
   style finding pending final rereview. Preserve all clean concern results and
   historical entries.
+
+## Final Temporal-Disposition Fix Handback
+
+- Resumed at accepted temporal-disposition finding commit
+  `19035485b3b2232e59f5d3e21459b0121d64b145`. Changed only the current style
+  disposition/current handback wording and synchronized status/handback
+  sections in the three T-0039a records.
+- Stale pre-review `pending relevance` wording is absent from the top concern
+  summary; documentation, API, and reliability remain clean; style remains
+  relevant with its accepted disposition finding pending final style rereview.
+  Historical wave entries and all other files are preserved.
+- Fresh exact three-path Prettier, focused current-summary/handback and status
+  scans, scope/generated checks, and `git diff --check` passed. No docs check,
+  full verify, or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. `receiving-code-review` and
+  `verification-before-completion` were read and applied.

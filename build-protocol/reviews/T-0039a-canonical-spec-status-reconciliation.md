@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final style rereview finding accepted
+Status: Final temporal-disposition fix handback ready
 
 ## Review Scope
 
@@ -12,8 +12,8 @@ Status: Final style rereview finding accepted
 
 ## Concern Dispositions
 
-- Style/maintainability: relevant; final two-lane rereview found one accepted
-  current-disposition bookkeeping defect.
+- Style/maintainability: relevant with its accepted disposition finding pending
+  final style rereview.
 - Documentation: relevant and clean in the final two-lane rereview.
 - TypeScript/API docs: relevant and clean in wave 3; later fixes did not change
   the public-contract/API surface.
@@ -298,9 +298,9 @@ supervisor`, conflicting with the explicit production process-supervision
 
 - The durable finding commit already corrected this record's top concern
   summary. It now records documentation, API, and reliability as relevant and
-  clean at their final applicable waves, and style as relevant with the current
-  disposition finding accepted; the bounded summary has no active pending
-  disposition.
+  clean at their final applicable waves. Style is relevant with its accepted
+  disposition finding pending final style rereview. The bounded summary contains
+  no stale pre-review pending-relevance wording.
 - Only the three T-0039a statuses and appended handbacks changed. Fresh
   three-path formatting/status/disposition, exact scope, generated-path, and
   `git diff --check` evidence passed without rewriting historical wave entries.
@@ -325,3 +325,20 @@ supervisor`, conflicting with the explicit production process-supervision
 - Accepted fix: state that stale `pending relevance` is absent, docs/API/
   reliability are clean, and style is relevant with its accepted finding
   pending final style rereview. Preserve historical evidence and rerun style.
+
+## Final Temporal-Disposition Fix Handback
+
+- Resumed at accepted temporal-disposition finding commit
+  `19035485b3b2232e59f5d3e21459b0121d64b145`. Updated only the current top
+  style disposition, the three current review-disposition handbacks, and the
+  synchronized status/handback records.
+- The top summary and current handbacks now distinguish absent stale pre-review
+  `pending relevance` wording from the accepted style finding, which remains
+  pending final style rereview. Documentation, API, and reliability retain
+  their clean results; historical wave entries are unchanged.
+- Fresh exact three-path Prettier, current-summary/handback and status scans,
+  scope/generated checks, and `git diff --check` passed. No docs check, full
+  verify, or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. `receiving-code-review` and
+  `verification-before-completion` were read and applied.
