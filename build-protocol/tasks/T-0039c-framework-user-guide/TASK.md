@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review wave 3 assigned
+Status: Review clean — final verification pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -384,3 +384,15 @@ without reading internal source.
 - API rechecks the `Cancel(Subscription)` call shape; reliability rechecks the
   server-handler/client-stream boundary and ZeroMQ retry/restart limits. Both
   prompts retain the ledger, current exclusions, and historical-text rule.
+
+## Review Closure
+
+- `2026-07-14T14:03:38Z`: Wave 3 TypeScript/API docs and
+  performance/reliability rereviews are CLEAN and both reviewers are closed.
+- Final dispositions: style/maintainability CLEAN from Wave 2; documentation
+  completeness CLEAN from Wave 2; TypeScript/API docs CLEAN from Wave 3;
+  performance/reliability CLEAN from Wave 3. Security remains deferred to
+  T-0041 by protocol.
+- Every accepted Wave 1 and Wave 2 finding is resolved in endpoint
+  `6caf1c8ebb624a6d996d82de5c2cb85db59a2799`. No child agent remains open.
+  T-0039c now proceeds to its final native full repository verification gate.

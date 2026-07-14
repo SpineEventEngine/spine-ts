@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Review wave 3 assigned
+Status: Review clean — final verification pending
 
 ## Review Scope
 
@@ -284,3 +284,18 @@ Status: Review wave 3 assigned
 - Both are read-only/no-subagent and receive the full ledger, current
   exclusions, and historical-superseded-text rule. Style/documentation retain
   their Wave 2 CLEAN dispositions with the concrete unaffected rationale above.
+
+## Review Wave 3 Result
+
+- TypeScript/API `019f60ed-904f-7962-aeb5-0227783b0d3c`: CLEAN at actual
+  immutable `gpt-5.6-terra` / high; closed. The guide passes the returned
+  `Subscription` message to `Cancel`, matching generated Proto and real Connect
+  tests, with no internal client/API leak.
+- Performance/reliability `019f60ed-8c20-75a1-a624-1ed3a59e7763`: CLEAN at
+  actual immutable `gpt-5.6-terra` / high; closed. Durable handoff is scoped to
+  server entity handlers, client streams remain process-local/bounded, and
+  ZeroMQ has no retry loop or retry/restart guarantee.
+- Final concern dispositions: style CLEAN (Wave 2), documentation CLEAN (Wave
+  2), TypeScript/API docs CLEAN (Wave 3), performance/reliability CLEAN (Wave
+  3). Every reviewer used no subagents and is closed. Security is deferred to
+  T-0041. Final native verification is the remaining task acceptance gate.
