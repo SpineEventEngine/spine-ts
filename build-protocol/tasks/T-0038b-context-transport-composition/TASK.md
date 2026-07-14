@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 reviewer wave assigned
+Status: Slice 2 P2 findings accepted; fix assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -507,3 +507,18 @@ work until Slice 1 focused verification and relevant review are clean.
   style/maintainability `gpt-5.6-terra` / high; documentation
   `gpt-5.6-luna` / medium; TypeScript/API docs `gpt-5.6-terra` / high; and
   performance/reliability `gpt-5.6-terra` / high. Security remains deferred.
+
+## Slice 2 Review Wave Result
+
+- TypeScript/API docs and performance/reliability returned CLEAN at actual
+  immutable `gpt-5.6-terra` / high, no subagents, and were closed.
+- Style/maintainability returned P2 at actual immutable
+  `gpt-5.6-terra` / high: centralize the repeated context-intake, detach,
+  rollback, and owned-close failed-start checkpoint sequence so its ordering
+  and terminal-state policy have one owner.
+- Documentation returned P2 at actual immutable `gpt-5.6-luna` / medium:
+  `Server.start()` TSDoc must state deterministic built-context registration
+  order and listener absence until all registrations succeed.
+- Both finding reviewers used no subagents and were closed. Resume the same
+  implementer at explicit `gpt-5.6-terra` / medium, no subagents, for this
+  complete batch; retain all accepted behavior and Slice 3 boundary.

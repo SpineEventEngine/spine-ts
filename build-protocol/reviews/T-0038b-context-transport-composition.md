@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 reviewer wave assigned
+Status: Slice 2 P2 findings accepted; fix assigned
 
 ## Scope
 
@@ -295,3 +295,22 @@ Status: Slice 2 reviewer wave assigned
 - All use no subagents and are bounded to Slice 2. Prompts ignore historical
   superseded text unless current records or changed active docs claim it.
   Security remains deferred to T-0041.
+
+## Slice 2 Reviewer Results
+
+- Style/maintainability: accepted P2. Reviewer
+  `019f5eb2-b450-7053-976f-780c76870110`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed. Centralize repeated
+  post-network failed-start phase advancement.
+- Documentation: accepted P2. Reviewer
+  `019f5eb2-b187-7cc1-8ce6-cf37e3582878`; actual immutable
+  `gpt-5.6-luna` / medium; no subagents; closed. State deterministic context
+  order and registration-before-listener failure boundary in `start()` TSDoc.
+- TypeScript/API docs: CLEAN. Reviewer
+  `019f5eb2-b7fc-7481-abf4-32505c10ea17`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- Performance/reliability: CLEAN. Reviewer
+  `019f5eb2-bb5d-7473-9eae-4894164c5585`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- Security remains deferred. Existing implementer fix assignment is explicit
+  `gpt-5.6-terra` / medium, no subagents.
