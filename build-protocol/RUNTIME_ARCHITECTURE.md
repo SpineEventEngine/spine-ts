@@ -15,7 +15,7 @@ The TS runtime centers on the same conceptual objects as Spine JVM:
   base classes.
 - `CommandBus`, `EventBus`, `QueryBus`, `SubscriptionBus`: logical buses.
 - `Stand`: read-side query/subscription facade.
-- `Server`: gRPC service host and runtime supervisor.
+- `Server`: gRPC service host and server lifecycle owner.
 
 Generic names should be familiar to JVM Spine users, but TypeScript API shape should be idiomatic.
 

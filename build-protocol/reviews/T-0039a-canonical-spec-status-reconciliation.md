@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final glossary finding accepted
+Status: Final glossary fix handback ready
 
 ## Review Scope
 
@@ -261,3 +261,17 @@ supervisor`, conflicting with the explicit production process-supervision
   exclusion. Reviewer closed.
 - Accepted fix: use factual gRPC service-host/server-lifecycle-owner wording.
   Rerun docs and style only; API and reliability retain clean results.
+
+## Final Glossary Fix Handback
+
+- The accepted glossary finding is resolved only in
+  `RUNTIME_ARCHITECTURE.md` and these three records. The active `Server`
+  definition now names service-host and server-lifecycle ownership without
+  implying process supervision; explicit exclusions and historical text remain.
+- Fresh focused scans, four-path formatting/scope, `docs:check`, synchronized
+  statuses, generated-path cleanliness, and `git diff --check` passed. The
+  package is ready for coordinator documentation/style rereview; API and
+  reliability retain their clean results.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. `receiving-code-review` and
+  `verification-before-completion` were applied.

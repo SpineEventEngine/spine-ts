@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final glossary finding accepted
+Status: Final glossary fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -381,3 +381,20 @@ inventory. Run focused docs/status lint before any reviewer assignment.
 - Replace that glossary phrase with `gRPC service host and server lifecycle
 owner`. Resume the same Terra Medium implementer for this line and the three
   records only. Rerun documentation and style; API/reliability stay clean.
+
+## Final Glossary Fix Handback
+
+- Resumed at accepted glossary finding commit
+  `a5cc02b05db0bbfab24071d870babd87fc877d07`. Changed only the active `Server`
+  glossary description in `RUNTIME_ARCHITECTURE.md` plus the three synchronized
+  T-0039a records.
+- `Server` is now described as the gRPC service host and server lifecycle owner.
+  No remaining active occurrence describes it as supervising processes; all
+  process-supervision references remain explicit negatives or release
+  exclusions, and historical text is preserved.
+- Fresh focused glossary/supervision scans, exact four-path Prettier,
+  `docs:check`, status equality, scope/generated checks, and `git diff --check`
+  passed. No full verify or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. `receiving-code-review` and
+  `verification-before-completion` were read and applied.
