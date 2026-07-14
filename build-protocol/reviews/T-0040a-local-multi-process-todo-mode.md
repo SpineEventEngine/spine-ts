@@ -36,8 +36,14 @@ overstate future production policy.
 
 ## Assignment State
 
-- Requirements splitter: expected `gpt-5.6-sol` / high; explicit dispatch and
-  actual runtime metadata pending.
-- Implementation owner: expected `gpt-5.6-terra` / medium after the design is
-  accepted; not yet dispatched.
+- Requirements splitter: accepted and closed. Agent
+  `019f6102-4708-72b0-97a3-7adf27c5e187` was explicitly dispatched as the
+  existing immutable `requirements_splitter` role with `gpt-5.6-sol` / high;
+  Desktop role metadata confirmed that actual profile.
+- Design disposition: no T-0038 child. The child uses public `Server` and
+  caller-owned environment/transport composition; the parent sends a generated
+  command through public transport request/reply and proves handling through a
+  public query against the child's projection.
+- Implementation owner: expected `gpt-5.6-terra` / medium; assignment recorded,
+  not yet dispatched.
 - Reviewer wave: not yet dispatched.

@@ -132,6 +132,95 @@ requirements-splitter role.
 - Acceptance gate: dispatch must explicitly carry the role, model, and
   reasoning, and actual runtime metadata must confirm the immutable profile.
 
+## Accepted Design
+
+The requirements-splitter result was accepted at `2026-07-14T14:31:40Z`.
+No mandatory public framework seam is missing, so no T-0038 child is warranted.
+
+- The child starts the existing to-do context through the public `Server` and
+  caller-owned `ServerEnvironment.local({ transport })` composition. Server
+  startup opens context transport responders before it opens the HTTP/2
+  listener and resolves.
+- The parent creates a second public ZeroMQ transport over the same private IPC
+  directory and deterministic adapter identity. It packs one generated
+  `CreateTask` command and sends it through `SignalTransport.request()` on a
+  public `createTransportTopic()` command topic.
+- Node process IPC is lifecycle-only: `ready`, `failure`, `shutdown`, and
+  `stopped`. It must never carry a handled observation or the to-do payload.
+- Readiness is sent only after the child `Server.start()` resolves and includes
+  the child PID plus listener address. The test verifies the ready PID matches
+  the forked child and differs from the parent.
+- Successful request/reply proves transport intake, not business handling. The
+  parent therefore uses only the public `QueryService` client to poll the
+  child's projection until the exact deterministic task appears. It does not
+  instantiate `CommandService` or provide an in-process handler fallback.
+- `RuntimeTransportBinding` and `createRoutingPlan()` remain public framework
+  building blocks but are unnecessary for this example. Internal
+  `ContextTransport` and `createContextRoutingPlan()` must not be imported or
+  newly exported.
+- Phase bounds: 2 seconds for transport request/reply, 5 seconds for readiness,
+  5 seconds for eventual query observation, 1 second for control sends,
+  5 seconds for graceful shutdown/exit, then 1 second for `SIGTERM` before
+  `SIGKILL` as a last-resort cleanup.
+- Diagnostics retain phase, child exit code/signal, capped sanitized stderr,
+  last query status/row IDs, and transport background failures. The private
+  directory path is replaced with `<ipc-directory>`.
+- Cleanup preserves a primary failure while attempting every acquired resource
+  in deterministic ownership order: parent transport; child shutdown and
+  bounded exit/termination; listener-closed check; retained IPC entry report;
+  recursive directory removal and absence check. The child closes its running
+  server, caller-owned environment, and supplied transport, and also handles
+  parent disconnect and `SIGTERM`.
+
+The accepted implementation is one bounded command slice. Event transport,
+remote/multi-host operation, production topology/authentication/supervision,
+restart/health policy, durable transport retry, exactly-once behavior, example
+documentation closure, and full black-box consolidation remain excluded.
+
+## Requirements-Splitter Handback
+
+- Agent: `019f6102-4708-72b0-97a3-7adf27c5e187` (existing
+  `requirements_splitter` role).
+- Dispatch fields were explicit: `gpt-5.6-sol` / high.
+- The Desktop role metadata declares this immutable role as
+  `gpt-5.6-sol` / high; this is the actual execution-surface profile accepted by
+  the orchestrator. The child correctly did not treat absent shell environment
+  variables as runtime metadata.
+- The child worked read-only, spawned no subagents, and was closed immediately
+  after its complete result was collected.
+- Skills/manifests checked included the session inventory,
+  `EXPECTED_SKILLS.md`, the lockfile, `codebase-design`,
+  `epic-breakdown-advisor`, `architecture-patterns`,
+  `nodejs-backend-patterns`, `javascript-testing-patterns`, and
+  `test-driven-development`. A companion workshop skill referenced by the epic
+  skill was absent and non-blocking for this repository-grounded split.
+
+## Implementation Assignment
+
+- Existing role: implementer.
+- Explicit immutable profile: `gpt-5.6-terra` / medium.
+- One writer owns:
+  - `examples/todo/src/local-multi-process.test.ts`;
+  - `examples/todo/test-fixtures/local-multi-process-worker.mjs`;
+  - `examples/todo/package.json` and the corresponding `pnpm-lock.yaml`
+    importer entry;
+  - this task brief and `build-protocol/work-logs/T-0040a.md` for TDD and
+    implementation evidence.
+- The review log remains coordinator/reviewer-owned. Do not modify example
+  domain source, public exports, server/transport source, Protobuf contracts,
+  README/user guide, build configuration, or generated output.
+- TDD order: add dependency plumbing and the end-to-end test first; run RED
+  while the worker is absent and confirm child failure before readiness; add
+  the minimal worker; run GREEN; then add bounded startup/primary-failure
+  cleanup coverage and refactor only while green.
+- Native focused proof must cover readiness, accepted transport intake, exact
+  eventual projected state, process separation, and deterministic cleanup.
+  Record every RED/GREEN command and result in the work log.
+- No Git mutation, commits, pushes, or subagents. Report changed paths, exact
+  public imports, behavior evidence, cleanup/failure coverage, focused command
+  results, remaining uncertainty, skills used, and actual immutable runtime
+  profile.
+
 ## Skill Applicability
 
 - Inventories checked: `build-protocol/EXPECTED_SKILLS.md`, installed skill
