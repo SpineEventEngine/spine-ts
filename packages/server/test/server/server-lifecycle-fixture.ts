@@ -94,6 +94,42 @@ export async function lifecycleFixture(
       .withGeneratedRegistryRoot(registry.root)
       .add(LifecycleProjection);
   const createContext = (name: string) => createBuilder(name).buildAsync();
+  const createMixedContext = (name: string) =>
+    BoundedContext.singleTenant(name)
+      .addCommandDispatcher({
+        messageSchemas: () => [LifecycleStateSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .addEventDispatcher({
+        messageSchemas: () => [LifecycleStateSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .build();
+  const createEventContext = (
+    name: string,
+    observed: string[],
+    onDispatch?: (id: string) => Promise<void>,
+  ) =>
+    BoundedContext.singleTenant(name)
+      .addEventDispatcher({
+        messageSchemas: () => [LifecycleStateSchema],
+        dispatch: (event) => {
+          const id = event.id?.value ?? "missing";
+          observed.push(id);
+          return onDispatch?.(id) ?? Promise.resolve();
+        },
+      })
+      .build();
+  const createEvent = (id: string) =>
+    packEvent({
+      id: create(EventIdSchema, { value: id }),
+      context: create(EventContextSchema, {
+        producerId: packAny(UserIdSchema, create(UserIdSchema, { value: id })),
+        version: create(VersionSchema, { number: 1 }),
+      }),
+      schema: LifecycleStateSchema,
+      message: create(LifecycleStateSchema, { id }),
+    });
   const context = await createContext("Lifecycle");
 
   return Object.freeze({
@@ -103,18 +139,11 @@ export async function lifecycleFixture(
     worker,
     createBuilder,
     createContext,
+    createMixedContext,
+    createEventContext,
+    createEvent,
     postEvent(target: BoundedContext, id: string) {
-      return target.eventBus().post(
-        packEvent({
-          id: create(EventIdSchema, { value: id }),
-          context: create(EventContextSchema, {
-            producerId: packAny(UserIdSchema, create(UserIdSchema, { value: id })),
-            version: create(VersionSchema, { number: 1 }),
-          }),
-          schema: LifecycleStateSchema,
-          message: create(LifecycleStateSchema, { id }),
-        }),
-      );
+      return target.eventBus().post(createEvent(id));
     },
     dispose() {
       rmSync(registry.directory, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Framework children integrated; main back-merge assigned
+Status: Main back-merge clean; matrix refresh assigned next
 
 ## Review Scope
 
@@ -192,9 +192,30 @@ findings at `2026-07-14T01:23:48Z`.
 
 ## Main Back-Merge Assignment
 
-- Source `main` is `fedae6aa`; parent endpoint before merge is `9addd3b0`.
+- Source `main` is `fedae6aa`; parent endpoint before merge is `0062f8e7`.
   Both framework children are integrated and verified on the source.
 - Back-merge without commit, inspect conflicts/unmerged paths, and dispatch one
   existing style/maintainability reviewer at explicit `gpt-5.6-terra` / high,
   read-only with no subagents, for merge integrity only. Matrix capability
   review remains a separate parent-refresh gate.
+
+## Main Back-Merge Review Result
+
+- Reviewer `019f5f52-ce99-7650-ad3f-e72947ea8bd0`, actual immutable
+  `gpt-5.6-terra` / high, skill check complete, no subagents, closed.
+- Merge integrity is clean: zero conflicts/unmerged paths, correct `MERGE_HEAD`,
+  both child endpoints integrated, staged source content equal to `main`, five
+  parent artifacts preserved, no generated/config/unrelated change, no conflict
+  markers, and no whitespace errors.
+- Accepted P2: correct the recorded pre-merge parent from predecessor
+  `9addd3b0` to actual assignment endpoint `0062f8e7`. The correction is staged
+  for focused merge-integrity rereview before commit.
+
+## Main Back-Merge Focused Rereview
+
+- CLEAN. Same reviewer `019f5f52-ce99-7650-ad3f-e72947ea8bd0`, actual immutable
+  `gpt-5.6-terra` / high, no subagents, closed.
+- Pre-merge parent `0062f8e7`, source/`MERGE_HEAD` `fedae6aa`, zero conflicts,
+  zero unmerged paths, five parent artifacts preserved, accurate staged
+  records, no conflict marker, and no whitespace error. The no-commit merge is
+  accepted for commit; capability matrix refresh remains separate.

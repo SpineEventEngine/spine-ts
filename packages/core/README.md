@@ -11,7 +11,10 @@ The type registry slice includes:
 - deterministic type URL derivation from a schema file's Spine
   `type_url_prefix` option;
 - fallback type URL derivation using `type.googleapis.com` for files without a
-  Spine prefix option;
+  Spine prefix option; a Spine file option takes precedence over a custom
+  fallback, while `type.example.test///` otherwise produces the canonical
+  `type.example.test/<full.type.Name>` result, and empty or
+  whitespace-containing custom values reject with `TypeError`;
 - schema registration and lookup by full Protobuf type name, type URL, and
   schema identity;
 - fail-fast duplicate detection for full names, type URLs, and descriptor

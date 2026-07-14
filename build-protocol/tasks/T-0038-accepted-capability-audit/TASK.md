@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Framework children integrated; main back-merge assigned
+Status: Main back-merge clean; matrix refresh assigned next
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -316,3 +316,18 @@ superseded by the independent review result above.
   committing first. Preserve the audit matrix/records, inspect any conflicts,
   run standalone merge-integrity review, then commit only after a clean result.
   The parent matrix refresh follows that integration checkpoint.
+
+## Main Back-Merge Review
+
+- `git merge --no-commit --no-ff main` integrated source `fedae6aa` into parent
+  endpoint `0062f8e7` with zero conflicts and zero unmerged paths. Both child
+  endpoints are ancestors of the source; staged child content matches `main`,
+  while the five parent audit artifacts remain preserved.
+- Style/merge-integrity reviewer found one P2 provenance typo only: the review
+  assignment named predecessor `9addd3b0` instead of actual pre-merge endpoint
+  `0062f8e7`. The record is corrected; a focused rereview precedes the merge
+  commit.
+- Focused rereview is CLEAN at immutable `gpt-5.6-terra` / high. It confirms
+  actual parent/source hashes, zero conflicts/unmerged paths, preserved parent
+  artifacts, and clean staged records. The merge may be committed; matrix
+  refresh is next.

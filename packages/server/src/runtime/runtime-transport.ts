@@ -108,6 +108,17 @@ export const RuntimeTransportBinding: Readonly<{
   },
 });
 
+const failedOpenCleanups = new WeakMap<object, RuntimeTransportBindingHandle>();
+
+/** @internal Package access to cleanup retained after a failed binding open. */
+export const runtimeTransportBindingAccess: Readonly<{
+  failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined;
+}> = Object.freeze({
+  failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined {
+    return isObject(error) ? failedOpenCleanups.get(error) : undefined;
+  },
+});
+
 class RuntimeTransportBinder {
   readonly #input: RuntimeTransportBindingInput;
   readonly #handles: TransportSubscriptionHandle[] = [];
@@ -125,7 +136,16 @@ class RuntimeTransportBinder {
 
       return new RuntimeTransportHandle(this.#handles, this.#input.runtime, this.#gate);
     } catch (error) {
-      await new RuntimeTransportHandle(this.#handles, this.#input.runtime, this.#gate).close();
+      const cleanup = new RuntimeTransportHandle(this.#handles, this.#input.runtime, this.#gate);
+
+      try {
+        await cleanup.close();
+      } catch (cleanupError) {
+        const failure = failedOpenFailure(error, cleanupError);
+        failedOpenCleanups.set(failure, cleanup);
+        throw failure;
+      }
+
       throw error;
     }
   }
@@ -454,6 +474,20 @@ function closeFailure(failures: readonly Error[]): Error {
   }
 
   return new Error(`Runtime transport close failed in ${String(failures.length)} operations.`);
+}
+
+function failedOpenFailure(primary: unknown, cleanup: unknown): AggregateError {
+  const primaryError = toError(primary);
+  const cleanupError = toError(cleanup);
+
+  return new AggregateError(
+    [primaryError, cleanupError],
+    `Runtime transport binding open failed: ${primaryError.message}; cleanup also failed: ${cleanupError.message}.`,
+  );
+}
+
+function isObject(value: unknown): value is object {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
 function readTypeUrl(message: unknown): string | undefined {

@@ -235,7 +235,11 @@ export interface TypeRegistryLookup {
 
 /** Options for deriving a schema type URL. */
 export interface DeriveTypeUrlOptions {
-  /** Prefix used when the schema file has no Spine `type_url_prefix` option. */
+  /**
+   * Prefix used when the schema file has no Spine `type_url_prefix` option.
+   * Trailing `/` separators are removed; empty or whitespace-containing values
+   * are rejected with `TypeError`.
+   */
   readonly fallbackPrefix?: string;
 }
 
@@ -278,7 +282,12 @@ export interface PackEventInput<
   readonly message: MessageShape<Schema>;
 }
 
-/** Derive the deterministic type URL for a Protobuf-ES message schema. */
+/**
+ * Derive the deterministic type URL for a Protobuf-ES message schema.
+ *
+ * @throws TypeError when the selected custom fallback normalizes to empty or
+ *   contains whitespace.
+ */
 export function deriveTypeUrl(schema: MessageSchema, options: DeriveTypeUrlOptions = {}): string {
   const typeUrlPrefix = getTypeUrlPrefix(schema, options.fallbackPrefix);
 
@@ -342,7 +351,13 @@ export function packEvent<Schema extends MessageSchema>(input: PackEventInput<Sc
   });
 }
 
-/** Return the type URL prefix that applies to the given schema. */
+/**
+ * Return the type URL prefix that applies to the given schema.
+ *
+ * Fallback prefixes have trailing `/` separators removed and must then be
+ * non-empty and contain no whitespace. A schema file's Spine option takes
+ * precedence without validating an unused fallback.
+ */
 export function getTypeUrlPrefix(
   schema: MessageSchema,
   fallbackPrefix: string = DEFAULT_TYPE_URL_PREFIX,
@@ -351,7 +366,13 @@ export function getTypeUrlPrefix(
     return getOption(schema.file, type_url_prefix);
   }
 
-  return fallbackPrefix;
+  const normalizedFallbackPrefix = fallbackPrefix.replace(/\/+$/u, "");
+
+  if (normalizedFallbackPrefix.length === 0 || /\s/u.test(normalizedFallbackPrefix)) {
+    throw new TypeError("Fallback type URL prefix must be non-empty and contain no whitespace.");
+  }
+
+  return normalizedFallbackPrefix;
 }
 
 /** Registry for Protobuf schemas, Spine type URLs, and descriptor metadata. */
