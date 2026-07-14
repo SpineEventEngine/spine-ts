@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 6 fixes verified; final re-review pending
+Status: In progress - Wave 7 reliability finding accepted; fix pending
 
 Started: `2026-07-14`
 
@@ -529,3 +529,20 @@ rows` are absent.
   remained the only enforced seed proof.
 - Smoke timeout wording now reports mixed entries as diagnostics. Server
   shutdown and saved-module cleanup left no temporary file or IPv4 listener.
+
+## 2026-07-14 - Specialist Wave 7 Finding
+
+- Style/maintainability, documentation completeness, and TypeScript/API docs
+  are clean.
+- Performance/reliability found one accepted lifecycle defect. The guide and
+  causal black-box proof start an async-iterator read, then await command work
+  before attaching a rejection handler. An immediate read rejection can
+  therefore surface as unhandled before cancellation, iterator return, and
+  session cleanup run.
+- Attach an immediate rejection observer without replacing the original
+  pending-read promise, and add focused failure-path evidence that an early
+  read rejection remains handled while cleanup completes. The bounded command
+  and post-command delivery deadlines remain unchanged.
+- Return this one-file behavior/test plus matching guide correction and durable
+  evidence to the existing `implementer`, explicit `gpt-5.6-terra` /
+  medium, with no subagents or Git mutation.

@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 6 fixes verified - final re-review pending
+Status: Wave 7 complete - one reliability finding accepted; fix pending
 
 Baseline: `526b7b4d`
 
@@ -406,3 +406,22 @@ links/imports, and future-policy overclaim.
 - Reviewers use session inventory, expected-skill manifest, readable installed
   metadata/lock, `requesting-code-review`, and specialty guidance. No reviewer
   may edit files, mutate Git, install, or spawn subagents.
+
+## 2026-07-14 - Specialist Wave 7 Results
+
+- Style/maintainability: clean.
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: one accepted P1 lifecycle finding. The guide and
+  black-box causal proof start `iterator.next()` before posting, but attach no
+  rejection observer until after awaiting command acknowledgement. A fast read
+  rejection can become unhandled before the existing cancellation, abort,
+  pending-read, iterator, and session cleanup executes.
+- Preserve the original pending-read promise and pre-post ordering, attach an
+  immediate no-op rejection observer, and add a failure-path test proving early
+  rejection stays handled while cleanup completes.
+- All Wave 7 reviewers were closed. Return the one deduplicated fix batch to
+  existing `implementer` agent
+  `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected explicit
+  `gpt-5.6-terra` / medium, no subagents or Git mutation. A fresh immutable
+  endpoint and all four specialist lanes remain required after the fix.
