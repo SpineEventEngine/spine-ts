@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security architecture split assigned
+Status: In progress - security artifacts assigned
 
 Started: `2026-07-14`
 
@@ -157,3 +157,34 @@ example.
   than pausing the autonomous cycle for routine confirmation.
 - Return exact focus paths and commands; do not write the threat model or
   adjudicate findings.
+
+## Accepted Security Architecture Split
+
+- Splitter agent `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4` completed with the
+  explicitly dispatched and immutable actual profile `gpt-5.6-sol` / high. It
+  made no file or Git changes, spawned no children, and is closed.
+- The accepted model has ten trust boundaries: network ingress, RPC-to-context,
+  context-to-storage, persisted-record replay, framework-to-handler,
+  same-host ZeroMQ IPC, source-to-generator, generated-module import,
+  dependency installation, and diagnostics-to-consumer output.
+- Investigation uses stable `TM-001` through `TM-012` hypotheses covering
+  tenant identity binding/isolation, malformed schemas and `Any` payloads,
+  exposed unbounded intake, subscriptions, delivery retries, local IPC,
+  generated-module execution, supply chain, sensitive diagnostics, lifecycle
+  cleanup, and regex/analysis work.
+- No hypothesis is pre-adjudicated as a finding. In particular, network intake,
+  trusted local IPC, and generated-module execution depend on documented trust
+  and exposure assumptions. No further Sol High escalation is currently
+  justified.
+
+## Security Artifact Author Assignment
+
+- Existing `implementer`, expected explicit `gpt-5.6-terra` / medium, one
+  bounded documentation owner, no subagents or Git mutation.
+- Author only `build-protocol/security/spine-ts-threat-model.md` and
+  `build-protocol/security/T-0041-security-findings.md`, plus the task/work log
+  evidence needed for resumability. Do not change production code or
+  adjudicate final reviewer findings.
+- Preserve stable `TM-*` identifiers, classify dependency reachability and
+  install-script risk, distinguish deployment residuals from framework defects,
+  and anchor every security claim to repository evidence.

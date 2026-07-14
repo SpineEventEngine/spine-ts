@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security architecture split assigned; artifacts and final review pending
+Status: Security architecture split accepted; artifacts and final review pending
 
 Baseline: `39f2c6f7`
 
@@ -52,7 +52,7 @@ Before every review wave, check synchronized status, duplicate policy values,
 public/internal leakage, future-policy overclaim, secret/redaction hygiene,
 tracked generated output, dependency-audit freshness, and diff integrity.
 
-## Current Assignment
+## Completed Architecture Assignment
 
 - Existing `requirements_splitter`, expected explicit `gpt-5.6-sol` /
   high, project-wide read-only security architecture split, no subagents or Git
@@ -61,3 +61,16 @@ tracked generated output, dependency-audit freshness, and diff integrity.
 - Splitter agent `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`: explicit dispatch
   and immutable actual runtime profile `gpt-5.6-sol` / high, no subagents or
   Git mutation.
+- Result accepted: ten trust boundaries, stable `TM-001` through `TM-012`
+  hypotheses, dependency-audit classification, focus paths, and bounded review
+  sequence. No final finding was adjudicated and no further architecture
+  escalation was requested.
+- Agent closed after acceptance.
+
+## Pending Artifact Author
+
+- Existing `implementer`, expected explicit `gpt-5.6-terra` / medium, bounded
+  to the two security artifacts and durable evidence entries, with no
+  production-code changes, subagents, or Git mutation.
+- The dedicated `security_reviewer` remains pending until the artifact commit
+  and focused mechanical checks are complete.
