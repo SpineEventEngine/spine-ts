@@ -1,209 +1,143 @@
 # To-Do Example User Guide
 
-This guide shows the runnable server-side to-do example. The server is intended
-for local development and tests; it uses in-memory storage, so state is not
-shared across processes and disappears when the process exits. It is a real
-local Connect/Node gRPC-compatible app, not a production persistence,
-deployment, authentication, tracing, health-check, process-supervision, or
-multi-host transport example.
+This application is a local, runnable specimen of the public Spine TS API. It
+uses generated messages and a framework-generated registry for bare-decorated
+handlers. Begin with the concise [README](README.md) for prerequisites, build,
+server, and smoke commands.
 
-## Generate And Build
+## Build and server lifecycle
 
-Run generation and TypeScript build from the repository root:
+From the repository root, run `pnpm typecheck:build`. It generates
+`examples/todo/generated/handler/generated-handler-registry.ts` and compiles
+the package. Both generated and compiled directories are ignored.
 
-Install workspace dependencies with `pnpm install` before running these
-commands.
-
-```bash
-pnpm typecheck:build
-```
-
-Generated Protobuf-ES output lives under `examples/todo/generated/` and remains
-ignored by Git. The same generation step writes the framework-owned handler
-registry to `examples/todo/generated/handler/generated-handler-registry.ts`.
-The TypeScript build compiles runnable JavaScript under `examples/todo/dist/`,
-including the runtime registry module at
-`examples/todo/dist/generated/handler/generated-handler-registry.js`.
-
-## Start The Server
-
-Start the example after building:
+Start the process with:
 
 ```bash
 pnpm --filter @spine-ts/example-todo start
 ```
 
-By default the process listens at:
+It creates a local `http://127.0.0.1:8080` server over one in-memory bounded
+context. For programmatic local tests, the public package exports
+`startTodoServer({ host: "127.0.0.1", port: 0 })`; always call the returned
+server's `close()` method. The command-line process owns its listener until
+`Ctrl-C` stops it. Each start has fresh in-memory state.
 
-```text
-http://127.0.0.1:8080
-```
+`createTodoContext()` adds `TaskAggregate` and `TaskListProjection`, then loads
+the compiled registry from the package root before `buildAsync()`. If the
+generated registry is missing or unreadable, context creation fails with its
+module path; rerun `pnpm typecheck:build` and retry. Application handlers keep
+their bare `@Assign` and `@Subscribe` decorators: they do not manually register
+handler schemas.
 
-Application code can also start an ephemeral test server:
+## Post commands and inspect acknowledgements
+
+Use generated schemas and public clients. The checked-in `pnpm --filter
+@spine-ts/example-todo smoke` program is the executable CreateTask example: it
+owns an `Http2SessionManager`, bounds the command and eventual query, checks an
+OK acknowledgement, and aborts its session in `finally`.
+
+`CreateTask` needs a task ID and non-empty title. `RenameTask` changes the title;
+`CompleteTask` marks it done; `ReopenTask` marks it open. All use the same
+`CommandService.Post` envelope shape as the smoke program, replacing only the
+generated command schema/message.
+
+An OK acknowledgement confirms the immediate command path, not that an
+asynchronous projection is visible. Query or subscribe for that observable
+effect. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
+`spine.validation.ValidationError` details. Completing an already completed
+task returns `TASK_ALREADY_DONE`; reopening an open task returns
+`TASK_NOT_DONE`. Those non-OK acknowledgements leave the task-list state
+unchanged.
+
+## Query task lists
+
+Every `TaskList` projection row has the task ID as its projection ID. Build a
+generated `Query` whose target type is `deriveTypeUrl(TaskListSchema)`, and use
+one of these criteria shapes:
 
 ```ts
-import { startTodoServer } from "@spine-ts/example-todo";
+// all task-list rows
+criterion: { case: "includeAll", value: true }
 
-const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
-console.log(server.baseUrl);
-await server.close();
-```
-
-The server registers the existing Spine `CommandService`, `QueryService`, and
-`SubscriptionService` adapters over `await createTodoContext()`. Context
-creation adds `TaskAggregate` and `TaskListProjection` entity classes and calls
-`withGeneratedRegistryRoot(new URL("..", import.meta.url)).buildAsync()`, so
-the framework loads the compiled generated handler registry from the compiled
-example package root and constructs default repositories. Application handlers stay as bare
-`@Assign` and `@Subscribe` methods and do not list handler schemas manually.
-There is no separate process supervisor or framework facade in this example.
-
-## Post Commands
-
-Use Connect clients and the generated command schemas:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
-import { packAny } from "@spine-ts/core";
-import { CommandSchema, UserIdSchema } from "@spine-ts/proto";
-import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
-import { SignalMetadata } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/spine/example/todo/v1/task_commands_pb.js";
-import { TaskIdSchema } from "./generated/spine/example/todo/v1/task_id_pb.js";
-
-const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
-const commands = createClient(CommandService, transport);
-const metadata = new SignalMetadata();
-const actorContext = metadata.actorContext({
-  actor: create(UserIdSchema, { value: "todo-user" }),
-});
-const command = create(CommandSchema, {
-  id: metadata.commandId("command-create-1"),
-  context: metadata.commandContext({
-    actorContext,
+// one exact row ID
+criterion: {
+  case: "filters",
+  value: create(TargetFiltersSchema, {
+    idFilter: {
+      id: [packAny(StringValueSchema, create(StringValueSchema, { value: "task-1" }))],
+    },
   }),
-  message: packAny(
-    CreateTaskSchema,
-    create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: "task-1" }),
-      title: "Write the guide",
-    }),
-  ),
-});
+}
 
-const ack = await commands.post(command);
-console.log(ack.status?.status.case);
-```
-
-`RenameTask`, `CompleteTask`, and `ReopenTask` use the same command service
-path. Invalid command payloads return an Ack error with
-`COMMAND_VALIDATION_ERROR` and packed `spine.validation.ValidationError`
-details when sent to the server; ordinary clients should let `packAny()`
-validate payloads locally before posting. Completing an already completed task
-returns `TASK_ALREADY_DONE`; reopening an open task returns `TASK_NOT_DONE`.
-
-## Query Task Lists
-
-The read side stores one `TaskList` projection row per task ID. Query all rows
-with an `includeAll` target:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
-import { deriveTypeUrl, unpackAny } from "@spine-ts/core";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
-import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { TaskListSchema } from "./generated/spine/example/todo/v1/task_list_pb.js";
-
-const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
-const queries = createClient(QueryService, transport);
-const response = await queries.read(
-  create(QuerySchema, {
-    id: create(QueryIdSchema, { value: "query-task-lists" }),
-    target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
-      criterion: { case: "includeAll", value: true },
-    }),
+// rows whose declared proto column open_task_count equals one
+criterion: {
+  case: "filters",
+  value: create(TargetFiltersSchema, {
+    filter: [create(CompositeFilterSchema, {
+      filter: [create(FilterSchema, {
+        fieldPath: { fieldName: ["open_task_count"] },
+        value: packAny(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
+        operator: Filter_Operator.EQUAL,
+      })],
+      operator: CompositeFilter_CompositeOperator.ALL,
+    })],
   }),
-);
-const lists = response.message
-  .map((row) => row.state)
-  .filter((state) => state !== undefined)
-  .map((state) => unpackAny(state, TaskListSchema));
-console.log(lists);
-```
-
-ID-filter queries are also supported by `QueryService.Read`; see
-`examples/todo/src/index.test.ts` for the exact `StringValue` ID filter shape.
-
-## Subscribe To Updates
-
-Subscribe to the `TaskList` projection target, activate the returned
-subscription, then post commands. Updates are emitted from projection changes:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
-import { deriveTypeUrl, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
-import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
-import {
-  TopicIdSchema,
-  TopicSchema,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
-import { SignalMetadata } from "@spine-ts/server";
-import { TaskListSchema } from "./generated/spine/example/todo/v1/task_list_pb.js";
-
-const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
-const subscriptions = createClient(SubscriptionService, transport);
-const metadata = new SignalMetadata();
-const subscription = await subscriptions.subscribe(
-  create(TopicSchema, {
-    id: create(TopicIdSchema, { value: "topic-task-lists" }),
-    target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
-      criterion: { case: "includeAll", value: true },
-    }),
-    context: metadata.actorContext({
-      actor: create(UserIdSchema, { value: "todo-user" }),
-    }),
-  }),
-);
-
-for await (const update of subscriptions.activate(subscription)) {
-  const entityUpdate =
-    update.update.case === "entityUpdates" ? update.update.value.update[0] : undefined;
-  const state = entityUpdate?.kind.case === "state" ? entityUpdate.kind.value : undefined;
-  if (state !== undefined) {
-    console.log(unpackAny(state, TaskListSchema));
-  }
 }
 ```
 
-Call `SubscriptionService.Cancel` with the returned subscription when the
-client is done.
+Use `QueryService.Read`, unpack each returned row state with
+`unpackAny(row.state, TaskListSchema)`, and poll only to a deadline when waiting
+for a projection consequence. See the runnable smoke and
+[`black-box.test.ts`](test/black-box.test.ts) for complete imports and requests.
 
-## Run Tests
+## Subscribe safely
 
-Focused example coverage:
+For a live view, create a `Topic` with the same `TaskList` target, call
+`SubscriptionService.Subscribe`, and pass the returned subscription to
+`activate()`. Start consuming the async iterator before posting the command
+whose update you need. Bound activation/next calls with an abort signal or a
+deadline. Cleanup has three parts: abort the stream, call `cancel(subscription)`,
+then call `iterator.return?.()` (or let `for await` finish). If the client owns
+an `Http2SessionManager`, call `session.abort()` in `finally` too.
+
+The smoke deliberately does not subscribe; the black-box suite is the
+subscription acceptance proof. Active streams and queued updates are
+process-local, and this guide does not promise update replay after disconnect
+or restart.
+
+## Test the supported paths
+
+From a clean generated state:
 
 ```bash
 pnpm typecheck:build
-pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
+pnpm vitest run examples/todo/test/black-box.test.ts
+pnpm vitest run examples/todo/test/local-multi-process.test.ts
 ```
 
-The focused suite covers in-process black-box behavior and a real
-gRPC-compatible smoke test that starts the standalone server, posts a
-`CreateTask` command, reads `TaskList` through `QueryService`, and receives a
-`SubscriptionService` update. It also checks that the source and compiled
-generated handler registries are fresh and that the bounded context accepts
-commands through generated metadata.
+The black-box test starts a real loopback server and proves public generated
+clients, acknowledgement handling, eventual projection reads, subscriptions,
+validation/refusals, generated-registry recovery, and listener/session cleanup.
 
-Some sandboxes block loopback listeners with `EPERM`; rerun the focused test
-with the required native loopback approval if that happens.
+The local multi-process test starts a separate child process and same-host
+ZeroMQ IPC fixture, sends one generated command from the parent, and reads the
+child-owned projected row. Its cleanup stops the child, closes the parent
+listener and transport, and removes the temporary IPC directory on success and
+failure paths. It is a focused test fixture—not a public multi-process
+supervisor or CLI. Sandboxes that deny loopback/IPC binds can report `EPERM`;
+run the native test in an environment that permits those local resources.
+
+## Further reading and limits
+
+- [Framework user guide](../../docs/USER_GUIDE.md)
+- [Server package README](../../packages/server/README.md)
+- [Testing package README](../../packages/testing/README.md)
+- [Transport package README](../../packages/transport/README.md)
+- [Example black-box test](test/black-box.test.ts)
+- [Example local multi-process test](test/local-multi-process.test.ts)
+
+The example is local-only and process-local: no production persistence,
+authentication, deployment, tracing, health checking, process supervision, or
+remote/multi-host transport is provided. Restarting the standalone server clears
+its tasks.

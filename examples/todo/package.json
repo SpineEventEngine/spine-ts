@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "smoke": "node scripts/smoke.mjs"
   },
   "exports": {
     ".": {
