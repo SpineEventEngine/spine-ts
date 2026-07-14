@@ -104,7 +104,7 @@ async function readTaskListEventually(id, context) {
 
   throw new Error(
     `TaskList ${sanitizeSmokeValue(id)} was not observed after ${queryDeadlineMs}ms (${attempts} reads); ` +
-      `last rows [${lastRowIds(lastResponse).join(", ")}].`,
+      `last diagnostics [${inspectTaskListRows(lastResponse).diagnostics.join(", ")}].`,
   );
 }
 
@@ -124,10 +124,6 @@ function createTaskListQuery(id, context, attempt) {
     }),
     context,
   });
-}
-
-function lastRowIds(response) {
-  return inspectTaskListRows(response).diagnostics;
 }
 
 async function withTimeout(promise, label, timeoutMs) {

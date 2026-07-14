@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 6 findings accepted - fix pending
+Status: Wave 6 fixes verified - final re-review pending
 
 Baseline: `526b7b4d`
 
@@ -360,6 +360,16 @@ links/imports, and future-policy overclaim.
 - All Wave 6 reviewers were closed. The accepted batch returns to existing
   `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
   explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
+
+## 2026-07-14 - Wave 6 Fix Acceptance
+
+- The resumed implementer retained explicit immutable `gpt-5.6-terra` /
+  medium metadata and was closed after result capture.
+- Coordinator evidence accepted exact-only seed enforcement, informational
+  bounded broad/column summaries, >16-row behavior evidence, and corrected
+  smoke diagnostic naming.
+- Focused test/type/docs/format/generated/diff checks passed. A fresh immutable
+  endpoint and all four specialist lanes remain required.
 
 ## Skill Applicability
 

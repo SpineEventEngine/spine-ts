@@ -72,12 +72,13 @@ the ID just printed:
 SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-ts/example-todo exec node scripts/query-client.mjs
 ```
 
-The seeded row appears in the all-row and exact-ID results. Because smoke
-creates one unfinished task, it also appears in the `open_task_count = 1`
-column-filter result. Broad and column queries request at most 16 rows; the
-exact-ID query requests one. Every limited request orders by the projection's
-declared `open_task_count` column. The client independently inspects at most 16
-returned rows and logs only capped IDs plus unavailable/omitted row counts.
+The exact-ID result must contain the seeded row, and the module enforces that
+proof. All-row and `open_task_count = 1` reads are bounded demonstrations: they
+request at most 16 rows and may omit the seed when more matching rows tie on the
+declared `open_task_count` ordering column. Their summaries report the requested
+limit, whether the returned page contains the seed, capped IDs, unavailable
+rows, and rows omitted by the client-side decoder. The exact-ID query requests
+one row. The client independently inspects at most 16 returned rows.
 
 ```js
 import { log } from "node:console";
@@ -165,9 +166,7 @@ try {
     }),
   );
 
-  requireTask(all, "all-row query");
   requireTask(exact, "exact-ID query");
-  requireTask(oneOpenTask, "open_task_count query");
   log({
     all: resultSummary(all),
     exact: resultSummary(exact),
@@ -177,17 +176,19 @@ try {
   session.abort();
 }
 
-function requireTask(lists, label) {
-  if (!lists.taskLists.some((list) => list.id === taskId)) {
+function requireTask(result, label) {
+  if (!result.taskLists.some((list) => list.id === taskId)) {
     throw new Error(`${label} did not return the requested smoke task.`);
   }
 }
 
 function resultSummary(result) {
   return {
+    requestedLimit: result.requestedLimit,
+    containsSeededTask: result.taskLists.some((list) => list.id === taskId),
     taskIds: result.taskLists.map((list) => list.id.slice(0, maxLoggedIdLength)),
     unavailableRows: result.unavailableRows,
-    omittedRows: result.omittedRows,
+    decoderOmittedRows: result.omittedRows,
   };
 }
 
@@ -216,7 +217,10 @@ async function readTaskLists(query) {
   if (response.response?.status?.status.case !== "ok") {
     throw new Error(`Query ${query.id?.value ?? "<missing>"} was not acknowledged.`);
   }
-  return decodeTaskLists(response);
+  return {
+    ...decodeTaskLists(response),
+    requestedLimit: query.format?.limit ?? 0,
+  };
 }
 
 function decodeTaskLists(response) {

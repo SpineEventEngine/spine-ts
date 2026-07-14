@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 6 findings accepted; fix pending
+Status: In progress - Wave 6 fixes verified; final re-review pending
 
 Started: `2026-07-14`
 
@@ -491,3 +491,41 @@ install` reported all eight workspace projects already up to date;
   not mislabeled as row IDs.
 - Correct the review log's historical `Reviewers: not assigned` line so it
   cannot contradict active/final reviewer assignments.
+
+## 2026-07-14 - Specialist Wave 6 Fix Evidence
+
+- The guide now requires the smoke seed only from the exact-ID result. All-row
+  and `open_task_count` results remain finite demonstrations and may omit the
+  seed under equal-column ordering ties without failing the module.
+- Broad result summaries make that behavior visible with `requestedLimit`,
+  `containsSeededTask`, capped returned IDs, unavailable rows, and distinctly
+  named `decoderOmittedRows`. Prose no longer promises the seed appears in a
+  bounded broad or column page.
+- Temporary extracted-module TDD RED found calls requiring `all`, `exact`, and
+  `oneOpenTask`. GREEN found only the exact call. A 17-row equal-column fake
+  response placed the seed seventeenth: both broad decodes retained 16 rows,
+  omitted the seed, and reported one decoder omission without failure; exact-ID
+  returned the seed and remained required, while an empty exact result failed.
+- Smoke timeout text now inlines the one-use inspection and labels its mixed
+  IDs/unavailable/omission entries `last diagnostics`. `lastRowIds` and `last
+rows` are absent.
+- Exact native workflow passed. Smoke seeded
+  `smoke-612a1f83-e4f9-4d6b-a4fb-3b7babc5008d`; the query module reported
+  limits 16/1/16 and `containsSeededTask: true` for this fresh one-row server,
+  and the subscription module delivered its exact UUID-backed row.
+- Focused smoke tests passed 3/3. `typecheck:build`, `typecheck:tooling`,
+  focused ESLint/Prettier, `docs:check` with 372 expected exports, and
+  generated-clean passed. Server `SIGINT` left no `127.0.0.1:8080` listener;
+  temporary extracted/check modules were removed. Final diff checks are in the
+  work log; full `pnpm verify` remains the coordinator gate.
+
+## 2026-07-14 - Coordinator Wave 6 Fix Verification
+
+- Focused smoke tests passed 3/3; fresh tooling/build types, docs/API, format,
+  generated-clean, and diff checks passed.
+- The latest verbatim query module passed against a fresh native server. Its
+  bounded all/exact/column summaries reported requested limits, seed presence,
+  capped IDs, and zero unavailable/omitted rows for the fresh seed; exact-ID
+  remained the only enforced seed proof.
+- Smoke timeout wording now reports mixed entries as diagnostics. Server
+  shutdown and saved-module cleanup left no temporary file or IPv4 listener.
