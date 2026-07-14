@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0039c framework user guide integration
+Status: In execution at T-0039c remote synchronization
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0039c framework user guide integration
+Active implementation frontier: T-0039c remote synchronization
 
 ## Purpose
 
@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0039c is accepted after clean specialist review and native
-full verification; integration, post-merge verification, remote synchronization,
-and clean worktree removal are the active frontier. The dated Starting State
-above is historical plan-creation context.
+Current status: T-0039c is integrated into `main` and post-merge native full
+verification passed. Remote synchronization and clean worktree removal are the
+active frontier. The dated Starting State above is historical plan-creation
+context.
 
 ## Initial Release Scope
 

@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Accepted — integration pending
+Status: Integrated and verified — remote synchronization pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -410,3 +410,16 @@ without reading internal source.
 - Acceptance criteria and all four review concerns are satisfied. Integration,
   post-merge verification, remote synchronization, and clean worktree removal
   remain before durable task closure.
+
+## Integration
+
+- Merged `task/T-0039c-framework-user-guide` into root `main` as
+  `207ba2bc2b5896fd76dff1feed85fa8bae5dc20c` (`Merge T-0039c framework user
+guide`). The protected user-owned untracked file was neither staged nor
+  modified.
+- Post-merge native `pnpm --config.verify-deps-before-run=false verify` exited
+  `0` on `2026-07-14T14:12:32Z`: ordinary and coverage runs each passed `71`
+  files / `1,642` tests with unchanged `95.38/90.12/98.22/95.40` coverage.
+- Typechecks, lint, cleanup, format, docs/API, Proto lint, and generated-clean
+  phases also passed. Push both refs, record remote state, and remove the clean
+  merged worktree to close T-0039c.
