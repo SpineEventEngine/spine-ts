@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 1 fixes verified — round 2 assignment pending
+Status: Review round 2 assigned
 
 ## Review Scope
 
@@ -153,3 +153,17 @@ semantic-tag, duplicate-exclusion, future-policy, and equal-status scans;
 conflict scan; and current/baseline `git diff --check`. No reviewer is active.
 The fixes may proceed to a fresh four-concern review wave; security remains
 deferred to T-0041 and full verify remains the final task gate.
+
+## Independent Review Round 2 Assignment
+
+- Immutable package range: `0868ecca..769176d4`.
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing role, explicit
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing role, explicit
+  `gpt-5.6-terra` / high.
+- Every reviewer is read-only, cannot spawn subagents, receives one concern,
+  and ignores superseded historical text unless current records or changed docs
+  activate it. Collect the complete wave before adjudication. Security remains
+  deferred to T-0041.

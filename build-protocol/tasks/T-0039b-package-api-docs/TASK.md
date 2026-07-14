@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 1 fixes verified — round 2 assignment pending
+Status: Review round 2 assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -290,3 +290,16 @@ may change. No subagents; coordinator retains Git and independent review.
   conflict checks, and baseline/current diff-whitespace checks passed.
 - The round 1 fixes are accepted for a fresh independent review wave. Full
   `pnpm verify` remains reserved for final task closure.
+
+## Independent Review Round 2 Assignment
+
+- Immutable review range: `0868ecca..769176d4`.
+- Re-run every relevant canonical concern over the complete milestone:
+  style/maintainability `gpt-5.6-terra` / high; documentation completeness
+  `gpt-5.6-luna` / medium; TypeScript/API docs `gpt-5.6-terra` / high; and
+  performance/reliability `gpt-5.6-terra` / high.
+- Every dispatch is explicit, read-only, concern-bounded, and prohibits
+  subagents. Reviewers must ignore historical superseded text unless current
+  records or changed public docs claim it as active.
+- The full wave must return before any result is accepted. Security remains
+  deferred to T-0041.
