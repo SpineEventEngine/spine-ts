@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 framed; implementation assigned
+Status: Slice 1 coordinator-verified; review endpoint pending
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -177,3 +177,120 @@ event behavior in the other process. Close with truthful observable docs.
 
 Implement Slice 1 only. Do not begin server lifecycle or cross-process/docs
 work until Slice 1 focused verification and relevant review are clean.
+
+## Slice 1 Implementer Handback
+
+- Actual implementer profile: `gpt-5.6-terra` / `medium`; no subagents were
+  dispatched or used.
+- Canonical skill applicability was performed before implementation. Applied:
+  `tdd`, `test-driven-development`, `implement`, `error-handling-patterns`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`, and
+  `verification-before-completion`. TDD and its test/mocking/refactoring
+  references governed the focused RED/GREEN cycles; JavaScript testing guided
+  the real bounded-context plus boundary-transport fixture; error handling and
+  Node guidance confirmed existing binding validation/async close ownership;
+  verification governed the fresh focused evidence. No new public/API,
+  HTTP/backend, custom error, or retry policy is needed.
+- Rechecked the accepted JVM evidence named by the parent plan:
+  `IntegrationBroker.java`, `BoundedContext.java`, `ServerEnvironment.java`,
+  and `Server.java`, plus the local runtime/routing evidence. The accepted
+  impact remains one internal context-to-transport composition: context buses
+  receive intake, the environment/Server retain delivery and lifecycle
+  ownership. The recorded source checkout was not available at its historical
+  `/private/tmp/spine-research/core-jvm` location in this worktree session, so
+  the accepted plan and local JVM evidence remain the durable source record.
+- Added package-internal `ContextTransport` and context route extraction in
+  `packages/server/src/runtime/`; neither is exported from the server root.
+  It derives one command responder per actual context command type and one
+  event subscriber per actual context event type, using the existing transport
+  topic/subscription rules and `RuntimeTransportBinding` validation, gate,
+  runtime queue, registration cleanup, and handle. Framework callbacks post to
+  the owning context endpoints. A single event intake route prevents
+  per-receiver duplicate event-bus posts; the existing bus then fans out.
+- RED/GREEN evidence: the first focused test failed because
+  `context-transport.js` was absent, then passed for accepted command posting.
+  The event fan-out test failed with no event registration, then passed after
+  restoring one event intake route per accepted type. Additional focused tests
+  prove malformed/type-URL-invalid command refusal before bus work, empty
+  context zero registrations, and close draining accepted context work without
+  closing the supplied transport.
+- Slice 1 changes only internal runtime source and its focused test. It does
+  not edit `server.ts`, listener/RunningServer lifecycle tests, public docs,
+  examples, Protobuf/manifests, generated tracked output, or Git state.
+- Fresh focused evidence: context/routing/command-event bus suite passed
+  `63/63`; native IPC-backed `runtime-transport.test.ts` passed `13/13` after
+  the sandbox denied local socket creation and the required native run was
+  approved; generated build typecheck, scoped ESLint, cleanup enforcement,
+  exact Prettier, generated-clean, public-root leak scan, and `git diff --check`
+  passed.
+- Remaining uncertainty and Slice 2 handback: `Server.start()` has not yet
+  opened these handles, so server ordering, partial-open/close retry, shared
+  transport behavior, and cross-process proof remain strictly Slice 2/3 work.
+
+## Slice 1 Pre-Review Correction
+
+- Coordinator inspection accepted one bounded correction batch before review.
+  The original implementer was closed after handback and is resumed with the
+  same explicit `gpt-5.6-terra` / `medium` profile; no subagents are allowed.
+- Replace direct context-bus sentinel posts in success tests with
+  `RuntimeTransportBindingHandle.close()` as the actual accepted-work drain,
+  then assert only the transport-originated command/event observations.
+- Add malformed event-envelope/type-URL refusal evidence so neither context bus
+  can be reached by an invalid accepted-route envelope.
+- Scope event fan-out subscriber identity to the owning context using a stable,
+  logical-ID-safe, collision-free encoding of the context name. Command
+  responder identity remains shared so duplicate command ownership still fails
+  deterministically in Slice 2.
+- Extend the recording transport to preserve multiple subscribers per topic and
+  prove two contexts accepting the same event type obtain distinct descriptors
+  and each receive one post. Do not begin server lifecycle work.
+
+## Slice 1 Corrected Implementer Handback
+
+- Resumed existing implementer dispatch and immutable runtime metadata both
+  confirm `gpt-5.6-terra` / `medium`; no subagents were dispatched or used.
+- Re-applied `receiving-code-review`, `test-driven-development`, `tdd`, and
+  `verification-before-completion`, including the TDD testing, mocking,
+  refactoring, and anti-pattern references. The correction preserved real
+  bounded contexts/buses and kept the recording transport at the adapter
+  boundary without adding test-only production access.
+- Command/event success tests now close the returned `ContextTransport` handle
+  immediately after transport intake and assert only transport-originated
+  observations. The close barrier is therefore the proof that accepted binding
+  callbacks and context-bus work drain; no direct sentinel bus work remains.
+- Added malformed event proof for both a missing message and a mismatched type
+  URL. Both reject as `RuntimeTransportEnvelopeError`, the handle remains
+  closeable, and the matching `EventBus` dispatcher receives nothing.
+- RED: two valid Unicode/punctuation context names accepting one event type
+  produced one distinct descriptor instead of two. After the recording
+  transport retained every registration and published to all handlers, the
+  test remained RED on the same descriptor collision. GREEN: event subscriber
+  IDs now include a fixed letter-bearing prefix plus deterministic base64url
+  UTF-8 context-name encoding and route ordinal. Both contexts receive the
+  event exactly once and descriptor keys differ. `command-worker-1` remains
+  intentionally shared for deterministic competing command ownership.
+- `RecordingSignalTransport` now stores a set of registrations per routing key,
+  publishes to a snapshot of every matching handler, and each idempotent handle
+  close removes only its own registration and removes the key only when empty.
+- Corrected focused evidence: context/routing/command-event bus suites passed
+  `65/65`; native IPC-backed runtime transport passed `13/13`; generated build
+  typecheck, scoped ESLint, cleanup enforcement, exact Prettier,
+  generated-clean, public-root leak scan, and `git diff --check` passed.
+- Scope and uncertainty are unchanged: no lifecycle, root export, public docs,
+  example, Protobuf, or generated tracked output changed. `Server.start()`
+  ownership, partial failure/retry, shared transport lifecycle, and
+  cross-process proof remain Slice 2/3 and were not started.
+
+## Slice 1 Coordinator Verification
+
+- Fresh coordinator runs passed four focused files and `65/65` tests, plus the
+  native ZeroMQ runtime-transport regression at `13/13`.
+- Generated build typecheck, scoped ESLint, exact Prettier, cleanup enforcement,
+  canonical package-script generated-clean, public-root leak scan,
+  `git diff --check`, and expected-path status inspection passed. A direct Node
+  invocation of the generated-clean script lacked pnpm's plugin `PATH`; the
+  canonical `pnpm proto:check-generated` invocation passed.
+- Pre-review docs/status lint is clean: all three status mirrors agree; no stale
+  active claim, duplicate policy owner, public root leak, public-doc overclaim,
+  generated output, or unrelated current file is present. Documentation remains
+  N/A for this internal slice; security remains deferred to T-0041.
