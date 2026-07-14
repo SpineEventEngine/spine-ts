@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 P2 findings accepted; fix assigned
+Status: Slice 2 P2 fixes coordinator-verified; rereview endpoint pending
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -522,3 +522,55 @@ work until Slice 1 focused verification and relevant review are clean.
 - Both finding reviewers used no subagents and were closed. Resume the same
   implementer at explicit `gpt-5.6-terra` / medium, no subagents, for this
   complete batch; retain all accepted behavior and Slice 3 boundary.
+
+## Slice 2 P2 Correction Handback
+
+- Existing implementer actual immutable role metadata matches the explicit
+  `gpt-5.6-terra` / `medium` assignment; no subagents were dispatched or used.
+  Before editing, the implementer fully read and applied
+  `receiving-code-review`, both canonical TDD skills and their required testing,
+  mocking, refactoring, and anti-pattern references, and
+  `verification-before-completion`. The accepted review findings were verified
+  against the committed implementation before changes.
+- Refactor safety used the existing three-file native lifecycle gate as the
+  pre-edit GREEN baseline (`70/70`). No structure-coupled test was added: those
+  tests already exercise registration-start failure, listener-start failure,
+  cleanup-only retry, intake and detach hard gates, retry-only-unfinished state,
+  primary-first and flattened diagnostics, and empty-aggregate behavior.
+- `Server.#advanceFailedStartCleanup()` is now the single internal owner of the
+  post-network context-intake close, attachment detach or failed-start rollback,
+  owned close-group advance, and terminal cleanup-state update. The three callers
+  retain their own network gate where applicable and their existing context,
+  listener, or cleanup-only error wording and aggregation. `ContextTransportGroup`
+  was not broadened and no second lifecycle owner was introduced.
+- Public `Server.start()` TSDoc now states that built contexts register
+  sequentially in deterministic input order after recovery, every registration
+  must succeed before HTTP server creation or listener open, and registration
+  failure opens no listener. `RunningServer`, root exports, and public signatures
+  are unchanged.
+- Changed implementation scope is only
+  `packages/server/src/server/server.ts`, plus these three durable records.
+  Verification evidence is recorded after the final checks below. Slice 3,
+  external docs, examples, Protobuf contracts, and generated tracked output were
+  not changed.
+- Remaining uncertainty is unchanged and belongs to Slice 3: real child-process
+  ZeroMQ traffic, bounded child-process teardown/timeouts, observable external
+  documentation, and final all-slice verification. Security remains deferred to
+  T-0041.
+- Fresh correction gates passed: native server lifecycle before and after the
+  refactor `70/70`; focused context/routing/command-event buses `65/65`; native
+  runtime transport `14/14`; generated build typecheck; scoped server ESLint;
+  cleanup enforcement; exact changed-file Prettier; `docs:check` with 205
+  expected server exports; canonical generated-clean; public root/declaration
+  leak scan; `git diff --check`; and expected-path status/diff inspection. No
+  full verify was run and no commit was created.
+
+## Slice 2 P2 Coordinator Verification
+
+- Fresh native lifecycle rerun passed three files and `70/70` tests after the
+  centralization. Generated build typecheck, scoped ESLint, exact Prettier,
+  cleanup, `docs:check` with 205 expected server exports, canonical
+  generated-clean, root/status inspection, and `git diff --check` also passed.
+- Inspection confirms one private phase-advancement owner, caller-specific
+  network/error framing, deterministic-order public TSDoc, and no behavior or
+  public-surface expansion.

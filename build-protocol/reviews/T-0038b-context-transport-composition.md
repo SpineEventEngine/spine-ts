@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 P2 findings accepted; fix assigned
+Status: Slice 2 P2 fixes coordinator-verified; rereview endpoint pending
 
 ## Scope
 
@@ -314,3 +314,46 @@ Status: Slice 2 P2 findings accepted; fix assigned
   `gpt-5.6-terra` / high; no subagents; closed.
 - Security remains deferred. Existing implementer fix assignment is explicit
   `gpt-5.6-terra` / medium, no subagents.
+
+## Slice 2 P2 Implementer Resolution
+
+- Existing implementer actual immutable metadata is `gpt-5.6-terra` / medium,
+  matching dispatch; no subagents were dispatched or used. The implementer
+  fully read and applied `receiving-code-review`, canonical TDD plus all required
+  references, and `verification-before-completion` before production edits.
+- Style P2 resolved: one private `Server.#advanceFailedStartCleanup()` now owns
+  context-intake close, attachment detach or failed-start rollback, owned
+  close-group advance, and terminal cleanup-state update. Each caller still owns
+  its network phase and exact failure wrapper/primary aggregation. Hard-gate,
+  retry checkpoint, stable flattening, empty-aggregate, and terminal semantics
+  are unchanged; `ContextTransportGroup` was not broadened.
+- Documentation P2 resolved: `Server.start()` now documents deterministic
+  sequential built-context registration in input order after recovery, requires
+  every registration before HTTP server creation/listener open, and states that
+  registration failure opens no listener. The wording exposes no internal
+  lifecycle capability or future policy; `RunningServer` and root exports are
+  unchanged.
+- Refactor safety started from a native `70/70` lifecycle GREEN baseline.
+  Existing tests already cover all three centralized paths and their diagnostic
+  edge cases, so no implementation-structure test was added. The only production
+  path changed is `packages/server/src/server/server.ts`; these three records are
+  synchronized for rereview.
+- Remaining uncertainty is intentionally Slice 3: cross-process ZeroMQ proof,
+  bounded child-process lifecycle, external observable docs, and final all-slice
+  verification. Security remains deferred to T-0041.
+- Rereview evidence is fresh and clean: native lifecycle before/after `70/70`,
+  context/routing/buses `65/65`, native runtime transport `14/14`, generated
+  build typecheck, scoped ESLint, cleanup enforcement, exact Prettier,
+  `docs:check` with 205 expected server exports, canonical generated-clean,
+  public-root/declaration leak scan, `git diff --check`, and expected-path
+  status/diff. No full verify or commit was performed.
+
+## Slice 2 P2 Coordinator Gate
+
+- Existing implementer fix accepted at actual immutable
+  `gpt-5.6-terra` / medium; no subagents; implementer closed.
+- Fresh coordinator verification passed native lifecycle `70/70`, build
+  typecheck, scoped ESLint, exact Prettier, cleanup, docs/API check with 205
+  server exports, canonical generated-clean, root/status, and diff.
+- Rereview only style/maintainability and documentation. API and reliability
+  clean results remain applicable; security remains deferred.

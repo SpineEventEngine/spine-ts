@@ -84,6 +84,11 @@ export class Server {
   /**
    * Assemble contexts, complete finite startup recovery, and open the listener.
    *
+   * After recovery succeeds, the built contexts open their transport
+   * registrations sequentially in deterministic input order. Every context
+   * must register successfully before the HTTP server is created or its
+   * listener is opened; a registration failure opens no listener.
+   *
    * Context assembly failure opens no listener and closes contexts assembled
    * by that attempt. If environment startup, context transport registration, or
    * listener open fails, the server first closes acquired network resources and
@@ -224,13 +229,42 @@ export class Server {
     if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
       throwCleanupErrors(errors);
     }
-
-    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
+    await this.#advanceFailedStartCleanup(cleanup, errors);
+    if (errors.length > 0) {
       throwCleanupErrors(errors);
     }
+    throw new Error("Server deferred cleanup completed after an earlier failed start.");
+  }
 
+  async #cleanupFailedContextStart(
+    cleanup: FailedStartCleanup,
+    startError: unknown,
+  ): Promise<never> {
+    const errors: unknown[] = [];
+
+    await this.#advanceFailedStartCleanup(cleanup, errors);
+    throwContextStartError(startError, errors);
+  }
+
+  async #cleanupFailedListenerStart(
+    cleanup: FailedStartCleanup,
+    startError: unknown,
+  ): Promise<never> {
+    const errors: unknown[] = [];
+
+    if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
+      throwListenerStartError(startError, errors);
+    }
+    await this.#advanceFailedStartCleanup(cleanup, errors);
+    throwListenerStartError(startError, errors);
+  }
+
+  async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
+    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
+      return;
+    }
     if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
-      throwCleanupErrors(errors);
+      return;
     }
 
     const failedStartRollback = cleanup.failedStartRollback;
@@ -263,7 +297,6 @@ export class Server {
       closeFailed = true;
       collectCloseError(error, errors);
     }
-
     if (
       !closeFailed &&
       cleanup.contextTransports === undefined &&
@@ -273,77 +306,6 @@ export class Server {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }
-    if (errors.length > 0) {
-      throwCleanupErrors(errors);
-    }
-    throw new Error("Server deferred cleanup completed after an earlier failed start.");
-  }
-
-  async #cleanupFailedContextStart(
-    cleanup: FailedStartCleanup,
-    startError: unknown,
-  ): Promise<never> {
-    const errors: unknown[] = [];
-
-    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
-      throwContextStartError(startError, errors);
-    }
-    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
-      throwContextStartError(startError, errors);
-    }
-
-    let closeFailed = false;
-    try {
-      await cleanup.closeGroup.close();
-    } catch (error) {
-      closeFailed = true;
-      collectCloseError(error, errors);
-    }
-    if (
-      !closeFailed &&
-      cleanup.contextTransports === undefined &&
-      cleanup.attachment === undefined &&
-      this.#failedStartCleanup === cleanup
-    ) {
-      this.#failedStartCleanup = undefined;
-      this.#failedStartConsumed = true;
-    }
-    throwContextStartError(startError, errors);
-  }
-
-  async #cleanupFailedListenerStart(
-    cleanup: FailedStartCleanup,
-    startError: unknown,
-  ): Promise<never> {
-    const errors: unknown[] = [];
-
-    if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
-      throwListenerStartError(startError, errors);
-    }
-    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
-      throwListenerStartError(startError, errors);
-    }
-    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
-      throwListenerStartError(startError, errors);
-    }
-
-    let closeFailed = false;
-    try {
-      await cleanup.closeGroup.close();
-    } catch (error) {
-      closeFailed = true;
-      collectCloseError(error, errors);
-    }
-    if (
-      !closeFailed &&
-      cleanup.contextTransports === undefined &&
-      cleanup.attachment === undefined &&
-      this.#failedStartCleanup === cleanup
-    ) {
-      this.#failedStartCleanup = undefined;
-      this.#failedStartConsumed = true;
-    }
-    throwListenerStartError(startError, errors);
   }
 
   async #closeFailedStartNetwork(cleanup: FailedStartCleanup, errors: unknown[]): Promise<boolean> {
