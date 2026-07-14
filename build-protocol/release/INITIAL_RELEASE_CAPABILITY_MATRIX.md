@@ -1,66 +1,115 @@
 # Initial Release Capability Matrix
 
-Status: In progress
+Status: Independent review assigned
 
 Task: T-0038 Accepted Capability Audit
 
 Baseline: `75340852`
 
-## Purpose
+## Purpose And Method
 
-Trace every active initial-release requirement to implementation, tests, and
-current documentation, or route the requirement to an explicit accepted
-classification without silently weakening the contract.
+This matrix traces active initial-release requirements to current implementation,
+representative behavior evidence, and current documentation. It treats historical
+milestone prose as non-active unless a governing source or current record claims
+it. A row's test is representative evidence, not a claim that a single test
+proves every implementation detail.
 
-## Classifications
-
-- `IMPLEMENTED`: current production behavior has representative test and
-  documentation evidence.
-- `DOCUMENTED_EXCLUSION`: active governing sources explicitly exclude the
-  behavior from the initial release.
-- `STALE_DOC_STATUS`: implementation and active contract disagree with current
-  documentation/status; T-0039 owns reconciliation.
-- `EXAMPLE_GAP`: framework behavior exists but the required example evidence is
-  absent or inaccurate; T-0040 owns closure.
-- `SECURITY_GATE`: final security evidence or remediation belongs to T-0041.
-- `FRAMEWORK_DEFECT`: mandatory framework behavior is absent or contradicted;
-  create the smallest numbered T-0038 child before closing this audit.
-
-## Evidence Rules
-
-- Cite concrete repository paths and named tests/checks.
-- Treat superseded historical text as historical unless an active governing
-  source or current record claims it.
-- Do not infer runtime guarantees from TypeScript declarations alone.
-- Do not classify accepted future policy as a missing initial-release feature.
+Classifications are exact: `IMPLEMENTED`, `DOCUMENTED_EXCLUSION`,
+`STALE_DOC_STATUS`, `EXAMPLE_GAP`, `SECURITY_GATE`, and `FRAMEWORK_DEFECT`.
 
 ## Source Inventory
 
-| Governing source                         | Active requirement groups | Audit status |
-| ---------------------------------------- | ------------------------- | ------------ |
-| `build-protocol/TECHNICAL_SPEC.md`       | Pending inventory         | Pending      |
-| `build-protocol/PROTOBUF_CONTRACT.md`    | Pending inventory         | Pending      |
-| `build-protocol/DEVELOPER_API.md`        | Pending inventory         | Pending      |
-| `build-protocol/RUNTIME_ARCHITECTURE.md` | Pending inventory         | Pending      |
-| `build-protocol/TODO_EXAMPLE_SPEC.md`    | Pending inventory         | Pending      |
-| `build-protocol/CODE_QUALITY.md`         | Pending inventory         | Pending      |
+| Governing source          | Active requirement groups audited                                     | Status   |
+| ------------------------- | --------------------------------------------------------------------- | -------- |
+| `TECHNICAL_SPEC.md`       | Protobuf-first runtime, handlers, routing, processes, compatibility   | Complete |
+| `PROTOBUF_CONTRACT.md`    | copied wire contract, generation, metadata, type URLs, validation     | Complete |
+| `DEVELOPER_API.md`        | public API, transactions, delivery, services, testing                 | Complete |
+| `RUNTIME_ARCHITECTURE.md` | buses, storage, delivery, transport, lifecycle                        | Complete |
+| `TODO_EXAMPLE_SPEC.md`    | public specimen, real services, black-box and local IPC demonstration | Complete |
+| `CODE_QUALITY.md`         | package layout, checks, documentation, coverage, release security     | Complete |
 
 ## Capability Traceability
 
-Pending author audit.
+| #   | Active requirement group                                                                                                                                    | Concrete implementation                                                                                                                  | Named test/check evidence                                                                                                                                                  | Current-doc evidence                                                                                                    | Classification         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 1   | Copied Spine wire contracts remain canonical and reproducible                                                                                               | `proto/spine/`, `proto/spine-sources.json`, `scripts/verify-proto-sources.mjs`                                                           | `scripts/verify-proto-sources.test.mjs`; `pnpm proto:verify`                                                                                                               | `README.md` Workspace; `docs/architecture/README.md` Proto Contract Boundary                                            | IMPLEMENTED            |
+| 2   | Buf + Protobuf-ES generation and ignored generated output                                                                                                   | `buf.gen.yaml`, `scripts/proto-workflow.mjs`, package `generated/` roots                                                                 | `scripts/proto-workflow.test.mjs`; `scripts/check-generated-clean.test.mjs`                                                                                                | `README.md` Useful Commands; `examples/todo/README.md` Run                                                              | IMPLEMENTED            |
+| 3   | Curated wire-message shapes, descriptors, and service exports                                                                                               | `packages/proto/src/index.ts`                                                                                                            | `packages/proto/test/index.test.ts`; `scripts/check-api-docs.mjs`                                                                                                          | `packages/proto/README.md`; `docs/api/README.md` Proto API                                                              | IMPLEMENTED            |
+| 4   | Type registry maps full names, schemas, semantic tags, and canonical type URLs                                                                              | `packages/core/src/index.ts` (`TypeRegistry`, `deriveTypeUrl`)                                                                           | `packages/core/test/index.test.ts` — “derives type URLs…” and lookup cases                                                                                                 | `docs/USER_GUIDE.md` What Exists Now; `docs/architecture/README.md` Core Metadata Registry                              | IMPLEMENTED            |
+| 5   | Command/event `Any` packing validates and preserves type URLs                                                                                               | `packages/core/src/index.ts` (`packAny`, `packCommand`, `packEvent`)                                                                     | `packages/core/test/index.test.ts` — packing/unpacking cases                                                                                                               | `packages/core/README.md`; `docs/USER_GUIDE.md` Core envelope helpers                                                   | IMPLEMENTED            |
+| 6   | Single-message validation and framework transition validation                                                                                               | `packages/core/src/index.ts`; `packages/server/src/entity/entity-transition-validation.ts`                                               | `packages/core/test/validation-facade-boundary.test.ts`; `packages/server/test/entity/entity-transition-validation.test.ts`                                                | `docs/USER_GUIDE.md` validation and transition sections                                                                 | IMPLEMENTED            |
+| 7   | Bare decorators, generated registry analysis, deterministic writer, and explicit runtime discovery                                                          | `packages/server/src/handler/{handler-decorators,build-time-handler-analyzer,generated-registry-writer,generated-registry-discovery}.ts` | corresponding `packages/server/test/handler/*.test.ts`; `examples/todo/src/index.test.ts` — “loads generated handler metadata…”                                            | `packages/server/README.md` handler registry sections; `docs/USER_GUIDE.md` generated registry section                  | IMPLEMENTED            |
+| 8   | End-user handler invariant enforcement: generated messages, explicit returns, no schema decorators/envelopes/app materialization                            | analyzer and registry ingestion above                                                                                                    | `packages/server/test/handler/build-time-handler-analyzer.test.ts`; `packages/server/test/handler/generated-handler-registry.test.ts`                                      | `TECHNICAL_SPEC.md` End-User Handler API Invariants; `docs/USER_GUIDE.md` handler guidance                              | IMPLEMENTED            |
+| 9   | Default first-declared-field command routing and explicit custom-route replacement                                                                          | `packages/server/src/repository/repository.ts` and `primitive-id.ts`                                                                     | `packages/server/test/repository/repository-routing.test.ts` — “routes commands… first command field”, “rejects blank…”                                                    | `packages/server/README.md` routing section; `docs/USER_GUIDE.md` routing section                                       | IMPLEMENTED            |
+| 10  | Framework-owned entity transactions, state validation, and non-event-sourced aggregate behavior                                                             | `packages/server/src/entity/{entity,entity-transaction,entity-transition-validation}.ts`                                                 | `packages/server/test/entity/entity-transaction.test.ts`; `repository-routing.test.ts` — “owns the aggregate transaction”                                                  | `docs/api/README.md` entity transaction section; `docs/USER_GUIDE.md` transaction section                               | IMPLEMENTED            |
+| 11  | Storage seams and append-before-dispatch event journal behavior                                                                                             | `packages/storage/src/{storage,record,event}/`; `packages/server/src/bus/event-bus.ts`                                                   | `packages/storage/test/event/event-store.test.ts`; `packages/server/test/bus/event-bus.test.ts`                                                                            | `packages/storage/README.md`; `docs/api/README.md` EventStore                                                           | IMPLEMENTED            |
+| 12  | Async command intake, acknowledgement, aggregate execution, and later event handling                                                                        | `packages/server/src/{bus,context,repository}/`                                                                                          | `packages/server/test/services/spine-services.test.ts`; `repository-routing.test.ts` — aggregate execution and post-commit dispatch cases                                  | `docs/USER_GUIDE.md` services and bounded-context sections                                                              | IMPLEMENTED            |
+| 13  | Process-manager and projection delivery/update paths, read-side query, and subscriptions                                                                    | `packages/server/src/{context,repository,stand,services}/`                                                                               | `repository-routing.test.ts` — process-manager/projection/Stand cases; `packages/server/test/stand/stand.test.ts`; `services/spine-services.test.ts`                       | `packages/server/README.md`; `docs/api/README.md` service/Stand sections                                                | IMPLEMENTED            |
+| 14  | Durable inbox, lease fencing, exact replay, bounded attempts, and fail-closed invalid legacy rows                                                           | `packages/server/src/delivery/`                                                                                                          | `packages/server/test/delivery/{inbox,sharded-work-registry,delivery-worker,delivery-loop,delivery-run-coordinator}.test.ts`                                               | `packages/server/README.md` delivery section; `docs/USER_GUIDE.md` delivery section                                     | IMPLEMENTED            |
+| 15  | Adapter-neutral transport plus same-host ZeroMQ IPC without public socket leakage                                                                           | `packages/transport/src/{index,zeromq}/`; `packages/server/src/runtime/runtime-transport.ts`                                             | `packages/transport/test/zeromq/local-ipc-smoke.test.ts`; `packages/server/test/runtime/runtime-transport.test.ts`                                                         | `packages/transport/README.md`; `docs/USER_GUIDE.md` transport section                                                  | IMPLEMENTED            |
+| 16  | Real generated `CommandService`, `QueryService`, and `SubscriptionService` over local HTTP/2                                                                | `packages/server/src/{services,server}/`                                                                                                 | `packages/server/test/services/spine-services.test.ts`; `packages/server/test/server/server-lifecycle-integration.test.ts`                                                 | `packages/server/README.md`; `docs/USER_GUIDE.md` Server section                                                        | IMPLEMENTED            |
+| 17  | Environment ownership, startup recovery, intake-before-detach, quiescence, reusable stop, and permanent close                                               | `packages/server/src/server/{server,server-environment,environment-attachment,environment-delivery-worker}.ts`                           | `packages/server/test/server/{environment-attachment,environment-close,environment-generation-stop,server-lifecycle-integration}.test.ts`                                  | `packages/server/README.md` lifecycle section; `docs/USER_GUIDE.md` Server section                                      | IMPLEMENTED            |
+| 18  | Package-root exports and public API documentation alignment                                                                                                 | all six `packages/*/src/index.ts`; `scripts/check-api-docs.mjs` allowlists expected roots                                                | `docs:check:generated` passed with 100 proto / 28 core / 205 server / 19 storage / 17 transport / 3 testing exports                                                        | `docs/api/README.md`; all six package READMEs                                                                           | IMPLEMENTED            |
+| 19  | Small black-box framework testing surface                                                                                                                   | `packages/testing/src/index.ts` (`BoundedContextFixture`)                                                                                | `packages/testing/test/index.test.ts`                                                                                                                                      | `packages/testing/README.md`; `docs/api/README.md` testing section                                                      | IMPLEMENTED            |
+| 20  | To-do app: generated registry, decorated aggregate/projection, real local gRPC command/query/subscription, validation/refusal and async projection evidence | `examples/todo/src/index.ts`                                                                                                             | `examples/todo/src/index.test.ts` — standalone clients, projection query/subscription, validation/refusal cases                                                            | `examples/todo/{README.md,USER_GUIDE.md}`                                                                               | IMPLEMENTED            |
+| 21  | To-do app child-process/local-IPC demonstration with black-box evidence                                                                                     | no child-process application harness or test found; example has only `src/index.test.ts` and uses process-local in-memory context        | bounded scan: `rg --files examples/todo` and focused assertion in `examples/todo/README.md` that each process has its own in-memory state                                  | `TODO_EXAMPLE_SPEC.md` Required Demonstrations requires this; current example guide has no local multi-process workflow | EXAMPLE_GAP → T-0040   |
+| 22  | Public specimens avoid forbidden end-user APIs                                                                                                              | `examples/todo/src/index.ts` uses bare `@Assign`/`@Subscribe`, generated types, and no app registry materialization                      | focused prohibition scan over `examples/todo`, `docs/USER_GUIDE.md`, package READMEs, API and architecture docs; example test asserts no discovery/materialization imports | `TODO_EXAMPLE_SPEC.md` End-User API Constraints; `docs/USER_GUIDE.md` handler guidance                                  | IMPLEMENTED            |
+| 23  | Root/package/API/user-guide status accurately separates observable behavior from later work                                                                 | current docs describe actual local/in-memory behavior and exclusions; T-0039 remains the plan-owned canonical completion pass            | focused stale-wording scan found no specific false current-behavior claim                                                                                                  | `PROJECT_COMPLETION_PLAN.md` Documentation Definition of Done and T-0039 packets                                        | IMPLEMENTED            |
+| 24  | No public monitor/scheduler/health/action/dead-letter/retry-policy API or production topology promise                                                       | root exports checked by `scripts/check-api-docs.mjs`; delivery APIs stay bounded in `packages/server/src/index.ts`                       | API check plus focused forbidden-public-name scan                                                                                                                          | `DEVELOPER_API.md` Delivery and Inbox API; `docs/api/README.md` delivery limitations                                    | DOCUMENTED_EXCLUSION   |
+| 25  | No distributed/multi-host transport, production supervision, or production adapter policy                                                                   | local `packages/transport/src/zeromq/` only; no supervisor public API                                                                    | local IPC smoke and public-root scan                                                                                                                                       | `PROJECT_COMPLETION_PLAN.md` Explicitly Not Release Blocking; root README limitations                                   | DOCUMENTED_EXCLUSION   |
+| 26  | No projection inbox `CATCH_UP`, no legacy `IMPORT_EVENT` delivery, aggregate importer/`ImportBus`, or new aggregate `@Apply`                                | delivery validation and registry role guards                                                                                             | `packages/server/test/delivery/inbox.test.ts`; handler analyzer/registry tests                                                                                             | `DEVELOPER_API.md` Delivery and Inbox API; `RUNTIME_ARCHITECTURE.md` Delivery and Reliability                           | DOCUMENTED_EXCLUSION   |
+| 27  | No production persistence/authentication/deployment/tracing/health commitment in the example                                                                | in-memory example assembly in `examples/todo/src/index.ts`                                                                               | `examples/todo/src/index.test.ts` local server suite                                                                                                                       | `examples/todo/README.md` limitations; `PROJECT_COMPLETION_PLAN.md` Explicitly Not Release Blocking                     | DOCUMENTED_EXCLUSION   |
+| 28  | Final project-wide security evidence: `Any`, validation, tenants, local IPC, dependencies, logging, DoS                                                     | final review is intentionally not run by this task                                                                                       | no per-task security check; task protocol defers it                                                                                                                        | `CODE_QUALITY.md` Final Security Gate; `PROJECT_COMPLETION_PLAN.md` T-0041                                              | SECURITY_GATE → T-0041 |
+| 29  | Release command, coverage threshold, generated-clean, and final tracked-state proof                                                                         | scripts exist in root `package.json` (`verify`, `test:coverage`, `docs:check`, `proto:check-generated`)                                  | tooling is implemented; audit runs focused checks only; full `pnpm verify` remains a T-0038 closure prerequisite reserved for final task acceptance/post-merge             | `CODE_QUALITY.md` Testing and Coverage; completion-plan Quality And Release DoD                                         | IMPLEMENTED            |
 
 ## Public Surface And Compatibility
 
-Pending package-root, TypeDoc/export, wire-shape, and type-URL audit.
+- Package roots audited: `@spine-ts/proto`, `core`, `storage`, `transport`,
+  `server`, and `testing`; `scripts/check-api-docs.mjs` is the executable
+  allowlist for their public exports and TypeDoc visibility.
+- After ignored Proto generation and workspace declaration build,
+  `docs:check:generated` passed with 100 proto, 28 core, 205 server, 19 storage,
+  17 transport, and 3 testing exports.
+- Wire compatibility evidence: generated Proto exports, `packages/proto/test/index.test.ts`,
+  registry/type-URL coverage in `packages/core/test/index.test.ts`, envelope
+  validation in command/event/runtime transport tests, and the copied-proto
+  verifier.
+- Legacy public compatibility names are not evidence of new end-user APIs:
+  `Apply`, envelope packers, and registry materialization references are
+  documented only as narrow legacy/framework/testing facilities. The specimen
+  scan found none in ordinary example handler source.
 
-## End-User API Prohibitions
+## End-User API Prohibition Scan
 
-Pending example and guide snippet scan.
+Audit command (no matches in ordinary example handler source):
+
+```text
+rg -n "@Apply|@(Assign|Command|React|Subscribe)\\s*\\(|materializeDecoratedEntityHandlers|packEvent|packCommand|EventIdSchema|startTransaction|commitTransaction|requireTaskId" examples/todo docs/USER_GUIDE.md packages/*/README.md docs/api docs/architecture
+```
+
+Matches outside the example handler source are documented low-level framework,
+test-fixture, legacy, or explanatory references. They remain inputs to T-0039's
+planned documentation completion pass; this audit found no current-doc mismatch.
 
 ## Accepted Exclusions
 
-Pending active exclusion inventory.
+The plan explicitly excludes distributed multi-host transport, production
+process supervision, retry timing/backoff/jitter, public monitoring/scheduler/
+health/action/dead-letter APIs, production transport topology/adapter policy,
+projection inbox catch-up, legacy `IMPORT_EVENT`, aggregate import/importers,
+`ImportBus`, aggregate `@Apply`, JVM source compatibility, and production
+persistence/authentication/deployment/tracing/health in the example. Rows
+24–27 record their evidence; they are not defects.
 
-## Routed Gaps
+## Routed Gaps And Uncertainty
 
-Pending classification.
+| Finding                                                                                  | Route                   | Evidence and next focused check                                                                                                          |
+| ---------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Required to-do child-process/local-IPC demonstration is absent                           | T-0040                  | Add one black-box child-process test that uses only public app/framework APIs and proves local IPC behavior.                             |
+| Final security review has not occurred                                                   | T-0041                  | Execute the final security gate after docs/example closure.                                                                              |
+| Full release verification and coverage evidence were intentionally not run in this audit | T-0038 closure / T-0042 | Run `pnpm --config.verify-deps-before-run=false verify` only at final acceptance/post-merge; this is not evidence of a framework defect. |
+
+No mandatory framework defect was established from the bounded scans and
+focused behavior evidence. Therefore no T-0038 child is created. The remaining
+uncertainty is release-gate execution and the routed non-framework gaps above.
+T-0039 remains a planned completion pass, not a gap discovered by this audit.

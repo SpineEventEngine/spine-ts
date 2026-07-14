@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Framed; audit implementation assigned
+Status: Independent review assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -125,7 +125,85 @@ security-owned gap, or mandatory framework defect.
   conflicts with this autonomous evidence audit. No server runtime/API edit is
   planned, so Spine JVM source inspection is N/A for the parent.
 
+### Implementer Recheck (`2026-07-14`)
+
+- Evidence: the session inventory exposed the currently available skills; the
+  task-relevant user entrypoints were enumerated with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and `build-protocol/skills/EXPECTED_SKILLS.md` plus
+  `/Users/armiol/.agents/.skill-lock.json` were read. All eight expected
+  manifest entries are present in the readable inventory/lock evidence.
+- Selected and fully read: `verification-before-completion`
+  (`/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`),
+  because this audit must make evidence-backed completion claims after focused
+  checks.
+- Skipped: `subagent-driven-development` and `requesting-code-review` require
+  dispatching subagents, which this assignment forbids; `using-git-worktrees`
+  is N/A because the assigned worktree already exists and may not be recreated;
+  `planning-with-files` would duplicate the task/work/review/matrix durable
+  records; ADR, TypeScript-advanced-types, Node-backend, TDD, and JVM-server
+  skills are N/A because this parent changes only audit records, not runtime or
+  public contracts. The project protocol remains governing if any advisory
+  skill differs from it.
+
 ## Immediate Next Action
 
-Dispatch the single Terra Medium implementer to produce the matrix and update
-the synchronized records, then run focused local audit checks before review.
+Hand the corrected matrix and synchronized records to the existing relevant
+reviewer concerns. T-0039 remains a planned documentation completion pass, not
+a mismatch found by this audit.
+
+## Coordinator Pre-review Finding
+
+- `2026-07-14T01:10:13Z`: immutable implementer-role metadata confirms actual
+  `gpt-5.6-terra` / medium matching explicit dispatch; the author is closed and
+  used no subagents. The four-path handback scope is correct.
+- After generated output plus `typecheck:build:generated`, TypeDoc/API checks
+  pass with 100 proto, 28 core, 205 server, 19 storage, 17 transport, and 3
+  testing exports; the focused capability suite passes 5 files / 64 tests and
+  cleanup rules pass.
+- Correct two pre-review record issues before reviewer dispatch: row 23 cannot
+  be `STALE_DOC_STATUS` while its evidence establishes no specific false
+  current claim; classify the current-doc separation truthfully and leave
+  T-0039 as a planned closure pass. Replace the now-resolved generated/build
+  precondition wording with the coordinator's executable green evidence and
+  update counts/routed-gap text consistently.
+
+## Final Pre-review Classification Finding
+
+- `2026-07-14T01:13:45Z`: strict classification lint counts 22 exact
+  `IMPLEMENTED` cells because row 29 says `IMPLEMENTED (tooling)` despite the
+  matrix declaring exact classifications. Move its qualifier into evidence and
+  use exact `IMPLEMENTED`; keep the stated 23/4/1/1 totals truthful.
+- `pnpm --config.verify-deps-before-run=false proto:check-generated` passes;
+  the earlier direct-node PATH failure is not a repository defect.
+
+## Independent Review Assignment
+
+- `2026-07-14T01:15:54Z`: accept and close the existing implementer, actual
+  `gpt-5.6-terra` / medium from explicit dispatch plus immutable spawn-role
+  metadata, no subagents. Author scope is exactly the matrix and three T-0038
+  records.
+- Coordinator checks pass: 29 exact rows (23 implemented, four exclusions, one
+  T-0040 example gap, one T-0041 security gate), 5 files / 64 focused tests,
+  TypeDoc/API exports at 100/28/205/19/17/3, cleanup rules, generated-clean,
+  Prettier, status synchronization, and diff integrity.
+- Assign all four relevant existing concerns concurrently: documentation at
+  explicit `gpt-5.6-luna` / medium; style/maintainability, TypeScript/API docs,
+  and performance/reliability at explicit `gpt-5.6-terra` / high. No reviewer
+  may edit or spawn subagents. Security remains deferred to T-0041.
+
+## Implementer Correction Handback
+
+- Row 23 is `IMPLEMENTED`: the focused scan found no specific false current
+  documentation claim. T-0039 remains planned and is not listed as a routed
+  audit gap.
+- Executable evidence supersedes the initial setup-only failures:
+  `docs:check:generated` passed with 100/28/205/19/17/3 package exports, the
+  focused proto/core/testing/example/local-IPC suite passed 5 files / 64 tests,
+  and cleanup enforcement passed.
+- The matrix now records 23 IMPLEMENTED, four DOCUMENTED_EXCLUSION, one
+  EXAMPLE_GAP, and one SECURITY_GATE classifications, with no
+  STALE_DOC_STATUS or FRAMEWORK_DEFECT finding.
+- Final classification correction: row 29 now uses the exact `IMPLEMENTED`
+  token; its tooling and final T-0038 execution qualifier is retained in the
+  evidence cell. The matrix is ready for independent review.
