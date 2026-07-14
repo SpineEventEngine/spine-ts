@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Author review wave 2 fix complete — coordinator rereview pending
+Status: Review wave 3 assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -371,3 +371,16 @@ without reading internal source.
 - Skills used: receiving-code-review, doc-coauthoring, and
   verification-before-completion. Actual immutable profile: existing
   implementer, `gpt-5.6-terra` / medium; no subagents.
+
+## Review Wave 3 Assignment
+
+- Literal endpoint: `6caf1c8ebb624a6d996d82de5c2cb85db59a2799`.
+- Package: `.superpowers/sdd/review-aaa31116..6caf1c8e.diff` (`151555` bytes,
+  ten commits from literal baseline `aaa31116`).
+- Rerun TypeScript/API docs and performance/reliability only, each through its
+  existing explicit immutable `gpt-5.6-terra` / high read-only/no-subagent
+  role. The Wave 2 style and documentation CLEAN dispositions remain valid:
+  this fix did not reorganize the journey or add/remove reader coverage.
+- API rechecks the `Cancel(Subscription)` call shape; reliability rechecks the
+  server-handler/client-stream boundary and ZeroMQ retry/restart limits. Both
+  prompts retain the ledger, current exclusions, and historical-text rule.

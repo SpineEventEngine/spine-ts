@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Author review wave 2 fix complete — coordinator rereview pending
+Status: Review wave 3 assigned
 
 ## Review Scope
 
@@ -269,3 +269,18 @@ Status: Author review wave 2 fix complete — coordinator rereview pending
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
   no subagents. Skills used: receiving-code-review, doc-coauthoring, and
   verification-before-completion.
+
+## Review Wave 3 Assignment
+
+- Literal baseline `aaa31116`; endpoint
+  `6caf1c8ebb624a6d996d82de5c2cb85db59a2799`; package
+  `.superpowers/sdd/review-aaa31116..6caf1c8e.diff`, ten commits, `151555`
+  bytes.
+- TypeScript/API docs: existing explicit immutable `gpt-5.6-terra` / high,
+  bounded to the cancellation message/call shape and public client contract.
+- Performance/reliability: existing explicit immutable `gpt-5.6-terra` / high,
+  bounded to durable handler scope versus process-local streams and ZeroMQ
+  retry/restart limits.
+- Both are read-only/no-subagent and receive the full ledger, current
+  exclusions, and historical-superseded-text rule. Style/documentation retain
+  their Wave 2 CLEAN dispositions with the concrete unaffected rationale above.
