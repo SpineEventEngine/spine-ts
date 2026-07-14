@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 2 findings accepted — fixes assigned
+Status: Review round 2 fixes verified — round 3 assignment pending
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -323,3 +323,43 @@ may change. No subagents; coordinator retains Git and independent review.
   `gpt-5.6-terra` / high. Every reviewer is closed.
 - The deduplicated complete batch returns to the existing implementer,
   `gpt-5.6-terra` / medium, docs/records only, no subagents.
+
+## Review Round 2 Fix Handback
+
+- `packages/testing/README.md` now identifies `@example/tasks-proto` as the
+  consumer's generated-package stand-in and imports `CreateTaskSchema` and
+  `TaskIdSchema` before use. The fixture block imports `BoundedContext` and all
+  repository/topic/query/command values from an explicitly identified
+  consumer-owned test-support stand-in, so neither snippet uses undeclared
+  globals or implies a shipped example package.
+- `packages/server/README.md` now separates facility selection from ownership:
+  production `ownsStorageFactory`, `ownsTransport`, `ownsDelivery`, and
+  `ownsTracerFactory` default false and control facility closure, while
+  `ServerOptions.ownsEnvironment` controls server closure of the environment
+  object after contexts and resources.
+- No source, export, example, dependency, generated, user-guide, or unrelated
+  documentation path changed. Focused evidence is recorded in the work/review
+  logs.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+- Focused verification passed: exact-path Prettier for both assigned READMEs
+  and all three records; package-only fixture import, stale ownership wording,
+  future-policy, identical-status, and prohibited-scope scans.
+- `git diff --check` and `pnpm docs:check` passed; TypeDoc export counts were
+  `100/28/205/19/17/3` for proto/core/server/storage/transport/testing.
+- Full `pnpm verify` was intentionally not run because it remains reserved for
+  the final task gate. Coordinator verification remains pending.
+
+## Coordinator Verification After Review Round 2
+
+- Confirmed every testing-snippet symbol is imported from an identified public
+  or illustrative consumer package; a multiline import-block scan found all
+  eight previously undeclared schema/setup symbols.
+- Confirmed server docs separate facility selection, the four production
+  per-facility `owns*` flags (default false), and server-level
+  `ServerOptions.ownsEnvironment` closure of the environment object.
+- `docs:check` passed with TypeDoc export counts `100/28/205/19/17/3`.
+- Exact-path Prettier, equal-status, stale-ownership, conflict, scope, and
+  current/baseline diff-whitespace checks passed.
+- Both round 2 fixes are accepted for a fresh complete review wave. Full
+  `pnpm verify` remains the final task gate.

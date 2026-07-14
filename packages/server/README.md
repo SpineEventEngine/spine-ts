@@ -898,8 +898,13 @@ await Server.atPort(8080, { environment }).add(tasks).start();
 Production construction rejects missing `storageFactory` or `transport` before
 network intake opens. Production mode validates explicit facility injection
 only; durable production storage adapters are outside the initial release, and
-`InMemoryStorageFactory` is local/test-only. The environment selects and owns
-facilities for server assembly. `Server` accepts built contexts and
+`InMemoryStorageFactory` is local/test-only. The environment selects facilities
+for server assembly. It closes a supplied facility only when the corresponding
+`ownsStorageFactory`, `ownsTransport`, `ownsDelivery`, or `ownsTracerFactory`
+flag is true; all four flags default to false for production environments.
+These per-facility flags are independent of `ServerOptions.ownsEnvironment`,
+which controls whether the server closes the environment object after contexts
+and explicit resources. `Server` accepts built contexts and
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
 more specific local factory first. This object is not a Java-style process-wide

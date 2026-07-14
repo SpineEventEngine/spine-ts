@@ -26,8 +26,12 @@ protobuf messages directly with `@bufbuild/protobuf`, use `SignalMetadata` for
 routine command IDs and command/actor context, and use `@spine-ts/core` packing
 helpers when they need low-level command or event envelopes.
 
+`@example/tasks-proto` below is an illustrative stand-in for the consumer's
+generated Protobuf package; substitute its actual package name.
+
 ```ts
 import { create } from "@bufbuild/protobuf";
+import { CreateTaskSchema, TaskIdSchema } from "@example/tasks-proto";
 import { packCommand } from "@spine-ts/core";
 import { UserIdSchema } from "@spine-ts/proto";
 import { SignalMetadata } from "@spine-ts/server";
@@ -48,7 +52,19 @@ const createTaskCommand = packCommand({
 });
 ```
 
+The fixture-usage snippet treats `@example/tasks-test-support` as the
+consumer-owned module that assembles the repositories and generated service
+messages shown above; substitute the application's real test-support package.
+
 ```ts
+import {
+  createTaskCommand,
+  taskAggregateRepository,
+  taskProjectionRepository,
+  taskQuery,
+  taskTopic,
+} from "@example/tasks-test-support";
+import { BoundedContext } from "@spine-ts/server";
 import { BoundedContextFixture } from "@spine-ts/testing";
 
 const context = BoundedContext.singleTenant("Tasks")

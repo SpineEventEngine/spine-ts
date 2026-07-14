@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 2 findings accepted — fixes assigned
+Status: Review round 2 fixes verified — round 3 assignment pending
 
 ## Review Scope
 
@@ -183,3 +183,31 @@ deferred to T-0041 and full verify remains the final task gate.
   and every reviewer is closed. The complete wave yields two accepted fixes,
   assigned together to the existing implementer (`gpt-5.6-terra` / medium),
   docs/records only, no subagents. Security remains deferred to T-0041.
+
+## Review Round 2 Fix Handback
+
+- Deduplicated fixture finding fixed in `packages/testing/README.md`: consumer
+  schemas are imported from an identified illustrative generated package, and
+  `BoundedContext` plus repository/topic/query/command setup are explicit with
+  no undeclared values.
+- Reliability finding fixed in `packages/server/README.md`: selection is
+  separate from per-facility ownership, all four production `owns*` flags are
+  named with their false defaults, and `ServerOptions.ownsEnvironment` is
+  separately defined as closure of the environment object after dependencies.
+- No reviewer is active. Coordinator focused verification remains pending.
+- Implementer evidence passed: exact-path Prettier for the two corrected
+  READMEs and all three records; focused package-only import, declaration,
+  stale ownership, future-policy, identical-status, and prohibited-scope
+  scans; `git diff --check`; and `pnpm docs:check` with TypeDoc export counts
+  `100/28/205/19/17/3` for proto/core/server/storage/transport/testing.
+- Full `pnpm verify` remains deliberately deferred to the final task gate.
+
+## Coordinator Verification After Review Round 2
+
+The coordinator independently accepted both fixes. Evidence: multiline
+import-block validation for every formerly undeclared testing symbol; public
+source/TSDoc comparison for per-facility and server-level ownership;
+`docs:check` counts `100/28/205/19/17/3`; exact-path Prettier; equal-status,
+stale-ownership, conflict, scope, and current/baseline diff checks. No reviewer
+is active. A fresh four-concern wave is required; security remains deferred to
+T-0041 and full verify remains final-only.
