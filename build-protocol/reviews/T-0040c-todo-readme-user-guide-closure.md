@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 5 finding accepted - fix pending
+Status: Wave 5 fix verified - final re-review pending
 
 Baseline: `526b7b4d`
 
@@ -310,6 +310,15 @@ links/imports, and future-policy overclaim.
 - All Wave 5 reviewers were closed. The single fix returns to existing
   `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
   explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
+
+## 2026-07-14 - Wave 5 Fix Acceptance
+
+- The resumed implementer retained explicit immutable `gpt-5.6-terra` /
+  medium metadata and was closed after result capture.
+- Coordinator native evidence accepted finite ordered response formats, bounded
+  decoder/log summaries, omission reporting, and oversized decoder evidence.
+- Focused test/type/docs/format/generated/diff checks passed. A fresh immutable
+  endpoint and all four specialist lanes remain required.
 
 ## Skill Applicability
 

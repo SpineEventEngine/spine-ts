@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 5 finding accepted; fix pending
+Status: In progress - Wave 5 fix verified; final re-review pending
 
 Started: `2026-07-14`
 
@@ -443,3 +443,40 @@ install` reported all eight workspace projects already up to date;
   decode/log handling needs an independent cap plus omitted-row reporting.
   Keep exact-ID as the deterministic seeded-row proof and add oversized-response
   evidence for the verbatim guide decoder.
+
+## 2026-07-14 - Specialist Wave 5 Fix Evidence
+
+- The verbatim guide query module now creates a public generated
+  `ResponseFormat` for every query. Broad and column-filter reads request at
+  most 16 rows; exact-ID requests one. All limited requests order ascending by
+  `open_task_count`, the only declared `TaskList` projection column, while the
+  exact-ID criterion remains the deterministic seeded proof.
+- Decoder handling independently inspects at most 16 response rows and returns
+  bounded `taskLists`, `unavailableRows`, and `omittedRows`. Logging emits at
+  most 16 task IDs, each capped at 64 characters, plus the two finite counters;
+  it no longer prints complete decoded rows. Absent, mismatched, undefined, and
+  malformed matching-type rows remain skipped and counted unavailable.
+- Temporary verbatim-decoder TDD RED retained all 100 valid rows after an
+  absent, mismatched, and malformed prefix. GREEN retained the 13 valid rows
+  within the first 16 response rows, reported three unavailable and 87 omitted
+  rows, and exited 0. No redundant checked-in application script remains.
+- Exact native workflow passed. Package smoke seeded
+  `smoke-9c1add31-a818-44f8-9a23-431934a13d3f`; the saved query module returned
+  that ID from all-row, exact-ID, and `open_task_count = 1` summaries with zero
+  unavailable/omitted rows. The saved subscription module delivered its exact
+  UUID-backed task.
+- `typecheck:build`, `typecheck:tooling`, focused ESLint/Prettier, `docs:check`
+  with 372 expected exports, and generated-clean passed. Server `SIGINT` left
+  no `127.0.0.1:8080` listener, and all temporary extracted/check modules were
+  removed. Final diff/format checks are recorded in the work log; full
+  `pnpm verify` remains the coordinator gate.
+
+## 2026-07-14 - Coordinator Wave 5 Fix Verification
+
+- The verbatim bounded query module passed against a fresh native server: all,
+  exact-ID, and column summaries each contained the smoke-seeded task with zero
+  unavailable or omitted rows; the exact subscription module also passed.
+- Focused smoke tests passed 3/3. Fresh tooling/build types, docs/API, format,
+  generated-clean, and diff checks passed.
+- Server shutdown and saved-module cleanup left no temporary repository file or
+  IPv4 listener. The single Wave 5 fix is ready for final all-lane re-review.

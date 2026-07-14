@@ -74,7 +74,10 @@ SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-ts/example-todo exec node sc
 
 The seeded row appears in the all-row and exact-ID results. Because smoke
 creates one unfinished task, it also appears in the `open_task_count = 1`
-column-filter result.
+column-filter result. Broad and column queries request at most 16 rows; the
+exact-ID query requests one. Every limited request orders by the projection's
+declared `open_task_count` column. The client independently inspects at most 16
+returned rows and logs only capped IDs plus unavailable/omitted row counts.
 
 ```js
 import { log } from "node:console";
@@ -96,7 +99,13 @@ import {
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import {
+  OrderBySchema,
+  OrderBy_Direction,
+  QueryIdSchema,
+  QuerySchema,
+  ResponseFormatSchema,
+} from "@spine-ts/proto/generated/spine/client/query_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import { SignalMetadata } from "@spine-ts/server";
 
@@ -108,6 +117,8 @@ if (taskId === undefined || taskId === "") {
   throw new Error("Set SPINE_TODO_TASK_ID to the complete task ID printed by package smoke.");
 }
 const querySuffix = randomUUID();
+const maxQueryRows = 16;
+const maxLoggedIdLength = 64;
 const session = new Http2SessionManager(baseUrl);
 const transport = createGrpcTransport({ baseUrl, sessionManager: session });
 const queries = createClient(QueryService, transport);
@@ -121,14 +132,18 @@ try {
     taskListQuery(`query-all-${querySuffix}`, { case: "includeAll", value: true }),
   );
   const exact = await readTaskLists(
-    taskListQuery(`query-exact-${querySuffix}`, {
-      case: "filters",
-      value: create(TargetFiltersSchema, {
-        idFilter: {
-          id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
-        },
-      }),
-    }),
+    taskListQuery(
+      `query-exact-${querySuffix}`,
+      {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: {
+            id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
+          },
+        }),
+      },
+      1,
+    ),
   );
   const oneOpenTask = await readTaskLists(
     taskListQuery(`query-one-open-task-${querySuffix}`, {
@@ -153,18 +168,30 @@ try {
   requireTask(all, "all-row query");
   requireTask(exact, "exact-ID query");
   requireTask(oneOpenTask, "open_task_count query");
-  log({ all, exact, oneOpenTask });
+  log({
+    all: resultSummary(all),
+    exact: resultSummary(exact),
+    oneOpenTask: resultSummary(oneOpenTask),
+  });
 } finally {
   session.abort();
 }
 
 function requireTask(lists, label) {
-  if (!lists.some((list) => list.id === taskId)) {
+  if (!lists.taskLists.some((list) => list.id === taskId)) {
     throw new Error(`${label} did not return the requested smoke task.`);
   }
 }
 
-function taskListQuery(id, criterion) {
+function resultSummary(result) {
+  return {
+    taskIds: result.taskLists.map((list) => list.id.slice(0, maxLoggedIdLength)),
+    unavailableRows: result.unavailableRows,
+    omittedRows: result.omittedRows,
+  };
+}
+
+function taskListQuery(id, criterion, limit = maxQueryRows) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: id }),
     target: create(TargetSchema, {
@@ -172,6 +199,15 @@ function taskListQuery(id, criterion) {
       criterion,
     }),
     context: actorContext,
+    format: create(ResponseFormatSchema, {
+      limit,
+      orderBy: [
+        create(OrderBySchema, {
+          column: "open_task_count",
+          direction: OrderBy_Direction.ASCENDING,
+        }),
+      ],
+    }),
   });
 }
 
@@ -184,21 +220,32 @@ async function readTaskLists(query) {
 }
 
 function decodeTaskLists(response) {
-  const lists = [];
-  for (const row of response.message) {
+  const maxDecodedRows = 16;
+  const taskLists = [];
+  let unavailableRows = 0;
+  const inspectedRows = response.message.slice(0, maxDecodedRows);
+  for (const row of inspectedRows) {
     if (row.state === undefined) {
+      unavailableRows += 1;
       continue;
     }
     try {
       const list = unpackAny(row.state, TaskListSchema);
       if (list !== undefined) {
-        lists.push(list);
+        taskLists.push(list);
+      } else {
+        unavailableRows += 1;
       }
     } catch {
       // Skip malformed matching-type bytes just like absent or mismatched rows.
+      unavailableRows += 1;
     }
   }
-  return lists;
+  return {
+    taskLists,
+    unavailableRows,
+    omittedRows: Math.max(0, response.message.length - inspectedRows.length),
+  };
 }
 
 async function withTimeout(promise, label, timeoutMs) {
