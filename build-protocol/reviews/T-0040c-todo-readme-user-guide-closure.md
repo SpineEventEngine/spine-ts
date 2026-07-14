@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 7 fix coordinator-verified - fresh re-review pending
+Status: Specialist Wave 8 assigned at `26b24495`
 
 Baseline: `526b7b4d`
 
@@ -436,3 +436,38 @@ links/imports, and future-policy overclaim.
 - Fresh type/build/docs/lint/format/generated/diff checks passed. A committed
   endpoint, fresh baseline review package, and all four specialist lanes remain
   required before the full task gate.
+
+## 2026-07-14 - Specialist Wave 8 Assignment
+
+- Endpoint: `26b24495` (`Handle early to-do subscription read failures`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..26b24495.diff` (30 commits, 157,596
+  bytes).
+- Lightweight pre-review lint passed. Task/work/review headers agree on the
+  Wave 8 endpoint; stale paths and initial reviewer state occur only in
+  explicitly historical evidence; no duplicated new policy source, public
+  framework export/declaration change, tracked generated output, broken
+  owned-scope boundary, or active future-production overclaim was found.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high.
+  Review the immediate-observer idiom, focused fault-injection structure,
+  cleanup assertions, private smoke seam, names, duplication, and repository
+  conventions.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium. Review the exact build/start/seed/query/
+  subscription workflow, early-rejection explanation by behavior, bounded-page
+  semantics, cleanup, links, limitations, and current status truth.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high. Review pending-promise type/runtime agreement,
+  generated query/filter/update shapes, Any handling, exact-ID proof,
+  private/app-owned boundaries, and unchanged public exports.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high.
+  Regress the Wave 7 early-rejection finding plus response/decoder/diagnostic
+  bounds, timeouts, iterator ordering, cancellation/abort/session cleanup,
+  exact-ID causality, temporary resources, and finite work.
+- All lanes are read-only and milestone-scoped: no edits, Git mutation,
+  installs, duplicate test runs, or subagents. Ignore historical superseded
+  text unless current task/work status or changed public docs claim it active.
+  Preserve the app-owned relative-import adjudication absent new ownership
+  evidence.

@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 7 reliability fix coordinator-verified; fresh re-review pending
+Status: In progress - Specialist Wave 8 assigned at `26b24495`
 
 Started: `2026-07-14`
 
