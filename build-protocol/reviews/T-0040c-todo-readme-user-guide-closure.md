@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 2 fixes verified - re-review pending
+Status: Wave 3 findings accepted - fix wave pending
 
 Baseline: `526b7b4d`
 
@@ -192,6 +192,22 @@ links/imports, and future-policy overclaim.
   TypeScript/API docs agent `019f6264-10e8-7ba2-84ea-d59dfab660e6` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f6264-1430-7d93-9ede-cc32339f601b` is actual `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 3 Results
+
+- TypeScript/API docs: clean.
+- Style/maintainability: replace the `@ts-expect-error` plus erased cast with
+  a typed import-light smoke row module, and add malformed matching-type bytes
+  to the direct regression.
+- Documentation completeness: cancellation must cover activation setup
+  failure, and the two complete guide modules need exact save/run commands and
+  generated-build/server prerequisites.
+- Performance/reliability: apply target-delivery timeout after posting the
+  target while keeping the raw read pending beforehand; replace `Date.now()`
+  identity with a collision-resistant per-run suffix.
+- All Wave 3 reviewers were closed. One complete fix batch returns to existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
 
 ## Skill Applicability
 

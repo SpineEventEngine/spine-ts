@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 2 fixes verified; re-review pending
+Status: In progress - Wave 3 findings accepted; fix wave pending
 
 Started: `2026-07-14`
 
@@ -306,3 +306,16 @@ install` reported all eight workspace projects already up to date;
 - Fresh tooling/build typechecks, docs/API checks, focused ESLint, full format,
   generated-clean, and diff checks passed. The fixes are ready for another
   immutable all-lane re-review.
+
+## 2026-07-14 - Specialist Wave 3 Findings
+
+- TypeScript/API docs is clean.
+- Move smoke row inspection to a typed import-light module instead of testing an
+  executable MJS through `@ts-expect-error`, and cover a matching type URL with
+  malformed bytes.
+- Ensure subscription cancellation covers activation/iterator setup failure;
+  give the two guide modules exact save/run commands and prerequisites.
+- Use a collision-resistant per-run identity in the guide module.
+- Keep the subscription read pending before unrelated/target posts, but start
+  its delivery timeout only after posting the target so unrelated projection
+  latency cannot consume the target's budget.
