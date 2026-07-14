@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Coordinator pre-review clean — review endpoint pending
+Status: Review wave 1 assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -227,6 +227,24 @@ without reading internal source.
 - The completion plan's three live statements now use the durable T-0039c
   framework-user-guide review frontier. The candidate endpoint may now be
   committed and packaged for the four relevant specialist concerns.
+
+## Review Wave 1 Assignment
+
+- Implementation endpoint: `66a491e12972f942190cb1fd1ab83d4a89babf88`.
+- Review package:
+  `.superpowers/sdd/review-aaa31116..66a491e1.diff` (`125348` bytes, four
+  commits from literal baseline `aaa31116`).
+- Style/maintainability: existing specialist reviewer, explicit immutable
+  `gpt-5.6-terra` / high, read-only, no subagents.
+- Documentation completeness: existing specialist reviewer, explicit immutable
+  `gpt-5.6-luna` / medium, read-only, no subagents.
+- TypeScript/API docs: existing specialist reviewer, explicit immutable
+  `gpt-5.6-terra` / high, read-only, no subagents.
+- Performance/reliability: existing specialist reviewer, explicit immutable
+  `gpt-5.6-terra` / high, read-only, no subagents.
+- Every lane is bounded to its recorded concern, the task ledger, the package,
+  and affected public journey. Historical superseded text is not a finding
+  unless the current guide/plan/task records claim it as active.
 
 ## Second Pre-Review Fix Implementation
 

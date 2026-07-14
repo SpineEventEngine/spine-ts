@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Coordinator pre-review clean — review endpoint pending
+Status: Review wave 1 assigned
 
 ## Review Scope
 
@@ -129,6 +129,22 @@ Status: Coordinator pre-review clean — review endpoint pending
   deferred to T-0041. The coordinator will freeze one literal implementation
   endpoint, record exact assignments, and dispatch the four bounded lanes only
   after that commit exists.
+
+## Review Wave 1 Assignment
+
+- Endpoint `66a491e12972f942190cb1fd1ab83d4a89babf88`; literal baseline `aaa31116`;
+  package `.superpowers/sdd/review-aaa31116..66a491e1.diff`, four commits,
+  `125348` bytes.
+- Style/maintainability role: explicit immutable `gpt-5.6-terra` / high.
+- Documentation completeness role: explicit immutable `gpt-5.6-luna` /
+  medium.
+- TypeScript/API docs role: explicit immutable `gpt-5.6-terra` / high.
+- Performance/reliability role: explicit immutable `gpt-5.6-terra` / high.
+- All dispatches are read-only, no-subagent, package/task-ledger bounded, and
+  must report actual immutable runtime model/reasoning plus a task-relevant
+  skill applicability check. They must ignore historical superseded text unless
+  current T-0039c records, completion-plan live status, or changed guide prose
+  claim it as active behavior.
 
 ## Second Pre-Review Fix Implementation
 
