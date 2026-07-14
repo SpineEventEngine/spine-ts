@@ -77,6 +77,17 @@ links/imports, and future-policy overclaim.
   report only concrete milestone-scoped defects. Historical superseded text is
   non-active unless the current task/work status or changed public docs claim it
   as active.
+- Explicit dispatch fields and immutable Desktop role metadata agree:
+  - style/maintainability agent
+    `019f6244-dc51-7791-8b9c-2888f1e9c1a9`: actual
+    `gpt-5.6-terra` / high;
+  - documentation agent `019f6244-d8f1-7382-b55a-b00c99c8ce3c`: actual
+    `gpt-5.6-luna` / medium;
+  - TypeScript/API docs agent `019f6244-e313-7402-a8fc-9ed043475835`:
+    actual `gpt-5.6-terra` / high;
+  - performance/reliability agent
+    `019f6244-df88-7731-af67-d15a86fbe0b2`: actual
+    `gpt-5.6-terra` / high.
 
 ## Skill Applicability
 
