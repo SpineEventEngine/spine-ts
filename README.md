@@ -17,11 +17,12 @@ gRPC-compatible app. It uses generated Protobuf and handler-registry artifacts
 from the build workflow, bare application handler decorators, and process-local
 in-memory storage. It is not a production persistence, deployment,
 authentication, tracing, health-check, process-supervision, or multi-host
-transport recipe. Remaining production gaps include durable production storage
+transport recipe. The initial release excludes durable production storage
 adapters, remote/multi-host transport adapters, broker or worker process
 supervision, deployment/authentication/tracing/health hardening, retained
 attempt/update replay policy, semantic-tag consumption in runtime
-handler/routing registries, and broader production verification.
+handler/routing registries, and broader production verification. These are
+release exclusions, not commitments to a future policy or implementation.
 
 ## Workspace
 
@@ -35,6 +36,11 @@ handler/routing registries, and broader production verification.
   `proto/spine-sources.json`.
 - `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
+- `@spine-ts/core` owns type metadata, validation, and envelope helpers;
+  `@spine-ts/server` owns bounded-context, service, lifecycle, and durable
+  handoff behavior; `@spine-ts/storage` owns record storage; and
+  `@spine-ts/transport` owns adapter-neutral transport contracts plus its
+  adapter-scoped same-host ZeroMQ subpath.
 - Package tests live outside package source under `packages/<package>/test`.
 - Cleanup enforcement runs through `pnpm lint` and therefore also through
   `pnpm verify`.

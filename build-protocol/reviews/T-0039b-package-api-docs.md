@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Coordinator pre-review fixes assigned
+Status: Coordinator pre-review accepted — review assignment pending
 
 ## Review Scope
 
@@ -69,3 +69,30 @@ consumer substitution. The complete batch is assigned back to the existing
 implementer with explicit immutable `gpt-5.6-terra` / medium execution, bounded
 docs/records ownership, and no subagents. Independent reviewer round 1 remains
 pending until focused coordinator validation accepts the fixes.
+
+## Implementation Fix Handback Round 1
+
+- Finding 1 fixed in `packages/core/README.md`: the default-validation example
+  now packs and unpacks a valid public `FieldPathSchema` message, proven through
+  built `@spine-ts/core` and `@spine-ts/proto` package imports.
+- Finding 2 fixed in `docs/api/README.md`: `RunningServer.close()` now records
+  listener/session close, context transport intake/drain, delivery
+  detach/quiescence, context/resource close, owned-environment close, and the
+  network/context hard gate before downstream cleanup.
+- Finding 3 fixed in `packages/server/README.md`: the first illustrative
+  `@example/tasks-proto` use is preceded by a consumer-substitution note.
+- Author verification: the built-package round trip printed
+  `type.spine.io/spine.base.FieldPath task.title`; `pnpm docs:check` passed with
+  expected exports `100/28/205/19/17/3`.
+- No reviewer wave has started. Coordinator focused verification remains the
+  acceptance gate before independent reviewer round 1.
+
+## Coordinator Verification Round 1
+
+The coordinator independently accepted all three fixes after a built-package
+round trip, `docs:check` with counts `100/28/205/19/17/3`, focused root-export/
+package API tests (`6` files / `69` tests), exact-path formatting, equal-status,
+scope/import/future-policy lint, conflict scan, and diff-whitespace checks. The
+future-policy scan's two contextual hits describe current lifecycle state and
+do not promise future policy. Independent reviewer round 1 may now be assigned;
+no reviewer result has yet been accepted.

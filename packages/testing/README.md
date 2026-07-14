@@ -1,6 +1,8 @@
 # @spine-ts/testing
 
-In-process black-box testing utilities for built Spine TS bounded contexts.
+In-process black-box testing utilities for built Spine TS bounded contexts. The
+package exercises public server/service seams in one process; it is not a
+network client, transport simulator, or production-runtime substitute.
 
 ## Bounded Context Fixture
 

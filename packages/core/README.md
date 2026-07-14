@@ -39,11 +39,10 @@ Use `createSpineCoreRegistry()` when a caller-owned mutable registry is needed.
 The shared `spineCoreRegistry` intentionally exposes lookup methods only, so
 application code cannot mutate the process-wide curated registry.
 
-Semantic tag lookup is intentionally empty for the current copied proto closure
-because no registered schema currently proves `(is)` or `(every_is)` consumer
-metadata in a TypeScript-friendly form. The lookup API is present so later
-validation/routing tasks can add descriptor-backed tags without changing
-callers.
+Semantic tag lookup is intentionally empty for the copied proto closure because
+no registered schema proves `(is)` or `(every_is)` consumer metadata in a
+TypeScript-friendly form. The registry reports only metadata that the copied
+descriptors establish.
 
 ## Validation
 
@@ -53,10 +52,10 @@ through the upstream validation package:
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { validateMessage, checkValid, ValidationException } from "@spine-ts/core";
-import { SomeCommandSchema } from "./generated/some_command_pb.js";
+import { CommandSchema } from "@spine-ts/proto";
 
-const command = create(SomeCommandSchema, {});
-const result = validateMessage(SomeCommandSchema, command);
+const command = create(CommandSchema, {});
+const result = validateMessage(CommandSchema, command);
 
 if (!result.valid) {
   const fields = result.violations.map(
@@ -66,7 +65,7 @@ if (!result.valid) {
 }
 
 try {
-  checkValid(SomeCommandSchema, command);
+  checkValid(CommandSchema, command);
 } catch (error) {
   if (error instanceof ValidationException) {
     const validationError = error.asMessage();
@@ -103,11 +102,11 @@ the default `type.googleapis.com/...` prefix.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { packAny, unpackAny } from "@spine-ts/core";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { FieldPathSchema } from "@spine-ts/proto";
 
-const payload = create(CreateTaskSchema, { title: "Ship the thin slice" });
-const any = packAny(CreateTaskSchema, payload);
-const unpacked = unpackAny(any, CreateTaskSchema);
+const payload = create(FieldPathSchema, { fieldName: ["task", "title"] });
+const any = packAny(FieldPathSchema, payload);
+const unpacked = unpackAny(any, FieldPathSchema);
 ```
 
 `packAny()` validates the enclosed message through the core validation facade by
@@ -149,5 +148,6 @@ IDs, versions, origins, system properties, storage records, bus deliveries, or
 transport metadata. The helpers snapshot supplied IDs and contexts before
 embedding them in the returned envelope.
 
-This package does not yet implement runtime buses, entity repositories, storage,
-decorators, handlers, or transport behavior.
+This package does not own runtime buses, entity repositories, storage,
+decorators, handlers, or transport behavior; those responsibilities remain in
+their respective packages.

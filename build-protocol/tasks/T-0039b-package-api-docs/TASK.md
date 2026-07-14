@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Coordinator pre-review fixes assigned
+Status: Coordinator pre-review accepted — review assignment pending
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -182,3 +182,38 @@ Fix assignment returns to the existing implementer context with its immutable
 `gpt-5.6-terra` / medium profile. Scope remains these docs and durable records;
 no source, exports, generated output, dependencies, user guide, or example app
 may change. No subagents; coordinator retains Git and independent review.
+
+## Implementation Fix Handback Round 1
+
+- Replaced the invalid empty-`Command` `packAny()` example with a package-only
+  `FieldPathSchema` round trip using `fieldName: ["task", "title"]`; the built
+  public packages return `type.spine.io/spine.base.FieldPath` and
+  `task.title` under default validation.
+- Reconciled the API overview with the public `RunningServer` lifecycle:
+  listener/sessions, context transport intake and accepted-work drain,
+  delivery detach/quiescence, contexts/resources, and the owned environment,
+  including the network/context-intake hard gate and unfinished-phase retry.
+- Identified `@example/tasks-proto` before its first use as a stand-in for the
+  consumer's generated Protobuf package. No example, dependency, source,
+  export, generated, or user-guide path changed.
+- Focused verification evidence is recorded in the work and review logs.
+  The built-package probe printed
+  `type.spine.io/spine.base.FieldPath task.title`, and `pnpm docs:check`
+  reported export counts `100/28/205/19/17/3`.
+  Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
+  no subagents.
+
+## Coordinator Verification Round 1
+
+- Independently reproduced the built-package default-validation round trip:
+  `type.spine.io/spine.base.FieldPath task.title`.
+- `pnpm --config.verify-deps-before-run=false docs:check` passed with TypeDoc
+  export counts `100/28/205/19/17/3`.
+- Focused root-export/package API tests passed `6` files / `69` tests.
+- Exact-path Prettier, equal-status, generated/private-import, changed-scope,
+  unresolved-conflict, and diff-whitespace checks passed.
+- The future-policy scan found only contextual current-state phrases: a
+  caller-owned environment “remains open” after server close, and failed-start
+  cleanup that “cannot yet complete.” Neither promises future policy.
+- The complete pre-review batch is accepted. Full `pnpm verify` remains the
+  final task gate after independent review closure.
