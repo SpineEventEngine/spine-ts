@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Review wave 2 findings assigned
+Status: Author review wave 2 fix complete — coordinator rereview pending
 
 ## Review Scope
 
@@ -246,3 +246,26 @@ Status: Review wave 2 findings assigned
 - Complete confirmed batch assigned to the same existing implementer with
   explicit immutable `gpt-5.6-terra` / medium and no subagents. Another literal
   package and affected rereview follow focused coordinator verification.
+
+## Review Wave 2 Fix Implementation
+
+- The guide now passes the returned `Subscription` message to `Cancel` in an
+  explicit cleanup path instead of describing cancellation as ID-only.
+- Durable delivery wording now identifies projection `@Subscribe` handler
+  invocation and explicitly excludes process-local `SubscriptionService`
+  client streams from that guarantee.
+- ZeroMQ limitations now match the transport package contract: no
+  transport-owned retry loops and no retry or restart guarantee.
+
+## Review Wave 2 Fix Handback
+
+- The complete three-item batch is addressed in the guide and mirrored across
+  all three T-0039c records. No plan, runtime, Proto source, package, or example
+  change was made.
+- Focused cancellation, delivery-boundary, ZeroMQ, prohibited API,
+  future-policy, status, docs/API, generated-clean, scope, and diff-integrity
+  checks are recorded in the work log. Full `pnpm verify` and affected-lane
+  rereview remain coordinator-owned.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
+  no subagents. Skills used: receiving-code-review, doc-coauthoring, and
+  verification-before-completion.

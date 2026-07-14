@@ -335,16 +335,17 @@ queries can use declared proto `column` names, equality filters, field masks,
 ordering, and positive limits from `1` through `1000` when ordering is present.
 Invalid criteria fail before state storage is read.
 
-Use `SubscriptionService.Subscribe`, then `Activate`, and cancel the returned
-opaque subscription ID when finished. State topics support ID and equality
-filters; event topics currently support `include_all`. Inactive subscription
-records are storage-backed and have a default TTL of 30 seconds. Activation
-consumes the inactive record before attaching delivery; updates from before
-activation are not replayed. Active streams and queued updates are
-process-local, with a default queue cap of 100 updates. Exceeding that cap
-closes the stream and discards its queued updates. Active streams and their
-queues are not recovered or replayed after disconnection or process restart,
-so clients must query current state when they need a fresh view.
+Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
+returned `Subscription` message, not its opaque ID alone; pass that message
+when the client is finished. State topics support ID and equality filters;
+event topics currently support `include_all`. Inactive subscription records
+are storage-backed and have a default TTL of 30 seconds. Activation consumes
+the inactive record before attaching delivery; updates from before activation
+are not replayed. Active streams and queued updates are process-local, with a
+default queue cap of 100 updates. Exceeding that cap closes the stream and
+discards its queued updates. Active streams and their queues are not recovered
+or replayed after disconnection or process restart, so clients must query
+current state when they need a fresh view.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -364,6 +365,12 @@ declare const topic: Parameters<typeof subscriptions.subscribe>[0];
 const response = await queries.read(query);
 const subscription = await subscriptions.subscribe(topic);
 const updates = subscriptions.activate(subscription);
+try {
+  // Consume `updates` while this client needs the live view.
+  void updates;
+} finally {
+  await subscriptions.cancel(subscription);
+}
 ```
 
 ## 9. Handle invalid input and business refusal
@@ -422,10 +429,13 @@ boundary; it needs an environment that permits loopback listeners.
 
 ## 11. Delivery, IPC, and release limits
 
-Process-manager reactions and live projection subscriptions use framework-owned
-durable handoff. A handler can be invoked more than once when ownership changes
-or a prior invocation cannot be conclusively finalized, so handlers must make
-side effects replay-safe and tolerate at-least-once delivery.
+Process-manager reactions and projection `@Subscribe` handler delivery use
+framework-owned durable handoff. This server-side entity-handler delivery is
+separate from the client-facing `SubscriptionService` streams in section 8;
+those active client streams and their queues are process-local. A handler can
+be invoked more than once when ownership changes or a prior invocation cannot
+be conclusively finalized, so handlers must make side effects replay-safe and
+tolerate at-least-once delivery.
 
 A failed supported delivery callback may remain pending after framework
 cleanup. No automatic retry scheduler or monitor revisits that row. Durable
@@ -435,9 +445,10 @@ guarantee.
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and
-keep the directory private. The adapter does not provide remote transport,
-durable redelivery, exactly-once delivery, process supervision, broad health
-checks, or production topology.
+keep the directory private. The adapter has no transport-owned retry loops and
+provides no retry or restart guarantee. It also does not provide remote
+transport, durable redelivery, exactly-once delivery, process supervision,
+broad health checks, or production topology.
 
 Initial-release exclusions also include durable production storage adapters,
 deployment/authentication/tracing hardening, retained update replay policy,

@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review wave 2 findings assigned
+Status: Author review wave 2 fix complete — coordinator rereview pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -348,3 +348,26 @@ without reading internal source.
 - Current tests and transport docs confirm every finding. The same existing
   implementer receives the complete batch with explicit immutable
   `gpt-5.6-terra` / medium and no subagents.
+
+## Review Wave 2 Fix Implementation
+
+- Corrected the subscription client contract so `Cancel` receives the returned
+  `Subscription` message, and placed
+  `await subscriptions.cancel(subscription)` in the client snippet's cleanup
+  path.
+- Named projection `@Subscribe` handler delivery as the durable server-side
+  handoff and explicitly separated it from process-local client-facing
+  `SubscriptionService` streams.
+- Added the ZeroMQ adapter's absence of transport-owned retry loops and retry
+  or restart guarantees without adding future-policy commitments.
+
+## Review Wave 2 Fix Handback
+
+- Changed paths are `docs/USER_GUIDE.md` and the three T-0039c records only;
+  no plan, runtime, Proto source, package, or example file was changed.
+- Focused call-shape, delivery-scope, and ZeroMQ limitation evidence confirms
+  all three accepted P2 items. Exact command results and remaining uncertainty
+  are recorded in the work log; full `pnpm verify` remains final-only.
+- Skills used: receiving-code-review, doc-coauthoring, and
+  verification-before-completion. Actual immutable profile: existing
+  implementer, `gpt-5.6-terra` / medium; no subagents.
