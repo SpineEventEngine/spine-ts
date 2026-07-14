@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 coordinator-verified; review endpoint pending
+Status: Slice 2 reviewer wave assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -497,3 +497,13 @@ work until Slice 1 focused verification and relevant review are clean.
   duplicated lifecycle policy, root/internal leak, future-policy doc claim,
   generated output, or unrelated path is present. The changed public TSDoc is
   observable and makes documentation review relevant for this slice.
+
+## Slice 2 Review Assignment
+
+- Immutable endpoint `d4debde8`; package
+  `.superpowers/sdd/review-ebdf959f..d4debde8.diff` from clean Slice 1 closure
+  `ebdf959f`, one commit and 67,201 bytes.
+- Assigned existing roles with explicit immutable profiles and no subagents:
+  style/maintainability `gpt-5.6-terra` / high; documentation
+  `gpt-5.6-luna` / medium; TypeScript/API docs `gpt-5.6-terra` / high; and
+  performance/reliability `gpt-5.6-terra` / high. Security remains deferred.

@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 coordinator-verified; review endpoint pending
+Status: Slice 2 reviewer wave assigned
 
 ## Scope
 
@@ -283,3 +283,15 @@ Status: Slice 2 coordinator-verified; review endpoint pending
   performance/reliability are all relevant because server lifecycle code,
   public lifecycle TSDoc, and failure/retry behavior changed. Security remains
   deferred to T-0041.
+
+## Slice 2 Reviewer Dispatch
+
+- Baseline `ebdf959f`; endpoint `d4debde8`; package
+  `.superpowers/sdd/review-ebdf959f..d4debde8.diff` (one commit, 67,201 bytes).
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high.
+- All use no subagents and are bounded to Slice 2. Prompts ignore historical
+  superseded text unless current records or changed active docs claim it.
+  Security remains deferred to T-0041.
