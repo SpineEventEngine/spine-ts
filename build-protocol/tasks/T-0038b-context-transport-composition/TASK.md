@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 fix coordinator-verified; reliability rereview endpoint pending
+Status: Slice 1 reliability rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -379,3 +379,13 @@ work until Slice 1 focused verification and relevant review are clean.
   weak internal cleanup ownership, duplicate-open refusal before cleanup,
   successful reopen after cleanup, exact responder removal, sibling event
   preservation, and no root/public/server-lifecycle change.
+
+## Slice 1 Reliability Rereview Assignment
+
+- Corrected endpoint `a69ae867`; package
+  `.superpowers/sdd/review-b2a6e7e1..a69ae867.diff` from prior implementation
+  endpoint `b2a6e7e1`, three commits and 40,183 bytes.
+- Assigned only the affected existing performance/reliability reviewer at
+  explicit expected `gpt-5.6-terra` / high, no subagents. Earlier clean style
+  and TypeScript/API results remain applicable; documentation is N/A and
+  security remains deferred.

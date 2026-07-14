@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 fix coordinator-verified; reliability rereview endpoint pending
+Status: Slice 1 reliability rereview assigned
 
 ## Scope
 
@@ -192,3 +192,13 @@ Status: Slice 1 fix coordinator-verified; reliability rereview endpoint pending
   failure retention, cleanup retry, and registration-close behavior. Prior
   style and TypeScript/API clean results remain applicable; documentation stays
   N/A and security remains deferred.
+
+## Slice 1 Reliability Rereview Dispatch
+
+- Baseline `b2a6e7e1`; corrected endpoint `a69ae867`; package
+  `.superpowers/sdd/review-b2a6e7e1..a69ae867.diff` (three commits, 40,183
+  bytes).
+- Existing performance/reliability reviewer assigned at explicit expected
+  `gpt-5.6-terra` / high, no subagents. Scope is resolution of P1/P2 and any
+  concrete regression introduced by those fixes; historical superseded text is
+  ignored unless current records claim it.
