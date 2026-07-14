@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0040a local multi-process to-do mode
+Status: In execution at T-0040b to-do black-box acceptance
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0040a local multi-process to-do mode
+Active implementation frontier: T-0040b to-do black-box acceptance
 
 ## Purpose
 
@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0039c is complete, integrated, post-merge verified, and
-remotely synchronized. T-0040a local multi-process to-do mode is the active
-implementation frontier. The dated Starting State above is historical
-plan-creation context.
+Current status: T-0040a is complete, integrated, and post-merge verified; remote
+synchronization is the remaining closure action. T-0040b to-do black-box
+acceptance is the next implementation frontier. The dated Starting State above
+is historical plan-creation context.
 
 ## Initial Release Scope
 

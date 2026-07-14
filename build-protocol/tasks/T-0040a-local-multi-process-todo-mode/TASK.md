@@ -1,10 +1,12 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: Accepted - final task gate passed; integration pending
+Status: Complete - integrated and post-merge verified; remote sync pending
 
 Started: `2026-07-14T14:20:28Z`
 
 Accepted: `2026-07-14T18:19:08Z`
+
+Integrated: `2026-07-14T18:24:22Z`
 
 Baseline commit: `24d1ef37`
 
@@ -725,6 +727,21 @@ retained after normal recursive removal"`. It exited `1`; 1 test failed and 18
   freshly regenerated; `git ls-files` found none under package/example
   generated paths. Only the three closure records remain to commit before
   integration.
+
+### Integration - 2026-07-14
+
+- Merged task endpoint `35ce33f4` into `main` with merge commit `c226af65`.
+- The first native post-merge `pnpm verify` stopped in tooling typecheck because
+  root `node_modules` predated the merged example's direct workspace transport
+  dependency. `pnpm install --offline --frozen-lockfile` reused all 199 locked
+  packages, changed no manifest/lockfile, and restored the declared workspace
+  link.
+- The full native post-merge rerun exited `0`: 72 files and 1,661 tests passed
+  in ordinary and coverage runs with 90.12% branch coverage; all typecheck,
+  lint, format, docs/API, Proto, and generated-clean gates passed.
+- Final root inspection is clean except untouched user-owned
+  `human-review-1-jul.md`. Push task and main refs, record remote state, then
+  remove the clean merged worktree.
 
 ## Skill Applicability
 
