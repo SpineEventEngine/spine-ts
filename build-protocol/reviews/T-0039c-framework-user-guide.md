@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Review wave 1 findings assigned
+Status: Author review wave 1 fix complete — coordinator rereview pending
 
 ## Review Scope
 
@@ -190,5 +190,27 @@ Status: Review wave 1 findings assigned
   remain coordinator work.
 - The pre-existing three-statement completion-plan diff was inspected and not
   altered by this fix.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Review Wave 1 Fix Implementation
+
+- The candidate now addresses all four accepted P2 items: mandatory Proto file
+  separation, query limit maximum, bounded inactive/active subscription
+  behavior, and explicit absence of autonomous failed-delivery retry.
+- No plan, runtime, Proto source, package, or example change was made. Focused
+  fix verification passed before affected-lane rereview.
+
+## Review Wave 1 Fix Handback
+
+- The complete accepted batch is addressed across the guide and three records.
+  The Proto-file P2 and all three reliability P2 findings have focused passing
+  evidence in the work log.
+- Exact-path formatting, Proto filename/import/model, query/subscription/
+  delivery wording, end-user prohibition, future-policy, status, docs/API,
+  generated-clean, scope, and diff-integrity checks passed.
+- Style and documentation lanes were already clean. TypeScript/API and
+  performance/reliability affected-lane rereview remain coordinator work; no
+  reviewer ran in this implementation context.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
   subagents.

@@ -36,6 +36,8 @@ the route ID first in command and event messages. Apply Spine validation
 options to required fields, and mark immutable entity fields `set_once`.
 Projection query fields need the `column` option.
 
+`task_state.proto` — IDs and entity states:
+
 ```proto
 syntax = "proto3";
 
@@ -70,6 +72,19 @@ message TaskList {
   string title = 2 [(required) = true];
   int32 open_task_count = 3 [(column) = true];
 }
+```
+
+`task_commands.proto` — commands (the filename ends in `commands.proto`):
+
+```proto
+syntax = "proto3";
+
+package acme.tasks.v1;
+
+import "acme/tasks/v1/task_state.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.acme.tasks";
 
 message CreateTask {
   TaskId id = 1 [(required) = true, (validate) = true];
@@ -79,6 +94,19 @@ message CreateTask {
 message NotifyOwner {
   TaskId id = 1 [(required) = true, (validate) = true];
 }
+```
+
+`task_events.proto` — events (the filename ends in `events.proto`):
+
+```proto
+syntax = "proto3";
+
+package acme.tasks.v1;
+
+import "acme/tasks/v1/task_state.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.acme.tasks";
 
 message TaskCreated {
   TaskId id = 1 [(required) = true, (validate) = true];
@@ -304,15 +332,19 @@ The framework may continue follow-up work asynchronously.
 Use the generated `QueryService` for registered aggregate or projection state.
 It supports ID-target reads and projection `include_all` reads. Projection
 queries can use declared proto `column` names, equality filters, field masks,
-ordering, and positive limits when ordering is present. Invalid criteria fail
-before state storage is read.
+ordering, and positive limits from `1` through `1000` when ordering is present.
+Invalid criteria fail before state storage is read.
 
 Use `SubscriptionService.Subscribe`, then `Activate`, and cancel the returned
 opaque subscription ID when finished. State topics support ID and equality
 filters; event topics currently support `include_all`. Inactive subscription
-records are storage-backed, but active streams and queued updates are
-process-local. Therefore clients must tolerate disconnects and query current
-state when they need a fresh view.
+records are storage-backed and have a default TTL of 30 seconds. Activation
+consumes the inactive record before attaching delivery; updates from before
+activation are not replayed. Active streams and queued updates are
+process-local, with a default queue cap of 100 updates. Exceeding that cap
+closes the stream and discards its queued updates. Active streams and their
+queues are not recovered or replayed after disconnection or process restart,
+so clients must query current state when they need a fresh view.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -394,6 +426,11 @@ Process-manager reactions and live projection subscriptions use framework-owned
 durable handoff. A handler can be invoked more than once when ownership changes
 or a prior invocation cannot be conclusively finalized, so handlers must make
 side effects replay-safe and tolerate at-least-once delivery.
+
+A failed supported delivery callback may remain pending after framework
+cleanup. No automatic retry scheduler or monitor revisits that row. Durable
+handoff records the work, but it is not an autonomous eventual-delivery
+guarantee.
 
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime

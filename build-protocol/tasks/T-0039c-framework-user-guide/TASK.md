@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review wave 1 findings assigned
+Status: Author review wave 1 fix complete — coordinator rereview pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -289,6 +289,29 @@ without reading internal source.
 - Exact command evidence, exclusions, and remaining uncertainty are recorded
   in the work log. Full verification and specialist review remain
   coordinator-owned.
+- Skills used: doc-coauthoring and verification-before-completion. Actual
+  immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Review Wave 1 Fix Implementation
+
+- Split the guide's modeled vocabulary into three internally coherent labeled
+  source units: entity state `task_state.proto`, `task_commands.proto`, and
+  `task_events.proto`, with deterministic package/type URL declarations and
+  required imports in every file.
+- Added the ordered query limit maximum, exact inactive/active subscription
+  lifetime and queue behavior, and the non-autonomous failed-delivery wording
+  from the accepted P2 batch.
+- Focused verification passed for the complete accepted batch.
+
+## Review Wave 1 Fix Handback
+
+- Changed paths are `docs/USER_GUIDE.md` and the three T-0039c records only.
+- All four confirmed P2 items are addressed: coherent state/command/event Proto
+  files, ordered query limit cap, exact subscription lifecycle/queue bounds,
+  and explicit non-autonomous failed-delivery behavior.
+- Exact evidence and remaining uncertainty are recorded in the work log. Full
+  verification and affected-lane rereview remain coordinator-owned.
 - Skills used: doc-coauthoring and verification-before-completion. Actual
   immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
   subagents.
