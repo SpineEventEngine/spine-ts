@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 second targeted fixes green; final rereview ready
+Status: Slice 3 final targeted rereview assigned
 
 ## Scope
 
@@ -752,3 +752,13 @@ Status: Slice 3 second targeted fixes green; final rereview ready
   accepted both P2 corrections at `26/26` tests. Final rereview is limited to
   style/maintainability and performance/reliability; documentation and API
   clean dispositions remain applicable.
+
+## Slice 3 Final Targeted Rereview Dispatch
+
+- Baseline `85d9fd87`; endpoint `e354cf10`; package
+  `.superpowers/sdd/review-85d9fd87..e354cf10.diff` (three commits, 34180
+  bytes).
+- Style/maintainability and performance/reliability: existing roles, explicit
+  `gpt-5.6-terra` / high, read-only, no subagents. Prompts are limited to the
+  two corrected P2s and adjacent affected behavior. Documentation and API
+  remain CLEAN; security remains deferred to T-0041.

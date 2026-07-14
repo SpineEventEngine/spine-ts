@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 second targeted fixes green; final rereview ready
+Status: Slice 3 final targeted rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1048,3 +1048,7 @@ permitted`: same-host command/event
   unrestricted native rerun passed both affected files with `26/26` tests.
   Both P2s are accepted as fixed; style and reliability require final targeted
   rereview.
+- Final correction package is
+  `.superpowers/sdd/review-85d9fd87..e354cf10.diff` (`3` commits, `34180`
+  bytes). Existing style and reliability roles are dispatched read-only at
+  explicit `gpt-5.6-terra` / high with no subagents.
