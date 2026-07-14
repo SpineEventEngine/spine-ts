@@ -459,14 +459,14 @@ class RunningHttp2Server implements RunningServer {
         this.#attachmentDetached = true;
       } catch (error) {
         detachRejected = true;
-        collectRunningCloseError(error, detachErrors);
+        collectCloseError(error, detachErrors);
       }
       if (detachRejected) {
         let endpointSafe = false;
         try {
           endpointSafe = serverEnvironmentAccess.endpointSafe(this.#environment, this.#attachment);
         } catch (error) {
-          collectRunningCloseError(error, detachErrors);
+          collectCloseError(error, detachErrors);
         }
         if (!endpointSafe) {
           throwRunningDetachErrors(detachErrors);
@@ -479,7 +479,7 @@ class RunningHttp2Server implements RunningServer {
       if (!detachRejected) {
         throw error;
       }
-      collectRunningCloseError(error, detachErrors);
+      collectCloseError(error, detachErrors);
       throw new AggregateError(
         detachErrors,
         "Server close failed while detaching delivery and closing owned contexts/resources.",
@@ -622,14 +622,6 @@ function throwRunningDetachErrors(errors: readonly unknown[]): never {
     throw errors[0];
   }
   throw new AggregateError(errors, "Server close failed while detaching delivery.");
-}
-
-function collectRunningCloseError(error: unknown, errors: unknown[]): void {
-  const previousCount = errors.length;
-  collectCloseError(error, errors);
-  if (errors.length === previousCount) {
-    errors.push(error);
-  }
 }
 
 async function closeNetwork(

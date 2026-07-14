@@ -651,22 +651,25 @@ describe("Server lifecycle integration", () => {
   it.each([
     {
       kind: "empty",
-      createFailure: () => new AggregateError([], "empty last retirement"),
+      createScenario: () => {
+        const failure = new AggregateError([], "empty last retirement");
+        return { failure, expectedFailure: failure };
+      },
     },
     {
       kind: "nested-empty",
-      createFailure: () =>
-        new AggregateError(
-          [new AggregateError([], "nested empty last retirement")],
-          "nested-empty last retirement",
-        ),
+      createScenario: () => {
+        const innerFailure = new AggregateError([], "nested empty last retirement");
+        const failure = new AggregateError([innerFailure], "nested-empty last retirement");
+        return { failure, expectedFailure: innerFailure };
+      },
     },
   ])(
     "preserves $kind aggregate failure presence across safe last cleanup",
-    async ({ createFailure }) => {
+    async ({ createScenario }) => {
       const worker = new HeldStartupWorker([]);
       worker.release();
-      const retirementFailure = createFailure();
+      const { failure: retirementFailure, expectedFailure } = createScenario();
       worker.failNextRetire(retirementFailure);
       const closeResource = vi.fn();
       let fixture: Awaited<ReturnType<typeof lifecycleFixture>> | undefined;
@@ -680,7 +683,7 @@ describe("Server lifecycle integration", () => {
           .start();
         const firstFailure = await running.close().catch((error: unknown) => error);
 
-        expect(firstFailure).toBe(retirementFailure);
+        expect(firstFailure).toBe(expectedFailure);
         expect(worker.stopCalls).toBe(1);
         expect(worker.awaitCalls).toBe(1);
         expect(worker.retireCalls).toBe(1);
@@ -705,22 +708,35 @@ describe("Server lifecycle integration", () => {
   it.each([
     {
       kind: "empty",
-      createFailure: () => new AggregateError([], "empty explicit-resource close"),
+      createScenario: () => {
+        const failure = new AggregateError([], "empty explicit-resource close");
+        return { failure, expectedFailures: [failure] };
+      },
     },
     {
       kind: "nested-empty",
-      createFailure: () =>
-        new AggregateError(
-          [new AggregateError([], "nested empty explicit-resource close")],
-          "nested-empty explicit-resource close",
-        ),
+      createScenario: () => {
+        const innerFailure = new AggregateError([], "nested empty explicit-resource close");
+        const failure = new AggregateError([innerFailure], "nested-empty explicit-resource close");
+        return { failure, expectedFailures: [innerFailure] };
+      },
+    },
+    {
+      kind: "multiple empty",
+      createScenario: () => {
+        const firstFailure = new AggregateError([], "first empty explicit-resource close");
+        const secondFailure = new AggregateError([], "second empty explicit-resource close");
+        const failure = new AggregateError(
+          [firstFailure, new AggregateError([secondFailure], "nested second empty close")],
+          "multiple empty explicit-resource close",
+        );
+        return { failure, expectedFailures: [firstFailure, secondFailure] };
+      },
     },
   ])(
     "retries an explicit resource after $kind aggregate failure without repeating later hooks",
-    async ({ createFailure }) => {
-      const fixture = await lifecycleFixture();
-      fixture.worker.release();
-      const resourceFailure = createFailure();
+    async ({ createScenario }) => {
+      const { failure: resourceFailure, expectedFailures } = createScenario();
       let retryingAttempts = 0;
       const retryingResource = vi.fn(() => {
         retryingAttempts += 1;
@@ -732,17 +748,21 @@ describe("Server lifecycle integration", () => {
         }
       });
       const laterResource = vi.fn();
-      const running = await Server.atPort(0, { environment: fixture.environment })
-        .add(fixture.context)
-        .addResource({ close: retryingResource })
-        .addResource({ close: laterResource })
-        .start();
+      let fixture: Awaited<ReturnType<typeof lifecycleFixture>> | undefined;
+      let running: Awaited<ReturnType<Server["start"]>> | undefined;
 
       try {
+        fixture = await lifecycleFixture();
+        fixture.worker.release();
+        running = await Server.atPort(0, { environment: fixture.environment })
+          .add(fixture.context)
+          .addResource({ close: retryingResource })
+          .addResource({ close: laterResource })
+          .start();
         const firstFailure = await running.close().catch((error: unknown) => error);
 
         expect(firstFailure).toBeInstanceOf(AggregateError);
-        expect((firstFailure as AggregateError).errors).toEqual([resourceFailure]);
+        expect((firstFailure as AggregateError).errors).toEqual(expectedFailures);
         expect(retryingResource).toHaveBeenCalledOnce();
         expect(laterResource).toHaveBeenCalledOnce();
 
@@ -752,10 +772,10 @@ describe("Server lifecycle integration", () => {
         expect(retryingResource).toHaveBeenCalledTimes(2);
         expect(laterResource).toHaveBeenCalledOnce();
       } finally {
-        await running.close().catch(() => undefined);
-        await fixture.context.close().catch(() => undefined);
-        await fixture.environment.close().catch(() => undefined);
-        fixture.dispose();
+        await running?.close().catch(() => undefined);
+        await fixture?.context.close().catch(() => undefined);
+        await fixture?.environment.close().catch(() => undefined);
+        fixture?.dispose();
       }
     },
   );
@@ -900,17 +920,23 @@ describe("Server lifecycle integration", () => {
   it.each([
     {
       kind: "empty",
-      createFailure: () => new AggregateError([], "empty selected-owner settlement"),
+      createScenario: () => {
+        const failure = new AggregateError([], "empty selected-owner settlement");
+        return { failure, expectedFailure: failure };
+      },
     },
     {
       kind: "nested-empty",
-      createFailure: () =>
-        new AggregateError(
-          [new AggregateError([], "nested empty settlement")],
+      createScenario: () => {
+        const innerFailure = new AggregateError([], "nested empty settlement");
+        const failure = new AggregateError(
+          [innerFailure],
           "nested-empty selected-owner settlement",
-        ),
+        );
+        return { failure, expectedFailure: innerFailure };
+      },
     },
-  ])("retains unsafe shared detach after $kind aggregate rejection", async ({ createFailure }) => {
+  ])("retains unsafe shared detach after $kind aggregate rejection", async ({ createScenario }) => {
     const worker = new HeldStartupWorker([]);
     worker.release();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
@@ -935,7 +961,7 @@ describe("Server lifecycle integration", () => {
     const departingStorages = storageFactory.storages.filter(
       (storage) => !siblingStorages.includes(storage),
     );
-    const settlementFailure = createFailure();
+    const { failure: settlementFailure, expectedFailure } = createScenario();
     worker.failNextAwait(settlementFailure);
     let releaseRetry: (() => void) | undefined;
 
@@ -943,7 +969,7 @@ describe("Server lifecycle integration", () => {
       const firstFailure = await departing.close().catch((error: unknown) => error);
 
       expect(resourceClose).not.toHaveBeenCalled();
-      expect(firstFailure).toBe(settlementFailure);
+      expect(firstFailure).toBe(expectedFailure);
       expect(network?.calls()).toBe(1);
       expect(worker.stopCalls).toBe(1);
       expect(worker.awaitCalls).toBe(1);
@@ -2301,6 +2327,106 @@ describe("Server lifecycle integration", () => {
       fixture.dispose();
     }
   });
+
+  it.each([
+    {
+      kind: "empty",
+      createScenario: () => {
+        const failure = new AggregateError([], "empty failed-start resource close");
+        return { failure, expectedFailures: [failure] };
+      },
+    },
+    {
+      kind: "nested-empty",
+      createScenario: () => {
+        const innerFailure = new AggregateError([], "nested empty failed-start resource close");
+        const failure = new AggregateError(
+          [innerFailure],
+          "nested-empty failed-start resource close",
+        );
+        return { failure, expectedFailures: [innerFailure] };
+      },
+    },
+  ])(
+    "preserves $kind explicit-resource identity across failed-start aggregation and retry",
+    async ({ createScenario }) => {
+      const startupFailure = new Error("empty-aggregate startup recovery failed");
+      let fixture: Awaited<ReturnType<typeof lifecycleFixture>> | undefined;
+      let worker: HeldStartupWorker | undefined;
+      let server: Server | undefined;
+      let starting: ReturnType<Server["start"]> | undefined;
+
+      try {
+        const { failure: resourceFailure, expectedFailures } = createScenario();
+        worker = new HeldStartupWorker([]);
+        worker.rejectNextStart(startupFailure);
+        fixture = await lifecycleFixture({ workers: [worker] });
+        let failedResourceAttempts = 0;
+        const closeFailedResource = vi.fn(() => {
+          failedResourceAttempts += 1;
+          if (failedResourceAttempts === 1) {
+            throw resourceFailure;
+          }
+          if (failedResourceAttempts > 2) {
+            throw new Error("Failed-start resource close repeated after success.");
+          }
+        });
+        const closeSuccessfulResource = vi.fn();
+        server = Server.atPort(0, { environment: fixture.environment })
+          .add(fixture.context)
+          .addResource({ close: closeFailedResource })
+          .addResource({ close: closeSuccessfulResource });
+        starting = server.start();
+        void starting.catch(() => undefined);
+
+        await worker.startedWithin();
+        worker.release();
+        const failure = await starting.catch((error: unknown) => error);
+
+        expect(failure).toBeInstanceOf(AggregateError);
+        const initialErrors = (failure as AggregateError).errors;
+        expect(initialErrors).toHaveLength(1 + expectedFailures.length);
+        expect(initialErrors[0]).toBe(startupFailure);
+        for (const [index, expectedFailure] of expectedFailures.entries()) {
+          expect(initialErrors[index + 1]).toBe(expectedFailure);
+        }
+        expect(closeFailedResource).toHaveBeenCalledOnce();
+        expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+        expect(worker.starts).toBe(1);
+        expect(worker.stopCalls).toBe(1);
+        expect(worker.awaitCalls).toBe(1);
+        expect(worker.retireCalls).toBe(1);
+        expect(createHttp2Server).not.toHaveBeenCalled();
+
+        const completion = await server.start().catch((error: unknown) => error);
+        expectDeferredCleanupCompletion(completion);
+        expect(closeFailedResource).toHaveBeenCalledTimes(2);
+        expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+        expect(worker.starts).toBe(1);
+        expect(worker.stopCalls).toBe(1);
+        expect(worker.awaitCalls).toBe(1);
+        expect(worker.retireCalls).toBe(1);
+        expect(createHttp2Server).not.toHaveBeenCalled();
+
+        const terminal = await server.start().catch((error: unknown) => error);
+        expectConsumedFailedStartServer(terminal);
+        expect(closeFailedResource).toHaveBeenCalledTimes(2);
+        expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+        expect(worker.starts).toBe(1);
+        expect(createHttp2Server).not.toHaveBeenCalled();
+      } finally {
+        worker?.release();
+        await starting?.catch(() => undefined);
+        if (server !== undefined) {
+          const cleanup = await server.start().catch((error: unknown) => error);
+          await closeIfRunningServer(cleanup).catch(() => undefined);
+        }
+        await fixture?.context.close().catch(() => undefined);
+        await fixture?.environment.close().catch(() => undefined);
+        fixture?.dispose();
+      }
+    },
+  );
 
   it("terminally rejects a consumed server after retrying immediate-safe cleanup", async () => {
     const events: string[] = [];

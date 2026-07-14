@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 final re-review assigned
+Status: Slice 6 final round-2 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1233,3 +1233,53 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
   docs/API, Proto, and generated-clean gates pass.
 - Fresh final re-review: documentation Luna Medium; style/API/reliability Terra
   High; no subagents. Security remains deferred to T-0041.
+
+## Slice 6 Final Re-review Findings And Round-2 Fix
+
+- `2026-07-13T23:53:02Z`: documentation CLEAN; API CLEAN; style MEDIUM + LOW;
+  reliability MEDIUM. Actual Luna Medium/Terra High profiles match dispatch,
+  no subagents, all closed.
+- Medium reliability: whole-traversal no-leaf fallback preserves an outer
+  close-group wrapper instead of the original inner empty aggregate at a second
+  failed-start aggregation boundary. Preserve each empty aggregate when visited
+  during recursive traversal; add failed-start empty/nested-empty explicit-
+  resource identity/order/retry evidence.
+- Medium style: protect the new running-close regression fixture/server before
+  acquisition. Low: remove `collectRunningCloseError` fallback now redundant
+  with the shared collector. Same Terra Medium implementer owns this batch.
+
+## Slice 6 Final Round-2 Review-Fix Handback
+
+- `2026-07-14T00:03:15Z`: strict focused RED is 4 failed / 1 passed with 36
+  skipped. Nested and multiple-empty running close returned their outer resource
+  aggregates, while both failed-start cases returned the close-group wrapper
+  after second-stage flattening. Minimal GREEN preserves a zero-cause aggregate
+  at the exact traversal visit, removes the obsolete whole-traversal and local
+  running fallbacks, and passes the same focused selection 5/5.
+- Failed-start coverage proves original startup identity first, then exact empty
+  resource identities; cleanup-only retry closes only the failed resource index,
+  does not repeat successful resources or worker lifecycle hooks, opens no
+  listener, completes cause-less, and leaves the server terminal. Running-close
+  setup now enters `try` before fixture/server acquisition, with optional and
+  independent teardown. Existing nested-empty last/shared assertions now
+  truthfully expect the exact inner failure; full lifecycle passes 41/41.
+- Focused server/lifecycle/index passes 3 files / 72 tests; the unchanged service
+  suite passes 98/98. Docs remain unchanged and pass the 6/6 observable scan;
+  generated docs report 205 expected server exports. Both typechecks and scoped
+  lint/cleanup/Proto/generated gates pass. Full verify exits 0 with native and
+  coverage runs at 68 files / 1,600 tests and 95.31/90.15/98.1/95.35 percent
+  statement/branch/function/line coverage. Final seven-path format/scope/status/
+  export/leak/diff audits follow; this is handback, not self-acceptance.
+- `2026-07-14T00:04:51Z`: final audit passes exact seven-path Prettier/scope,
+  4/4 synchronized handback status, zero public internal-name leak, unchanged
+  README/package/root exports/service fixture, generated-clean verification,
+  and `git diff --check`.
+
+## Slice 6 Final Round-2 Coordinator Gate
+
+- `2026-07-14T00:09:10Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify passes
+  native and coverage at 68 files / 1,600 tests, 95.31/90.15/98.1/95.35
+  coverage, 205 server exports, and all repository gates.
+- Final round-2 re-review: documentation Luna Medium; style/API/reliability
+  Terra High; no subagents. Security deferred to T-0041.

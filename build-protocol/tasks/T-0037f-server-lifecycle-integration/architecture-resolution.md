@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 6 final re-review assigned
+Status: Slice 6 final round-2 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1099,3 +1099,37 @@ smallest coherent implementation.
   retry evidence, and completed startup docs pass independent full verify with
   1,597 native and coverage tests and all project gates. Actual Terra Medium
   implementer used no subagents and is closed. Final four-lane re-review follows.
+
+## Slice 6 No-leaf Identity Clarification
+
+- `2026-07-13T23:53:02Z`: an empty aggregate is a leaf-like failure for
+  traversal purposes. Preserve it at the frame where it is encountered so a
+  later aggregation boundary reports the original hook failure rather than its
+  close-group wrapper. Normal leaf flattening, cycle handling, stable order,
+  failed-index retry, and public surface remain unchanged.
+
+## Slice 6 Final Round-2 Review-Fix Handback
+
+- `2026-07-14T00:03:15Z`: recursive collection now appends an `AggregateError`
+  with zero causes at its own visit. Top-level empty preserves itself;
+  nested-empty preserves the exact inner aggregate; multiple empties preserve
+  traversal order. Non-empty leaves, ancestor-cycle handling, arbitrary values,
+  and retryable index state retain the established algorithm. Running close now
+  calls the shared collector directly with no duplicate no-leaf abstraction.
+- The second-boundary failed-start tests preserve original-first phase order and
+  exact resource identity through the close-group wrapper, then prove failed-
+  index-only cleanup retry and terminal consumption. Full lifecycle passes
+  41/41 and full verify passes two 68-file / 1,600-test runs. README/TSDoc,
+  public/export surface, service fixture, generated source, and lifecycle
+  architecture are unchanged. Coordinator re-review remains required.
+- Final exact audit passes seven-path formatting/scope, 4/4 synchronized status,
+  public leak/export/docs/service-fixture checks, generated-clean verification,
+  and diff integrity.
+
+## Slice 6 Final Round-2 Coordinator Acceptance
+
+- `2026-07-14T00:09:10Z`: traversal-frame empty aggregate preservation,
+  second-boundary failed-start identity/retry evidence, and protected regression
+  setup pass independent full verify with 1,600 native and coverage tests.
+  Actual Terra Medium implementer used no subagents and is closed. Final four-
+  lane re-review follows.

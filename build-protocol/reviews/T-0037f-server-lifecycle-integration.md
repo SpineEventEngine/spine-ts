@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 final re-review assigned
+Status: Slice 6 final round-2 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -939,3 +939,44 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Resume documentation at `gpt-5.6-luna` / medium and style, API, reliability
   at `gpt-5.6-terra` / high, no subagents, against fresh final fix package.
   Security deferred to T-0041.
+
+## Slice 6 Final Re-review Result
+
+- `2026-07-13T23:53:02Z`: documentation CLEAN; TypeScript/API docs CLEAN;
+  style/maintainability MEDIUM + LOW; performance/reliability MEDIUM. Actual
+  profiles match Luna Medium/Terra High dispatch; no subagents; all closed.
+- Required: traversal-level empty aggregate preservation with failed-start
+  explicit-resource regression; protect new test setup; remove redundant local
+  fallback. Prior false-success/index-retention defect and docs findings are
+  resolved. Security deferred to T-0041.
+
+## Slice 6 Final Round-2 Review-Fix Handback
+
+- `2026-07-14T00:03:15Z`: review traversal-local zero-cause handling and direct
+  shared collector use in running close. Strict RED is 4/5 focused failures;
+  focused GREEN is 5/5, and lifecycle is 41/41. Exact identity coverage spans
+  top-level empty, nested-inner empty, multiple stable-order empties, safe last
+  cleanup, unsafe shared detach, running explicit-resource retry, and failed-
+  start second-stage aggregation.
+- Failed-start evidence requires original startup identity first, exact resource
+  aggregate next, unfinished-index-only cleanup retry, successful-hook inertia,
+  cause-less completion, and terminal same-server rejection without listener or
+  worker lifecycle repetition. The running test acquires fixture/server only
+  inside protected setup. Full server compatibility is 72/72; service remains
+  unchanged at 98/98.
+- Full verify passes native and coverage at 68 files / 1,600 tests with all
+  coverage dimensions above 90%; 205 server exports and all type/static/docs/
+  Proto/generated gates pass. README/TSDoc and public/generated/service surfaces
+  are unchanged. Final exact audits follow; security remains deferred to T-0041
+  and coordinator re-review is required. This is not self-acceptance.
+- Final exact audit passes the 6/6 docs scan, seven-path formatting/scope, 4/4
+  status synchronization, public-leak/export/docs/service-fixture and generated-
+  clean checks, and diff integrity.
+
+## Slice 6 Final Round-2 Re-review Assignment
+
+- `2026-07-14T00:09:10Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent full
+  verify passes all phases and two 1,600-test runs.
+- Resume documentation Luna Medium and style/API/reliability Terra High, all no
+  subagents, against the fresh round-2 package. Security deferred to T-0041.
