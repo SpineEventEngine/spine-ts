@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 reliability rereview assigned
+Status: Slice 1 clean; Slice 2 implementation assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -389,3 +389,33 @@ work until Slice 1 focused verification and relevant review are clean.
   explicit expected `gpt-5.6-terra` / high, no subagents. Earlier clean style
   and TypeScript/API results remain applicable; documentation is N/A and
   security remains deferred.
+
+## Slice 1 Clean Closure
+
+- Reliability rereviewer returned CLEAN at actual immutable
+  `gpt-5.6-terra` / high, no subagents, and was closed. Its focused runtime and
+  context-transport run passed `21/21`, including native ZeroMQ IPC.
+- Slice 1 is accepted at corrected endpoint `a69ae867`: all relevant lanes are
+  clean, documentation is N/A, security is deferred, and coordinator gates are
+  clean. No full verify is run until final T-0038b closure.
+
+## Slice 2 Implementation Assignment
+
+- Resume the same existing implementer at explicit `gpt-5.6-terra` / medium,
+  no subagents. Own server lifecycle composition and focused lifecycle tests
+  only; do not begin Slice 3 cross-process/docs work.
+- Open context transport registrations in deterministic built-context order
+  after attachment/startup recovery and before listener creation/intake.
+- Track every successful handle and any retained failed-open cleanup. A partial
+  open failure must preserve primary-first diagnostics, close/retry only owned
+  partial registrations, and gate detach/context/resource cleanup until intake
+  cleanup succeeds.
+- Running and failed-listener close order is network, context transport intake
+  close plus accepted-work drain, environment detach/quiescence, then
+  contexts/resources/owned environment. Retry only unfinished phases; shared
+  caller-owned transport and sibling server routes remain usable.
+- Prove listener absence on registration failure, deterministic duplicate
+  command responder failure, partial-open cleanup/retry, ingress-close hard
+  gate, successful phase non-repetition, shared transport sibling behavior, and
+  existing T-0037f lifecycle compatibility. Add no public root symbol or new
+  lifecycle policy owner.

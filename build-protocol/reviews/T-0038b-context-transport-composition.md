@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 reliability rereview assigned
+Status: Slice 1 clean; Slice 2 implementation assigned
 
 ## Scope
 
@@ -202,3 +202,24 @@ Status: Slice 1 reliability rereview assigned
   `gpt-5.6-terra` / high, no subagents. Scope is resolution of P1/P2 and any
   concrete regression introduced by those fixes; historical superseded text is
   ignored unless current records claim it.
+
+## Slice 1 Reliability Rereview Result
+
+- CLEAN. Reviewer `019f5e9a-7dca-7e80-ad6c-4f83479d43d2`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- Reviewer confirmed P1/P2 retry ownership and registration cleanup semantics,
+  no root API leak, and no concrete reliability regression. Focused
+  runtime/context transport evidence passed `21/21`, including native ZeroMQ.
+- Slice 1 all-concern disposition: style CLEAN; documentation N/A; TypeScript/API
+  CLEAN; performance/reliability CLEAN; security deferred to T-0041.
+
+## Slice 2 Concern Plan
+
+- Style/maintainability: relevant for keeping retry checkpoints inside existing
+  server lifecycle ownership and avoiding duplicate close policy.
+- Documentation: N/A unless public/observable lifecycle wording changes.
+- TypeScript/API docs: relevant for no root/options/declaration leakage.
+- Performance/reliability: relevant for open/close ordering, partial failure,
+  idempotent retry, shared transport, sibling routes, and accepted-work drain.
+- Security: deferred to T-0041. Implementer assignment is explicit
+  `gpt-5.6-terra` / medium, no subagents.
