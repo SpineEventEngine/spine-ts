@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final rereview finding accepted
+Status: Final rereview fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -345,3 +345,20 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   historical/superseded in implementation status, and replace `future` with
   then-pending wording. Resume the same Terra Medium implementer; no decision,
   runtime, public API, or other surface changes.
+
+## Final Rereview Fix Handback
+
+- Resumed at accepted finding commit
+  `72537ba371edb474dc17a327bbaa80215bf105e3`. Changed only D-0086's July 13
+  clarification label/tense in `DECISION_LOG.md` plus the three synchronized
+  T-0039a records.
+- The clarification is explicitly historical and superseded in implementation
+  status by the July 14 final outcome below; T-0037f's assignments are described
+  as then-pending. Its technical evidence, the accepted D-0086 decision, D-0085,
+  and every other surface are preserved.
+- Fresh focused active/historical/future scans, exact four-path Prettier,
+  `docs:check`, status equality, scope/generated checks, and `git diff --check`
+  passed. No full verify or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. `receiving-code-review` and
+  `verification-before-completion` were read and applied.

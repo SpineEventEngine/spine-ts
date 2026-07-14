@@ -3899,12 +3899,13 @@ Consequences:
 - This decision changes sequencing and durable documentation only. It does not
   claim any T-0037 child behavior is implemented.
 
-Active outcome clarification (2026-07-13): the eight-child sequence remains
-accepted, but integrated ownership narrows the T-0037e3 child and supersedes its
-former place in the generation-retirement retry-owner enumeration. T-0037d owns
+Historical outcome clarification (2026-07-13; implementation status superseded
+by the 2026-07-14 final outcome below): the eight-child sequence remains accepted,
+but integrated ownership narrows the T-0037e3 child and supersedes its former
+place in the generation-retirement retry-owner enumeration. T-0037d owns
 failed-start generation retirement and retry, T-0037e1 owns last-detach
 retirement and retry, and T-0037e2 owns reusable-stop retirement and retry;
-T-0037f's accepted future server-cleanup assignments remain outside this
+T-0037f's then-pending accepted server-cleanup assignments remain outside this
 clarification. T-0037e3 owns serialized live-registration/retained-owner refusal,
 owner-free zero-registration/no-generation permanent admission, cancellation of
 an eager stop queued behind that admission only while it is both unadmitted and
