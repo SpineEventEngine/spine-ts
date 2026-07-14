@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer Wave 7 fixes verified; awaiting Wave 8
+Status: In progress - reviewer Wave 8 fixes verified; awaiting Wave 9
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -204,11 +204,14 @@ documentation closure, and full black-box consolidation remain excluded.
   - `examples/todo/test-fixtures/local-multi-process-worker.mjs`;
   - `examples/todo/package.json` and the corresponding `pnpm-lock.yaml`
     importer entry;
+  - the accepted Wave 3 layout correction in `vitest.config.ts` and
+    `tsconfig.eslint.json` only;
   - this task brief and `build-protocol/work-logs/T-0040a.md` for TDD and
     implementation evidence.
 - The review log remains coordinator/reviewer-owned. Do not modify example
   domain source, public exports, server/transport source, Protobuf contracts,
-  README/user guide, build configuration, or generated output.
+  README/user guide, other build configuration, or generated output. The two
+  discovery entries above are the only accepted build-configuration exception.
 - TDD order: add dependency plumbing and the end-to-end test first; run RED
   while the worker is absent and confirm child failure before readiness; add
   the minimal worker; run GREEN; then add bounded startup/primary-failure
@@ -514,6 +517,41 @@ task-list ID"`. It exited `1`; 1 test failed and 14 were skipped in 899
   source, or guide documentation changed. Actual immutable implementation
   metadata remains existing role `implementer`, model `gpt-5.6-terra`,
   reasoning `medium`; no subagents or Git mutation.
+
+### Reviewer Wave 8 Fixes - 2026-07-14
+
+- `LocalMultiProcessFixture.#eventually()` now computes remaining deadline time
+  after each failed predicate and sleeps only for the positive minimum of ten
+  milliseconds and that remainder. The controlled no-ready scenario measures
+  `ready()` alone and asserts lower and upper elapsed bounds around the owned
+  five-second readiness phase.
+- `isAbsent()` now returns true only for an `Error` carrying Node code `ENOENT`;
+  successful stat returns false and every other error is rethrown. The fixture
+  owns a private `onStatIpcDirectory` test seam and tracks absence verification
+  as `boolean | undefined`, so a verification failure is aggregated and can
+  never become `ipcDirectoryRemoved: true`.
+- A controlled `EACCES` verification failure proves close returns no cleanup
+  result, preserves an existing primary failure first, nests the actionable
+  absence-verification cleanup error second, exits the child gracefully, and
+  still removes the directory according to a separate real stat.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "preserves a primary failure
+when IPC directory absence verification fails"`. It exited `1`; 1 test failed
+  and 15 were skipped in 1.17 seconds because close incorrectly returned a
+  successful result with `ipcDirectoryRemoved: true`.
+- GREEN command: the same invocation exited `0`; 1 test passed and 15 were
+  skipped in 1.26 seconds. The final affected selection, including no-ready
+  elapsed bounds, passed 2 tests with 14 skipped in 6.08 seconds.
+- The final native moved suite passed all 16 tests in 30.19 seconds. The final
+  native seven-file affected regression passed all 114 tests in 30.60 seconds.
+  Post-format reruns passed the same 16 and 114 tests in 30.25 and 30.69 seconds.
+  Both TypeScript checks, focused ESLint, cleanup enforcement, and the
+  public/internal boundary scan passed. Assigned-file formatting and diff
+  whitespace also passed.
+- No production code, worker behavior, dependency, public contract, framework
+  source, guide documentation, or build configuration changed. Actual immutable
+  implementation metadata remains existing role `implementer`, model
+  `gpt-5.6-terra`, reasoning `medium`; no subagents or Git mutation.
 
 ## Skill Applicability
 

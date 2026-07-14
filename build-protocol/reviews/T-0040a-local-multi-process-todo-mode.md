@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 7 fixes verified - awaiting reviewer Wave 8
+Status: Wave 8 fixes verified - awaiting reviewer Wave 9
 
 Baseline: `24d1ef37`
 
@@ -53,7 +53,8 @@ overstate future production policy.
 - Reviewer waves 3 and 4: complete, fixed, verified, and closed.
 - Reviewer wave 5: complete, fixed, verified, and closed.
 - Reviewer wave 6: complete, fixed, verified, and closed.
-- Reviewer wave 7: complete and closed; three accepted findings are assigned.
+- Reviewer wave 7: complete, fixed, verified, and closed.
+- Reviewer wave 8: complete and closed; three accepted findings are assigned.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -690,3 +691,74 @@ and repeat every canonical concern.
   whitespace, and generated tracking passed.
 - Every Wave 7 finding is resolved. Commit and run all four canonical concerns
   in Wave 8 with current summaries advanced before dispatch.
+
+## Reviewer Wave 8 Assignments
+
+Fix endpoint: `2c11401c`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..2c11401c.diff` (195,797 bytes)
+
+Pre-review lint advanced all active summaries before dispatch and found no
+stale callback/name, include-all query, full-array lookup, unbounded diagnostic,
+internal/public leak, tracked generated output, duplicated policy value, or
+future-policy overclaim.
+
+Dispatch the same four existing read-only, no-subagent concerns with explicit
+immutable profiles. Regress every prior finding, especially active status
+accuracy, exact generated ID filter, non-allocating lookup, all `on*` callback
+names, bounded diagnostics, real-query-first behavior, and cleanup. Scope
+remains the package and affected paths. Ignore superseded history unless a
+current record claims it active. Report only concrete line-specific defects.
+Actual IDs/profile metadata and complete disposition remain pending.
+
+## Reviewer Wave 8 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6192-5d3d-7f60-85bd-e1eb9d0e1ebc`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6192-8fe0-7822-9367-ab0609b6f6c4`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6192-af18-7742-b582-6b0cfaf2e7ae`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6192-cf21-70f0-b2a9-3eac43e2dee4`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Style/maintainability and TypeScript/API docs were clean. Accepted findings:
+
+1. **P2, active assignment scope:** the initial assignment still prohibited all
+   build-configuration changes despite the accepted Wave 3 discovery additions
+   to `vitest.config.ts` and `tsconfig.eslint.json`. Amend the active ownership
+   ledger to allow exactly those entries and no other build configuration. The
+   task brief is corrected in this result step.
+2. **P2, readiness deadline:** `#eventually()` always sleeps 10 milliseconds,
+   even when less remains. Cap each delay to remaining time and extend the
+   no-ready proof with lower/upper elapsed bounds around the five-second phase.
+3. **P2, absence verification:** `isAbsent()` treats every `stat()` rejection as
+   absence. Return true only for `ENOENT`; surface other operational errors so
+   cleanup aggregates them without losing a primary failure. Add a controlled
+   non-`ENOENT` cleanup-verification test.
+
+The exact ID filter, early-return lookup, diagnostics, real-query-first path,
+retry pacing, timers, startup ordering, termination, callback naming, and public
+contracts otherwise remain clean. Return the two code/test fixes to the same
+Terra Medium implementer, verify natively, commit, and repeat every concern.
+
+## Wave 8 Fix Verification - 2026-07-14
+
+- The same immutable Terra Medium implementer capped readiness polling and
+  added ENOENT-specific absence verification plus controlled cleanup-error
+  aggregation; no production, worker, dependency, API, docs, or build-config
+  change; no subagents.
+- Coordinator inspection confirmed remaining-time delay ownership, readiness
+  timing assertions, tri-state close behavior, non-ENOENT propagation, primary-
+  failure ordering, and actual uninjected directory absence.
+- Native affected regression passed 7 files and all 114 tests in 30.67 seconds.
+  Both TypeScript checks, full lint and cleanup enforcement, formatting, diff
+  whitespace, and generated tracking passed.
+- Every Wave 8 finding is resolved. Commit and run all four canonical concerns
+  in Wave 9 with current summaries advanced before dispatch.

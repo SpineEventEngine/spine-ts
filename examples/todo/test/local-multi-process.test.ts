@@ -104,6 +104,7 @@ interface FixtureCreateOptions {
   readonly onResourcesAcquired?: (resources: FixtureSetupResources) => void;
   readonly onCloseParentTransport?: (transport: SignalTransport) => Promise<void>;
   readonly onRemoveIpcDirectory?: (ipcDirectory: string) => Promise<void>;
+  readonly onStatIpcDirectory?: (ipcDirectory: string) => Promise<unknown>;
 }
 
 interface TrackedChild {
@@ -415,6 +416,48 @@ describe("local multi-process to-do mode", () => {
   );
 
   it(
+    "preserves a primary failure when IPC directory absence verification fails",
+    async () => {
+      const primaryFailure = new Error("Injected primary operation failure.");
+      const verificationFailure = Object.assign(new Error("Injected IPC directory stat failure"), {
+        code: "EACCES",
+      });
+      let resources: FixtureSetupResources | undefined;
+      const fixture = await LocalMultiProcessFixture.create({
+        onResourcesAcquired: (acquired) => {
+          resources = acquired;
+        },
+        onStatIpcDirectory: () => Promise.reject(verificationFailure),
+      });
+      let cleanup: CleanupResult | undefined;
+      let rejection: unknown;
+
+      await fixture.ready();
+      try {
+        cleanup = await fixture.close(primaryFailure);
+      } catch (error) {
+        rejection = error;
+      }
+
+      expect(cleanup).toBeUndefined();
+      expect(rejection).toBeInstanceOf(AggregateError);
+      if (!(rejection instanceof AggregateError)) {
+        throw new Error("Directory verification did not preserve aggregate diagnostics.");
+      }
+      expect(rejection.message).toBe("Primary operation and cleanup failed.");
+      expect(rejection.errors[0]).toBe(primaryFailure);
+      expect(rejection.errors[1]).toBeInstanceOf(AggregateError);
+      expect(aggregateMessages(rejection.errors[1])).toEqual([
+        "Local multi-process IPC directory absence verification failed: " +
+          "Injected IPC directory stat failure.",
+      ]);
+      expect(await requireSetupResources(resources).childExit).toEqual({ code: 0, signal: null });
+      expect(await isAbsent(requireSetupResources(resources).ipcDirectory)).toBe(true);
+    },
+    outerTestTimeoutMs,
+  );
+
+  it(
     "suppresses readiness and closes without force when shutdown arrives during startup",
     async () => {
       let resources: FixtureSetupResources | undefined;
@@ -535,10 +578,13 @@ describe("local multi-process to-do mode", () => {
       const fixture = await LocalMultiProcessFixture.create({ workerMode: "no-ready" });
       let primaryFailure: Error | undefined;
       let cleanup: CleanupResult | undefined;
+      const readinessStartedAt = Date.now();
+      let readinessElapsedMs: number | undefined;
 
       try {
         await fixture.ready();
       } catch (error) {
+        readinessElapsedMs = Date.now() - readinessStartedAt;
         primaryFailure = asError(error);
       } finally {
         cleanup = await fixture.close(primaryFailure);
@@ -547,6 +593,9 @@ describe("local multi-process to-do mode", () => {
       expect(primaryFailure?.message).toBe(
         `Local multi-process child readiness timed out after ${String(readinessTimeoutMs)}ms.`,
       );
+      const elapsedMs = readinessElapsedMs ?? 0;
+      expect(elapsedMs).toBeGreaterThanOrEqual(readinessTimeoutMs - 250);
+      expect(elapsedMs).toBeLessThan(readinessTimeoutMs + 1_500);
       expect(cleanup).toMatchObject({
         childExitCode: 0,
         forcedTermination: false,
@@ -600,6 +649,7 @@ class LocalMultiProcessFixture {
   #ipcDirectory: string;
   #parentTransport: SignalTransport;
   #ready: ReadyMessage | undefined;
+  #onStatIpcDirectory: FixtureCreateOptions["onStatIpcDirectory"];
   #stallQueries: boolean;
   #statelessQueryRows: boolean;
   #stalledQueryAbortCount = 0;
@@ -655,6 +705,7 @@ class LocalMultiProcessFixture {
         options.immediateQueryErrors ?? false,
         options.statelessQueryRows ?? false,
         options.stallQueries ?? false,
+        options.onStatIpcDirectory,
       );
     } catch (error) {
       const cleanupFailures = await cleanupFailedFixtureSetup({
@@ -681,6 +732,7 @@ class LocalMultiProcessFixture {
     immediateQueryErrors: boolean,
     statelessQueryRows: boolean,
     stallQueries: boolean,
+    onStatIpcDirectory: FixtureCreateOptions["onStatIpcDirectory"],
   ) {
     this.#ipcDirectory = ipcDirectory;
     this.#parentTransport = parentTransport;
@@ -688,6 +740,7 @@ class LocalMultiProcessFixture {
     this.#immediateQueryErrors = immediateQueryErrors;
     this.#statelessQueryRows = statelessQueryRows;
     this.#stallQueries = stallQueries;
+    this.#onStatIpcDirectory = onStatIpcDirectory;
     const { child } = trackedChild;
     child.once("error", (error) => {
       this.#childFailure = phaseError("child process", error, this.#ipcDirectory);
@@ -867,8 +920,13 @@ class LocalMultiProcessFixture {
       failures,
       this.#ipcDirectory,
     );
-    const ipcDirectoryRemoved = await isAbsent(this.#ipcDirectory);
-    if (!ipcDirectoryRemoved) {
+    let ipcDirectoryRemoved: boolean | undefined;
+    try {
+      ipcDirectoryRemoved = await isAbsent(this.#ipcDirectory, this.#onStatIpcDirectory);
+    } catch (error) {
+      failures.push(phaseError("IPC directory absence verification", error, this.#ipcDirectory));
+    }
+    if (ipcDirectoryRemoved === false) {
       failures.push(
         new Error(
           `Private IPC directory remains after cleanup; retained entries [${retainedEntries.join(", ")}].`,
@@ -893,7 +951,7 @@ class LocalMultiProcessFixture {
       childExitSignal: exitState.signal,
       forcedTermination,
       listenerClosed,
-      ipcDirectoryRemoved,
+      ipcDirectoryRemoved: ipcDirectoryRemoved ?? false,
     };
   }
 
@@ -904,7 +962,10 @@ class LocalMultiProcessFixture {
       if (predicate()) {
         return;
       }
-      await delay(10);
+      const remainingMs = deadline - Date.now();
+      if (remainingMs > 0) {
+        await delay(Math.min(10, remainingMs));
+      }
     }
     this.#throwChildFailure(phase);
     throw new Error(`Local multi-process ${phase} timed out after ${String(timeoutMs)}ms.`);
@@ -1316,11 +1377,23 @@ async function capture(
   }
 }
 
-async function isAbsent(target: string): Promise<boolean> {
-  return await stat(target).then(
-    () => false,
-    () => true,
-  );
+async function isAbsent(
+  target: string,
+  onStat: (target: string) => Promise<unknown> = stat,
+): Promise<boolean> {
+  try {
+    await onStat(target);
+    return false;
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return true;
+    }
+    throw error;
+  }
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function phaseError(phase: string, error: unknown, ipcDirectory: string): Error {
