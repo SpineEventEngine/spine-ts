@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 targeted rereview P2 fixes assigned
+Status: Slice 3 second targeted fixes green; final rereview ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1007,3 +1007,44 @@ permitted`: same-host command/event
   to the parent entering its quiet window, fail immediately above three, retain
   the existing real transport proof, move the declaration, update all records,
   and rerun the native affected files.
+
+## Slice 3 Targeted Rereview Fix Handback
+
+- Actual immutable execution metadata is the existing implementer at explicit
+  `gpt-5.6-terra` / medium; no subagents were dispatched or used. Applied
+  receiving-code-review, strict `tdd`/`test-driven-development` and required
+  test references, JavaScript async testing, TypeScript async error handling,
+  and verification-before-completion.
+- Reliability RED replaced the timer option in the regression with
+  `injectCommandDuplicateInQuietWindow`; before implementation it was ignored,
+  so the focused native test resolved with the original three observations
+  instead of rejecting (`1` failed, `5` skipped). GREEN sends one fixed
+  control-only Node IPC message only after the parent admits at least three
+  observations and verifies exactly three. The child replays its remembered
+  command observation without receiving a command/event payload over Node IPC;
+  focused GREEN is `1/1` with `5` skipped.
+- `observeCommand()` now admits with `>= 3`, immediately rejects any admission
+  count above three, and monitors the bounded `200 ms` quiet window in `10 ms`
+  increments so a later fourth rejects without a five-second exact-equality
+  timeout. The old duplicate-delay environment value, optional parser,
+  `node:timers` import, and child `setTimeout()` are removed. Real generated
+  command/event envelopes still cross ZeroMQ only.
+- Style P2 is a declaration-only move: `createZeroMqTransport` is again the
+  first exported declaration at line `50`, followed by package-internal
+  `zeroMqSocketAccess` at line `58`. No implementation, root/subpath export, or
+  public declaration changed.
+- Fresh unrestricted native files pass: ZeroMQ adapter `20/20`, child-process
+  proof `6/6`. Generated build/tooling typechecks, scoped ESLint, cleanup rules,
+  exact three-file Prettier, obsolete-delay scan, declaration-order/root-leak
+  scans, and `git diff --check` pass.
+- Changed paths are only `packages/transport/src/zeromq/signal-transport.ts`,
+  the two cross-process fixture files, and all three T-0038b records. Accepted
+  docs, production semantics, endpoint cleanup, public API, topology/retry
+  policy, examples, Protobuf, unrelated files, and Git history are unchanged.
+  Remaining uncertainty is coordinator acceptance/full verification plus the
+  existing same-host and T-0041 security limitations.
+- Coordinator inspection confirmed immediate over-count rejection and
+  parent-triggered control only after exact-three admission. The independent
+  unrestricted native rerun passed both affected files with `26/26` tests.
+  Both P2s are accepted as fixed; style and reliability require final targeted
+  rereview.

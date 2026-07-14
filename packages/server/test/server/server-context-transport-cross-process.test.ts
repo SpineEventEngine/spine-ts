@@ -68,6 +68,10 @@ interface StoppedMessage {
 interface ShutdownMessage {
   readonly type: "shutdown";
 }
+interface DuplicateCommandObservationMessage {
+  readonly type: "duplicate-command-observation";
+}
+type ParentMessage = DuplicateCommandObservationMessage | ShutdownMessage;
 type ChildMessage = ReadyMessage | FailureMessage | ObservationMessage | StoppedMessage;
 interface ChildExitState {
   readonly code: number | null;
@@ -75,6 +79,7 @@ interface ChildExitState {
 }
 interface FixtureOptions {
   readonly backgroundFailures: string[];
+  readonly injectCommandDuplicateInQuietWindow: boolean;
   readonly ipcDirectory: string;
   readonly parentTransport: SignalTransport;
   readonly trackedChild: TrackedChild;
@@ -85,7 +90,7 @@ interface FixtureCreateOptions {
     transport: SignalTransport,
     ipcDirectory: string,
   ) => Promise<void>;
-  readonly commandDuplicateDelayMs?: number;
+  readonly injectCommandDuplicateInQuietWindow?: boolean;
 }
 interface FixtureSetupResources {
   readonly ipcDirectory: string;
@@ -192,8 +197,10 @@ describe("Server context transport across Node processes", () => {
     expect(`${result.diagnostics} ${result.stderr}`).toContain("SPINE_T0038B_ADAPTER_IDENTITY");
   });
 
-  it("rejects a delayed fourth command observation", async () => {
-    const fixture = await CrossProcessFixture.create({ commandDuplicateDelayMs: 100 });
+  it("rejects a controlled fourth command observation during the quiet window", async () => {
+    const fixture = await CrossProcessFixture.create({
+      injectCommandDuplicateInQuietWindow: true,
+    });
 
     try {
       await fixture.ready();
@@ -295,6 +302,7 @@ class CrossProcessFixture {
   #backgroundFailures: string[];
   #childFailure: Error | undefined;
   #closed = false;
+  #injectCommandDuplicateInQuietWindow: boolean;
   #ipcDirectory: string;
   #observations: ObservationMessage[] = [];
   #parentTransport: SignalTransport;
@@ -327,11 +335,6 @@ class CrossProcessFixture {
         env: {
           ...process.env,
           SPINE_T0038B_ADAPTER_IDENTITY: adapterIdentity,
-          ...(options.commandDuplicateDelayMs === undefined
-            ? {}
-            : {
-                SPINE_T0038B_COMMAND_DUPLICATE_DELAY_MS: String(options.commandDuplicateDelayMs),
-              }),
           SPINE_T0038B_IPC_DIRECTORY: ipcDirectory,
           SPINE_T0038B_TRANSPORT_TIMEOUT_MS: String(transportTimeoutMs),
         },
@@ -343,6 +346,7 @@ class CrossProcessFixture {
 
       return new CrossProcessFixture({
         backgroundFailures,
+        injectCommandDuplicateInQuietWindow: options.injectCommandDuplicateInQuietWindow ?? false,
         ipcDirectory,
         parentTransport,
         trackedChild,
@@ -359,8 +363,15 @@ class CrossProcessFixture {
     }
   }
 
-  constructor({ backgroundFailures, ipcDirectory, parentTransport, trackedChild }: FixtureOptions) {
+  constructor({
+    backgroundFailures,
+    injectCommandDuplicateInQuietWindow,
+    ipcDirectory,
+    parentTransport,
+    trackedChild,
+  }: FixtureOptions) {
     this.#backgroundFailures = backgroundFailures;
+    this.#injectCommandDuplicateInQuietWindow = injectCommandDuplicateInQuietWindow;
     this.#ipcDirectory = ipcDirectory;
     this.#parentTransport = parentTransport;
     this.#trackedChild = trackedChild;
@@ -398,25 +409,49 @@ class CrossProcessFixture {
 
   async observeCommand(entityId: string): Promise<ObservationBehavior[]> {
     await this.#eventually(
-      () =>
-        this.#observations.filter(
-          (observation) => observation.source === "command" && observation.entityId === entityId,
-        ).length === 3,
+      () => this.#commandObservations(entityId).length >= 3,
       "command handling and projection observation",
     );
-    await waitFor(observationQuietMs);
+    this.#requireExpectedCommandObservations(entityId);
 
-    const observations = this.#observations.filter(
+    const quietDeadline = Date.now() + observationQuietMs;
+    if (this.#injectCommandDuplicateInQuietWindow) {
+      await withinPhase(
+        sendChildMessage(this.#trackedChild.child, { type: "duplicate-command-observation" }),
+        observationQuietMs,
+        "command duplicate control",
+      );
+    }
+    await this.#holdCommandObservationQuietWindow(entityId, quietDeadline);
+
+    return this.#commandObservations(entityId)
+      .map((observation) => observation.behavior)
+      .sort();
+  }
+
+  #commandObservations(entityId: string): ObservationMessage[] {
+    return this.#observations.filter(
       (observation) => observation.source === "command" && observation.entityId === entityId,
     );
+  }
+
+  #requireExpectedCommandObservations(entityId: string): void {
+    const observations = this.#commandObservations(entityId);
     if (observations.length !== 3) {
       throw new Error(
         "Cross-process command observation expected exactly 3 observations but received " +
           `${String(observations.length)} during the bounded quiet window.`,
       );
     }
+  }
 
-    return observations.map((observation) => observation.behavior).sort();
+  async #holdCommandObservationQuietWindow(entityId: string, deadline: number): Promise<void> {
+    while (Date.now() < deadline) {
+      this.#throwChildFailure("command observation quiet window");
+      this.#requireExpectedCommandObservations(entityId);
+      await waitFor(Math.min(10, Math.max(1, deadline - Date.now())));
+    }
+    this.#requireExpectedCommandObservations(entityId);
   }
 
   async publishEventUntilObserved(event: Event, entityId: string): Promise<ObservationBehavior[]> {
@@ -925,7 +960,7 @@ async function emergencySetupCleanup(resources: FixtureSetupResources | undefine
   await rm(resources.ipcDirectory, { recursive: true, force: true });
 }
 
-async function sendChildMessage(child: ChildProcess, message: ShutdownMessage): Promise<void> {
+async function sendChildMessage(child: ChildProcess, message: ParentMessage): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     child.send(message, (error) => {
       if (error === null) {

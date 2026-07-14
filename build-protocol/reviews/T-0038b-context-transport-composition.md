@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 targeted rereview P2 fixes assigned
+Status: Slice 3 second targeted fixes green; final rereview ready
 
 ## Scope
 
@@ -719,3 +719,36 @@ Status: Slice 3 targeted rereview P2 fixes assigned
 - Every reviewer completed the skill check. One existing implementer fix pass
   is explicit `gpt-5.6-terra` / medium with no subagents. API remains CLEAN;
   security remains deferred to T-0041.
+
+## Slice 3 Targeted Rereview Fix Handback
+
+- Actual author metadata matches the immutable assignment: existing implementer,
+  explicit `gpt-5.6-terra` / medium, no subagents. Receiving-review, strict TDD
+  and references, JavaScript async testing, error handling, and fresh
+  verification were applied.
+- Reliability P2 has deterministic RED/GREEN. RED ignored the new parent
+  quiet-window injection option and resolved the first three observations (`1`
+  failed, `5` skipped). GREEN admits `>= 3`, validates exactly three before the
+  quiet window, sends one fixed payload-free Node IPC control, and checks the
+  `200 ms` quiet window every `10 ms`; four observations reject immediately.
+  Focused GREEN is `1/1`, `5` skipped. Obsolete child delay environment/parser/
+  timer machinery is absent, while generated command/event envelopes continue
+  over ZeroMQ only.
+- Style P2 is fixed without behavior or API change: public
+  `createZeroMqTransport` is the first export at line `50`; package-internal
+  `zeroMqSocketAccess` follows at line `58` and remains absent from root/subpath
+  declarations.
+- Fresh unrestricted native results are adapter `20/20` and child process
+  `6/6`. Generated build/tooling typechecks, scoped ESLint, cleanup rules, exact
+  Prettier, obsolete-delay/declaration-order/root-leak scans, and
+  `git diff --check` pass.
+- Diff scope is exactly transport declaration order, two fixture files, and all
+  three records. Accepted docs, production behavior, public API, endpoint
+  cleanup, topology/retry policy, examples, Protobuf, unrelated work, and Git
+  history are unchanged. Coordinator acceptance/full verification remains; API
+  and documentation retain CLEAN dispositions, and security remains deferred to
+  T-0041.
+- Coordinator inspection and independent unrestricted native verification
+  accepted both P2 corrections at `26/26` tests. Final rereview is limited to
+  style/maintainability and performance/reliability; documentation and API
+  clean dispositions remain applicable.

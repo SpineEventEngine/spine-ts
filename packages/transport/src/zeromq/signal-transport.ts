@@ -46,6 +46,14 @@ const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
 const unsafeModeMask = 0o077;
 
+/** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
+export function createZeroMqTransport(
+  config: ZeroMqAdapterConfig,
+  options: ZeroMqTransportOptions = {},
+): SignalTransport {
+  return new ZeroMqSignalTransport(config, options);
+}
+
 /** @internal Package-private native socket boundary used by deterministic cleanup tests. */
 export const zeroMqSocketAccess = {
   async bindReply(socket: Reply, address: string): Promise<void> {
@@ -58,14 +66,6 @@ export const zeroMqSocketAccess = {
     await ensurePrivateIpcDirectory(ipcDirectory);
   },
 };
-
-/** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
-export function createZeroMqTransport(
-  config: ZeroMqAdapterConfig,
-  options: ZeroMqTransportOptions = {},
-): SignalTransport {
-  return new ZeroMqSignalTransport(config, options);
-}
 
 class ZeroMqSignalTransport implements SignalTransport {
   readonly #config: ZeroMqAdapterConfig;

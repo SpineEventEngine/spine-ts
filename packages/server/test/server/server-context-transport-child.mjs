@@ -1,6 +1,5 @@
 import { Buffer } from "node:buffer";
 import process from "node:process";
-import { setTimeout } from "node:timers";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -24,21 +23,19 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const ipcDirectory = requiredEnvironment("SPINE_T0038B_IPC_DIRECTORY");
 const adapterIdentity = adapterIdentityEnvironment("SPINE_T0038B_ADAPTER_IDENTITY");
 const transportTimeoutMs = positiveIntegerEnvironment("SPINE_T0038B_TRANSPORT_TIMEOUT_MS");
-const commandDuplicateDelayMs = optionalPositiveIntegerEnvironment(
-  "SPINE_T0038B_COMMAND_DUPLICATE_DELAY_MS",
-);
 const inboundEventEntityId = "cross-process-inbound-event";
 const { AggregateStateSchema, ProjectionStateSchema, SingularSetOnceStateSchema } =
   fixtureSchemas();
+let commandObservation;
 
 class TaskAggregate extends Aggregate {
   assignTask(command) {
+    commandObservation = {
+      behavior: "command-handled",
+      source: "command",
+      entityId: command.id,
+    };
     observe("command-handled", "command", command.id);
-    if (commandDuplicateDelayMs !== undefined) {
-      setTimeout(() => {
-        observe("command-handled", "command", command.id);
-      }, commandDuplicateDelayMs);
-    }
     return packEvent({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
@@ -108,6 +105,8 @@ let stopping;
 process.on("message", (message) => {
   if (isShutdownMessage(message)) {
     void shutdown();
+  } else if (isDuplicateCommandObservationMessage(message)) {
+    duplicateCommandObservation();
   }
 });
 process.once("SIGTERM", () => {
@@ -185,6 +184,14 @@ function observe(behavior, source, entityId) {
   });
 }
 
+function duplicateCommandObservation() {
+  if (commandObservation === undefined) {
+    void reportFailure("observation control", new Error("No command observation is available."));
+    return;
+  }
+  observe(commandObservation.behavior, commandObservation.source, commandObservation.entityId);
+}
+
 function shutdown(exitCode = 0) {
   stopping ??= closeChild(exitCode);
   return stopping;
@@ -218,6 +225,15 @@ function isShutdownMessage(message) {
     message !== null &&
     typeof message === "object" &&
     message.type === "shutdown" &&
+    Object.keys(message).length === 1
+  );
+}
+
+function isDuplicateCommandObservationMessage(message) {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    message.type === "duplicate-command-observation" &&
     Object.keys(message).length === 1
   );
 }
@@ -277,8 +293,4 @@ function positiveIntegerEnvironment(name) {
     throw new Error(`${name} must be a safe positive integer.`);
   }
   return value;
-}
-
-function optionalPositiveIntegerEnvironment(name) {
-  return process.env[name] === undefined ? undefined : positiveIntegerEnvironment(name);
 }
