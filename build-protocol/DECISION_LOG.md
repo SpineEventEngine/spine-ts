@@ -3725,12 +3725,12 @@ attempt performs ordered owned-facility teardown outside that gate. Public
 `ServerEnvironment.close()` behavior and all public exclusions remain unchanged.
 
 Final implementation outcome (2026-07-14): T-0036 supplied the bounded
-package-internal delivery evidence; T-0037a through T-0037f integrated the
-environment-owned readiness, recovery, detach, reuse, permanent-close, and
-server lifecycle in that order. T-0038b then integrated same-host context
-transport composition into the established server ordering. These outcomes add
-no public scheduler, monitor, retry-timing, topology, adapter, or supervision
-policy.
+package-internal delivery evidence; T-0037a, T-0037b, T-0037c, T-0037d,
+T-0037e1, T-0037e2, T-0037e3, and T-0037f integrated the environment-owned
+readiness, recovery, detach, reuse, permanent-close, and server lifecycle in
+that order. T-0038b then integrated same-host context transport composition
+into the established server ordering. These outcomes add no public scheduler,
+monitor, retry-timing, topology, adapter, or supervision policy.
 
 ## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
 

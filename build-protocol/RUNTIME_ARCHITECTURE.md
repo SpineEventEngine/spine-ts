@@ -27,18 +27,17 @@ records why a class/object/prototype method would be worse.
 
 The first TS `Server` slice was intentionally narrower than Spine JVM's
 complete server/runtime environment. It introduced a Node HTTP/2 listener over
-`SpineServices`, defaulted to `127.0.0.1`, returned a `RunningServer` with
-`host`, `port`, `baseUrl`, and idempotent `close()`, and did not introduce
-`ServerEnvironment`, process supervision, worker management, durable
-scheduling, or ZeroMQ-specific public API. Current source now also has a small
-explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
-facilities, and close ownership. Its optional closeable delivery facility is
-not an active delivery scheduler. Current server close still stops network
-intake/sessions and then closes one flat group of contexts, resources, and an
-optionally owned environment; there is no delivery-registration barrier yet.
-D-0085 assigns a package-internal environment-owned bounded-run lifecycle to
-future implementation, and D-0086 sequences it through eight ordered
-implementation children without claiming that lifecycle is current behavior.
+`SpineServices`, defaulted to `127.0.0.1`, and returned a `RunningServer` with
+`host`, `port`, `baseUrl`, and idempotent `close()`; it did not yet include
+`ServerEnvironment` or environment-owned delivery. That is historical. The
+current runtime exposes `ServerEnvironment` for storage, transport, optional
+delivery/tracing facilities, and close ownership. Server startup completes
+finite environment recovery and opens command/event transport intake before
+listener intake. Server close stops network intake and sessions, drains
+accepted transport work, detaches and quiesces delivery, then closes contexts,
+resources, and any server-owned environment. This lifecycle adds no process
+supervision, public delivery scheduler, retry-timing policy, or production
+transport-topology policy.
 
 ## Read-Side and Write-Side Segregation
 
@@ -380,20 +379,11 @@ delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
-`ServerEnvironment` is the sole framework owner of delivery readiness and
-bounded delivery runs for its attached contexts. After each successful supported
-inbox persistence, the context reports readiness without changing that durable
-write's result. Attachment transfers responsibility from the pre-attachment
-handoff to the environment without overlap, and startup completes finite
-recovery for the attached contexts before the server accepts network traffic.
-A bounded failure or parked result remains observable lifecycle state; it does
-not claim that every pending row was delivered.
-
-`Server.start()` builds contexts, attaches them to the environment and completes
-their recovery, opens context transport intake, and only then opens the
-listener. If startup fails, cleanup preserves the ownership boundary: a
-caller-owned environment remains reusable after its required cleanup settles,
-while a server-owned environment follows the server's ownership rules.
+`ServerEnvironment` owns the delivery lifecycle for attached contexts.
+`Server.start()` builds its contexts and completes finite environment recovery
+before opening listener intake. If recovery rejects, startup rejects and the
+listener is not opened. Recovery completion does not claim that every pending
+delivery was completed.
 
 `RunningServer.close()` stops listener intake and sessions, closes context
 transport intake and drains accepted work, detaches delivery and waits for

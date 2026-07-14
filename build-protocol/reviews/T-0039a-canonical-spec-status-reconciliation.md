@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review findings accepted
+Status: Review fix handback ready
 
 ## Review Scope
 
@@ -122,3 +122,14 @@ Status: Review findings accepted
   recovery only as finite observable completion/rejection; name the exact eight
   D-0086 children; and set the plan status to current execution. Rerun all four
   concerns because the fixes touch each lane's claim surface.
+
+## Review Fix Handback
+
+- All four accepted findings are addressed within the authorized documentation
+  surfaces. Decision history and accepted exclusions are unchanged; no runtime,
+  public API, example, generated, or out-of-boundary path changed.
+- Fresh evidence covers current/stale wording, exact D-0086 child enumeration,
+  plan status, matrix/status invariants, six-path Prettier and scope,
+  `docs:check`, generated-path cleanliness, and `git diff --check`.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents. The package is ready for coordinator rereview.

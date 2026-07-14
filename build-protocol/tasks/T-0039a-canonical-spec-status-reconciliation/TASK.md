@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review findings accepted
+Status: Review fix handback ready
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -240,3 +240,17 @@ inventory. Run focused docs/status lint before any reviewer assignment.
      to the current in-execution state.
 - Resume the existing Terra Medium implementer for this complete documentation
   batch. Preserve all accepted exclusions and the twelve-path task boundary.
+
+## Review Fix Handback
+
+- The complete four-item review batch is implemented in the three canonical
+  documents plus these three T-0039a records. The original narrow server slice
+  is now historical, current startup/close behavior is integrated, observable
+  startup wording contains no internal parked/handoff/run concepts, D-0085
+  names all eight D-0086 children, and the completion plan says T-0039a is in
+  execution.
+- Focused stale/current wording, exact child-list, plan status, matrix/status,
+  six-path formatting/scope, docs, generated-path, and diff checks are
+  recorded in the work log. No full verify or mutating Git operation was run.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
+  no subagents.
