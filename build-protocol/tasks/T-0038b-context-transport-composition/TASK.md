@@ -1211,3 +1211,12 @@ duplicate control was not applied within the bounded quiet window.` This
 - All T-0038b acceptance criteria and four canonical review concerns are
   satisfied. Security remains intentionally deferred to T-0041. The task is
   complete and accepted for main integration.
+
+## Main Integration
+
+- Merge commit `ac1d0f5e` integrates T-0038b into `main`. Unrestricted
+  post-merge full verify exits `0`: ordinary and coverage phases each pass `71`
+  files and `1642/1642` tests with `95.38/90.12/98.22/95.4` percent coverage.
+- All type, lint, cleanup, format, TypeDoc/API, Proto, generated-clean, and diff
+  gates pass after merge. The user-owned `human-review-1-jul.md` remains
+  untracked and untouched. T-0038b is fully integrated.

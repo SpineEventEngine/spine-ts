@@ -939,3 +939,11 @@ received 4` rather than the asserted late-ack barrier diagnostic.
   diff, and status gates pass. Style/maintainability, documentation,
   TypeScript/API docs, and performance/reliability are CLEAN; security remains
   deferred to T-0041 by protocol. T-0038b is accepted for integration.
+
+## Integration Gate
+
+- Merge `ac1d0f5e` is post-merge verified on `main`: `71` files and `1642/1642`
+  tests in both ordinary and coverage phases, coverage
+  `95.38/90.12/98.22/95.4`, and all repository gates clean.
+- No review concern was reopened by integration. T-0038b is fully accepted;
+  final project security remains owned by T-0041.
