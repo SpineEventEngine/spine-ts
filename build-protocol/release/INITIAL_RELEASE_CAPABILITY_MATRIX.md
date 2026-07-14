@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Integrated capability rereview finding assigned
+Status: Row 23 stale-status fix ready for style/docs rereview
 
 Task: T-0038 Accepted Capability Audit
 
@@ -53,7 +53,7 @@ Allowed classifications: `IMPLEMENTED`, `DOCUMENTED_EXCLUSION`,
 | 20  | To-do app: generated registry, decorated aggregate/projection, real local gRPC command/query/subscription, validation/refusal and async projection evidence | `examples/todo/src/index.ts`                                                                                                                                                                                                   | `examples/todo/src/index.test.ts` — standalone clients, projection query/subscription, validation/refusal cases                                                                                                                                                                                                                                      | `examples/todo/{README.md,USER_GUIDE.md}`                                                                                               | IMPLEMENTED          | —      |
 | 21  | To-do app child-process/local-IPC demonstration with black-box evidence                                                                                     | `examples/todo/src/index.ts` remains process-local and has no example-owned child worker/entry or local-IPC composition                                                                                                        | `examples/todo/src/index.test.ts` is process-local; bounded `rg --files examples/todo` finds no child worker/entry or harness/acceptance test; integrated `packages/server/test/server/server-context-transport-cross-process.test.ts` establishes the framework prerequisite                                                                        | `build-protocol/TODO_EXAMPLE_SPEC.md` Required Demonstrations; `examples/todo/{README.md,USER_GUIDE.md}` document no local IPC workflow | EXAMPLE_GAP          | T-0040 |
 | 22  | Public specimens avoid forbidden end-user APIs                                                                                                              | `examples/todo/src/index.ts` uses bare `@Assign`/`@Subscribe`, generated types, and no app registry materialization                                                                                                            | focused prohibition scan over `examples/todo`, `docs/USER_GUIDE.md`, package READMEs, API and architecture docs; example test asserts no discovery/materialization imports                                                                                                                                                                           | `build-protocol/TODO_EXAMPLE_SPEC.md` End-User API Constraints; `docs/USER_GUIDE.md` handler guidance                                   | IMPLEMENTED          | —      |
-| 23  | Root/package/API/user-guide status accurately separates observable behavior from later work                                                                 | current docs describe actual local/in-memory behavior and exclusions; T-0039 remains the plan-owned canonical completion pass                                                                                                  | focused stale-wording scan found no specific false current-behavior claim                                                                                                                                                                                                                                                                            | `build-protocol/PROJECT_COMPLETION_PLAN.md` Documentation Definition of Done and T-0039 packets                                         | IMPLEMENTED          | —      |
+| 23  | Root/package/API/user-guide status accurately separates observable behavior from later work                                                                 | `build-protocol/tasks/T-0038b-context-transport-composition/TASK.md` and `build-protocol/work-logs/T-0038b.md` still have the exact header `Status: Complete; accepted for main integration`                                   | Both records' `Main Integration` sections document merge `ac1d0f5e` and successful post-merge verification; `git merge-base --is-ancestor ac1d0f5e HEAD` exits 0                                                                                                                                                                                     | `build-protocol/PROJECT_COMPLETION_PLAN.md` T-0039a owns child-record status reconciliation                                             | STALE_DOC_STATUS     | T-0039 |
 | 24  | No public monitor/scheduler/health/action/dead-letter/retry-policy API or production topology promise                                                       | root exports checked by `scripts/check-api-docs.mjs`; delivery APIs stay bounded in `packages/server/src/index.ts`                                                                                                             | API check plus focused forbidden-public-name scan                                                                                                                                                                                                                                                                                                    | `build-protocol/DEVELOPER_API.md` Delivery and Inbox API; `docs/api/README.md` delivery limitations                                     | DOCUMENTED_EXCLUSION | —      |
 | 25  | No distributed/multi-host transport, production supervision, or production adapter policy                                                                   | local `packages/transport/src/zeromq/` only; no supervisor public API                                                                                                                                                          | local IPC smoke and public-root scan                                                                                                                                                                                                                                                                                                                 | `build-protocol/PROJECT_COMPLETION_PLAN.md` Explicitly Not Release Blocking; root README limitations                                    | DOCUMENTED_EXCLUSION | —      |
 | 26  | No projection inbox `CATCH_UP`, no legacy `IMPORT_EVENT` delivery, aggregate importer/`ImportBus`, or new aggregate `@Apply`                                | delivery validation and registry role guards                                                                                                                                                                                   | `packages/server/test/delivery/inbox.test.ts`; handler analyzer/registry tests                                                                                                                                                                                                                                                                       | `build-protocol/DEVELOPER_API.md` Delivery and Inbox API; `build-protocol/RUNTIME_ARCHITECTURE.md` Delivery and Reliability             | DOCUMENTED_EXCLUSION | —      |
@@ -113,28 +113,30 @@ aggregate `@Apply`, JVM source compatibility, and production persistence,
 authentication, deployment, tracing, or health in the example. Rows 24–27 are
 accepted exclusions, not defects.
 
-Current exact taxonomy: 31 rows — 25 `IMPLEMENTED`, 4
-`DOCUMENTED_EXCLUSION`, 0 `STALE_DOC_STATUS`, 1 `EXAMPLE_GAP`, 1
+Current exact taxonomy: 31 rows — 24 `IMPLEMENTED`, 4
+`DOCUMENTED_EXCLUSION`, 1 `STALE_DOC_STATUS`, 1 `EXAMPLE_GAP`, 1
 `SECURITY_GATE`, and 0 `FRAMEWORK_DEFECT`. The only non-em-dash routes are
-T-0040 and T-0041.
+T-0039, T-0040, and T-0041.
 
-Focused parent validation after back-merge `eae95a3e`: the exact taxonomy/route
-lint reports 31 rows with 29 em-dash routes plus one T-0040 and one T-0041;
+Focused parent validation after the row 23 correction: the exact taxonomy/route
+lint reports 31 rows with 28 em-dash routes plus one each of T-0039, T-0040,
+and T-0041;
 the manifest check reports 10 exports and 10 inventory rows; the four active
-status headers agree; the owned-diff public/internal leakage and docs-overclaim
-scan is clean; exact four-file Prettier, generated-path, `git diff --check`,
-and status checks pass.
+status headers agree; row 23 evidence matches the exact child headers,
+integration record, and ancestry; exact four-file Prettier, generated-path,
+scope, and `git diff --check` checks pass.
 
 ## Routed Findings
 
 | Finding                                                             | Route  | Current evidence and next proof                                                      |
 | ------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| T-0038b child status headers lag completed integration              | T-0039 | T-0039a reconciles the child records outside this audit parent's write scope.        |
 | To-do child-process/local-IPC composition and acceptance are absent | T-0040 | Add the public-API-only example harness/test over the integrated framework behavior. |
 | Final project-wide security review has not occurred                 | T-0041 | Execute the final security gate after docs/example closure.                          |
 
-T-0039 remains a planned documentation completion pass, not a mismatch found by
-this audit. T-0038 remains open for its focused matrix validation/re-review and
-reserved final verification; T-0042 owns final release proof.
+T-0039a owns the child-record reconciliation; this audit parent does not edit
+T-0038b records. T-0038 remains open for focused style/docs rereview and reserved
+final verification; T-0042 owns final release proof.
 
 ## Pending Closure Evidence (Not Classified)
 

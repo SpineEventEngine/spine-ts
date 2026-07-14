@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability rereview finding assigned
+Status: Row 23 stale-status fix ready for style/docs rereview
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -523,3 +523,34 @@ for main integration` although its durable integration record and ancestry
   matrix author to classify row 23 as `STALE_DOC_STATUS`, route it to T-0039,
   cite the exact child headers/integration record, update counts/routes, and
   preserve all other rows and accepted evidence.
+
+## Row 23 Fix Skill Applicability
+
+- Before the fix, checked the exposed session inventory, task-provided skill
+  paths, `build-protocol/skills/EXPECTED_SKILLS.md`, the complete readable
+  entrypoint inventory from
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and `/Users/armiol/.agents/.skill-lock.json`; all eight expected manifest
+  entries are represented.
+- Fully read and selected `receiving-code-review` to validate the accepted
+  stale-status finding against child headers/integration ancestry, and
+  `verification-before-completion` for fresh focused evidence. Subagent,
+  worktree, planning, ADR, runtime, TypeScript, testing, and JVM-server skills
+  are N/A for this existing-worktree, no-subagent, four-record classification
+  fix. Repository protocol and the parent-only write scope remain governing.
+
+## Row 23 Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium, matching
+  the explicit existing implementer assignment; no subagents were used.
+- Row 23 now cites the exact stale T-0038b task/work headers, their completed
+  `Main Integration` record for merge `ac1d0f5e` and post-merge verification,
+  and successful ancestry. It is `STALE_DOC_STATUS`, routed to T-0039, with
+  T-0039a retaining ownership of child-record reconciliation.
+- All four parent headers are synchronized to style/docs-rereview readiness.
+  Counts are exactly 31 rows with 24/4/1/1/1/0 classifications; routes are 28
+  em dashes plus one each T-0039/T-0040/T-0041. Rows 21/30/31, the ten-entry
+  export inventory/API correction, parent full verify, and T-0042 are preserved.
+- Focused taxonomy/route, export-inventory, active-status, row-23 evidence,
+  exact four-file Prettier, generated-path, scope, and `git diff --check` checks
+  pass. No full verify, commit, child edit, or other out-of-scope change occurred.

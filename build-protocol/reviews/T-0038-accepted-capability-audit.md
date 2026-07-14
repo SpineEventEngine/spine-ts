@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability rereview finding assigned
+Status: Row 23 stale-status fix ready for style/docs rereview
 
 ## Review Scope
 
@@ -390,3 +390,30 @@ findings at `2026-07-14T01:23:48Z`.
   `IMPLEMENTED` to `STALE_DOC_STATUS`, route T-0039, cite exact evidence, and
   update taxonomy/routes. Rerun style and documentation only; API and
   reliability remain CLEAN unless the fix crosses their concerns.
+
+## Row 23 Fix Skill Applicability
+
+- Before fix edits, checked the exposed session inventory, task-provided skill
+  paths, expected-skill manifest, complete readable
+  `/Users/armiol/.agents/skills` entrypoint enumeration, and installed lock;
+  all eight expected manifest entries are present in the bounded evidence.
+- `receiving-code-review` and `verification-before-completion` were fully read
+  and selected. Subagent/worktree/planning/ADR/runtime/TypeScript/testing/
+  JVM-server skills are N/A for this existing-worktree, no-subagent,
+  parent-record-only classification correction.
+
+## Row 23 Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium and matches
+  the explicit resumed implementer assignment; no subagents were used.
+- Row 23 now records the concrete current mismatch: T-0038b task/work headers
+  remain accepted-for-integration while both integration sections document
+  merge `ac1d0f5e` and post-merge verification and ancestry succeeds. The row is
+  STALE_DOC_STATUS/T-0039; T-0039a owns the child-record fix.
+- All four active headers now agree on style/docs-rereview readiness. Taxonomy
+  is 31/24/4/1/1/1/0 and routing is 28 em dashes plus one each T-0039/T-0040/
+  T-0041. API and reliability CLEAN results remain applicable; parent full
+  verification and T-0042 remain pending.
+- Focused taxonomy/route, export-inventory, active-status, row-23 evidence,
+  exact four-file Prettier, generated-path, scope, and `git diff --check` checks
+  pass. No full verify, commit, child edit, or out-of-scope change occurred.
