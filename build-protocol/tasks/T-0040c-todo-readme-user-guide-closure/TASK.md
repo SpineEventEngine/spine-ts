@@ -717,3 +717,12 @@ activation|expires abandoned inactive subscriptions before activation"`.
   then pushed on `main`.
 - T-0040c is durably closed. The clean merged worktree and local task branch
   may now be removed; T-0041 is active.
+
+## 2026-07-14 - Local Cleanup
+
+- Git confirmed the task worktree clean and the branch merged into `main`.
+- Removed `.worktrees/T-0040c-todo-readme-user-guide-closure` without force
+  and deleted the merged local task branch. The pushed remote task branch
+  remains durable history.
+- No T-0040c worktree, local branch, agent, finding, gate, push, or cleanup
+  remains open.
