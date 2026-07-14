@@ -320,6 +320,24 @@ links/imports, and future-policy overclaim.
 - Focused test/type/docs/format/generated/diff checks passed. A fresh immutable
   endpoint and all four specialist lanes remain required.
 
+## 2026-07-14 - Specialist Wave 6 Assignment
+
+- Endpoint: `d9d7aa81` (`Bound to-do guide query results`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..d9d7aa81.diff`.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Final full-milestone review, emphasizing the finite ordered query response,
+  independent decoder/log caps, seeded result proof, and all earlier accepted
+  cleanup/boundary fixes. Read-only; no Git mutation, installs, duplicate test
+  runs, or subagents; historical superseded text is inactive.
+
 ## Skill Applicability
 
 - Reviewers use session inventory, expected-skill manifest, readable installed
