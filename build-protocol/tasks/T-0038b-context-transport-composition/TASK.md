@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 final reliability rereview assigned
+Status: Slice 3 late-ack receipt assertion P2 assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1149,3 +1149,13 @@ duplicate control was not applied within the bounded quiet window.` This
 - Final package is `.superpowers/sdd/review-d9c21256..3d8cd3a6.diff` (`3`
   commits, `21739` bytes). The existing performance/reliability role is
   dispatched read-only at explicit `gpt-5.6-terra` / high, no subagents.
+
+## Slice 3 Late-Ack Final Rereview Finding
+
+- Reliability accepts the classifier and branch behavior but reports one P2
+  assertion gap: missing and late acknowledgments share one diagnostic, so the
+  regression must also assert that its classifier was invoked with the real
+  received timestamp.
+- Same implementer resumes explicit `gpt-5.6-terra` / medium, no subagents, to
+  capture/assert classifier invocation in the one parent test and update the
+  three records. No fixture behavior or production change is authorized.

@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 final reliability rereview assigned
+Status: Slice 3 late-ack receipt assertion P2 assigned
 
 ## Scope
 
@@ -871,3 +871,15 @@ received 4` rather than the asserted late-ack barrier diagnostic.
 - Performance/reliability: existing role, explicit `gpt-5.6-terra` / high,
   read-only, no subagents, limited to deterministic late-ack coverage and the
   adjacent barrier. Other lanes remain CLEAN; security remains deferred.
+
+## Slice 3 Late-Ack Final Rereview Result
+
+- Performance/reliability reviewer
+  `019f5f3e-366f-7220-9198-159a5f63b9cd`, actual immutable
+  `gpt-5.6-terra` / high, skill check complete, no subagents, closed.
+- Accepted P2 assertion gap: missing and late paths share the barrier message,
+  and the regression does not prove its timestamp classifier saw a real child
+  acknowledgment. Capture/assert classifier invocation after the rejection.
+- Same existing implementer assignment is explicit `gpt-5.6-terra` / medium,
+  no subagents, parent test plus records only. All other dispositions remain
+  CLEAN; security remains deferred.
