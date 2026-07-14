@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 2 assigned
+Status: Review round 2 findings accepted — fixes assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -303,3 +303,23 @@ may change. No subagents; coordinator retains Git and independent review.
   records or changed public docs claim it as active.
 - The full wave must return before any result is accepted. Security remains
   deferred to T-0041.
+
+## Independent Review Round 2 Results
+
+- Style/maintainability: clean, including both round 1 corrections.
+- Documentation and TypeScript/API docs reported the same accepted defect:
+  `packages/testing/README.md` uses undeclared consumer schemas and setup values
+  across its two fixture snippets. Identify/import the illustrative generated
+  schemas and make `BoundedContext`, repositories, topic, query, and command
+  setup explicit enough that the examples do not imply undeclared globals.
+- Performance/reliability reported one accepted defect:
+  `packages/server/README.md` says the environment selects and owns facilities,
+  but supplied production facilities default caller-owned. State that selection
+  and per-facility ownership are separate via `ownsStorageFactory`,
+  `ownsTransport`, `ownsDelivery`, and `ownsTracerFactory`, and distinguish
+  those flags from server-level `ownsEnvironment`.
+- All four explicit dispatches matched the Desktop runtime's immutable profiles:
+  documentation `gpt-5.6-luna` / medium; style, API, and reliability
+  `gpt-5.6-terra` / high. Every reviewer is closed.
+- The deduplicated complete batch returns to the existing implementer,
+  `gpt-5.6-terra` / medium, docs/records only, no subagents.

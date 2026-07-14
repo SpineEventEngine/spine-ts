@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 2 assigned
+Status: Review round 2 findings accepted — fixes assigned
 
 ## Review Scope
 
@@ -167,3 +167,19 @@ deferred to T-0041 and full verify remains the final task gate.
   and ignores superseded historical text unless current records or changed docs
   activate it. Collect the complete wave before adjudication. Security remains
   deferred to T-0041.
+
+## Independent Review Round 2 Results
+
+- Style/maintainability (`gpt-5.6-terra` / high): clean.
+- Documentation (`gpt-5.6-luna` / medium) and TypeScript/API docs
+  (`gpt-5.6-terra` / high): same P2, deduplicated. The testing README fixture
+  examples omit consumer-generated schema imports and leave setup values
+  undeclared.
+- Performance/reliability (`gpt-5.6-terra` / high): P2. The server README
+  incorrectly says the environment owns selected facilities; production
+  facilities default caller-owned unless their individual `owns*` flags are
+  true, independently of server-level `ownsEnvironment`.
+- All explicit dispatch fields matched immutable Desktop runtime role metadata,
+  and every reviewer is closed. The complete wave yields two accepted fixes,
+  assigned together to the existing implementer (`gpt-5.6-terra` / medium),
+  docs/records only, no subagents. Security remains deferred to T-0041.
