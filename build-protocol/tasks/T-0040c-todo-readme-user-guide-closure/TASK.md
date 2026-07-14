@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 3 fixes verified; re-review pending
+Status: In progress - Wave 4 findings adjudicated; fix wave pending
 
 Started: `2026-07-14`
 
@@ -372,3 +372,18 @@ install` reported all eight workspace projects already up to date;
 - Server shutdown and copied-module cleanup left no temporary repository file or
   IPv4 listener. Fresh tooling/build types, docs/API, focused ESLint, format,
   generated-clean, and diff checks passed.
+
+## 2026-07-14 - Specialist Wave 4 Findings And Adjudication
+
+- Style/maintainability is clean.
+- Make the query module require a real task ID produced by the smoke workflow so
+  its exact-ID and one-open-task reads demonstrate matching results.
+- Cap smoke response rows inspected/retained, report omitted rows, and bound
+  sanitization work before iterating; add oversized-response/ID regressions.
+- Catch malformed matching-type `Any` rows in the guide query decoder and
+  extend executable-module evidence.
+- Rejected one API finding that app-owned relative `dist` imports are
+  unsupported package subpaths. The guide modules and smoke execute inside the
+  private `@spine-ts/example-todo` package and own their generated/compiled
+  artifacts; framework dependencies use public package exports. Adding an
+  exported example subpath would create the public contract this task forbids.

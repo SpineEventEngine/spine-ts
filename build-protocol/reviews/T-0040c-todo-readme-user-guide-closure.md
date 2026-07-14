@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 3 fixes verified - re-review pending
+Status: Wave 4 findings adjudicated - fix wave pending
 
 Baseline: `526b7b4d`
 
@@ -243,6 +243,24 @@ links/imports, and future-policy overclaim.
   TypeScript/API docs agent `019f6275-4b1b-70b1-b284-75af9570c3e2` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f6275-4727-78b3-b8bf-5c46cf54b12d` is actual `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 4 Results
+
+- Style/maintainability: clean.
+- Documentation completeness: accepted. The exact-ID query example currently
+  uses `task-1` without creating or requiring it; seed via smoke and pass the
+  printed ID explicitly.
+- Performance/reliability: accepted. Cap row inspection/retention and sanitizer
+  input work with oversized regressions; catch malformed matching-type guide
+  query rows.
+- TypeScript/API docs: rejected after coordinator adjudication. Relative
+  `../dist/**` paths are app-owned imports from scripts that execute inside the
+  private example package, not unsupported imports from an external package
+  consumer. All framework imports use public exports. Creating example export
+  subpaths is an out-of-scope public-contract expansion.
+- All Wave 4 reviewers were closed. One accepted fix batch returns to existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
 
 ## Skill Applicability
 
