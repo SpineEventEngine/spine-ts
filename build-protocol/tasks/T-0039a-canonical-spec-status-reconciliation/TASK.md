@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Review wave 3 fix handback ready
+Status: Final affected-lane rereview assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -324,3 +324,13 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   the work log.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Final Affected-Lane Rereview Assignment
+
+- `2026-07-14T10:54:21Z`: coordinator accepted endpoint `021524d2` after the
+  bounded canonical scan, four-path Prettier, `docs:check`, synchronized
+  statuses, exact scope/generated checks, and `git diff --check`.
+- Assign documentation at explicit Luna Medium and style/reliability at explicit
+  Terra High, read-only/no subagents. TypeScript/API docs retains its clean
+  wave-3 result because the public-contract surface is unchanged. Security
+  remains deferred to T-0041.

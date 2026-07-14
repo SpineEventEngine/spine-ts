@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Review wave 3 fix handback ready
+Status: Final affected-lane rereview assigned
 
 ## Review Scope
 
@@ -206,3 +206,14 @@ Status: Review wave 3 fix handback ready
   generated-path cleanliness, and `git diff --check`.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. The package is ready for coordinator rereview.
+
+## Final Affected-Lane Rereview Assignment
+
+- `2026-07-14T10:54:21Z`: accepted fix endpoint `021524d2`; focused
+  coordinator evidence is clean.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+  Style/maintainability and performance/reliability: existing roles, explicit
+  `gpt-5.6-terra` / high. All read-only/no subagents.
+- TypeScript/API docs is not rerun: its wave-3 result is clean and the fix
+  changes no public-contract/API surface. Historical superseded text remains
+  non-active; security remains deferred to T-0041.
