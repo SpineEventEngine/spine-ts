@@ -27,6 +27,7 @@
     "@spine-ts/server": "workspace:*"
   },
   "devDependencies": {
-    "@spine-ts/testing": "workspace:*"
+    "@spine-ts/testing": "workspace:*",
+    "@spine-ts/transport": "workspace:*"
   }
 }

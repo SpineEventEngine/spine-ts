@@ -69,6 +69,9 @@ importers:
       '@spine-ts/testing':
         specifier: workspace:*
         version: link:../../packages/testing
+      '@spine-ts/transport':
+        specifier: workspace:*
+        version: link:../../packages/transport
 
   packages/core:
     dependencies:
