@@ -395,10 +395,11 @@ links/imports, and future-policy overclaim.
   high; documentation agent `019f629d-d7c9-73a2-b668-5a28e3056c21` is
   actual `gpt-5.6-luna` / medium; TypeScript/API docs agent
   `019f629d-d076-75d3-acfb-923639f4d50b` is actual `gpt-5.6-terra` /
-  high. All three were closed after result capture. The unstarted
-  performance/reliability lane retains its recorded explicit
-  `gpt-5.6-terra` / high assignment and will run separately; no partial wave
-  is accepted before that result is collected.
+  high. All three were closed after result capture. The initially unstarted
+  performance/reliability lane was then dispatched separately as agent
+  `019f62a2-a171-79a3-96c4-48408f4dfa5c`; explicit dispatch fields and
+  immutable Desktop role metadata agree on actual `gpt-5.6-terra` / high.
+  No partial wave is accepted before that result is collected.
 
 ## Skill Applicability
 
