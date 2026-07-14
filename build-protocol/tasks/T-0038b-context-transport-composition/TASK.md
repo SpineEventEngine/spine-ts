@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 late-ack regression P2 assigned
+Status: Slice 3 late-ack regression green; reliability rereview ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1065,6 +1065,34 @@ permitted`: same-host command/event
   diagnostic. No timer/environment delay or child/production behavior change
   is authorized.
 
+## Slice 3 Late-Acknowledgment Regression Handback
+
+- `2026-07-14`: Actual immutable execution metadata remained the existing
+  implementer at explicit `gpt-5.6-terra` / medium; no subagents were
+  dispatched or used. Receiving-code-review, strict TDD and required
+  references, JavaScript async testing, and verification-before-completion
+  instructions were applied.
+- Focused native RED added one test requesting deterministic late timestamp
+  classification before that parent-fixture option existed. The real child
+  still submitted its ordered duplicate observation and acknowledgment, so the
+  test received the normal four-observation diagnostic instead of the required
+  barrier diagnostic (`1` failed, `6` skipped).
+- GREEN adds only a private parent-fixture receipt-timestamp classifier. Normal
+  fixtures preserve the actual `Date.now()` receipt value; the new regression
+  maps the real received acknowledgment to `Number.MAX_SAFE_INTEGER`,
+  deterministically exercising the existing `appliedAt >= deadline` branch.
+  Focused native GREEN is `1` passed with `6` skipped; the complete native file
+  is `7/7`.
+- No child timer, environment value, sleep, child edit, production change, or
+  normal-proof behavior changed. Tooling typecheck, scoped one-file ESLint,
+  cleanup enforcement, exact four-file Prettier, `git diff --check`, and
+  four-path protected-scope/status/diff checks pass.
+- Changed paths are only
+  `packages/server/test/server/server-context-transport-cross-process.test.ts`
+  and these three records. The late-ack regression P2 is fixed and ready for
+  coordinator handback. Remaining uncertainty is coordinator acceptance/final
+  verification and the existing same-host/T-0041 limitation.
+
 ## Slice 3 Final Rereview Finding
 
 - Both final reviewers independently accepted declaration order and reported
@@ -1114,3 +1142,7 @@ duplicate control was not applied within the bounded quiet window.` This
   `.superpowers/sdd/review-e354cf10..d9c21256.diff` (`3` commits, `24181`
   bytes). The existing performance/reliability role is dispatched read-only at
   explicit `gpt-5.6-terra` / high with no subagents.
+- Coordinator inspected the private parent-only timestamp classifier and
+  independently reran the unrestricted native child-process file. All `7/7`
+  tests passed. The late-ack P2 is accepted as fixed and ready for
+  reliability-only rereview.

@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 late-ack regression P2 assigned
+Status: Slice 3 late-ack regression green; reliability rereview ready
 
 ## Scope
 
@@ -834,3 +834,31 @@ Status: Slice 3 late-ack regression P2 assigned
 - Same implementer fix assignment is explicit `gpt-5.6-terra` / medium, no
   subagents, parent fixture/test and records only. Other lanes remain CLEAN;
   security remains deferred to T-0041.
+
+## Slice 3 Late-Acknowledgment Regression Evidence
+
+- `2026-07-14`: Actual author metadata matches the immutable assignment:
+  existing implementer, explicit `gpt-5.6-terra` / medium, no subagents.
+  Receiving-code-review, strict TDD/references, JavaScript async testing, and
+  verification-before-completion were applied.
+- Focused native RED is `1` failed with `6` skipped. The unimplemented test
+  option was ignored, so the real processed acknowledgment retained its normal
+  receipt timestamp and the test received `expected exactly 3 observations but
+received 4` rather than the asserted late-ack barrier diagnostic.
+- Focused native GREEN is `1/1` with `6` skipped. A fixture-private timestamp
+  classifier defaults to identity and lets only this regression classify the
+  real received acknowledgment at `Number.MAX_SAFE_INTEGER`. This reaches the
+  accepted `appliedAt >= deadline` branch without delaying or changing the
+  child. The complete unrestricted native file passes `7/7`.
+- Fresh tooling typecheck, scoped test ESLint, cleanup enforcement, exact
+  four-file Prettier, `git diff --check`, protected-scope scans, and exact
+  four-path status/diff pass. The child, production, docs, public API,
+  topology/retry policy, examples, Protobuf, and unrelated work are unchanged.
+- Diff scope is exactly the parent cross-process fixture/test and all three
+  records. The accepted late-ack coverage P2 is fixed; reliability/coordinator
+  acceptance and final verification remain. Existing same-host and T-0041
+  limitations are unchanged.
+- Coordinator inspection and an independent unrestricted native rerun accepted
+  the deterministic late classification at `7/7` tests. Only the
+  performance/reliability lane requires final rereview; all other clean
+  dispositions remain.

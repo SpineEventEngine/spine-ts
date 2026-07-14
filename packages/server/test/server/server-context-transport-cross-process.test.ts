@@ -87,6 +87,7 @@ interface ChildExitState {
 }
 interface FixtureOptions {
   readonly backgroundFailures: string[];
+  readonly classifyDuplicateCommandObservationAppliedAt: (receivedAt: number) => number;
   readonly injectCommandDuplicateInQuietWindow: boolean;
   readonly ipcDirectory: string;
   readonly parentTransport: SignalTransport;
@@ -94,6 +95,7 @@ interface FixtureOptions {
 }
 interface FixtureCreateOptions {
   readonly beforeFixtureConstruction?: (resources: FixtureSetupResources) => void;
+  readonly classifyDuplicateCommandObservationAppliedAt?: (receivedAt: number) => number;
   readonly closeParentTransport?: (
     transport: SignalTransport,
     ipcDirectory: string,
@@ -222,6 +224,24 @@ describe("Server context transport across Node processes", () => {
     }
   });
 
+  it("rejects a processed acknowledgment classified after the quiet deadline", async () => {
+    const fixture = await CrossProcessFixture.create({
+      classifyDuplicateCommandObservationAppliedAt: () => Number.MAX_SAFE_INTEGER,
+      injectCommandDuplicateInQuietWindow: true,
+    });
+
+    try {
+      await fixture.ready();
+      await fixture.requestCommand(createTaskCommand());
+
+      await expect(fixture.observeCommand(commandEntityId)).rejects.toThrow(
+        "Cross-process command duplicate control was not applied within the bounded quiet window.",
+      );
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("rejects a non-decimal transport timeout at the child boundary", async () => {
     const result = await runChildBoundary({
       SPINE_T0038B_TRANSPORT_TIMEOUT_MS: "2e3",
@@ -309,6 +329,7 @@ describe("Server context transport across Node processes", () => {
 class CrossProcessFixture {
   #backgroundFailures: string[];
   #childFailure: Error | undefined;
+  #classifyDuplicateCommandObservationAppliedAt: (receivedAt: number) => number;
   #closed = false;
   #duplicateCommandObservationAppliedAt: number | undefined;
   #injectCommandDuplicateInQuietWindow: boolean;
@@ -355,6 +376,8 @@ class CrossProcessFixture {
 
       return new CrossProcessFixture({
         backgroundFailures,
+        classifyDuplicateCommandObservationAppliedAt:
+          options.classifyDuplicateCommandObservationAppliedAt ?? ((receivedAt) => receivedAt),
         injectCommandDuplicateInQuietWindow: options.injectCommandDuplicateInQuietWindow ?? false,
         ipcDirectory,
         parentTransport,
@@ -374,12 +397,15 @@ class CrossProcessFixture {
 
   constructor({
     backgroundFailures,
+    classifyDuplicateCommandObservationAppliedAt,
     injectCommandDuplicateInQuietWindow,
     ipcDirectory,
     parentTransport,
     trackedChild,
   }: FixtureOptions) {
     this.#backgroundFailures = backgroundFailures;
+    this.#classifyDuplicateCommandObservationAppliedAt =
+      classifyDuplicateCommandObservationAppliedAt;
     this.#injectCommandDuplicateInQuietWindow = injectCommandDuplicateInQuietWindow;
     this.#ipcDirectory = ipcDirectory;
     this.#parentTransport = parentTransport;
@@ -633,7 +659,8 @@ class CrossProcessFixture {
     } else if (message.type === "observed") {
       this.#observations.push(message);
     } else if (message.type === "duplicate-command-observation-applied") {
-      this.#duplicateCommandObservationAppliedAt = Date.now();
+      this.#duplicateCommandObservationAppliedAt =
+        this.#classifyDuplicateCommandObservationAppliedAt(Date.now());
     } else if (message.type === "failure") {
       this.#childFailure = new Error(
         `Cross-process child ${message.phase} failed: ${safeMessage(message.message, this.#ipcDirectory)}.`,
