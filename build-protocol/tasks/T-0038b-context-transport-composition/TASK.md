@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 style/docs rereview assigned
+Status: Slice 2 clean; Slice 3 implementation assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -583,3 +583,36 @@ work until Slice 1 focused verification and relevant review are clean.
 - Assigned only affected existing roles: style/maintainability at explicit
   `gpt-5.6-terra` / high and documentation at explicit `gpt-5.6-luna` / medium,
   both no subagents. Prior API/reliability clean results remain applicable.
+
+## Slice 2 Clean Closure
+
+- Style and documentation rereviewers returned CLEAN at matching actual
+  immutable profiles (`gpt-5.6-terra` / high and `gpt-5.6-luna` / medium), used
+  no subagents, and were closed.
+- Slice 2 all-concern disposition is clean at corrected endpoint `adefe8c8`:
+  style CLEAN; documentation CLEAN; TypeScript/API CLEAN; reliability CLEAN;
+  security deferred. No full verify is run until final child closure.
+
+## Slice 3 Implementation Assignment
+
+- Resume the same existing implementer at explicit `gpt-5.6-terra` / medium,
+  no subagents. Own only the native cross-process fixture, truthful observable
+  docs, final child gates, and these records.
+- Spawn a real Node child using built public package entry points, a separate
+  ZeroMQ transport, and a unique private absolute IPC directory. Node IPC is
+  limited to readiness after `Server.start()`, bounded observations, errors,
+  and shutdown control; generated command/event payload traffic uses ZeroMQ.
+- Prove remote command handling, its emitted-event projection/delivery work,
+  and exactly one child context-bus post for one inbound event identity. Use
+  public framework composition and no `packages/**/src` private imports or
+  application callback/materialization seam.
+- Bound request/receive near 2 seconds and process/eventual phases near 5
+  seconds with sanitized phase diagnostics. Handle pub/sub join through bounded
+  repeated publication of one fixed event identity, not production retry policy.
+- `finally` must close server/environment/transports, request child shutdown,
+  await exit, terminate only a stuck child after grace, remove IPC files, and
+  fail on leaked child/listener/socket/files or duplicate observation.
+- Update only observable server/package guide/architecture wording needed to
+  state implemented same-host command/event execution and limitations. Do not
+  edit the to-do example, add topology/supervision/distributed claims, or expose
+  internals. Finish with all-slice focused gates and final `pnpm verify`.

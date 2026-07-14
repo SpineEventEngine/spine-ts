@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 style/docs rereview assigned
+Status: Slice 2 clean; Slice 3 implementation assigned
 
 ## Scope
 
@@ -366,3 +366,26 @@ Status: Slice 2 style/docs rereview assigned
 - Style/maintainability assigned at explicit `gpt-5.6-terra` / high;
   documentation assigned at explicit `gpt-5.6-luna` / medium; both no
   subagents. Scope is P2 resolution and concrete regressions only.
+
+## Slice 2 P2 Rereview Result
+
+- Style/maintainability: CLEAN. Reviewer
+  `019f5ebe-eb13-7692-9944-1d5911f90341`; actual immutable
+  `gpt-5.6-terra` / high; no subagents; closed.
+- Documentation: CLEAN. Reviewer
+  `019f5ebe-e7db-7bb2-ae16-89e84446164e`; actual immutable
+  `gpt-5.6-luna` / medium; no subagents; closed.
+- Slice 2 final disposition: all four concerns CLEAN; security deferred to
+  T-0041.
+
+## Slice 3 Concern Plan
+
+- Style/maintainability: relevant for bounded fixture/helper ownership and no
+  application/private wiring.
+- Documentation: relevant for observable same-host behavior and limitations.
+- TypeScript/API docs: relevant for public-import-only fixture and no API leak.
+- Performance/reliability: relevant for process/socket/listener cleanup,
+  timeouts, pub/sub join, duplicate observations, and shutdown.
+- Security remains deferred but private-directory and sanitized-diagnostic
+  evidence must be carried to T-0041. Implementer assignment is explicit
+  `gpt-5.6-terra` / medium, no subagents.
