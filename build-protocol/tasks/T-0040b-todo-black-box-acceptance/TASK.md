@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: Accepted - final task gate passed; integration pending
+Status: Complete locally - integrated and post-merge verified; remote sync pending
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -371,6 +371,16 @@ examples/todo/test/black-box.test.ts -t "rejects a remote command"` failed
 - All acceptance criteria and canonical review dispositions are satisfied.
   Integrate into `main`, rerun the post-merge full gate, synchronize both refs,
   and remove the clean merged worktree.
+
+## Integration
+
+- Accepted task endpoint `53881256` merged into `main` as merge commit
+  `1708a9004f2f35533aa8ee522941f0f87e7b551b`.
+- Full native post-merge `verify` passed with the same 72 files / 1,667 tests in
+  ordinary and coverage runs and 90.12% branch coverage. TypeScript,
+  lint/cleanup, format, docs/API, Proto, and generated-clean gates passed.
+- Local implementation and integration are complete. Remote synchronization and
+  clean merged-worktree removal remain before durable task closure.
 
 ## Skill Applicability
 
