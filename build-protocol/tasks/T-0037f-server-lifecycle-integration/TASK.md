@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 final round-2 re-review assigned
+Status: Slice 6 final round-3 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1283,3 +1283,45 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
   coverage, 205 server exports, and all repository gates.
 - Final round-2 re-review: documentation Luna Medium; style/API/reliability
   Terra High; no subagents. Security deferred to T-0041.
+
+## Slice 6 Final Round-2 Re-review Finding
+
+- `2026-07-14T00:15:14Z`: docs/API/style CLEAN; reliability LOW. Actual
+  Luna Medium/Terra High profiles match dispatch, no subagents, all closed.
+- Low: failed-start regression stores its initial `start()` outcome only inside
+  the assertion block. If it unexpectedly returns a `RunningServer`, teardown
+  starts again and cannot close the original listener. Retain the initial
+  outcome in an optional handle, close it when successful, and run cleanup-only
+  retry only after rejection. Same Terra Medium implementer owns test-only fix.
+
+## Slice 6 Final Round-3 Review-Fix Handback
+
+- `2026-07-14T00:23:26Z`: structural RED reports all five required teardown
+  safeguards absent: outer first outcome, exact first running handle, rejection
+  provenance, exact-handle close, and rejection-only retry. The corrected scan
+  passes 6/6, including closure of an unexpected running cleanup result.
+- The failed-start regression now retains settlement outside the assertion
+  block. Unexpected initial success closes that exact `RunningServer` and skips
+  cleanup-only retry. Rejection alone enables retry; any unexpectedly successful
+  retry result is closed. Worker release, settlement, first server, retry server,
+  context, environment, and fixture disposal are independently guarded.
+- Affected cases pass 2/2; lifecycle passes 41/41; server/lifecycle/index passes
+  72/72; unchanged service tests pass 98/98. Both typechecks, final scoped
+  ESLint, cleanup, formatting, generated-clean, and full verify pass. Full native
+  and coverage runs are 68 files / 1,600 tests with 95.31/90.15/98.1/95.35
+  percent coverage. Exact five-path zero-production/docs/public/generated scope
+  audits follow. This is handback, not self-acceptance.
+- `2026-07-14T00:23:26Z`: final audit passes exact five-path Prettier/scope,
+  4/4 synchronized handback status, 6/6 teardown ownership, zero production/
+  docs/public/service diff, zero internal-name leak, generated-clean, and
+  `git diff --check`.
+
+## Slice 6 Final Round-3 Coordinator Gate
+
+- `2026-07-14T00:30:14Z`: accepted/closed actual `gpt-5.6-terra` / medium
+  implementer, matching dispatch, no subagents. Coordinator full verify passes
+  native and coverage at 68 files / 1,600 tests, all coverage dimensions above
+  90%, 205 server exports, and every repository gate.
+- Test/records-only round: docs and TypeScript/API docs N/A because README,
+  TSDoc, production, declarations, and exports are unchanged and previously
+  CLEAN. Assign style and reliability at Terra High; security deferred.

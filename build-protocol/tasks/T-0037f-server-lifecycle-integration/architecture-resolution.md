@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 6 final round-2 re-review assigned
+Status: Slice 6 final round-3 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1133,3 +1133,34 @@ smallest coherent implementation.
   setup pass independent full verify with 1,600 native and coverage tests.
   Actual Terra Medium implementer used no subagents and is closed. Final four-
   lane re-review follows.
+
+## Slice 6 Final Round-3 Teardown Clarification
+
+- `2026-07-14T00:15:14Z`: the failed-start regression must retain the first
+  outcome across assertions and teardown. Unexpected success closes that exact
+  running handle; only rejection enters cleanup-only retry. Test-only change,
+  no behavior or architecture modification.
+
+## Slice 6 Final Round-3 Review-Fix Handback
+
+- `2026-07-14T00:23:26Z`: the test now models startup settlement explicitly:
+  outer outcome plus exact resolved handle and asynchronous rejection state.
+  Teardown awaits retained settlement, closes initial success directly, and
+  invokes cleanup continuation only after rejection; a resolved continuation
+  is also closed directly. Each remaining fixture dependency cleans regardless
+  of earlier teardown failure.
+- Structural ownership scan passes 6/6; affected behavior is 2/2, lifecycle is
+  41/41, compatibility is 72/72, and service is 98/98. Full verify passes two
+  68-file / 1,600-test runs. Production, README/TSDoc, public/export surface,
+  generated files, service fixture, and lifecycle architecture are unchanged.
+  Coordinator re-review remains required.
+- Final audit passes five-path formatting/scope, 4/4 status, zero production/
+  docs/public/service change, public-leak and generated-clean checks, and diff
+  integrity.
+
+## Slice 6 Final Round-3 Coordinator Acceptance
+
+- `2026-07-14T00:30:14Z`: exact first-outcome teardown ownership passes full
+  verify with 1,600 native and coverage tests. Actual Terra Medium implementer
+  used no subagents and is closed. Production/docs/API architecture is
+  unchanged; final style/reliability test review follows.

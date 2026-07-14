@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 final round-2 re-review assigned
+Status: Slice 6 final round-3 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -980,3 +980,41 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   verify passes all phases and two 1,600-test runs.
 - Resume documentation Luna Medium and style/API/reliability Terra High, all no
   subagents, against the fresh round-2 package. Security deferred to T-0041.
+
+## Slice 6 Final Round-2 Re-review Result
+
+- `2026-07-14T00:15:14Z`: documentation CLEAN; TypeScript/API docs CLEAN;
+  style/maintainability CLEAN; performance/reliability LOW. Actual profiles
+  match dispatch; no subagents; all closed.
+- Remaining low is isolated to failed-start regression teardown losing an
+  unexpected successful first `RunningServer`. Retain/close that outcome and
+  retry cleanup only on rejection. All prior runtime/docs findings are resolved.
+
+## Slice 6 Final Round-3 Review-Fix Handback
+
+- `2026-07-14T00:23:26Z`: review the test-only settlement/teardown correction.
+  Structural RED reports five missing safeguards; GREEN passes 6/6. The exact
+  first resolved server is retained and closed, rejection provenance alone
+  enables cleanup continuation, and any unexpected running continuation result
+  closes independently before context/environment fixture teardown.
+- Affected failed-start cases pass 2/2, lifecycle 41/41, compatibility 72/72,
+  and unchanged service tests 98/98. Both typechecks and final lint/cleanup/
+  format/generated gates pass. Full verify passes native and coverage at 68
+  files / 1,600 tests with all coverage dimensions above 90% and 205 server
+  exports.
+- Review scope must remain the focused integration test plus four synchronized
+  records. Production/docs/public/export/service/generated diffs are forbidden
+  and absent. Fresh coordinator re-review is required; security remains deferred
+  to T-0041. This is not self-acceptance.
+- Final exact audit passes five-path formatting/scope, 4/4 status, 6/6 teardown
+  ownership, zero production/docs/public/service diff, public-leak/generated-
+  clean checks, and diff integrity.
+
+## Slice 6 Final Round-3 Re-review Assignment
+
+- `2026-07-14T00:30:14Z`: coordinator accepts/closes same implementer, actual
+  `gpt-5.6-terra` / medium, matching dispatch, no subagents. Independent full
+  verify passes all phases and two 1,600-test runs.
+- Documentation and API N/A: no changed docs/production/declarations/exports and
+  prior lanes CLEAN. Resume style/maintainability and performance/reliability
+  at `gpt-5.6-terra` / high, no subagents. Security deferred to T-0041.

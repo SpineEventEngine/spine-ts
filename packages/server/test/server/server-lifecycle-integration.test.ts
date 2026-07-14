@@ -2355,6 +2355,10 @@ describe("Server lifecycle integration", () => {
       let worker: HeldStartupWorker | undefined;
       let server: Server | undefined;
       let starting: ReturnType<Server["start"]> | undefined;
+      let firstOutcome: unknown;
+      let firstRunning: Awaited<ReturnType<Server["start"]>> | undefined;
+      const firstStartState = { rejected: false };
+      let retainingFirstOutcome: Promise<unknown> | undefined;
 
       try {
         const { failure: resourceFailure, expectedFailures } = createScenario();
@@ -2377,14 +2381,25 @@ describe("Server lifecycle integration", () => {
           .addResource({ close: closeFailedResource })
           .addResource({ close: closeSuccessfulResource });
         starting = server.start();
-        void starting.catch(() => undefined);
+        retainingFirstOutcome = starting.then(
+          (running) => {
+            firstRunning = running;
+            firstOutcome = running;
+            return running;
+          },
+          (error: unknown) => {
+            firstStartState.rejected = true;
+            firstOutcome = error;
+            return error;
+          },
+        );
 
         await worker.startedWithin();
         worker.release();
-        const failure = await starting.catch((error: unknown) => error);
+        await retainingFirstOutcome;
 
-        expect(failure).toBeInstanceOf(AggregateError);
-        const initialErrors = (failure as AggregateError).errors;
+        expect(firstOutcome).toBeInstanceOf(AggregateError);
+        const initialErrors = (firstOutcome as AggregateError).errors;
         expect(initialErrors).toHaveLength(1 + expectedFailures.length);
         expect(initialErrors[0]).toBe(startupFailure);
         for (const [index, expectedFailure] of expectedFailures.entries()) {
@@ -2416,10 +2431,11 @@ describe("Server lifecycle integration", () => {
         expect(createHttp2Server).not.toHaveBeenCalled();
       } finally {
         worker?.release();
-        await starting?.catch(() => undefined);
-        if (server !== undefined) {
-          const cleanup = await server.start().catch((error: unknown) => error);
-          await closeIfRunningServer(cleanup).catch(() => undefined);
+        await retainingFirstOutcome?.catch(() => undefined);
+        await firstRunning?.close().catch(() => undefined);
+        if (firstStartState.rejected && server !== undefined) {
+          const cleanupRunning = await server.start().catch(() => undefined);
+          await cleanupRunning?.close().catch(() => undefined);
         }
         await fixture?.context.close().catch(() => undefined);
         await fixture?.environment.close().catch(() => undefined);
