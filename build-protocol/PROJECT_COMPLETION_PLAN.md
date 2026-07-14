@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0039c remote synchronization
+Status: In execution at T-0040a local multi-process to-do mode
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0039c remote synchronization
+Active implementation frontier: T-0040a local multi-process to-do mode
 
 ## Purpose
 
@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0039c is integrated into `main` and post-merge native full
-verification passed. Remote synchronization and clean worktree removal are the
-active frontier. The dated Starting State above is historical plan-creation
-context.
+Current status: T-0039c is complete, integrated, post-merge verified, and
+remotely synchronized. T-0040a local multi-process to-do mode is the active
+implementation frontier. The dated Starting State above is historical
+plan-creation context.
 
 ## Initial Release Scope
 

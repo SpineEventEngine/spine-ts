@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Integrated and verified — remote synchronization pending
+Status: Complete — remotely synchronized
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -423,3 +423,13 @@ guide`). The protected user-owned untracked file was neither staged nor
 - Typechecks, lint, cleanup, format, docs/API, Proto lint, and generated-clean
   phases also passed. Push both refs, record remote state, and remove the clean
   merged worktree to close T-0039c.
+
+## Remote Closure
+
+- Confirmed `origin/task/T-0039c-framework-user-guide` at
+  `2028ffb951f23f55b499d80446ce63778aafda06`.
+- Confirmed verified integration `origin/main` at
+  `6ac65fea85c54f2cccb34dfab3e1e223f7e4758b` before this closure record.
+- No task tag was created. T-0039c is durably complete; this evidence-only
+  closure commit must be pushed to `origin/main`, after which the clean merged
+  worktree/local branch may be removed. No new reviewer wave is required.
