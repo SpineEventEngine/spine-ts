@@ -690,7 +690,11 @@ class LocalMultiProcessFixture {
       }
       const list = findTaskList(response, "local-multi-process-task");
       lastRowIds = response.message
-        .map((message) => unpackAny(message.state, TaskListSchema)?.id ?? "<unreadable>")
+        .map(
+          (message) =>
+            unpackAny(message.state as NonNullable<typeof message.state>, TaskListSchema)?.id ??
+            "<unreadable>",
+        )
         .join(",");
       if (list !== undefined && isExpectedTaskList(list)) {
         return list;
@@ -968,7 +972,7 @@ function createTaskListQuery(): Query {
 
 function findTaskList(response: QueryResponse, id: string): TaskList | undefined {
   return response.message
-    .map((message) => unpackAny(message.state, TaskListSchema))
+    .map((message) => unpackAny(message.state as NonNullable<typeof message.state>, TaskListSchema))
     .find((list) => list?.id === id);
 }
 

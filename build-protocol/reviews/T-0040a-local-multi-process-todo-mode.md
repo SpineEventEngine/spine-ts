@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 2 fixes verified - awaiting reviewer wave 3
+Status: Wave 3 complete - one accepted layout fix pending
 
 Baseline: `24d1ef37`
 
@@ -49,7 +49,9 @@ overstate future production policy.
   coordinator-confirmed as the existing immutable `implementer` role with
   `gpt-5.6-terra` / medium; no subagents.
 - Reviewer wave 1: complete and closed; findings fixed and coordinator-verified.
-- Reviewer wave 2: pending fresh committed package.
+- Reviewer waves 1 and 2: complete, fixed, verified, and closed.
+- Reviewer wave 3: complete and closed; one accepted test-layout correction is
+  pending implementation.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -293,3 +295,86 @@ rerun native focused evidence, and then run a fresh complete four-concern wave.
   all passed.
 - Every Wave 2 finding is resolved. Commit the fix endpoint and run all four
   specialist concerns against one fresh Wave 3 package.
+
+## Reviewer Wave 3 Assignments
+
+Fix endpoint: `18e964c9`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..18e964c9.diff` (124,990 bytes)
+
+Dispatch the same four existing, read-only, no-subagent concerns with explicit
+immutable profiles: style/maintainability Terra High, documentation Luna
+Medium, TypeScript/API docs Terra High, and performance/reliability Terra High.
+Every prompt must regression-check all prior findings and specifically verify:
+
+- the path poll owns and expires its deadline without abandoned work;
+- `settles()` clears every losing timer;
+- immediate query failures are paced and capped by the remaining observation
+  budget;
+- the complete public-contract, startup/shutdown, query-cancellation,
+  readiness, phase-budget, force-kill, constant, and naming fixes remain clean.
+
+Scope remains the current package and affected paths. Ignore superseded history
+unless current status records claim it active. Report only concrete actionable
+findings with exact path/line and smallest correction. Actual Wave 3 agent IDs
+and immutable runtime metadata remain to be recorded before accepting results.
+
+## Reviewer Wave 3 Results - 2026-07-14T15:43:21Z
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6147-82fc-7b80-b938-096c8d99608c`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6147-86b1-7223-b8fc-326416bfd2db`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6147-8a6a-7bc3-b3af-81ec450bb364`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6147-8df2-7b70-ac33-2af059393852`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Documentation and performance/reliability were clean. Every prior timing,
+lifecycle, cleanup, and public-contract finding remains resolved.
+
+Adjudicated Wave 3 findings:
+
+1. **Accepted P2, source/test layout:**
+   `examples/todo/src/local-multi-process.test.ts` is a newly added production
+   test co-located under `src/`, contrary to the active source/test layout in
+   `CODE_QUALITY.md`. Move it to
+   `examples/todo/test/local-multi-process.test.ts`, extend root Vitest
+   discovery to the example `test/` tree, and update only current assignment
+   and future evidence paths. Historical commands remain unchanged as factual
+   evidence.
+2. **Rejected, duplicate transport close:** the API reviewer claimed
+   `cleanupFailedFixtureSetup()` invokes both the injected and default close
+   callbacks. Current source has exactly one invocation:
+   `(options.closeParentTransport ?? closeTransport)(options.parentTransport)`.
+   Nullish coalescing selects one callback and does not call the fallback after
+   an injected callback throws. The controlled callback deliberately closes
+   the transport and then throws to prove cleanup-error aggregation; this is
+   not a second helper invocation. No code change is warranted.
+
+Return the one accepted layout correction to the same Terra Medium implementer,
+run the moved test and affected regression suite, commit, and repeat all four
+review concerns against a fresh package.
+
+## Wave 3 Fix Verification - 2026-07-14T16:54:20Z
+
+- The same immutable Terra Medium implementer moved the test to
+  `examples/todo/test/`, extended Vitest and type-aware ESLint discovery, and
+  updated current task evidence. No production behavior, worker fixture,
+  dependency, public contract, or historical command record changed; no
+  subagents.
+- Coordinator native regression passed 7 files and all 110 tests in 26.10
+  seconds using the moved path. The example and tooling TypeScript projects,
+  full lint plus cleanup enforcement, repository format check, staged diff
+  whitespace, tracked-generated scan, and rename inspection all passed.
+- Git recognizes the move as a 99% rename; the only source deltas are two
+  compile-time `NonNullable` casts required once the moved test entered the
+  tooling TypeScript project. Runtime fixture behavior is unchanged.
+- The accepted Wave 3 finding is resolved. Commit this endpoint and run every
+  canonical reviewer concern against one fresh Wave 4 package.

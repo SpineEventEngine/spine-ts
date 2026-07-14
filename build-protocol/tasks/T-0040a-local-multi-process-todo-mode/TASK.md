@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer wave 2 fixes and focused validation complete
+Status: In progress - reviewer wave 3 layout fix and focused validation complete
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -200,7 +200,7 @@ documentation closure, and full black-box consolidation remain excluded.
 - Existing role: implementer.
 - Explicit immutable profile: `gpt-5.6-terra` / medium.
 - One writer owns:
-  - `examples/todo/src/local-multi-process.test.ts`;
+  - `examples/todo/test/local-multi-process.test.ts`;
   - `examples/todo/test-fixtures/local-multi-process-worker.mjs`;
   - `examples/todo/package.json` and the corresponding `pnpm-lock.yaml`
     importer entry;
@@ -362,6 +362,27 @@ examples/todo/src/local-multi-process.test.ts`; 5 existing tests passed and 4
   framework source changed. Actual immutable implementation metadata remains
   existing role `implementer`, model `gpt-5.6-terra`, reasoning `medium`; no
   subagents.
+
+### Reviewer Wave 3 Layout Correction - 2026-07-14
+
+- Moved the integration test unchanged from `examples/todo/src/` to
+  `examples/todo/test/`, matching the active source/test layout rule. Its
+  generated imports and worker fixture URL remain correct because both target
+  sibling directories under the example root.
+- Added `examples/*/test/**/*.test.ts` to root Vitest discovery while retaining
+  the historical `examples/*/src/**/*.test.ts` pattern. Added the corresponding
+  `examples/*/test/**/*.ts` type-aware ESLint project include so the moved test
+  remains lintable without disabling repository rules.
+- Discovery RED: after the move and before the Vitest include change, `pnpm
+--config.verify-deps-before-run=false exec vitest list
+examples/todo/test/local-multi-process.test.ts` listed zero tests. Discovery
+  GREEN listed all 12 moved tests and all 20 historical `src` tests.
+- Native moved-path proof passed 1 file and 12 tests in 24.25 seconds. The
+  seven-file affected regression passed all 110 tests in 25.11 seconds.
+- Production behavior, worker fixture, dependencies, public contracts, and
+  historical evidence paths did not change. Actual immutable implementation
+  metadata remains existing role `implementer`, model `gpt-5.6-terra`,
+  reasoning `medium`; no subagents.
 
 ## Skill Applicability
 

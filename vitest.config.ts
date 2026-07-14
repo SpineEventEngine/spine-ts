@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       "packages/*/test/**/*.test.ts",
       "examples/*/src/**/*.test.ts",
+      "examples/*/test/**/*.test.ts",
       "scripts/**/*.test.mjs",
     ],
     coverage: {
