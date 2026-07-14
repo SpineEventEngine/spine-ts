@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review wave 1 assigned
+Status: Review wave 1 findings assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -245,6 +245,27 @@ without reading internal source.
 - Every lane is bounded to its recorded concern, the task ledger, the package,
   and affected public journey. Historical superseded text is not a finding
   unless the current guide/plan/task records claim it as active.
+
+## Review Wave 1 Result
+
+- Complete wave collected and every reviewer closed. Style/maintainability and
+  documentation completeness are clean. TypeScript/API docs accepted one P2;
+  performance/reliability accepted three P2 findings.
+- Required Protobuf modeling convention: split or clearly label state,
+  `*_commands.proto`, and `*_events.proto` source units in the guide, including
+  needed imports and repeated deterministic package/type URL declarations.
+- Query contract: state that positive ordered limits are capped at `1000`.
+- Subscription contract: state that inactive records default to a 30-second
+  TTL and are consumed on activation; active streams/queued updates are
+  process-local, default to a 100-update cap, and close/discard queued updates
+  when a consumer exceeds that bound.
+- Delivery contract: state that a failed supported callback may remain pending
+  without an automatic retry scheduler or monitor, so durable handoff is not an
+  autonomous eventual-delivery guarantee.
+- Repository evidence confirmed every finding against `TECHNICAL_SPEC.md`,
+  `PROTOBUF_CONTRACT.md`, `spine-services.ts`, package docs, and delivery docs.
+  The same existing implementer receives this complete batch with explicit
+  immutable `gpt-5.6-terra` / medium and no subagents.
 
 ## Second Pre-Review Fix Implementation
 

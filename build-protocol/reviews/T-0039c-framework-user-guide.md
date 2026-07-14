@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Review wave 1 assigned
+Status: Review wave 1 findings assigned
 
 ## Review Scope
 
@@ -145,6 +145,29 @@ Status: Review wave 1 assigned
   skill applicability check. They must ignore historical superseded text unless
   current T-0039c records, completion-plan live status, or changed guide prose
   claim it as active behavior.
+
+## Review Wave 1 Result
+
+- Style/maintainability `019f60d2-56b4-7851-8605-72056b591ce3`: CLEAN,
+  actual immutable `gpt-5.6-terra` / high; closed.
+- Documentation `019f60d2-5a9e-7a51-800c-310972b9955d`: CLEAN, actual
+  immutable `gpt-5.6-luna` / medium from execution-surface role metadata;
+  closed. Its generic `GPT-5` self-label and follow-up `UNAVAILABLE` are not
+  runtime metadata and do not override the immutable role configuration plus
+  explicit dispatch.
+- TypeScript/API `019f60d2-613d-7470-a11c-6cd17f804896`: one P2 for omitting
+  mandatory `commands.proto` / `events.proto` source-file separation; actual
+  immutable `gpt-5.6-terra` / high from execution-surface role metadata;
+  closed.
+- Performance/reliability `019f60d2-5df5-7932-aa3e-6de9375c4c64`: three P2
+  findings for missing query limit maximum, inactive/active subscription
+  bounds and close behavior, and the absence of autonomous delivery retry;
+  actual immutable `gpt-5.6-terra` / high from execution-surface role metadata;
+  closed.
+- All findings are confirmed against current canonical/runtime evidence and
+  form one accepted batch. Same existing implementer assigned explicit
+  immutable `gpt-5.6-terra` / medium, no subagents. Affected review concerns
+  will rerun against a new literal endpoint after focused verification.
 
 ## Second Pre-Review Fix Implementation
 
