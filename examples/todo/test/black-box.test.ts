@@ -166,10 +166,10 @@ describe("@spine-ts/example-todo", () => {
     expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
-  it("observes an OK acknowledgement and eventual subscription delivery", async () => {
+  it("ignores an unrelated update and observes the exact subscribed task", async () => {
     await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
       const subscription = await withTimeout(
-        subscriptions.subscribe(createTaskListTopic()),
+        subscriptions.subscribe(createTaskListTopic("task-standalone")),
         "standalone subscription creation",
         500,
       );
@@ -181,23 +181,22 @@ describe("@spine-ts/example-todo", () => {
       let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
-        const probeUpdate = withTimeout(
-          iterator.next(),
-          "standalone subscription activation probe update",
-          500,
-        );
+        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
         await postRemoteCommand(
           commands,
-          createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
-          "standalone subscription activation probe acknowledgement",
+          createTaskCommand(
+            "command-subscription-unrelated",
+            "task-subscription-unrelated",
+            "Unrelated",
+          ),
+          "unrelated subscription command acknowledgement",
         );
-        const probed = await probeUpdate;
-        if (probed.done === true) {
-          throw new Error("Expected standalone subscription activation probe update.");
-        }
-        expect(unpackSubscribedTaskList(probed.value).list.tasks[0]?.title).toBe("Probe");
+        await readRemoteEventually(
+          queries,
+          createTaskListIdQuery("task-subscription-unrelated"),
+          (candidate) => taskTitle(candidate, "task-subscription-unrelated") === "Unrelated",
+        );
 
-        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
         const ack = await postRemoteCommand(
           commands,
           createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
@@ -220,6 +219,7 @@ describe("@spine-ts/example-todo", () => {
         expect(response.response?.status?.status.case).toBe("ok");
         expect(readTask(response, "task-standalone")?.completed).toBe(false);
         expect(update.subscription.id).toEqual(subscription.id);
+        expect(update.list.id).toBe("task-standalone");
         expect(update.list.tasks[0]?.title).toBe("Standalone");
 
         const cancel = await withTimeout(
@@ -1235,15 +1235,22 @@ function createOpenTaskCountQuery(openTaskCount: number) {
   });
 }
 
-function createTaskListTopic() {
+function createTaskListTopic(id?: string) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "topic-task-list" }),
     target: create(TargetSchema, {
       type: deriveTypeUrl(TaskListSchema),
-      criterion: {
-        case: "includeAll",
-        value: true,
-      },
+      criterion:
+        id === undefined
+          ? { case: "includeAll", value: true }
+          : {
+              case: "filters",
+              value: create(TargetFiltersSchema, {
+                idFilter: {
+                  id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+                },
+              }),
+            },
     }),
     context: createActorContext(),
   });

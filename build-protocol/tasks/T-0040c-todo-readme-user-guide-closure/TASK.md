@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 2 findings accepted; fix wave pending
+Status: In progress - Wave 2 fixes verified; re-review pending
 
 Started: `2026-07-14`
 
@@ -262,3 +262,47 @@ install` reported all eight workspace projects already up to date;
   `includeAll` topic accepts any decodable update, so another writer's update
   can produce false success. Precompute the task ID, use an exact-ID topic, and
   validate the delivered list ID with behavior evidence.
+
+## 2026-07-14 - Specialist Wave 2 Fix Evidence
+
+- Added one private-script behavior test and the smallest import-safe smoke
+  factoring. Meaningful RED returned `[undefined, valid TaskList]` for an absent
+  row, mismatched `Any`, then valid target. GREEN now returns only the valid
+  target and bounded sanitized diagnostics `target row, <2 unavailable rows>`.
+- `inspectTaskListRows()` is used by both eventual target matching and timeout
+  diagnostics. It skips absent state, undefined/mismatched unpack results, and
+  malformed unpack failures; diagnostic IDs remain capped and sanitized, with
+  finite unavailable/omitted counts. The five-second overall query deadline and
+  per-attempt remaining-time bound are unchanged.
+- Updated the existing causal remote subscription behavior test. RED consumed
+  `task-subscription-unrelated` through the old `includeAll` topic; GREEN uses a
+  public exact-ID `TargetFilters` topic, starts `next()` before both commands,
+  proves the unrelated row was projected, and receives only
+  `task-standalone`. A missed activation still fails at the existing 500 ms
+  bound; no readiness acknowledgement was introduced.
+- The complete guide subscription module now precomputes one task ID, uses the
+  same public `StringValue`/`TargetFilters` exact-ID criterion, posts that ID,
+  and rejects a delivered `TaskList` whose ID differs. Its bounded cleanup order
+  is unchanged.
+- Focused regression passed 2 files / 27 tests. `typecheck:tooling`,
+  `typecheck:build`, and `docs:check` passed. The exact package smoke and
+  extracted guide subscription module passed against the native server, which
+  was then stopped with `SIGINT`. Full `pnpm verify` remains the coordinator
+  gate.
+- Focused ESLint, Prettier on all owned files, `proto:check-generated`, and
+  `git diff --check` passed; generated output remains fresh, ignored, and
+  untracked, and no IPv4 listener remained after shutdown.
+
+## 2026-07-14 - Coordinator Wave 2 Fix Verification
+
+- Independently ran the smoke decoder and real loopback black-box suites:
+  2 files / 27 tests passed, including absent/mismatched rows followed by the
+  valid target and an unrelated projected update before exact-ID delivery.
+- Extracted both guide modules verbatim and ran them against a fresh native
+  server. All query modes exited 0, the exact-ID subscription delivered its
+  matching task, and package smoke observed its own matching projection.
+- Server shutdown, extracted-file cleanup, and listener inspection left no
+  temporary repository file or `127.0.0.1:8080` listener.
+- Fresh tooling/build typechecks, docs/API checks, focused ESLint, full format,
+  generated-clean, and diff checks passed. The fixes are ready for another
+  immutable all-lane re-review.

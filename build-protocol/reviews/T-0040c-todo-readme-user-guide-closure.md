@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 2 findings accepted - fix wave pending
+Status: Wave 2 fixes verified - re-review pending
 
 Baseline: `526b7b4d`
 
@@ -156,6 +156,16 @@ links/imports, and future-policy overclaim.
 - All Wave 2 reviewers were closed. One fix batch returns to existing
   `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
   explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
+
+## 2026-07-14 - Wave 2 Fix Acceptance
+
+- The resumed implementation context retained the explicit immutable
+  `gpt-5.6-terra` / medium profile and was closed after result capture.
+- Coordinator inspection and native behavior verification accepted the shared
+  smoke row-inspection guard, finite diagnostics, exact-ID subscription topic,
+  delivered-ID assertion, and focused regressions.
+- Fresh type/build/docs/lint/format/generated/diff checks passed. A fresh
+  baseline-to-endpoint package and all four specialist lanes remain required.
 
 ## Skill Applicability
 

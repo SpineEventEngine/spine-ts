@@ -194,12 +194,16 @@ import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 
 import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packCommand, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
 import { UserIdSchema } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
-import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import {
+  TargetFiltersSchema,
+  TargetSchema,
+} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import {
   TopicIdSchema,
   TopicSchema,
@@ -220,9 +224,17 @@ const metadata = new SignalMetadata();
 const actorContext = metadata.actorContext({
   actor: create(UserIdSchema, { value: "todo-subscription-user" }),
 });
+const taskId = `subscription-task-${Date.now()}`;
 const target = create(TargetSchema, {
   type: deriveTypeUrl(TaskListSchema),
-  criterion: { case: "includeAll", value: true },
+  criterion: {
+    case: "filters",
+    value: create(TargetFiltersSchema, {
+      idFilter: {
+        id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
+      },
+    }),
+  },
 });
 
 try {
@@ -247,7 +259,7 @@ try {
   try {
     pendingUpdate = withTimeout(iterator.next(), "subscription update", 1_000);
     const ack = await withTimeout(
-      commands.post(createTaskCommand(`subscription-task-${Date.now()}`)),
+      commands.post(createTaskCommand(taskId)),
       "CreateTask acknowledgement",
       1_000,
     );
@@ -263,6 +275,9 @@ try {
     const list = taskListFrom(delivered.value);
     if (list === undefined) {
       throw new Error("Subscription update did not contain TaskList state.");
+    }
+    if (list.id !== taskId) {
+      throw new Error(`Expected TaskList ${taskId}, received ${list.id}.`);
     }
     log(`subscription update: ${list.id}`);
 

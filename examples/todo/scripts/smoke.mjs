@@ -1,6 +1,7 @@
 import { log } from "node:console";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
+import { pathToFileURL } from "node:url";
 
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
@@ -38,22 +39,32 @@ const actorContext = metadata.actorContext({
   actor: create(UserIdSchema, { value: "todo-smoke-user" }),
 });
 
-try {
-  const acknowledgement = await withTimeout(
-    commands.post(createCommand(taskId, suffix, actorContext)),
-    "CreateTask acknowledgement",
-    commandTimeoutMs,
-  );
-  if (acknowledgement.status?.status.case !== "ok") {
-    throw new Error(
-      `CreateTask acknowledgement was ${sanitize(acknowledgement.status?.status.case ?? "missing")}.`,
-    );
-  }
+if (isEntrypoint()) {
+  await main();
+}
 
-  const taskList = await readTaskListEventually(taskId, actorContext);
-  log(`to-do smoke ok: ${taskList.id} (${taskList.tasks[0]?.title ?? "untitled"})`);
-} finally {
-  session.abort();
+async function main() {
+  try {
+    const acknowledgement = await withTimeout(
+      commands.post(createCommand(taskId, suffix, actorContext)),
+      "CreateTask acknowledgement",
+      commandTimeoutMs,
+    );
+    if (acknowledgement.status?.status.case !== "ok") {
+      throw new Error(
+        `CreateTask acknowledgement was ${sanitize(acknowledgement.status?.status.case ?? "missing")}.`,
+      );
+    }
+
+    const taskList = await readTaskListEventually(taskId, actorContext);
+    log(`to-do smoke ok: ${taskList.id} (${taskList.tasks[0]?.title ?? "untitled"})`);
+  } finally {
+    session.abort();
+  }
+}
+
+function isEntrypoint() {
+  return process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
 
 function createCommand(id, commandSuffix, context) {
@@ -82,11 +93,9 @@ async function readTaskListEventually(id, context) {
     );
     attempts += 1;
     lastResponse = response;
-    const taskList = response.message
-      .map((row) => row.state)
-      .filter((state) => state !== undefined)
-      .map((state) => unpackAny(state, TaskListSchema))
-      .find((candidate) => candidate.id === id);
+    const taskList = inspectTaskListRows(response).taskLists.find(
+      (candidate) => candidate.id === id,
+    );
     if (response.response?.status?.status.case === "ok" && taskList !== undefined) {
       return taskList;
     }
@@ -118,13 +127,42 @@ function createTaskListQuery(id, context, attempt) {
 }
 
 function lastRowIds(response) {
-  return (response?.message ?? []).slice(0, maxDiagnosticRows).map((row) => {
-    try {
-      return sanitize(unpackAny(row.state, TaskListSchema).id);
-    } catch {
-      return "<unreadable>";
+  return inspectTaskListRows(response).diagnostics;
+}
+
+export function inspectTaskListRows(response) {
+  const taskLists = [];
+  let unavailableRows = 0;
+
+  for (const row of response?.message ?? []) {
+    if (row.state === undefined) {
+      unavailableRows += 1;
+      continue;
     }
-  });
+    try {
+      const taskList = unpackAny(row.state, TaskListSchema);
+      if (taskList === undefined) {
+        unavailableRows += 1;
+        continue;
+      }
+      taskLists.push(taskList);
+    } catch {
+      unavailableRows += 1;
+    }
+  }
+
+  const diagnostics = taskLists
+    .slice(0, maxDiagnosticRows)
+    .map((taskList) => sanitize(taskList.id));
+  const omittedRows = Math.max(0, taskLists.length - maxDiagnosticRows);
+  if (unavailableRows > 0) {
+    diagnostics.push(`<${unavailableRows} unavailable rows>`);
+  }
+  if (omittedRows > 0) {
+    diagnostics.push(`<${omittedRows} rows omitted>`);
+  }
+
+  return { diagnostics, taskLists };
 }
 
 async function withTimeout(promise, label, timeoutMs) {
