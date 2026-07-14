@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Matrix row 21 stale-evidence fix assigned
+Status: Integrated matrix refresh green; review packaging ready
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -382,3 +382,31 @@ superseded by the independent review result above.
 - Resume the same matrix implementer at explicit `gpt-5.6-terra` / medium, no
   subagents, for row 21 plus synchronized record updates only. Preserve its
   EXAMPLE_GAP/T-0040 classification and every other row/count/route.
+
+## Matrix Pre-Review Acceptance
+
+- Row 21 now states that the to-do app remains process-local and lacks its own
+  child worker/entry, harness/acceptance test, and documented IPC workflow,
+  while citing the integrated server child-process proof as the framework
+  prerequisite. EXAMPLE_GAP/T-0040 is preserved.
+- Coordinator status lint found the handback headers still reflected the fix
+  assignment. All four active headers are now synchronized to review-ready.
+  Counts/routes, rows 30/31, pending parent verify/T-0042, and four-file scope
+  remain unchanged.
+
+## Matrix Pre-Review Fix Handback
+
+- `receiving-code-review` was fully read and applied to verify the finding
+  against current repository evidence; `verification-before-completion` governs
+  the focused handback checks. No runtime/test/public-doc/child/example or
+  generated file is owned by this correction.
+- Row 21 now states that the to-do app remains process-local and lacks an
+  example-owned child worker/entry, harness/acceptance test, and documented
+  local IPC workflow. It separately cites the integrated T-0038b server
+  child-process test as proof that the framework prerequisite exists.
+- Classification remains EXAMPLE_GAP with route T-0040. Rows 30/31, exact
+  31/25/4/0/1/1/0 taxonomy, 29 em-dash routes plus T-0040/T-0041, pending parent
+  full verify, and T-0042 release proof remain unchanged.
+- Focused taxonomy/route, synchronized-status, row-21 stale-evidence, exact
+  four-file Prettier, generated-path, four-file scope, `git diff --check`, and
+  status checks pass. Full verify was not run.

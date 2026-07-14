@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Matrix row 21 stale-evidence fix assigned
+Status: Integrated matrix refresh green; review packaging ready
 
 ## Review Scope
 
@@ -263,3 +263,27 @@ findings at `2026-07-14T01:23:48Z`.
 - Same matrix author is resumed at explicit `gpt-5.6-terra` / medium, no
   subagents. Fix row 21 evidence only, synchronize records, and retain all
   strict counts/routes before reviewer dispatch.
+
+## Matrix Pre-Review Acceptance
+
+- Row 21 now cleanly routes only the missing example composition/acceptance/
+  guidance to T-0040 and cites T-0038b's integrated framework proof.
+- Coordinator corrected stale active headers left by the handback and verified
+  all four are synchronized. The matrix remains exactly 31/25/4/0/1/1/0 with
+  routes 29 em dashes, one T-0040, and one T-0041. Reviewer packaging is
+  authorized; parent full verify remains pending.
+
+## Matrix Pre-Review Fix Handback
+
+- The author applied receiving-review and verification guidance and confirmed
+  the finding against current repository state. Row 21 now distinguishes the
+  absent example-owned child worker/entry, harness/acceptance test, and local
+  IPC workflow from T-0038b's integrated framework-level server child-process
+  proof.
+- EXAMPLE_GAP/T-0040 is unchanged. Every other matrix row, including rows
+  30/31, and the exact 31/25/4/0/1/1/0 taxonomy with 29 em dashes plus one
+  T-0040 and one T-0041 remain assigned for focused verification. Parent full
+  verify and T-0042 release proof remain pending.
+- Focused taxonomy/route, synchronized-status, stale-evidence, exact four-file
+  Prettier, generated-path, four-file scope, `git diff --check`, and status
+  checks pass. No review disposition is added; reviewer dispatch remains next.
