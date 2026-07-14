@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Author assigned
+Status: Coordinator pre-review findings assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -129,3 +129,41 @@ without reading internal source.
   handler/testing/delivery claims, practical versus illustrative snippet
   disposition, focused command results, exclusions, uncertainty, skills used,
   and actual immutable runtime profile.
+
+## Author Handback
+
+- Reconciled `docs/USER_GUIDE.md` into the required eleven-step end-user
+  journey without changing runtime, public APIs, packages, generated output, or
+  example sources/docs.
+- Evidence: current root and package READMEs, `DEVELOPER_API.md`,
+  `RUNTIME_ARCHITECTURE.md`, public server/testing/transport exports, and
+  server lifecycle/handler source were used to retain current behavior.
+- Snippets using `@example/*` are explicitly identified consumer substitutions;
+  client and fixture snippets name every required consumer fixture. No focused
+  guide assertion was needed because the rewrite introduced no concrete
+  regression test need.
+- Focused validation and scan results are recorded in the work log. Full
+  `pnpm verify`, review, Git integration, remote synchronization, and cleanup
+  remain coordinator work.
+- Immutable author profile actually used: implementer,
+  `gpt-5.6-terra` / medium; no subagents.
+
+## Coordinator Pre-Review Findings
+
+- At `2026-07-14T13:15:07Z`, the lightweight docs/status lint found two
+  accepted documentation defects before reviewer dispatch.
+- The Protobuf model declares `Task` as the aggregate state, while the handler
+  fragment extends `Aggregate<string, typeof TaskStateSchema, number>` and also
+  references process-manager/projection state schemas not modeled in the
+  preceding contract. The fragment therefore is not the coherent typeable
+  example it claims to be. Make the modeled entity schemas, generated imports,
+  entity ID generics, and handler classes agree without adding internal APIs.
+- `PROJECT_COMPLETION_PLAN.md` still presents T-0039a as the active frontier in
+  its three current-status statements. Update only those current-status lines
+  to the factual T-0039c pre-review-fix state; do not rewrite historical plan
+  creation context or later packets.
+- The same existing implementer context is assigned the complete batch with
+  explicit immutable `gpt-5.6-terra` / medium dispatch and no subagents. Write
+  scope is the guide, these three records, and only the plan's three stale
+  current-status statements. Full verification, review, Git mutation,
+  integration, push, and cleanup remain coordinator-owned.
