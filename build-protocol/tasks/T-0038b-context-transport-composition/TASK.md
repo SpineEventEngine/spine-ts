@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 reliability findings accepted; fix assigned
+Status: Slice 1 fix coordinator-verified; reliability rereview endpoint pending
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -323,3 +323,59 @@ work until Slice 1 focused verification and relevant review are clean.
 - The same implementer is resumed for this complete bounded batch at explicit
   `gpt-5.6-terra` / medium, no subagents. Public root exports and Slice 2 server
   lifecycle remain unchanged in this fix.
+
+## Slice 1 Reliability Fix Handback
+
+- Existing implementer dispatch and actual immutable runtime metadata both
+  remain `gpt-5.6-terra` / `medium`; no subagents were dispatched or used.
+  Re-applied `receiving-code-review`, `test-driven-development`, `tdd` with its
+  required testing/mocking/refactoring/anti-pattern references, and
+  `verification-before-completion`. The accepted architecture and public
+  `RuntimeTransportBinding` contract were preserved; no retry timing or server
+  lifecycle policy was introduced.
+- P1 RED first expected primary-first `AggregateError` diagnostics but received
+  only `test command handle close failed`, proving cleanup masked the event
+  registration failure. GREEN creates one retryable binding handle before
+  cleanup, reports `[registrationError, closeError]` in that order when cleanup
+  also fails, and retains the handle in weak package-internal access exposed to
+  `ContextTransport` without a root export.
+- The strengthened ownership RED then showed a second open resolving before
+  cleanup. GREEN makes the fake transport retain the successful command owner:
+  an open before cleanup retry fails with the exact duplicate-owner error;
+  retrying retained cleanup closes that exact owner successfully; only then
+  does a later open register and close normally. This proves ownership release,
+  not merely registration call counts.
+- P2 RED showed post-close command intake still reaching the retired responder
+  and returning `RUNTIME_NOT_ACCEPTING` instead of finding no responder. GREEN
+  gives `RecordingSignalTransport.respond()` an idempotent exact-registration
+  close. Post-close command and event publication now reject before retired
+  handlers run. Closing the first same-key event registration leaves its sibling
+  live for one additional event; after sibling close, publication also rejects.
+- Changed paths are
+  `packages/server/src/runtime/runtime-transport.ts`,
+  `packages/server/src/runtime/context-transport.ts`,
+  `packages/server/test/runtime/runtime-transport.test.ts`, and
+  `packages/server/test/runtime/context-transport.test.ts`, plus the three
+  durable T-0038b records. `server.ts`, lifecycle tests, root exports, public
+  docs, examples, Protobuf/manifests, generated tracked output, and Slice 2/3
+  remain untouched.
+- Fresh correction evidence: focused context/routing/command-event bus tests
+  passed `65/65`; native ZeroMQ runtime transport passed `14/14`; generated
+  build typecheck, scoped ESLint, cleanup enforcement, exact Prettier,
+  canonical generated-clean, public-root leak, and diff/status checks passed.
+- Remaining uncertainty is intentionally downstream: Slice 2 must consume the
+  internal failed-open cleanup checkpoint in real `Server` startup/close retry
+  sequencing and prove shared-transport ownership. Slice 3 still owns the real
+  cross-process fixture and observable docs. Neither slice was started.
+
+## Slice 1 Fix Coordinator Verification
+
+- Fresh coordinator runs passed four focused context/routing/bus files and
+  `65/65` tests, plus the native ZeroMQ runtime-transport file at `14/14`.
+- Generated build typecheck, scoped ESLint, exact Prettier, cleanup enforcement,
+  canonical generated-clean, public-root leak, expected-path status, and
+  `git diff --check` passed.
+- Coordinator inspection confirmed primary-first combined diagnostics, retained
+  weak internal cleanup ownership, duplicate-open refusal before cleanup,
+  successful reopen after cleanup, exact responder removal, sibling event
+  preservation, and no root/public/server-lifecycle change.

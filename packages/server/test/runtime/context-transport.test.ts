@@ -82,6 +82,13 @@ describe("ContextTransport", () => {
     await handle.close();
 
     expect(observed).toEqual(["transport-command"]);
+    await expect(
+      transport.request({
+        topic: requireFirst(transport.responders()).topic,
+        envelope: createTransportCommand("retired-command"),
+      }),
+    ).rejects.toThrow("No context transport responder");
+    expect(observed).toEqual(["transport-command"]);
     await context.close();
   });
 
@@ -101,6 +108,13 @@ describe("ContextTransport", () => {
 
     await handle.close();
 
+    expect(observed).toEqual(["first:transport-event", "second:transport-event"]);
+    await expect(
+      transport.publish({
+        topic: requireFirst(transport.subscribers()).topic,
+        envelope: createTransportEvent("retired-event"),
+      }),
+    ).rejects.toThrow("No context transport subscriber");
     expect(observed).toEqual(["first:transport-event", "second:transport-event"]);
     await context.close();
   });
@@ -122,12 +136,23 @@ describe("ContextTransport", () => {
       topic: requireFirst(transport.subscribers()).topic,
       envelope: createTransportEvent("shared-event"),
     });
-    await Promise.all([firstHandle.close(), secondHandle.close()]);
+    await firstHandle.close();
+    await transport.publish({
+      topic: requireFirst(transport.subscribers()).topic,
+      envelope: createTransportEvent("sibling-event"),
+    });
+    await secondHandle.close();
 
     const descriptorKeys = transport.subscribers().map(({ descriptorKey }) => descriptorKey);
     expect(new Set(descriptorKeys).size).toBe(2);
     expect(firstObserved).toEqual(["first:shared-event"]);
-    expect(secondObserved).toEqual(["second:shared-event"]);
+    expect(secondObserved).toEqual(["second:shared-event", "second:sibling-event"]);
+    await expect(
+      transport.publish({
+        topic: requireFirst(transport.subscribers()).topic,
+        envelope: createTransportEvent("retired-event"),
+      }),
+    ).rejects.toThrow("No context transport subscriber");
     await firstContext.close();
     await secondContext.close();
   });
@@ -308,9 +333,13 @@ interface RecordedPublishRegistration {
   readonly handler: PublishTransportHandler;
 }
 
+interface RecordedRequestRegistration {
+  readonly handler: RequestTransportHandler;
+}
+
 class RecordingSignalTransport implements SignalTransport {
   readonly #publishHandlers = new Map<string, Set<RecordedPublishRegistration>>();
-  readonly #requestHandlers = new Map<string, RequestTransportHandler>();
+  readonly #requestHandlers = new Map<string, RecordedRequestRegistration>();
   readonly #responders: TransportSubscription<"command">[] = [];
   readonly #subscribers: TransportSubscription<"event">[] = [];
   closeCalls = 0;
@@ -374,15 +403,15 @@ class RecordingSignalTransport implements SignalTransport {
   async request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
     operation: RequestTransportOperation<RequestEnvelope, Kind>,
   ): Promise<ResponseEnvelope> {
-    const handler = this.#requestHandlers.get(operation.topic.routing.routingKey);
+    const registration = this.#requestHandlers.get(operation.topic.routing.routingKey);
 
-    if (handler === undefined) {
+    if (registration === undefined) {
       throw new Error(
         `No context transport responder for "${operation.topic.routing.routingKey}".`,
       );
     }
 
-    return (await handler(operation)) as ResponseEnvelope;
+    return (await registration.handler(operation)) as ResponseEnvelope;
   }
 
   respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
@@ -392,12 +421,26 @@ class RecordingSignalTransport implements SignalTransport {
     if (subscription.topic.signalKind === "command") {
       this.#responders.push(subscription as TransportSubscription<"command">);
     }
-    this.#requestHandlers.set(
-      subscription.topic.routing.routingKey,
-      handler as RequestTransportHandler,
-    );
+    const routingKey = subscription.topic.routing.routingKey;
+    const registration: RecordedRequestRegistration = {
+      handler: handler as RequestTransportHandler,
+    };
 
-    return Promise.resolve({ subscription, close: () => Promise.resolve() });
+    this.#requestHandlers.set(routingKey, registration);
+    let closed = false;
+
+    return Promise.resolve({
+      subscription,
+      close: () => {
+        if (!closed) {
+          closed = true;
+          if (this.#requestHandlers.get(routingKey) === registration) {
+            this.#requestHandlers.delete(routingKey);
+          }
+        }
+        return Promise.resolve();
+      },
+    });
   }
 
   close(): Promise<void> {

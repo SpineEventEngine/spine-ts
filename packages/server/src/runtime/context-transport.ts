@@ -3,6 +3,7 @@ import type { SignalTransport } from "@spine-ts/transport";
 import type { BoundedContext } from "../context/bounded-context.js";
 import {
   RuntimeTransportBinding,
+  runtimeTransportBindingAccess,
   type RuntimeTransportBindingHandle,
 } from "./runtime-transport.js";
 import { SingleProcessServerRuntime } from "./runtime.js";
@@ -21,6 +22,14 @@ export const ContextTransport: Readonly<{
       onEvent: (event) => input.context.eventBus().post(event),
     });
   },
+});
+
+/** @internal Package access to cleanup retained after a failed context transport open. */
+export const contextTransportAccess: Readonly<{
+  failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined;
+}> = Object.freeze({
+  failedOpenCleanup: (error: unknown): RuntimeTransportBindingHandle | undefined =>
+    runtimeTransportBindingAccess.failedOpenCleanup(error),
 });
 
 /** @internal Input for framework-owned bounded-context transport intake. */

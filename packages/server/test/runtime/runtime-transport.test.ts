@@ -42,6 +42,8 @@ import {
   type RuntimeTransportBindingHandle,
   type RuntimeTransportBindingInput,
 } from "../../src/index.js";
+import { contextTransportAccess } from "../../src/runtime/context-transport.js";
+import { runtimeTransportBindingAccess } from "../../src/runtime/runtime-transport.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -632,6 +634,69 @@ describe("RuntimeTransportBinding", () => {
     ).rejects.toThrow("test transport registration failed");
     expect(runtime.state).toBe("closed");
   });
+
+  it("retains retryable cleanup when failed-open cleanup also fails", async () => {
+    const plan = createRuntimePlan();
+    const transport = new RetryableOpenTransport();
+    const failedRuntime = new SingleProcessServerRuntime();
+    let failure: unknown;
+
+    try {
+      await RuntimeTransportBinding.open({
+        plan,
+        runtime: failedRuntime,
+        transport,
+        onCommand: () => undefined,
+        onEvent: () => undefined,
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([
+      transport.registrationError,
+      transport.closeError,
+    ]);
+    expect((failure as Error).message).toContain("registration failed");
+    expect(transport.commandRegistrations).toBe(1);
+    expect(transport.eventRegistrations).toBe(1);
+    expect(transport.commandCloseAttempts).toBe(1);
+    expect(failedRuntime.state).toBe("closed");
+
+    const blockedRuntime = new SingleProcessServerRuntime();
+    await expect(
+      RuntimeTransportBinding.open({
+        plan,
+        runtime: blockedRuntime,
+        transport,
+        onCommand: () => undefined,
+        onEvent: () => undefined,
+      }),
+    ).rejects.toBe(transport.duplicateError);
+    expect(blockedRuntime.state).toBe("closed");
+
+    const cleanup = runtimeTransportBindingAccess.failedOpenCleanup(failure);
+
+    expect(cleanup).toBeDefined();
+    expect(contextTransportAccess.failedOpenCleanup(failure)).toBe(cleanup);
+    await cleanup?.close();
+    expect(transport.commandCloseAttempts).toBe(2);
+
+    const recoveredRuntime = new SingleProcessServerRuntime();
+    const recovered = await RuntimeTransportBinding.open({
+      plan,
+      runtime: recoveredRuntime,
+      transport,
+      onCommand: () => undefined,
+      onEvent: () => undefined,
+    });
+
+    expect(transport.commandRegistrations).toBe(2);
+    expect(transport.eventRegistrations).toBe(2);
+    await recovered.close();
+    expect(recoveredRuntime.state).toBe("closed");
+  });
 });
 
 function createRuntimePlan() {
@@ -998,6 +1063,98 @@ class FailingSignalTransport implements SignalTransport {
     void subscription;
     void handler;
     return Promise.reject(new Error("test transport registration failed"));
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class RetryableOpenTransport implements SignalTransport {
+  readonly registrationError = new Error("test event registration failed");
+  readonly closeError = new Error("test command handle close failed");
+  readonly duplicateError = new Error("test duplicate command registration");
+  commandRegistrations = 0;
+  eventRegistrations = 0;
+  commandCloseAttempts = 0;
+  #commandOwner: object | undefined;
+
+  publish<Envelope, Kind extends TransportSignalKind>(
+    operation: PublishTransportOperation<Envelope, Kind>,
+  ): Promise<void> {
+    void operation;
+    return Promise.resolve();
+  }
+
+  subscribe<Envelope, Kind extends TransportSignalKind>(
+    subscription: TransportSubscription<Kind>,
+    handler: PublishTransportHandler<Envelope, Kind>,
+  ): Promise<TransportSubscriptionHandle<Kind>> {
+    void handler;
+    this.eventRegistrations += 1;
+
+    if (this.eventRegistrations === 1) {
+      return Promise.reject(this.registrationError);
+    }
+
+    return Promise.resolve(new IdempotentTestHandle(subscription));
+  }
+
+  request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
+    operation: RequestTransportOperation<RequestEnvelope, Kind>,
+  ): Promise<ResponseEnvelope> {
+    void operation;
+    return Promise.reject(new Error("test transport request should not run"));
+  }
+
+  respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
+    subscription: TransportSubscription<Kind>,
+    handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
+  ): Promise<TransportSubscriptionHandle<Kind>> {
+    void handler;
+
+    if (this.#commandOwner !== undefined) {
+      return Promise.reject(this.duplicateError);
+    }
+
+    this.commandRegistrations += 1;
+    const owner = {};
+    const rejectsFirstClose = this.commandRegistrations === 1;
+    this.#commandOwner = owner;
+    let closed = false;
+    return Promise.resolve({
+      subscription,
+      close: () => {
+        if (closed) {
+          return Promise.resolve();
+        }
+
+        this.commandCloseAttempts += 1;
+        if (rejectsFirstClose && this.commandCloseAttempts === 1) {
+          return Promise.reject(this.closeError);
+        }
+
+        closed = true;
+        if (this.#commandOwner === owner) {
+          this.#commandOwner = undefined;
+        }
+        return Promise.resolve();
+      },
+    });
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class IdempotentTestHandle<
+  Kind extends TransportSignalKind,
+> implements TransportSubscriptionHandle<Kind> {
+  readonly subscription: TransportSubscription<Kind>;
+
+  constructor(subscription: TransportSubscription<Kind>) {
+    this.subscription = subscription;
   }
 
   close(): Promise<void> {

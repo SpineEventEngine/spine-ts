@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 reliability findings accepted; fix assigned
+Status: Slice 1 fix coordinator-verified; reliability rereview endpoint pending
 
 ## Scope
 
@@ -146,3 +146,49 @@ Status: Slice 1 reliability findings accepted; fix assigned
 - Documentation: N/A, unchanged internal-only behavior. Security: deferred to
   T-0041. Existing implementer fix dispatch is explicit
   `gpt-5.6-terra` / medium, no subagents.
+
+## Slice 1 Reliability Fix Evidence
+
+- Existing implementer actual immutable metadata matches the explicit
+  `gpt-5.6-terra` / `medium` fix dispatch; no subagents. Receiving-review, strict
+  TDD plus required references, and verification-before-completion were applied.
+- P1 is resolved in the implementation package: failed open plus failed cleanup
+  produces an `AggregateError` whose first entry is the event-registration
+  failure and second entry is the command-handle close failure. Weak internal
+  runtime access retains the exact retryable handle, and package-internal
+  context access delegates to it without any root export or public lifecycle
+  contract.
+- P1 ownership evidence is behavioral. The fake command registration remains
+  owned after close rejects, so a second open before cleanup retry fails with an
+  exact duplicate-owner error. Retrying retained cleanup releases that owner;
+  only afterward does a later open succeed. This supplements, and does not rely
+  on, call-count assertions.
+- P2 is resolved in the focused adapter: responder close is per-registration
+  and idempotent. Post-close command request and event publish cannot find
+  retired registrations. Closing one of two same-key event registrations does
+  not retire the sibling, which receives one subsequent event before its own
+  close.
+- TDD evidence: initial P1 RED received only the cleanup failure; strengthened
+  ownership RED allowed the pre-cleanup reopen; P2 RED routed a request through
+  the retired responder and returned `RUNTIME_NOT_ACCEPTING`. Each focused case
+  is GREEN with the corrected implementation.
+- Fresh mechanical evidence: focused context/routing/command-event bus tests
+  `65/65`; native ZeroMQ runtime transport `14/14`; generated build typecheck;
+  scoped ESLint; cleanup; exact Prettier; canonical generated-clean; no root
+  leak; clean diff/status checks.
+- Scope remains Slice 1 internal-only. Documentation stays N/A and security
+  stays deferred to T-0041. Server lifecycle consumption of the retained
+  checkpoint and shared-transport retry behavior remain Slice 2 review work;
+  cross-process proof remains Slice 3.
+
+## Slice 1 Fix Coordinator Gate
+
+- Existing implementer result was accepted at actual immutable
+  `gpt-5.6-terra` / medium; no subagents; implementer closed.
+- Fresh coordinator verification passed `65/65` focused context/routing/bus and
+  `14/14` native runtime-transport tests, build typecheck, scoped ESLint, exact
+  Prettier, cleanup, canonical generated-clean, root leak, status, and diff.
+- Only performance/reliability requires re-review because the fix changes
+  failure retention, cleanup retry, and registration-close behavior. Prior
+  style and TypeScript/API clean results remain applicable; documentation stays
+  N/A and security remains deferred.
