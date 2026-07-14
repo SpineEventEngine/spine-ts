@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 6 fixes verified - awaiting reviewer Wave 7
+Status: Wave 7 fixes verified - awaiting reviewer Wave 8
 
 Baseline: `24d1ef37`
 
@@ -52,7 +52,8 @@ overstate future production policy.
 - Reviewer waves 1 and 2: complete, fixed, verified, and closed.
 - Reviewer waves 3 and 4: complete, fixed, verified, and closed.
 - Reviewer wave 5: complete, fixed, verified, and closed.
-- Reviewer wave 6: complete and closed; three accepted findings are assigned.
+- Reviewer wave 6: complete, fixed, verified, and closed.
+- Reviewer wave 7: complete and closed; three accepted findings are assigned.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -618,3 +619,74 @@ canonical concern.
   whitespace, and generated tracking passed.
 - Every Wave 6 finding is resolved. Commit and run all four canonical concerns
   in Wave 7, advancing all current summaries before reviewer dispatch.
+
+## Reviewer Wave 7 Assignments
+
+Fix endpoint: `b4a9a3ef`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..b4a9a3ef.diff` (182,906 bytes)
+
+Pre-review lint advanced the task, work, review, Assignment State, and Next
+summaries to active Wave 7 state before dispatch. It also found no stale
+callback name, unbounded row-diagnostic path, internal/public leak, tracked
+generated output, duplicated policy value, or future-policy overclaim.
+
+Dispatch the same four existing read-only, no-subagent concerns with explicit
+immutable profiles. Regress all prior findings, especially active status
+accuracy, callback naming, row-inspection and rendered-length bounds,
+sanitization/truncation proof, real-query-first behavior, and complete cleanup.
+Scope remains the package and affected paths. Historical superseded text is
+out of scope unless current records claim it active. Report only concrete,
+line-specific defects with the smallest correction. Actual IDs/profile metadata
+and complete disposition remain pending.
+
+## Reviewer Wave 7 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6184-aaae-7753-9858-67275bb63d8b`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6184-cf78-71c2-a27e-9eda3064b90b`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6184-ef09-7da0-ab8e-e2b528c2797a`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6185-1fe8-7c52-9ff0-04a08e8fc53a`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Documentation was clean, including every current status summary and historical
+path. Accepted and deduplicated findings:
+
+1. **P3, semantic-name length:** rename five-component
+   `maxDiagnosticRowIdLength` to `maxDiagnosticIdLength`.
+2. **P3, callback naming:** rename function-valued options
+   `closeParentTransport` and `removeIpcDirectory` to
+   `onCloseParentTransport` and `onRemoveIpcDirectory` at declarations and all
+   uses.
+3. **P2, bounded lookup:** the query requests all projection rows and
+   `findTaskList()` maps the complete response on every retry. Use the existing
+   public `TargetFiltersSchema.idFilter` pattern for the deterministic task-list
+   ID, assert the query filter, and scan without allocating a full mapped array.
+
+All other TypeScript/API, diagnostic rendering, sanitization, timing, process,
+query-interceptor, cleanup, and termination checks were clean. Return this
+complete batch to the same Terra Medium implementer, verify natively, commit,
+and repeat every canonical concern.
+
+## Wave 7 Fix Verification - 2026-07-14
+
+- The same immutable Terra Medium implementer added the deterministic public ID
+  filter and non-allocating lookup, completed callback naming, and shortened
+  the diagnostic constant; no production, worker, dependency, public API, or
+  docs change; no subagents.
+- Coordinator inspection confirmed the generated filter contract, exact
+  focused assertion, real-query-first interceptor, early-return scan, and clean
+  callback/name searches.
+- Native affected regression passed 7 files and all 113 tests in 30.77 seconds.
+  Both TypeScript checks, full lint and cleanup enforcement, formatting, diff
+  whitespace, and generated tracking passed.
+- Every Wave 7 finding is resolved. Commit and run all four canonical concerns
+  in Wave 8 with current summaries advanced before dispatch.

@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer Wave 6 fixes verified; awaiting Wave 7
+Status: In progress - reviewer Wave 7 fixes verified; awaiting Wave 8
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -477,6 +477,38 @@ unreadable query row diagnostics and cleans up"`. It exited `1`; 1 test failed
   seven-file affected regression passed all 112 tests in 30.72 seconds. Both
   TypeScript checks, focused ESLint, cleanup enforcement, and the stale callback
   name scan passed. Assigned-file formatting, diff whitespace, and the
+  public/internal boundary scan also passed.
+- No production code, worker behavior, dependency, public contract, framework
+  source, or guide documentation changed. Actual immutable implementation
+  metadata remains existing role `implementer`, model `gpt-5.6-terra`,
+  reasoning `medium`; no subagents or Git mutation.
+
+### Reviewer Wave 7 Fixes - 2026-07-14
+
+- Renamed `maxDiagnosticRowIdLength` to `maxDiagnosticIdLength`. Renamed the
+  remaining function-valued fixture options to `onCloseParentTransport` and
+  `onRemoveIpcDirectory` across declarations, controlled call sites, failed-
+  setup cleanup option typing, callback selection, and invocation.
+- `createTaskListQuery()` now uses the established public generated filter
+  shape: `TargetFiltersSchema.idFilter.id` contains exactly one `Any` produced
+  by `packAny(StringValueSchema, ...)` for `local-multi-process-task`. A focused
+  assertion compares the actual query oneof to that exact criterion.
+- `findTaskList()` now scans response rows with an early return, skips absent
+  state explicitly, and allocates no mapped response array. The controlled
+  diagnostic interceptor remains real-query-first and may still substitute
+  multiple rows after the child receives the deterministic filtered query.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "queries only the deterministic
+task-list ID"`. It exited `1`; 1 test failed and 14 were skipped in 899
+  milliseconds because the actual criterion was `includeAll` rather than the
+  expected generated `filters` oneof.
+- GREEN command: the same invocation exited `0`; 1 test passed and 14 were
+  skipped in 841 milliseconds. The affected criterion/diagnostic selection then
+  passed 2 tests with 13 skipped in 6.10 seconds.
+- The native moved suite passed all 15 tests in 29.98 seconds. The native
+  seven-file affected regression passed all 113 tests in 30.52 seconds. Both
+  TypeScript checks, focused ESLint, cleanup enforcement, and the stale-name and
+  query-shape scans passed. Assigned-file formatting, diff whitespace, and the
   public/internal boundary scan also passed.
 - No production code, worker behavior, dependency, public contract, framework
   source, or guide documentation changed. Actual immutable implementation

@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
@@ -18,7 +19,10 @@ import {
   type QueryResponse,
 } from "@spine-ts/proto/generated/spine/client/query_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
-import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import {
+  TargetFiltersSchema,
+  TargetSchema,
+} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import { SignalMetadata } from "@spine-ts/server";
 import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
@@ -39,7 +43,7 @@ const terminateTimeoutMs = 1_000;
 const outerTestTimeoutMs = 25_000;
 const maxDiagnosticLength = 480;
 const maxDiagnosticRowIds = 4;
-const maxDiagnosticRowIdLength = 64;
+const maxDiagnosticIdLength = 64;
 const adapterIdentity = "todo-local-multi-process";
 const startupPendingMarker = "startup-pending";
 const workerPath = fileURLToPath(
@@ -98,8 +102,8 @@ interface FixtureCreateOptions {
   readonly stallQueries?: boolean;
   readonly childCloseFailures?: readonly ChildCloseResource[];
   readonly onResourcesAcquired?: (resources: FixtureSetupResources) => void;
-  readonly closeParentTransport?: (transport: SignalTransport) => Promise<void>;
-  readonly removeIpcDirectory?: (ipcDirectory: string) => Promise<void>;
+  readonly onCloseParentTransport?: (transport: SignalTransport) => Promise<void>;
+  readonly onRemoveIpcDirectory?: (ipcDirectory: string) => Promise<void>;
 }
 
 interface TrackedChild {
@@ -109,6 +113,22 @@ interface TrackedChild {
 }
 
 describe("local multi-process to-do mode", () => {
+  it("queries only the deterministic task-list ID", () => {
+    expect(createTaskListQuery().target?.criterion).toEqual({
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        idFilter: {
+          id: [
+            packAny(
+              StringValueSchema,
+              create(StringValueSchema, { value: "local-multi-process-task" }),
+            ),
+          ],
+        },
+      }),
+    });
+  });
+
   it(
     "bounds and sanitizes unreadable query row diagnostics and cleans up",
     async () => {
@@ -366,11 +386,11 @@ describe("local multi-process to-do mode", () => {
             resources = acquired;
             throw setupFailure;
           },
-          closeParentTransport: async (transport: SignalTransport) => {
+          onCloseParentTransport: async (transport: SignalTransport) => {
             await transport.close();
             throw parentCloseFailure;
           },
-          removeIpcDirectory: async (ipcDirectory: string) => {
+          onRemoveIpcDirectory: async (ipcDirectory: string) => {
             await rm(ipcDirectory, { recursive: true, force: true });
             throw directoryRemovalFailure;
           },
@@ -641,8 +661,8 @@ class LocalMultiProcessFixture {
         ipcDirectory,
         parentTransport,
         trackedChild,
-        closeParentTransport: options.closeParentTransport,
-        removeIpcDirectory: options.removeIpcDirectory,
+        onCloseParentTransport: options.onCloseParentTransport,
+        onRemoveIpcDirectory: options.onRemoveIpcDirectory,
       });
       if (cleanupFailures.length === 0) {
         throw error;
@@ -942,13 +962,13 @@ async function cleanupFailedFixtureSetup(options: {
   readonly ipcDirectory: string;
   readonly parentTransport: SignalTransport | undefined;
   readonly trackedChild: TrackedChild | undefined;
-  readonly closeParentTransport: FixtureCreateOptions["closeParentTransport"];
-  readonly removeIpcDirectory: FixtureCreateOptions["removeIpcDirectory"];
+  readonly onCloseParentTransport: FixtureCreateOptions["onCloseParentTransport"];
+  readonly onRemoveIpcDirectory: FixtureCreateOptions["onRemoveIpcDirectory"];
 }): Promise<Error[]> {
   const failures: Error[] = [];
   if (options.parentTransport !== undefined) {
     try {
-      await (options.closeParentTransport ?? closeTransport)(options.parentTransport);
+      await (options.onCloseParentTransport ?? closeTransport)(options.parentTransport);
     } catch (error) {
       failures.push(asError(error));
     }
@@ -968,7 +988,7 @@ async function cleanupFailedFixtureSetup(options: {
   }
 
   try {
-    await (options.removeIpcDirectory ?? removeDirectory)(options.ipcDirectory);
+    await (options.onRemoveIpcDirectory ?? removeDirectory)(options.ipcDirectory);
   } catch (error) {
     failures.push(asError(error));
   }
@@ -1084,7 +1104,19 @@ function createTaskListQuery(): Query {
     id: create(QueryIdSchema, { value: "local-multi-process-query" }),
     target: create(TargetSchema, {
       type: deriveTypeUrl(TaskListSchema),
-      criterion: { case: "includeAll", value: true },
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: {
+            id: [
+              packAny(
+                StringValueSchema,
+                create(StringValueSchema, { value: "local-multi-process-task" }),
+              ),
+            ],
+          },
+        }),
+      },
     }),
     context: signalMetadata.actorContext({
       actor: create(UserIdSchema, { value: "local-multi-process-parent" }),
@@ -1093,11 +1125,16 @@ function createTaskListQuery(): Query {
 }
 
 function findTaskList(response: QueryResponse, id: string): TaskList | undefined {
-  return response.message
-    .map((message) =>
-      message.state === undefined ? undefined : unpackAny(message.state, TaskListSchema),
-    )
-    .find((list) => list?.id === id);
+  for (const message of response.message) {
+    if (message.state === undefined) {
+      continue;
+    }
+    const list = unpackAny(message.state, TaskListSchema);
+    if (list?.id === id) {
+      return list;
+    }
+  }
+  return undefined;
 }
 
 function summarizeRowIds(response: QueryResponse, ipcDirectory: string): string {
@@ -1118,10 +1155,10 @@ function summarizeRowIds(response: QueryResponse, ipcDirectory: string): string 
 
 function sanitizeRowId(id: string, ipcDirectory: string): string {
   const sanitized = sanitize(id, ipcDirectory);
-  if (sanitized.length <= maxDiagnosticRowIdLength) {
+  if (sanitized.length <= maxDiagnosticIdLength) {
     return sanitized;
   }
-  return `${sanitized.slice(0, maxDiagnosticRowIdLength - 3)}...`;
+  return `${sanitized.slice(0, maxDiagnosticIdLength - 3)}...`;
 }
 
 function isExpectedTaskList(list: TaskList): boolean {
