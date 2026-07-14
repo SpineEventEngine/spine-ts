@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Complete; final task verification passed, merge pending
+Status: Complete; merged and post-merge verified
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1215,3 +1215,10 @@ smallest coherent implementation.
 - The integrated lifecycle architecture and its unchanged public boundary are
   accepted for merge. Post-merge verification remains; security is deferred to
   T-0041.
+
+## Main Integration
+
+- `2026-07-14T00:57:11Z`: merged as `42c392dc`; post-merge full verify passes
+  both 68-file / 1,600-test phases, all coverage dimensions above 90%, all 205
+  server exports, and every repository gate. The accepted lifecycle
+  architecture is fully integrated on `main`.

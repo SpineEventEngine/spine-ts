@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Complete; final task verification passed, merge pending
+Status: Complete; merged and post-merge verified
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -1084,3 +1084,12 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
   justified N/A final dispositions. No critical or high-confidence correctness
   finding remains. Security is deferred to the final T-0041 gate. Accept for
   merge and post-merge verification.
+
+## Main Integration Verification
+
+- `2026-07-14T00:57:11Z`: T-0037f merged to `main` as `42c392dc`. The
+  post-merge full gate exits 0 with 68 files / 1,600 tests in both native and
+  coverage runs, all coverage dimensions above 90%, 205 server exports, and
+  every docs/API, type, lint, format, cleanup, Proto, and generated-clean check.
+  All task review concerns are closed; project security remains scheduled for
+  T-0041.

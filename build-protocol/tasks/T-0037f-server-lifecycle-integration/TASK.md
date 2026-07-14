@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Complete; final task verification passed, merge pending
+Status: Complete; merged and post-merge verified
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1389,3 +1389,11 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
   generated-clean verification pass. All T-0037f acceptance criteria and
   relevant review concerns are satisfied. Merge and post-merge verification
   remain; final security review is intentionally owned by T-0041.
+
+## Main Integration
+
+- `2026-07-14T00:57:11Z`: merged to `main` as `42c392dc`. Post-merge
+  `pnpm --config.verify-deps-before-run=false verify` exits 0 with 68 files /
+  1,600 tests in both native and coverage phases, all coverage dimensions above
+  90%, all 205 expected server exports, and every type/lint/cleanup/format/
+  docs/Proto/generated-clean gate. T-0037f is fully integrated.
