@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 1 fixes verified - awaiting reviewer wave 2
+Status: Wave 2 fixes verified - awaiting reviewer wave 3
 
 Baseline: `24d1ef37`
 
@@ -205,3 +205,91 @@ native suite, and then generate a fresh package for a full four-concern wave.
 - Every Wave 1 finding is resolved. No T-0038 child or public API change is
   required. Commit the fix endpoint and run all four specialist concerns again
   against one fresh package.
+
+## Reviewer Wave 2 Assignments
+
+Fix endpoint: `9cfc6380`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..9cfc6380.diff` (107,338 bytes)
+
+All Wave 2 reviewers are read-only, may inspect affected source/tests, must not
+edit or mutate Git, and must not spawn subagents. Use the same bounded concern
+assignments and explicit immutable profiles as Wave 1:
+
+- `style_maintainability_reviewer`: `gpt-5.6-terra` / high. Recheck bounded
+  fixture structure, timeout tests, constant ownership, naming, and concrete
+  maintainability defects.
+- `documentation_reviewer`: `gpt-5.6-luna` / medium. Recheck current status,
+  evidence, changed comments/records, and local-only limitations without
+  demanding T-0040c documentation.
+- `typescript_api_docs_reviewer`: `gpt-5.6-terra` / high. Recheck public-only
+  imports/options, self-reference, Connect call contracts, dependencies,
+  declarations, and accidental API leaks.
+- `performance_reliability_reviewer`: `gpt-5.6-terra` / high. Recheck every
+  Wave 1 race/bound/cleanup fix, controlled timing proof, process/socket
+  ownership, and any new reliability regression.
+
+Every prompt must prioritize current changed behavior, explicitly regression-
+check Wave 1, ignore superseded historical text unless current records claim it
+active, and report only concrete actionable findings with exact paths/lines.
+Actual Wave 2 agent IDs and immutable runtime metadata remain to be recorded
+before accepting the wave.
+
+## Reviewer Wave 2 Results - 2026-07-14T15:25:29Z
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6138-b131-7321-a500-430c2894d31b`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6138-b523-77c3-a26f-c7f8bd9b8375`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6138-b866-7c33-841d-91c8736e9b09`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6138-bc02-77b0-a365-edb8a1a14c43`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+TypeScript/API result: clean. Every Wave 1 public-contract finding is resolved;
+no export, declaration, TSDoc, dependency, or Protobuf change is needed.
+
+Accepted and deduplicated Wave 2 findings:
+
+1. **P2, bounded wait:** `waitForPath()` continues polling after the outer
+   `within()` timeout because the losing promise is not canceled. Give the path
+   wait its own deadline or abort signal, stop its timer/stat loop on expiry,
+   and remove the uncancellable outer race. Add a focused timeout assertion if
+   needed to prove the helper settles.
+2. **P2, timer cleanup:** `settles()` races a promise against `delay()` but
+   retains the losing 5-second or 1-second timer after early child exit.
+   Implement it with a retained timeout handle and clear that handle in
+   `finally`.
+3. **P2, bounded work:** an immediately rejected `QueryService.read()` retries
+   without delay for the full observation phase. Add a retry delay capped by
+   the remaining observation budget and a controlled immediate-error query
+   case that proves bounded attempt count plus clean child shutdown.
+
+The Wave 1 race, API, phase-budget, no-ready, query-cancellation, SIGKILL,
+constant-ownership, and naming fixes otherwise passed every concern. Return
+only this three-item batch to the same Terra Medium implementation context,
+rerun native focused evidence, and then run a fresh complete four-concern wave.
+
+## Wave 2 Fix Verification - 2026-07-14T15:37:00Z
+
+- The same immutable Terra Medium implementer fixed the three accepted
+  findings without changing the child worker, dependencies, exports, framework,
+  or public contracts; no subagents.
+- Coordinator source inspection confirmed `waitForPath()` owns and expires its
+  deadline, `settles()` clears the losing timer in `finally`, and every
+  immediate query failure waits 20 milliseconds capped to the remaining
+  observation budget.
+- Fresh native focused/regression evidence passed: 7 files and 110 tests in
+  24.80 seconds, including the real late-marker deadline, zero-retained-timer
+  proof, and bounded immediate-error attempt count with graceful cleanup.
+- Example typecheck, focused ESLint, repository format, generated cleanliness,
+  diff whitespace, tracked-generated scan, and internal/public boundary scan
+  all passed.
+- Every Wave 2 finding is resolved. Commit the fix endpoint and run all four
+  specialist concerns against one fresh Wave 3 package.

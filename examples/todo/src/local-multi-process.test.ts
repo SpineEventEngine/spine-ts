@@ -1,5 +1,5 @@
 import { fork, type ChildProcess } from "node:child_process";
-import { chmod, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,7 +21,7 @@ import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.
 import { SignalMetadata } from "@spine-ts/server";
 import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CreateTaskSchema } from "../generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
@@ -31,6 +31,7 @@ const requestTimeoutMs = 2_000;
 const receiveTimeoutMs = 100;
 const readinessTimeoutMs = 5_000;
 const observationTimeoutMs = 5_000;
+const queryRetryDelayMs = 20;
 const controlTimeoutMs = 1_000;
 const gracefulShutdownTimeoutMs = 5_000;
 const terminateTimeoutMs = 1_000;
@@ -88,6 +89,7 @@ type WorkerMode = "default" | "ignore-stop" | "no-ready" | "pending-startup";
 interface FixtureCreateOptions {
   readonly workerPath?: string;
   readonly workerMode?: WorkerMode;
+  readonly immediateQueryErrors?: boolean;
   readonly stallQueries?: boolean;
   readonly childCloseFailures?: readonly ChildCloseResource[];
   readonly afterResourcesAcquired?: (resources: FixtureSetupResources) => void;
@@ -102,6 +104,41 @@ interface TrackedChild {
 }
 
 describe("local multi-process to-do mode", () => {
+  it("stops waiting for a path at its own deadline", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "stmp-path-wait-"));
+    const marker = path.join(directory, "late-marker");
+    const markerDelayMs = 100;
+    const timeoutMs = 25;
+    const startedAt = Date.now();
+    const lateMarker = delay(markerDelayMs).then(async () => writeFile(marker, "late", "utf8"));
+
+    try {
+      const rejection = await waitForPath(marker, "controlled path wait", timeoutMs).catch(
+        (error: unknown) => error,
+      );
+      const elapsedMs = Date.now() - startedAt;
+      await lateMarker;
+
+      expect(asError(rejection).message).toBe(
+        `Local multi-process controlled path wait timed out after ${String(timeoutMs)}ms.`,
+      );
+      expect(elapsedMs).toBeLessThan(markerDelayMs);
+    } finally {
+      await lateMarker;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("clears the child-exit timeout when the child settles early", async () => {
+    vi.useFakeTimers();
+    try {
+      expect(await settles(Promise.resolve(), gracefulShutdownTimeoutMs)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it(
     "routes one generated CreateTask to the child and observes its exact projected state",
     async () => {
@@ -289,8 +326,8 @@ describe("local multi-process to-do mode", () => {
 
       try {
         const acquired = requireSetupResources(resources);
-        await within(
-          waitForPath(path.join(acquired.ipcDirectory, startupPendingMarker)),
+        await waitForPath(
+          path.join(acquired.ipcDirectory, startupPendingMarker),
           "controlled pending startup",
           readinessTimeoutMs,
         );
@@ -340,6 +377,45 @@ describe("local multi-process to-do mode", () => {
       expect(elapsedMs).toBeGreaterThanOrEqual(observationTimeoutMs - 250);
       expect(elapsedMs).toBeLessThan(observationTimeoutMs + 1_500);
       expect(fixture.stalledQueryAbortCount).toBeGreaterThan(0);
+      expect(cleanup).toMatchObject({
+        childExitCode: 0,
+        forcedTermination: false,
+        listenerClosed: true,
+        ipcDirectoryRemoved: true,
+      });
+    },
+    outerTestTimeoutMs,
+  );
+
+  it(
+    "paces immediate QueryService failures for the observation phase and cleans up",
+    async () => {
+      const fixture = await LocalMultiProcessFixture.create({ immediateQueryErrors: true });
+      let primaryFailure: Error | undefined;
+      let cleanup: CleanupResult | undefined;
+      let observationStartedAt: number | undefined;
+
+      try {
+        await fixture.ready();
+        await fixture.requestCreateTask();
+        observationStartedAt = Date.now();
+        await fixture.readTaskListEventually();
+      } catch (error) {
+        primaryFailure = asError(error);
+      } finally {
+        cleanup = await fixture.close(primaryFailure);
+      }
+
+      const elapsedMs = Date.now() - (observationStartedAt ?? Date.now());
+      expect(primaryFailure?.message).toContain(
+        `projected task observation timed out after ${String(observationTimeoutMs)}ms`,
+      );
+      expect(elapsedMs).toBeGreaterThanOrEqual(observationTimeoutMs - 250);
+      expect(elapsedMs).toBeLessThan(observationTimeoutMs + 1_500);
+      expect(fixture.immediateQueryErrorCount).toBeGreaterThan(1);
+      expect(fixture.immediateQueryErrorCount).toBeLessThanOrEqual(
+        Math.ceil(observationTimeoutMs / queryRetryDelayMs) + 1,
+      );
       expect(cleanup).toMatchObject({
         childExitCode: 0,
         forcedTermination: false,
@@ -416,6 +492,8 @@ describe("local multi-process to-do mode", () => {
 class LocalMultiProcessFixture {
   #childFailure: Error | undefined;
   #closed = false;
+  #immediateQueryErrorCount = 0;
+  #immediateQueryErrors: boolean;
   #ipcDirectory: string;
   #parentTransport: SignalTransport;
   #ready: ReadyMessage | undefined;
@@ -469,6 +547,7 @@ class LocalMultiProcessFixture {
         ipcDirectory,
         parentTransport,
         trackedChild,
+        options.immediateQueryErrors ?? false,
         options.stallQueries ?? false,
       );
     } catch (error) {
@@ -493,11 +572,13 @@ class LocalMultiProcessFixture {
     ipcDirectory: string,
     parentTransport: SignalTransport,
     trackedChild: TrackedChild,
+    immediateQueryErrors: boolean,
     stallQueries: boolean,
   ) {
     this.#ipcDirectory = ipcDirectory;
     this.#parentTransport = parentTransport;
     this.#trackedChild = trackedChild;
+    this.#immediateQueryErrors = immediateQueryErrors;
     this.#stallQueries = stallQueries;
     const { child } = trackedChild;
     child.once("error", (error) => {
@@ -513,6 +594,10 @@ class LocalMultiProcessFixture {
 
   get pid(): number | undefined {
     return this.#trackedChild.child.pid;
+  }
+
+  get immediateQueryErrorCount(): number {
+    return this.#immediateQueryErrorCount;
   }
 
   get readyReceived(): boolean {
@@ -564,15 +649,22 @@ class LocalMultiProcessFixture {
       QueryService,
       createGrpcTransport({
         baseUrl: `http://${ready.host}:${String(ready.port)}`,
-        ...(this.#stallQueries
-          ? {
-              interceptors: [
+        interceptors: [
+          ...(this.#stallQueries
+            ? [
                 stalledQueryInterceptor(() => {
                   this.#stalledQueryAbortCount++;
                 }),
-              ],
-            }
-          : {}),
+              ]
+            : []),
+          ...(this.#immediateQueryErrors
+            ? [
+                immediateErrorQueryInterceptor(() => {
+                  this.#immediateQueryErrorCount++;
+                }),
+              ]
+            : []),
+        ],
       }),
     );
     let lastRowIds = "";
@@ -593,6 +685,7 @@ class LocalMultiProcessFixture {
         lastQueryStatus = response.response?.status?.status.case ?? "missing status";
       } catch (error) {
         lastQueryStatus = sanitize(asError(error).message, this.#ipcDirectory);
+        await delayBeforeQueryRetry(deadline);
         continue;
       }
       const list = findTaskList(response, "local-multi-process-task");
@@ -602,7 +695,7 @@ class LocalMultiProcessFixture {
       if (list !== undefined && isExpectedTaskList(list)) {
         return list;
       }
-      await delay(20);
+      await delayBeforeQueryRetry(deadline);
     }
 
     throw new Error(
@@ -846,6 +939,20 @@ function stalledQueryInterceptor(onAbort: () => void): Interceptor {
     });
 }
 
+function immediateErrorQueryInterceptor(onAttempt: () => void): Interceptor {
+  return () => () => {
+    onAttempt();
+    return Promise.reject(new Error("Controlled immediate QueryService read failure."));
+  };
+}
+
+async function delayBeforeQueryRetry(deadline: number): Promise<void> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs > 0) {
+    await delay(Math.min(queryRetryDelayMs, remainingMs));
+  }
+}
+
 function createTaskListQuery(): Query {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "local-multi-process-query" }),
@@ -990,7 +1097,21 @@ async function within<T>(promise: Promise<T>, phase: string, timeoutMs: number):
 }
 
 async function settles(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  return await Promise.race([promise.then(() => true), delay(timeoutMs).then(() => false)]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => {
+          resolve(false);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 async function capture(
@@ -1043,15 +1164,22 @@ function requireSetupResources(
   return resources;
 }
 
-async function waitForPath(target: string): Promise<void> {
-  while (
-    !(await stat(target).then(
+async function waitForPath(target: string, phase: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const exists = await stat(target).then(
       () => true,
       () => false,
-    ))
-  ) {
-    await delay(10);
+    );
+    if (exists) {
+      return;
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) {
+      await delay(Math.min(10, remainingMs));
+    }
   }
+  throw new Error(`Local multi-process ${phase} timed out after ${String(timeoutMs)}ms.`);
 }
 
 function delay(milliseconds: number): Promise<void> {

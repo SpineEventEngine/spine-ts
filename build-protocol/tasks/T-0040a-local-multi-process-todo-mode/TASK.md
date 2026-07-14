@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer wave 1 fixes and focused validation complete
+Status: In progress - reviewer wave 2 fixes and focused validation complete
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -341,6 +341,27 @@ examples/todo/src/local-multi-process.test.ts`; 5 existing tests passed and 4
   and reviewer wave 2 remain coordinator gates.
 - Actual immutable implementation metadata remains existing role `implementer`,
   model `gpt-5.6-terra`, reasoning `medium`; no subagents.
+
+### Reviewer Wave 2 Fixes - 2026-07-14
+
+- `waitForPath()` now owns its phase deadline, caps each polling delay to the
+  remaining budget, and rejects without an outer `within()` race. A controlled
+  late-marker test proves the helper settles before work arriving after its
+  deadline.
+- `settles()` retains its timeout handle and clears it in `finally`. A focused
+  fake-timer test proves an early child-exit result leaves zero timers.
+- Immediate `QueryService.read()` failures now wait 20 milliseconds before
+  retrying, capped to the remaining five-second observation budget. The
+  controlled interceptor produced 218,832 attempts before the fix; GREEN
+  enforces more than one and at most 251 attempts, the full observation timeout,
+  and graceful child/listener/IPC cleanup.
+- Native focused suite passed 1 file and 12 tests in 24.22s; its final
+  post-format rerun passed all 12 tests in 24.39s. The directly affected native
+  regression wave passed 7 files and 110 tests in 24.81s.
+- No worker mode, dependency, export, documentation surface, public API, or
+  framework source changed. Actual immutable implementation metadata remains
+  existing role `implementer`, model `gpt-5.6-terra`, reasoning `medium`; no
+  subagents.
 
 ## Skill Applicability
 
