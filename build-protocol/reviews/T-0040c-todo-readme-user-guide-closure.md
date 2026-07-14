@@ -471,3 +471,13 @@ links/imports, and future-policy overclaim.
   text unless current task/work status or changed public docs claim it active.
   Preserve the app-owned relative-import adjudication absent new ownership
   evidence.
+- The execution surface reached its active-thread capacity after starting three
+  lanes. Explicit dispatch fields and immutable Desktop role metadata agree:
+  style agent `019f62ae-fb21-7072-9554-c634f6ba2e1c` is actual
+  `gpt-5.6-terra` / high; documentation agent
+  `019f62af-16df-7aa2-ac32-c69a4df09eda` is actual `gpt-5.6-luna` /
+  medium; TypeScript/API docs agent
+  `019f62af-37ff-7d10-8ef7-940e89d96f1b` is actual `gpt-5.6-terra` /
+  high. The unstarted performance/reliability lane retains its recorded
+  explicit `gpt-5.6-terra` / high assignment and will run when one slot is
+  free. No partial wave is accepted before all four results are collected.
