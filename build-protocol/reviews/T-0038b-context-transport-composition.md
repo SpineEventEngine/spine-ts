@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 pre-review lint correction green; review packaging ready
+Status: Slice 3 specialist review wave assigned
 
 ## Scope
 
@@ -590,3 +590,17 @@ Status: Slice 3 pre-review lint correction green; review packaging ready
   validation precedes transport construction. The independent unrestricted
   native rerun passed `5/5`; the pre-review finding is closed and reviewer
   dispatch is authorized.
+
+## Slice 3 Reviewer Dispatch
+
+- Baseline `1b19e7a2`; endpoint `b031fe84`; package
+  `.superpowers/sdd/review-1b19e7a2..b031fe84.diff` (five commits, 139514
+  bytes).
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high.
+- All are read-only, bounded to Slice 3, and use no subagents. Each must record
+  canonical skill applicability and actual runtime metadata. Prompts ignore
+  historical superseded text unless current records or changed active docs
+  claim it. Security remains deferred to T-0041.

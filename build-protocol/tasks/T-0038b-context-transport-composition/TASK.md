@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 pre-review lint correction green; review packaging ready
+Status: Slice 3 specialist review wave assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -892,3 +892,19 @@ permitted`: same-host command/event
   both parent-owned values before transport construction. The independent
   unrestricted native rerun passed the complete child-process file with `5/5`
   tests. The pre-review finding is accepted as resolved.
+
+## Slice 3 Specialist Review Assignment
+
+- Review baseline is clean Slice 2 endpoint `1b19e7a2`; Slice 3 implementation
+  endpoint is `b031fe84`. The immutable package is
+  `.superpowers/sdd/review-1b19e7a2..b031fe84.diff` (`5` commits, `139514`
+  bytes).
+- Existing role dispatches are explicit: style/maintainability at
+  `gpt-5.6-terra` / high, documentation at `gpt-5.6-luna` / medium,
+  TypeScript/API docs at `gpt-5.6-terra` / high, and
+  performance/reliability at `gpt-5.6-terra` / high. Each reviewer is
+  read-only, bounded to Slice 3, and may not spawn subagents.
+- Every prompt requires the canonical skill applicability check and directs
+  reviewers to ignore historical or superseded text unless the current task,
+  work/review logs, or changed active documentation claims it as current.
+  Security remains deferred to T-0041.
