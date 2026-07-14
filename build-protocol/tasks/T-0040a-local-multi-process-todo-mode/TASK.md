@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - design investigation
+Status: In progress - implementation and focused validation complete
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -220,6 +220,93 @@ documentation closure, and full black-box consolidation remain excluded.
   public imports, behavior evidence, cleanup/failure coverage, focused command
   results, remaining uncertainty, skills used, and actual immutable runtime
   profile.
+
+## Implementation Evidence
+
+### RED - 2026-07-14
+
+- Added the direct `@spine-ts/transport` workspace development dependency and
+  the parent end-to-end test before creating the worker fixture.
+- Native command: `pnpm exec vitest run examples/todo/src/local-multi-process.test.ts`.
+- Result: expected failure. Two scenarios attempting the normal worker failed
+  before readiness because Node could not resolve
+  `examples/todo/test-fixtures/local-multi-process-worker.mjs`; the child exit
+  state was code `1`, signal `null`. The dedicated early-exit scenario passed.
+- An initial RED invocation first revealed a test-only wrong generated import;
+  it was corrected to the existing public `filters_pb.js` export before the
+  recorded RED run. The final RED failure is therefore the required absent
+  worker lifecycle failure, not a malformed test import.
+- Native dependency refresh used `pnpm install --offline --frozen-lockfile`;
+  it changed no lockfile resolution and installed the added workspace link.
+
+### GREEN - 2026-07-14
+
+- Added `examples/todo/test-fixtures/local-multi-process-worker.mjs`. It imports
+  only public packages, composes `createTodoContext()` with public `Server` and
+  caller-owned `ServerEnvironment.local({ transport, ownsTransport: false })`,
+  and explicitly closes the running server, environment, and transport.
+- Parent composition is public `createZeroMqAdapterConfig()`,
+  `createZeroMqTransport()`, `createTransportTopic()`, generated `CreateTask`
+  plus `packCommand()`, then generated `QueryService` over public Connect Node
+  transport. The child-process control channel contains only `ready`,
+  `failure`, `shutdown`, and `stopped` lifecycle messages; it carries neither
+  the signal payload nor a handling observation.
+- Native command: `pnpm exec vitest run examples/todo/src/local-multi-process.test.ts`.
+- Result: 1 file and 3 tests passed. The proof asserts child PID separation,
+  request/reply intake, and exact eventual `TaskList` state queried from the
+  child listener. The focused failure cases prove early-exit diagnostics and
+  cleanup after an injected assertion-path failure.
+- During GREEN, the initial private directory prefix exceeded the macOS local
+  socket pathname limit. The directory prefix was shortened to `stmp-`; the
+  directory remains mode `0700` and the adapter/logical identifiers remain
+  deterministic. A cleanup result-field mismatch was corrected before the
+  final passing run.
+
+### Focused Validation - 2026-07-14
+
+- `pnpm exec tsc --noEmit -p examples/todo/tsconfig.json` completed with exit
+  `0`.
+- `pnpm exec vitest run examples/todo/src/index.test.ts` passed: 1 file, 20
+  tests.
+- `pnpm exec vitest run packages/server/test/server/server-context-transport-cross-process.test.ts packages/server/test/server/server-context-transport-lifecycle.test.ts packages/server/test/server/server-lifecycle-integration.test.ts packages/transport/test/zeromq/signal-transport.test.ts packages/transport/test/zeromq/local-ipc-smoke.test.ts`
+  passed: 5 files, 78 tests.
+- The final `pnpm exec vitest run examples/todo/src/local-multi-process.test.ts`
+  passed: 1 file, 3 tests. `pnpm proto:check-generated` reported freshly
+  generated ignored output. Focused ESLint, repository format check, and
+  `git diff --check` were clean.
+- The changed paths are exactly the assigned test, worker fixture, todo package
+  importer metadata, lockfile importer entry, task brief, and work log. The
+  implementation deliberately makes no production supervision, restart,
+  topology, authentication, remote-host, or exactly-once claim.
+- Coordinator-confirmed actual immutable runtime metadata identifies the
+  existing `implementer` role as `gpt-5.6-terra` / medium. No subagents were
+  dispatched.
+
+### Coordinator Pre-Review Fix Wave - 2026-07-14
+
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/src/local-multi-process.test.ts`. Result: 5 tests ran; 3 passed
+  and the 2 new failure-path scenarios failed because child close injection and
+  partial-setup injection were not yet implemented.
+- The worker now imports `createTodoContext()` through the public package
+  self-reference `@spine-ts/example-todo`. The real Node child success and
+  failure-path scenarios prove that Node resolves the package export in the
+  forked process.
+- Worker shutdown attempts running server, environment, and supplied transport
+  closes independently in that deterministic order. It aggregates sanitized
+  failures, reports one lifecycle failure, and still attempts `stopped` before
+  disconnecting.
+- Parent control sends and listener-closure connects have explicit one-second
+  bounds. Graceful exit remains five seconds, `SIGTERM` remains one second, and
+  the final post-`SIGKILL` exit wait is now explicitly bounded to one second
+  with phase diagnostics before cleanup continues.
+- Partial fixture setup tracks the child immediately, attempts parent transport
+  close, bounded child shutdown/termination, and directory removal in order,
+  then preserves the primary setup failure followed by every cleanup failure.
+- GREEN command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/src/local-multi-process.test.ts`. Result: 1 file and 5 tests
+  passed. The directly affected example, server lifecycle/cross-process, and
+  ZeroMQ regression wave passed 6 files and 98 tests.
 
 ## Skill Applicability
 
