@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Coordinator pre-review accepted — review assignment pending
+Status: Review round 1 assigned
 
 ## Review Scope
 
@@ -96,3 +96,18 @@ scope/import/future-policy lint, conflict scan, and diff-whitespace checks. The
 future-policy scan's two contextual hits describe current lifecycle state and
 do not promise future policy. Independent reviewer round 1 may now be assigned;
 no reviewer result has yet been accepted.
+
+## Independent Review Round 1 Assignment
+
+- Immutable package range: `0868ecca..fcef6d35`.
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing role, explicit
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high.
+- Performance/reliability: existing role, explicit
+  `gpt-5.6-terra` / high.
+- Reviewers are read-only, receive only their distinct concern, cannot spawn
+  subagents, and must ignore historical superseded text unless current task
+  records or changed public docs claim it as active. The complete wave must be
+  collected before findings are deduplicated or returned to implementation.
+- Security is deferred to T-0041 by protocol.

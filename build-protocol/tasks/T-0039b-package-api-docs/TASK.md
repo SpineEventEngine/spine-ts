@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Coordinator pre-review accepted — review assignment pending
+Status: Review round 1 assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -217,3 +217,22 @@ may change. No subagents; coordinator retains Git and independent review.
   cleanup that “cannot yet complete.” Neither promises future policy.
 - The complete pre-review batch is accepted. Full `pnpm verify` remains the
   final task gate after independent review closure.
+
+## Independent Review Round 1 Assignment
+
+- Immutable review range: `0868ecca..fcef6d35`.
+- Style/maintainability: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess bounded organization, duplication, clarity,
+  and maintainable current-state wording only.
+- Documentation completeness: existing reviewer, explicit
+  `gpt-5.6-luna` / medium; assess factual completeness, links, commands,
+  examples, exclusions, and active-vs-historical truth only.
+- TypeScript/API docs: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess public imports/exports, declarations, TSDoc,
+  compatibility wording, examples, and internal leakage only.
+- Performance/reliability: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess lifecycle, delivery, transport, storage,
+  ownership, bounded-resource, retry, and failure claims only.
+- All reviewers are read-only, may not spawn subagents, and must ignore
+  historical superseded text unless current task records or changed public docs
+  claim it as active state. Security remains deferred to T-0041.
