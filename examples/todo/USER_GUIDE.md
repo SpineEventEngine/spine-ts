@@ -285,8 +285,15 @@ pnpm --filter @spine-ts/example-todo exec node scripts/subscription-client.mjs
 ```
 
 It starts the iterator read before posting the command, applies the delivery
-deadline after that post, decodes one exact-ID projection update, and owns
-cancellation, iterator, abort-signal, and HTTP/2 session cleanup:
+deadline after that post, and decodes one exact-ID projection update. When
+subscription creation succeeds, the returned `Subscription` is an opaque,
+server-generated handle; the module explicitly cancels it and immediately
+aborts the stream signal, returns the iterator, and aborts the HTTP/2 session.
+If the one-second creation deadline expires before that handle reaches the
+client, the client has no subscription ID it can cancel. Session abort still
+closes the client transport, while any server record created but never
+activated is removed by the configurable server inactive TTL
+(`SpineServicesOptions.inactiveTtlMs`), which defaults to 30 seconds.
 
 ```js
 import { log } from "node:console";

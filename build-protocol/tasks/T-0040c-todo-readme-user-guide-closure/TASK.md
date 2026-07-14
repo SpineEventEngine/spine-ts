@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 8 subscription-timeout docs correction pending
+Status: In progress - Wave 8 docs correction coordinator-verified; fresh re-review pending
 
 Started: `2026-07-14`
 
@@ -618,3 +618,49 @@ completes"` against the old pending-read pattern. It exited 1: the focused
 - Return this bounded correction and focused existing-expiry verification to
   the existing `implementer`, explicit `gpt-5.6-terra` / medium, no
   subagents or Git mutation.
+
+## 2026-07-14 - Wave 8 Subscription-Timeout Documentation Fix Evidence
+
+- Existing immutable implementer retained actual explicit `gpt-5.6-terra` /
+  medium. No subagent or Git mutation was used; changes are limited to
+  `examples/todo/USER_GUIDE.md` and these two owned records.
+- The guide keeps the one-second creation bound and executable lifecycle code
+  unchanged. It now distinguishes a returned opaque server-generated handle,
+  which the module explicitly cancels before aborting/returning client
+  resources, from a timeout before handle receipt, which gives the client no
+  subscription ID to cancel. The latter closes the HTTP/2 client session and
+  relies on configurable `SpineServicesOptions.inactiveTtlMs`, default 30
+  seconds, to expire any server record created but never activated.
+- Existing service verification passed 2/2 with 96 tests skipped:
+  `pnpm exec vitest run packages/server/test/services/spine-services.test.ts
+-t "removes expired durable inactive subscriptions before recovered
+activation|expires abandoned inactive subscriptions before activation"`.
+  The process-local regression confirms expiry before activation attaches no
+  Stand delivery; the durable regression confirms a second service instance
+  cannot activate the expired recovered record.
+- `typecheck:tooling`, `docs:check` with all 372 curated exports, and focused
+  Prettier passed. An initially parallel `typecheck:build` and `docs:check`
+  invocation raced their shared Protobuf generation staging directory;
+  `docs:check` completed, and the sequential `typecheck:build` rerun passed.
+  The two exact untracked `.generated-*` staging directories left by that
+  failed invocation were removed. A fresh `proto:check-generated` confirmed
+  ignored, untracked, freshly regenerated canonical output; final focused
+  Prettier and `git diff --check` passed, and status lists exactly the three
+  owned paths.
+- Remaining uncertainty: the to-do guide does not fault-inject the transport
+  race itself; accepted server cleanup is established by the existing
+  process-local and durable service regressions. Full `pnpm verify` and a fresh
+  immutable specialist wave remain coordinator gates.
+
+## 2026-07-14 - Coordinator Wave 8 Fix Verification
+
+- Independently inspected the guide diff against the copied Spine
+  `Subscription` contract and current `SpineServices` implementation. The
+  text accurately separates returned-handle cancellation from inactive-TTL
+  cleanup after an ambiguous creation timeout.
+- The two existing expiry regressions passed 2/2. Sequential
+  `typecheck:build`, `typecheck:tooling`, `docs:check` with all 372
+  curated exports, generated-clean, focused Prettier, and `git diff --check`
+  passed. No generation staging directory remains.
+- A committed immutable endpoint, fresh baseline package, and all four
+  specialist lanes remain required before the full task gate.

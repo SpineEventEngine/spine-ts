@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 8 complete - one subscription-timeout docs correction pending
+Status: Wave 8 fix coordinator-verified - fresh re-review pending
 
 Baseline: `526b7b4d`
 
@@ -508,3 +508,14 @@ links/imports, and future-policy overclaim.
   `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected explicit
   `gpt-5.6-terra` / medium, no subagents or Git mutation. A fresh immutable
   endpoint and all four lanes remain required.
+
+## 2026-07-14 - Wave 8 Fix Acceptance
+
+- The resumed implementer retained actual immutable `gpt-5.6-terra` /
+  medium metadata and was closed after result capture.
+- Coordinator contract inspection and the two existing expiry regressions
+  accepted the guide's successful-handle cancellation versus inactive-TTL
+  timeout cleanup distinction.
+- Fresh sequential type/build/docs/format/generated/diff checks passed with no
+  retained generation staging directory. A committed endpoint, fresh package,
+  and all four specialist lanes remain required.
