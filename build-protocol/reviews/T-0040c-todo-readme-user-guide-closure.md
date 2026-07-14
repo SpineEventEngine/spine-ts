@@ -219,6 +219,24 @@ links/imports, and future-policy overclaim.
 - Fresh type/build/docs/lint/format/generated/diff checks passed. A fresh
   baseline-to-endpoint package and all four specialist lanes remain required.
 
+## 2026-07-14 - Specialist Wave 4 Assignment
+
+- Endpoint: `e45d1584` (`Finalize to-do guide client reliability`).
+- Review package:
+  `.superpowers/sdd/review-526b7b4d..e45d1584.diff`.
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  `gpt-5.6-terra` / high.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high.
+- Re-review the full milestone within the original bounded concerns, with
+  special attention to every Wave 3 correction. Read-only; no Git mutation,
+  installs, duplicate test runs, or subagents; historical superseded text is
+  inactive unless current records/docs claim it.
+
 ## Skill Applicability
 
 - Reviewers use session inventory, expected-skill manifest, readable installed
