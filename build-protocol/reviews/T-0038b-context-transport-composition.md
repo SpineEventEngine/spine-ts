@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 2 clean; Slice 3 implementation assigned
+Status: Slice 3 coordinator teardown corrections assigned
 
 ## Scope
 
@@ -389,3 +389,65 @@ Status: Slice 2 clean; Slice 3 implementation assigned
 - Security remains deferred but private-directory and sanitized-diagnostic
   evidence must be carried to T-0041. Implementer assignment is explicit
   `gpt-5.6-terra` / medium, no subagents.
+
+## Slice 3 Implementer Pre-Review Handback
+
+- Existing implementer completed the bounded assignment at matching actual
+  immutable `gpt-5.6-terra` / `medium`; no subagents were dispatched or used.
+  Canonical implementation/TDD/testing/backend/error-handling/verification
+  skills and required references were fully read before edits. The
+  `systematic-debugging` skill was applied to the only concrete unexpected
+  delivery replay and established the unsupported repeated-set-once fixture as
+  root cause before the final fix.
+- The immutable review scope is uncommitted and consists of the plain Node
+  `.mjs` child, its Vitest parent, one owned test-only transport generic
+  correction, three observable docs, and these records. There is no production
+  source, public export/declaration/signature, server lifecycle, example,
+  Protobuf, generated tracked output, or application callback/materializer
+  change. The child's framework imports use public package entry points; the
+  explicit scan found no `packages/**/src` or package-private import.
+- Behavior evidence: a separately configured parent ZeroMQ transport requests
+  one generated command; child readiness occurs only after public
+  `Server.start()`; the child aggregate handles the command and emits a generated
+  event; two real projection repositories each observe that event once; bounded
+  republication of one fixed parent event identity produces exactly one
+  observation from each projection. Node IPC carries only bounded control,
+  sanitized errors, and behavior observations, never command/event envelopes.
+- Reliability evidence: one unique private mode-`0700` absolute IPC directory;
+  2s transport and 5s process/observation bounds; primary-plus-cleanup error
+  aggregation; parent transport close before child shutdown; child
+  `RunningServer` then environment then caller-owned transport close; exit
+  grace with forced termination only when stuck; listener refusal and recursive
+  IPC-directory absence checks; duplicate/background/non-zero/forced/leak paths
+  fail. The secondary projection uses validated singular set-once state so its
+  durable checkpoint advances without the intentionally unsupported repeated
+  set-once transition.
+- TDD evidence is exact: missing-child readiness RED then command-path GREEN;
+  5000ms command/projection observation RED then emitted-event GREEN; 5000ms
+  two-projection inbound RED, diagnostic replay reproduction, public-validator
+  root-cause proof, then complete GREEN. Collection/schema harness mistakes were
+  corrected and rerun before counting behavioral REDs.
+- Focused native result is 12 files and `167/167` tests. Final native verify is
+  green after one tooling-only correction round: 71 files and `1627/1627` tests
+  in both ordinary and coverage passes; 95.37% statements, 90.15% branches,
+  98.13% functions, 95.4% lines; whole-repo typechecks, ESLint, format, cleanup,
+  TypeDoc/API with 205 server exports, proto lint, and generated-clean. Scoped
+  checks also passed exact changed-file Prettier, public-root/declaration and
+  private-import scans, protected-path scan, `git diff --check`, and expected
+  status/diff.
+- Pre-review concern disposition: style/maintainability relevant and pending;
+  documentation relevant and pending; TypeScript/API relevant and pending;
+  performance/reliability relevant and pending. Security remains deferred to
+  T-0041 with private-directory/sanitized-diagnostic evidence retained. No
+  parent T-0038 closure, merge, commit, or review dispatch was performed.
+
+## Slice 3 Coordinator Pre-Review Findings
+
+- Native child-process proof passed `1/1` on coordinator rerun.
+- Accepted reliability correction: verify the post-close IPC directory is empty
+  before recursive removal, while still removing it after a leak finding.
+- Accepted reliability correction: make fixture setup cleanup-safe before the
+  fixture object exists, covering parent transport, child, and directory with
+  primary-first diagnostics and bounded termination.
+- Same implementer fix dispatch is explicit `gpt-5.6-terra` / medium, no
+  subagents. Reviewer dispatch remains pending corrected local gates.

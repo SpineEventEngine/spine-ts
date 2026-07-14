@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 2 clean; Slice 3 implementation assigned
+Status: Slice 3 coordinator teardown corrections assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -616,3 +616,97 @@ work until Slice 1 focused verification and relevant review are clean.
   state implemented same-host command/event execution and limitations. Do not
   edit the to-do example, add topology/supervision/distributed claims, or expose
   internals. Finish with all-slice focused gates and final `pnpm verify`.
+
+## Slice 3 Implementation Handback
+
+- Existing implementer actual immutable role metadata is
+  `gpt-5.6-terra` / `medium`, matching the explicit assignment; no subagents
+  were dispatched or used. Canonical applicability was recorded before edits.
+  The implementer fully read and applied `implement`, `executing-plans`,
+  `using-git-worktrees`, both canonical TDD skills and their required testing,
+  mocking, refactoring, and anti-pattern references,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`,
+  `error-handling-patterns`, and `verification-before-completion`.
+  `systematic-debugging` was fully read and applied when the final GREEN
+  candidate exposed a concrete projection-delivery blocker.
+- Strict TDD proceeded in three vertical increments. The first valid RED
+  launched the parent fixture and failed readiness because the plain Node child
+  module did not exist; GREEN added the `.mjs` child, public package imports,
+  `Server.start()`-before-ready handshake, one parent command request, and
+  bounded `finally` teardown. The second RED timed out waiting for command
+  handling/projection observations; GREEN added a real aggregate command
+  handler that emits a generated event plus a persisted projection. The final
+  RED timed out waiting for two inbound-event projection observations. A
+  diagnostic run showed repeated delivery of the prior command event; the
+  public transition validator proved the initially selected
+  `RichSetOnceState` fixture always rejects because repeated set-once fields are
+  unsupported. Replacing only that audit state with validated
+  `SingularSetOnceState` produced the final GREEN (`1/1`). Collection/type
+  harness defects (`.mjs` parent exclusion and one missing parent schema binding)
+  were corrected and rerun before accepting behavioral RED evidence.
+- `server-context-transport-child.mjs` is a real Node child using built public
+  entry points from `@spine-ts/server`, `@spine-ts/core`, `@spine-ts/proto`,
+  `@spine-ts/storage`, and `@spine-ts/transport/zeromq`, plus the existing local
+  descriptor test fixture; it has no `packages/**/src` import and adds no public
+  callback/materialization seam. Parent and child create distinct ZeroMQ
+  transports over one unique mode-`0700` absolute temporary IPC directory and
+  deterministic adapter identity. Generated command/event envelopes cross only
+  ZeroMQ. Node IPC carries only bounded readiness, sanitized failure,
+  behavior/entity observation, stopped, and shutdown messages.
+- The proof observes one transported command accepted and handled by the child,
+  its generated event persisted by a real projection and delivered to a second
+  projection, and one fixed parent event identity delivered exactly once to
+  each projection despite bounded slow-join republication. Request/publish work
+  is bounded at two seconds; readiness, observation, and exit phases are bounded
+  at five seconds. Cleanup closes the parent transport, requests shutdown,
+  closes child `RunningServer`, caller-owned environment, then child transport,
+  awaits exit, terminates only after grace, verifies the listener is closed,
+  recursively removes the IPC directory, and verifies its absence. Duplicate
+  observations, background failures, non-zero exit, forced termination, and
+  retained listener/files fail the test.
+- Observable wording changed only in `packages/server/README.md`,
+  `docs/USER_GUIDE.md`, and `docs/architecture/README.md`. It states current
+  deterministic pre-listener context intake, command/event bus and projection
+  behavior, close ordering, the native public child proof, and trusted
+  same-host-only limitations. No example, root export, public signature,
+  production source, Protobuf contract, generated tracked output, remote
+  topology, supervision, or retry policy changed.
+- Focused native verification passed 12 files and `167/167` tests covering all
+  Slice 1/2 server lifecycle, context/runtime/routing/bus regressions, the new
+  child proof, and all ZeroMQ adapter tests. Generated build and tooling
+  typechecks, scoped ESLint, cleanup enforcement, exact changed-file Prettier,
+  `docs:check` with 205 expected server exports, canonical
+  `pnpm proto:check-generated`, public-root/declaration/private-import and
+  protected-path scans, `git diff --check`, and expected-path status/diff all
+  passed. The first final verify attempt correctly failed tooling typecheck on a
+  missing third generic in the owned Slice 1 test and lost narrowing in the new
+  test; both type-only defects were fixed and the tooling gate reran green.
+  Final native `pnpm --config.verify-deps-before-run=false verify` then passed:
+  71 files and `1627/1627` tests in both ordinary and coverage runs, 95.37%
+  statements, 90.15% branches, 98.13% functions, 95.4% lines, docs/API, proto
+  lint, and generated-clean.
+- Implementation paths are
+  `packages/server/test/server/server-context-transport-cross-process.test.ts`,
+  `packages/server/test/server/server-context-transport-child.mjs`, the
+  type-only generic correction in
+  `packages/server/test/runtime/context-transport.test.ts`, the three observable
+  docs above, and these three durable records. No commit was created.
+- Remaining uncertainty is intentionally bounded to trusted same-host Node/V8
+  IPC and local timing. Remote/multi-host transport, broker topology,
+  supervision, production retry policy, deployment hardening, and final
+  security review remain out of scope; security evidence carries to T-0041.
+  Parent T-0038 closure, review acceptance, merge, and push have not begun.
+
+## Slice 3 Coordinator Pre-Review Correction
+
+- Fresh coordinator native run passed the new child-process proof `1/1`.
+- Accepted teardown finding: cleanup removes the IPC directory recursively
+  without first proving it contains no retained socket/file entry. Inspect
+  entries after transports/child exit, record any count as a leak failure, then
+  remove the directory in all cases.
+- Accepted setup finding: a failure after `mkdtemp` but before fixture
+  construction can bypass test `finally` and leak the parent transport, child,
+  or directory. Make fixture creation failure-safe with bounded cleanup and
+  primary-first combined diagnostics.
+- Resume the same implementer at explicit `gpt-5.6-terra` / medium, no
+  subagents. Change only the cross-process harness and these records.
