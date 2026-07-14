@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Specialist Wave 9 clean - full task gate pending
+Status: Clean - Wave 9 and full task gate passed; integration pending
 
 Baseline: `526b7b4d`
 
@@ -574,3 +574,14 @@ links/imports, and future-policy overclaim.
   further specialist lane is required before the full task gate.
 - Security disposition: deferred by task ledger and build protocol to the final
   project-wide T-0041 gate.
+
+## 2026-07-14 - Final Task Gate
+
+- Native full `verify` passed 73 files / 1,671 tests in both ordinary and
+  coverage runs.
+- Global branch coverage is 90.15%; statements, functions, and lines are also
+  above their 90% thresholds.
+- Type/build/lint/cleanup/format/docs/API/Protobuf/generated checks passed, and
+  all 372 curated exports remain present.
+- The task branch is clean and ready for integration. No task-review finding
+  remains; final project security stays deferred to T-0041.

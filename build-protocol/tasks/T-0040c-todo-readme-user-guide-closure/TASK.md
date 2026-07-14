@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Specialist Wave 9 clean; full task gate pending
+Status: Branch complete - clean Wave 9 and full task gate passed; integration pending
 
 Started: `2026-07-14`
 
@@ -676,3 +676,17 @@ activation|expires abandoned inactive subscriptions before activation"`.
   timeout.
 - All Wave 9 reviewers are closed. Security remains deferred to T-0041. The
   full native task `pnpm verify` gate is next.
+
+## 2026-07-14 - Full Task Gate
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exited 0.
+- The ordinary and coverage suites each passed 73 files / 1,671 tests.
+  Coverage was 95.38% statements, 90.15% branches, 98.22% functions, and
+  95.41% lines, satisfying every 90% global threshold.
+- Node-version, copied-proto checksum/generation, build and tooling typechecks,
+  ESLint, cleanup enforcement, full formatting, TypeDoc/API checks, Protobuf
+  lint, and generated-clean checks passed. TypeDoc confirmed all 372 curated
+  exports.
+- Final task-worktree status and `git diff --check` are clean, with no
+  `.generated-*` staging directory. The branch is ready to integrate into
+  `main`; post-merge verification and remote synchronization remain.
