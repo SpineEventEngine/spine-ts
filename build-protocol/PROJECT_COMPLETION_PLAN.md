@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0039a canonical specification and status reconciliation
+Status: In execution at T-0039c framework user guide review
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0039a canonical specification and status reconciliation
+Active implementation frontier: T-0039c framework user guide review
 
 ## Purpose
 
@@ -89,10 +89,9 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0038 is complete, integrated, post-merge verified, and
-pushed. T-0039a is the active implementation frontier for canonical
-specification and durable-status reconciliation. The dated Starting State above
-is historical plan-creation context.
+Current status: T-0039b is complete, integrated, post-merge verified, and
+pushed. T-0039c is the active framework-user-guide review frontier. The dated
+Starting State above is historical plan-creation context.
 
 ## Initial Release Scope
 

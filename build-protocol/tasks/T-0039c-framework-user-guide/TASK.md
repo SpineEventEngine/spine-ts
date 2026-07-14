@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Second coordinator pre-review finding assigned
+Status: Coordinator pre-review clean — review endpoint pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -211,3 +211,45 @@ without reading internal source.
   the current modeled schemas and framework-owned transaction boundary; do not
   add manual transaction controls, default-route ID extraction, internal APIs,
   runtime changes, or new scope.
+
+## Coordinator Pre-Review Closure
+
+- The second fix demonstrates framework-owned state updates for the aggregate,
+  process manager, and projection using their modeled schemas and `this.id`.
+- Fresh coordinator checks passed: exact five-file Prettier, `docs:check` with
+  expected export counts `100/28/205/19/17/3`, generated-output cleanliness,
+  status equality, package/internal and prohibited end-user API scans,
+  future-policy scan, exact changed-path scope, and `git diff --check`.
+- The future-policy scan's only lexical match remains the public fixture method
+  name `readEventually`; it is not policy prose. No duplicate implementation
+  constant/helper applies to this documentation-only slice, and no public root
+  or TypeDoc export changed.
+- The completion plan's three live statements now use the durable T-0039c
+  framework-user-guide review frontier. The candidate endpoint may now be
+  committed and packaged for the four relevant specialist concerns.
+
+## Second Pre-Review Fix Implementation
+
+- Section 3 now demonstrates protected `updateDraftState()` use in the
+  aggregate, process-manager, and projection handlers with their exact modeled
+  generated schemas.
+- State replacements use the framework-provided `this.id` identity and are
+  deterministic for replay. The example adds no transaction lifecycle calls,
+  target extraction, schema-bearing decorators, internal imports, or runtime
+  controls.
+- Focused verification passed for the final second-fix scope.
+
+## Second Pre-Review Fix Handback
+
+- Changed paths for this fix: `docs/USER_GUIDE.md` and the three T-0039c
+  records only. The previously accepted completion-plan status diff was
+  preserved without further edit.
+- Aggregate, process-manager, and projection handlers now replace their exact
+  modeled draft states through protected `updateDraftState()` calls and use
+  the framework-provided routed identity.
+- Exact command evidence, exclusions, and remaining uncertainty are recorded
+  in the work log. Full verification and specialist review remain
+  coordinator-owned.
+- Skills used: doc-coauthoring and verification-before-completion. Actual
+  immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
