@@ -106,7 +106,9 @@ process.on("message", (message) => {
   if (isShutdownMessage(message)) {
     void shutdown();
   } else if (isDuplicateCommandObservationMessage(message)) {
-    duplicateCommandObservation();
+    void duplicateCommandObservation().catch((error) => {
+      void reportFailure("observation control", error);
+    });
   }
 });
 process.once("SIGTERM", () => {
@@ -184,12 +186,12 @@ function observe(behavior, source, entityId) {
   });
 }
 
-function duplicateCommandObservation() {
+async function duplicateCommandObservation() {
   if (commandObservation === undefined) {
-    void reportFailure("observation control", new Error("No command observation is available."));
-    return;
+    throw new Error("No command observation is available.");
   }
-  observe(commandObservation.behavior, commandObservation.source, commandObservation.entityId);
+  await sendControl({ type: "observed", ...commandObservation });
+  await sendControl({ type: "duplicate-command-observation-applied" });
 }
 
 function shutdown(exitCode = 0) {

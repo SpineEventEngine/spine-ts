@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 final rereview acknowledgment P2 assigned
+Status: Slice 3 acknowledgment fix green; reliability rereview ready
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1063,3 +1063,38 @@ permitted`: same-host command/event
   subagents, to add a narrowly validated child-processed acknowledgment or
   observation barrier. The parent must fail if application is not observed
   within the bounded quiet window and must still reject the fourth observation.
+
+## Slice 3 Final Rereview Acknowledgment Fix Handback
+
+- `2026-07-14`: Actual immutable execution metadata remained the existing
+  implementer at explicit `gpt-5.6-terra` / medium; no subagents were
+  dispatched or used. Receiving-code-review, strict TDD and its required
+  references, JavaScript async testing, error-handling, and
+  verification-before-completion instructions were applied.
+- Focused native RED added the parent application-barrier requirement while
+  leaving the child unchanged. The child submitted the fourth observation but
+  no acknowledgment, so the regression failed with `1` failed and `5` skipped:
+  expected the exact-four rejection but received `Cross-process command
+duplicate control was not applied within the bounded quiet window.` This
+  proves ignored or too-late control application cannot satisfy the test.
+- GREEN makes the child await submission of its remembered, payload-free
+  duplicate observation before sending the exact one-key
+  `duplicate-command-observation-applied` acknowledgment. The parent validates
+  that control shape, requires it before the existing `200 ms` quiet deadline,
+  then checks the observation count and rejects the fourth. Node IPC remains
+  control-only; command/event envelopes still cross ZeroMQ. Focused native
+  GREEN is `1` passed with `5` skipped; the complete native file is `6/6`.
+- Tooling typecheck, scoped two-file ESLint, exact fixture Prettier, cleanup
+  enforcement, and child syntax checks pass. Final exact five-file formatting,
+  protected-scope/root/private scans, `git diff --check`, and status/diff checks
+  pass. Changed paths are only both cross-process fixture files and these three
+  records. Transport production, accepted docs, public API, topology/retry
+  policy, examples, Protobuf, unrelated work, and Git history are unchanged.
+- Slice 3 final-rereview acknowledgment P2 is fixed and ready for coordinator
+  handback. Remaining uncertainty is coordinator acceptance and the
+  coordinator-owned final verification; same-host/local-only and T-0041
+  security limitations are unchanged. Slice 3 scope was not expanded.
+- Coordinator inspected the ordered child observation/acknowledgment flow and
+  independently reran the unrestricted native child-process file. All `6/6`
+  tests passed. The P2 is accepted as fixed and ready for reliability-only
+  rereview.

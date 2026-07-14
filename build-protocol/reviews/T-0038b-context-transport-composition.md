@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 final rereview acknowledgment P2 assigned
+Status: Slice 3 acknowledgment fix green; reliability rereview ready
 
 ## Scope
 
@@ -778,3 +778,36 @@ Status: Slice 3 final rereview acknowledgment P2 assigned
 - Same existing implementer assignment is explicit `gpt-5.6-terra` / medium,
   no subagents. Documentation/API and declaration-order results remain CLEAN;
   security remains deferred to T-0041.
+
+## Slice 3 Final Rereview Acknowledgment Fix Evidence
+
+- `2026-07-14`: Actual author metadata matches the immutable assignment:
+  existing implementer, explicit `gpt-5.6-terra` / medium, no subagents.
+  Receiving-code-review, strict TDD/references, JavaScript async testing,
+  error-handling, and verification-before-completion were applied.
+- Native RED first added the parent requirement for a validated child-applied
+  barrier. With the old child, the focused regression was `1` failed and `5`
+  skipped: it expected the exact-four rejection but received the explicit
+  missing-application-barrier diagnostic. Thus ignored or post-deadline control
+  cannot produce a false success.
+- Native GREEN is ordered and payload-free: after receiving the fixed duplicate
+  control, the child awaits submission of its remembered duplicate observation
+  and only then submits `duplicate-command-observation-applied`. The parent
+  validates exactly that one-key message, observes it within the existing
+  bounded quiet window, and then rejects the already-submitted fourth
+  observation. Focused result is `1/1` with `5` skipped; full native result is
+  `6/6`. Real command/event envelopes remain ZeroMQ-only and normal proof
+  behavior is unchanged.
+- Fresh tooling typecheck, scoped fixture ESLint, exact fixture Prettier,
+  cleanup enforcement, child syntax, exact five-file record formatting,
+  protected/root/private scans, `git diff --check`, and expected five-path
+  status/diff pass.
+- Diff scope is exactly the two cross-process fixture files and all three
+  records. Production adapter, accepted docs, public surfaces, endpoint
+  cleanup, topology/retry policy, examples, Protobuf, unrelated work, and Git
+  history are unchanged. The single accepted P2 is fixed; coordinator
+  acceptance/final verification remains, and same-host/T-0041 limitations are
+  unchanged.
+- Coordinator inspection and an independent unrestricted native rerun accepted
+  the application barrier at `6/6` tests. Only performance/reliability requires
+  rereview; style, documentation, and API clean results remain applicable.

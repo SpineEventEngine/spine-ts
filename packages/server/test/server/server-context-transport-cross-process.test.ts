@@ -65,6 +65,9 @@ interface ObservationMessage {
 interface StoppedMessage {
   readonly type: "stopped";
 }
+interface DuplicateCommandObservationAppliedMessage {
+  readonly type: "duplicate-command-observation-applied";
+}
 interface ShutdownMessage {
   readonly type: "shutdown";
 }
@@ -72,7 +75,12 @@ interface DuplicateCommandObservationMessage {
   readonly type: "duplicate-command-observation";
 }
 type ParentMessage = DuplicateCommandObservationMessage | ShutdownMessage;
-type ChildMessage = ReadyMessage | FailureMessage | ObservationMessage | StoppedMessage;
+type ChildMessage =
+  | DuplicateCommandObservationAppliedMessage
+  | FailureMessage
+  | ObservationMessage
+  | ReadyMessage
+  | StoppedMessage;
 interface ChildExitState {
   readonly code: number | null;
   readonly signal: string | null;
@@ -302,6 +310,7 @@ class CrossProcessFixture {
   #backgroundFailures: string[];
   #childFailure: Error | undefined;
   #closed = false;
+  #duplicateCommandObservationAppliedAt: number | undefined;
   #injectCommandDuplicateInQuietWindow: boolean;
   #ipcDirectory: string;
   #observations: ObservationMessage[] = [];
@@ -421,6 +430,8 @@ class CrossProcessFixture {
         observationQuietMs,
         "command duplicate control",
       );
+      await this.#awaitDuplicateCommandObservationApplied(quietDeadline);
+      this.#requireExpectedCommandObservations(entityId);
     }
     await this.#holdCommandObservationQuietWindow(entityId, quietDeadline);
 
@@ -452,6 +463,21 @@ class CrossProcessFixture {
       await waitFor(Math.min(10, Math.max(1, deadline - Date.now())));
     }
     this.#requireExpectedCommandObservations(entityId);
+  }
+
+  async #awaitDuplicateCommandObservationApplied(deadline: number): Promise<void> {
+    while (this.#duplicateCommandObservationAppliedAt === undefined && Date.now() < deadline) {
+      this.#throwChildFailure("command duplicate application barrier");
+      await waitFor(Math.min(10, Math.max(1, deadline - Date.now())));
+    }
+    if (
+      this.#duplicateCommandObservationAppliedAt === undefined ||
+      this.#duplicateCommandObservationAppliedAt >= deadline
+    ) {
+      throw new Error(
+        "Cross-process command duplicate control was not applied within the bounded quiet window.",
+      );
+    }
   }
 
   async publishEventUntilObserved(event: Event, entityId: string): Promise<ObservationBehavior[]> {
@@ -606,6 +632,8 @@ class CrossProcessFixture {
       this.#readyState = message;
     } else if (message.type === "observed") {
       this.#observations.push(message);
+    } else if (message.type === "duplicate-command-observation-applied") {
+      this.#duplicateCommandObservationAppliedAt = Date.now();
     } else if (message.type === "failure") {
       this.#childFailure = new Error(
         `Cross-process child ${message.phase} failed: ${safeMessage(message.message, this.#ipcDirectory)}.`,
@@ -705,6 +733,9 @@ function isChildMessage(message: unknown): message is ChildMessage {
       message.entityId.length > 0 &&
       message.entityId.length <= 80
     );
+  }
+  if (message.type === "duplicate-command-observation-applied") {
+    return Object.keys(message).length === 1;
   }
 
   return message.type === "stopped" && Object.keys(message).length === 1;
