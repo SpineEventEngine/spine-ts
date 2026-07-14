@@ -15,7 +15,7 @@ The TS runtime centers on the same conceptual objects as Spine JVM:
   base classes.
 - `CommandBus`, `EventBus`, `QueryBus`, `SubscriptionBus`: logical buses.
 - `Stand`: read-side query/subscription facade.
-- `Server`: gRPC service host and runtime supervisor.
+- `Server`: gRPC service host and server lifecycle owner.
 
 Generic names should be familiar to JVM Spine users, but TypeScript API shape should be idiomatic.
 
@@ -27,18 +27,17 @@ records why a class/object/prototype method would be worse.
 
 The first TS `Server` slice was intentionally narrower than Spine JVM's
 complete server/runtime environment. It introduced a Node HTTP/2 listener over
-`SpineServices`, defaulted to `127.0.0.1`, returned a `RunningServer` with
-`host`, `port`, `baseUrl`, and idempotent `close()`, and did not introduce
-`ServerEnvironment`, process supervision, worker management, durable
-scheduling, or ZeroMQ-specific public API. Current source now also has a small
-explicit `ServerEnvironment` for storage, transport, optional delivery/tracing
-facilities, and close ownership. Its optional closeable delivery facility is
-not an active delivery scheduler. Current server close still stops network
-intake/sessions and then closes one flat group of contexts, resources, and an
-optionally owned environment; there is no delivery-registration barrier yet.
-D-0085 assigns a package-internal environment-owned bounded-run lifecycle to
-future implementation, and D-0086 sequences it through eight ordered
-implementation children without claiming that lifecycle is current behavior.
+`SpineServices`, defaulted to `127.0.0.1`, and returned a `RunningServer` with
+`host`, `port`, `baseUrl`, and idempotent `close()`; it did not yet include
+`ServerEnvironment` or environment-owned delivery. That is historical. The
+current runtime exposes `ServerEnvironment` for storage, transport, optional
+delivery/tracing facilities, and close ownership. Server startup completes
+finite environment recovery and opens command/event transport intake before
+listener intake. Server close stops network intake and sessions, drains
+accepted transport work, detaches and quiesces delivery, then closes contexts,
+resources, and any server-owned environment. This lifecycle adds no process
+supervision, public delivery scheduler, retry-timing policy, or production
+transport-topology policy.
 
 ## Read-Side and Write-Side Segregation
 
@@ -96,13 +95,10 @@ interface SignalTransport {
 }
 ```
 
-The final interface will be refined during implementation, but it must:
-
-- represent command, event, query, subscription, system, and delivery topics;
-- hide socket types and ZeroMQ-specific envelopes;
-- support local process discovery or explicit process registration;
-- support graceful close and broker restart handling;
-- allow later replacement with another local IPC or distributed transport.
+The implemented abstraction hides socket types and ZeroMQ-specific envelopes,
+supports adapter-neutral command/event request and publication flows, and owns
+graceful handle closure. The same interface is used by the in-process adapter
+and the same-host ZeroMQ adapter.
 
 T-0016f adds the first executable server-side bridge over this abstraction.
 `RuntimeTransportBinding.open()` consumes a `ServerRuntimeRoutingPlan`, a
@@ -116,41 +112,24 @@ registrations before the runtime. It deliberately does not own the transport
 instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
 delivery attempts, retry work, or create a JVM-style server environment.
 
-## ZeroMQ Local Broker
+## ZeroMQ Same-Host Adapter
 
-ZeroMQ is used only for local IPC between Node.js processes on one host.
-
-The broker adapter may choose more than one ZeroMQ socket pattern:
-
-- Pub/sub is natural for event fan-out by type URL and semantic tag.
-- Command handling requires exactly one effective command dispatcher per command
-  type; the adapter may implement this with broker-managed routing, worker
-  registration, and load balancing rather than pure pub/sub.
-- Query handling follows the gRPC `QueryService` contract; internally it may
-  use request/reply to a read-side worker or process-local stand access.
-- Subscription streaming follows `SubscriptionService`; internally it may use
-  pub/sub for read-side updates plus a subscription registry.
-
-The public framework model still describes publishers and subscribers. The
-adapter chooses socket topology based on bus semantics.
+ZeroMQ provides local IPC between application-composed Node.js processes on one
+host. The adapter uses request/reply for command routing and publish/subscribe
+for event fan-out while keeping endpoint and socket details outside domain,
+repository, and service APIs. Query and subscription behavior remains exposed
+through the existing gRPC-compatible services rather than a promised transport
+broker topology.
 
 ## Process Model
 
-The framework must support these modes:
-
-- single-process mode for tests and simple development;
-- multi-process local mode with a broker and role-specific workers;
-- supervised mode where the main process starts and monitors broker/workers;
-- externally supervised mode where process manager tooling starts workers.
-
-Each worker process must declare:
-
-- bounded context name;
-- tenant mode;
-- role;
-- handled signal types;
-- supported entity/repository types;
-- health and readiness state.
+The supported runtime scope is single-process execution and application-composed
+local multi-process execution over the same-host transport adapter. The
+framework does not start, restart, supervise, or health-check brokers or worker
+processes and does not require public worker declarations. Distributed
+transport, production topology, process supervision, restart handling, and
+health/readiness policy are outside the initial release; no future design for
+those policies is committed.
 
 ## Bus Semantics
 
@@ -315,8 +294,8 @@ delivery worker boundary:
   stale owner continues running after losing renewal, endpoint callback side
   effects are at-least-once/replay-safe: later final fencing can prevent stale
   finalization, but it cannot uninvoke a callback that already ran. Broader
-  production supervision, cancellation, and retry-monitor policy remains future
-  work. The run returns
+  production supervision, cancellation, and retry-monitor policy are outside
+  the initial release, with no future design committed. The run returns
   simple counts plus
   per-message failures and releases the shard in a `finally` path;
 - Package-internal loop code repeats those direct drains for one shard. Renewal
@@ -365,142 +344,37 @@ delivery worker boundary:
 
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
-handoffs, one direct drain call, and a closeable loop owner. It does not yet
-implement a generic repository delivery engine, projection catch-up through
-inbox storage, retry monitors, public or production retry-attempt counter
-policy beyond the internal retained-attempt gate, retained raw delivery error
-details, production worker supervision, or transport-backed topology. Event
-import and aggregate importers are removed from the active plan by upstream ADR
-0001 D1. Aggregate `@React` handlers, when present, use ordinary
-generated-reactor transaction semantics rather than event-sourcing
-applier/import delivery. `IMPORT_EVENT` is no longer a supported public
-delivery label for new inbox writes; stored/wire legacy rows using it are
-recognized only as deprecated compatibility data and fail closed before
-delivery.
+handoffs, one direct drain call, and a closeable loop owner. The initial release
+excludes a generic repository delivery engine, projection catch-up through
+inbox storage, retry monitors, public or production retry-attempt counter policy
+beyond the internal retained-attempt gate, retained raw delivery error details,
+production worker supervision, and transport-backed topology. These exclusions
+make no future policy commitment. Event import and aggregate importers are
+removed from the active plan by upstream ADR 0001 D1. Aggregate `@React`
+handlers, when present, use ordinary generated-reactor transaction semantics
+rather than event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer
+a supported public delivery label for new inbox writes; stored/wire legacy rows
+using it are recognized only as deprecated compatibility data and fail closed
+before delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
-Current built-context handoffs construct short-lived tenant-specific
-`Delivery` instances, persist supported inbox work, and immediately exact-drain
-that row. Built contexts retain the storage factory actually used to build them
-behind `boundedContextAccess`; a builder-specific factory can differ from the
-environment default. The tenant index can enumerate recorded multitenant
-tenants, but server startup does not currently enumerate those scopes for
-recovery. T-0036's finite epochs and ordered fulfilled/rejected per-shard
-evidence remain package-internal, explicitly invoked, and unchanged.
+`ServerEnvironment` owns the delivery lifecycle for attached contexts.
+`Server.start()` builds its contexts and completes finite environment recovery
+before opening listener intake. If recovery rejects, startup rejects and the
+listener is not opened. Recovery completion does not claim that every pending
+delivery was completed.
 
-D-0086 maps the future D-0085 lifecycle into eight strict implementation slices.
-The former T-0037e is a superseded split-parent audit record, not a ninth
-implementation child:
+`RunningServer.close()` stops listener intake and sessions, closes context
+transport intake and drains accepted work, detaches delivery and waits for
+quiescence, then closes contexts and resources. A caller-owned environment may
+remain in use by sibling servers and is not closed by this server; a
+server-owned environment closes only after those dependencies. Retriable close
+failures retain unfinished work and do not duplicate completed phases.
+`ServerEnvironment.close()` is permanent only after it is no longer in use; an
+in-use close rejects without tearing down its owned facilities.
 
-1. T-0037a owns context delivery descriptors, actual storage, tenant startup
-   scopes, endpoint/shard facts, and readiness after every successful
-   individual row persistence, including successful rows in a partially failed
-   batch and never a rejected write. Its internal notification is synchronous
-   and non-throwing, so observation cannot change durable receive outcomes.
-2. T-0037b owns serialized finite generation runs, one lossless pending union
-   deduplicated by canonical tenant/configured scope and bounded by current
-   tenant/configured scope cardinality rather than notification count,
-   per-shard interpretation of T-0036 evidence, and the reusable authoritative
-   coordinator-instance stop/await/retire primitive. It closes admission and
-   stops, awaits quiescence, classifies, consumes/reports eligible records, then
-   permanently retires and cleans up in that order. Once stop/await succeeds,
-   irreversible admission closure, stopped state, and quiescence prevent any old
-   start, notification, or endpoint invocation despite later reporting or
-   cleanup failure; cleanup failure may leak only inert resources. A distinct
-   inability to establish quiescence prohibits slot replacement and endpoint-
-   dependent teardown until explicit retry. That retry resumes the same stopped,
-   admission-closed transition without duplicating completed stop work, proves
-   quiescence, then classifies, consumes/reports, retires/cleans up, and permits
-   safe slot clearing exactly once. A reusable lifecycle caller may
-   receive an earlier retirement/reporting error only after completing its
-   required slot clearing or fresh-generation transition. A fresh-construction,
-   route-rebind, or buffered-transfer error instead propagates while that
-   transition remains incomplete and retained for external retry.
-3. T-0037c owns bounded canonical operational obligations and one-time cause
-   reporting. Its package-internal table uses only configured registration or
-   generation obligations plus one shared record; reporting does not resolve
-   operational work, and fulfilled `FAILED` retains no cause. It does not
-   install a lifecycle owner, retry policy, monitor, or server wiring.
-4. T-0037d owns environment registration cardinality, startup recovery, the
-   no-overlap barrier that closes new direct exact-drain admission, awaits any
-   already-admitted direct exact drain in the attaching scope, buffers canonical
-   readiness from persistence during route installation within the configured-
-   scope bound, transfers each buffered scope exactly once into the installed
-   route, and only then admits startup/environment work. Subsequent receives use
-   readiness only; no durable row loses both owners. It also owns registration-
-   scoped rollback, including invoking T-0037b's primitive and clearing the
-   retired empty generation slot through a finally-equivalent path after sole
-   failed attachment despite reporting or retirement-cleanup failure. It may
-   replace that slot only when quiescence was established. T-0037d owns the
-   caller-owned failed-start rollback state machine and same-operation retry;
-   T-0037f owns the surrounding deferred server cleanup for either environment
-   ownership mode.
-5. T-0037e1 owns registration detach. Non-last detach/retry is scoped to the
-   departing registration and never retires the shared generation. Ordinary
-   last detach invokes the existing primitive, clears only a proven-quiescent
-   retired slot, retries the same unsafe operation after quiescence failure,
-   and permits one later first attach to create a fresh generation. It also
-   owns detach/attach linearization.
-6. T-0037e2 owns reusable explicit stop and the sole transition-owned fresh
-   candidate. It first rebinds surviving registrations and readiness routes,
-   with per-unit checkpoints. It then transfers configured, startup, buffered,
-   and retained canonical scopes exactly once into fresh pending admission,
-   with separate per-unit checkpoints. Configured/startup/buffered/retained
-   scopes are transferred, never rebound. Only after both phases does it publish
-   the candidate and reopen later-write admission. Construction or partial-
-   progress failure retains bounded ownership and the same candidate, when one
-   exists, for external retry without overlap or self-loop. A racing eligible
-   attach waits and joins that candidate. Reporting or inert retirement errors
-   propagate only after rebind, all-scope transfer, publication, and admission
-   reopen complete exactly once.
-7. T-0037e3 owns serialized live-registration and retained-owner permanent-close
-   refusal plus owner-free zero-registration/no-generation permanent admission.
-   Integrated T-0037d/e1/e2 ownership leaves no close-owned current generation:
-   those predecessor operations alone perform generation stop, quiescence,
-   classification, cause reporting, retirement, safe slot clearing, and their
-   same-operation retries. T-0037e3 cancels an eager stop queued behind the
-   winning close only when that stop is both unadmitted and not completed,
-   commits permanent attachment/stop admission, and releases the lifecycle
-   serial gate. A stop-first no-generation operation that has completed its turn
-   but remains retained for waiter settlement is not cancelled; close commits
-   after it, and its queued waiter observes permanent-close rejection before the
-   stop promise resolves normally. The existing coalesced public close attempt
-   runs ordered `RetryableCloseGroup` facility teardown outside the gate. The
-   environment remains permanently closed.
-8. T-0037f owns server listener/startup and network/context/resource/facility
-   shutdown ordering. A non-last close retry resumes only departing-registration
-   cleanup and eligible reporting; it never retires the shared generation or
-   clears its slot, and sibling generation identity, readiness, pending work,
-   endpoints, contexts/resources, and facilities remain usable. Last-detach
-   retirement remains a separate path.
-
-The five deterministic same-operation generation-retirement retries stay
-distinct: caller-owned failed-start rollback (T-0037d); ordinary last detach
-(T-0037e1); reusable explicit stop (T-0037e2); and server-owned startup cleanup
-plus caller-owned server cleanup (T-0037f). T-0037e3 is not a generation-
-retirement retry owner; it refuses retained predecessor owners and retries only
-failed facility closes through the existing public close attempt.
-Non-last detach is a separate non-retiring registration-scoped retry and is not
-one of those five.
-
-The first future handoff is T-0037a's package-internal
-`boundedContextAccess` descriptor/readiness seam. It does not start a worker or
-change environment ownership by itself. JVM evidence supports only placing
-delivery ownership at environment level and submitting readiness after durable
-local persistence. The TS sequence rejects JVM singleton state, per-message
-threads, repeat callbacks, public monitor actions, catch-up stations, and
-global storage-factory copying. Retry timing and all public scheduler,
-monitoring, health, topology, adapter, and catch-up policy remain deferred.
-The sequence adds no root/public export, signature, or option and commits no
-generated artifact; package-internal declarations emitted by normal
-documentation/type builds may change with internal implementation. T-0037e3
-updates existing README/TypeDoc only for behavior independently observable at
-its merge point, such as existing `ServerEnvironment.close()` behavior if
-publicly reachable without server detach. If close TSDoc ships, it explicitly
-states that close rejects non-destructively while the environment is in use and
-performs no owned-facility teardown; the package README carries matching public
-wording. T-0037f alone documents caller-owned environment reuse after server
-detach and the full observable `Server`, `RunningServer`, and
-`ServerEnvironment` startup/close lifecycle. Neither child names or describes
-package-internal explicit generation stop in public docs.
+The lifecycle exposes no public delivery scheduler, monitor, action,
+dead-letter, retry-timing, topology, adapter, supervision, or catch-up policy.
+It does not add distributed transport, legacy `IMPORT_EVENT` delivery,
+aggregate import, or a new aggregate `@Apply` path.

@@ -3724,6 +3724,14 @@ phase releases the lifecycle serial gate, the existing coalesced public close
 attempt performs ordered owned-facility teardown outside that gate. Public
 `ServerEnvironment.close()` behavior and all public exclusions remain unchanged.
 
+Final implementation outcome (2026-07-14): T-0036 supplied the bounded
+package-internal delivery evidence; T-0037a, T-0037b, T-0037c, T-0037d,
+T-0037e1, T-0037e2, T-0037e3, and T-0037f integrated the environment-owned
+readiness, recovery, detach, reuse, permanent-close, and server lifecycle in
+that order. T-0038b then integrated same-host context transport composition
+into the established server ordering. These outcomes add no public scheduler,
+monitor, retry-timing, topology, adapter, or supervision policy.
+
 ## D-0086: Sequence Environment Delivery Lifecycle In Eight Children
 
 Status: Accepted
@@ -3891,12 +3899,13 @@ Consequences:
 - This decision changes sequencing and durable documentation only. It does not
   claim any T-0037 child behavior is implemented.
 
-Active outcome clarification (2026-07-13): the eight-child sequence remains
-accepted, but integrated ownership narrows the T-0037e3 child and supersedes its
-former place in the generation-retirement retry-owner enumeration. T-0037d owns
+Historical outcome clarification (2026-07-13; implementation status superseded
+by the 2026-07-14 final outcome below): the eight-child sequence remains accepted,
+but integrated ownership narrows the T-0037e3 child and supersedes its former
+place in the generation-retirement retry-owner enumeration. T-0037d owns
 failed-start generation retirement and retry, T-0037e1 owns last-detach
 retirement and retry, and T-0037e2 owns reusable-stop retirement and retry;
-T-0037f's accepted future server-cleanup assignments remain outside this
+T-0037f's then-pending accepted server-cleanup assignments remain outside this
 clarification. T-0037e3 owns serialized live-registration/retained-owner refusal,
 owner-free zero-registration/no-generation permanent admission, cancellation of
 an eager stop queued behind that admission only while it is both unadmitted and
@@ -3908,3 +3917,10 @@ completes and releases `EnvironmentAttachments.#serial` before
 reject even while facility settlement is pending. This clarification preserves
 D-0085 ordering in every generation owner and introduces no ninth child, public
 surface, or new lifecycle decision.
+
+Final implementation outcome (2026-07-14): all eight children are complete,
+merged, and post-merge verified. Together with T-0036 they implement
+D-0085's environment-owned bounded delivery lifecycle; integrated T-0038b
+uses that completed lifecycle for same-host context transport composition.
+The child sequence remains historical decomposition, not a public API or a
+commitment to excluded policy.

@@ -1,6 +1,6 @@
 # T000: Autonomous Process Bootstrap
 
-Status: In progress
+Status: Historical/closed
 Start: 2026-06-27
 Branch: baseline before task branches
 Worktree: /Users/armiol/development/experiments/spine-ts
@@ -57,3 +57,9 @@ Start the autonomous build process required by `build-protocol/BUILD_PROTOCOL.md
 
 - Pending splitter output.
 - Pending first implementation task selection.
+
+## Historical Closure Note
+
+This bootstrap record is closed historical chronology. Its process baseline was
+superseded by the later repository/tooling and autonomous-task records; it does
+not represent pending product work.

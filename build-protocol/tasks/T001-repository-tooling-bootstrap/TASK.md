@@ -1,6 +1,6 @@
 # T001: Repository And Tooling Bootstrap
 
-Status: Candidate
+Status: Historical/closed
 Start: Not started
 Branch: `feature/T001-repository-tooling-bootstrap`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T001-repository-tooling-bootstrap`
@@ -38,3 +38,9 @@ Create the initial TypeScript/Node.js monorepo foundation for the Spine TS frame
 ## Work Log
 
 - Pending requirements splitter confirmation.
+
+## Historical Closure Note
+
+This bootstrap candidate is closed historical chronology. Later integrated
+repository tooling and task records supersede its planned initial setup; it is
+not pending framework work.
