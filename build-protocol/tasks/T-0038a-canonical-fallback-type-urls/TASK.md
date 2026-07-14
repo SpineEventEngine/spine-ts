@@ -1,6 +1,6 @@
 # T-0038a: Canonical Fallback Type URLs
 
-Status: Affected re-review assigned
+Status: Round-2 style re-review assigned
 
 Started: `2026-07-14T01:50:36Z`
 
@@ -164,12 +164,6 @@ every accepted Spine-option, default, and valid custom fallback result.
   pending recorded reviewer dispositions. No code-behavior uncertainty remains
   within the focused evidence; those process gates are the remaining concern.
 
-## Immediate Next Action
-
-Run focused fix verification, then re-review the affected style,
-documentation, and performance/reliability concerns. Re-run TypeScript/API
-review only if verification finds a public contract or declaration change.
-
 ## Coordinator Pre-review Finding
 
 - `2026-07-14T01:59:03Z`: accept/close actual Terra Medium implementer from
@@ -236,3 +230,34 @@ review only if verification finds a public contract or declaration change.
   documentation at explicit Luna Medium. TypeScript/API docs is N/A for the
   test/README/record-only fix delta after prior CLEAN; no declaration, TSDoc,
   export, or runtime change. Security remains deferred to T-0041.
+
+## Affected Re-review Result And Round-2 Fix
+
+- `2026-07-14T02:14:06Z`: documentation CLEAN and reliability CLEAN; style LOW
+  for the original unversioned Immediate Next Action remaining stale after its
+  own focused verification. Actual docs Luna Medium and style/reliability Terra
+  High match explicit immutable-role dispatch; no subagents; all closed. API
+  remains CLEAN/N/A; security deferred.
+- Resume same Terra Medium author to remove the obsolete unversioned Immediate
+  Next Action section and rely on dated latest entries for current action.
+  Synchronize records and rerun formatting/diff/status only, then style re-review.
+
+## Round-2 Style Re-review Assignment
+
+- `2026-07-14T02:16:41Z`: accept/close same actual Terra Medium record fixer,
+  explicit immutable-role dispatch matched, no subagents. Coordinator verifies
+  three synchronized records, zero unversioned action section, no core delta,
+  Prettier, and diff integrity.
+- Assign style/maintainability only at explicit Terra High, read-only, no
+  subagents. Docs/reliability remain CLEAN; API remains CLEAN/N/A; security is
+  deferred to T-0041.
+
+## Round-2 Status Fix Handback
+
+- Removed the original unversioned Immediate Next Action section in full. Dated
+  latest task/review entries remain the sole current-action source.
+- Three-record Prettier, exact synchronized-status scan, and
+  `git diff --check` pass. Relative to `5c8bd9c3`, source, test, and core README
+  have no delta.
+- No code, test, README, API, generated output, full verify, Git action, or
+  subagent work occurred. Style-only re-review remains pending.

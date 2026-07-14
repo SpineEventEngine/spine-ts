@@ -1,6 +1,6 @@
 # T-0038a Review Log
 
-Status: Affected re-review assigned
+Status: Round-2 style re-review assigned
 
 ## Scope
 
@@ -148,3 +148,37 @@ Status: Affected re-review assigned
   success/precedence evidence.
 - TypeScript/API docs: N/A for no declaration/TSDoc/export/runtime delta after
   prior CLEAN. Security remains deferred to T-0041.
+
+## Affected Re-review Result
+
+- `2026-07-14T02:14:06Z`: documentation CLEAN; performance/reliability CLEAN;
+  style/maintainability LOW because the original unversioned Immediate Next
+  Action still names already-completed focused verification. API stays prior
+  CLEAN/N/A; security deferred. Actual immutable role profiles match explicit
+  Luna Medium/Terra High dispatch; no subagents; all reviewers closed.
+
+## Round-2 Fix Assignment
+
+- Same Terra Medium author removes the obsolete unversioned action section,
+  updates the three records/statuses, and runs static formatting/status/diff
+  checks. No source, test, README, declaration, or API change. Style-only
+  re-review follows.
+
+## Round-2 Style Re-review Assignment
+
+- `2026-07-14T02:16:41Z`: accept/close same actual Terra Medium record fixer;
+  explicit immutable-role metadata matched, no subagents. Coordinator confirms
+  no source/test/README delta, no unversioned action section, synchronized
+  status, clean formatting/diff.
+- Assign style/maintainability at explicit Terra High only. Documentation and
+  reliability remain CLEAN, API CLEAN/N/A, security deferred.
+
+## Round-2 Status Fix Handback
+
+- Style finding addressed by deleting the obsolete unversioned Immediate Next
+  Action section; dated latest entries remain authoritative.
+- Three-record Prettier, exact synchronized-status scan, and
+  `git diff --check` pass. No source, test, or core README delta exists from
+  `5c8bd9c3`.
+- No code, test, README, API, generated output, full verify, Git action, or
+  subagent change. Style re-review remains pending.
