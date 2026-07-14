@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security review assigned
+Status: In progress - security fix architecture assigned
 
 Started: `2026-07-14`
 
@@ -231,3 +231,25 @@ example.
   project scope. Report only repository-grounded findings with prerequisites,
   boundary/asset, severity/confidence, evidence, current control, and smallest
   correction.
+
+## Security Review Round 1 Result
+
+- Dedicated reviewer agent `019f62e5-7a3b-7e50-84d3-7f7991ffe7a5`, immutable
+  actual `gpt-5.6-terra` / high, confirmed four release-blocking framework
+  defects and is closed.
+- `SF-007` (High): Connect's implicit approximately 4 GiB message limits permit
+  excessive buffering/decompression before framework validation.
+- `SF-008` (High): subscriptions have per-record TTL/queue bounds but no total
+  framework ceiling across inactive and active subscriptions.
+- `SF-009` (Medium): an omitted query format/limit permits an unbounded
+  include-all result despite the declared 1,000-row cap.
+- `SF-010` (Medium): the ZeroMQ IPC directory privacy check follows symlinks and
+  does not verify POSIX ownership.
+
+## Security Fix Architecture Assignment
+
+- Existing `requirements_splitter`, expected explicit `gpt-5.6-sol` / high,
+  read-only, no subagents or Git mutation.
+- Select the smallest Spine-compatible public/internal contracts, exact finite
+  defaults, TDD slices, and focused review/verification for `SF-007` through
+  `SF-010`. Avoid speculative security APIs and preserve copied wire contracts.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security artifacts verified; dedicated final review assigned
+Status: Security Round 1 found four blockers; fix architecture assigned
 
 Baseline: `39f2c6f7`
 
@@ -111,3 +111,43 @@ tracked generated output, dependency-audit freshness, and diff integrity.
 - Review the whole release surface through the bounded `TM-*` hypotheses and
   report concrete findings only. Historical superseded text is inactive unless
   a current task/status record or changed public doc claims it as active.
+- Artifact endpoint `039aabd4`; immutable package
+  `.superpowers/sdd/review-39f2c6f7..039aabd4.diff` (4 commits, 59,729 bytes).
+- Reviewer agent `019f62e5-7a3b-7e50-84d3-7f7991ffe7a5` was explicitly
+  dispatched as the existing `security_reviewer` with model
+  `gpt-5.6-terra` and reasoning `high`; immutable role metadata confirms actual
+  `gpt-5.6-terra` / high. No subagents or Git mutation are permitted.
+
+## Dedicated Security Review Round 1
+
+- Actual immutable profile matched dispatch: `gpt-5.6-terra` / high. Required
+  security skills were applied, no subagents were spawned, no repository/Git
+  mutation occurred, and the reviewer is closed.
+- `SF-007` - High, high confidence, TB-01: `createHttpServer()` does not pass
+  `readMaxBytes`/`writeMaxBytes`; Connect 2.1.2 defaults both to `0xffffffff`.
+  A reachable caller can force excessive pre-validation buffering or
+  decompression. Add finite validated limits and oversized compressed/
+  uncompressed network regressions.
+- `SF-008` - High, high confidence, TB-01/TB-02: every subscribe creates a UUID,
+  durable record, timer, and later listener/queue, but only inactive TTL and
+  per-subscription queue limits exist. Add one total-capacity reservation with
+  exact rollback/release across persistence failure, expiry, cancellation, and
+  stream cleanup; cover concurrent saturation.
+- `SF-009` - Medium, high confidence, TB-01/TB-02: omitted query format is
+  accepted and include-all produces an unbounded storage query. Apply a finite
+  default or require a positive limit; cover more than 1,000 rows and tenant
+  filtering.
+- `SF-010` - Medium, high confidence, TB-06: IPC validation uses `stat()` and
+  mode bits only. Reject final/ancestor symlinks, require effective-UID
+  ownership on POSIX, recheck before bind, and test symlink/foreign-owner paths.
+- `SF-001`, `SF-003`, `SF-004`, and `SF-006` remain accurate. `SF-002` is
+  superseded by `SF-010`; `SF-005` is superseded in part by `SF-007` through
+  `SF-009`. TM-004, TM-005, and TM-007 are confirmed; the remaining recorded
+  hypotheses produced no confirmed defect. Round 1 is not clean.
+
+## Security Fix Architecture Assignment
+
+- Existing `requirements_splitter`, expected explicit `gpt-5.6-sol` / high,
+  read-only, no subagents or Git mutation.
+- Resolve public-contract/default ambiguity once, using Spine JVM/source and
+  local Connect 2.1.2 evidence, before one implementer receives the full batch.

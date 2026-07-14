@@ -1,7 +1,7 @@
 # T-0041 Security Findings and Evidence
 
-Status: Initial evidence report. Dedicated `security_reviewer` has not run;
-T-0041 is not complete.
+Status: Dedicated security review Round 1 confirmed four release blockers;
+fixes and re-review are pending.
 
 Baseline: `39f2c6f7`. Artifact source HEAD:
 `6f4e9bca5993932d348f6009856406f28dae1a64`.
@@ -45,17 +45,21 @@ remain ignored.
 
 ## Findings
 
-No confirmed framework vulnerability is recorded in this initial artifact.
-Stable IDs preserve dispositions; they do not declare the final gate clean.
+Round 1 confirmed four framework defects. Stable IDs preserve every original
+disposition and the new release-blocking findings.
 
-| ID     | Status/severity                                     | Attacker prerequisite                                                    | Asset/boundary               | Evidence/control                                                                                                          | Residual and smallest correction                               |
-| ------ | --------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| SF-001 | Contractual residual / High if misdeployed          | Consumer broad-binds without TLS, authn, tenant-binding authz, or rates. | Remote; TB-01..03            | Local default `server.ts:18-19,55-57`; exclusions `README.md:15-24`, `server/README.md:86-87`.                            | Deployment owns ingress; correct only framework claim/bypass.  |
-| SF-002 | Contractual residual / Medium                       | Same-host attacker can alter/access IPC directory.                       | IPC; TB-06                   | `adapter-config.ts:33-56`; `signal-transport.ts:592-602`; `transport/README.md:31-45`.                                    | Host isolation external; fix only proven privacy-check bypass. |
-| SF-003 | Contractual residual / Medium                       | Generated module/path/root or developer/CI is controlled.                | Node execution; TB-07,08     | `generated-registry-discovery.ts:174-258`; dynamic import executes selected code.                                         | Trusted root required; no speculative sandbox.                 |
-| SF-004 | Evidence observation / No advisory                  | Audited lock closure remains current.                                    | Dependencies; TB-09          | Coordinator zero-advisory and 235-signature evidence; lock integrity anchors.                                             | Re-run after dependency change; reviewer verifies freshness.   |
-| SF-005 | Evidence observation / Medium availability residual | Exposed caller or trusted handler drives valid work.                     | Availability; TB-01,02,04,05 | Limits `spine-services.ts:925-938,1206-1460`; delivery caps `delivery-loop.ts:195-214`; runtime limit `runtime.ts:47-58`. | App rates/trusted-handler supervision external.                |
-| SF-006 | Evidence observation / Low                          | Caller induces failure and reads output.                                 | Sensitive data; TB-10        | Allowlist `signal-intake.ts:58-115`; redaction test `signal-transport.test.ts:584-593`.                                   | Log sink policy external; regression only for framework leak.  |
+| ID     | Status/severity                            | Attacker prerequisite                                                    | Asset/boundary               | Evidence/control                                                                                  | Residual and smallest correction                               |
+| ------ | ------------------------------------------ | ------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| SF-001 | Contractual residual / High if misdeployed | Consumer broad-binds without TLS, authn, tenant-binding authz, or rates. | Remote; TB-01..03            | Local default `server.ts:18-19,55-57`; exclusions `README.md:15-24`, `server/README.md:86-87`.    | Deployment owns ingress; correct only framework claim/bypass.  |
+| SF-002 | Superseded by SF-010                       | Same-host attacker can alter/access IPC directory.                       | IPC; TB-06                   | The initial mode-only disposition omitted symlink and ownership checks.                           | See confirmed `SF-010`.                                        |
+| SF-003 | Contractual residual / Medium              | Generated module/path/root or developer/CI is controlled.                | Node execution; TB-07,08     | `generated-registry-discovery.ts:174-258`; dynamic import executes selected code.                 | Trusted root required; no speculative sandbox.                 |
+| SF-004 | Evidence observation / No advisory         | Audited lock closure remains current.                                    | Dependencies; TB-09          | Coordinator zero-advisory and 235-signature evidence; lock integrity anchors.                     | Re-run after dependency change; reviewer verifies freshness.   |
+| SF-005 | Partially superseded by SF-007..SF-009     | Exposed caller or trusted handler drives valid work.                     | Availability; TB-01,02,04,05 | Existing per-operation limits do not cover the three confirmed gaps below.                        | Retain only trusted-handler/deployment residuals.              |
+| SF-006 | Evidence observation / Low                 | Caller induces failure and reads output.                                 | Sensitive data; TB-10        | Allowlist `signal-intake.ts:58-115`; redaction test `signal-transport.test.ts:584-593`.           | Log sink policy external; regression only for framework leak.  |
+| SF-007 | Confirmed / High / High confidence         | Caller reaches the HTTP/2 listener and sends a very large message.       | Availability; TB-01          | Connect defaults omitted adapter limits to `0xffffffff`; loopback is only a reachability control. | Add finite validated read/write limits and network tests.      |
+| SF-008 | Confirmed / High / High confidence         | Valid caller repeatedly creates inactive or active subscriptions.        | Availability; TB-01/TB-02    | Inactive TTL and queue caps exist, but no total reservation/capacity bound exists.                | Add bounded total capacity with exact rollback/release.        |
+| SF-009 | Confirmed / Medium / High confidence       | Authorized caller queries a tenant containing many projection rows.      | Availability; TB-01/TB-02    | Supplied limit is capped, but omitted format/include-all creates an unbounded query.              | Apply a finite default or require a positive limit.            |
+| SF-010 | Confirmed / Medium / High confidence       | Same-host attacker controls a configured path component before startup.  | IPC; TB-06                   | `stat()` follows symlinks and only group/world mode bits are checked.                             | Reject symlinks, require POSIX ownership, recheck before bind. |
 
 ## Accepted-residual contract
 
@@ -73,7 +77,7 @@ release-blocking and needs focused behavior regression evidence.
 | ----- | --------------------------------------- | ---------------------------------------------------- |
 | 0     | Requirements splitter                   | Accepted: ten TB boundaries and TM-001..TM-012.      |
 | 1     | Artifact author                         | Finding Batch 1 corrected; coordinator checks clean. |
-| 2     | Dedicated security reviewer, Terra High | Pending; no clean outcome claimed.                   |
+| 2     | Dedicated security reviewer, Terra High | Round 1: four confirmed blockers; reviewer closed.   |
 | 3     | Style/docs/API/reliability              | Pending after artifacts/fixes stabilize.             |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
