@@ -478,6 +478,8 @@ links/imports, and future-policy overclaim.
   `019f62af-16df-7aa2-ac32-c69a4df09eda` is actual `gpt-5.6-luna` /
   medium; TypeScript/API docs agent
   `019f62af-37ff-7d10-8ef7-940e89d96f1b` is actual `gpt-5.6-terra` /
-  high. The unstarted performance/reliability lane retains its recorded
-  explicit `gpt-5.6-terra` / high assignment and will run when one slot is
-  free. No partial wave is accepted before all four results are collected.
+  high. The initially unstarted performance/reliability lane was dispatched
+  after the documentation lane closed as agent
+  `019f62b0-ee25-75e1-8a30-48bbc2235311`; explicit dispatch fields and
+  immutable Desktop role metadata agree on actual `gpt-5.6-terra` / high.
+  No partial wave is accepted before all four results are collected.
