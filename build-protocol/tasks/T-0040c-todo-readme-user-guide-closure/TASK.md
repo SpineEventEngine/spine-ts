@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 1 fixes verified; re-review pending
+Status: In progress - Wave 2 findings accepted; fix wave pending
 
 Started: `2026-07-14`
 
@@ -250,3 +250,15 @@ install` reported all eight workspace projects already up to date;
 - Fresh `typecheck:build`, `docs:check`, focused smoke ESLint, `format:check`,
   `proto:check-generated`, and `git diff --check` passed. The corrected batch
   is ready for a fresh immutable endpoint and all four specialist lanes.
+
+## 2026-07-14 - Specialist Wave 2 Findings
+
+- Documentation completeness is clean.
+- Three lanes independently identified one deduplicated smoke defect:
+  `unpackAny` can return `undefined`, but target matching dereferences
+  `candidate.id`; malformed/mismatched rows should be skipped while preserving
+  the bounded diagnostic path.
+- Performance/reliability identified one subscription-example race: the
+  `includeAll` topic accepts any decodable update, so another writer's update
+  can produce false success. Precompute the task ID, use an exact-ID topic, and
+  validate the delivered list ID with behavior evidence.

@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 1 fixes verified - re-review pending
+Status: Wave 2 findings accepted - fix wave pending
 
 Baseline: `526b7b4d`
 
@@ -141,6 +141,21 @@ links/imports, and future-policy overclaim.
   TypeScript/API docs agent `019f6253-d1b4-7a62-9c67-8ddd62a12311` is actual
   `gpt-5.6-terra` / high; performance/reliability agent
   `019f6253-cee1-7263-89ca-8562bc5776a5` is actual `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 2 Results
+
+- Documentation completeness: clean; Wave 1 reader gaps are closed.
+- Style/maintainability, TypeScript/API docs, and performance/reliability all
+  reported the same optional-`unpackAny` smoke dereference. It is one accepted
+  finding: skip absent/mismatched decoded rows in target matching and finite
+  diagnostics.
+- Performance/reliability also reported that the guide's `includeAll`
+  subscription may accept another writer's update. Accepted correction:
+  precompute one task ID, use an exact-ID topic filter, validate the delivered
+  list ID, and retain bounded cleanup/failure behavior.
+- All Wave 2 reviewers were closed. One fix batch returns to existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, no subagents or Git mutation.
 
 ## Skill Applicability
 
