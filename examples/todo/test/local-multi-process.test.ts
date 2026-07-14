@@ -91,6 +91,7 @@ interface FixtureCreateOptions {
   readonly workerPath?: string;
   readonly workerMode?: WorkerMode;
   readonly immediateQueryErrors?: boolean;
+  readonly statelessQueryRows?: boolean;
   readonly stallQueries?: boolean;
   readonly childCloseFailures?: readonly ChildCloseResource[];
   readonly afterResourcesAcquired?: (resources: FixtureSetupResources) => void;
@@ -105,12 +106,42 @@ interface TrackedChild {
 }
 
 describe("local multi-process to-do mode", () => {
-  it("handles a query row without state as unreadable", () => {
-    const response = create(QueryResponseSchema, { message: [{}] });
+  it(
+    "reports a query row without state as unreadable and cleans up",
+    async () => {
+      const fixture = await LocalMultiProcessFixture.create({ statelessQueryRows: true });
+      let primaryFailure: Error | undefined;
+      let cleanup: CleanupResult | undefined;
+      let observationStartedAt: number | undefined;
 
-    expect(() => findTaskList(response, "missing-task-list")).not.toThrow();
-    expect(findTaskList(response, "missing-task-list")).toBeUndefined();
-  });
+      try {
+        await fixture.ready();
+        observationStartedAt = Date.now();
+        await fixture.readTaskListEventually();
+      } catch (error) {
+        primaryFailure = asError(error);
+      } finally {
+        cleanup = await fixture.close(primaryFailure);
+      }
+
+      const elapsedMs = Date.now() - (observationStartedAt ?? Date.now());
+      expect(primaryFailure?.message).toContain(
+        `projected task observation timed out after ${String(observationTimeoutMs)}ms`,
+      );
+      expect(primaryFailure?.message).toContain("last row IDs [<unreadable>]");
+      expect(primaryFailure?.message).not.toContain("TypeError");
+      expect(elapsedMs).toBeGreaterThanOrEqual(observationTimeoutMs - 250);
+      expect(elapsedMs).toBeLessThan(observationTimeoutMs + 1_500);
+      expect(cleanup).toEqual({
+        childExitCode: 0,
+        childExitSignal: null,
+        forcedTermination: false,
+        listenerClosed: true,
+        ipcDirectoryRemoved: true,
+      });
+    },
+    outerTestTimeoutMs,
+  );
 
   it("stops waiting for a path at its own deadline", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "stmp-path-wait-"));
@@ -542,6 +573,7 @@ class LocalMultiProcessFixture {
   #parentTransport: SignalTransport;
   #ready: ReadyMessage | undefined;
   #stallQueries: boolean;
+  #statelessQueryRows: boolean;
   #stalledQueryAbortCount = 0;
   #stderr = "";
   #stopped = false;
@@ -593,6 +625,7 @@ class LocalMultiProcessFixture {
         parentTransport,
         trackedChild,
         options.immediateQueryErrors ?? false,
+        options.statelessQueryRows ?? false,
         options.stallQueries ?? false,
       );
     } catch (error) {
@@ -618,12 +651,14 @@ class LocalMultiProcessFixture {
     parentTransport: SignalTransport,
     trackedChild: TrackedChild,
     immediateQueryErrors: boolean,
+    statelessQueryRows: boolean,
     stallQueries: boolean,
   ) {
     this.#ipcDirectory = ipcDirectory;
     this.#parentTransport = parentTransport;
     this.#trackedChild = trackedChild;
     this.#immediateQueryErrors = immediateQueryErrors;
+    this.#statelessQueryRows = statelessQueryRows;
     this.#stallQueries = stallQueries;
     const { child } = trackedChild;
     child.once("error", (error) => {
@@ -709,6 +744,7 @@ class LocalMultiProcessFixture {
                 }),
               ]
             : []),
+          ...(this.#statelessQueryRows ? [statelessQueryRowInterceptor()] : []),
         ],
       }),
     );
@@ -994,6 +1030,19 @@ function immediateErrorQueryInterceptor(onAttempt: () => void): Interceptor {
   return () => () => {
     onAttempt();
     return Promise.reject(new Error("Controlled immediate QueryService read failure."));
+  };
+}
+
+function statelessQueryRowInterceptor(): Interceptor {
+  return (next) => async (request) => {
+    const response = await next(request);
+    if (response.stream) {
+      return response;
+    }
+    return {
+      ...response,
+      message: create(QueryResponseSchema, { message: [{}] }),
+    };
   };
 }
 

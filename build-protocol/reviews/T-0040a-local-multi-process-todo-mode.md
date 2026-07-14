@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 4 fixes verified - awaiting reviewer Wave 5
+Status: Wave 5 fix verified - awaiting reviewer Wave 6
 
 Baseline: `24d1ef37`
 
@@ -50,8 +50,9 @@ overstate future production policy.
   `gpt-5.6-terra` / medium; no subagents.
 - Reviewer wave 1: complete and closed; findings fixed and coordinator-verified.
 - Reviewer waves 1 and 2: complete, fixed, verified, and closed.
-- Reviewer wave 3: complete and closed; one accepted test-layout correction is
-  pending implementation.
+- Reviewer waves 3 and 4: complete, fixed, verified, and closed.
+- Reviewer wave 5: complete and closed; current status summaries are corrected
+  and one accepted diagnostic behavior proof is assigned.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -471,3 +472,77 @@ commit, and rerun all four concerns.
   instead of overclaiming a clean mirror check. Every Wave 4 finding is
   resolved. Commit this endpoint and run all four canonical concerns against a
   fresh Wave 5 package.
+
+## Reviewer Wave 5 Assignments
+
+Fix endpoint: `d4998d2c`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..d4998d2c.diff` (155,308 bytes)
+
+The lightweight pre-review pass found aligned Wave 5 status mirrors, no
+`NonNullable` or internal-source leak, one parent-owned receive timeout and
+control timeout passed to the worker, no generated tracking, and no new public
+or future-policy claim. Security remains deferred to T-0041.
+
+Dispatch the same four existing read-only, no-subagent concerns with explicit
+immutable profiles: style/maintainability Terra High, documentation Luna
+Medium, TypeScript/API docs Terra High, and performance/reliability Terra High.
+Each reviewer must regression-check its complete prior finding set, with
+particular attention to optional-state narrowing, control-timeout ownership,
+before/after-readiness diagnostics, controlled exit ordering, cleanup, and
+accurate current statuses. Scope remains the package and affected paths;
+historical superseded text is out of scope unless current records claim it as
+active. Record only concrete line-specific defects and the smallest correction.
+Actual IDs and immutable runtime metadata remain to be recorded.
+
+## Reviewer Wave 5 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6169-724c-7191-bbd5-73d084ccd559`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6169-91b8-74a3-a1fe-0c9ea23ba8f1`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6169-ac71-75a3-a53d-00b83c833677`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6169-d06d-7b51-9212-8cdf9f6c5cfb`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+TypeScript/API docs and performance/reliability were clean. Every prior public-
+contract, process-ordering, timeout, cancellation, retry, cleanup, termination,
+and diagnostic finding remains resolved.
+
+Accepted and deduplicated findings:
+
+1. **P2, stale current summaries:** the Assignment State still called the Wave
+   3 layout correction pending, while the unlabelled work-log Next section still
+   directed Wave 3 verification. Advance both to current Wave 5 state. These
+   summaries were corrected in the same durable result step.
+2. **P2, missing diagnostic-path proof:** the new absent-state test exercises
+   `findTaskList()` but not the separate observation-loop branch that emits
+   `<unreadable>` row IDs. Feed a controlled state-less query row through
+   `readTaskListEventually()` and assert its bounded timeout diagnostic contains
+   `<unreadable>`, preserving clean fixture shutdown.
+
+No public docs, API, dependency, framework source, or production policy change
+is warranted. Return the remaining test-only finding to the same Terra Medium
+implementer, run focused native evidence, commit, and repeat all four concerns.
+
+## Wave 5 Fix Verification - 2026-07-14
+
+- The same immutable Terra Medium implementer replaced the helper-only
+  assertion with a controlled public-Connect observation scenario; no
+  production, worker, dependency, API, or public-doc change; no subagents.
+- Coordinator source inspection confirmed the interceptor first calls the real
+  child query listener and then supplies a generated state-less row to the
+  existing observation loop. The bounded diagnostic and complete graceful
+  cleanup are asserted together.
+- Native affected regression passed 7 files and all 112 tests in 30.98 seconds.
+  Both TypeScript checks, full lint and cleanup enforcement, formatting, diff
+  whitespace, and generated tracking passed.
+- Every Wave 5 finding is resolved. Commit and rerun all four canonical
+  concerns against a fresh Wave 6 package.

@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer Wave 4 fixes verified; awaiting Wave 5
+Status: In progress - reviewer Wave 5 fix verified; awaiting Wave 6
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -422,6 +422,33 @@ readiness"`; 1 test failed and 13 were skipped because the unchanged worker
 - Actual immutable implementation metadata remains existing role
   `implementer`, model `gpt-5.6-terra`, reasoning `medium`. No subagents were
   dispatched and no Git mutation was performed.
+
+### Reviewer Wave 5 Test Fix - 2026-07-14
+
+- Replaced the shallow `findTaskList()`-only assertion with a controlled
+  fixture path that forwards each unary query through the public Connect
+  interceptor chain, then supplies a generated `QueryResponse` containing one
+  row with absent state to `readTaskListEventually()`.
+- The observation loop runs to its existing five-second deadline and reports
+  `last row IDs [<unreadable>]` without a `TypeError`. Cleanup proves the parent
+  transport closes normally, the child exits gracefully, the listener closes,
+  and the private IPC directory is removed without forced termination.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "reports a query row without
+state as unreadable and cleans up"`. It exited `1`; 1 test failed and 13 were
+  skipped because the unwired option produced `last row IDs []` after the
+  bounded observation phase.
+- GREEN command: the same focused invocation exited `0`; 1 test passed and 13
+  were skipped in 6.23 seconds, with the controlled test body taking 5.32
+  seconds.
+- The native moved suite passed all 14 tests in 30.41 seconds. The native
+  seven-file affected regression passed all 112 tests in 30.64 seconds. Both
+  TypeScript no-emit checks, focused ESLint, cleanup enforcement, assigned-file
+  formatting, diff whitespace, and the public/internal boundary scan passed.
+- No production code, worker behavior, dependency, public contract, framework
+  source, or guide documentation changed. Actual immutable implementation
+  metadata remains existing role `implementer`, model `gpt-5.6-terra`,
+  reasoning `medium`; no subagents or Git mutation.
 
 ## Skill Applicability
 
