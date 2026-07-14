@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Independent review assigned
+Status: Framework children planned; T-0038a pending
 
 ## Review Scope
 
@@ -12,16 +12,17 @@ Status: Independent review assigned
 
 ## Concern Dispositions
 
-- Style/maintainability: pending; matrix structure, traceability, duplication,
-  and evidence readability are relevant.
-- Documentation: pending; current-vs-future claims and routing are central.
-- TypeScript/API docs: pending; package-root exports, declarations, API checks,
-  wire shapes, and type URLs are central.
-- Performance/reliability: pending; runtime capability evidence, lifecycle,
-  retry/idempotency, persistence, and representative test coverage are central.
+- Style/maintainability: review closed with accepted matrix-structure and
+  durable-record corrections; re-review follows child integration.
+- Documentation: review closed with accepted routing, governing-path, example,
+  and historical-status corrections; re-review follows child integration.
+- TypeScript/API docs: review closed with accepted type-URL defect and complete
+  package export-subpath inventory requirements; re-review follows children.
+- Performance/reliability: review closed with accepted framework-owned local
+  multi-process execution defect; re-review follows child integration.
 - Security: deferred to final T-0041 by protocol; no per-task security lane.
 
-## Reviewer Profile Plan
+## Historical Reviewer Profile Plan
 
 - Documentation reviewer: explicit `gpt-5.6-luna` / medium, no subagents.
 - Style/maintainability, TypeScript/API docs, and performance/reliability:
@@ -30,14 +31,15 @@ Status: Independent review assigned
 
 ## Current State
 
-The coordinator's focused verification is green and the implementer corrections
-are complete. Independent reviewer dispatch remains pending: the present human
-assignment explicitly forbids subagents, so this implementer cannot replace the
-existing reviewer roles with invented/self-review roles.
+The independent review wave is complete and its parent corrections are applied.
+T-0038a and T-0038b planning/implementation/integration remain pending; the
+parent matrix must then be rerun and re-reviewed. This implementer used no
+subagents.
 
-## Pre-Review Lint
+## Historical Pre-Review Lint
 
-- Status headers are synchronized across all four T-0038 durable records.
+- At the earlier pre-review boundary, status headers were synchronized across
+  all four records. That assertion is historical, not the current status.
 - The matrix's routed gaps and reviewer-pending state are current statements
   rather than stale prior-round claims. No unsupported current-doc mismatch or
   resolved generated/build precondition remains current.
@@ -94,7 +96,60 @@ existing reviewer roles with invented/self-review roles.
 - All reviewers are read-only, no subagents, and must perform/report the
   canonical skill-applicability check. Security remains deferred to T-0041.
 
-## Implementer Correction Result
+## Independent Review Result
+
+- `2026-07-14T01:23:48Z`: style requested HIGH/MEDIUM/LOW corrections;
+  documentation requested two MEDIUM and one LOW; TypeScript/API docs requested
+  two HIGH and one MEDIUM; reliability requested one HIGH. Actual profiles
+  match immutable Luna Medium/Terra High role assignments; no subagents; all
+  reviewers closed.
+- Deduplicated parent findings: exact classifications need a route column; row
+  29 conflates tooling with unexecuted release proof; governing paths are not
+  repository-relative; row 21 falsely says only the test source exists; one
+  work-log assertion is stale; package export subpaths are absent from the
+  public/internal/API evidence audit.
+- Accepted HIGH framework finding T-0038a: public `getTypeUrlPrefix()` and
+  `deriveTypeUrl()` accept malformed caller-supplied fallback prefixes and can
+  yield noncanonical public type URLs. Packing and implicit registry APIs have
+  no custom fallback input.
+- Accepted HIGH framework finding T-0038b: active local multi-process execution
+  requirements are not met by callback-only transport binding plus unattached
+  server environment transport. A framework child precedes T-0040 example proof.
+- Security stays deferred to T-0041. Parent re-review follows matrix correction
+  and integration of both children.
+
+## Fix And Planning Assignments
+
+- Parent correction returns to the same explicit Terra Medium implementer;
+  exact four-file record ownership, no subagents.
+- T-0038a/T-0038b planning uses the existing explicit Sol High requirements
+  splitter; only `framework-children-plan.md`, no subagents. Public-contract and
+  server/JVM evidence make selective deep planning applicable.
+- Re-review occurs only after parent corrections and child integrations are
+  reflected in a fresh matrix package.
+
+## Child-Plan Coordinator Finding
+
+- `2026-07-14T01:41:13Z`: parent matrix correction accepted; author closed.
+  Planner actual Sol High matches explicit immutable-role dispatch and used no
+  subagents; plan correction remains before acceptance.
+- Required corrections: Terra Medium child implementers; child integration
+  serially through `main` before parent back-merge; direct fallback-option defect
+  wording without nonexistent pack/implicit-registry custom-input propagation.
+
+## Child-Plan Acceptance
+
+- `2026-07-14T01:44:38Z`: corrected Sol High plan accepted; explicit profile
+  matches immutable role metadata, no subagents, planner closed. JVM evidence,
+  Terra Medium implementation allocation, main-first integration order, and
+  direct fallback semantics are satisfactory.
+- Final parent correction is limited to matrix/record wording; child
+  implementation begins only after this audit checkpoint is clean and committed.
+
+## Historical Implementer Correction Result
+
+The following result predates and is superseded by the independent review
+findings at `2026-07-14T01:23:48Z`.
 
 - Row 23 is now IMPLEMENTED, and T-0039 remains a planned completion pass rather
   than a routed mismatch.
@@ -108,3 +163,29 @@ existing reviewer roles with invented/self-review roles.
 - Row 29 now has the exact `IMPLEMENTED` classification token; its closure
   qualifier remains in evidence. Strict 23/4/1/1 classification proof and
   final formatting/diff checks precede review handback.
+
+## Parent Review-Fix Handback
+
+- Parent matrix corrections are applied with exact classification and separate
+  routing columns. Current count target is 31 rows: 23 implemented, four
+  exclusions, one example gap, one security gate, and two framework defects.
+- T-0038a and T-0038b are explicit blocking framework-child routes; T-0040's
+  example proof follows T-0038b. Final verify/release proof is unclassified
+  pending closure evidence.
+- The six package manifests contribute ten export entries, all enumerated with
+  designation and evidence/exemption. API-checker claims are narrowed to its
+  real root-symbol/exact-source scope.
+- Re-review remains pending after both framework children are integrated and
+  the parent matrix is refreshed.
+- Parent validation is clean: exact taxonomy/route counts are 31/23/4/0/1/1/2
+  with zero unexpected tokens or route errors; all ten manifest export entries
+  are inventoried; Prettier and diff checks pass; and no tracked generated path
+  or generated-path diff exists.
+
+## Child-Plan Precision Handback
+
+- T-0038a is narrowed to malformed caller-supplied fallback handling in public
+  `getTypeUrlPrefix()` / `deriveTypeUrl()` only. File-option/default behavior in
+  packing and implicit registry paths remains unchanged compatibility evidence.
+- No other classification, route, export entry, or capability evidence changed.
+  Re-review remains pending after framework-child integration and parent refresh.

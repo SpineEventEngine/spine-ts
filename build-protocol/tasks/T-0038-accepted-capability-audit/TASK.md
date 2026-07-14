@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Independent review assigned
+Status: Framework children planned; T-0038a pending
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -148,9 +148,9 @@ security-owned gap, or mandatory framework defect.
 
 ## Immediate Next Action
 
-Hand the corrected matrix and synchronized records to the existing relevant
-reviewer concerns. T-0039 remains a planned documentation completion pass, not
-a mismatch found by this audit.
+Complete selective Sol High planning for T-0038a and T-0038b, implement and
+integrate the children in separate worktrees, then rerun and re-review this
+parent matrix before T-0038 final acceptance.
 
 ## Coordinator Pre-review Finding
 
@@ -192,7 +192,87 @@ a mismatch found by this audit.
   and performance/reliability at explicit `gpt-5.6-terra` / high. No reviewer
   may edit or spawn subagents. Security remains deferred to T-0041.
 
-## Implementer Correction Handback
+## Independent Review Result And Disposition
+
+- `2026-07-14T01:23:48Z`: all four reviewers are closed and used no
+  subagents. Documentation ran at actual Luna Medium; style, TypeScript/API
+  docs, and reliability ran at actual Terra High, established by explicit
+  dispatch plus immutable spawn-role metadata.
+- Confirmed parent-record corrections: use exact classification tokens with a
+  separate route field; narrow row 29 to implemented release tooling and leave
+  execution as closure evidence; root all governing paths under
+  `build-protocol/`; correct row 21's example wording; make old status assertions
+  explicitly historical; and enumerate every package export subpath with a
+  public/package-internal designation and evidence/exemption.
+- Confirmed framework defect T-0038a: public `getTypeUrlPrefix()` and
+  `deriveTypeUrl()` accept a malformed caller-supplied fallback such as `/`,
+  produce a noncanonical URL, and lack regression coverage. Create a minimal
+  public-contract child to reject malformed fallback input in those two APIs
+  without changing file-option/default-fallback behavior.
+- Confirmed framework defect T-0038b: the active technical spec requires local
+  multi-process framework execution, but `RuntimeTransportBinding` ends at
+  caller callbacks and `Server.start()` does not integrate the environment
+  transport with framework-owned command/event/delivery execution. Create the
+  smallest architecture-planned child with real cross-process behavior proof;
+  T-0040 then owns only example composition/acceptance over that seam.
+- Resume the same Terra Medium audit author for parent-only matrix corrections.
+  Selective Sol High requirements splitting is mandatory for the two public/
+  runtime contract children. T-0038 cannot close until both children are
+  integrated and the matrix is rerun/re-reviewed.
+
+## Review-Fix And Child-Planning Assignments
+
+- Parent audit fix: resume the same existing implementer at explicit
+  `gpt-5.6-terra` / medium, no subagents. Ownership remains the matrix plus the
+  three T-0038 records only. Correct the complete deduplicated parent batch,
+  classify the two confirmed framework defects, and do not edit runtime/public
+  docs/tests/examples/generated output.
+- Framework-child plan: existing requirements splitter at explicit
+  `gpt-5.6-sol` / high, no subagents. Sole write ownership is
+  `build-protocol/tasks/T-0038-accepted-capability-audit/framework-children-plan.md`.
+  Define minimal T-0038a type-URL validation and T-0038b framework-owned local
+  multi-process execution children, their order, TDD acceptance, public
+  boundaries, review/gates, and the smallest JVM-familiar server integration.
+- The splitter must perform the canonical skill check and inspect relevant
+  local Spine JVM server notes/source before planning T-0038b. It may not edit
+  current records, implementation, tests, public docs, Git state, or generated
+  output. These two disjoint documentation writes may run concurrently.
+
+## Child-Plan Coordinator Finding
+
+- `2026-07-14T01:41:13Z`: parent audit correction is accepted from the same
+  actual Terra Medium implementer, explicit dispatch plus immutable role
+  metadata, no subagents, now closed. The Sol High planner returned one-file
+  scope and is closed pending correction.
+- Correct the plan before implementation: normal child implementation uses
+  explicit `gpt-5.6-terra` / medium; Terra High belongs to correctness/API/
+  reliability review. Branch T-0038a from current verified `main`, merge it to
+  `main`, then branch T-0038b from updated `main`, merge it, and only then
+  back-merge updated `main` into the still-open audit parent.
+- Narrow T-0038a accurately: malformed custom fallback reaches the public
+  `getTypeUrlPrefix()` / `deriveTypeUrl()` option path. Packing and implicit
+  registry derivation expose no custom fallback input and are preservation
+  evidence, not propagation of that invalid argument. The matrix defect wording
+  must be corrected after the plan handback.
+
+## Child-Plan Acceptance
+
+- `2026-07-14T01:44:38Z`: corrected one-file requirements-splitter plan accepted
+  at actual `gpt-5.6-sol` / high, matching explicit dispatch and immutable role
+  metadata; no subagents; planner closed.
+- Plan records relevant Spine JVM `IntegrationBroker`, `BoundedContext`,
+  `ServerEnvironment`, and `Server` evidence; Terra Medium child ownership;
+  separate TDD/review gates; serial integration through `main`; and parent
+  refresh only after both child merges.
+- Resume the same Terra Medium audit author for one parent precision fix: row
+  30 and routed text must describe invalid custom fallback only through public
+  prefix selection/derivation. Packing and implicit registry behavior are
+  unchanged preservation evidence, not affected-input propagation.
+
+## Historical Implementer Correction Handback
+
+The following pre-review handback was accurate at its timestamp but is
+superseded by the independent review result above.
 
 - Row 23 is `IMPLEMENTED`: the focused scan found no specific false current
   documentation claim. T-0039 remains planned and is not listed as a routed
@@ -207,3 +287,23 @@ a mismatch found by this audit.
 - Final classification correction: row 29 now uses the exact `IMPLEMENTED`
   token; its tooling and final T-0038 execution qualifier is retained in the
   evidence cell. The matrix is ready for independent review.
+
+## Parent Review-Fix Handback
+
+- The matrix now has a separate Route column and 31 exact classification cells:
+  23 IMPLEMENTED, four DOCUMENTED_EXCLUSION, one EXAMPLE_GAP, one
+  SECURITY_GATE, and two FRAMEWORK_DEFECT.
+- T-0038a owns malformed caller-fallback validation and regression coverage for
+  public `getTypeUrlPrefix()` / `deriveTypeUrl()` only. Valid file-option and
+  default-fallback behavior remains separately IMPLEMENTED; packing and implicit
+  registry APIs expose no custom fallback input.
+- T-0038b owns framework-managed local multi-process command/event/delivery
+  execution and real cross-process proof. Existing adapter-neutral transport,
+  callback binding, and ZeroMQ IPC remain separately IMPLEMENTED. T-0040's
+  example gap explicitly follows T-0038b.
+- All ten package-manifest export entries are inventoried as public root,
+  public adapter, public generated, or package-internal with TypeDoc/import/
+  declaration evidence or an explicit TypeDoc exemption.
+- T-0038 final verify and T-0042 release proof are unclassified pending closure
+  evidence. Parent closure waits for both framework children and matrix rerun/
+  re-review.
