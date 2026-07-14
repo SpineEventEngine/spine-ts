@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Author review wave 1 fix complete — coordinator rereview pending
+Status: Review wave 2 assigned
 
 ## Review Scope
 
@@ -168,6 +168,22 @@ Status: Author review wave 1 fix complete — coordinator rereview pending
   form one accepted batch. Same existing implementer assigned explicit
   immutable `gpt-5.6-terra` / medium, no subagents. Affected review concerns
   will rerun against a new literal endpoint after focused verification.
+
+## Review Wave 2 Assignment
+
+- Literal baseline `aaa31116`; endpoint
+  `03d47b93e663c5cc15a2aedfbd336497de0160d5`; package
+  `.superpowers/sdd/review-aaa31116..03d47b93.diff`, seven commits, `139142`
+  bytes.
+- Style/maintainability: existing explicit immutable `gpt-5.6-terra` / high.
+- Documentation completeness: existing explicit immutable `gpt-5.6-luna` /
+  medium.
+- TypeScript/API docs: existing explicit immutable `gpt-5.6-terra` / high.
+- Performance/reliability: existing explicit immutable `gpt-5.6-terra` / high.
+- Every dispatch is read-only/no-subagent and must report findings or CLEAN,
+  skill applicability, and actual immutable role metadata. The execution
+  surface's immutable role metadata is the authoritative actual-profile source.
+  Prompts repeat the historical-superseded-text rule and current exclusions.
 
 ## Second Pre-Review Fix Implementation
 

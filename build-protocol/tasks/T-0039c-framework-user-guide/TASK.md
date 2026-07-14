@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Author review wave 1 fix complete — coordinator rereview pending
+Status: Review wave 2 assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -266,6 +266,22 @@ without reading internal source.
   `PROTOBUF_CONTRACT.md`, `spine-services.ts`, package docs, and delivery docs.
   The same existing implementer receives this complete batch with explicit
   immutable `gpt-5.6-terra` / medium and no subagents.
+
+## Review Wave 2 Assignment
+
+- Wave 1 fixes are committed at literal endpoint
+  `03d47b93e663c5cc15a2aedfbd336497de0160d5`.
+- Review package:
+  `.superpowers/sdd/review-aaa31116..03d47b93.diff` (`139142` bytes, seven
+  commits from literal baseline `aaa31116`).
+- All four concerns rerun because the fixes changed Proto section structure,
+  reader completeness, TypeScript/Protobuf contract wording, and reliability
+  guarantees. Style/API/reliability use their existing explicit immutable
+  `gpt-5.6-terra` / high roles; documentation uses its existing explicit
+  immutable `gpt-5.6-luna` / medium role. All are read-only/no-subagent.
+- Historical superseded text remains non-actionable unless current T-0039c
+  records, completion-plan live state, or changed guide prose claims it as
+  active behavior.
 
 ## Second Pre-Review Fix Implementation
 
