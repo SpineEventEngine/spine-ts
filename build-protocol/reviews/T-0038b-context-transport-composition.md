@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 receipt assertion green; final reliability rereview ready
+Status: Slice 3 final receipt-assertion rereview assigned
 
 ## Scope
 
@@ -908,3 +908,12 @@ received 4` rather than the asserted late-ack barrier diagnostic.
 - Coordinator inspection and an independent unrestricted native rerun accepted
   the receipt assertion at `7/7` tests. Only the reliability lane requires
   final rereview; all other clean dispositions remain applicable.
+
+## Slice 3 Receipt-Assertion Final Rereview Dispatch
+
+- Baseline `3d8cd3a6`; endpoint `b08fca40`; package
+  `.superpowers/sdd/review-3d8cd3a6..b08fca40.diff` (three commits, 14566
+  bytes).
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high,
+  read-only, no subagents, limited to classifier receipt proof. Other lanes
+  remain CLEAN; security remains deferred.
