@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review clean — final verification pending
+Status: Accepted — integration pending
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -396,3 +396,17 @@ without reading internal source.
 - Every accepted Wave 1 and Wave 2 finding is resolved in endpoint
   `6caf1c8ebb624a6d996d82de5c2cb85db59a2799`. No child agent remains open.
   T-0039c now proceeds to its final native full repository verification gate.
+
+## Final Task Verification
+
+- `2026-07-14T14:08:31Z`: native
+  `pnpm --config.verify-deps-before-run=false verify` exited `0`.
+- Ordinary and coverage runs each passed `71` test files / `1,642` tests.
+  Coverage: `95.38%` statements, `90.12%` branches, `98.22%` functions, and
+  `95.40%` lines.
+- Node version, copied Proto generation/checksums, build/tooling typechecks,
+  ESLint, cleanup rules, formatting, TypeDoc/API checks (`100/28/205/19/17/3`),
+  Proto lint, and generated-output cleanliness all passed.
+- Acceptance criteria and all four review concerns are satisfied. Integration,
+  post-merge verification, remote synchronization, and clean worktree removal
+  remain before durable task closure.
