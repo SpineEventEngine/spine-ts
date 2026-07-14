@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Row 23 stale-status fix ready for style/docs rereview
+Status: Row 23 style/docs rereview assigned
 
 ## Review Scope
 
@@ -417,3 +417,16 @@ findings at `2026-07-14T01:23:48Z`.
 - Focused taxonomy/route, export-inventory, active-status, row-23 evidence,
   exact four-file Prettier, generated-path, scope, and `git diff --check` checks
   pass. No full verify, commit, child edit, or out-of-scope change occurred.
+
+## Row 23 Focused Rereview Assignment
+
+- `2026-07-14T09:35:35Z`: accepted endpoint `a6f184ea`; coordinator checks
+  independently confirm exact taxonomy/routes, T-0038b ancestry/evidence,
+  synchronized status, exact scope, Prettier, and whitespace integrity.
+- Style/maintainability: resume existing role at explicit
+  `gpt-5.6-terra` / high for row structure, evidence truth, routed scope, and
+  current status/counts only.
+- Documentation: resume existing role at explicit `gpt-5.6-luna` / medium for
+  current-vs-historical truth and T-0039 ownership wording only.
+- Both are read-only, no subagents, and must report skill applicability. API
+  and reliability remain CLEAN; security remains deferred to T-0041.

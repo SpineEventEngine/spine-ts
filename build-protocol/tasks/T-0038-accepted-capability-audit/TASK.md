@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Row 23 stale-status fix ready for style/docs rereview
+Status: Row 23 style/docs rereview assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -554,3 +554,15 @@ for main integration` although its durable integration record and ancestry
 - Focused taxonomy/route, export-inventory, active-status, row-23 evidence,
   exact four-file Prettier, generated-path, scope, and `git diff --check` checks
   pass. No full verify, commit, child edit, or other out-of-scope change occurred.
+
+## Row 23 Focused Rereview Assignment
+
+- `2026-07-14T09:35:35Z`: coordinator accepts committed fix endpoint
+  `a6f184ea` after independently proving exact 31/24/4/1/1/1/0 taxonomy, 28
+  em-dash routes plus T-0039/T-0040/T-0041, T-0038b integration ancestry,
+  synchronized status, exact four-file scope, Prettier, and diff integrity.
+- Resume the affected existing style/maintainability role at explicit
+  `gpt-5.6-terra` / high and documentation role at explicit `gpt-5.6-luna` /
+  medium. Both are read-only, no subagents, and limited to row 23's truthful
+  stale-status classification/routing plus current counts/status. API and
+  reliability remain CLEAN; security remains deferred to T-0041.

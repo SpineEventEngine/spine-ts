@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Row 23 stale-status fix ready for style/docs rereview
+Status: Row 23 style/docs rereview assigned
 
 Task: T-0038 Accepted Capability Audit
 
