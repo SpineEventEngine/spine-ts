@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - Wave 7 reliability finding accepted; fix pending
+Status: In progress - Wave 7 reliability fix coordinator-verified; fresh re-review pending
 
 Started: `2026-07-14`
 
@@ -546,3 +546,51 @@ rows` are absent.
 - Return this one-file behavior/test plus matching guide correction and durable
   evidence to the existing `implementer`, explicit `gpt-5.6-terra` /
   medium, with no subagents or Git mutation.
+
+## 2026-07-14 - Wave 7 Reliability Fix Evidence
+
+- Existing immutable implementer retained explicit `gpt-5.6-terra` / medium;
+  no subagent or Git mutation was used. Changes are limited to the guide,
+  causal black-box proof/regression, and these two owned records.
+- TDD RED ran `pnpm exec vitest run examples/todo/test/black-box.test.ts -t
+"handles an early subscription read rejection while lifecycle cleanup
+completes"` against the old pending-read pattern. It exited 1: the focused
+  observer received `early subscription read failure` as an
+  `unhandledRejection` after the deliberate pre-command event-loop turn.
+- GREEN attaches `void pendingRead.catch(() => undefined)` immediately while
+  retaining the original promise for bounded delivery and cleanup. The guide
+  and causal native proof use the same pattern. The focused regression proves
+  stream abort, subscription cancel, pending-read settlement, iterator return,
+  and session abort all complete; its isolated rerun passed 1/1.
+- The combined native Wave 7 selection passed 2/2, including the unchanged
+  unrelated-update-before-target causal proof. Its first sandbox run failed
+  only with `listen EPERM: operation not permitted 127.0.0.1`; the approved
+  native rerun passed. Command and post-command delivery deadlines remain
+  bounded and unchanged.
+- `typecheck:build`, `typecheck:tooling`, focused ESLint, focused Prettier, and
+  `docs:check` passed; TypeDoc confirmed all 372 curated exports.
+  `proto:check-generated` confirmed ignored, untracked, freshly regenerated
+  output. `git diff --check` passed, and final status contains exactly the four
+  owned changed paths.
+- The guide's second JavaScript block was extracted verbatim by a read-only
+  Markdown pipeline and executed from `examples/todo/scripts` against the
+  native server. It exited 0 with exact task
+  `subscription-task-0232239e-254e-40a5-be98-a59e5e1d0dca`. Server `SIGINT`
+  closed the managed process, and `lsof` found no retained
+  `127.0.0.1:8080` listener. The sandbox denied the supplementary `ps` scan;
+  listener cleanup is directly verified.
+- Remaining uncertainty: the regression fault-injects the async iterator at
+  the application-test boundary rather than changing framework runtime. Full
+  `pnpm verify` and a fresh immutable specialist wave remain coordinator gates.
+
+## 2026-07-14 - Coordinator Wave 7 Fix Verification
+
+- Independently inspected the four-path diff and confirmed the immediate
+  observer does not replace or recover the original pending-read promise.
+- The native focused selection passed 2/2: early rejection remained handled
+  through cleanup, and the real unrelated-update/exact-target subscription
+  proof retained its causal ordering.
+- Fresh build/tooling typechecks, focused ESLint and Prettier, `docs:check`
+  with all 372 expected curated exports, generated-clean verification, and
+  `git diff --check` passed. A fresh baseline-to-endpoint review package and
+  all four specialist lanes remain required before the full task gate.

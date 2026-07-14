@@ -166,6 +166,70 @@ describe("@spine-ts/example-todo", () => {
     expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
+  it("handles an early subscription read rejection while lifecycle cleanup completes", async () => {
+    const cleanup: string[] = [];
+    const unhandled: unknown[] = [];
+    const stream = new AbortController();
+    const readFailure = new Error("early subscription read failure");
+    let pendingRead: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
+    const onUnhandledRejection = (reason: unknown, promise: Promise<unknown>): void => {
+      if (promise === pendingRead) {
+        unhandled.push(reason);
+      }
+    };
+    const iterator = {
+      next: () => Promise.reject<IteratorResult<SubscriptionUpdate>>(readFailure),
+      return: () => {
+        cleanup.push("iterator return");
+        return Promise.resolve<IteratorResult<SubscriptionUpdate>>({
+          done: true,
+          value: undefined,
+        });
+      },
+    };
+
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      try {
+        pendingRead = iterator.next();
+        void pendingRead.catch(() => undefined);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        await withTimeout(Promise.resolve(), "early rejection command work", 20);
+        await expect(withTimeout(pendingRead, "early subscription read delivery", 20)).rejects.toBe(
+          readFailure,
+        );
+      } finally {
+        stream.abort();
+        cleanup.push("stream abort");
+        await withTimeout(
+          Promise.resolve().then(() => cleanup.push("subscription cancel")),
+          "early rejection subscription cancellation",
+          20,
+        );
+        await withTimeout(
+          pendingRead ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "early rejected pending read cleanup",
+          20,
+        ).catch(() => undefined);
+        await withTimeout(iterator.return(), "early rejection subscription iterator cleanup", 20);
+        cleanup.push("session abort");
+      }
+
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+      expect(stream.signal.aborted).toBe(true);
+      expect(cleanup).toEqual([
+        "stream abort",
+        "subscription cancel",
+        "iterator return",
+        "session abort",
+      ]);
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
   it("ignores an unrelated update and observes the exact subscribed task", async () => {
     await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
       const subscription = await withTimeout(
@@ -182,6 +246,7 @@ describe("@spine-ts/example-todo", () => {
 
       try {
         rawUpdate = iterator.next();
+        void rawUpdate.catch(() => undefined);
         await postRemoteCommand(
           commands,
           createTaskCommand(

@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Wave 7 complete - one reliability finding accepted; fix pending
+Status: Wave 7 fix coordinator-verified - fresh re-review pending
 
 Baseline: `526b7b4d`
 
@@ -425,3 +425,14 @@ links/imports, and future-policy overclaim.
   `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected explicit
   `gpt-5.6-terra` / medium, no subagents or Git mutation. A fresh immutable
   endpoint and all four specialist lanes remain required after the fix.
+
+## 2026-07-14 - Wave 7 Fix Acceptance
+
+- The resumed implementer retained actual immutable `gpt-5.6-terra` /
+  medium metadata and was closed after result capture.
+- Coordinator inspection and native focused evidence accepted the immediate
+  rejection observer, preservation of the raw delivery promise, early-failure
+  cleanup regression, and unchanged exact-target causal ordering.
+- Fresh type/build/docs/lint/format/generated/diff checks passed. A committed
+  endpoint, fresh baseline review package, and all four specialist lanes remain
+  required before the full task gate.

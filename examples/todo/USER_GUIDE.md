@@ -362,6 +362,7 @@ try {
       .activate(subscription, { signal: stream.signal })
       [Symbol.asyncIterator]();
     pendingUpdate = iterator.next();
+    void pendingUpdate.catch(() => undefined);
     const ack = await withTimeout(
       commands.post(createTaskCommand(taskId, suffix)),
       "CreateTask acknowledgement",
