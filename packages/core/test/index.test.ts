@@ -116,19 +116,20 @@ describe("@spine-ts/core type registry", () => {
     },
   );
 
-  it("canonicalizes valid custom fallback prefixes for schemas without a Spine option", () => {
-    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test" })).toBe(
-      "type.example.test/google.protobuf.Any",
-    );
-    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test/" })).toBe(
-      "type.example.test/google.protobuf.Any",
-    );
-    expect(deriveTypeUrl(AnySchema, { fallbackPrefix: "type.example.test///" })).toBe(
-      "type.example.test/google.protobuf.Any",
-    );
-  });
+  it.each(["type.example.test", "type.example.test/", "type.example.test///"])(
+    "canonicalizes valid custom fallback prefix %j for schemas without a Spine option",
+    (fallbackPrefix) => {
+      const expectedPrefix = "type.example.test";
+
+      expect(getTypeUrlPrefix(AnySchema, fallbackPrefix)).toBe(expectedPrefix);
+      expect(deriveTypeUrl(AnySchema, { fallbackPrefix })).toBe(
+        `${expectedPrefix}/google.protobuf.Any`,
+      );
+    },
+  );
 
   it("uses a Spine file option before considering an unused custom fallback", () => {
+    expect(getTypeUrlPrefix(FieldPathSchema, "///")).toBe("type.spine.io");
     expect(deriveTypeUrl(FieldPathSchema, { fallbackPrefix: "///" })).toBe(
       "type.spine.io/spine.base.FieldPath",
     );

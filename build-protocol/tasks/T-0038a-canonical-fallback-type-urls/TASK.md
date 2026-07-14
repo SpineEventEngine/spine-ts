@@ -1,6 +1,6 @@
 # T-0038a: Canonical Fallback Type URLs
 
-Status: Independent review assigned
+Status: Affected re-review assigned
 
 Started: `2026-07-14T01:50:36Z`
 
@@ -166,8 +166,9 @@ every accepted Spine-option, default, and valid custom fallback result.
 
 ## Immediate Next Action
 
-Dispatch the Terra Medium implementer for strict RED/GREEN and narrow docs,
-then run focused coordinator verification and all relevant reviewers.
+Run focused fix verification, then re-review the affected style,
+documentation, and performance/reliability concerns. Re-run TypeScript/API
+review only if verification finds a public contract or declaration change.
 
 ## Coordinator Pre-review Finding
 
@@ -190,3 +191,48 @@ then run focused coordinator verification and all relevant reviewers.
   TypeScript/API docs, and performance/reliability at explicit
   `gpt-5.6-terra` / high. All are read-only, no subagents. Security remains
   deferred to T-0041; full verify remains reserved for clean final acceptance.
+
+## Independent Review Result And Fix Assignment
+
+- `2026-07-14T02:06:30Z`: API CLEAN; style one MEDIUM and one LOW;
+  documentation one LOW; reliability one corroborating LOW. Documentation ran
+  at actual Luna Medium; style/API/reliability at actual Terra High, matching
+  explicit immutable-role dispatch. No subagents; all reviewers closed.
+- Resume the same Terra Medium implementer for one batch: directly assert valid
+  bare/trailing/repeated-trailing custom fallback results and file-option
+  precedence through public `getTypeUrlPrefix()` so `deriveTypeUrl()` cannot
+  mask a getter regression; make the README state file-option precedence and
+  one concrete valid custom result; replace the stale unversioned Immediate
+  Next Action with the current fix/re-review stage.
+- No runtime change is required. Rerun focused core/docs/static gates and the
+  affected reviewer concerns. Security remains deferred to T-0041.
+
+## Review Fix Evidence
+
+- The valid custom fallback test is now a three-row public-path table for bare,
+  trailing `/`, and repeated trailing `///` inputs. Every row directly asserts
+  the normalized `getTypeUrlPrefix()` result and preserves the corresponding
+  exact `deriveTypeUrl()` result. The existing Spine-option precedence case now
+  directly asserts both APIs with malformed unused fallback `///`.
+- Core README now states Spine file-option precedence and the concise canonical
+  result `type.example.test///` to `type.example.test/<full.type.Name>`. The
+  stale Immediate Next Action now names focused fix verification and affected
+  re-review.
+- Focused verification: core test file exit 0 with `36 passed (36)`; docs/API
+  check exit 0 with 28 expected core exports; exact-six-file Prettier exit 0;
+  generated-clean exit 0; three status headers synchronized; and
+  `git diff --check` exit 0.
+- No runtime, TSDoc, export, generated tracked-file, full-verify, Git, or
+  subagent change occurred. Affected style, documentation, and
+  performance/reliability re-review remains pending.
+
+## Affected Re-review Assignment
+
+- `2026-07-14T02:10:41Z`: accept/close same actual Terra Medium implementer,
+  matching explicit immutable-role dispatch, no subagents. Coordinator rerun
+  passes 36/36 core tests, docs/API with 28 core exports, generated-clean,
+  Prettier, synchronized status, and diff integrity.
+- Re-review style/maintainability and reliability at explicit Terra High, and
+  documentation at explicit Luna Medium. TypeScript/API docs is N/A for the
+  test/README/record-only fix delta after prior CLEAN; no declaration, TSDoc,
+  export, or runtime change. Security remains deferred to T-0041.

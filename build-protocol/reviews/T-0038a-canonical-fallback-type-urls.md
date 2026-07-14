@@ -1,6 +1,6 @@
 # T-0038a Review Log
 
-Status: Independent review assigned
+Status: Affected re-review assigned
 
 ## Scope
 
@@ -99,3 +99,52 @@ Status: Independent review assigned
   entry points, deterministic rejection, and valid/default compatibility.
 - All read-only, no subagents, canonical skill check required. Security is
   deferred to T-0041.
+
+## Independent Review Result
+
+- `2026-07-14T02:06:30Z`: TypeScript/API docs CLEAN. Style/maintainability:
+  MEDIUM direct getter success coverage, LOW stale Immediate Next Action.
+  Documentation: LOW missing explicit README precedence/valid custom result.
+  Performance/reliability corroborates direct getter success coverage as LOW.
+- Actual documentation Luna Medium and all other lanes Terra High from explicit
+  immutable-role dispatch; no subagents; all reviewers closed. Security remains
+  deferred.
+
+## Fix Assignment
+
+- Resume same Terra Medium author. Add direct public getter assertions for valid
+  custom normalization and option precedence; tighten README; correct current
+  action. No production behavior change. Re-review style, docs, and reliability;
+  API need rerun only if public contract/declaration content changes beyond the
+  accepted README/test/current-action batch.
+
+## Review Fix Handoff
+
+- Style/reliability coverage finding addressed: a three-row valid custom
+  fallback table directly checks getter normalization and preserves exact derive
+  results; the Spine-option precedence case directly checks getter and derive
+  behavior with malformed unused fallback `///`.
+- Documentation finding addressed: core README explicitly states file-option
+  precedence and one canonical valid custom result. Stale-action finding
+  addressed: TASK.md now points to focused verification and affected re-review.
+- Focused gates passed: core test file `36 passed (36)`; docs/API check retained
+  28 expected core exports; exact-six-file Prettier, generated-clean, three-way
+  status synchronization, and `git diff --check` exited 0.
+- No runtime, TSDoc, export, generated tracked-file, full-verify, Git, or
+  subagent change. API remained within the accepted test/README/current-action
+  batch and was not changed; affected style, documentation, and
+  performance/reliability re-review is pending.
+
+## Affected Re-review Assignment
+
+- `2026-07-14T02:10:41Z`: accept/close same actual Terra Medium fixer from
+  explicit immutable-role dispatch, no subagents. Coordinator passes 36/36,
+  docs/API with 28 exports, generated-clean, exact formatting/status/diff.
+- Style/maintainability: rerun explicit Terra High for direct getter coverage
+  and stale-action resolution.
+- Documentation: rerun explicit Luna Medium for README precedence and canonical
+  custom result.
+- Performance/reliability: rerun explicit Terra High for direct public getter
+  success/precedence evidence.
+- TypeScript/API docs: N/A for no declaration/TSDoc/export/runtime delta after
+  prior CLEAN. Security remains deferred to T-0041.
