@@ -275,6 +275,12 @@ Current slice exposes:
   accepted-for-async-work from immediate intake failure without implementing
   `Ack`, buses, filters, storage, dispatch, services, or transport.
 
+The package manifest also exports
+`@spine-ts/server/internal/generated-handler-registry` solely so generated
+registry source can import the `GeneratedHandlerRegistry` type it must satisfy.
+That subpath is generated-artifact-only and package-internal: application code
+must not import it. It is not part of the package root or root TypeDoc API.
+
 In the snippets below, `@example/tasks-proto` stands in for the consumer's
 generated Protobuf package; substitute that package's actual import name.
 
@@ -678,9 +684,19 @@ late dispatcher registration. Builders collect dispatchers and can inject the
 `StorageFactory` used to create the context `EventStore` and repository record
 storages, plus the direct stand state storage:
 
+The low-level fixture below declares its caller-owned custom dispatchers and
+already-packed framework envelopes. Ordinary application handlers return
+generated domain messages and do not construct these envelopes.
+
 ```ts
-import { BoundedContext } from "@spine-ts/server";
+import type { Command, Event } from "@spine-ts/proto";
+import { BoundedContext, type CommandDispatcher, type EventDispatcher } from "@spine-ts/server";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
+
+declare const commandDispatcher: CommandDispatcher;
+declare const eventDispatcher: EventDispatcher;
+declare const commandEnvelope: Command;
+declare const eventEnvelope: Event;
 
 const tasks = BoundedContext.singleTenant("Tasks")
   .withStorageFactory(new InMemoryStorageFactory())
@@ -744,15 +760,29 @@ live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
 received row is marked delivered. Scheduler/retry workers, cross-process
 recovery, production delivery policy, durable catch-up storage/projection
-catch-up through inbox storage, and production storage adapters remain open
-production gaps.
+catch-up through inbox storage, and production storage adapters are outside the
+initial release; no future policy is committed.
 
 ## Direct Stand
 
 Use the context-owned `Stand` for direct latest-state reads, storage-backed
 latest-state queries, and in-process entity update notifications:
 
+This fixture assumes `tasks` is a built context whose registered repository has
+made `TaskStateSchema` known to its stand. The state, ID, and version are
+caller-owned generated fixture values.
+
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
+import { TaskIdSchema, TaskStateSchema } from "@example/tasks-proto";
+import type { Version } from "@spine-ts/proto";
+import type { BoundedContext } from "@spine-ts/server";
+
+declare const tasks: BoundedContext;
+declare const taskState: MessageShape<typeof TaskStateSchema>;
+declare const taskId: MessageShape<typeof TaskIdSchema>;
+declare const version: Version;
+
 const stand = tasks.stand();
 
 await stand.update(TaskStateSchema, taskState, { version });
@@ -854,13 +884,12 @@ remain outside this slice.
 Use `Server` when a local Node process should host the built Spine services over
 HTTP/2:
 
-```ts
-import { BoundedContext, Server, ServerEnvironment } from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
-import type { SignalTransport } from "@spine-ts/transport";
+`@example/tasks-domain` below is an illustrative stand-in for the consumer's
+entity package; substitute its actual package name.
 
-declare const durableStorageFactory: StorageFactory;
-declare const deploymentSignalTransport: SignalTransport;
+```ts
+import { TaskAggregate } from "@example/tasks-domain";
+import { BoundedContext, Server } from "@spine-ts/server";
 
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
@@ -887,6 +916,15 @@ transport defaults. Supplying one leaves it caller-owned unless
 `ownsEnvironment: true` is explicit:
 
 ```ts
+import type { BoundedContext } from "@spine-ts/server";
+import { Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import type { SignalTransport } from "@spine-ts/transport";
+
+declare const tasks: BoundedContext;
+declare const durableStorageFactory: StorageFactory;
+declare const deploymentSignalTransport: SignalTransport;
+
 const environment = ServerEnvironment.production({
   storageFactory: durableStorageFactory,
   transport: deploymentSignalTransport,
@@ -966,8 +1004,11 @@ Extend `Entity` when framework-owned code needs a common base for local entity
 state and metadata without introducing repository/runtime behavior:
 
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
 import { Entity } from "@spine-ts/server";
 import { TaskStateSchema } from "@example/tasks-proto";
+
+declare const taskState: MessageShape<typeof TaskStateSchema>;
 
 class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
 
@@ -1114,8 +1155,12 @@ code or tests need the built-in entity state rules without creating entities or
 repositories:
 
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
 import { validateEntityStateTransition } from "@spine-ts/server";
 import { TaskStateSchema } from "@example/tasks-proto";
+
+declare const previous: MessageShape<typeof TaskStateSchema> | undefined;
+declare const next: MessageShape<typeof TaskStateSchema>;
 
 const result = validateEntityStateTransition({
   schema: TaskStateSchema,

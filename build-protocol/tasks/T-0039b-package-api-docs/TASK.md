@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 3 findings accepted — fixes assigned
+Status: Review round 3 fixes verified — round 4 assignment pending
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -398,3 +398,43 @@ may change. No subagents; coordinator retains Git and independent review.
   runtime: docs Luna/medium; other lanes Terra/high. Every reviewer is closed.
 - Return the complete four-item docs-only batch to the existing implementer,
   `gpt-5.6-terra` / medium, no subagents.
+
+## Review Round 3 Fix Handback
+
+- `packages/core/README.md` now labels the low-level envelope-helper fence as an
+  intentionally non-executable call-shape fragment and enumerates all eight
+  caller-owned IDs, contexts, schemas, and messages. It continues to state that
+  ordinary application handlers return domain messages rather than building
+  framework envelopes.
+- `packages/server/README.md` now explicitly types or declares every assigned
+  dispatcher/envelope, stand, lifecycle/environment, entity-state, and
+  transition fixture input using package-only imports. It also documents the
+  generated-handler-registry subpath as generated-artifact-only/package-internal
+  and replaces the stale production-gap wording with an initial-release
+  exclusion and no-future-policy statement.
+- `docs/api/README.md` records the internal subpath only as the required
+  type-only import for generated registry source, not a root, TypeDoc, or
+  application API.
+- No source, package metadata, export, example, dependency, generated,
+  user-guide, or unrelated documentation path changed.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+- Focused assigned-fence identifier, package-only import, internal-subpath,
+  future-policy, and identical-status scans passed. Exact-path Prettier,
+  `git diff --check`, and the prohibited-scope scan passed.
+- `pnpm docs:check` verified all 25 copied proto checksums and TypeDoc export
+  counts `100/28/205/19/17/3` for proto/core/server/storage/transport/testing.
+  Full `pnpm verify` remains final-only.
+
+## Coordinator Verification After Review Round 3
+
+- Accepted the explicit/non-executable core fixture inputs, all assigned server
+  fence declarations, the generated-artifact-only internal subpath wording,
+  and the release-exclusion correction against public source and package
+  exports.
+- `docs:check` passed at `100/28/205/19/17/3`; focused server root API and
+  generated-registry-writer tests passed `2` files / `31` tests.
+- Exact-path Prettier, equal-status, fixture-input, internal-subpath, corrected
+  future-policy, scope, conflict, and current/baseline diff checks passed.
+- Round 3 fixes are accepted for a fresh complete wave. Full `pnpm verify`
+  remains final-only.

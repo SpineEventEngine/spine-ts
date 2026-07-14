@@ -122,6 +122,13 @@ or malformed payload bytes.
 Low-level framework and test-fixture code can use `packCommand()` and
 `packEvent()` when it already owns generated Spine envelope IDs and contexts:
 
+The following block is intentionally a non-executable call-shape fragment. It
+requires caller-owned `commandId` (`CommandId`), `commandContext`
+(`CommandContext`), `eventId` (`EventId`), and `eventContext` (`EventContext`)
+messages from `@spine-ts/proto`, plus consumer-generated `CreateTaskSchema` and
+`TaskCreatedSchema` values and their corresponding `payload` and `taskCreated`
+messages.
+
 ```ts
 import { packCommand, packEvent } from "@spine-ts/core";
 

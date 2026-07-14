@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 3 findings accepted — fixes assigned
+Status: Review round 3 fixes verified — round 4 assignment pending
 
 ## Review Scope
 
@@ -239,3 +239,31 @@ T-0041 and full verify remains final-only.
   matched immutable Desktop runtime metadata, and every reviewer is closed.
   Assign all four docs-only fixes together to the existing implementer
   (`gpt-5.6-terra` / medium), no subagents. Security remains T-0041.
+
+## Review Round 3 Fix Handback
+
+- Core envelope-helper input finding fixed by explicitly marking the call-shape
+  fragment non-executable and naming all eight caller-owned inputs.
+- Server fixture finding fixed across the dispatcher/envelope, stand,
+  lifecycle/environment, entity-state, and transition fences with public
+  package-only type imports and explicit fixture declarations.
+- Internal-subpath finding fixed narrowly in the server package README and API
+  overview; it remains generated-artifact-only/package-internal and absent from
+  root and TypeDoc guidance.
+- Future-policy finding fixed with initial-release exclusion wording and no
+  future commitment. No reviewer is active; coordinator verification is
+  pending.
+- Implementer evidence passed: assigned-fence identifier and package-import
+  scans, narrow internal-subpath and future-policy scans, identical statuses,
+  exact-path Prettier, prohibited-scope scan, and `git diff --check`.
+- `pnpm docs:check` verified 25 copied proto checksums and TypeDoc export counts
+  `100/28/205/19/17/3`; full `pnpm verify` remains final-only.
+
+## Coordinator Verification After Review Round 3
+
+All four fixes are independently accepted. Evidence: public type/Stand/export/
+writer inspection; `docs:check` counts `100/28/205/19/17/3`; focused server
+tests `2` files / `31` tests; exact-path Prettier; fixture-input,
+internal-subpath, corrected future-policy, equal-status, scope, conflict, and
+current/baseline diff checks. No reviewer is active. Fresh four-concern review
+is required; security remains T-0041 and full verify remains final-only.
