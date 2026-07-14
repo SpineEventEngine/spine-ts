@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Pre-review ready
+Status: Independent review assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -211,3 +211,14 @@ inventory. Run focused docs/status lint before any reviewer assignment.
   commit, or mutating Git operation was run.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Independent Review Assignment
+
+- `2026-07-14T10:21:11Z`: coordinator accepts endpoint `2fe64207` after exact
+  status/docs lint, lock evidence, matrix taxonomy/routes, 12-path Prettier,
+  generated/scope scan, and `git diff --check`.
+- All four existing concerns are relevant to the changed canonical contract:
+  style/maintainability, TypeScript/API docs, and performance/reliability at
+  explicit `gpt-5.6-terra` / high; documentation at explicit
+  `gpt-5.6-luna` / medium. All are read-only, no subagents, and limited to the
+  milestone diff/current claims. Security remains deferred to T-0041.

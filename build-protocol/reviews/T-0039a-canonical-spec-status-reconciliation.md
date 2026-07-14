@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Pre-review ready
+Status: Independent review assigned
 
 ## Review Scope
 
@@ -87,3 +87,19 @@ Status: Pre-review ready
   reviewer dispatch.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents.
+
+## Independent Review Assignment
+
+- `2026-07-14T10:21:11Z`: accepted endpoint `2fe64207`; coordinator lint proves
+  current statuses, exact matrix taxonomy/routes, lock evidence, scope,
+  formatting, generated cleanliness, and whitespace integrity.
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high, for
+  canonical structure, active-vs-historical status, and maintainable wording.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium, for factual
+  lifecycle/decision/status truth, exclusions, links, and no future overclaim.
+- TypeScript/API docs: existing role, explicit `gpt-5.6-terra` / high, for
+  `ServerEnvironment` public-surface accuracy and public lifecycle compatibility.
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high, for
+  startup/recovery/close/retry ordering and bounded-policy claims.
+- All are read-only, no subagents, and must report canonical skill
+  applicability plus actual immutable profile. Security remains deferred.
