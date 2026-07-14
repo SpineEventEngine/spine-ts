@@ -337,6 +337,13 @@ links/imports, and future-policy overclaim.
   independent decoder/log caps, seeded result proof, and all earlier accepted
   cleanup/boundary fixes. Read-only; no Git mutation, installs, duplicate test
   runs, or subagents; historical superseded text is inactive.
+- Explicit dispatch and immutable Desktop metadata agree for Wave 6:
+  style agent `019f6290-f09a-7ac3-a724-a0e7d3dc1cf9` is actual
+  `gpt-5.6-terra` / high; documentation agent
+  `019f6290-f440-7be2-a005-17b4c8bc6fd1` is actual `gpt-5.6-luna` / medium;
+  TypeScript/API docs agent `019f6290-ed69-7b00-85bc-a2dc51af5f21` is actual
+  `gpt-5.6-terra` / high; performance/reliability agent
+  `019f6290-f82a-7103-961b-4707914a7693` is actual `gpt-5.6-terra` / high.
 
 ## Skill Applicability
 
