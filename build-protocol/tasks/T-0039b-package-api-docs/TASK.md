@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Complete — merge pending
+Status: Integrated — remote synchronization pending
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -471,3 +471,13 @@ may change. No subagents; coordinator retains Git and independent review.
   Proto lint, and generated-clean checks all passed.
 - All acceptance criteria are satisfied with no open review finding. Merge,
   post-merge verification, remote synchronization, and cleanup remain.
+
+## Integration
+
+- Merged to `main` as `8324a8a0` (`Merge T-0039b package API documentation`).
+- Native post-merge full verify passed: ordinary and coverage suites each
+  `71` files / `1,642` tests; coverage `95.38/90.12/98.22/95.4`.
+- Type, lint/cleanup, format, docs/API `100/28/205/19/17/3`, Proto, and
+  generated-clean gates all passed on the merge result.
+- The completed task branch is already pushed at `dea9a362`; verified `main`
+  push and remote-state recording remain.

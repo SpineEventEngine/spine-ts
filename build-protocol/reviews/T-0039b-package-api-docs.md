@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Complete — merge pending
+Status: Integrated — remote synchronization pending
 
 ## Review Scope
 
@@ -296,3 +296,11 @@ coverage suites each passed `71` files / `1,642` tests; coverage was
 `95.38/90.12/98.22/95.4`; and every type, lint/cleanup, format, docs/API
 (`100/28/205/19/17/3`), Proto, and generated-clean gate passed. No actionable
 finding remains. Integration and remote closure are pending.
+
+## Integration
+
+Clean review closure was merged as `8324a8a0`. Native post-merge full verify
+passed with `71` files / `1,642` tests in ordinary and coverage phases,
+`95.38/90.12/98.22/95.4` coverage, TypeDoc counts `100/28/205/19/17/3`, and
+all remaining static/Proto/generated gates green. Remote synchronization and
+cleanup remain; no new review is required for this evidence-only record.
