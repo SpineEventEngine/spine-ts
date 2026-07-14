@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 1 clean; Slice 2 implementation assigned
+Status: Slice 2 coordinator-verified; review endpoint pending
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -419,3 +419,81 @@ work until Slice 1 focused verification and relevant review are clean.
   gate, successful phase non-repetition, shared transport sibling behavior, and
   existing T-0037f lifecycle compatibility. Add no public root symbol or new
   lifecycle policy owner.
+
+## Slice 2 Implementer Handback
+
+- Existing implementer dispatch and actual immutable runtime metadata match at
+  `gpt-5.6-terra` / `medium`; no subagents were dispatched or used. Canonical
+  applicability/readings completed before production work: `executing-plans`,
+  `using-git-worktrees` (confirmed this existing linked worktree), `implement`,
+  `test-driven-development`, `tdd` and its testing/mocking/refactoring and
+  anti-pattern references, `error-handling-patterns`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`, and
+  `verification-before-completion`. User constraints superseded skill defaults
+  that would commit, spawn subagents, or perform orchestrator-owned review.
+- Added package-internal `ContextTransportGroup` under `src/server/`. It opens
+  contexts sequentially with the environment transport, retains every
+  successful binding plus `contextTransportAccess.failedOpenCleanup(error)`,
+  and delegates retry indexing/error flattening to existing
+  `RetryableCloseGroup`. It is not exported from the package root and does not
+  own transport, context, storage, delivery, or listener lifecycle.
+- `Server.start()` now opens that group after context build and successful
+  environment attachment/recovery, before `SpineServices`, HTTP/2 server
+  creation, or listener open. Registration failure creates the existing
+  failed-start checkpoint, attempts only this server's intake cleanup, and
+  hard-gates detach/dependency cleanup behind successful intake close.
+  Primary-first diagnostics flatten the registration failure before immediate
+  binding cleanup and server retry-cleanup failures in stable order.
+- Running and failed-listener cleanup now order network/session close, context
+  transport registration close plus accepted-work drain, environment
+  detach/quiescence, contexts/resources, then an owned environment's existing
+  facility order. Successful network, registration, detach, and dependency
+  indexes are not repeated. Caller-owned transport stays open; one shared
+  server close removes only its registrations; an owned transport closes once
+  through `ServerEnvironment.close()` after contexts/resources.
+- Strict TDD evidence: initial ordering RED observed recovery followed directly
+  by listener creation with no subscriptions; running-close RED resolved without
+  attempting intake close; partial-open RED reported only registration plus the
+  first handle-close failure and omitted the server cleanup failure;
+  failed-listener RED recorded zero registration closes; duplicate-owner RED
+  returned a second `RunningServer`. Each corresponding GREEN proves the
+  accepted order, hard gate/retry, retained cleanup-only terminal semantics,
+  listener absence, and deterministic duplicate refusal while the original
+  server remains connectable.
+- Focused behavior also proves accepted transport work blocks detach until its
+  callback drains; partial cleanup retries only the failed command handle and
+  not the successfully closed prior-context event handle; same-event sibling
+  routes survive one server close; the real local transport rejects duplicate
+  command ownership; and a fresh server can acquire that route after the owner
+  closes.
+- Changed paths are `packages/server/src/server/server.ts`, new internal
+  `packages/server/src/server/context-transport-group.ts`, focused
+  `packages/server/test/server/server-context-transport-lifecycle.test.ts`,
+  reused `packages/server/test/server/server-lifecycle-fixture.ts`, and these
+  three durable records. Public `Server`/`RunningServer` signatures are
+  unchanged; their existing TSDoc received only the required truthful ordering
+  correction. No root export/options, external docs, examples, Protobuf,
+  generated tracked output, topology/retry policy, or Slice 3 fixture was added.
+- Verification evidence: clean pre-change focused baseline `83/83`; final
+  focused server lifecycle `70/70`; context/routing/command-event bus `65/65`;
+  native ZeroMQ runtime transport `14/14`; generated build typecheck; scoped
+  ESLint; cleanup enforcement; exact Prettier; TypeDoc generation; canonical
+  generated-clean; root-leak scan; and diff/status checks passed. No full
+  `pnpm verify` was run, as reserved for final T-0038b closure.
+- Remaining uncertainty is Slice 3 only: no real child-process ZeroMQ proof or
+  observable external documentation has been implemented. Security remains
+  deferred to T-0041 under the accepted plan.
+
+## Slice 2 Coordinator Verification
+
+- Initial sandboxed lifecycle run was denied loopback listen permission and
+  cascaded; the required native rerun passed three files and `70/70` tests.
+- Fresh coordinator runs also passed context/routing/bus `65/65`, native runtime
+  transport `14/14`, generated build typecheck, scoped ESLint, exact Prettier,
+  cleanup, `docs:check` with 205 expected server exports, canonical
+  generated-clean, root-leak inspection, expected-path status, and
+  `git diff --check`.
+- Pre-review lint is clean: status mirrors agree; no stale active claim,
+  duplicated lifecycle policy, root/internal leak, future-policy doc claim,
+  generated output, or unrelated path is present. The changed public TSDoc is
+  observable and makes documentation review relevant for this slice.

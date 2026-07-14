@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 1 clean; Slice 2 implementation assigned
+Status: Slice 2 coordinator-verified; review endpoint pending
 
 ## Scope
 
@@ -223,3 +223,63 @@ Status: Slice 1 clean; Slice 2 implementation assigned
   idempotent retry, shared transport, sibling routes, and accepted-work drain.
 - Security: deferred to T-0041. Implementer assignment is explicit
   `gpt-5.6-terra` / medium, no subagents.
+
+## Slice 2 Implementer Pre-Review Evidence
+
+- Existing implementer actual immutable metadata matches explicit dispatch at
+  `gpt-5.6-terra` / `medium`; no subagents were dispatched or used. Canonical
+  implementation/worktree/TDD references, JavaScript testing, error handling,
+  Node lifecycle, and verification skills were read and applied. No commit or
+  implementer-owned review was performed.
+- Scope is one internal `ContextTransportGroup`, existing `Server` lifecycle
+  integration, the reused T-0037f fixture, one focused lifecycle file, minimal
+  truthful `Server`/`RunningServer` TSDoc ordering correction, and these records.
+  Root exports/options, external docs/examples, Protobuf, generated tracked
+  output, topology/retry policy, and Slice 3 remain unchanged.
+- Startup evidence: attachment/recovery completes before contexts open in input
+  order; every registration completes before HTTP server creation/listening.
+  Registration or duplicate-responder failure creates no listener. The failure
+  checkpoint retains successful handles and exact Slice 1 failed-open cleanup.
+- Failure evidence: initial partial-open rejection flattens stable diagnostics
+  with registration first, then binding close, then server cleanup close. An
+  unresolved intake close is a hard gate before detach and all dependencies.
+  Cleanup-only `start()` retries only failed registration indexes, then advances
+  existing detach/close checkpoints once and preserves established terminal
+  failed-start semantics.
+- Running/listener evidence: network/session close precedes intake close and is
+  not repeated; intake close drains accepted callback work and precedes delivery
+  detach; detach precedes contexts/resources; an owned environment closes its
+  transport only in its existing facility phase. Failed listener cleanup uses
+  the same network/intake/detach/dependency order.
+- Shared/duplicate evidence: closing one caller-environment server removes only
+  its same-event subscription and leaves sibling traffic/listener operational;
+  supplied transport is not closed. The real local transport deterministically
+  rejects duplicate command ownership, the failed server has no listener and
+  cleans only its attempt, the existing server remains connectable, and route
+  ownership becomes available after that server closes.
+- TDD RED evidence is behavior-specific: listener followed recovery without
+  subscriptions; running close skipped registration close; partial-open error
+  omitted the second cleanup failure; listener-failure cleanup recorded no
+  registration close; duplicate ownership returned another running listener.
+  All are GREEN in the focused lifecycle package.
+- Mechanical evidence is clean: baseline `83/83`; final server lifecycle
+  `70/70`; context/routing/command-event bus `65/65`; native ZeroMQ runtime
+  transport `14/14`; generated build typecheck; scoped ESLint; cleanup; exact
+  Prettier; TypeDoc; canonical generated-clean; no root leak; and clean
+  diff/status checks. Documentation concern is limited to review of the
+  required TSDoc correction; security remains deferred to T-0041.
+- Remaining review uncertainty is Slice 3 separation only: this package does
+  not claim real cross-process proof or final observable external docs.
+
+## Slice 2 Coordinator Pre-Review Gate
+
+- Existing implementer result accepted at actual immutable
+  `gpt-5.6-terra` / medium; no subagents; implementer closed.
+- Fresh coordinator verification passed native server lifecycle `70/70`,
+  context/routing/bus `65/65`, native runtime transport `14/14`, build
+  typecheck, scoped ESLint, exact Prettier, cleanup, docs/API check with 205
+  server exports, canonical generated-clean, root leak, status, and diff.
+- Docs/status lint is clean. Style, documentation, TypeScript/API docs, and
+  performance/reliability are all relevant because server lifecycle code,
+  public lifecycle TSDoc, and failure/retry behavior changed. Security remains
+  deferred to T-0041.

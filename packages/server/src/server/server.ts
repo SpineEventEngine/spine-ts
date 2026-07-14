@@ -10,6 +10,7 @@ import {
   boundedContextAccess,
 } from "../context/bounded-context.js";
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
+import { ContextTransportGroup } from "./context-transport-group.js";
 import type { EnvironmentAttachmentHandle } from "./environment-attachment.js";
 import { collectCloseError, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -22,9 +23,10 @@ type ServerContext = BoundedContext | BoundedContextBuilder;
 /**
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
- * A server assembles its bounded contexts and completes finite environment
- * delivery recovery before accepting network requests. It also owns the
- * ordered cleanup of contexts and resources added to this assembly.
+ * A server assembles its bounded contexts, completes finite environment
+ * delivery recovery, and opens their transport intake before accepting network
+ * requests. It also owns the ordered cleanup of contexts and resources added
+ * to this assembly.
  */
 export class Server {
   readonly #host: string;
@@ -83,15 +85,15 @@ export class Server {
    * Assemble contexts, complete finite startup recovery, and open the listener.
    *
    * Context assembly failure opens no listener and closes contexts assembled
-   * by that attempt. If environment startup or listener open fails, the server
-   * first closes acquired network resources, waits until active work can no
-   * longer use its dependencies, then closes contexts and explicit resources,
-   * followed by facilities of a server-owned environment. If network cleanup
-   * fails, it is a hard gate: a cleanup-only `start()` retry must complete it
-   * before contexts, explicit resources, or environment facilities close; all
-   * remain open until then. An initial rejection combines the original startup
-   * or listener failure first with reached cleanup failures in stable phase
-   * order.
+   * by that attempt. If environment startup, context transport registration, or
+   * listener open fails, the server first closes acquired network resources and
+   * context transport intake, waits until active work can no longer use its
+   * dependencies, then closes contexts and explicit resources, followed by
+   * facilities of a server-owned environment. Network and context transport
+   * cleanup are hard gates: a cleanup-only `start()` retry must complete them
+   * before delivery detaches or dependencies close. An initial rejection
+   * combines the original startup failure first with reached cleanup failures
+   * in stable phase order.
    *
    * If that cleanup cannot yet complete safely, a later call on this same
    * instance is cleanup-only: it does not assemble contexts or open a listener.
@@ -159,17 +161,33 @@ export class Server {
       }
       throw error;
     }
+    const closeables = [
+      ...contexts,
+      ...this.#resources,
+      ...(this.#ownsEnvironment ? [this.#environment] : []),
+    ];
+    const contextTransports = new ContextTransportGroup(this.#environment.transport);
+    try {
+      await contextTransports.open(contexts);
+    } catch (error) {
+      const cleanup: FailedStartCleanup = {
+        closeGroup: new RetryableCloseGroup(
+          closeables,
+          "Server start cleanup failed while closing owned contexts/resources.",
+        ),
+        contextTransports,
+        attachment,
+        failedStartRollback: undefined,
+      };
+      this.#failedStartCleanup = cleanup;
+      return this.#cleanupFailedContextStart(cleanup, error);
+    }
     const services = new SpineServices({
       contexts,
       ...this.#services,
     });
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = createHttpServer(services, sessions);
-    const closeables = [
-      ...contexts,
-      ...this.#resources,
-      ...(this.#ownsEnvironment ? [this.#environment] : []),
-    ];
     const address = await listen(httpServer, this.#host, this.#port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
@@ -178,6 +196,7 @@ export class Server {
             "Server start cleanup failed while closing owned contexts/resources.",
           ),
           network: { server: httpServer, sessions },
+          contextTransports,
           attachment,
           failedStartRollback: undefined,
         };
@@ -192,6 +211,7 @@ export class Server {
       sessions,
       environment: this.#environment,
       attachment,
+      contextTransports,
       host,
       port: address.port,
       closeables,
@@ -202,6 +222,10 @@ export class Server {
     const errors: unknown[] = [];
 
     if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
+      throwCleanupErrors(errors);
+    }
+
+    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
       throwCleanupErrors(errors);
     }
 
@@ -240,7 +264,12 @@ export class Server {
       collectCloseError(error, errors);
     }
 
-    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
+    if (
+      !closeFailed &&
+      cleanup.contextTransports === undefined &&
+      cleanup.attachment === undefined &&
+      this.#failedStartCleanup === cleanup
+    ) {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }
@@ -250,6 +279,38 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  async #cleanupFailedContextStart(
+    cleanup: FailedStartCleanup,
+    startError: unknown,
+  ): Promise<never> {
+    const errors: unknown[] = [];
+
+    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
+      throwContextStartError(startError, errors);
+    }
+    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
+      throwContextStartError(startError, errors);
+    }
+
+    let closeFailed = false;
+    try {
+      await cleanup.closeGroup.close();
+    } catch (error) {
+      closeFailed = true;
+      collectCloseError(error, errors);
+    }
+    if (
+      !closeFailed &&
+      cleanup.contextTransports === undefined &&
+      cleanup.attachment === undefined &&
+      this.#failedStartCleanup === cleanup
+    ) {
+      this.#failedStartCleanup = undefined;
+      this.#failedStartConsumed = true;
+    }
+    throwContextStartError(startError, errors);
+  }
+
   async #cleanupFailedListenerStart(
     cleanup: FailedStartCleanup,
     startError: unknown,
@@ -257,6 +318,9 @@ export class Server {
     const errors: unknown[] = [];
 
     if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
+      throwListenerStartError(startError, errors);
+    }
+    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
       throwListenerStartError(startError, errors);
     }
     if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
@@ -270,7 +334,12 @@ export class Server {
       closeFailed = true;
       collectCloseError(error, errors);
     }
-    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
+    if (
+      !closeFailed &&
+      cleanup.contextTransports === undefined &&
+      cleanup.attachment === undefined &&
+      this.#failedStartCleanup === cleanup
+    ) {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }
@@ -285,6 +354,24 @@ export class Server {
     try {
       await closeNetwork(network.server, network.sessions);
       delete cleanup.network;
+      return true;
+    } catch (error) {
+      collectCloseError(error, errors);
+      return false;
+    }
+  }
+
+  async #closeFailedStartContextTransports(
+    cleanup: FailedStartCleanup,
+    errors: unknown[],
+  ): Promise<boolean> {
+    const contextTransports = cleanup.contextTransports;
+    if (contextTransports === undefined) {
+      return true;
+    }
+    try {
+      await contextTransports.close();
+      delete cleanup.contextTransports;
       return true;
     } catch (error) {
       collectCloseError(error, errors);
@@ -332,6 +419,7 @@ interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly failedStartRollback: FailedStartRollbackCapability | undefined;
   network?: FailedStartNetwork;
+  contextTransports?: ContextTransportGroup;
   attachment?: EnvironmentAttachmentHandle;
 }
 
@@ -386,14 +474,16 @@ export interface RunningServer {
   /** Base URL for Connect gRPC-compatible clients. */
   readonly baseUrl: string;
   /**
-   * Stop network intake and sessions, wait for active work to become safe, then
-   * close contexts, explicit resources, and any server-owned environment.
+   * Stop network intake and sessions, close context transport registrations and
+   * drain accepted work, then detach delivery before closing contexts, explicit
+   * resources, and any server-owned environment.
    *
-   * A failure while closing the network prevents dependency cleanup until a
-   * later retry completes that phase. Closing one server that shares a
-   * caller-owned environment does not interrupt sibling servers, and the
-   * caller-owned environment and its facilities remain open. A server-owned
-   * environment closes only after its contexts and resources.
+   * A failure while closing the network or context transport intake prevents
+   * detach and dependency cleanup until a later retry completes that phase.
+   * Closing one server that shares a caller-owned environment does not
+   * interrupt sibling servers, and the caller-owned environment and its
+   * facilities remain open. A server-owned environment closes only after its
+   * contexts and resources.
    *
    * Concurrent calls share one in-flight close. Repeated calls after a
    * successful close are idempotent. After a failed close, a later call retries
@@ -411,6 +501,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #closeables: readonly unknown[];
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
+  readonly #contextTransports: ContextTransportGroup;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -425,6 +516,7 @@ class RunningHttp2Server implements RunningServer {
     this.#closeables = options.closeables;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
+    this.#contextTransports = options.contextTransports;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -447,6 +539,7 @@ class RunningHttp2Server implements RunningServer {
       await closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
+    await this.#contextTransports.close();
     const detachErrors: unknown[] = [];
     let detachRejected = false;
     if (!this.#attachmentDetached) {
@@ -497,6 +590,7 @@ interface RunningHttp2ServerOptions {
   readonly closeables: readonly unknown[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
+  readonly contextTransports: ContextTransportGroup;
   readonly host: string;
   readonly port: number;
 }
@@ -614,6 +708,21 @@ function throwListenerStartError(startError: unknown, cleanupErrors: readonly un
   throw new AggregateError(
     errors,
     "Server start failed while opening listener and cleanup also failed.",
+  );
+}
+
+function throwContextStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
+  if (cleanupErrors.length === 0) {
+    throw startError;
+  }
+  const errors: unknown[] = [];
+  collectCloseError(startError, errors);
+  for (const error of cleanupErrors) {
+    collectCloseError(error, errors);
+  }
+  throw new AggregateError(
+    errors,
+    "Server start failed while opening context transport and cleanup also failed.",
   );
 }
 
