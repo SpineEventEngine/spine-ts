@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: In progress - implementation verified; review pending
+Status: In progress - Wave 1 fixes verified; targeted re-review pending
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -161,8 +161,9 @@ cleanup.
 - Five coherent real ephemeral-loopback generated-client cases now share one
   `withRemoteTodo(onRun)` owner for server start, generated clients, explicit
   public HTTP/2 session ownership, and bounded deterministic cleanup. They
-  prove immediate OK acknowledgement before bounded eventual projection
-  observation; all rows, exact ID, and `open_task_count` filter queries;
+  prove an immediate OK acknowledgement and bounded eventual projection
+  observation as separate public outcomes; all rows, exact ID, and
+  `open_task_count` filter queries;
   activation, delivered update, cancel ACK, iterator return/settlement, server
   close, and closed-listener rejection. They also prove packed
   `ValidationError` details and unchanged state for invalid rename; both
@@ -218,6 +219,27 @@ cleanup.
   and throws capped sanitized diagnostics. Its controlled deadline test proves
   query ID, deadline, attempts, status/row context, and control-character
   sanitization.
+
+## Reviewer Wave 1 Finding Batch
+
+- Documentation accepted P2: the missing-registry criterion promises actionable
+  diagnostics, but the test only proves rejection and recovery. Assert stable,
+  useful diagnostic content before restoring the registry.
+- Style and reliability accepted P1: replace the fixed pre-stream delay with a
+  causal, bounded public activation probe before the update under test.
+- Style and reliability accepted P1: rejected command no-effect assertions
+  currently accept the pre-delivery snapshot immediately. Fence each rejected
+  batch with a later valid command observed through the projection, then assert
+  the target snapshot is unchanged.
+- Style/reliability strict ACK-before-update scheduling assertion is rejected as
+  an overstatement of the accepted public contract. The completion plan requires
+  immediate successful acknowledgement and eventual asynchronous handling as
+  separate observations; it does not guarantee which HTTP/2 promise settles
+  first after intake. Rename current task/test wording that says "before
+  delivery" and preserve the two independent public observations.
+- TypeScript/API docs is clean. All four reviewers are closed. The same
+  implementer owns this complete test-and-record fix batch; no production,
+  dependency, configuration, or public-doc change is authorized.
 - Fresh native coordinator regression passed 3 files and all 65 tests.
   Focused repository routing passed 3 selected tests with 122 skipped.
 - `typecheck:build`, `typecheck:tooling`, full lint/cleanup, repository
@@ -225,6 +247,36 @@ cleanup.
   generated tracking, forbidden end-user API scan, and `git diff --check`
   passed. No production, dependency, config, public-doc, or public API file
   changed. Commit and begin targeted review.
+
+## Reviewer Wave 1 Fix Evidence
+
+- The missing compiled-registry case now asserts the stable conventional module
+  path plus `must exist and be readable`, restores the registry in `finally`,
+  and proves context creation recovers afterward.
+- Subscription activation no longer depends on a fixed delay. A bounded
+  `iterator.next()` begins activation, a distinct valid probe command is posted,
+  and its update is observed before a fresh bounded `next()` owns the command
+  update under test. Subscription creation, both command acknowledgements,
+  stream reads, cancellation, iterator settlement, and cleanup are bounded.
+- The ACK test and task wording now prove OK acknowledgement and eventual query/
+  subscription effects as separate observations without claiming strict HTTP/2
+  promise settlement order.
+- Invalid rename and reopen-open share a later valid projected sentinel fence;
+  repeated completion has its own later valid projected fence; and missing/
+  blank ID rejection has a later valid projected fence. Target snapshots and
+  row counts are read only after those causal fences, eliminating acceptance of
+  a merely pre-delivery snapshot.
+- These changes strengthen test observation rather than production behavior.
+  The focused registry diagnostic case passed on first execution (1 selected /
+  24 skipped), the causal activation case passed on first execution (1 selected
+  / 24 skipped), and the fenced refusal/invalid-ID cases passed on first
+  execution (2 selected / 23 skipped). No production RED was fabricated.
+- Coordinator inspection confirmed the probe update crosses the same public
+  stream before a fresh tested read, and each later sentinel is observed through
+  its public projection before the rejected target is compared. Native focused
+  regression passed 3 files / 65 tests; direct route proof passed 3 selected /
+  122 skipped. Build/tooling typechecks, full lint/cleanup, format,
+  generated-clean, and `git diff --check` passed.
 
 ## Skill Applicability
 

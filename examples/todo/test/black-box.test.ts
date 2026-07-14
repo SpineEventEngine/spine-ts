@@ -71,7 +71,13 @@ describe("@spine-ts/example-todo", () => {
 
     renameSync(registry, hiddenRegistry);
     try {
-      await expect(createTodoContext()).rejects.toThrow();
+      const failure = await createTodoContext().catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain(
+        `Generated handler registry module "${registry}"`,
+      );
+      expect((failure as Error).message).toContain("must exist and be readable.");
     } finally {
       renameSync(hiddenRegistry, registry);
     }
@@ -140,9 +146,13 @@ describe("@spine-ts/example-todo", () => {
     expect(reads).toBeGreaterThan(1);
   });
 
-  it("acknowledges commands before delivery and settles a canceled subscription", async () => {
+  it("observes an OK acknowledgement and eventual subscription delivery", async () => {
     await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
-      const subscription = await subscriptions.subscribe(createTaskListTopic());
+      const subscription = await withTimeout(
+        subscriptions.subscribe(createTaskListTopic()),
+        "standalone subscription creation",
+        500,
+      );
       const stream = new AbortController();
       const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription, {
         signal: stream.signal,
@@ -151,10 +161,31 @@ describe("@spine-ts/example-todo", () => {
       let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
-        await delay(25);
+        const probeUpdate = withTimeout(
+          iterator.next(),
+          "standalone subscription activation probe update",
+          500,
+        );
+        await withTimeout(
+          commands.post(
+            createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
+          ),
+          "standalone subscription activation probe acknowledgement",
+          500,
+        );
+        const probed = await probeUpdate;
+        if (probed.done === true) {
+          throw new Error("Expected standalone subscription activation probe update.");
+        }
+        expect(unpackSubscribedTaskList(probed.value).list.tasks[0]?.title).toBe("Probe");
+
         nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
-        const ack = await commands.post(
-          createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
+        const ack = await withTimeout(
+          commands.post(
+            createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
+          ),
+          "standalone command acknowledgement",
+          500,
         );
         const response = await readRemoteEventually(
           queries,
@@ -257,17 +288,23 @@ describe("@spine-ts/example-todo", () => {
           validate: false,
         }),
       );
-      const afterInvalidRename = await readRemoteEventually(
-        queries,
-        createTaskListIdQuery("task-refusal"),
-        (candidate) =>
-          sameTaskListSnapshot(
-            taskListSnapshot(candidate, "task-refusal"),
-            taskListSnapshot(original, "task-refusal"),
-          ),
-      );
       const reopenOpen = await commands.post(
         createReopenCommand("command-remote-reopen-open", "task-refusal"),
+      );
+      await withTimeout(
+        commands.post(createTaskCommand("command-refusal-fence", "task-refusal-fence", "Fence")),
+        "validation and reopen refusal fence acknowledgement",
+        500,
+      );
+      await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-refusal-fence"),
+        (candidate) => taskTitle(candidate, "task-refusal-fence") === "Fence",
+      );
+      const afterRefusals = await withTimeout(
+        queries.read(createTaskListIdQuery("task-refusal")),
+        "task state after validation and reopen refusal fence",
+        500,
       );
 
       await commands.post(createCompleteCommand("command-remote-complete", "task-refusal"));
@@ -279,21 +316,33 @@ describe("@spine-ts/example-todo", () => {
       const completeAgain = await commands.post(
         createCompleteCommand("command-remote-complete-again", "task-refusal"),
       );
-      const afterCompleteAgain = await readRemoteEventually(
-        queries,
-        createTaskListIdQuery("task-refusal"),
-        (candidate) =>
-          sameTaskListSnapshot(
-            taskListSnapshot(candidate, "task-refusal"),
-            taskListSnapshot(completed, "task-refusal"),
+      await withTimeout(
+        commands.post(
+          createTaskCommand(
+            "command-complete-refusal-fence",
+            "task-complete-refusal-fence",
+            "Fence",
           ),
+        ),
+        "complete refusal fence acknowledgement",
+        500,
+      );
+      await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-complete-refusal-fence"),
+        (candidate) => taskTitle(candidate, "task-complete-refusal-fence") === "Fence",
+      );
+      const afterCompleteAgain = await withTimeout(
+        queries.read(createTaskListIdQuery("task-refusal")),
+        "task state after complete refusal fence",
+        500,
       );
 
       expect(errorType(invalidRename.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
       expect(
         validationDetails(invalidRename.status?.status)?.constraintViolation.length,
       ).toBeGreaterThan(0);
-      expect(taskListSnapshot(afterInvalidRename, "task-refusal")).toEqual(
+      expect(taskListSnapshot(afterRefusals, "task-refusal")).toEqual(
         taskListSnapshot(original, "task-refusal"),
       );
       expect(errorType(reopenOpen.status?.status)).toBe("TASK_NOT_DONE");
@@ -331,15 +380,29 @@ describe("@spine-ts/example-todo", () => {
           validate: false,
         }),
       );
-      const after = await readRemoteEventually(
+      await withTimeout(
+        commands.post(createTaskCommand("command-id-fence", "task-id-fence", "Fence")),
+        "invalid ID fence acknowledgement",
+        500,
+      );
+      await readRemoteEventually(
         queries,
-        createTaskListQuery(),
-        (candidate) => candidate.message.length === before.message.length,
+        createTaskListIdQuery("task-id-fence"),
+        (candidate) => taskTitle(candidate, "task-id-fence") === "Fence",
+      );
+      const after = await withTimeout(
+        queries.read(createTaskListQuery()),
+        "task rows after invalid ID fence",
+        500,
       );
 
       expect(missingId.status?.status.case).toBe("error");
       expect(blankId.status?.status.case).toBe("error");
-      expect(after.message).toEqual(before.message);
+      expect(taskListSnapshot(after, "task-kept")).toEqual(taskListSnapshot(before, "task-kept"));
+      expect(after.message.map((message) => unpackTaskList(message.state)?.id).sort()).toEqual([
+        "task-id-fence",
+        "task-kept",
+      ]);
     });
   }, 15_000);
 
