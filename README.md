@@ -51,12 +51,14 @@ exclusions, not commitments to a future policy or implementation.
 - `pnpm proto:generate`
 - `pnpm typecheck:build`
 - `pnpm docs:check`
-- `pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests`
+- `pnpm vitest run examples/todo/test/black-box.test.ts`
+- `pnpm vitest run examples/todo/test/local-multi-process.test.ts`
 - `pnpm --filter @spine-ts/example-todo start`
+- `pnpm --filter @spine-ts/example-todo smoke`
 - `pnpm lint`
 - `pnpm verify`
 - `pnpm docs:api`
 
-See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide and
-runnable API examples, and [build-protocol](build-protocol/README.md) for the
-implementation protocol.
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide,
+[examples/todo/README.md](examples/todo/README.md) for the local runnable flow,
+and [build-protocol](build-protocol/README.md) for the implementation protocol.

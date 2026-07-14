@@ -166,10 +166,74 @@ describe("@spine-ts/example-todo", () => {
     expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
-  it("observes an OK acknowledgement and eventual subscription delivery", async () => {
+  it("handles an early subscription read rejection while lifecycle cleanup completes", async () => {
+    const cleanup: string[] = [];
+    const unhandled: unknown[] = [];
+    const stream = new AbortController();
+    const readFailure = new Error("early subscription read failure");
+    let pendingRead: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
+    const onUnhandledRejection = (reason: unknown, promise: Promise<unknown>): void => {
+      if (promise === pendingRead) {
+        unhandled.push(reason);
+      }
+    };
+    const iterator = {
+      next: () => Promise.reject<IteratorResult<SubscriptionUpdate>>(readFailure),
+      return: () => {
+        cleanup.push("iterator return");
+        return Promise.resolve<IteratorResult<SubscriptionUpdate>>({
+          done: true,
+          value: undefined,
+        });
+      },
+    };
+
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      try {
+        pendingRead = iterator.next();
+        void pendingRead.catch(() => undefined);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        await withTimeout(Promise.resolve(), "early rejection command work", 20);
+        await expect(withTimeout(pendingRead, "early subscription read delivery", 20)).rejects.toBe(
+          readFailure,
+        );
+      } finally {
+        stream.abort();
+        cleanup.push("stream abort");
+        await withTimeout(
+          Promise.resolve().then(() => cleanup.push("subscription cancel")),
+          "early rejection subscription cancellation",
+          20,
+        );
+        await withTimeout(
+          pendingRead ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "early rejected pending read cleanup",
+          20,
+        ).catch(() => undefined);
+        await withTimeout(iterator.return(), "early rejection subscription iterator cleanup", 20);
+        cleanup.push("session abort");
+      }
+
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+      expect(stream.signal.aborted).toBe(true);
+      expect(cleanup).toEqual([
+        "stream abort",
+        "subscription cancel",
+        "iterator return",
+        "session abort",
+      ]);
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
+  it("ignores an unrelated update and observes the exact subscribed task", async () => {
     await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
       const subscription = await withTimeout(
-        subscriptions.subscribe(createTaskListTopic()),
+        subscriptions.subscribe(createTaskListTopic("task-standalone")),
         "standalone subscription creation",
         500,
       );
@@ -178,38 +242,42 @@ describe("@spine-ts/example-todo", () => {
         signal: stream.signal,
       });
       const iterator = updates[Symbol.asyncIterator]();
-      let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
+      let rawUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
-        const probeUpdate = withTimeout(
-          iterator.next(),
-          "standalone subscription activation probe update",
-          500,
-        );
+        rawUpdate = iterator.next();
+        void rawUpdate.catch(() => undefined);
         await postRemoteCommand(
           commands,
-          createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
-          "standalone subscription activation probe acknowledgement",
+          createTaskCommand(
+            "command-subscription-unrelated",
+            "task-subscription-unrelated",
+            "Unrelated",
+          ),
+          "unrelated subscription command acknowledgement",
         );
-        const probed = await probeUpdate;
-        if (probed.done === true) {
-          throw new Error("Expected standalone subscription activation probe update.");
-        }
-        expect(unpackSubscribedTaskList(probed.value).list.tasks[0]?.title).toBe("Probe");
+        await readRemoteEventually(
+          queries,
+          createTaskListIdQuery("task-subscription-unrelated"),
+          (candidate) => taskTitle(candidate, "task-subscription-unrelated") === "Unrelated",
+        );
 
-        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
         const ack = await postRemoteCommand(
           commands,
           createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
           "standalone command acknowledgement",
         );
+        const delivered = await withTimeout(
+          rawUpdate,
+          "standalone server subscription update",
+          500,
+        );
+        rawUpdate = undefined;
         const response = await readRemoteEventually(
           queries,
           createTaskListQuery(),
           (candidate) => taskTitle(candidate, "task-standalone") === "Standalone",
         );
-        const delivered = await nextUpdate;
-        nextUpdate = undefined;
         if (delivered.done === true) {
           throw new Error("Expected standalone server subscription update.");
         }
@@ -220,6 +288,7 @@ describe("@spine-ts/example-todo", () => {
         expect(response.response?.status?.status.case).toBe("ok");
         expect(readTask(response, "task-standalone")?.completed).toBe(false);
         expect(update.subscription.id).toEqual(subscription.id);
+        expect(update.list.id).toBe("task-standalone");
         expect(update.list.tasks[0]?.title).toBe("Standalone");
 
         const cancel = await withTimeout(
@@ -238,13 +307,18 @@ describe("@spine-ts/example-todo", () => {
         expect(cancel.status?.status.case).toBe("ok");
         expect(settled.done).toBe(true);
       } finally {
-        await nextUpdate?.catch(() => undefined);
+        stream.abort();
         await withTimeout(
           subscriptions.cancel(subscription),
           "standalone subscription cancellation cleanup",
           500,
         ).catch(() => undefined);
-        stream.abort();
+        await withTimeout(
+          rawUpdate ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "standalone pending subscription read cleanup",
+          500,
+        ).catch(() => undefined);
         await withTimeout(
           iterator.return?.() ??
             Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
@@ -1235,15 +1309,22 @@ function createOpenTaskCountQuery(openTaskCount: number) {
   });
 }
 
-function createTaskListTopic() {
+function createTaskListTopic(id?: string) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "topic-task-list" }),
     target: create(TargetSchema, {
       type: deriveTypeUrl(TaskListSchema),
-      criterion: {
-        case: "includeAll",
-        value: true,
-      },
+      criterion:
+        id === undefined
+          ? { case: "includeAll", value: true }
+          : {
+              case: "filters",
+              value: create(TargetFiltersSchema, {
+                idFilter: {
+                  id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+                },
+              }),
+            },
     }),
     context: createActorContext(),
   });
