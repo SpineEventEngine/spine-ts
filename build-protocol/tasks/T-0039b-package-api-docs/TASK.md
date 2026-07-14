@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 1 assigned
+Status: Review round 1 findings accepted — fixes assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -236,3 +236,25 @@ may change. No subagents; coordinator retains Git and independent review.
 - All reviewers are read-only, may not spawn subagents, and must ignore
   historical superseded text unless current task records or changed public docs
   claim it as active state. Security remains deferred to T-0041.
+
+## Independent Review Round 1 Results
+
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: clean.
+- Style/maintainability: two accepted findings:
+  1. `README.md` incorrectly excludes semantic-tag consumption in runtime
+     routing even though D-0069 and current runtime routing consume command
+     assignee and event receiver tags. Remove or narrow that false exclusion.
+  2. `packages/server/README.md` repeats the same production supervision,
+     topology, adapter, catch-up, and retry exclusions in adjacent sentences.
+     Consolidate them while retaining backoff/scheduler ownership and the
+     no-future-policy qualifier.
+- Each dispatch explicitly supplied its assigned model/reasoning. The Desktop
+  multi-agent runtime metadata declares the immutable role profiles used:
+  documentation `gpt-5.6-luna` / medium and the other three reviewers
+  `gpt-5.6-terra` / high. Child-local model introspection is not required
+  because the orchestrator-facing role configuration is the runtime metadata
+  and matched every explicit spawn field.
+- The complete accepted batch returns to the existing implementer, immutable
+  `gpt-5.6-terra` / medium, docs/records only, no subagents.

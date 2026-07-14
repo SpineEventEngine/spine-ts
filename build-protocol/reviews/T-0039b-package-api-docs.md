@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 1 assigned
+Status: Review round 1 findings accepted — fixes assigned
 
 ## Review Scope
 
@@ -111,3 +111,21 @@ no reviewer result has yet been accepted.
   records or changed public docs claim it as active. The complete wave must be
   collected before findings are deduplicated or returned to implementation.
 - Security is deferred to T-0041 by protocol.
+
+## Independent Review Round 1 Results
+
+- Documentation completeness (`gpt-5.6-luna` / medium): clean.
+- TypeScript/API docs (`gpt-5.6-terra` / high): clean.
+- Performance/reliability (`gpt-5.6-terra` / high): clean.
+- Style/maintainability (`gpt-5.6-terra` / high): two actionable findings:
+  1. P1, `README.md`: remove or narrow the false initial-release exclusion for
+     semantic-tag consumption already implemented by D-0069 routing.
+  2. P2, `packages/server/README.md`: merge adjacent duplicate production
+     exclusion lists while preserving unique scheduler/backoff and no-future-
+     policy wording.
+- The orchestrator collected the complete wave before adjudication and closed
+  every reviewer. The Desktop runtime exposes immutable role model/reasoning
+  metadata matching all explicit spawn fields; child-local inability to inspect
+  that metadata does not conflict with the orchestrator-facing runtime record.
+- Both findings are technically accepted and assigned together to the existing
+  implementer (`gpt-5.6-terra` / medium), docs/records only, no subagents.
