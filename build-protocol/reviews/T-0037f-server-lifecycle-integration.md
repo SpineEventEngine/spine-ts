@@ -1,6 +1,6 @@
 # T-0037f Review Log
 
-Status: Slice 6 final round-3 re-review assigned
+Status: Slice 6 final round-4 re-review assigned
 
 Derived status mirror: the canonical current state is the `Status` header in
 `build-protocol/tasks/T-0037f-server-lifecycle-integration/TASK.md`.
@@ -1018,3 +1018,44 @@ non-actionable unless a current T-0037f record or changed active doc claims it.
 - Documentation and API N/A: no changed docs/production/declarations/exports and
   prior lanes CLEAN. Resume style/maintainability and performance/reliability
   at `gpt-5.6-terra` / high, no subagents. Security deferred to T-0041.
+
+## Slice 6 Final Round-3 Re-review Result
+
+- `2026-07-14T00:34:20Z`: performance/reliability CLEAN; style/maintainability
+  LOW. Actual Terra High, matching dispatch; no subagents; both closed.
+- Retain and close exact cleanup and terminal retry outcomes on unexpected
+  success. Docs/API N/A with zero diff; security deferred. Re-review this test-
+  only correction after focused verification.
+
+## Slice 6 Final Round-4 Review-Fix Handback
+
+- `2026-07-14T00:40:29Z`: test-only correction retains all three start
+  settlements and closes each exact unexpected `RunningServer`. Cleanup
+  continuation remains rejection-gated and cannot substitute another attempt
+  when a retained cleanup settlement exists. All other teardown remains
+  independently guarded; production/docs/public/service/generated content is
+  unchanged.
+- Strict structural baseline RED (eight missing properties) becomes 9/9 GREEN.
+  Affected cases pass 2/2, lifecycle 41/41, the repeated three-file gate 72/72,
+  and services 98/98. Both typechecks, scoped ESLint, cleanup, and Prettier pass.
+  One first-pass combined-gate timing failure was non-reproducible in isolation
+  and on immediate unchanged full-gate rerun. Exact audits follow; coordinator
+  owns clean re-review and the intentionally deferred full verify.
+- Exact final audit passes five-path scope, 4/4 synchronized status, zero
+  production/docs/public/export/service diff, generated-clean, scoped Prettier,
+  and diff integrity. Ready for coordinator re-review; not self-accepted.
+
+## Slice 6 Final Round-4 Re-review Assignment
+
+- `2026-07-14T00:45:54Z`: accept and close the same implementer at actual
+  `gpt-5.6-terra` / medium matching explicit dispatch, no subagents. Fresh
+  coordinator checks pass both typechecks, scoped ESLint/cleanup/diff checks,
+  and 3 files / 72 tests.
+- Documentation: N/A because this correction has zero docs or active-claim
+  delta and the preceding lane is CLEAN. TypeScript/API docs: N/A because it
+  has zero production, declaration, export, or public-contract delta and the
+  preceding lane is CLEAN. Assign style/maintainability and performance/
+  reliability at explicit `gpt-5.6-terra` / high, no subagents, against the
+  fresh round-4 package. Security remains deferred to T-0041. Review only the
+  active test teardown and current records; superseded historical text is not
+  active unless these records claim it.

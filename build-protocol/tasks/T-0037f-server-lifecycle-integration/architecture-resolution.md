@@ -1,6 +1,6 @@
 # T-0037f Architecture Resolution
 
-Status: Slice 6 final round-3 re-review assigned
+Status: Slice 6 final round-4 re-review assigned
 
 ## Slice 3 Round-2 Review-Fix
 
@@ -1164,3 +1164,35 @@ smallest coherent implementation.
   verify with 1,600 native and coverage tests. Actual Terra Medium implementer
   used no subagents and is closed. Production/docs/API architecture is
   unchanged; final style/reliability test review follows.
+
+## Slice 6 Final Round-4 Teardown Clarification
+
+- `2026-07-14T00:34:20Z`: retain all three start outcomes (initial, cleanup,
+  terminal) across teardown and close any exact successful handle. Test-only;
+  no runtime, docs, API, or architecture change.
+
+## Slice 6 Final Round-4 Teardown Handback
+
+- `2026-07-14T00:40:29Z`: the test now preserves attempt provenance through
+  teardown: the initial rejection alone authorizes cleanup continuation, and an
+  existing retained cleanup attempt prevents a substitute `start()`. Exact
+  successful initial, cleanup, and terminal handles close independently before
+  context/environment/fixture cleanup. This is test structure only and leaves
+  the accepted lifecycle architecture unchanged.
+- Baseline/working-tree structural evidence is RED then 9/9 GREEN. Focused
+  2/2, lifecycle 41/41, server/lifecycle/index 72/72, services 98/98, both
+  typechecks, ESLint, cleanup, and Prettier are GREEN. Coordinator retains the
+  final full-verify and acceptance decision.
+- Exact final audit passes five-path scope, 4/4 status, generated-clean, zero
+  production/docs/public/export/service diff, and diff integrity.
+
+## Slice 6 Final Round-4 Re-review Assignment
+
+- `2026-07-14T00:45:54Z`: coordinator accepts and closes the same Terra Medium
+  implementer with matching explicit dispatch and no subagents. The focused
+  coordinator gate passes 3 files / 72 tests, both typechecks, and scoped
+  static/diff checks.
+- This remains test-ownership correction only. Documentation/API are N/A after
+  prior CLEAN results and zero corresponding delta. Assign the existing style
+  and reliability reviewers at explicit Terra High, no subagents; defer
+  security to T-0041 and full verify to the clean final pre-merge gate.

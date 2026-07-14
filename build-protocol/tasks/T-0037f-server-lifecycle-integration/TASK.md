@@ -1,6 +1,6 @@
 # T-0037f: Server Lifecycle Integration
 
-Status: Slice 6 final round-3 re-review assigned
+Status: Slice 6 final round-4 re-review assigned
 
 Started: `2026-07-13T17:10:59Z`
 
@@ -1325,3 +1325,44 @@ BoundedContext instance.` The isolated file reproduces 4 failed / 94 passed.
 - Test/records-only round: docs and TypeScript/API docs N/A because README,
   TSDoc, production, declarations, and exports are unchanged and previously
   CLEAN. Assign style and reliability at Terra High; security deferred.
+
+## Slice 6 Final Round-3 Re-review Finding
+
+- `2026-07-14T00:34:20Z`: reliability CLEAN; style LOW. Actual Terra High,
+  no subagents, both closed.
+- Low: cleanup and terminal retry outcomes in the failed-start regression remain
+  block-local. Retain each exact outcome in optional outer handles and close any
+  unexpected `RunningServer` in teardown, just like the initial outcome. Same
+  Terra Medium implementer owns the test-only round-4 fix. Use focused inner
+  gates; reserve full verify for clean final pre-merge acceptance.
+
+## Slice 6 Final Round-4 Review-Fix Handback
+
+- `2026-07-14T00:40:29Z`: the parameterized failed-start regression now retains
+  initial, cleanup-only, and terminal outcomes plus every exact unexpectedly
+  successful `RunningServer`. Teardown closes those exact handles and starts a
+  cleanup continuation only after an initial rejection and only when no cleanup
+  attempt was retained. No production, docs, public, service, or generated file
+  changed.
+- Structural baseline RED reports eight missing retention/teardown properties;
+  the working-tree scan passes 9/9. Affected cases pass 2/2, lifecycle passes
+  41/41, repeated server/lifecycle/index passes 72/72, and services pass 98/98.
+  Both typechecks, scoped ESLint, cleanup enforcement, and scoped Prettier pass.
+  Full verify is intentionally reserved for coordinator acceptance.
+- Final audit passes exact five-path scope, 4/4 synchronized status, zero
+  production/docs/public/export/service diff, generated-clean, scoped Prettier,
+  and `git diff --check`.
+
+## Slice 6 Final Round-4 Re-review Assignment
+
+- `2026-07-14T00:45:54Z`: coordinator accepts and closes the same implementer,
+  actual `gpt-5.6-terra` / medium matching explicit dispatch, with no
+  subagents. The coordinator-focused gate passes both typechecks, scoped
+  ESLint/cleanup/diff checks, and 3 files / 72 tests.
+- Documentation and TypeScript/API docs are N/A for this wave because the
+  round-4 delta changes no documentation, production source, declaration,
+  export, or public contract, and both prior lanes are CLEAN. Assign the
+  existing style/maintainability and performance/reliability reviewers at
+  explicit `gpt-5.6-terra` / high, no subagents. Security remains deferred to
+  T-0041. Full `pnpm verify` remains reserved for the clean final pre-merge
+  gate.

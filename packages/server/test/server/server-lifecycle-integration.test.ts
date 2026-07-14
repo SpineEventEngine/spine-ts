@@ -2359,6 +2359,12 @@ describe("Server lifecycle integration", () => {
       let firstRunning: Awaited<ReturnType<Server["start"]>> | undefined;
       const firstStartState = { rejected: false };
       let retainingFirstOutcome: Promise<unknown> | undefined;
+      let cleanupOutcome: unknown;
+      let cleanupRunning: Awaited<ReturnType<Server["start"]> | undefined>;
+      let retainingCleanupOutcome: Promise<unknown> | undefined;
+      let terminalOutcome: unknown;
+      let terminalRunning: Awaited<ReturnType<Server["start"]> | undefined>;
+      let retainingTerminalOutcome: Promise<unknown> | undefined;
 
       try {
         const { failure: resourceFailure, expectedFailures } = createScenario();
@@ -2413,30 +2419,71 @@ describe("Server lifecycle integration", () => {
         expect(worker.retireCalls).toBe(1);
         expect(createHttp2Server).not.toHaveBeenCalled();
 
-        const completion = await server.start().catch((error: unknown) => error);
-        expectDeferredCleanupCompletion(completion);
-        expect(closeFailedResource).toHaveBeenCalledTimes(2);
-        expect(closeSuccessfulResource).toHaveBeenCalledOnce();
-        expect(worker.starts).toBe(1);
-        expect(worker.stopCalls).toBe(1);
-        expect(worker.awaitCalls).toBe(1);
-        expect(worker.retireCalls).toBe(1);
-        expect(createHttp2Server).not.toHaveBeenCalled();
+        if (firstStartState.rejected) {
+          retainingCleanupOutcome = server.start().then(
+            (running) => {
+              cleanupRunning = running;
+              cleanupOutcome = running;
+              return running;
+            },
+            (error: unknown) => {
+              cleanupOutcome = error;
+              return error;
+            },
+          );
+          await retainingCleanupOutcome;
+          expectDeferredCleanupCompletion(cleanupOutcome);
+          expect(closeFailedResource).toHaveBeenCalledTimes(2);
+          expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+          expect(worker.starts).toBe(1);
+          expect(worker.stopCalls).toBe(1);
+          expect(worker.awaitCalls).toBe(1);
+          expect(worker.retireCalls).toBe(1);
+          expect(createHttp2Server).not.toHaveBeenCalled();
 
-        const terminal = await server.start().catch((error: unknown) => error);
-        expectConsumedFailedStartServer(terminal);
-        expect(closeFailedResource).toHaveBeenCalledTimes(2);
-        expect(closeSuccessfulResource).toHaveBeenCalledOnce();
-        expect(worker.starts).toBe(1);
-        expect(createHttp2Server).not.toHaveBeenCalled();
+          retainingTerminalOutcome = server.start().then(
+            (running) => {
+              terminalRunning = running;
+              terminalOutcome = running;
+              return running;
+            },
+            (error: unknown) => {
+              terminalOutcome = error;
+              return error;
+            },
+          );
+          await retainingTerminalOutcome;
+          expectConsumedFailedStartServer(terminalOutcome);
+          expect(closeFailedResource).toHaveBeenCalledTimes(2);
+          expect(closeSuccessfulResource).toHaveBeenCalledOnce();
+          expect(worker.starts).toBe(1);
+          expect(createHttp2Server).not.toHaveBeenCalled();
+        }
       } finally {
         worker?.release();
         await retainingFirstOutcome?.catch(() => undefined);
         await firstRunning?.close().catch(() => undefined);
-        if (firstStartState.rejected && server !== undefined) {
-          const cleanupRunning = await server.start().catch(() => undefined);
-          await cleanupRunning?.close().catch(() => undefined);
+        if (
+          firstStartState.rejected &&
+          retainingCleanupOutcome === undefined &&
+          server !== undefined
+        ) {
+          retainingCleanupOutcome = server.start().then(
+            (running) => {
+              cleanupRunning = running;
+              cleanupOutcome = running;
+              return running;
+            },
+            (error: unknown) => {
+              cleanupOutcome = error;
+              return error;
+            },
+          );
         }
+        await retainingCleanupOutcome?.catch(() => undefined);
+        await cleanupRunning?.close().catch(() => undefined);
+        await retainingTerminalOutcome?.catch(() => undefined);
+        await terminalRunning?.close().catch(() => undefined);
         await fixture?.context.close().catch(() => undefined);
         await fixture?.environment.close().catch(() => undefined);
         fixture?.dispose();
