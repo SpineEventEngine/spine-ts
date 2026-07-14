@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { createClient, type Client } from "@connectrpc/connect";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
 import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   EntityStateWithVersionSchema,
   QueryIdSchema,
+  QueryResponseSchema,
   QuerySchema,
   type Query,
   type QueryResponse,
@@ -53,6 +54,9 @@ type TodoModule = typeof import("../dist/src/index.js");
 let createTodoContext: TodoModule["createTodoContext"];
 let startTodoServer: TodoModule["startTodoServer"];
 const signalMetadata = new SignalMetadata();
+const maxRemoteDiagnosticRows = 4;
+const maxRemoteDiagnosticIdLength = 64;
+const remoteOperationTimeoutMs = 500;
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
@@ -68,7 +72,13 @@ describe("@spine-ts/example-todo", () => {
 
     renameSync(registry, hiddenRegistry);
     try {
-      await expect(createTodoContext()).rejects.toThrow();
+      const failure = await createTodoContext().catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toContain(
+        `Generated handler registry module "${registry}"`,
+      );
+      expect((failure as Error).message).toContain("must exist and be readable.");
     } finally {
       renameSync(hiddenRegistry, registry);
     }
@@ -93,7 +103,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("keeps generated registry discovery out of application context assembly", () => {
-    const source = readFileSync(fileURLToPath(new URL("index.ts", import.meta.url)), "utf8");
+    const source = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
 
     expect(source).not.toContain("GeneratedRegistryDiscovery");
     expect(source).not.toContain("HandlerMetadataRegistry");
@@ -101,24 +111,97 @@ describe("@spine-ts/example-todo", () => {
     expect(source).not.toContain("new Repository");
   });
 
-  it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
-    const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
+  it("reports bounded diagnostics when remote query acceptance expires", async () => {
+    const response = create(QueryResponseSchema, {
+      message: [
+        create(EntityStateWithVersionSchema, {
+          state: packAny(
+            TaskListSchema,
+            create(TaskListSchema, {
+              id: "unsafe\nrow",
+            }),
+          ),
+        }),
+      ],
+    });
+    let reads = 0;
 
-    try {
-      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
-      const commands = createClient(CommandService, transport);
-      const queries = createClient(QueryService, transport);
-      const subscriptions = createClient(SubscriptionService, transport);
-      const subscription = await subscriptions.subscribe(createTaskListTopic());
-      const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription);
+    const failure = await readRemoteEventually(
+      {
+        read: () => {
+          reads += 1;
+          return Promise.resolve(response);
+        },
+      },
+      createTaskListQuery(),
+      () => false,
+      20,
+      1,
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain("query-task-list");
+    expect((failure as Error).message).toContain("after 20ms");
+    expect((failure as Error).message).toContain("row IDs [unsafe row]");
+    expect((failure as Error).message).not.toContain("unsafe\nrow");
+    expect(reads).toBeGreaterThan(1);
+  });
+
+  it("rejects a remote command when its client call never settles", async () => {
+    const timeoutMs = 20;
+    const startedAt = Date.now();
+    const failure = await postRemoteCommand(
+      {
+        post: () => new Promise<never>(() => undefined),
+      },
+      createTaskCommand("command-timeout", "task-timeout", "Timeout"),
+      "controlled hanging command",
+      timeoutMs,
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      `Timed out waiting for controlled hanging command after ${String(timeoutMs)}ms.`,
+    );
+    expect(Date.now() - startedAt).toBeLessThan(500);
+  });
+
+  it("observes an OK acknowledgement and eventual subscription delivery", async () => {
+    await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
+      const subscription = await withTimeout(
+        subscriptions.subscribe(createTaskListTopic()),
+        "standalone subscription creation",
+        500,
+      );
+      const stream = new AbortController();
+      const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription, {
+        signal: stream.signal,
+      });
       const iterator = updates[Symbol.asyncIterator]();
       let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
-        await delay(25);
+        const probeUpdate = withTimeout(
+          iterator.next(),
+          "standalone subscription activation probe update",
+          500,
+        );
+        await postRemoteCommand(
+          commands,
+          createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
+          "standalone subscription activation probe acknowledgement",
+        );
+        const probed = await probeUpdate;
+        if (probed.done === true) {
+          throw new Error("Expected standalone subscription activation probe update.");
+        }
+        expect(unpackSubscribedTaskList(probed.value).list.tasks[0]?.title).toBe("Probe");
+
         nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
-        const ack = await commands.post(
+        const ack = await postRemoteCommand(
+          commands,
           createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
+          "standalone command acknowledgement",
         );
         const response = await readRemoteEventually(
           queries,
@@ -132,21 +215,258 @@ describe("@spine-ts/example-todo", () => {
         }
         const update = unpackSubscribedTaskList(delivered.value);
 
-        expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+        expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
         expect(ack.status?.status.case).toBe("ok");
         expect(response.response?.status?.status.case).toBe("ok");
         expect(readTask(response, "task-standalone")?.completed).toBe(false);
         expect(update.subscription.id).toEqual(subscription.id);
         expect(update.list.tasks[0]?.title).toBe("Standalone");
+
+        const cancel = await withTimeout(
+          subscriptions.cancel(subscription),
+          "standalone subscription cancellation acknowledgement",
+          500,
+        );
+        stream.abort();
+        const settled = await withTimeout(
+          iterator.return?.() ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "standalone subscription iterator return",
+          500,
+        );
+
+        expect(cancel.status?.status.case).toBe("ok");
+        expect(settled.done).toBe(true);
       } finally {
         await nextUpdate?.catch(() => undefined);
-        await subscriptions.cancel(subscription);
-        await iterator.return?.();
+        await withTimeout(
+          subscriptions.cancel(subscription),
+          "standalone subscription cancellation cleanup",
+          500,
+        ).catch(() => undefined);
+        stream.abort();
+        await withTimeout(
+          iterator.return?.() ??
+            Promise.resolve<IteratorResult<SubscriptionUpdate>>({ done: true, value: undefined }),
+          "standalone subscription iterator cleanup",
+          500,
+        );
       }
+    });
+  }, 15_000);
+
+  it("queries all rows, an exact ID, and a supported column over generated clients", async () => {
+    await withRemoteTodo(async ({ commands, queries }) => {
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-query-first", "task-first", "First"),
+        "first remote query setup acknowledgement",
+      );
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-query-second", "task-second", "Second"),
+        "second remote query setup acknowledgement",
+      );
+      const all = await readRemoteEventually(
+        queries,
+        createTaskListQuery(),
+        (candidate) => candidate.message.length === 2,
+      );
+      const exact = await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-first"),
+        (candidate) => candidate.message.length === 1,
+      );
+
+      await postRemoteCommand(
+        commands,
+        createCompleteCommand("command-remote-query-complete", "task-first"),
+        "remote query completion acknowledgement",
+      );
+      const filtered = await readRemoteEventually(
+        queries,
+        createOpenTaskCountQuery(1),
+        (candidate) =>
+          candidate.message.length === 1 && readList(candidate, "task-second") !== undefined,
+      );
+
+      expect(all.message.map((message) => unpackTaskList(message.state)?.id).sort()).toEqual([
+        "task-first",
+        "task-second",
+      ]);
+      expect(readTask(exact, "task-first")?.title).toBe("First");
+      expect(readList(filtered, "task-second")?.openTaskCount).toBe(1);
+    });
+  }, 15_000);
+
+  it("returns validation and business refusals without changing remote state", async () => {
+    await withRemoteTodo(async ({ commands, queries }) => {
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-refusal-create", "task-refusal", "Kept"),
+        "remote refusal setup acknowledgement",
+      );
+      const original = await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-refusal"),
+        (candidate) => taskTitle(candidate, "task-refusal") === "Kept",
+      );
+      const invalidRename = await postRemoteCommand(
+        commands,
+        createRenameCommand("command-remote-invalid-rename", "task-refusal", "", {
+          validate: false,
+        }),
+        "invalid rename acknowledgement",
+      );
+      const reopenOpen = await postRemoteCommand(
+        commands,
+        createReopenCommand("command-remote-reopen-open", "task-refusal"),
+        "reopen-open refusal acknowledgement",
+      );
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-refusal-fence", "task-refusal-fence", "Fence"),
+        "validation and reopen refusal fence acknowledgement",
+      );
+      await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-refusal-fence"),
+        (candidate) => taskTitle(candidate, "task-refusal-fence") === "Fence",
+      );
+      const afterRefusals = await readRemoteOnce(
+        queries,
+        createTaskListIdQuery("task-refusal"),
+        "task state after validation and reopen refusal fence",
+      );
+
+      await postRemoteCommand(
+        commands,
+        createCompleteCommand("command-remote-complete", "task-refusal"),
+        "remote completion acknowledgement",
+      );
+      const completed = await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-refusal"),
+        (candidate) => taskCompleted(candidate, "task-refusal") === true,
+      );
+      const completeAgain = await postRemoteCommand(
+        commands,
+        createCompleteCommand("command-remote-complete-again", "task-refusal"),
+        "repeated completion refusal acknowledgement",
+      );
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-complete-refusal-fence", "task-complete-refusal-fence", "Fence"),
+        "complete refusal fence acknowledgement",
+      );
+      await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-complete-refusal-fence"),
+        (candidate) => taskTitle(candidate, "task-complete-refusal-fence") === "Fence",
+      );
+      const afterCompleteAgain = await readRemoteOnce(
+        queries,
+        createTaskListIdQuery("task-refusal"),
+        "task state after complete refusal fence",
+      );
+
+      expect(errorType(invalidRename.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+      expect(
+        validationDetails(invalidRename.status?.status)?.constraintViolation.length,
+      ).toBeGreaterThan(0);
+      expect(taskListSnapshot(afterRefusals, "task-refusal")).toEqual(
+        taskListSnapshot(original, "task-refusal"),
+      );
+      expect(errorType(reopenOpen.status?.status)).toBe("TASK_NOT_DONE");
+      expect(errorType(completeAgain.status?.status)).toBe("TASK_ALREADY_DONE");
+      expect(taskListSnapshot(afterCompleteAgain, "task-refusal")).toEqual(
+        taskListSnapshot(completed, "task-refusal"),
+      );
+    });
+  }, 15_000);
+
+  it("rejects missing and blank IDs without a remote task effect", async () => {
+    await withRemoteTodo(async ({ commands, queries }) => {
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-id-create", "task-kept", "Kept"),
+        "invalid ID setup acknowledgement",
+      );
+      const before = await readRemoteEventually(
+        queries,
+        createTaskListQuery(),
+        (candidate) => candidate.message.length === 1,
+      );
+      const missingId = await postRemoteCommand(
+        commands,
+        packCommand({
+          ...createCommandMetadata("command-remote-missing-id"),
+          schema: CreateTaskSchema,
+          message: create(CreateTaskSchema, { title: "Missing ID" }),
+          validate: false,
+        }),
+        "missing ID rejection acknowledgement",
+      );
+      const blankId = await postRemoteCommand(
+        commands,
+        packCommand({
+          ...createCommandMetadata("command-remote-blank-id"),
+          schema: CreateTaskSchema,
+          message: create(CreateTaskSchema, {
+            id: create(TaskIdSchema, { value: "   " }),
+            title: "Blank ID",
+          }),
+          validate: false,
+        }),
+        "blank ID rejection acknowledgement",
+      );
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-id-fence", "task-id-fence", "Fence"),
+        "invalid ID fence acknowledgement",
+      );
+      await readRemoteEventually(
+        queries,
+        createTaskListIdQuery("task-id-fence"),
+        (candidate) => taskTitle(candidate, "task-id-fence") === "Fence",
+      );
+      const after = await readRemoteOnce(
+        queries,
+        createTaskListQuery(),
+        "task rows after invalid ID fence",
+      );
+
+      expect(missingId.status?.status.case).toBe("error");
+      expect(blankId.status?.status.case).toBe("error");
+      expect(taskListSnapshot(after, "task-kept")).toEqual(taskListSnapshot(before, "task-kept"));
+      expect(after.message.map((message) => unpackTaskList(message.state)?.id).sort()).toEqual([
+        "task-id-fence",
+        "task-kept",
+      ]);
+    });
+  }, 15_000);
+
+  it("closes the loopback listener and every explicitly owned client session", async () => {
+    const baseUrl = await withRemoteTodo(async ({ baseUrl, queries }) => {
+      await expect(
+        readRemoteOnce(queries, createTaskListQuery(), "pre-close task-list read"),
+      ).resolves.toBeDefined();
+      return baseUrl;
+    });
+    const probeSession = new Http2SessionManager(baseUrl);
+    const closedQueries = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl, sessionManager: probeSession }),
+    );
+
+    try {
+      await expect(
+        withTimeout(closedQueries.read(createTaskListQuery()), "closed standalone listener", 500),
+      ).rejects.toThrow();
     } finally {
-      await server.close();
+      probeSession.abort();
     }
-  });
+  }, 15_000);
 
   it("creates one task through command handling and exposes it in the task list", async () => {
     const fixture = new BoundedContextFixture(await createTodoContext(), {
@@ -624,6 +944,55 @@ describe("@spine-ts/example-todo", () => {
   });
 });
 
+interface RemoteTodo {
+  readonly baseUrl: string;
+  readonly commands: Client<typeof CommandService>;
+  readonly queries: Client<typeof QueryService>;
+  readonly subscriptions: Client<typeof SubscriptionService>;
+}
+
+type RemoteCommandClient = Pick<Client<typeof CommandService>, "post">;
+type RemoteQueryClient = Pick<Client<typeof QueryService>, "read">;
+
+async function postRemoteCommand(
+  client: RemoteCommandClient,
+  command: Parameters<RemoteCommandClient["post"]>[0],
+  label: string,
+  timeoutMs = remoteOperationTimeoutMs,
+): Promise<Awaited<ReturnType<RemoteCommandClient["post"]>>> {
+  return await withTimeout(client.post(command), label, timeoutMs);
+}
+
+async function readRemoteOnce(
+  client: RemoteQueryClient,
+  query: Parameters<RemoteQueryClient["read"]>[0],
+  label: string,
+  timeoutMs = remoteOperationTimeoutMs,
+): Promise<Awaited<ReturnType<RemoteQueryClient["read"]>>> {
+  return await withTimeout(client.read(query), label, timeoutMs);
+}
+
+async function withRemoteTodo<T>(onRun: (remote: RemoteTodo) => Promise<T>): Promise<T> {
+  const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
+  const session = new Http2SessionManager(server.baseUrl);
+  const transport = createGrpcTransport({
+    baseUrl: server.baseUrl,
+    sessionManager: session,
+  });
+
+  try {
+    return await onRun({
+      baseUrl: server.baseUrl,
+      commands: createClient(CommandService, transport),
+      queries: createClient(QueryService, transport),
+      subscriptions: createClient(SubscriptionService, transport),
+    });
+  } finally {
+    session.abort();
+    await withTimeout(server.close(), "standalone server close", 6_000);
+  }
+}
+
 function assertBuiltExample(): void {
   const output = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
   const registry = fileURLToPath(
@@ -921,19 +1290,68 @@ async function nextSubscriptionUpdate(
 async function readRemoteEventually(
   client: { readonly read: (query: Query) => Promise<QueryResponse> },
   query: Query,
-  accept: (response: QueryResponse) => boolean,
+  onAccept: (response: QueryResponse) => boolean,
   timeoutMs = 500,
   intervalMs = 5,
 ): Promise<QueryResponse> {
   const deadline = Date.now() + timeoutMs;
-  let response = await client.read(query);
+  let attempts = 0;
+  let response: QueryResponse | undefined;
 
-  while (!accept(response) && Date.now() < deadline) {
-    await delay(intervalMs);
-    response = await client.read(query);
+  while (Date.now() < deadline) {
+    const remainingMs = Math.max(1, deadline - Date.now());
+    response = await withTimeout(
+      client.read(query),
+      `remote query ${sanitizeDiagnostic(query.id?.value ?? "<missing>")} response`,
+      remainingMs,
+    );
+    attempts += 1;
+    if (onAccept(response)) {
+      return response;
+    }
+    await delay(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
   }
 
-  return response;
+  throw remoteReadTimeout(query, response, timeoutMs, attempts);
+}
+
+function remoteReadTimeout(
+  query: Query,
+  response: QueryResponse | undefined,
+  timeoutMs: number,
+  attempts: number,
+): Error {
+  const rows = response?.message ?? [];
+  const rowIds = rows.slice(0, maxRemoteDiagnosticRows).map((message) => {
+    try {
+      return sanitizeDiagnostic(unpackTaskList(message.state)?.id ?? "<unreadable>");
+    } catch {
+      return "<unreadable>";
+    }
+  });
+  const omitted = rows.length - rowIds.length;
+  const suffix = omitted > 0 ? `, <${String(omitted)} rows omitted>` : "";
+  const queryId = sanitizeDiagnostic(query.id?.value ?? "<missing>");
+  const status = response?.response?.status?.status.case ?? "missing";
+
+  return new Error(
+    `Remote query ${queryId} did not satisfy acceptance after ${String(timeoutMs)}ms ` +
+      `(${String(attempts)} reads); last status ${status}, ${String(rows.length)} rows, ` +
+      `row IDs [${rowIds.join(", ")}${suffix}].`,
+  );
+}
+
+function sanitizeDiagnostic(value: string): string {
+  let safeValue = "";
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    safeValue += code <= 31 || code === 127 ? " " : character;
+  }
+  const sanitized = safeValue.trim();
+  if (sanitized.length === 0) {
+    return "<blank>";
+  }
+  return sanitized.slice(0, maxRemoteDiagnosticIdLength);
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
