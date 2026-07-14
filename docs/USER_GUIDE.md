@@ -779,13 +779,15 @@ groups, planner-local route/worker IDs, and correlation keys back to plan-level
 transport arrays. They do not retain handler names, entity names, raw readiness
 metadata, or ZeroMQ details.
 
-It does not create a context runtime handle, command/event/import bus, storage
-lifecycle, delivery engine, integration broker, transport endpoint, broker
-supervisor, retry worker, durable delivery store, or handler invocation path.
-The separate `Server` API is only a local HTTP/2 owner around `SpineServices`.
-Accepted signal intake values still mean only accepted for later asynchronous
-work; they are not `Ack` messages and do not claim validation, storage,
-dispatch, delivery, or successful handling.
+The routing plan itself does not create a context runtime handle,
+command/event/import bus, storage lifecycle, delivery engine, integration
+broker, transport endpoint, broker supervisor, retry worker, durable delivery
+store, or handler invocation path. The separate `Server` API owns local
+composition: after startup recovery, it opens each built context's command and
+event transport intake before opening its HTTP/2 listener. Accepted signal
+intake values still mean only accepted for later asynchronous work; they are not
+`Ack` messages and do not claim successful storage, dispatch, delivery, or
+handling.
 
 ## Local Server Lifecycle
 
@@ -838,17 +840,30 @@ production gap, and `InMemoryStorageFactory` is local/test-only. The environment
 selects and owns facilities for server assembly. `Server` accepts built
 contexts and bounded-context builders; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
-more specific local factory first. Closing a running server is idempotent
-and follows the JVM-familiar order: stop accepting requests, close active
-HTTP/2 sessions, close owned contexts/resources, then close environment-owned
-facilities when the server owns the environment. If a close hook fails,
-remaining close hooks still run and the returned promise rejects with an
-`AggregateError`; a later `close()` retry attempts only the close hooks that
-failed previously.
+more specific local factory first.
+
+After recovery, `Server.start()` opens built contexts' command/event transport
+intake sequentially in deterministic input order. Every context must succeed
+before the HTTP server is created or its listener opens. Accepted transported
+commands enter the owning command bus; accepted events enter the owning event
+bus and then follow ordinary projection/subscriber fan-out. Native child-process
+coverage exercises this behavior between separate same-host ZeroMQ transport
+instances. It waits through bounded observation and quiet windows for command
+handling and, for one fixed transported event, checks one observation from each
+matching projection. That bounded check is not a general exactly-once delivery
+guarantee for durable redelivery, retries, process restarts, or remote transport.
+
+Closing a running server is idempotent and follows the JVM-familiar order: stop
+network intake and active HTTP/2 sessions, close context transport intake and
+drain accepted work, detach environment delivery, close owned
+contexts/resources, then close environment-owned facilities when the server
+owns the environment. Network and context-intake close are hard gates. A later
+`close()` retries only unfinished phases; successful phases do not repeat.
 
 `Server` does not expose ZeroMQ, IPC endpoint names, worker supervision,
-durable scheduling, retry ownership, or a Java-style process-wide environment
-singleton.
+durable scheduling, retry ownership, remote/multi-host topology, or a
+Java-style process-wide environment singleton. The current ZeroMQ execution
+path remains trusted same-host IPC only.
 Managed sandboxes may reject local listener tests with `EPERM`; rerun
 listener-based verification natively when that happens.
 
@@ -932,10 +947,14 @@ transport routing descriptors internally. Public package root exports do not
 include ZeroMQ socket classes, endpoint strings, multipart frame layouts, native
 binding types, broker topology, process supervision, delivery retries, or
 server-owned handler materialization. Native tests prove same-host `ipc://`
-publish/subscribe, request/reply, and runtime command/event callback behavior
-over temporary endpoints. Managed sandboxes may reject `ipc://` binds with
-`EPERM`, so live IPC verification can require native filesystem/socket
-permissions outside the sandbox.
+publish/subscribe, request/reply, runtime command/event callbacks, and a public
+`Server` child process that handles a transported command, projects its emitted
+event, and checks during bounded observation and quiet windows that one fixed
+transported event produces one observation from each matching projection. This
+test evidence is not a general exactly-once guarantee for durable redelivery,
+retries, process restarts, or remote transport. Managed sandboxes may reject
+`ipc://` binds with `EPERM`, so live IPC verification can require native
+filesystem/socket permissions outside the sandbox.
 
 The ZeroMQ `SignalTransport` uses Node's V8 serializer internally, so its local
 IPC frames are trusted runtime data, not an untrusted network protocol. Use this

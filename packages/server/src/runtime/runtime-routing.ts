@@ -179,6 +179,22 @@ export function createRoutingPlan(input: RoutingPlanInput): ServerRuntimeRouting
   });
 }
 
+/** @internal Create one transport intake route per type accepted by a built context. */
+export function createContextRoutingPlan(context: BoundedContext): ServerRuntimeRoutingPlan {
+  const validatedContext = validateContext({ context });
+  const commandTypeUrls = normalizeAcceptedTypeUrls(
+    validatedContext.commandBus().acceptedCommandTypes(),
+  );
+  const eventTypeUrls = normalizeAcceptedTypeUrls(validatedContext.eventBus().acceptedEventTypes());
+
+  return Object.freeze({
+    context: validatedContext.snapshot,
+    commands: createAcceptedCommandPlan(commandTypeUrls),
+    events: createAcceptedEventPlan(eventTypeUrls, validatedContext.snapshot.name.value),
+    deferred: createDeferredSeams(),
+  });
+}
+
 function createCommandPlan(
   readiness: CommandRegistrationReadiness | undefined,
 ): CommandRuntimeRoutingPlan {
@@ -208,6 +224,46 @@ function createCommandPlan(
     subscriptions: Object.freeze(routeDrafts.map(({ subscription }) => subscription)),
     workerIds: Object.freeze([commandWorkerId]),
     routes,
+  });
+}
+
+function createAcceptedCommandPlan(typeUrls: readonly string[]): CommandRuntimeRoutingPlan {
+  if (typeUrls.length === 0) {
+    return createEmptyCommandPlan();
+  }
+
+  const routeDrafts = Object.freeze(
+    typeUrls.map((typeUrl, index) => createContextCommandRoute(typeUrl, index + 1)),
+  );
+
+  return Object.freeze({
+    topics: Object.freeze(routeDrafts.map(({ topic }) => topic)),
+    subscriptions: Object.freeze(routeDrafts.map(({ subscription }) => subscription)),
+    workerIds: Object.freeze([commandWorkerId]),
+    routes: finalizeCommandRoutes(routeDrafts),
+  });
+}
+
+function createContextCommandRoute(typeUrl: string, routeOrdinal: number): CommandRouteDraft {
+  const message = acceptedRouteMessage(typeUrl);
+  const topic = createTransportTopic({
+    signalKind: "command",
+    messageTypeUrl: message.typeUrl,
+    semanticTags: [],
+  });
+  const subscription = createTransportSubscription({
+    subscriberId: commandWorkerId,
+    topic,
+    mode: "competing-consumer",
+  });
+
+  return Object.freeze({
+    routeId: `command-route-${String(routeOrdinal)}`,
+    receiverGroup: "command-assignee",
+    workerId: commandWorkerId,
+    message,
+    topic,
+    subscription,
   });
 }
 
@@ -346,6 +402,83 @@ function createEventPlan(
     reactorRoutes,
     applicationRoutes,
   });
+}
+
+function createAcceptedEventPlan(
+  typeUrls: readonly string[],
+  contextName: string,
+): EventRuntimeRoutingPlan {
+  if (typeUrls.length === 0) {
+    return createEmptyEventPlan();
+  }
+
+  const routeDrafts = Object.freeze(
+    typeUrls.map((typeUrl, index) =>
+      createContextEventRoute(typeUrl, eventSubscriberId(contextName, index + 1), index + 1),
+    ),
+  );
+  const routes = finalizeEventRoutes(routeDrafts);
+
+  return Object.freeze({
+    topics: Object.freeze(routeDrafts.map(({ topic }) => topic)),
+    subscriptions: Object.freeze(routeDrafts.map(({ subscription }) => subscription)),
+    workerIds: Object.freeze(routeDrafts.map(({ workerId }) => workerId)),
+    subscriberRoutes: routes,
+    reactorRoutes: Object.freeze([]),
+    applicationRoutes: Object.freeze([]),
+  });
+}
+
+function createContextEventRoute(
+  typeUrl: string,
+  workerId: string,
+  routeOrdinal: number,
+): EventRouteDraft {
+  const message = acceptedRouteMessage(typeUrl);
+  const topic = createTransportTopic({
+    signalKind: "event",
+    messageTypeUrl: message.typeUrl,
+    semanticTags: [],
+  });
+  const subscription = createTransportSubscription({
+    subscriberId: workerId,
+    topic,
+    mode: "fan-out",
+  });
+
+  return Object.freeze({
+    routeId: `event-subscriber-route-${String(routeOrdinal)}`,
+    receiverGroup: "subscriber",
+    workerId,
+    message,
+    topic,
+    subscription,
+  });
+}
+
+function eventSubscriberId(contextName: string, routeOrdinal: number): string {
+  const contextId = Buffer.from(contextName, "utf8").toString("base64url");
+
+  return `event-context-${contextId}-worker-${String(routeOrdinal)}`;
+}
+
+function normalizeAcceptedTypeUrls(typeUrls: readonly string[]): readonly string[] {
+  return Object.freeze(
+    [...new Set(typeUrls)]
+      .map((typeUrl) => acceptedRouteMessage(typeUrl).typeUrl)
+      .sort(compareFullTypeNames),
+  );
+}
+
+function acceptedRouteMessage(typeUrl: string): RouteMessage {
+  const separator = typeUrl.lastIndexOf("/");
+  const fullTypeName = typeUrl.slice(separator + 1);
+
+  if (separator <= 0 || fullTypeName.length === 0) {
+    throw new TypeError(`Built context exposed an invalid accepted type URL "${typeUrl}".`);
+  }
+
+  return Object.freeze({ fullTypeName, typeUrl });
 }
 
 function createEventRouteDrafts(

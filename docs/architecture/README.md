@@ -707,15 +707,24 @@ the local IPC adapter. The package root stays adapter-neutral, while the
 paths from `ZeroMqAdapterConfig` plus transport routing descriptors and keeps
 endpoint strings, multipart frames, socket classes, and native module types out
 of framework APIs. Native tests prove publish/subscribe, request/reply, and
-`RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. The
-implementation does not add remote transport, broker topology, worker
+`RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. A
+public-package Node child-process proof additionally assembles a `Server` with
+real aggregate/projection repositories: a parent command is handled in the
+child, its emitted event reaches projection behavior, and bounded observation
+and quiet windows check one observation from each matching child projection for
+one fixed parent event. The parent and child own separate adapter instances over
+one private same-host IPC directory. This bounded test does not establish a
+general exactly-once guarantee for durable redelivery, retries, process
+restarts, or remote transport.
+
+The implementation does not add remote transport, broker topology, worker
 registration handshakes, delivery retries, process supervision, or broad health
 checks. The workspace explicitly approves the `zeromq` install script in pnpm
-configuration, so dependency restoration must run in an environment that permits
-native package build/install scripts. Managed sandboxes may reject ZeroMQ
-`ipc://` binds with `EPERM`, so live local IPC tests can require native IPC
-filesystem/socket permissions outside the sandbox. Per D-0007, this adapter path
-is for same-host IPC only; scaling beyond one host remains the job of a
+configuration, so dependency restoration must run in an environment that
+permits native package build/install scripts. Managed sandboxes may reject
+ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
+IPC filesystem/socket permissions outside the sandbox. Per D-0007, this adapter
+path is for same-host IPC only; scaling beyond one host remains the job of a
 different transport behind the same public contract.
 
 The ZeroMQ adapter serializes envelopes with Node's V8 serializer. Its `ipc://`
