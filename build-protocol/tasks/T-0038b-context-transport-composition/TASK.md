@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 final targeted rereview assigned
+Status: Slice 3 final rereview acknowledgment P2 assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1052,3 +1052,14 @@ permitted`: same-host command/event
   `.superpowers/sdd/review-85d9fd87..e354cf10.diff` (`3` commits, `34180`
   bytes). Existing style and reliability roles are dispatched read-only at
   explicit `gpt-5.6-terra` / high with no subagents.
+
+## Slice 3 Final Rereview Finding
+
+- Both final reviewers independently accepted declaration order and reported
+  one deduplicated P2: `child.send()` confirms submission, not child processing,
+  so the duplicate control can be applied after the quiet deadline and the
+  regression can resolve with three observations.
+- The same implementer is resumed at explicit `gpt-5.6-terra` / medium, no
+  subagents, to add a narrowly validated child-processed acknowledgment or
+  observation barrier. The parent must fail if application is not observed
+  within the bounded quiet window and must still reject the fourth observation.

@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 final targeted rereview assigned
+Status: Slice 3 final rereview acknowledgment P2 assigned
 
 ## Scope
 
@@ -762,3 +762,19 @@ Status: Slice 3 final targeted rereview assigned
   `gpt-5.6-terra` / high, read-only, no subagents. Prompts are limited to the
   two corrected P2s and adjacent affected behavior. Documentation and API
   remain CLEAN; security remains deferred to T-0041.
+
+## Slice 3 Final Targeted Rereview Result
+
+- Style reviewer `019f5f29-a640-7433-8d5f-3c19434def8d` and reliability
+  reviewer `019f5f29-aa89-7c30-bdfb-a0413c30fc32` both accepted the declaration
+  order correction and reported one deduplicated P2. Both existing roles are
+  immutable `gpt-5.6-terra` / high by runtime configuration, used no
+  subagents, completed skill applicability, and are closed.
+- P2: the parent currently proves only that duplicate control was submitted to
+  Node IPC. The child can apply it after the quiet deadline, allowing a false
+  three-observation success. Add a child-processed acknowledgment/observation
+  barrier bounded by the quiet window, then require the fourth observation to
+  reject.
+- Same existing implementer assignment is explicit `gpt-5.6-terra` / medium,
+  no subagents. Documentation/API and declaration-order results remain CLEAN;
+  security remains deferred to T-0041.
