@@ -1,6 +1,6 @@
 # T-0039c Review Log
 
-Status: Review wave 2 assigned
+Status: Review wave 2 findings assigned
 
 ## Review Scope
 
@@ -230,3 +230,19 @@ Status: Review wave 2 assigned
   reviewer ran in this implementation context.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
   subagents.
+
+## Review Wave 2 Result
+
+- Style `019f60de-6e1b-7443-84ee-471c15b0e620`: CLEAN, actual immutable
+  `gpt-5.6-terra` / high; closed.
+- Documentation `019f60de-724a-7551-a6d5-d83e73ed80f1`: CLEAN, actual
+  immutable `gpt-5.6-luna` / medium; closed.
+- TypeScript/API `019f60de-75d5-7293-8c9c-608e6b783e95`: one P2 for the
+  `SubscriptionService.Cancel` call shape; actual immutable
+  `gpt-5.6-terra` / high; closed.
+- Performance/reliability `019f60de-79b5-75e0-874d-a6e9faaec566`: two P2
+  findings for ambiguous durable projection-handler scope and missing ZeroMQ
+  retry/restart limitations; actual immutable `gpt-5.6-terra` / high; closed.
+- Complete confirmed batch assigned to the same existing implementer with
+  explicit immutable `gpt-5.6-terra` / medium and no subagents. Another literal
+  package and affected rereview follow focused coordinator verification.

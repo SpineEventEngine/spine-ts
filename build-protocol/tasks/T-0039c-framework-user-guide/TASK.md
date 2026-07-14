@@ -1,6 +1,6 @@
 # T-0039c: Framework User Guide Closure
 
-Status: Review wave 2 assigned
+Status: Review wave 2 findings assigned
 
 Started: `2026-07-14T13:03:12Z`
 
@@ -331,3 +331,20 @@ without reading internal source.
 - Skills used: doc-coauthoring and verification-before-completion. Actual
   immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
   subagents.
+
+## Review Wave 2 Result
+
+- Complete wave collected and all reviewers closed. Style/maintainability and
+  documentation completeness are clean. TypeScript/API docs accepted one P2;
+  performance/reliability accepted two P2 findings.
+- Subscription client call shape: say that `Cancel` accepts the returned
+  `Subscription` message and show `await subscriptions.cancel(subscription)`;
+  do not tell readers to pass only the opaque ID.
+- Delivery scope: replace ambiguous “live projection subscriptions” with
+  explicit projection `@Subscribe` handler delivery so it cannot be confused
+  with process-local `SubscriptionService` streams.
+- ZeroMQ scope: add the adapter's explicit lack of transport-owned retry loops
+  and retry/restart guarantees, not only durable redelivery.
+- Current tests and transport docs confirm every finding. The same existing
+  implementer receives the complete batch with explicit immutable
+  `gpt-5.6-terra` / medium and no subagents.
