@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability review findings assigned
+Status: Integrated capability review fixes ready for affected rereview
 
 ## Review Scope
 
@@ -31,10 +31,11 @@ Status: Integrated capability review findings assigned
 
 ## Current State
 
-The independent review wave is complete and its parent corrections are applied.
-T-0038a and T-0038b planning/implementation/integration remain pending; the
-parent matrix must then be rerun and re-reviewed. This implementer used no
-subagents.
+T-0038a and T-0038b are integrated, post-merge verified, and represented by the
+refreshed matrix. The integrated review wave is complete and its accepted local
+record corrections are applied. Current path is local fix acceptance, affected
+style/documentation/TypeScript/API rereview, then parent final verification.
+Reliability remains CLEAN; security remains deferred to T-0041.
 
 ## Historical Pre-Review Lint
 
@@ -326,3 +327,32 @@ findings at `2026-07-14T01:23:48Z`.
   write scope. Rerun style, documentation, and TypeScript/API lanes after local
   acceptance; retain the clean reliability disposition unless the fix changes
   its evidence.
+
+## Integrated Review Fix Skill Applicability
+
+- Before fix edits, the exposed session inventory, task-provided skill paths,
+  expected-skill manifest, complete readable `/Users/armiol/.agents/skills`
+  entrypoint enumeration, and installed lock were checked; all eight expected
+  entries are present in the bounded evidence.
+- `receiving-code-review` and `verification-before-completion` were fully read
+  and selected. Dispatch/worktree/planning/ADR/runtime/TypeScript/testing/
+  JVM-server skills are N/A because this is the resumed no-subagent matrix
+  author in an existing worktree with four record files as its exact scope.
+
+## Integrated Review Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium and matches
+  the explicit existing implementer dispatch; no subagents were used.
+- The manifest-exported generated-handler-registry subpath now accurately
+  describes non-root generated support consumed by generator-emitted imports.
+  The root API/TypeDoc evidence separately identifies
+  `HandlerRegistryIngestor` and `HandlerRegistryIngestionError`, even though all
+  these declarations share one source module.
+- Four active statuses agree on affected-rereview readiness. The unqualified
+  stale `Current State` is replaced above: both children are integrated; local
+  acceptance is this handback, affected rereview follows, and parent final
+  verification remains after it. Parent full verify/T-0042 remain pending.
+- Focused taxonomy/route, ten-entry export inventory, active-state/stale-state,
+  docs-overclaim, exact four-file Prettier, generated-path, scope, and
+  `git diff --check` checks pass. Reliability remains CLEAN and no full verify,
+  commit, or out-of-scope change occurred.

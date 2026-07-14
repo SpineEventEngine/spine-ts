@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability review findings assigned
+Status: Integrated capability review fixes ready for affected rereview
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -203,7 +203,7 @@ T-0040's example gap or T-0041's security gate complete.
   execution as closure evidence; root all governing paths under
   `build-protocol/`; correct row 21's example wording; make old status assertions
   explicitly historical; and enumerate every package export subpath with a
-  public/package-internal designation and evidence/exemption.
+  root/generated-support designation and evidence/exemption.
 - Confirmed framework defect T-0038a: public `getTypeUrlPrefix()` and
   `deriveTypeUrl()` accept a malformed caller-supplied fallback such as `/`,
   produce a noncanonical URL, and lack regression coverage. Create a minimal
@@ -302,8 +302,8 @@ superseded by the independent review result above.
   callback binding, and ZeroMQ IPC remain separately IMPLEMENTED. T-0040's
   example gap explicitly follows T-0038b.
 - All ten package-manifest export entries are inventoried as public root,
-  public adapter, public generated, or package-internal with TypeDoc/import/
-  declaration evidence or an explicit TypeDoc exemption.
+  public adapter, public generated, or manifest-exported generated support with
+  TypeDoc/import/declaration evidence or an explicit TypeDoc exemption.
 - T-0038 final verify and T-0042 release proof are unclassified pending closure
   evidence. Parent closure waits for both framework children and matrix rerun/
   re-review.
@@ -451,3 +451,38 @@ State` still says T-0038a/T-0038b are pending. Rewrite or explicitly
   Ownership remains the matrix plus these three T-0038 records only; no
   runtime, tests, public docs, examples, child records, generated output, or Git
   operations are delegated.
+
+## Integrated Review Fix Skill Applicability
+
+- Before fix work, the session inventory, task-provided skill paths,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, the complete readable entrypoint
+  inventory from
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and `/Users/armiol/.agents/.skill-lock.json` were checked. All eight expected
+  manifest skills are present in the entrypoint/lock evidence.
+- Selected and fully read: `receiving-code-review`, to verify the accepted
+  findings against current manifest/source/generator/API-check evidence; and
+  `verification-before-completion`, for fresh focused handback evidence.
+  Subagent/reviewer-dispatch skills are N/A because this author may not spawn
+  subagents; worktree/planning/ADR/runtime/TypeScript/testing/JVM-server skills
+  are N/A because the assigned worktree exists and this batch changes records
+  only. Project protocol and exact write scope remain governing.
+
+## Integrated Review Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium, matching
+  the explicit existing implementer assignment; no subagents were used.
+- The server generated-handler-registry entry is now designated
+  manifest-exported generated support. Generator-emitted imports consume its
+  non-root generated registry data types; root TypeDoc/API checks exclude those
+  support types while separately checking the root-public
+  `HandlerRegistryIngestor` and `HandlerRegistryIngestionError` from the shared
+  source module.
+- All four active headers are synchronized to affected-rereview readiness. The
+  local fix acceptance is this focused handback; affected style/documentation/
+  TypeScript/API rereview is next, followed by parent final verification.
+  Reliability remains CLEAN. Parent full verify and T-0042 release proof remain
+  pending.
+- Focused taxonomy/route, ten-entry export inventory, active-status/stale-state,
+  docs-overclaim, exact four-file Prettier, generated-path, four-file scope, and
+  `git diff --check` checks pass. No full verify or commit was performed.
