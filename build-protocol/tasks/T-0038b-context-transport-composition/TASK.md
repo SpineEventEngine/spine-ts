@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 acknowledgment fix green; reliability rereview ready
+Status: Slice 3 acknowledgment reliability rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1098,3 +1098,7 @@ duplicate control was not applied within the bounded quiet window.` This
   independently reran the unrestricted native child-process file. All `6/6`
   tests passed. The P2 is accepted as fixed and ready for reliability-only
   rereview.
+- Correction package is
+  `.superpowers/sdd/review-e354cf10..d9c21256.diff` (`3` commits, `24181`
+  bytes). The existing performance/reliability role is dispatched read-only at
+  explicit `gpt-5.6-terra` / high with no subagents.

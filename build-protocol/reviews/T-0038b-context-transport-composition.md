@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 acknowledgment fix green; reliability rereview ready
+Status: Slice 3 acknowledgment reliability rereview assigned
 
 ## Scope
 
@@ -811,3 +811,13 @@ Status: Slice 3 acknowledgment fix green; reliability rereview ready
 - Coordinator inspection and an independent unrestricted native rerun accepted
   the application barrier at `6/6` tests. Only performance/reliability requires
   rereview; style, documentation, and API clean results remain applicable.
+
+## Slice 3 Acknowledgment Rereview Dispatch
+
+- Baseline `e354cf10`; endpoint `d9c21256`; package
+  `.superpowers/sdd/review-e354cf10..d9c21256.diff` (three commits, 24181
+  bytes).
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high,
+  read-only, no subagents, limited to the child-applied barrier and adjacent
+  teardown/control behavior. Style, documentation, and API remain CLEAN;
+  security remains deferred to T-0041.
