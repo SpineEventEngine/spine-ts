@@ -1,6 +1,6 @@
 # T-0040b Review Log
 
-Status: Wave 1 fixes verified - targeted Wave 2 package pending
+Status: Wave 2 fixes verified - final targeted package pending
 
 Baseline: `acd9f05c`
 
@@ -41,7 +41,8 @@ tracking, and future-policy overclaim.
   evidence. Explicit dispatch fields and immutable Desktop metadata agree on
   agent `019f61ea-2cff-7731-88c6-6c5c0f610b45`, actual `gpt-5.6-terra` /
   medium. No subagents or Git mutation.
-- Reviewers: not assigned.
+- Reviewers: Wave 1 and targeted Wave 2 completed; all assigned reviewer agents
+  are closed.
 
 ## Coordinator Pre-Review Findings
 
@@ -143,6 +144,73 @@ recorded below.
   TypeScript/API clean disposition is retained: fixes touch only test behavior
   and durable records, with no public source, export, declaration, schema,
   package boundary, or API docs change.
+
+## Targeted Reviewer Wave 2 Assignments
+
+Endpoint: `0a14898b`
+
+Package: `.superpowers/sdd/review-acd9f05c..0a14898b.diff` (70,663 bytes, two
+commits)
+
+- Existing `style_maintainability_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: verify the causal probe, sentinel structure, naming,
+  and resolved Wave 1 style findings.
+- Existing `documentation_reviewer`, expected explicit `gpt-5.6-luna` /
+  medium: verify diagnostic evidence, narrowed ACK wording, active status, and
+  resolved Wave 1 documentation finding.
+- Existing `performance_reliability_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: verify activation causality, sentinel ordering,
+  deadlines, cleanup, and resolved Wave 1 reliability findings.
+- All assignments are read-only, no-subagent, package-scoped, and must ignore
+  superseded history unless a current status or changed public document claims
+  it active. At dispatch, complete results remained pending; they are recorded
+  below.
+- TypeScript/API docs is not rerun: its clean Wave 1 disposition remains valid
+  because the fix changes no public source, export, declaration, schema,
+  package boundary, or API documentation.
+
+### Wave 2 Runtime Metadata
+
+- Existing `style_maintainability_reviewer` agent
+  `019f6214-c5ce-7a63-a123-60bf6a3df52e`: explicit `gpt-5.6-terra` / high;
+  immutable Desktop metadata agrees; clean result recorded below; agent closed.
+- Existing `documentation_reviewer` agent
+  `019f6214-c962-73c2-84d0-d0d3e52467fa`: explicit `gpt-5.6-luna` / medium;
+  immutable Desktop metadata agrees; result recorded below; agent closed.
+- Existing `performance_reliability_reviewer` agent
+  `019f6214-cc93-7bc2-803b-6b861ed034af`: explicit `gpt-5.6-terra` / high;
+  immutable Desktop metadata agrees; result recorded below; agent closed.
+
+## Targeted Reviewer Wave 2 Results
+
+- Style/maintainability: clean; agent closed.
+- Documentation: one P2 stale Assignment State mirror; all substantive Wave 1
+  documentation findings are resolved; agent closed.
+- Performance/reliability: one P1 requiring per-call bounds around every direct
+  generated-client command/read so stalled RPCs cannot delay fixture cleanup;
+  Wave 1 causal and sentinel findings are resolved; agent closed.
+- TypeScript/API docs: retained clean from Wave 1 for the concrete unaffected
+  boundary already recorded above.
+
+### Coordinator Disposition
+
+- Accept both findings. Add a controlled remote-command timeout regression,
+  centralize a labeled per-call bound for direct command/read RPCs, replace all
+  direct new remote call sites, and update the stale Assignment State mirror.
+- Return the complete batch to the same Terra Medium implementer. No reviewer
+  remains open and no partial-wave fix was assigned.
+
+## Targeted Wave 2 Fix Verification
+
+- The controlled command timeout RED/GREEN and exhaustive bounded-call
+  replacement are recorded in the task/work logs. The stale Assignment State
+  mirror is corrected without rewriting reviewer results.
+- Coordinator native regression passed 3 files / 66 tests. Tooling typecheck,
+  full lint/generated build/cleanup, format, generated-clean, and diff
+  whitespace passed.
+- Final targeted re-review reruns documentation and performance/reliability.
+  Style and TypeScript/API clean dispositions remain current because the fix is
+  mechanical test-only deadline enforcement with no public contract change.
 
 ## Skill Applicability
 

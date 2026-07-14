@@ -56,6 +56,7 @@ let startTodoServer: TodoModule["startTodoServer"];
 const signalMetadata = new SignalMetadata();
 const maxRemoteDiagnosticRows = 4;
 const maxRemoteDiagnosticIdLength = 64;
+const remoteOperationTimeoutMs = 500;
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
@@ -146,6 +147,25 @@ describe("@spine-ts/example-todo", () => {
     expect(reads).toBeGreaterThan(1);
   });
 
+  it("rejects a remote command when its client call never settles", async () => {
+    const timeoutMs = 20;
+    const startedAt = Date.now();
+    const failure = await postRemoteCommand(
+      {
+        post: () => new Promise<never>(() => undefined),
+      },
+      createTaskCommand("command-timeout", "task-timeout", "Timeout"),
+      "controlled hanging command",
+      timeoutMs,
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      `Timed out waiting for controlled hanging command after ${String(timeoutMs)}ms.`,
+    );
+    expect(Date.now() - startedAt).toBeLessThan(500);
+  });
+
   it("observes an OK acknowledgement and eventual subscription delivery", async () => {
     await withRemoteTodo(async ({ baseUrl, commands, queries, subscriptions }) => {
       const subscription = await withTimeout(
@@ -166,12 +186,10 @@ describe("@spine-ts/example-todo", () => {
           "standalone subscription activation probe update",
           500,
         );
-        await withTimeout(
-          commands.post(
-            createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
-          ),
+        await postRemoteCommand(
+          commands,
+          createTaskCommand("command-subscription-probe", "task-subscription-probe", "Probe"),
           "standalone subscription activation probe acknowledgement",
-          500,
         );
         const probed = await probeUpdate;
         if (probed.done === true) {
@@ -180,12 +198,10 @@ describe("@spine-ts/example-todo", () => {
         expect(unpackSubscribedTaskList(probed.value).list.tasks[0]?.title).toBe("Probe");
 
         nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
-        const ack = await withTimeout(
-          commands.post(
-            createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
-          ),
+        const ack = await postRemoteCommand(
+          commands,
+          createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
           "standalone command acknowledgement",
-          500,
         );
         const response = await readRemoteEventually(
           queries,
@@ -241,9 +257,15 @@ describe("@spine-ts/example-todo", () => {
 
   it("queries all rows, an exact ID, and a supported column over generated clients", async () => {
     await withRemoteTodo(async ({ commands, queries }) => {
-      await commands.post(createTaskCommand("command-remote-query-first", "task-first", "First"));
-      await commands.post(
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-query-first", "task-first", "First"),
+        "first remote query setup acknowledgement",
+      );
+      await postRemoteCommand(
+        commands,
         createTaskCommand("command-remote-query-second", "task-second", "Second"),
+        "second remote query setup acknowledgement",
       );
       const all = await readRemoteEventually(
         queries,
@@ -256,7 +278,11 @@ describe("@spine-ts/example-todo", () => {
         (candidate) => candidate.message.length === 1,
       );
 
-      await commands.post(createCompleteCommand("command-remote-query-complete", "task-first"));
+      await postRemoteCommand(
+        commands,
+        createCompleteCommand("command-remote-query-complete", "task-first"),
+        "remote query completion acknowledgement",
+      );
       const filtered = await readRemoteEventually(
         queries,
         createOpenTaskCountQuery(1),
@@ -275,67 +301,73 @@ describe("@spine-ts/example-todo", () => {
 
   it("returns validation and business refusals without changing remote state", async () => {
     await withRemoteTodo(async ({ commands, queries }) => {
-      await commands.post(
+      await postRemoteCommand(
+        commands,
         createTaskCommand("command-remote-refusal-create", "task-refusal", "Kept"),
+        "remote refusal setup acknowledgement",
       );
       const original = await readRemoteEventually(
         queries,
         createTaskListIdQuery("task-refusal"),
         (candidate) => taskTitle(candidate, "task-refusal") === "Kept",
       );
-      const invalidRename = await commands.post(
+      const invalidRename = await postRemoteCommand(
+        commands,
         createRenameCommand("command-remote-invalid-rename", "task-refusal", "", {
           validate: false,
         }),
+        "invalid rename acknowledgement",
       );
-      const reopenOpen = await commands.post(
+      const reopenOpen = await postRemoteCommand(
+        commands,
         createReopenCommand("command-remote-reopen-open", "task-refusal"),
+        "reopen-open refusal acknowledgement",
       );
-      await withTimeout(
-        commands.post(createTaskCommand("command-refusal-fence", "task-refusal-fence", "Fence")),
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-refusal-fence", "task-refusal-fence", "Fence"),
         "validation and reopen refusal fence acknowledgement",
-        500,
       );
       await readRemoteEventually(
         queries,
         createTaskListIdQuery("task-refusal-fence"),
         (candidate) => taskTitle(candidate, "task-refusal-fence") === "Fence",
       );
-      const afterRefusals = await withTimeout(
-        queries.read(createTaskListIdQuery("task-refusal")),
+      const afterRefusals = await readRemoteOnce(
+        queries,
+        createTaskListIdQuery("task-refusal"),
         "task state after validation and reopen refusal fence",
-        500,
       );
 
-      await commands.post(createCompleteCommand("command-remote-complete", "task-refusal"));
+      await postRemoteCommand(
+        commands,
+        createCompleteCommand("command-remote-complete", "task-refusal"),
+        "remote completion acknowledgement",
+      );
       const completed = await readRemoteEventually(
         queries,
         createTaskListIdQuery("task-refusal"),
         (candidate) => taskCompleted(candidate, "task-refusal") === true,
       );
-      const completeAgain = await commands.post(
+      const completeAgain = await postRemoteCommand(
+        commands,
         createCompleteCommand("command-remote-complete-again", "task-refusal"),
+        "repeated completion refusal acknowledgement",
       );
-      await withTimeout(
-        commands.post(
-          createTaskCommand(
-            "command-complete-refusal-fence",
-            "task-complete-refusal-fence",
-            "Fence",
-          ),
-        ),
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-complete-refusal-fence", "task-complete-refusal-fence", "Fence"),
         "complete refusal fence acknowledgement",
-        500,
       );
       await readRemoteEventually(
         queries,
         createTaskListIdQuery("task-complete-refusal-fence"),
         (candidate) => taskTitle(candidate, "task-complete-refusal-fence") === "Fence",
       );
-      const afterCompleteAgain = await withTimeout(
-        queries.read(createTaskListIdQuery("task-refusal")),
+      const afterCompleteAgain = await readRemoteOnce(
+        queries,
+        createTaskListIdQuery("task-refusal"),
         "task state after complete refusal fence",
-        500,
       );
 
       expect(errorType(invalidRename.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
@@ -355,21 +387,28 @@ describe("@spine-ts/example-todo", () => {
 
   it("rejects missing and blank IDs without a remote task effect", async () => {
     await withRemoteTodo(async ({ commands, queries }) => {
-      await commands.post(createTaskCommand("command-remote-id-create", "task-kept", "Kept"));
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-remote-id-create", "task-kept", "Kept"),
+        "invalid ID setup acknowledgement",
+      );
       const before = await readRemoteEventually(
         queries,
         createTaskListQuery(),
         (candidate) => candidate.message.length === 1,
       );
-      const missingId = await commands.post(
+      const missingId = await postRemoteCommand(
+        commands,
         packCommand({
           ...createCommandMetadata("command-remote-missing-id"),
           schema: CreateTaskSchema,
           message: create(CreateTaskSchema, { title: "Missing ID" }),
           validate: false,
         }),
+        "missing ID rejection acknowledgement",
       );
-      const blankId = await commands.post(
+      const blankId = await postRemoteCommand(
+        commands,
         packCommand({
           ...createCommandMetadata("command-remote-blank-id"),
           schema: CreateTaskSchema,
@@ -379,21 +418,22 @@ describe("@spine-ts/example-todo", () => {
           }),
           validate: false,
         }),
+        "blank ID rejection acknowledgement",
       );
-      await withTimeout(
-        commands.post(createTaskCommand("command-id-fence", "task-id-fence", "Fence")),
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-id-fence", "task-id-fence", "Fence"),
         "invalid ID fence acknowledgement",
-        500,
       );
       await readRemoteEventually(
         queries,
         createTaskListIdQuery("task-id-fence"),
         (candidate) => taskTitle(candidate, "task-id-fence") === "Fence",
       );
-      const after = await withTimeout(
-        queries.read(createTaskListQuery()),
+      const after = await readRemoteOnce(
+        queries,
+        createTaskListQuery(),
         "task rows after invalid ID fence",
-        500,
       );
 
       expect(missingId.status?.status.case).toBe("error");
@@ -408,7 +448,9 @@ describe("@spine-ts/example-todo", () => {
 
   it("closes the loopback listener and every explicitly owned client session", async () => {
     const baseUrl = await withRemoteTodo(async ({ baseUrl, queries }) => {
-      await expect(queries.read(createTaskListQuery())).resolves.toBeDefined();
+      await expect(
+        readRemoteOnce(queries, createTaskListQuery(), "pre-close task-list read"),
+      ).resolves.toBeDefined();
       return baseUrl;
     });
     const probeSession = new Http2SessionManager(baseUrl);
@@ -907,6 +949,27 @@ interface RemoteTodo {
   readonly commands: Client<typeof CommandService>;
   readonly queries: Client<typeof QueryService>;
   readonly subscriptions: Client<typeof SubscriptionService>;
+}
+
+type RemoteCommandClient = Pick<Client<typeof CommandService>, "post">;
+type RemoteQueryClient = Pick<Client<typeof QueryService>, "read">;
+
+async function postRemoteCommand(
+  client: RemoteCommandClient,
+  command: Parameters<RemoteCommandClient["post"]>[0],
+  label: string,
+  timeoutMs = remoteOperationTimeoutMs,
+): Promise<Awaited<ReturnType<RemoteCommandClient["post"]>>> {
+  return await withTimeout(client.post(command), label, timeoutMs);
+}
+
+async function readRemoteOnce(
+  client: RemoteQueryClient,
+  query: Parameters<RemoteQueryClient["read"]>[0],
+  label: string,
+  timeoutMs = remoteOperationTimeoutMs,
+): Promise<Awaited<ReturnType<RemoteQueryClient["read"]>>> {
+  return await withTimeout(client.read(query), label, timeoutMs);
 }
 
 async function withRemoteTodo<T>(onRun: (remote: RemoteTodo) => Promise<T>): Promise<T> {

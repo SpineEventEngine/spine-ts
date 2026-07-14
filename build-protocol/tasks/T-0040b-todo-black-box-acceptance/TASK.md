@@ -1,6 +1,6 @@
 # T-0040b: To-Do Black-Box Acceptance
 
-Status: In progress - Wave 1 fixes verified; targeted re-review pending
+Status: In progress - Wave 2 fixes verified; final targeted re-review pending
 
 Started: `2026-07-14T18:27:30Z`
 
@@ -277,6 +277,60 @@ cleanup.
   regression passed 3 files / 65 tests; direct route proof passed 3 selected /
   122 skipped. Build/tooling typechecks, full lint/cleanup, format,
   generated-clean, and `git diff --check` passed.
+
+## Targeted Reviewer Wave 2 Finding Batch
+
+- Style/maintainability is clean. The causal probe, sentinels, naming,
+  diagnostics, and current task/work status resolved its Wave 1 findings.
+- Documentation accepted P2: the review log's early Assignment State still says
+  reviewers are unassigned despite the later Wave 1/Wave 2 records. Update that
+  current mirror; registry diagnostics, ACK wording, evidence, public-doc scope,
+  and future-policy restraint are otherwise clean.
+- Performance/reliability accepted P1: several direct generated-client command
+  and read calls rely on the outer 15-second test timeout. Route every direct
+  remote `post()`/`read()` through a labeled per-call bound so a stalled RPC
+  cannot delay fixture `finally` cleanup. Existing `readRemoteEventually()`
+  already bounds each read; subscription operations and closed-listener probe
+  are already explicitly bounded.
+- Add a controlled timeout regression for the shared remote command helper
+  before replacing call sites. Retain deterministic session/server cleanup and
+  change no production/public API code.
+
+## Targeted Reviewer Wave 2 Fix Evidence
+
+- The existing immutable implementer (`gpt-5.6-terra` / medium) changed only
+  the moved black-box test, task/work evidence, and the authorized stale review
+  Assignment State mirror. No subagent or Git mutation was used.
+- TDD RED:
+  `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/black-box.test.ts -t "rejects a remote command"` failed
+  as expected with `postRemoteCommand is not defined`: 1 failed / 25 skipped.
+  After adding the minimal helper, the identical GREEN command passed: 1 passed
+  / 25 skipped.
+- `postRemoteCommand()` now gives every generated-client command post an
+  actionable label and a 500 ms default deadline, with an explicit timeout for
+  the controlled never-settling fake. `readRemoteOnce()` applies the same
+  bounded labeled contract to one-shot query reads. All command posts and
+  one-shot reads in the real loopback acceptance use these helpers;
+  `readRemoteEventually()` retains its per-attempt deadline, and existing
+  subscription/closed-listener bounds are unchanged.
+- The review Assignment State now reflects completed Wave 1 and targeted Wave
+  2, with every assigned reviewer agent closed. No reviewer result was changed.
+- Native moved acceptance passed: 1 file / 26 tests. The first sandboxed run
+  passed 21 tests and reported `listen EPERM` for the five loopback cases; the
+  identical approved native command then passed all 26 tests.
+- Focused verification passed: tooling TypeScript no-emit, focused ESLint on the
+  moved test, full `lint:generated` (build TypeScript, repository ESLint, and
+  cleanup enforcement), and `proto:check-generated`. Generated outputs remain
+  freshly regenerated, ignored, and untracked.
+- Direct Prettier check of all four owned files and `git diff --check` passed.
+  A direct scan found no `commands.post()` or `queries.read()` call remaining in
+  the real acceptance block.
+- Coordinator inspection confirmed the typed helpers bound every direct command
+  and one-shot read in the real remote scenarios while eventual reads retain
+  their stricter remaining-deadline logic. Native affected regression passed 3
+  files / 66 tests; tooling typecheck, full lint/generated build/cleanup,
+  format, generated-clean, and `git diff --check` passed independently.
 
 ## Skill Applicability
 
