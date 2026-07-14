@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Integrated capability matrix refresh assigned
+Status: Matrix row 21 stale-evidence fix assigned
 
 ## Review Scope
 
@@ -230,3 +230,36 @@ findings at `2026-07-14T01:23:48Z`.
   routed findings retain T-0040 and T-0041 only. Parent final verify remains
   pending. Review dispatch follows focused static acceptance and a committed
   matrix endpoint.
+
+## Integrated Matrix Refresh Pre-review Record
+
+- Canonical skill applicability was performed before the refresh edit: session
+  inventory, expected-skill manifest, complete readable
+  `/Users/armiol/.agents/skills` entrypoint inventory, and installed lock were
+  checked; `verification-before-completion` was selected and fully read.
+  Worktree/subagent/planning/ADR/runtime/TypeScript/testing/JVM-server skills
+  are N/A for the provided-worktree, no-subagent, audit-record-only scope.
+- The reviewed integration base is back-merge `eae95a3e`. Rows 30/31 replace
+  superseded defect evidence with the exact T-0038a core source/test/README/
+  TSDoc and T-0038b context transport/server lifecycle/ZeroMQ source, focused
+  runtime/lifecycle/native child-process/ZeroMQ proof, and current server/user/
+  architecture docs. Both rows are `IMPLEMENTED` with an em-dash route.
+- Current exact taxonomy is 31/25/4/0/1/1/0. Routed findings contain only the
+  T-0040 example gap and T-0041 security gate. Parent final verify and T-0042
+  release proof remain pending for later closure; this record makes neither a
+  completion claim nor a new review disposition.
+- Pre-review static evidence is taxonomy/route lint (31 rows; 29 em dashes,
+  T-0040, T-0041), ten manifest exports/inventory rows, synchronized active
+  status, clean owned-diff public/internal leakage and docs-overclaim scan,
+  exact four-file Prettier, generated-path scan, `git diff --check`, and four
+  owned modified paths. Full verify is intentionally not part of this handback.
+
+## Matrix Pre-Review Finding
+
+- Row 21 is stale: it says both example and framework cross-process proof are
+  absent. T-0038b now proves framework behavior; the EXAMPLE_GAP/T-0040 route
+  remains because the to-do application has no child worker/harness/test or
+  local IPC workflow.
+- Same matrix author is resumed at explicit `gpt-5.6-terra` / medium, no
+  subagents. Fix row 21 evidence only, synchronize records, and retain all
+  strict counts/routes before reviewer dispatch.

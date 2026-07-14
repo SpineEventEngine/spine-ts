@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Integrated capability matrix refresh assigned
+Status: Matrix row 21 stale-evidence fix assigned
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -148,9 +148,9 @@ security-owned gap, or mandatory framework defect.
 
 ## Immediate Next Action
 
-Complete selective Sol High planning for T-0038a and T-0038b, implement and
-integrate the children in separate worktrees, then rerun and re-review this
-parent matrix before T-0038 final acceptance.
+Run the assigned focused parent matrix validation and re-review package. Keep
+the reserved parent final verify and T-0042 release proof pending; do not claim
+T-0040's example gap or T-0041's security gate complete.
 
 ## Coordinator Pre-review Finding
 
@@ -345,3 +345,40 @@ superseded by the independent review result above.
 - Preserve pending parent final verify and T-0042 release proof. Run focused
   taxonomy/route/export/status/docs lint, exact formatting, and diff checks;
   do not edit runtime, public docs, child records, examples, or generated files.
+
+## Integrated Matrix Refresh Handback
+
+- Canonical skill applicability was refreshed before this record-only edit:
+  session inventory, `build-protocol/skills/EXPECTED_SKILLS.md`, the complete
+  readable `/Users/armiol/.agents/skills` entrypoint enumeration, and
+  `/Users/armiol/.agents/.skill-lock.json` were checked. The selected
+  `verification-before-completion` skill was fully read. Dispatch/worktree/
+  planning, ADR, runtime, TypeScript, testing, and JVM-server skills are N/A:
+  this assignment owns no runtime/test/API change, provides the worktree, and
+  forbids subagents. Project protocol remains governing.
+- Back-merge `eae95a3e` is the integrated parent base. Row 30 now records
+  `packages/core/src/index.ts`, `packages/core/test/index.test.ts`,
+  `packages/core/README.md`, and public TSDoc as T-0038a evidence. Row 31 now
+  records current context-transport/runtime-routing/runtime-transport,
+  context-transport-group/server, and ZeroMQ sources; their focused runtime,
+  lifecycle, cross-process, and ZeroMQ tests; and the server README, user
+  guide, and architecture README as T-0038b evidence.
+- Current matrix taxonomy is exactly 31 rows: 25 IMPLEMENTED, 4
+  DOCUMENTED_EXCLUSION, 0 STALE_DOC_STATUS, 1 EXAMPLE_GAP, 1 SECURITY_GATE, and
+  0 FRAMEWORK_DEFECT. Only T-0040 and T-0041 remain routed; all other routes
+  are em dashes. Parent final verify and T-0042 release proof remain pending.
+- Focused acceptance evidence is the taxonomy/route lint (31 rows, 29 em-dash
+  routes, one T-0040, one T-0041), the ten-entry manifest inventory, active
+  status scan, owned-diff public/internal leakage and docs-overclaim scan,
+  exact four-file Prettier, generated-path scan, `git diff --check`, and status
+  check. Full `pnpm verify` remains deliberately unrun.
+
+## Matrix Pre-Review Finding
+
+- Coordinator taxonomy/status/docs lint confirms rows 30/31 and strict counts,
+  but row 21 still claims framework-level cross-process proof is absent. That
+  proof now exists in the integrated server child-process test; only the
+  example-owned worker/harness/test and documented workflow remain absent.
+- Resume the same matrix implementer at explicit `gpt-5.6-terra` / medium, no
+  subagents, for row 21 plus synchronized record updates only. Preserve its
+  EXAMPLE_GAP/T-0040 classification and every other row/count/route.
