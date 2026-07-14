@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 specialist fixes green; targeted rereview ready
+Status: Slice 3 targeted specialist rereview assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -986,3 +986,12 @@ permitted`: same-host command/event
   native files together. Adapter and child-process behavior passed `2` files
   and `26/26` tests. The complete finding batch is accepted as fixed and ready
   for targeted rereview.
+
+## Slice 3 Targeted Rereview Assignment
+
+- Correction package is
+  `.superpowers/sdd/review-b031fe84..85d9fd87.diff` (`4` commits, `56803`
+  bytes). Style/maintainability and performance/reliability use the existing
+  roles at explicit `gpt-5.6-terra` / high; documentation uses the existing
+  role at explicit `gpt-5.6-luna` / medium. All are read-only with no
+  subagents. TypeScript/API remains clean and is not repeated.

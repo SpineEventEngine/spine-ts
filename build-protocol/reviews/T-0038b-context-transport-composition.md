@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 specialist fixes green; targeted rereview ready
+Status: Slice 3 targeted specialist rereview assigned
 
 ## Scope
 
@@ -688,3 +688,15 @@ Status: Slice 3 specialist fixes green; targeted rereview ready
   every correction. The adapter and child-process files passed together with
   `26/26` tests. Style, documentation, and performance/reliability require
   targeted rereview; the clean TypeScript/API disposition remains applicable.
+
+## Slice 3 Targeted Rereview Dispatch
+
+- Baseline `b031fe84`; corrected endpoint `85d9fd87`; package
+  `.superpowers/sdd/review-b031fe84..85d9fd87.diff` (four commits, 56803
+  bytes).
+- Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+- Performance/reliability: existing role, explicit `gpt-5.6-terra` / high.
+- All are read-only, bounded to accepted fixes, and use no subagents. Prompts
+  retain the superseded-history rule. TypeScript/API remains CLEAN; security
+  remains deferred to T-0041.
