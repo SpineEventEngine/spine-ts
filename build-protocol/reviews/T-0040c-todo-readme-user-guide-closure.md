@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Pre-review lint passed - specialist wave pending
+Status: Wave 1 findings accepted - fix wave pending
 
 Baseline: `526b7b4d`
 
@@ -88,6 +88,22 @@ links/imports, and future-policy overclaim.
   - performance/reliability agent
     `019f6244-df88-7731-af67-d15a86fbe0b2`: actual
     `gpt-5.6-terra` / high.
+
+## 2026-07-14 - Specialist Wave 1 Results
+
+- Style/maintainability: one P2 finding. Node built-in imports at the end of
+  `smoke.mjs` obscure dependencies and violate repository import grouping.
+- Documentation completeness: two P1 findings. Query criteria fragments leave
+  required request/client setup implicit, and subscription prose omits a
+  complete bounded activation/iteration/cancellation/session example.
+- TypeScript/API docs: one important finding. `EntityStateWithVersion.state`
+  is optional and `unpackAny` may return `undefined`; the direct guide
+  instruction does not type-check safely.
+- Performance/reliability: clean.
+- All reviewers were closed after result capture. The complete accepted batch
+  will be fixed by the original implementation context, existing
+  `implementer` agent `019f6235-15d0-7022-a8dc-ac7579dffb0c`, expected
+  explicit `gpt-5.6-terra` / medium, with no subagents or Git mutation.
 
 ## Skill Applicability
 

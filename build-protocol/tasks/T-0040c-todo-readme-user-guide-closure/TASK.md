@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: In progress - implementation verified; specialist review pending
+Status: In progress - specialist findings accepted; fix wave pending
 
 Started: `2026-07-14`
 
@@ -204,3 +204,15 @@ verify` remains the coordinator gate.
   documentation, the private example package script, one bounded smoke program,
   and durable T-0040c records. No dependency, lockfile, framework runtime,
   generated artifact, or public package export changed.
+
+## 2026-07-14 - Specialist Wave 1 Findings
+
+- Performance/reliability is clean.
+- Move the smoke's three trailing Node built-in imports into its header import
+  block.
+- Replace the guide's unsafe direct `unpackAny(row.state, TaskListSchema)`
+  instruction with a defined-state and matching-type guard.
+- Make all/ID/column query guidance explicitly executable rather than leaving
+  reader-owned setup implicit.
+- Add a complete bounded subscription example with generated request/client
+  setup, iterator consumption, cancellation, abort, and session cleanup.
