@@ -1,6 +1,6 @@
 # T-0040c Review Log
 
-Status: Clean - Wave 9 and full task gate passed; integration pending
+Status: Clean - integrated and post-merge verified; remote synchronization pending
 
 Baseline: `526b7b4d`
 
@@ -585,3 +585,13 @@ links/imports, and future-policy overclaim.
   all 372 curated exports remain present.
 - The task branch is clean and ready for integration. No task-review finding
   remains; final project security stays deferred to T-0041.
+
+## 2026-07-14 - Integration Closure
+
+- Clean endpoint `c8398a0b` merged into `main` as `6cb35cc3`.
+- Native post-merge full verification repeated the clean 73-file / 1,671-test
+  ordinary and coverage runs with 90.15% branches and every global threshold
+  satisfied.
+- All deterministic project checks passed and no reviewer remains open. Remote
+  synchronization and clean worktree removal are the only remaining task
+  closure actions.

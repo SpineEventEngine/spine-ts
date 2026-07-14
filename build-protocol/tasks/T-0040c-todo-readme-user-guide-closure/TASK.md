@@ -1,6 +1,6 @@
 # T-0040c: To-Do README And User Guide Closure
 
-Status: Branch complete - clean Wave 9 and full task gate passed; integration pending
+Status: Complete - integrated and post-merge verified; remote synchronization pending
 
 Started: `2026-07-14`
 
@@ -690,3 +690,18 @@ activation|expires abandoned inactive subscriptions before activation"`.
 - Final task-worktree status and `git diff --check` are clean, with no
   `.generated-*` staging directory. The branch is ready to integrate into
   `main`; post-merge verification and remote synchronization remain.
+
+## 2026-07-14 - Integration And Post-Merge Gate
+
+- Integrated branch endpoint `c8398a0b` into `main` with merge commit
+  `6cb35cc3` (`Merge T-0040c to-do guide closure`).
+- Native post-merge `pnpm --config.verify-deps-before-run=false verify`
+  exited 0 with the same 73 files / 1,671 tests in ordinary and coverage runs.
+  Coverage remained 95.38% statements, 90.15% branches, 98.22% functions, and
+  95.41% lines.
+- All type/build/lint/cleanup/format/docs/API/Protobuf/generated checks passed;
+  TypeDoc retained 372 curated exports. Root diff/staging checks are clean
+  apart from the protected untracked user file, which was not read or touched.
+- All task subagents are closed. T-0041 final project security review is next;
+  task-branch/main push, remote evidence, and clean merged-worktree removal
+  remain T-0040c closure actions.

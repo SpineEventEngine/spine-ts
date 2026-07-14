@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0040c to-do README and user-guide closure
+Status: In execution at T-0041 final project security gate
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0040c to-do README and user-guide closure
+Active implementation frontier: T-0041 final project security gate
 
 ## Purpose
 
@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0040b is complete, integrated, post-merge verified, and
-remotely synchronized. T-0040c to-do README and user-guide closure is the active
-implementation frontier. The dated Starting State above is historical
-plan-creation context.
+Current status: T-0040c is complete, integrated, and post-merge verified;
+remote synchronization is the remaining closure action. T-0041 final
+project-wide security review is the next implementation frontier. The dated
+Starting State above is historical plan-creation context.
 
 ## Initial Release Scope
 
