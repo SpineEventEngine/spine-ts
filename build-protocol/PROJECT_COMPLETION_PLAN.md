@@ -89,10 +89,10 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0040a is complete, integrated, and post-merge verified; remote
-synchronization is the remaining closure action. T-0040b to-do black-box
-acceptance is the next implementation frontier. The dated Starting State above
-is historical plan-creation context.
+Current status: T-0040a is complete, integrated, post-merge verified, and
+remotely synchronized. T-0040b to-do black-box acceptance is the active
+implementation frontier. The dated Starting State above is historical
+plan-creation context.
 
 ## Initial Release Scope
 

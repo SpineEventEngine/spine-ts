@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: Complete - integrated and post-merge verified; remote sync pending
+Status: Complete - integrated, post-merge verified, and remotely synchronized
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -742,6 +742,14 @@ retained after normal recursive removal"`. It exited `1`; 1 test failed and 18
 - Final root inspection is clean except untouched user-owned
   `human-review-1-jul.md`. Push task and main refs, record remote state, then
   remove the clean merged worktree.
+
+### Remote Closure - 2026-07-14
+
+- Pushed completed task branch
+  `task/T-0040a-local-multi-process-todo-mode` to origin at `35ce33f4`.
+- Pushed verified `main` integration state to origin at `a0c24e2b`.
+- T-0040a is durably closed. Remove its clean merged worktree/local branch and
+  continue T-0040b.
 
 ## Skill Applicability
 
