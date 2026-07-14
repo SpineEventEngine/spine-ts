@@ -551,3 +551,13 @@ links/imports, and future-policy overclaim.
   recorded tests, or subagents. Ignore superseded history unless current
   status/public docs claim it. Preserve the app-owned relative-import and
   server-owned opaque-ID adjudications absent new evidence.
+- The execution surface admitted three lanes. Explicit dispatch fields and
+  immutable Desktop role metadata agree: documentation agent
+  `019f62bc-12ba-76a0-ac8d-52e746591f1f` is actual `gpt-5.6-luna` /
+  medium; TypeScript/API docs agent
+  `019f62bc-319e-7da1-8d14-0b4c6ef262f3` is actual
+  `gpt-5.6-terra` / high; performance/reliability agent
+  `019f62bc-505d-7922-b151-16682f38338d` is actual
+  `gpt-5.6-terra` / high. The unstarted style lane retains its explicit
+  `gpt-5.6-terra` / high assignment and will use the first freed slot. No
+  partial wave is accepted.
