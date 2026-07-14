@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 2 fixes verified — round 3 assignment pending
+Status: Review round 3 assigned
 
 ## Review Scope
 
@@ -211,3 +211,15 @@ source/TSDoc comparison for per-facility and server-level ownership;
 stale-ownership, conflict, scope, and current/baseline diff checks. No reviewer
 is active. A fresh four-concern wave is required; security remains deferred to
 T-0041 and full verify remains final-only.
+
+## Independent Review Round 3 Assignment
+
+- Immutable package range: `0868ecca..716aba30`.
+- Style/maintainability: `gpt-5.6-terra` / high.
+- Documentation completeness: `gpt-5.6-luna` / medium.
+- TypeScript/API docs: `gpt-5.6-terra` / high.
+- Performance/reliability: `gpt-5.6-terra` / high.
+- Explicit dispatch, read-only, no subagents, distinct concerns, superseded
+  historical text ignored unless current records/docs activate it. Recheck both
+  round 2 fixes and collect the full wave before adjudication. Security remains
+  deferred to T-0041.

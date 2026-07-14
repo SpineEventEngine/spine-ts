@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 2 fixes verified — round 3 assignment pending
+Status: Review round 3 assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -363,3 +363,14 @@ may change. No subagents; coordinator retains Git and independent review.
   current/baseline diff-whitespace checks passed.
 - Both round 2 fixes are accepted for a fresh complete review wave. Full
   `pnpm verify` remains the final task gate.
+
+## Independent Review Round 3 Assignment
+
+- Immutable range: `0868ecca..716aba30`.
+- Re-run all relevant concerns over the complete milestone: style/API/
+  reliability with explicit `gpt-5.6-terra` / high; documentation with explicit
+  `gpt-5.6-luna` / medium.
+- Read-only, no subagents, one bounded concern each, and ignore superseded
+  historical text unless current records or changed docs activate it.
+- Recheck testing-package substitutions and environment-vs-facility ownership.
+  Collect the full wave before adjudication. Security remains T-0041.
