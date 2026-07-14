@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 specialist review wave assigned
+Status: Slice 3 specialist findings assigned for one fix pass
 
 ## Scope
 
@@ -615,3 +615,30 @@ Status: Slice 3 specialist review wave assigned
   `gpt-5.6-luna` / medium, no subagents, against the same immutable package.
   The replacement must confirm the immutable runtime profile exposed by its
   role configuration; the first result is not counted as a clean lane.
+
+## Slice 3 Reviewer Results
+
+- Style/maintainability: accepted P1. Reviewer
+  `019f5f0b-3900-7c83-84fe-988c192aac28`; actual immutable role metadata
+  available to the orchestrator is `gpt-5.6-terra` / high, matching dispatch;
+  no subagents; closed. Failed responder bind can leak its unowned `Reply`
+  socket before a cleanup handle exists.
+- Documentation: accepted P2. Replacement reviewer
+  `019f5f0d-6bbd-7442-9750-4c8b35f9f405`; actual immutable
+  `gpt-5.6-luna` / medium confirmed; no subagents; closed. Exactly-once wording
+  in USER_GUIDE, architecture README, and server README must be scoped to the
+  fixed event's bounded observations and disclaimed as a broad guarantee.
+- TypeScript/API docs: CLEAN. Reviewer
+  `019f5f0b-3f79-74e3-81ec-b9608a979edb`; actual immutable role metadata
+  available to the orchestrator is `gpt-5.6-terra` / high, matching dispatch;
+  no subagents; closed.
+- Performance/reliability: accepted P1 and P2. Reviewer
+  `019f5f0b-42df-7941-ad5e-12b3bd9bd5bd`; actual immutable role metadata
+  available to the orchestrator is `gpt-5.6-terra` / high, matching dispatch;
+  no subagents; closed. Track close-vs-subscribe so no live connector starts
+  after close, and hold a quiet window before accepting exactly three command
+  observations.
+- Every accepted result completed the canonical skill check. The full wave was
+  collected before assignment. One fix pass returns all findings to the same
+  existing implementer at explicit `gpt-5.6-terra` / medium, no subagents.
+  Security remains deferred to T-0041.

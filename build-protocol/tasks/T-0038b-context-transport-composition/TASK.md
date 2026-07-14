@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 specialist review wave assigned
+Status: Slice 3 specialist findings assigned for one fix pass
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -912,3 +912,17 @@ permitted`: same-host command/event
   result because it reported actual model/reasoning metadata as unavailable.
   That reviewer is closed and the same role is redispatched at explicit
   `gpt-5.6-luna` / medium with the metadata acceptance requirement restated.
+
+## Slice 3 Specialist Review Findings
+
+- The complete review wave is collected before fixes. TypeScript/API docs is
+  CLEAN. Accepted findings are: failed responder bind can leave its `Reply`
+  socket unowned; `subscribe()` can resume after transport close and create a
+  live connector; command observations lack the fixed-event path's quiet-window
+  duplicate check; and three active docs need to scope exactly-once wording to
+  this bounded proof rather than a general delivery guarantee.
+- Existing reviewers are closed. The same implementer is resumed at immutable
+  explicit `gpt-5.6-terra` / medium, no subagents, with all four findings in one
+  fix assignment. Required regressions cover failed responder bind cleanup,
+  close-vs-subscribe, and delayed duplicate command observations; docs must
+  state the proof scope without changing accepted behavior or future policy.
