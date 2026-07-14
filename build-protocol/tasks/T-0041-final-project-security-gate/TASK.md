@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security fix architecture assigned
+Status: In progress - security fixes assigned
 
 Started: `2026-07-14`
 
@@ -253,3 +253,30 @@ example.
 - Select the smallest Spine-compatible public/internal contracts, exact finite
   defaults, TDD slices, and focused review/verification for `SF-007` through
   `SF-010`. Avoid speculative security APIs and preserve copied wire contracts.
+
+## Accepted Security Fix Architecture
+
+- Splitter agent `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4` completed with actual
+  immutable `gpt-5.6-sol` / high, changed no files or Git state, spawned no
+  children, and is closed.
+- `SF-007`: top-level `ServerOptions.readMaxBytes` and `writeMaxBytes`, each
+  defaulting to 4,194,304 and validated in `1..0xffffffff`, passed directly to
+  Connect. No generic transport/security options object.
+- `SF-008`: `SpineServicesOptions.subscriptionLimit`, default 100 positive safe
+  integer, enforced by idempotent ID reservations across persistence,
+  inactive/active lifetime, recovery, and exact cleanup.
+- `SF-009`: every storage query receives the 1,000-row safety cap when the wire
+  format/limit is absent or zero; explicit positive ordered limits remain
+  unchanged. No Protobuf change and no new client requirement.
+- `SF-010`: reject symlinks root-to-leaf, require final POSIX effective-UID
+  ownership and exact `0700`, capture component identities, and recheck before
+  native bind/connect. Do not claim impossible pathname race elimination or
+  apply POSIX checks on non-POSIX hosts.
+
+## Security Fix Implementer Assignment
+
+- Existing `implementer`, expected explicit `gpt-5.6-terra` / medium, one owner
+  for all four findings in three sequential slices, no subagents or Git
+  mutation.
+- TDD order: `SF-007`; `SF-008` plus `SF-009`; then `SF-010`. Update source,
+  behavior tests, public TSDoc/docs, security artifacts, and durable records.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security Round 1 found four blockers; fix architecture assigned
+Status: Security Round 1 fixes assigned
 
 Baseline: `39f2c6f7`
 
@@ -151,3 +151,17 @@ tracked generated output, dependency-audit freshness, and diff integrity.
   read-only, no subagents or Git mutation.
 - Resolve public-contract/default ambiguity once, using Spine JVM/source and
   local Connect 2.1.2 evidence, before one implementer receives the full batch.
+- Resumed splitter agent `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4` was explicitly
+  redispatched with model `gpt-5.6-sol` and reasoning `high`; immutable actual
+  profile is `gpt-5.6-sol` / high, read-only, without subagents or Git mutation.
+
+## Accepted Security Fix Architecture
+
+- The splitter completed and is closed. Accepted contracts are direct 4 MiB
+  configurable Connect limits, default-100 idempotent subscription
+  reservations, an implicit 1,000-row query safety limit with unchanged wire
+  semantics, and root-to-leaf IPC link/identity checks with final POSIX
+  ownership and mode enforcement.
+- One existing implementer receives the complete finding batch and executes
+  three sequential slices. Canonical concern review and security re-review wait
+  for the full fix endpoint and focused verification.
