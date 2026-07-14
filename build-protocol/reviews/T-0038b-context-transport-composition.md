@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 acknowledgment reliability rereview assigned
+Status: Slice 3 late-ack regression P2 assigned
 
 ## Scope
 
@@ -820,4 +820,17 @@ Status: Slice 3 acknowledgment reliability rereview assigned
 - Performance/reliability: existing role, explicit `gpt-5.6-terra` / high,
   read-only, no subagents, limited to the child-applied barrier and adjacent
   teardown/control behavior. Style, documentation, and API remain CLEAN;
+  security remains deferred to T-0041.
+
+## Slice 3 Acknowledgment Rereview Result
+
+- Performance/reliability reviewer
+  `019f5f34-b644-7c93-9dae-08c4009ea35a`, actual immutable
+  `gpt-5.6-terra` / high, no subagents, skill check complete, closed.
+- Accepted behavior: child submits observation before exact acknowledgment;
+  parent validates and observes it, missing ack fails, fourth rejects, normal
+  flow is bounded and control-only. Accepted P2 test gap: deterministically
+  exercise the explicit late-receipt branch and assert its barrier diagnostic.
+- Same implementer fix assignment is explicit `gpt-5.6-terra` / medium, no
+  subagents, parent fixture/test and records only. Other lanes remain CLEAN;
   security remains deferred to T-0041.

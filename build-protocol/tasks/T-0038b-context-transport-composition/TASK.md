@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 acknowledgment reliability rereview assigned
+Status: Slice 3 late-ack regression P2 assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -1052,6 +1052,18 @@ permitted`: same-host command/event
   `.superpowers/sdd/review-85d9fd87..e354cf10.diff` (`3` commits, `34180`
   bytes). Existing style and reliability roles are dispatched read-only at
   explicit `gpt-5.6-terra` / high with no subagents.
+
+## Slice 3 Acknowledgment Rereview Finding
+
+- Reliability accepts ordered observation/ack submission, strict control shape,
+  missing-ack failure, count rejection, bounds, teardown, and control-only IPC.
+  One P2 remains: the explicit `acknowledgedAt >= deadline` rejection branch has
+  no deterministic late-ack regression although current records claim it.
+- The same implementer is resumed explicit `gpt-5.6-terra` / medium, no
+  subagents, to add one parent-fixture test seam/case that classifies a real
+  processed acknowledgment after the deadline and asserts the barrier
+  diagnostic. No timer/environment delay or child/production behavior change
+  is authorized.
 
 ## Slice 3 Final Rereview Finding
 
