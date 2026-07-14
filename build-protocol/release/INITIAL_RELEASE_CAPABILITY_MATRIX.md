@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Row 23 review-summary finding assigned
+Status: Review-summary fix ready for focused style/docs acceptance
 
 Task: T-0038 Accepted Capability Audit
 

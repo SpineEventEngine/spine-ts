@@ -1,6 +1,6 @@
 # T-0038 Review Log
 
-Status: Row 23 review-summary finding assigned
+Status: Review-summary fix ready for focused style/docs acceptance
 
 ## Review Scope
 
@@ -12,14 +12,14 @@ Status: Row 23 review-summary finding assigned
 
 ## Concern Dispositions
 
-- Style/maintainability: review closed with accepted matrix-structure and
-  durable-record corrections; re-review follows child integration.
-- Documentation: review closed with accepted routing, governing-path, example,
-  and historical-status corrections; re-review follows child integration.
-- TypeScript/API docs: review closed with accepted type-URL defect and complete
-  package export-subpath inventory requirements; re-review follows children.
-- Performance/reliability: review closed with accepted framework-owned local
-  multi-process execution defect; re-review follows child integration.
+- Style/maintainability: accepted row 23, exact counts/routes, and evidence; its
+  focused rereview found this top-summary staleness. The summary correction
+  awaits focused style acceptance.
+- Documentation: accepted row 23, exact counts/routes, and evidence; its focused
+  rereview found this top-summary staleness. The summary correction awaits
+  focused documentation acceptance.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: CLEAN.
 - Security: deferred to final T-0041 by protocol; no per-task security lane.
 
 ## Historical Reviewer Profile Plan
@@ -32,10 +32,10 @@ Status: Row 23 review-summary finding assigned
 ## Current State
 
 T-0038a and T-0038b are integrated, post-merge verified, and represented by the
-refreshed matrix. The integrated review wave is complete and its accepted local
-record corrections are applied. Current path is local fix acceptance, affected
-style/documentation/TypeScript/API rereview, then parent final verification.
-Reliability remains CLEAN; security remains deferred to T-0041.
+refreshed matrix. Row 23 routes reconciliation of T-0038b's stale current
+headers to T-0039a. Current action is focused style/docs acceptance of this
+top-summary correction, followed by parent final verification. T-0042 release
+proof remains pending, and security remains deferred to T-0041.
 
 ## Historical Pre-Review Lint
 
@@ -444,3 +444,29 @@ findings at `2026-07-14T01:23:48Z`.
   top of this file still name completed child integration, local fix acceptance,
   and API rereview as future steps. Resume the same Terra Medium author to
   replace those two summaries and synchronize parent handback/status only.
+
+## Review-Summary Fix Skill Applicability
+
+- Before fix edits, checked the exposed session inventory, task-provided skill
+  paths, expected-skill manifest, complete readable
+  `/Users/armiol/.agents/skills` entrypoint enumeration, and installed lock;
+  all eight expected manifest entries are present in the bounded evidence.
+- `receiving-code-review` and `verification-before-completion` were fully read
+  and selected. Subagent/worktree/planning/ADR/runtime/TypeScript/testing/
+  JVM-server skills are N/A for the existing-worktree, no-subagent, active-
+  summary correction with matrix content preserved.
+
+## Review-Summary Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium and matches
+  the explicit resumed implementer assignment; no subagents were used.
+- Active Concern Dispositions now retain style/docs acceptance of row 23 and
+  identify only this top-summary correction as awaiting focused style/docs
+  acceptance; API and reliability are CLEAN and security remains deferred.
+- Active Current State now reflects integrated children, T-0039a's stale-header
+  reconciliation, focused style/docs acceptance as the sole review step before
+  parent final verification, and pending T-0042/security gates. No completed
+  local acceptance or API rereview is presented as future work.
+- Four statuses agree. Focused status/current-summary, taxonomy/route, exact
+  four-file Prettier, generated-path, scope, and `git diff --check` checks pass;
+  matrix content is unchanged and no full verify or commit occurred.

@@ -1,6 +1,6 @@
 # T-0038: Accepted Capability Audit
 
-Status: Row 23 review-summary finding assigned
+Status: Review-summary fix ready for focused style/docs acceptance
 
 Started: `2026-07-14T00:59:38Z`
 
@@ -583,3 +583,34 @@ for main integration` although its durable integration record and ancestry
   and reliability are CLEAN, row 23 style/docs rereview produced this summary
   fix, and only focused style/docs acceptance then parent final verification
   remain. Preserve matrix row/count/route content.
+
+## Review-Summary Fix Skill Applicability
+
+- Before the fix, checked the exposed session inventory, task-provided skill
+  paths, `build-protocol/skills/EXPECTED_SKILLS.md`, the complete readable
+  entrypoint inventory from
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  and `/Users/armiol/.agents/.skill-lock.json`; all eight expected manifest
+  entries are represented.
+- Fully read and selected `receiving-code-review` to verify the summary finding
+  against the accepted row-23 rereview, and `verification-before-completion`
+  for fresh focused evidence. Subagent/worktree/planning/ADR/runtime/
+  TypeScript/testing/JVM-server skills are N/A for this existing-worktree,
+  no-subagent, parent-record summary correction. Repository protocol and exact
+  four-file scope remain governing.
+
+## Review-Summary Fix Handback
+
+- Actual immutable runtime-role metadata is `gpt-5.6-terra` / medium, matching
+  the explicit existing implementer assignment; no subagents were used.
+- Replaced the review log's active Concern Dispositions and Current State so
+  they reflect integrated children, accepted row 23/counts/routes/evidence,
+  CLEAN API/reliability, T-0039a reconciliation ownership, and only focused
+  style/docs acceptance before parent final verification.
+- All four status headers are synchronized. Matrix content, including exact
+  31/24/4/1/1/1/0 taxonomy, 28 em dashes plus T-0039/T-0040/T-0041, rows
+  21/23/30/31, API/export evidence, and pending T-0042/security gates, is
+  unchanged.
+- Focused status/current-summary, taxonomy/route, exact four-file Prettier,
+  generated-path, scope, and `git diff --check` checks pass. No full verify,
+  commit, or out-of-scope change occurred.
