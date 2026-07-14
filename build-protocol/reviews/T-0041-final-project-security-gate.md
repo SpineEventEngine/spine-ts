@@ -58,3 +58,6 @@ tracked generated output, dependency-audit freshness, and diff integrity.
   high, project-wide read-only security architecture split, no subagents or Git
   mutation.
 - The splitter does not replace the dedicated final security reviewer.
+- Splitter agent `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`: explicit dispatch
+  and immutable actual runtime profile `gpt-5.6-sol` / high, no subagents or
+  Git mutation.
