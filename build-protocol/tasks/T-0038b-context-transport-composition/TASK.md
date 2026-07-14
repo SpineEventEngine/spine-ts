@@ -1,6 +1,6 @@
 # T-0038b: Context Transport Composition
 
-Status: Slice 3 adapter endpoint cleanup green; pre-review handback ready
+Status: Slice 3 pre-review duplicated-constant fix assigned
 
 Started: `2026-07-14T02:27:17Z`
 
@@ -835,3 +835,17 @@ after child and transports closed.`
   pre-removal directory emptiness. `git diff --check` also passed. Slice 3 is
   accepted as an implementation endpoint and is ready for the complete
   specialist review wave.
+
+## Slice 3 Pre-Review Lint Finding
+
+- The required lightweight status/docs/API scan found no stale status, public
+  export leak, internal-helper documentation, or future-policy overclaim. It
+  did find that the parent and child process fixtures separately define the
+  adapter identity and transport timeout even though those values form one
+  cross-process test contract and must agree.
+- The same implementer is resumed at its immutable explicit
+  `gpt-5.6-terra` / medium profile, with no subagents, to pass the shared values
+  through the child environment, validate them at the child boundary, rerun the
+  native child-process proof, and update all three durable records. No
+  production, public API, documentation, topology, or timing-policy change is
+  authorized.

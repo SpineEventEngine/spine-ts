@@ -1,6 +1,6 @@
 # T-0038b Review Log
 
-Status: Slice 3 adapter endpoint cleanup green; pre-review handback ready
+Status: Slice 3 pre-review duplicated-constant fix assigned
 
 ## Scope
 
@@ -545,3 +545,14 @@ Status: Slice 3 adapter endpoint cleanup green; pre-review handback ready
   files passed with `21/21` tests, and `git diff --check` passed. No pre-review
   finding was introduced; the implementation endpoint may now be committed and
   packaged for the complete four-lane review wave.
+
+## Slice 3 Pre-Review Lint Disposition
+
+- Status/docs/API lint found no stale active-state claim, public export leak,
+  internal-only docs claim, or future production-policy overclaim. Historical
+  open-gap text remains superseded context unless current state claims it.
+- One actionable maintainability finding blocks reviewer dispatch: the parent
+  and child fixtures duplicate the adapter identity and transport timeout that
+  must agree. The same explicit Terra Medium implementer is assigned a bounded
+  parent-to-child environment handoff with child-boundary validation and native
+  proof. Review packaging waits for that correction.
