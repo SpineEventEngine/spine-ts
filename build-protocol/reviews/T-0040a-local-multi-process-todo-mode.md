@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Awaiting reviewer wave
+Status: Wave 1 fixes verified - awaiting reviewer wave 2
 
 Baseline: `24d1ef37`
 
@@ -48,7 +48,8 @@ overstate future production policy.
   `019f610b-c8d9-7282-a3ec-9a2d2cc3d84b` was explicitly dispatched and
   coordinator-confirmed as the existing immutable `implementer` role with
   `gpt-5.6-terra` / medium; no subagents.
-- Reviewer wave: not yet dispatched.
+- Reviewer wave 1: complete and closed; findings fixed and coordinator-verified.
+- Reviewer wave 2: pending fresh committed package.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -94,3 +95,113 @@ evidence. The resolution is recorded below.
   leakage/policy-claim lint all passed.
 - No unresolved coordinator pre-review finding remains. The four specialist
   concerns may now review one committed package.
+
+## Reviewer Wave 1 Assignments
+
+Implementation endpoint: `08f57537`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..08f57537.diff` (79,334 bytes)
+
+Every reviewer is read-only, may inspect source/tests needed to verify the
+package, must not edit or mutate Git, and must not spawn subagents. Findings
+must identify severity, exact path/line, concrete behavior or requirement at
+risk, and the smallest defensible correction. Historical superseded text is
+out of scope unless the current task brief, current status logs, or changed
+documentation claims it as active.
+
+- Existing `style_maintainability_reviewer`: explicit immutable
+  `gpt-5.6-terra` / high. Review the task ledger and package for concrete
+  correctness, file ownership, naming, duplicated fixture machinery, test
+  quality, public-import discipline, and maintainability. Do not request broad
+  refactors or stylistic preference changes.
+- Existing `documentation_reviewer`: explicit immutable
+  `gpt-5.6-luna` / medium. Review changed records, package metadata, comments,
+  observable workflow completeness, status accuracy, and local-only limitation
+  wording. Do not review unrelated docs or demand T-0040c content early.
+- Existing `typescript_api_docs_reviewer`: explicit immutable
+  `gpt-5.6-terra` / high. Review package exports/imports, self-reference,
+  dependency placement, generated declarations/contracts, runtime/type
+  agreement, accidental public leaks, and whether any public API/TSDoc change
+  is actually required.
+- Existing `performance_reliability_reviewer`: explicit immutable
+  `gpt-5.6-terra` / high. Review process separation, readiness ordering,
+  request/query bounds, child/socket/environment ownership, cleanup under every
+  failure path, diagnostics, races, retained resources, and missing behavior
+  tests. Avoid speculative optimization.
+
+Actual agent IDs and immutable runtime metadata will be recorded from the
+Desktop dispatch results before accepting this wave.
+
+## Reviewer Wave 1 Results - 2026-07-14T15:03:38Z
+
+All four reviewers were explicitly dispatched against the same package,
+completed without subagents, and were closed promptly. Desktop immutable role
+metadata confirmed:
+
+- Style/maintainability: agent
+  `019f6124-2303-7ac3-854e-1a94ec57de34`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6124-1e98-75c3-b50f-1c786cf9c715`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6124-1a57-7e40-a436-fb949194eb46`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6124-2751-7581-8024-da5aee95d57b`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Documentation result: clean. Residual risk is limited to forced termination,
+stalled operations, and genuine transport background failures not yet induced;
+the accepted finding batch below adds the required timeout/termination proofs.
+
+Accepted and deduplicated findings:
+
+1. **High, public API:** both parent and child pass ZeroMQ
+   `onBackgroundFailure`, whose exported option is explicitly `@internal`.
+   Remove this optional diagnostic dependency from example code and records;
+   the task does not require a new public framework seam, so a T-0038 child is
+   not justified.
+2. **High, reliability:** shutdown can race `Server.start()`. Add a stop latch
+   that suppresses readiness once stopping begins, waits for or rolls back
+   startup, and closes any successfully created running server before the
+   environment and transport. Prove shutdown during pending startup leaves no
+   listener and does not require forced termination.
+3. **High, reliability:** the observation wrapper does not cancel an in-flight
+   Connect query and can exceed the five-second observation phase. Pass RPC
+   `timeoutMs` capped to the remaining observation budget, bound the wrapper to
+   the same remainder, and add a controlled stalled-query cleanup proof.
+4. **P2, timeout coverage:** add a controlled no-ready/stalled worker case that
+   asserts readiness-timeout diagnostics and complete cleanup.
+5. **P2, failure budget:** outer Vitest timeouts are below the legal sum of
+   readiness, request/observation, shutdown, termination, and listener phases.
+   Set explicit budgets above the worst-case phase sum and add a worker mode
+   that ignores shutdown and `SIGTERM`, proving `SIGKILL` cleanup removes the
+   child and IPC directory within that budget.
+6. **P2, duplicated constant:** define the ZeroMQ receive timeout in the parent
+   and pass it through the child environment instead of hard-coding `100` on
+   both sides.
+7. **P3, naming:** rename five-component `awaitChildExitOrTerminate` to a public-
+   name-compliant short explicit name such as `stopChild`.
+
+No finding requests a public export, Protobuf/type-URL change, dependency,
+README/user-guide work, production policy, or broad fixture refactor. Return
+this complete batch to the same implementation context, rerun the affected
+native suite, and then generate a fresh package for a full four-concern wave.
+
+## Wave 1 Fix Verification - 2026-07-14T15:20:40Z
+
+- The same immutable Terra Medium implementer fixed all seven accepted
+  findings, used no subagents, and was closed after handback.
+- Coordinator source inspection confirmed the internal adapter hook is absent,
+  startup/shutdown is serialized, query calls receive a remaining-budget
+  timeout, all controlled worker modes remain lifecycle-only, receive timeout
+  has one parent owner, and the helper is now `stopChild`.
+- Fresh native focused/regression evidence passed: 7 files and 107 tests in
+  19.48 seconds, including pending startup, stalled query cancellation,
+  no-ready timeout, and bounded `SIGKILL` cleanup.
+- Example typecheck, focused ESLint, repository format, generated cleanliness,
+  diff whitespace, tracked-generated scan, public/internal leak scan, and
+  production-policy scan all passed.
+- Every Wave 1 finding is resolved. No T-0038 child or public API change is
+  required. Commit the fix endpoint and run all four specialist concerns again
+  against one fresh package.

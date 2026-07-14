@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - implementation and focused validation complete
+Status: In progress - reviewer wave 1 fixes and focused validation complete
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -163,8 +163,8 @@ No mandatory public framework seam is missing, so no T-0038 child is warranted.
   5 seconds for graceful shutdown/exit, then 1 second for `SIGTERM` before
   `SIGKILL` as a last-resort cleanup.
 - Diagnostics retain phase, child exit code/signal, capped sanitized stderr,
-  last query status/row IDs, and transport background failures. The private
-  directory path is replaced with `<ipc-directory>`.
+  and last query status/row IDs. The private directory path is replaced with
+  `<ipc-directory>`.
 - Cleanup preserves a primary failure while attempting every acquired resource
   in deterministic ownership order: parent transport; child shutdown and
   bounded exit/termination; listener-closed check; retained IPC entry report;
@@ -307,6 +307,40 @@ examples/todo/src/local-multi-process.test.ts`. Result: 5 tests ran; 3 passed
 examples/todo/src/local-multi-process.test.ts`. Result: 1 file and 5 tests
   passed. The directly affected example, server lifecycle/cross-process, and
   ZeroMQ regression wave passed 6 files and 98 tests.
+
+### Reviewer Wave 1 Fixes - 2026-07-14
+
+- Removed the internal-only ZeroMQ diagnostic option from both parent and
+  worker composition and from active implementation claims. No public API or
+  T-0038 child was added.
+- Added a worker stop latch around the startup promise. Controlled pending
+  startup marks the private directory only for test synchronization; shutdown
+  releases the transport registration gate, suppresses `ready`, awaits startup,
+  and then closes running server, environment, and transport in order.
+- Every `QueryService.read()` uses public Connect call options with `timeoutMs`
+  capped to the smaller of the two-second request limit and remaining
+  five-second observation budget. The wrapper uses the same bound, stalled
+  calls are canceled, and diagnostics retain the last query status.
+- Controlled no-ready and shutdown/SIGTERM-resistant worker modes prove the
+  readiness timeout and deterministic `SIGKILL` fallback. All tests use one
+  25-second outer budget, above the legal 21-second stacked phase maximum.
+- The parent owns the single `receiveTimeoutMs` constant and passes its decimal
+  value to the worker, which validates it before transport creation.
+- Renamed the child-stop helper to `stopChild`.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/src/local-multi-process.test.ts`; 5 existing tests passed and 4
+  new tests failed for the intended missing modes.
+- Post-refactor GREEN command: the same native command passed 1 file and 9
+  tests in 18.86s. Its final post-format rerun passed 1 file and 9 tests in
+  19.32s.
+- The directly affected native regression command covered this fixture, the
+  existing to-do example, three server lifecycle/cross-process files, and two
+  ZeroMQ transport files; all 7 files and 107 tests passed in 19.46s.
+- Example typecheck, focused ESLint, generated-output cleanliness, formatting,
+  diff whitespace, and public/internal source scans passed. Full `pnpm verify`
+  and reviewer wave 2 remain coordinator gates.
+- Actual immutable implementation metadata remains existing role `implementer`,
+  model `gpt-5.6-terra`, reasoning `medium`; no subagents.
 
 ## Skill Applicability
 

@@ -1,4 +1,6 @@
 import process from "node:process";
+import { rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 
 import { Server, ServerEnvironment } from "@spine-ts/server";
@@ -9,18 +11,29 @@ import { createTodoContext } from "@spine-ts/example-todo";
 const ipcDirectory = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_IPC_DIRECTORY");
 const adapterIdentity = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_ADAPTER_IDENTITY");
 const requestTimeoutMs = positiveIntegerEnvironment("SPINE_TODO_MULTI_PROCESS_REQUEST_TIMEOUT_MS");
+const receiveTimeoutMs = positiveIntegerEnvironment("SPINE_TODO_MULTI_PROCESS_RECEIVE_TIMEOUT_MS");
+const workerMode = workerModeEnvironment();
 const injectedCloseFailures = closeFailureEnvironment();
-const transport = createZeroMqTransport(
+const startupGate = createGate();
+const baseTransport = createZeroMqTransport(
   createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity }),
-  { requestTimeoutMs, receiveTimeoutMs: 100, onBackgroundFailure: (error) => reportFailure("transport", error) },
+  { requestTimeoutMs, receiveTimeoutMs },
 );
+const transport =
+  workerMode === "pending-startup"
+    ? pendingStartupTransport(baseTransport, startupGate)
+    : baseTransport;
 const environment = ServerEnvironment.local({ transport, ownsTransport: false });
 let running;
 let stopping;
+let stopRequested = false;
+let startup;
 
 process.on("message", (message) => {
   if (isShutdownMessage(message)) {
-    void shutdown();
+    if (workerMode !== "ignore-stop") {
+      void shutdown();
+    }
   } else {
     void reportFailure("control", new Error("Received an invalid lifecycle control message."));
   }
@@ -29,25 +42,45 @@ process.once("disconnect", () => {
   void shutdown();
 });
 process.once("SIGTERM", () => {
-  void shutdown();
+  if (workerMode !== "ignore-stop") {
+    void shutdown();
+  }
 });
 
+startup = startServer();
 try {
-  running = await Server.atPort(0, { host: "127.0.0.1", environment })
-    .add(await createTodoContext())
-    .start();
-  await sendControl(
-    { type: "ready", pid: process.pid, host: running.host, port: running.port },
-    "ready control",
-  );
+  running = await startup;
+  if (stopRequested) {
+    await shutdown();
+  } else if (workerMode !== "no-ready") {
+    await sendControl(
+      { type: "ready", pid: process.pid, host: running.host, port: running.port },
+      "ready control",
+    );
+  }
 } catch (error) {
-  await reportFailure("startup", error);
+  if (!stopRequested) {
+    await reportFailure("startup", error);
+  }
   await shutdown(1);
 }
 
+async function startServer() {
+  return await Server.atPort(0, { host: "127.0.0.1", environment })
+    .add(await createTodoContext())
+    .start();
+}
+
 async function shutdown(exitCode = 0) {
+  stopRequested = true;
+  startupGate.release();
   stopping ??= (async () => {
     const closeFailures = [];
+    try {
+      running ??= await startup;
+    } catch (error) {
+      closeFailures.push(new Error(`startup rollback failed: ${safeMessage(error)}`));
+    }
     await captureClose("running server", async () => running?.close(), closeFailures);
     await captureClose("environment", async () => environment.close(), closeFailures);
     await captureClose("transport", async () => transport.close(), closeFailures);
@@ -122,6 +155,42 @@ async function sendControl(message, phase) {
   });
 }
 
+function pendingStartupTransport(delegate, gate) {
+  let pending = true;
+  return {
+    publish: (operation) => delegate.publish(operation),
+    subscribe: (subscription, handler) => delegate.subscribe(subscription, handler),
+    request: (operation) => delegate.request(operation),
+    async respond(subscription, handler) {
+      if (pending) {
+        pending = false;
+        const marker = path.join(ipcDirectory, "startup-pending");
+        await writeFile(marker, "pending", "utf8");
+        try {
+          await gate.wait;
+        } finally {
+          await rm(marker, { force: true });
+        }
+      }
+      return await delegate.respond(subscription, handler);
+    },
+    close: () => delegate.close(),
+  };
+}
+
+function createGate() {
+  let release;
+  const wait = new Promise((resolve) => {
+    release = resolve;
+  });
+  return {
+    wait,
+    release() {
+      release();
+    },
+  };
+}
+
 function requiredEnvironment(name) {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {
@@ -140,6 +209,15 @@ function positiveIntegerEnvironment(name) {
     throw new Error(`${name} must be a safe integer.`);
   }
   return parsed;
+}
+
+function workerModeEnvironment() {
+  const value = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_WORKER_MODE");
+  const allowed = new Set(["default", "ignore-stop", "no-ready", "pending-startup"]);
+  if (!allowed.has(value)) {
+    throw new Error("SPINE_TODO_MULTI_PROCESS_WORKER_MODE has an unknown value.");
+  }
+  return value;
 }
 
 function closeFailureEnvironment() {
