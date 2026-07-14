@@ -197,6 +197,31 @@ describe("local multi-process to-do mode", () => {
     }
   });
 
+  it("surfaces a path polling stat failure before its deadline", async () => {
+    const timeoutMs = 1_000;
+    const statFailure = Object.assign(new Error("Injected path stat failure."), {
+      code: "EACCES",
+    });
+    let statAttempts = 0;
+    const startedAt = Date.now();
+
+    const rejection = await waitForPath(
+      "controlled-path",
+      "controlled path wait",
+      timeoutMs,
+      () => {
+        statAttempts += 1;
+        return Promise.reject(statFailure);
+      },
+    ).catch((error: unknown) => error);
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(rejection).toBe(statFailure);
+    expect(asError(rejection).message).toBe("Injected path stat failure.");
+    expect(statAttempts).toBe(1);
+    expect(elapsedMs).toBeLessThan(250);
+  });
+
   it("clears the child-exit timeout when the child settles early", async () => {
     vi.useFakeTimers();
     try {
@@ -1426,14 +1451,15 @@ function requireSetupResources(
   return resources;
 }
 
-async function waitForPath(target: string, phase: string, timeoutMs: number): Promise<void> {
+async function waitForPath(
+  target: string,
+  phase: string,
+  timeoutMs: number,
+  onStat: (target: string) => Promise<unknown> = stat,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const exists = await stat(target).then(
-      () => true,
-      () => false,
-    );
-    if (exists) {
+    if (!(await isAbsent(target, onStat))) {
       return;
     }
     const remainingMs = deadline - Date.now();

@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer Wave 8 fixes verified; awaiting Wave 9
+Status: In progress - Wave 9 fix verified; Wave 10 pending
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -552,6 +552,53 @@ when IPC directory absence verification fails"`. It exited `1`; 1 test failed
   source, guide documentation, or build configuration changed. Actual immutable
   implementation metadata remains existing role `implementer`, model
   `gpt-5.6-terra`, reasoning `medium`; no subagents or Git mutation.
+
+### Reviewer Wave 9 Fix - 2026-07-14
+
+- `waitForPath()` now accepts a private `onStat` callback and reuses the
+  ENOENT-only `isAbsent()` contract. An existing path still returns immediately,
+  `ENOENT` retains owned deadline polling and the capped final delay, and every
+  other filesystem error is rethrown unchanged.
+- The focused controlled test injects the original `EACCES` `Error`, verifies
+  identity, message, one stat attempt, and completion below 250 milliseconds
+  against a one-second deadline. The existing real-filesystem late-marker test
+  remains paired with it and continues to prove deadline ownership.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "surfaces a path polling stat
+failure before its deadline"`. It exited `1`; 1 test failed and 16 were skipped
+  in 2.20 seconds, with the test taking 1.01 seconds. The callback was ignored
+  and the received error was the misleading `controlled path wait timed out
+after 1000ms` diagnostic instead of the injected `EACCES` error.
+- GREEN used the same command and exited `0`; 1 test passed and 16 were skipped
+  in 1.05 seconds, with the test taking 2 milliseconds. The focused GREEN pair
+  for the non-ENOENT and late-marker cases passed 2 tests with 15 skipped in
+  1.11 seconds.
+- The sandboxed moved suite was unable to open native IPC and failed 12 tests
+  with child `Operation not permitted` startup diagnostics. The same command
+  rerun with native IPC/loopback permission passed all 17 tests in 30.71 seconds.
+  The native seven-file affected regression passed all 115 tests in 31.18
+  seconds.
+- Both TypeScript no-emit checks, focused ESLint, cleanup enforcement,
+  assigned-file Prettier, and diff whitespace passed. The public/internal scan
+  exited `1` with no matches. Full `pnpm verify` was intentionally not run.
+- No production code, worker behavior, dependency, public contract, framework
+  source, guide documentation, or build configuration changed. Actual immutable
+  implementation metadata remains existing role `implementer`, model
+  `gpt-5.6-terra`, reasoning `medium`; no subagents or Git mutation.
+
+### Coordinator Wave 9 Fix Verification - 2026-07-14
+
+- The coordinator inspected the complete four-file diff and confirmed that
+  `waitForPath()` now uses the existing ENOENT-only absence contract while
+  preserving its owned deadline and remaining-time delay cap. The injected
+  `EACCES` proof checks original error identity, exact message, one stat
+  attempt, and prompt completion.
+- Fresh native affected regression passed seven files and all 115 tests in
+  31.52 seconds. Both TypeScript no-emit checks, full lint and cleanup
+  enforcement, formatting, and `git diff --check` passed.
+- The Wave 9 finding is resolved. No production code, worker behavior,
+  dependency, public contract, framework source, guide documentation, or build
+  configuration changed. Commit this fix and run all four concerns in Wave 10.
 
 ## Skill Applicability
 

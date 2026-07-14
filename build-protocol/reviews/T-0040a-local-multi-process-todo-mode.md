@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 8 fixes verified - awaiting reviewer Wave 9
+Status: Wave 9 fix verified - Wave 10 pending
 
 Baseline: `24d1ef37`
 
@@ -54,7 +54,9 @@ overstate future production policy.
 - Reviewer wave 5: complete, fixed, verified, and closed.
 - Reviewer wave 6: complete, fixed, verified, and closed.
 - Reviewer wave 7: complete, fixed, verified, and closed.
-- Reviewer wave 8: complete and closed; three accepted findings are assigned.
+- Reviewer wave 8: complete, fixed, verified, and closed.
+- Reviewer wave 9: complete and closed; its accepted finding is fixed and
+  coordinator-verified. Wave 10 is pending.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -762,3 +764,66 @@ Terra Medium implementer, verify natively, commit, and repeat every concern.
   whitespace, and generated tracking passed.
 - Every Wave 8 finding is resolved. Commit and run all four canonical concerns
   in Wave 9 with current summaries advanced before dispatch.
+
+## Reviewer Wave 9 Assignments
+
+Fix endpoint: `e6f4a058`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..e6f4a058.diff` (211,970 bytes)
+
+Pre-review lint advanced every active summary before dispatch and found no
+stale assignment scope, readiness overrun, broad absence result, cleanup-error
+loss, callback/name issue, unbounded query/diagnostic path, internal/public leak,
+tracked generated output, duplicated policy, or future-policy overclaim.
+
+Dispatch the same four existing read-only, no-subagent concerns with explicit
+immutable profiles. Regress every prior finding, especially remaining-deadline
+polling, ENOENT-only absence, non-ENOENT cleanup aggregation with primary error,
+active statuses, exact ID filter, bounded diagnostics, and process/resource
+cleanup. Scope remains the package and affected paths; superseded history is
+out of scope unless current records claim it active. Report only concrete
+line-specific defects. Actual IDs/profile metadata and disposition remain
+pending.
+
+## Reviewer Wave 9 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f61a5-9152-74a0-8934-a10aa8e4329f`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f61a5-c20a-7b71-b447-c35b2d42b1ce`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f61a5-e03f-79d1-84e7-2c79d463a4ea`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f61a5-fc5b-7d41-b4f6-aab890cf00b1`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Documentation, TypeScript/API docs, and performance/reliability were clean.
+Accepted one finding:
+
+1. **P2, path-poll errors:** `waitForPath()` maps every `stat()` rejection to
+   “not present.” Reuse the ENOENT-only absence contract, rethrow other
+   operational errors immediately, and add a focused injected non-ENOENT path
+   poll test so actionable filesystem failures do not become readiness
+   timeouts.
+
+All active records, assignment scope, cleanup verification/aggregation,
+readiness timing, ID-filtered query, bounded diagnostics, process lifecycle,
+public contracts, and prior findings otherwise remain clean. Return this single
+fix to the same Terra Medium implementer, verify, commit, and rerun every
+canonical concern.
+
+## Reviewer Wave 9 Fix Verification - 2026-07-14
+
+- The coordinator inspected the full fix and confirmed ENOENT-only path
+  polling, unchanged non-ENOENT error propagation, retained deadline ownership,
+  and a focused controlled proof of immediate actionable failure.
+- Fresh native affected regression passed seven files and all 115 tests in
+  31.52 seconds. Both TypeScript checks, full lint and cleanup enforcement,
+  formatting, and `git diff --check` passed.
+- Wave 9 is fully fixed and verified. Wave 10 must rerun all four canonical
+  concerns against a new literal-endpoint package after the fix commit.
