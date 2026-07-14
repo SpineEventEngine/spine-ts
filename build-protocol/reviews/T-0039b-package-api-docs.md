@@ -1,6 +1,6 @@
 # T-0039b Review Log
 
-Status: Review round 3 fixes verified — round 4 assignment pending
+Status: Review round 4 assigned
 
 ## Review Scope
 
@@ -267,3 +267,12 @@ tests `2` files / `31` tests; exact-path Prettier; fixture-input,
 internal-subpath, corrected future-policy, equal-status, scope, conflict, and
 current/baseline diff checks. No reviewer is active. Fresh four-concern review
 is required; security remains T-0041 and full verify remains final-only.
+
+## Independent Review Round 4 Assignment
+
+- Immutable package range: `0868ecca..f67c55b1`.
+- Style, TypeScript/API docs, performance/reliability: explicit
+  `gpt-5.6-terra` / high; documentation: explicit `gpt-5.6-luna` / medium.
+- Read-only, one distinct concern, no subagents; ignore superseded history
+  unless current records/docs activate it. Recheck all round 3 fixes and collect
+  the complete wave before adjudication. Security remains T-0041.

@@ -1,6 +1,6 @@
 # T-0039b: Package And API Documentation
 
-Status: Review round 3 fixes verified — round 4 assignment pending
+Status: Review round 4 assigned
 
 Started: `2026-07-14T11:46:19Z`
 
@@ -438,3 +438,12 @@ may change. No subagents; coordinator retains Git and independent review.
   future-policy, scope, conflict, and current/baseline diff checks passed.
 - Round 3 fixes are accepted for a fresh complete wave. Full `pnpm verify`
   remains final-only.
+
+## Independent Review Round 4 Assignment
+
+- Immutable full range: `0868ecca..f67c55b1`.
+- Explicit profiles: docs `gpt-5.6-luna` / medium; style, API docs, and
+  reliability `gpt-5.6-terra` / high.
+- Read-only, no subagents, one concern each, ignore superseded historical text
+  unless current records/docs activate it. Recheck all round 3 fixes and collect
+  the complete wave before adjudication. Security remains T-0041.
