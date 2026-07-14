@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packCommand, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
 import { UserIdSchema } from "@spine-ts/proto";
 import {
   QueryIdSchema,
@@ -37,6 +37,9 @@ const controlTimeoutMs = 1_000;
 const gracefulShutdownTimeoutMs = 5_000;
 const terminateTimeoutMs = 1_000;
 const outerTestTimeoutMs = 25_000;
+const maxDiagnosticLength = 480;
+const maxDiagnosticRowIds = 4;
+const maxDiagnosticRowIdLength = 64;
 const adapterIdentity = "todo-local-multi-process";
 const startupPendingMarker = "startup-pending";
 const workerPath = fileURLToPath(
@@ -94,7 +97,7 @@ interface FixtureCreateOptions {
   readonly statelessQueryRows?: boolean;
   readonly stallQueries?: boolean;
   readonly childCloseFailures?: readonly ChildCloseResource[];
-  readonly afterResourcesAcquired?: (resources: FixtureSetupResources) => void;
+  readonly onResourcesAcquired?: (resources: FixtureSetupResources) => void;
   readonly closeParentTransport?: (transport: SignalTransport) => Promise<void>;
   readonly removeIpcDirectory?: (ipcDirectory: string) => Promise<void>;
 }
@@ -107,7 +110,7 @@ interface TrackedChild {
 
 describe("local multi-process to-do mode", () => {
   it(
-    "reports a query row without state as unreadable and cleans up",
+    "bounds and sanitizes unreadable query row diagnostics and cleans up",
     async () => {
       const fixture = await LocalMultiProcessFixture.create({ statelessQueryRows: true });
       let primaryFailure: Error | undefined;
@@ -125,11 +128,16 @@ describe("local multi-process to-do mode", () => {
       }
 
       const elapsedMs = Date.now() - (observationStartedAt ?? Date.now());
-      expect(primaryFailure?.message).toContain(
+      const failureMessage = primaryFailure?.message ?? "";
+      expect(failureMessage).toContain(
         `projected task observation timed out after ${String(observationTimeoutMs)}ms`,
       );
-      expect(primaryFailure?.message).toContain("last row IDs [<unreadable>]");
-      expect(primaryFailure?.message).not.toContain("TypeError");
+      expect(failureMessage).toContain("last row IDs [<unreadable>,unsafe row ");
+      expect(failureMessage).toContain("<3 rows omitted>");
+      expect(failureMessage).not.toContain("extra-row-2");
+      expect(failureMessage).not.toContain("TypeError");
+      expect(failureMessage).not.toMatch(/[\r\n\t]/u);
+      expect(failureMessage.length).toBeLessThanOrEqual(maxDiagnosticLength);
       expect(elapsedMs).toBeGreaterThanOrEqual(observationTimeoutMs - 250);
       expect(elapsedMs).toBeLessThan(observationTimeoutMs + 1_500);
       expect(cleanup).toEqual({
@@ -255,7 +263,7 @@ describe("local multi-process to-do mode", () => {
       let resources: FixtureSetupResources | undefined;
       const fixture = await LocalMultiProcessFixture.create({
         workerMode: "exit-after-ready",
-        afterResourcesAcquired: (acquired) => {
+        onResourcesAcquired: (acquired) => {
           resources = acquired;
         },
       });
@@ -318,7 +326,7 @@ describe("local multi-process to-do mode", () => {
     async () => {
       let resources: FixtureSetupResources | undefined;
       const fixture = await LocalMultiProcessFixture.create({
-        afterResourcesAcquired: (acquired: FixtureSetupResources) => {
+        onResourcesAcquired: (acquired: FixtureSetupResources) => {
           resources = acquired;
         },
         childCloseFailures: ["running server", "environment", "transport"],
@@ -354,7 +362,7 @@ describe("local multi-process to-do mode", () => {
 
       try {
         unexpectedFixture = await LocalMultiProcessFixture.create({
-          afterResourcesAcquired: (acquired: FixtureSetupResources) => {
+          onResourcesAcquired: (acquired: FixtureSetupResources) => {
             resources = acquired;
             throw setupFailure;
           },
@@ -392,7 +400,7 @@ describe("local multi-process to-do mode", () => {
       let resources: FixtureSetupResources | undefined;
       const fixture = await LocalMultiProcessFixture.create({
         workerMode: "pending-startup",
-        afterResourcesAcquired: (acquired) => {
+        onResourcesAcquired: (acquired) => {
           resources = acquired;
         },
       });
@@ -535,7 +543,7 @@ describe("local multi-process to-do mode", () => {
       let resources: FixtureSetupResources | undefined;
       const fixture = await LocalMultiProcessFixture.create({
         workerMode: "ignore-stop",
-        afterResourcesAcquired: (acquired) => {
+        onResourcesAcquired: (acquired) => {
           resources = acquired;
         },
       });
@@ -616,7 +624,7 @@ class LocalMultiProcessFixture {
         stdio: ["ignore", "ignore", "pipe", "ipc"],
       });
       trackedChild = trackChild(child);
-      options.afterResourcesAcquired?.({
+      options.onResourcesAcquired?.({
         ipcDirectory,
         childExit: trackedChild.exit,
       });
@@ -770,14 +778,7 @@ class LocalMultiProcessFixture {
         continue;
       }
       const list = findTaskList(response, "local-multi-process-task");
-      lastRowIds = response.message
-        .map((message) => {
-          if (message.state === undefined) {
-            return "<unreadable>";
-          }
-          return unpackAny(message.state, TaskListSchema)?.id ?? "<unreadable>";
-        })
-        .join(",");
+      lastRowIds = summarizeRowIds(response, this.#ipcDirectory);
       if (list !== undefined && isExpectedTaskList(list)) {
         return list;
       }
@@ -785,8 +786,11 @@ class LocalMultiProcessFixture {
     }
 
     throw new Error(
-      `Local multi-process projected task observation timed out after ${String(observationTimeoutMs)}ms; ` +
-        `last query status [${lastQueryStatus}]; last row IDs [${lastRowIds}].`,
+      sanitize(
+        `Local multi-process projected task observation timed out after ${String(observationTimeoutMs)}ms; ` +
+          `last query status [${lastQueryStatus}]; last row IDs [${lastRowIds}].`,
+        this.#ipcDirectory,
+      ),
     );
   }
 
@@ -1041,9 +1045,31 @@ function statelessQueryRowInterceptor(): Interceptor {
     }
     return {
       ...response,
-      message: create(QueryResponseSchema, { message: [{}] }),
+      message: controlledDiagnosticQueryResponse(),
     };
   };
+}
+
+function controlledDiagnosticQueryResponse(): QueryResponse {
+  return create(QueryResponseSchema, {
+    message: [
+      {},
+      {
+        state: packAny(
+          TaskListSchema,
+          create(TaskListSchema, {
+            id: `unsafe\nrow\t${"x".repeat(maxDiagnosticLength)}`,
+          }),
+        ),
+      },
+      ...Array.from({ length: maxDiagnosticRowIds + 1 }, (_, index) => ({
+        state: packAny(
+          TaskListSchema,
+          create(TaskListSchema, { id: `extra-row-${String(index)}` }),
+        ),
+      })),
+    ],
+  });
 }
 
 async function delayBeforeQueryRetry(deadline: number): Promise<void> {
@@ -1072,6 +1098,30 @@ function findTaskList(response: QueryResponse, id: string): TaskList | undefined
       message.state === undefined ? undefined : unpackAny(message.state, TaskListSchema),
     )
     .find((list) => list?.id === id);
+}
+
+function summarizeRowIds(response: QueryResponse, ipcDirectory: string): string {
+  const inspectedRows = response.message.slice(0, maxDiagnosticRowIds);
+  const rowIds = inspectedRows.map((message) => {
+    if (message.state === undefined) {
+      return "<unreadable>";
+    }
+    const id = unpackAny(message.state, TaskListSchema)?.id;
+    return id === undefined ? "<unreadable>" : sanitizeRowId(id, ipcDirectory);
+  });
+  const omittedRows = response.message.length - inspectedRows.length;
+  if (omittedRows > 0) {
+    rowIds.push(`<${String(omittedRows)} rows omitted>`);
+  }
+  return sanitize(rowIds.join(","), ipcDirectory);
+}
+
+function sanitizeRowId(id: string, ipcDirectory: string): string {
+  const sanitized = sanitize(id, ipcDirectory);
+  if (sanitized.length <= maxDiagnosticRowIdLength) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, maxDiagnosticRowIdLength - 3)}...`;
 }
 
 function isExpectedTaskList(list: TaskList): boolean {
@@ -1246,7 +1296,7 @@ function sanitize(value: string, ipcDirectory: string): string {
   return value
     .replaceAll(ipcDirectory, "<ipc-directory>")
     .replaceAll(/[\r\n\t]+/gu, " ")
-    .slice(0, 480);
+    .slice(0, maxDiagnosticLength);
 }
 
 function asError(error: unknown): Error {

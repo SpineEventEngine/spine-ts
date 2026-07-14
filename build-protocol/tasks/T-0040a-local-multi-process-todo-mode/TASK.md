@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - reviewer Wave 5 fix verified; awaiting Wave 6
+Status: In progress - reviewer Wave 6 fixes verified; awaiting Wave 7
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -445,6 +445,39 @@ state as unreadable and cleans up"`. It exited `1`; 1 test failed and 13 were
   seven-file affected regression passed all 112 tests in 30.64 seconds. Both
   TypeScript no-emit checks, focused ESLint, cleanup enforcement, assigned-file
   formatting, diff whitespace, and the public/internal boundary scan passed.
+- No production code, worker behavior, dependency, public contract, framework
+  source, or guide documentation changed. Actual immutable implementation
+  metadata remains existing role `implementer`, model `gpt-5.6-terra`,
+  reasoning `medium`; no subagents or Git mutation.
+
+### Reviewer Wave 6 Fixes - 2026-07-14
+
+- Renamed the fixture lifecycle callback from `afterResourcesAcquired` to
+  `onResourcesAcquired` at its declaration, invocation, and all five controlled
+  test call sites. The complete fixture suite and both TypeScript projects
+  retain coverage of the mechanical rename.
+- Observation diagnostics now inspect at most four rows before mapping IDs.
+  Each displayed ID is sanitized and capped at 64 characters, absent or
+  undecodable state remains `<unreadable>`, and additional rows produce a
+  deterministic `<N rows omitted>` marker. The complete observation failure is
+  sanitized to one line and capped by the existing 480-character policy.
+- The controlled public-Connect interceptor still calls the real child query
+  first. It now returns seven rows: one absent state, one oversized ID with
+  newline/tab characters, and five extra rows. The behavior proof verifies the
+  four-row limit, `<3 rows omitted>`, sanitized single-line output, the complete
+  diagnostic cap, the five-second observation bound, and graceful cleanup.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "bounds and sanitizes
+unreadable query row diagnostics and cleans up"`. It exited `1`; 1 test failed
+  and 13 were skipped in 6.25 seconds because the diagnostic retained raw
+  newline/tab characters and rendered all seven rows without an omitted marker.
+- GREEN command: the same invocation exited `0`; 1 test passed and 13 were
+  skipped in 6.31 seconds, with the test body taking 5.33 seconds.
+- The native moved suite passed all 14 tests in 30.41 seconds. The native
+  seven-file affected regression passed all 112 tests in 30.72 seconds. Both
+  TypeScript checks, focused ESLint, cleanup enforcement, and the stale callback
+  name scan passed. Assigned-file formatting, diff whitespace, and the
+  public/internal boundary scan also passed.
 - No production code, worker behavior, dependency, public contract, framework
   source, or guide documentation changed. Actual immutable implementation
   metadata remains existing role `implementer`, model `gpt-5.6-terra`,

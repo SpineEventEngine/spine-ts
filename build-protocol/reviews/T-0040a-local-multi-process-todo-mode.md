@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 5 fix verified - awaiting reviewer Wave 6
+Status: Wave 6 fixes verified - awaiting reviewer Wave 7
 
 Baseline: `24d1ef37`
 
@@ -51,8 +51,8 @@ overstate future production policy.
 - Reviewer wave 1: complete and closed; findings fixed and coordinator-verified.
 - Reviewer waves 1 and 2: complete, fixed, verified, and closed.
 - Reviewer waves 3 and 4: complete, fixed, verified, and closed.
-- Reviewer wave 5: complete and closed; current status summaries are corrected
-  and one accepted diagnostic behavior proof is assigned.
+- Reviewer wave 5: complete, fixed, verified, and closed.
+- Reviewer wave 6: complete and closed; three accepted findings are assigned.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -546,3 +546,75 @@ implementer, run focused native evidence, commit, and repeat all four concerns.
   whitespace, and generated tracking passed.
 - Every Wave 5 finding is resolved. Commit and rerun all four canonical
   concerns against a fresh Wave 6 package.
+
+## Reviewer Wave 6 Assignments
+
+Fix endpoint: `798e9229`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..798e9229.diff` (168,679 bytes)
+
+Lightweight pre-review lint found aligned Wave 6 headers and current summaries,
+no unsafe optional-state cast, internal-source import, generated tracking, or
+future-policy overclaim, and preserved one-source timeout ownership. Security
+remains deferred to T-0041.
+
+Dispatch the same four existing read-only, no-subagent concerns with explicit
+immutable profiles. Each reviewer must regression-check all prior findings and
+specifically verify that the state-less response travels through the real query
+call, observation-loop diagnostics, bounded timeout, and graceful cleanup; that
+current status summaries remain current; and that no public or production scope
+was added. Scope remains the package and affected paths. Ignore historical
+superseded text unless a current record claims it active. Report only concrete,
+line-specific actionable defects. Actual IDs/profile metadata remain pending.
+
+## Reviewer Wave 6 Results - 2026-07-14
+
+All four read-only reviewers completed without subagents and were closed.
+Explicit dispatch and Desktop immutable role metadata agreed:
+
+- Style/maintainability: agent
+  `019f6175-ea6a-7b82-9cf7-d2588e17c77e`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: agent `019f6176-07c5-7861-9669-db6f90ca7b52`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f6176-236a-7ff0-8441-2d7532a686e3`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f6176-432d-7801-9064-a45565da0b2d`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted and deduplicated findings:
+
+1. **P2, active summaries:** headers still said Wave 6 was awaited and current
+   summaries still directed the completed Wave 5 proof. Advance headers,
+   Assignment State, and Next when a review assignment is recorded, not after
+   reviewers return. Current summaries are corrected in this result step.
+2. **P3, callback naming:** rename the void fixture hook
+   `afterResourcesAcquired` to `onResourcesAcquired` at its declaration and all
+   call sites, matching the binding callback-name rule.
+3. **P2, bounded diagnostics:** the observation loop maps and joins every query
+   row ID before rendering a diagnostic. Limit inspected IDs, sanitize and cap
+   the rendered summary, indicate truncation, and add an over-limit/malformed
+   diagnostic proof so repeated failed observations have bounded work and safe
+   single-line output.
+
+The real query call, state-less replacement response, bounded observation,
+cleanup, optional-state narrowing, public contracts/imports, and prior
+reliability findings otherwise passed. Return the two code/test corrections to
+the same Terra Medium implementer, verify natively, commit, and rerun every
+canonical concern.
+
+## Wave 6 Fix Verification - 2026-07-14
+
+- The same immutable Terra Medium implementer renamed the callback and added
+  bounded, sanitized row diagnostics with controlled over-limit coverage; no
+  production, worker, dependency, API, or public-doc change; no subagents.
+- Coordinator source inspection confirmed four-row inspection, 64-character ID
+  caps, deterministic omission markers, single-line/path sanitization, and the
+  480-character final bound while retaining the real-query-first behavior.
+- Native affected regression passed 7 files and all 112 tests in 30.79 seconds.
+  Both TypeScript checks, full lint and cleanup enforcement, formatting, diff
+  whitespace, and generated tracking passed.
+- Every Wave 6 finding is resolved. Commit and run all four canonical concerns
+  in Wave 7, advancing all current summaries before reviewer dispatch.
