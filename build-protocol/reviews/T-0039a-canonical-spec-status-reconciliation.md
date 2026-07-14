@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final glossary fix handback ready
+Status: Final two-lane rereview assigned
 
 ## Review Scope
 
@@ -275,3 +275,13 @@ supervisor`, conflicting with the explicit production process-supervision
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. `receiving-code-review` and
   `verification-before-completion` were applied.
+
+## Final Two-Lane Rereview Assignment
+
+- `2026-07-14T11:14:28Z`: accepted endpoint `8e239148`; focused coordinator
+  evidence is clean.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+  Style/maintainability: existing role, explicit `gpt-5.6-terra` / high.
+  Read-only/no subagents.
+- API and reliability retain clean unaffected results. Historical superseded
+  text remains non-active; security remains deferred to T-0041.

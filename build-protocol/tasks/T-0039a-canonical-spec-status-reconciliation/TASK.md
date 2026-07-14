@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final glossary fix handback ready
+Status: Final two-lane rereview assigned
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -398,3 +398,12 @@ owner`. Resume the same Terra Medium implementer for this line and the three
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. `receiving-code-review` and
   `verification-before-completion` were read and applied.
+
+## Final Two-Lane Rereview Assignment
+
+- `2026-07-14T11:14:28Z`: coordinator accepted endpoint `8e239148` after the
+  glossary/supervision scan, four-path Prettier, `docs:check`, synchronized
+  status/scope/generated checks, and `git diff --check`.
+- Assign documentation at explicit Luna Medium and style at explicit Terra High,
+  read-only/no subagents. API and reliability retain clean unaffected results;
+  security remains deferred to T-0041.
