@@ -162,7 +162,8 @@ Current slice exposes:
   losing renewal, endpoint callback side effects are at-least-once/replay-safe:
   later final fencing can prevent stale finalization, but it cannot uninvoke a
   callback that already ran. Broader production supervision, cancellation, and
-  retry-monitor policy remains future work.
+  retry-monitor policy is outside the initial release; no future policy is
+  committed.
   Recognized valid `DeliveryLabel` values for durable rows are
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
   Framework replay callbacks support only `HANDLE_COMMAND`,
@@ -274,11 +275,20 @@ Current slice exposes:
   accepted-for-async-work from immediate intake failure without implementing
   `Ack`, buses, filters, storage, dispatch, services, or transport.
 
+The package manifest also exports
+`@spine-ts/server/internal/generated-handler-registry` solely so generated
+registry source can import the `GeneratedHandlerRegistry` type it must satisfy.
+That subpath is generated-artifact-only and package-internal: application code
+must not import it. It is not part of the package root or root TypeDoc API.
+
+In the snippets below, `@example/tasks-proto` stands in for the consumer's
+generated Protobuf package; substitute that package's actual import name.
+
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Aggregate, Assign, BoundedContext, React, Subscribe } from "@spine-ts/server";
-import type { CreateTask } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
+import type { CreateTask, TaskCreated } from "@example/tasks-proto";
+import { TaskCreatedSchema, TaskStateSchema } from "@example/tasks-proto";
 
 export class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
   @Assign
@@ -611,8 +621,7 @@ import {
   createRoutingPlan,
   defineEntityHandlers,
 } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import { CreateTaskSchema, TaskCreatedSchema, TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
   create(command: unknown): void {}
@@ -675,9 +684,19 @@ late dispatcher registration. Builders collect dispatchers and can inject the
 `StorageFactory` used to create the context `EventStore` and repository record
 storages, plus the direct stand state storage:
 
+The low-level fixture below declares its caller-owned custom dispatchers and
+already-packed framework envelopes. Ordinary application handlers return
+generated domain messages and do not construct these envelopes.
+
 ```ts
-import { BoundedContext } from "@spine-ts/server";
+import type { Command, Event } from "@spine-ts/proto";
+import { BoundedContext, type CommandDispatcher, type EventDispatcher } from "@spine-ts/server";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
+
+declare const commandDispatcher: CommandDispatcher;
+declare const eventDispatcher: EventDispatcher;
+declare const commandEnvelope: Command;
+declare const eventEnvelope: Event;
 
 const tasks = BoundedContext.singleTenant("Tasks")
   .withStorageFactory(new InMemoryStorageFactory())
@@ -741,15 +760,29 @@ live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
 received row is marked delivered. Scheduler/retry workers, cross-process
 recovery, production delivery policy, durable catch-up storage/projection
-catch-up through inbox storage, and production storage adapters remain open
-production gaps.
+catch-up through inbox storage, and production storage adapters are outside the
+initial release; no future policy is committed.
 
 ## Direct Stand
 
 Use the context-owned `Stand` for direct latest-state reads, storage-backed
 latest-state queries, and in-process entity update notifications:
 
+This fixture assumes `tasks` is a built context whose registered repository has
+made `TaskStateSchema` known to its stand. The state, ID, and version are
+caller-owned generated fixture values.
+
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
+import { TaskIdSchema, TaskStateSchema } from "@example/tasks-proto";
+import type { Version } from "@spine-ts/proto";
+import type { BoundedContext } from "@spine-ts/server";
+
+declare const tasks: BoundedContext;
+declare const taskState: MessageShape<typeof TaskStateSchema>;
+declare const taskId: MessageShape<typeof TaskIdSchema>;
+declare const version: Version;
+
 const stand = tasks.stand();
 
 await stand.update(TaskStateSchema, taskState, { version });
@@ -851,13 +884,12 @@ remain outside this slice.
 Use `Server` when a local Node process should host the built Spine services over
 HTTP/2:
 
-```ts
-import { BoundedContext, Server, ServerEnvironment } from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
-import type { SignalTransport } from "@spine-ts/transport";
+`@example/tasks-domain` below is an illustrative stand-in for the consumer's
+entity package; substitute its actual package name.
 
-declare const durableStorageFactory: StorageFactory;
-declare const deploymentSignalTransport: SignalTransport;
+```ts
+import { TaskAggregate } from "@example/tasks-domain";
+import { BoundedContext, Server } from "@spine-ts/server";
 
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
@@ -884,6 +916,15 @@ transport defaults. Supplying one leaves it caller-owned unless
 `ownsEnvironment: true` is explicit:
 
 ```ts
+import type { BoundedContext } from "@spine-ts/server";
+import { Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import type { SignalTransport } from "@spine-ts/transport";
+
+declare const tasks: BoundedContext;
+declare const durableStorageFactory: StorageFactory;
+declare const deploymentSignalTransport: SignalTransport;
+
 const environment = ServerEnvironment.production({
   storageFactory: durableStorageFactory,
   transport: deploymentSignalTransport,
@@ -894,9 +935,14 @@ await Server.atPort(8080, { environment }).add(tasks).start();
 
 Production construction rejects missing `storageFactory` or `transport` before
 network intake opens. Production mode validates explicit facility injection
-only; durable production storage adapters remain an open production gap, and
-`InMemoryStorageFactory` is local/test-only. The environment selects and owns
-facilities for server assembly. `Server` accepts built contexts and
+only; durable production storage adapters are outside the initial release, and
+`InMemoryStorageFactory` is local/test-only. The environment selects facilities
+for server assembly. It closes a supplied facility only when the corresponding
+`ownsStorageFactory`, `ownsTransport`, `ownsDelivery`, or `ownsTracerFactory`
+flag is true; all four flags default to false for production environments.
+These per-facility flags are independent of `ServerOptions.ownsEnvironment`,
+which controls whether the server closes the environment object after contexts
+and explicit resources. `Server` accepts built contexts and
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
 more specific local factory first. This object is not a Java-style process-wide
@@ -958,8 +1004,11 @@ Extend `Entity` when framework-owned code needs a common base for local entity
 state and metadata without introducing repository/runtime behavior:
 
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
 import { Entity } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { TaskStateSchema } from "@example/tasks-proto";
+
+declare const taskState: MessageShape<typeof TaskStateSchema>;
 
 class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
 
@@ -1015,7 +1064,7 @@ the right OOP family type for repositories and built contexts:
 
 ```ts
 import { Aggregate } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
 ```
@@ -1033,7 +1082,7 @@ descriptor-backed state schema:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
 
@@ -1089,11 +1138,10 @@ original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates the row label,
 pending `TO_DELIVER` status, tenant, payload/schema, target type URL, and
 routed target ID.
-Transport topology, broker/process supervision, production delivery policy,
-retry monitors/workers, durable catch-up storage/projection catch-up through
-inbox storage, and production storage adapters remain open production gaps.
-Full production supervision, backoff/scheduler ownership, topology, production
-adapters, catch-up storage, and retry policy remain outside this slice.
+Transport topology, broker/process supervision, production delivery and retry
+policy, retry monitors/workers, backoff/scheduler ownership, durable catch-up
+storage/projection catch-up through inbox storage, and production storage
+adapters are outside the initial release; no future policy is committed.
 This seam
 follows Spine `core-jvm` `Repository` identity and registration concepts
 closely. The direct repository API does not create, find, or store entities;
@@ -1107,8 +1155,12 @@ code or tests need the built-in entity state rules without creating entities or
 repositories:
 
 ```ts
+import type { MessageShape } from "@bufbuild/protobuf";
 import { validateEntityStateTransition } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { TaskStateSchema } from "@example/tasks-proto";
+
+declare const previous: MessageShape<typeof TaskStateSchema> | undefined;
+declare const next: MessageShape<typeof TaskStateSchema>;
 
 const result = validateEntityStateTransition({
   schema: TaskStateSchema,
@@ -1134,64 +1186,12 @@ contents are unchanged or the transition is a creation.
 
 ## Entity Transactions
 
-Use `createEntityTransaction()` when framework-controlled code needs an
-in-memory buffered draft over previous state before accepting a commit result:
-
-```ts
-import { createEntityTransaction } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
-
-const transaction = createEntityTransaction({
-  schema: TaskStateSchema,
-  previous,
-  version: { previous: 7, draft: 8 },
-});
-
-transaction.update((state) => ({ ...state, name: "Ready" }));
-transaction.archive();
-transaction.updateVersionMetadata(9);
-
-const result = transaction.commit();
-
-if (result.status === "accepted") {
-  result.next; // accepted state snapshot
-  result.lifecycle.archived; // true
-  result.version.committed; // 9
-}
-```
-
-`commit()` calls `validateEntityStateTransition({ schema, previous, next })`.
-Ordinary validation failures, such as changing a `(set_once)` field, return a
-rejected result with the validator violations instead of throwing:
-
-```ts
-transaction.update((state) => ({ ...state, id: "different-id" }));
-
-const result = transaction.commit();
-
-if (result.status === "rejected") {
-  result.validation.violations.map((violation) => violation.fieldPath?.fieldName.join("."));
-}
-```
-
-Compatibility note: `EntityTransaction` is the public draft/result shape used
-by framework-owned entity bases around state mutation. It is not a
-storage-backed transaction, a unit-of-work implementation, or a process-wide
-runtime context; applications should treat its returned snapshots as validation
-and commit evidence rather than as persisted state.
-
-`rollback()` releases the transaction and returns previous/draft evidence
-without accepting state. `archive()`, `unarchive()`, `markDeleted()`, and
-`restore()` mutate only buffered lifecycle flags; `updateVersionMetadata()`
-replaces only caller-owned draft version metadata and does not compute version
-increments, clocks, producer metadata, or event versions. `requireActive()`
-guards active-only state mutation by rejecting committed/rolled-back
-transactions and active drafts already marked archived or deleted. After an
-accepted commit or rollback, active-only helpers throw
-`EntityTransactionStateError` deterministically; archived/deleted active drafts
-throw `EntityTransactionDraftStateError` without embedding entity state payloads.
-
-This is only an in-memory commit boundary for entity base classes and
-repository-owned execution. It does not instantiate entities, invoke handlers,
-write repositories or storage, apply snapshots, dispatch messages, register
-buses, start transport, or provide async-local/global transaction state.
+`EntityTransaction` and `createEntityTransaction()` are compatibility and
+framework-owned draft/result seams used by entity bases and repository
+execution. They are not an end-user transaction API: application handlers must
+not start, commit, roll back, or otherwise control transactions manually.
+The seam is in-memory only; it is not a storage-backed transaction, unit of
+work, or process-wide runtime context. It does not instantiate entities,
+invoke handlers, write repositories or storage, apply snapshots, dispatch
+messages, register buses, start transport, or provide async-local/global
+transaction state.

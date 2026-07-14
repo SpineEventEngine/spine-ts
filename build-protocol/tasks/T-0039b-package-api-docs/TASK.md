@@ -1,0 +1,473 @@
+# T-0039b: Package And API Documentation
+
+Status: Complete — merge pending
+
+Started: `2026-07-14T11:46:19Z`
+
+Baseline commit: `0868ecca`
+
+Branch: `task/T-0039b-package-api-docs`
+
+Worktree: `.worktrees/T-0039b-package-api-docs`
+
+Dependency: T-0039a complete, merged, post-merge verified, and pushed.
+
+## Objective
+
+Reconcile the root README, all six package READMEs, public TSDoc, the API
+overview, and generated TypeDoc with the final supported public framework
+surface and accepted initial-release exclusions.
+
+## Human-Imposed Requirements Ledger
+
+- Continue autonomously until project completion or a real protocol blocker.
+- Keep this slice limited to package/API documentation; T-0039c owns the
+  framework user-guide journey and T-0040 owns example closure.
+- Preserve accepted DDD, Protobuf/type-URL, public API, generated-output,
+  end-user API, review, logging, worktree, verification, and push requirements.
+- Do not add, remove, or rename public exports or change runtime behavior merely
+  to simplify documentation.
+- Public docs must describe current observable behavior and explicit release
+  exclusions without promising future retry, monitor, supervision, topology,
+  health, catch-up, or legacy import policy.
+- Public examples use package imports only and keep end-user code free of
+  framework envelopes, manual transactions, `@Apply`, schema-bearing
+  decorators, and handler materialization.
+- Use focused checks in inner loops and reserve full `pnpm verify` for final
+  task and post-merge gates.
+- Run only existing relevant review concerns; no per-task security review.
+- Explicitly dispatch child model/reasoning and prohibit child subagents.
+- Push the completed task branch and updated `main` to `origin`.
+- Never read, edit, stage, delete, or use `human-review-1-jul.md`.
+
+## Acceptance Criteria
+
+- Root and `packages/{core,proto,server,storage,transport,testing}/README.md`
+  accurately state package purpose, supported entry points, current behavior,
+  and limitations.
+- `docs/api/README.md` and public TSDoc agree with actual root/subpath exports,
+  declarations, runtime behavior, ownership, and compatibility constraints.
+- Generated TypeDoc contains every expected export and no internal coordinator,
+  obligation, registration, generation, cursor, raw lifecycle access, ZeroMQ
+  endpoint, or storage implementation detail leaks as public policy.
+- Lifecycle documentation states only observable `Server`, `RunningServer`, and
+  `ServerEnvironment` behavior, including startup recovery, listener ordering,
+  shared/owned environment semantics, retry-safe close, and explicit exclusions.
+- Legacy compatibility symbols retain narrow accepted wording; docs do not
+  recommend new `@Apply`, import, raw callback-delivery, or manual-transaction use.
+- Links, commands, package imports, code snippets, formatting, API export checks,
+  generated cleanliness, and all relevant review concerns are clean.
+
+## Scope
+
+- Required surfaces: root README; six package READMEs; `docs/api/README.md`;
+  public TSDoc necessary to make generated TypeDoc accurate.
+- Tests/scripts may change only when a focused documentation/API assertion is
+  necessary to prevent a concrete regression.
+- Exclude `docs/USER_GUIDE.md`, example documentation/application behavior,
+  runtime implementation, Protobuf contracts, generated output, dependency
+  changes, and broad historical-log rewrites.
+
+## Risk Assumptions
+
+- The server README and API overview are large historical accumulations; edit
+  concrete stale active claims instead of rewriting them wholesale.
+- `docs:check` proves export coverage but not every prose claim, so compare
+  lifecycle/transport/delivery statements with canonical T-0039a docs and actual
+  public exports.
+- Internal types may appear in explanatory implementation history. They must not
+  be presented as stable application API or code examples.
+
+## Planning Disposition
+
+- No requirements splitter: this task changes no architecture, domain model,
+  public/serialized contract, transaction, concurrency, or idempotency rule.
+  `PROJECT_COMPLETION_PLAN.md` already defines the exact documentation packet.
+- One Terra Medium author owns the bounded docs/TSDoc reconciliation. Review and
+  verification remain coordinator-owned.
+
+## Canonical Skill Applicability
+
+- Read and apply `verification-before-completion`; use receiving-review after a
+  finding batch. The coordinator owns worktree and requesting-review workflows.
+- `doc-coauthoring` is N/A because its interactive drafting loop conflicts with
+  autonomous factual reconciliation. TypeScript/API-design skills are relevant
+  only when public TSDoc or declaration meaning must be checked; no API design is
+  authorized.
+- TDD/runtime/debugging/security/web/artifact skills are N/A unless a concrete
+  focused docs assertion exposes a real code defect, which must be routed rather
+  than absorbed into this task.
+
+## Bounded Inventory
+
+- Required surfaces total about 2,374 lines; server README and API overview are
+  the large accumulations, so preserve accurate detail and make bounded edits.
+- Concrete stale active formulations include `does not yet`, `future transport`,
+  `later scheduler/retry stack`, `remains future work`, and production
+  supervision/catch-up promises in package/API docs.
+- Root and package docs already state many accepted exclusions. Reconcile
+  contradictions without replacing current behavior with marketing prose.
+- Existing API checker expects `100/28/205/19/17/3` exports for proto, core,
+  server, storage, transport, and testing.
+
+## Author Assignment
+
+- Existing role: implementer.
+- Explicit immutable profile: `gpt-5.6-terra` / medium.
+- Scope: required README/API/TSDoc surfaces plus these three durable records;
+  focused docs/API test assertion only when necessary.
+- Read-only exclusions: runtime behavior, public export set, Protobuf, generated
+  artifacts, user guide, example, dependencies, and unrelated historical logs.
+- No subagents. No commit, merge, push, or other Git mutation; coordinator owns
+  Git and independent review.
+- Required handback: changed paths, each reconciled claim and implementation/
+  export evidence, focused commands/results, skipped candidates/reasons,
+  uncertainty, skill applicability, and actual immutable runtime profile.
+
+## Author Handback
+
+- Changed paths: `README.md`, `packages/core/README.md`,
+  `packages/proto/README.md`, `packages/server/README.md`,
+  `packages/storage/README.md`, `packages/transport/README.md`,
+  `packages/testing/README.md`, `docs/api/README.md`, and the three T-0039b
+  records.
+- Reconciled claims: root/package ownership follows each package manifest and
+  root export surface; lifecycle prose retains only observable `Server`,
+  `RunningServer`, and `ServerEnvironment` startup/close/ownership behavior;
+  ZeroMQ remains adapter-scoped, trusted same-host IPC with no exactly-once,
+  durable-redelivery, retry, restart, or remote-delivery guarantee; release
+  exclusions make no future-policy commitment; legacy `IMPORT_EVENT`, `@Apply`,
+  and transaction wording is compatibility/framework-only and does not direct
+  applications to use it.
+- Evidence: `pnpm docs:check` reported the expected TypeDoc export counts
+  `100/28/205/19/17/3`; focused package metadata/root-export tests passed
+  `7` files / `71` tests; `pnpm typecheck:build` and
+  `pnpm typecheck:generated` passed after producing this worktree's required
+  local build outputs; exact-path Prettier, phrase/import/end-user scans, and
+  Markdown-target scan passed.
+- No public TSDoc or focused assertion changed: existing declarations already
+  describe the generated TypeDoc surface, and no documentation-only regression
+  needed a durable test.
+- Skipped: full `pnpm verify` (reserved by the task for final/post-merge gates),
+  runtime tests (no runtime change), TDD/debugging/security/web/artifact skills
+  (no concrete defect or matching scope), and `doc-coauthoring`'s interactive
+  loop (incompatible with this autonomous factual reconciliation).
+- Uncertainty: no public snippet compiler covers the documentation-only
+  `@example/tasks-proto` illustrative package imports; the required scan proves
+  they are package imports rather than private relative paths. Coordinator
+  review remains required.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
+  no subagents.
+
+## Coordinator Pre-Review Round 1
+
+The focused local docs/status lint accepted the changed-path scope, equal
+durable statuses, diff whitespace, release-exclusion wording, and absence of
+private source/generated imports. It found this complete bounded fix batch:
+
+1. The `packAny()` example builds an empty `Command` and therefore throws
+   `ValidationException` with three violations before packing. Use a valid
+   public `@spine-ts/proto` message so the shown default validation path runs.
+2. The API overview's `RunningServer.close()` paragraph omits context transport
+   drain and environment-delivery detach/quiescence, and its statement that
+   cleanup continues after every close failure contradicts the public hard gate
+   for network/context-intake failures. Reconcile it with the final observable
+   lifecycle in `DEVELOPER_API.md` and `RunningServer` TSDoc.
+3. `@example/tasks-proto` is intentionally an illustrative consumer-generated
+   package but no such workspace package exists. State that substitution once
+   before its first use so snippets do not imply a shipped dependency, while
+   retaining package-only imports and leaving T-0040 example ownership intact.
+
+Fix assignment returns to the existing implementer context with its immutable
+`gpt-5.6-terra` / medium profile. Scope remains these docs and durable records;
+no source, exports, generated output, dependencies, user guide, or example app
+may change. No subagents; coordinator retains Git and independent review.
+
+## Implementation Fix Handback Round 1
+
+- Replaced the invalid empty-`Command` `packAny()` example with a package-only
+  `FieldPathSchema` round trip using `fieldName: ["task", "title"]`; the built
+  public packages return `type.spine.io/spine.base.FieldPath` and
+  `task.title` under default validation.
+- Reconciled the API overview with the public `RunningServer` lifecycle:
+  listener/sessions, context transport intake and accepted-work drain,
+  delivery detach/quiescence, contexts/resources, and the owned environment,
+  including the network/context-intake hard gate and unfinished-phase retry.
+- Identified `@example/tasks-proto` before its first use as a stand-in for the
+  consumer's generated Protobuf package. No example, dependency, source,
+  export, generated, or user-guide path changed.
+- Focused verification evidence is recorded in the work and review logs.
+  The built-package probe printed
+  `type.spine.io/spine.base.FieldPath task.title`, and `pnpm docs:check`
+  reported export counts `100/28/205/19/17/3`.
+  Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium;
+  no subagents.
+
+## Coordinator Verification Round 1
+
+- Independently reproduced the built-package default-validation round trip:
+  `type.spine.io/spine.base.FieldPath task.title`.
+- `pnpm --config.verify-deps-before-run=false docs:check` passed with TypeDoc
+  export counts `100/28/205/19/17/3`.
+- Focused root-export/package API tests passed `6` files / `69` tests.
+- Exact-path Prettier, equal-status, generated/private-import, changed-scope,
+  unresolved-conflict, and diff-whitespace checks passed.
+- The future-policy scan found only contextual current-state phrases: a
+  caller-owned environment “remains open” after server close, and failed-start
+  cleanup that “cannot yet complete.” Neither promises future policy.
+- The complete pre-review batch is accepted. Full `pnpm verify` remains the
+  final task gate after independent review closure.
+
+## Independent Review Round 1 Assignment
+
+- Immutable review range: `0868ecca..fcef6d35`.
+- Style/maintainability: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess bounded organization, duplication, clarity,
+  and maintainable current-state wording only.
+- Documentation completeness: existing reviewer, explicit
+  `gpt-5.6-luna` / medium; assess factual completeness, links, commands,
+  examples, exclusions, and active-vs-historical truth only.
+- TypeScript/API docs: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess public imports/exports, declarations, TSDoc,
+  compatibility wording, examples, and internal leakage only.
+- Performance/reliability: existing reviewer, explicit
+  `gpt-5.6-terra` / high; assess lifecycle, delivery, transport, storage,
+  ownership, bounded-resource, retry, and failure claims only.
+- All reviewers are read-only, may not spawn subagents, and must ignore
+  historical superseded text unless current task records or changed public docs
+  claim it as active state. Security remains deferred to T-0041.
+
+## Independent Review Round 1 Results
+
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: clean.
+- Style/maintainability: two accepted findings:
+  1. `README.md` incorrectly excludes semantic-tag consumption in runtime
+     routing even though D-0069 and current runtime routing consume command
+     assignee and event receiver tags. Remove or narrow that false exclusion.
+  2. `packages/server/README.md` repeats the same production supervision,
+     topology, adapter, catch-up, and retry exclusions in adjacent sentences.
+     Consolidate them while retaining backoff/scheduler ownership and the
+     no-future-policy qualifier.
+- Each dispatch explicitly supplied its assigned model/reasoning. The Desktop
+  multi-agent runtime metadata declares the immutable role profiles used:
+  documentation `gpt-5.6-luna` / medium and the other three reviewers
+  `gpt-5.6-terra` / high. Child-local model introspection is not required
+  because the orchestrator-facing role configuration is the runtime metadata
+  and matched every explicit spawn field.
+- The complete accepted batch returns to the existing implementer, immutable
+  `gpt-5.6-terra` / medium, docs/records only, no subagents.
+
+## Review Round 1 Fix Handback
+
+- `README.md` no longer lists semantic-tag consumption as excluded. Current
+  descriptor-derived command-assignee and event-receiver tag consumption is
+  preserved as implemented; only application-owned semantic-tag registration
+  or handler materialization remains in the release exclusions.
+- `packages/server/README.md` now has one production-exclusion statement that
+  retains transport topology, broker/process supervision, production delivery
+  and retry policy, retry monitors/workers, backoff/scheduler ownership,
+  durable catch-up storage/projection catch-up through inbox storage, production
+  storage adapters, and the no-future-policy commitment.
+- No source, example, dependency, export, generated, user-guide, or unrelated
+  documentation path changed. Focused evidence is recorded in the work and
+  review logs.
+- Exact-path Prettier, semantic-tag/future-policy/duplicate/status scans, and
+  `git diff --check` passed. `pnpm docs:check` reported expected exports
+  `100/28/205/19/17/3`.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+
+## Coordinator Verification After Review Round 1
+
+- Confirmed D-0069 semantic-tag routing remains described as implemented while
+  only application-owned registration/materialization remains excluded.
+- Confirmed the server production exclusions are one statement retaining every
+  unique boundary and the no-future-policy qualifier.
+- `docs:check` passed with TypeDoc export counts `100/28/205/19/17/3`.
+- Exact-path Prettier, semantic-tag/duplicate/future-policy/status scans,
+  conflict checks, and baseline/current diff-whitespace checks passed.
+- The round 1 fixes are accepted for a fresh independent review wave. Full
+  `pnpm verify` remains reserved for final task closure.
+
+## Independent Review Round 2 Assignment
+
+- Immutable review range: `0868ecca..769176d4`.
+- Re-run every relevant canonical concern over the complete milestone:
+  style/maintainability `gpt-5.6-terra` / high; documentation completeness
+  `gpt-5.6-luna` / medium; TypeScript/API docs `gpt-5.6-terra` / high; and
+  performance/reliability `gpt-5.6-terra` / high.
+- Every dispatch is explicit, read-only, concern-bounded, and prohibits
+  subagents. Reviewers must ignore historical superseded text unless current
+  records or changed public docs claim it as active.
+- The full wave must return before any result is accepted. Security remains
+  deferred to T-0041.
+
+## Independent Review Round 2 Results
+
+- Style/maintainability: clean, including both round 1 corrections.
+- Documentation and TypeScript/API docs reported the same accepted defect:
+  `packages/testing/README.md` uses undeclared consumer schemas and setup values
+  across its two fixture snippets. Identify/import the illustrative generated
+  schemas and make `BoundedContext`, repositories, topic, query, and command
+  setup explicit enough that the examples do not imply undeclared globals.
+- Performance/reliability reported one accepted defect:
+  `packages/server/README.md` says the environment selects and owns facilities,
+  but supplied production facilities default caller-owned. State that selection
+  and per-facility ownership are separate via `ownsStorageFactory`,
+  `ownsTransport`, `ownsDelivery`, and `ownsTracerFactory`, and distinguish
+  those flags from server-level `ownsEnvironment`.
+- All four explicit dispatches matched the Desktop runtime's immutable profiles:
+  documentation `gpt-5.6-luna` / medium; style, API, and reliability
+  `gpt-5.6-terra` / high. Every reviewer is closed.
+- The deduplicated complete batch returns to the existing implementer,
+  `gpt-5.6-terra` / medium, docs/records only, no subagents.
+
+## Review Round 2 Fix Handback
+
+- `packages/testing/README.md` now identifies `@example/tasks-proto` as the
+  consumer's generated-package stand-in and imports `CreateTaskSchema` and
+  `TaskIdSchema` before use. The fixture block imports `BoundedContext` and all
+  repository/topic/query/command values from an explicitly identified
+  consumer-owned test-support stand-in, so neither snippet uses undeclared
+  globals or implies a shipped example package.
+- `packages/server/README.md` now separates facility selection from ownership:
+  production `ownsStorageFactory`, `ownsTransport`, `ownsDelivery`, and
+  `ownsTracerFactory` default false and control facility closure, while
+  `ServerOptions.ownsEnvironment` controls server closure of the environment
+  object after contexts and resources.
+- No source, export, example, dependency, generated, user-guide, or unrelated
+  documentation path changed. Focused evidence is recorded in the work/review
+  logs.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+- Focused verification passed: exact-path Prettier for both assigned READMEs
+  and all three records; package-only fixture import, stale ownership wording,
+  future-policy, identical-status, and prohibited-scope scans.
+- `git diff --check` and `pnpm docs:check` passed; TypeDoc export counts were
+  `100/28/205/19/17/3` for proto/core/server/storage/transport/testing.
+- Full `pnpm verify` was intentionally not run because it remains reserved for
+  the final task gate. Coordinator verification remains pending.
+
+## Coordinator Verification After Review Round 2
+
+- Confirmed every testing-snippet symbol is imported from an identified public
+  or illustrative consumer package; a multiline import-block scan found all
+  eight previously undeclared schema/setup symbols.
+- Confirmed server docs separate facility selection, the four production
+  per-facility `owns*` flags (default false), and server-level
+  `ServerOptions.ownsEnvironment` closure of the environment object.
+- `docs:check` passed with TypeDoc export counts `100/28/205/19/17/3`.
+- Exact-path Prettier, equal-status, stale-ownership, conflict, scope, and
+  current/baseline diff-whitespace checks passed.
+- Both round 2 fixes are accepted for a fresh complete review wave. Full
+  `pnpm verify` remains the final task gate.
+
+## Independent Review Round 3 Assignment
+
+- Immutable range: `0868ecca..716aba30`.
+- Re-run all relevant concerns over the complete milestone: style/API/
+  reliability with explicit `gpt-5.6-terra` / high; documentation with explicit
+  `gpt-5.6-luna` / medium.
+- Read-only, no subagents, one bounded concern each, and ignore superseded
+  historical text unless current records or changed docs activate it.
+- Recheck testing-package substitutions and environment-vs-facility ownership.
+  Collect the full wave before adjudication. Security remains T-0041.
+
+## Independent Review Round 3 Results
+
+- Style/maintainability, documentation completeness, and
+  performance/reliability: clean.
+- TypeScript/API docs found four accepted P2 defects:
+  1. The core `packCommand()` / `packEvent()` fence uses eight undeclared
+     caller-owned IDs, contexts, schemas, and messages. Make its fixture inputs
+     explicit or label it clearly as a non-executable fragment.
+  2. Active server fences similarly hide dispatcher/envelope, stand state,
+     lifecycle entity/environment, entity-state, and transition inputs. Make
+     each fence self-contained or explicitly declare/label required fixture
+     values without converting framework-only APIs into end-user guidance.
+  3. The real exported subpath
+     `@spine-ts/server/internal/generated-handler-registry` is undocumented.
+     Document it narrowly as generated-artifact-only/package-internal and not
+     an application API; do not add it to the root API or TypeDoc surface.
+  4. The server README still calls scheduler/retry/recovery/catch-up/storage
+     exclusions “open production gaps.” Replace that with initial-release
+     exclusions and no future-policy commitment.
+- All reviewers used the explicit immutable profiles recorded in the Desktop
+  runtime: docs Luna/medium; other lanes Terra/high. Every reviewer is closed.
+- Return the complete four-item docs-only batch to the existing implementer,
+  `gpt-5.6-terra` / medium, no subagents.
+
+## Review Round 3 Fix Handback
+
+- `packages/core/README.md` now labels the low-level envelope-helper fence as an
+  intentionally non-executable call-shape fragment and enumerates all eight
+  caller-owned IDs, contexts, schemas, and messages. It continues to state that
+  ordinary application handlers return domain messages rather than building
+  framework envelopes.
+- `packages/server/README.md` now explicitly types or declares every assigned
+  dispatcher/envelope, stand, lifecycle/environment, entity-state, and
+  transition fixture input using package-only imports. It also documents the
+  generated-handler-registry subpath as generated-artifact-only/package-internal
+  and replaces the stale production-gap wording with an initial-release
+  exclusion and no-future-policy statement.
+- `docs/api/README.md` records the internal subpath only as the required
+  type-only import for generated registry source, not a root, TypeDoc, or
+  application API.
+- No source, package metadata, export, example, dependency, generated,
+  user-guide, or unrelated documentation path changed.
+- Actual immutable profile: existing implementer, `gpt-5.6-terra` / medium; no
+  subagents.
+- Focused assigned-fence identifier, package-only import, internal-subpath,
+  future-policy, and identical-status scans passed. Exact-path Prettier,
+  `git diff --check`, and the prohibited-scope scan passed.
+- `pnpm docs:check` verified all 25 copied proto checksums and TypeDoc export
+  counts `100/28/205/19/17/3` for proto/core/server/storage/transport/testing.
+  Full `pnpm verify` remains final-only.
+
+## Coordinator Verification After Review Round 3
+
+- Accepted the explicit/non-executable core fixture inputs, all assigned server
+  fence declarations, the generated-artifact-only internal subpath wording,
+  and the release-exclusion correction against public source and package
+  exports.
+- `docs:check` passed at `100/28/205/19/17/3`; focused server root API and
+  generated-registry-writer tests passed `2` files / `31` tests.
+- Exact-path Prettier, equal-status, fixture-input, internal-subpath, corrected
+  future-policy, scope, conflict, and current/baseline diff checks passed.
+- Round 3 fixes are accepted for a fresh complete wave. Full `pnpm verify`
+  remains final-only.
+
+## Independent Review Round 4 Assignment
+
+- Immutable full range: `0868ecca..f67c55b1`.
+- Explicit profiles: docs `gpt-5.6-luna` / medium; style, API docs, and
+  reliability `gpt-5.6-terra` / high.
+- Read-only, no subagents, one concern each, ignore superseded historical text
+  unless current records/docs activate it. Recheck all round 3 fixes and collect
+  the complete wave before adjudication. Security remains T-0041.
+
+## Independent Review Round 4 Results
+
+- Style/maintainability: clean.
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: clean.
+- All explicit dispatches matched immutable Desktop runtime profiles: docs
+  `gpt-5.6-luna` / medium; the other three lanes `gpt-5.6-terra` / high. Every
+  reviewer is closed and no findings remain.
+- T-0039b acceptance criteria proceed to the final native `pnpm verify` gate.
+  Security remains deferred to T-0041.
+
+## Final Verification
+
+- Native `pnpm --config.verify-deps-before-run=false verify` passed.
+- Ordinary and coverage runs each passed `71` files / `1,642` tests.
+- Coverage: `95.38%` statements, `90.12%` branches, `98.22%` functions, and
+  `95.4%` lines.
+- Node check, copied Proto generation/checksums, build/tooling typechecks,
+  ESLint/cleanup rules, formatting, TypeDoc/API counts `100/28/205/19/17/3`,
+  Proto lint, and generated-clean checks all passed.
+- All acceptance criteria are satisfied with no open review finding. Merge,
+  post-merge verification, remote synchronization, and cleanup remain.

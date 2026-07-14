@@ -1,8 +1,10 @@
 # @spine-ts/storage
 
-Small JVM-like storage seam for Spine TS runtime records.
+Small JVM-like storage seam for Spine TS runtime records. Its root API is
+independent of `@spine-ts/server`; server runtime code composes this seam rather
+than widening it with delivery or service behavior.
 
-The package owns the first corrected storage layer:
+The package owns the current storage layer:
 
 - `StorageFactory.createRecordStorage(context, spec)` is the one mandatory
   adapter method;

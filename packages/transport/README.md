@@ -1,6 +1,7 @@
 # @spine-ts/transport
 
-Adapter-agnostic transport contracts for local signal routing.
+Adapter-agnostic transport contracts for signal routing, with a same-host
+ZeroMQ IPC adapter on an explicit subpath.
 
 Current scope:
 
@@ -10,7 +11,7 @@ Current scope:
   mode only, never process IDs, filesystem paths, hostnames, socket names, or
   endpoints;
 - publish/request operation contracts plus handler callback types;
-- async close behavior for future transport implementations; and
+- async close behavior for transport implementations; and
 - an adapter-scoped ZeroMQ local IPC implementation available from the
   `@spine-ts/transport/zeromq` subpath.
 
@@ -27,8 +28,8 @@ values, worker registrations, delivery attempts/results, retry policy, durable
 delivery, and handler materialization are not exported from the public transport
 API. Delivery and inbox concepts are implemented in `@spine-ts/server`;
 participant lifecycle, broker supervision, retained retry history,
-remote/multi-host transport, and production health policy remain outside this
-package.
+remote/multi-host transport, and production health policy are initial-release
+exclusions; this documentation makes no future-policy commitment.
 
 ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or
@@ -40,10 +41,11 @@ request/reply tests open sockets only under temporary IPC directories and clean
 them up within the test process. The implementation does not define remote
 transport, transport-owned retry loops, durable delivery policy, process
 supervision, broker topology, worker registration handshakes, or broad health
-checks. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
+checks. It provides no exactly-once, durable-redelivery, retry, restart, or
+remote-delivery guarantee. Managed sandboxes may reject ZeroMQ `ipc://` binds
+with `EPERM`, so live
 local IPC runs can require native IPC filesystem/socket permissions outside the
-sandbox. Scaling beyond one host must use another adapter behind the same
-public transport contracts.
+sandbox. This adapter's supported scope ends at one host.
 
 The adapter serializes envelopes with Node's V8 serializer. Treat every
 `ipc://` frame as trusted runtime data, not as an untrusted network protocol:

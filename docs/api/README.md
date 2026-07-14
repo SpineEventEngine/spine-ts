@@ -120,7 +120,7 @@ the cleanup error; that error is not promised frozen, bounded, or stack-free. It
 is not a public
 monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
 or adapter policy. Broader inbox lifecycle management and transport topology
-remain open production gaps.
+are outside the initial release; no future policy is committed.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -294,13 +294,16 @@ transport defaults. Supplied environments are caller-owned unless
 `ownsEnvironment` is true. Production environment construction requires
 `storageFactory` and `transport` and rejects missing facilities before a
 listener is opened. `RunningServer` exposes `host`, `port`, `baseUrl`, and
-idempotent `close()`. Close stops network intake, closes active HTTP/2
-sessions, closes owned contexts/resources, then closes environment-owned
-facilities when the server owns the environment. Cleanup continues after
-individual close failures and reports them as one `AggregateError`; a later
-close retry attempts only previously failed close hooks. The API deliberately
-hides ZeroMQ, IPC endpoint names, worker/process supervision, durable
-scheduling, and Java-style global environment configuration.
+idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
+closes context transport intake and drains accepted work, then detaches and
+quiesces environment delivery before closing contexts, explicit resources, and
+the environment when the server owns it. Network or context-intake close
+failure is a hard gate: delivery detach and dependency cleanup do not begin
+until a later `close()` retry completes that phase. After the hard gate,
+remaining phases are attempted in order; failures are combined, and a later
+close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
+endpoint names, worker/process supervision, durable scheduling, and Java-style
+global environment configuration.
 `@spine-ts/testing` exports `BoundedContextFixture`,
 `BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
 built `BoundedContext`, captures the in-process `SpineServices` handlers, and
@@ -382,7 +385,8 @@ claim compare-and-set using the storage clock as abandoned-work recovery. If a
 stale owner continues after losing renewal, endpoint callback side effects are
 at-least-once/replay-safe: later final fencing can prevent stale finalization,
 but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy remains future work.
+supervision, cancellation, and retry-monitor policy are outside the initial
+release; no future policy is committed.
 The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve
@@ -427,7 +431,10 @@ types, `EntityTransactionStateError`, and
 `EntityTransactionDraftStateError`. This public surface is an in-memory,
 framework-owned draft/result boundary over one entity state. It is intentionally
 not a storage-backed transaction API, repository unit of work, async-local
-transaction context, dispatch phase, or lifecycle-event emitter. Lifecycle
+transaction context, dispatch phase, or lifecycle-event emitter. It is a
+framework-owned compatibility seam, not an end-user manual-transaction API.
+Application handlers must not start, commit, roll back, or otherwise control
+transactions manually. Lifecycle
 helpers mutate only buffered draft flags, `updateVersionMetadata()` replaces
 only caller-owned draft version metadata, and `requireActive()` rejects closed
 transactions or active drafts already marked archived/deleted without including
@@ -482,6 +489,10 @@ records may return generated event messages or explicit `void` with no emitted
 schemas. `@Subscribe` records return explicit `void` and declare no emitted
 schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
+The exported `@spine-ts/server/internal/generated-handler-registry` subpath
+exists only to give that generated registry source its required type-only
+`GeneratedHandlerRegistry` import. It is a generated-artifact/package-internal
+entry point, not an application import, package-root API, or TypeDoc entry.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry
@@ -695,8 +706,10 @@ transport routing descriptors internally, then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint
 strings, multipart frames, and native binding types remain absent from the root
 API; remote transport, broker topology, process supervision, worker
-registration handshakes, delivery retries, and broad health checks remain open
-production gaps. The adapter serializes envelopes with Node's V8 serializer and is for
+registration handshakes, delivery retries, and broad health checks are outside
+the initial release. The adapter provides no exactly-once, durable-redelivery,
+retry, restart, or remote-delivery guarantee. The adapter serializes envelopes
+with Node's V8 serializer and is for
 trusted same-host runtime peers only; `ipcDirectory` must be private to those
 peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
 local IPC tests can require native IPC filesystem/socket permissions outside

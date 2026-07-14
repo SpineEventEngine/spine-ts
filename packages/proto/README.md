@@ -2,7 +2,7 @@
 
 Generated Protobuf-ES TypeScript for copied Spine Protobuf definitions.
 
-The package root currently exposes a curated Spine proto intake set:
+The package root exposes a curated Spine proto intake set:
 
 - Spine custom options from `spine/options.proto`.
 - `spine.base.FieldPath`.
