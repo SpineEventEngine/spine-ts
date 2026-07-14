@@ -1,5 +1,5 @@
 import { fork, type ChildProcess } from "node:child_process";
-import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -368,6 +368,52 @@ describe("local multi-process to-do mode", () => {
   );
 
   it(
+    "reports only IPC entries retained after normal recursive removal",
+    async () => {
+      const staleEntry = "stale-before-removal";
+      const postRemovalEntry = "retained-after-removal";
+      let resources: FixtureSetupResources | undefined;
+      const fixture = await LocalMultiProcessFixture.create({
+        onResourcesAcquired: (acquired) => {
+          resources = acquired;
+        },
+        onRemoveIpcDirectory: async (ipcDirectory) => {
+          await rm(ipcDirectory, { recursive: true, force: true });
+          await mkdir(ipcDirectory, { mode: 0o700 });
+          await writeFile(path.join(ipcDirectory, postRemovalEntry), "retained", "utf8");
+        },
+      });
+      const acquired = requireSetupResources(resources);
+      let closeAttempted = false;
+
+      try {
+        await fixture.ready();
+        await writeFile(path.join(acquired.ipcDirectory, staleEntry), "stale", "utf8");
+        closeAttempted = true;
+        const rejection = await fixture.close(undefined).catch((error: unknown) => error);
+
+        expect(rejection).toBeInstanceOf(AggregateError);
+        const messages = aggregateMessages(rejection);
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toContain(postRemovalEntry);
+        expect(messages[0]).not.toContain(staleEntry);
+        expect(await acquired.childExit).toEqual({ code: 0, signal: null });
+        expect(await isAbsent(acquired.ipcDirectory)).toBe(false);
+      } finally {
+        try {
+          if (!closeAttempted) {
+            await fixture.close(undefined).catch(() => undefined);
+          }
+        } finally {
+          await rm(acquired.ipcDirectory, { recursive: true, force: true });
+        }
+      }
+      expect(await isAbsent(acquired.ipcDirectory)).toBe(true);
+    },
+    outerTestTimeoutMs,
+  );
+
+  it(
     "attempts every child close in order and still stops after shutdown failures",
     async () => {
       let resources: FixtureSetupResources | undefined;
@@ -731,6 +777,7 @@ class LocalMultiProcessFixture {
   #ipcDirectory: string;
   #parentTransport: SignalTransport;
   #ready: ReadyMessage | undefined;
+  #onRemoveIpcDirectory: FixtureCreateOptions["onRemoveIpcDirectory"];
   #onStatIpcDirectory: FixtureCreateOptions["onStatIpcDirectory"];
   #stallQueries: boolean;
   #statelessQueryRows: boolean;
@@ -787,6 +834,7 @@ class LocalMultiProcessFixture {
         options.immediateQueryErrors ?? false,
         options.statelessQueryRows ?? false,
         options.stallQueries ?? false,
+        options.onRemoveIpcDirectory,
         options.onStatIpcDirectory,
       );
     } catch (error) {
@@ -815,6 +863,7 @@ class LocalMultiProcessFixture {
     immediateQueryErrors: boolean,
     statelessQueryRows: boolean,
     stallQueries: boolean,
+    onRemoveIpcDirectory: FixtureCreateOptions["onRemoveIpcDirectory"],
     onStatIpcDirectory: FixtureCreateOptions["onStatIpcDirectory"],
   ) {
     this.#ipcDirectory = ipcDirectory;
@@ -823,6 +872,7 @@ class LocalMultiProcessFixture {
     this.#immediateQueryErrors = immediateQueryErrors;
     this.#statelessQueryRows = statelessQueryRows;
     this.#stallQueries = stallQueries;
+    this.#onRemoveIpcDirectory = onRemoveIpcDirectory;
     this.#onStatIpcDirectory = onStatIpcDirectory;
     const { child } = trackedChild;
     child.once("error", (error) => {
@@ -996,9 +1046,8 @@ class LocalMultiProcessFixture {
         this.#ipcDirectory,
       );
     }
-    const retainedEntries = await readdir(this.#ipcDirectory).catch(() => [] as string[]);
     await capture(
-      () => rm(this.#ipcDirectory, { recursive: true, force: true }),
+      () => (this.#onRemoveIpcDirectory ?? removeDirectory)(this.#ipcDirectory),
       "IPC directory removal",
       failures,
       this.#ipcDirectory,
@@ -1010,6 +1059,7 @@ class LocalMultiProcessFixture {
       failures.push(phaseError("IPC directory absence verification", error, this.#ipcDirectory));
     }
     if (ipcDirectoryRemoved === false) {
+      const retainedEntries = await readdir(this.#ipcDirectory).catch(() => [] as string[]);
       failures.push(
         new Error(
           `Private IPC directory remains after cleanup; retained entries [${retainedEntries.join(", ")}].`,

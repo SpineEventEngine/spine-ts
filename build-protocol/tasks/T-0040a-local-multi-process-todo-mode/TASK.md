@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - Wave 10 fixes verified; Wave 11 pending
+Status: In progress - Wave 11 fixes verified; Wave 12 pending
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -653,6 +653,58 @@ examples/todo/test/local-multi-process.test.ts -t "partial-setup"`. It exited
   `git diff --check` passed.
 - Every Wave 10 finding is resolved. Commit the fix/evidence batch and rerun all
   four canonical concerns in Wave 11.
+
+### Reviewer Wave 11 Fixes - 2026-07-14
+
+- Normal fixture cleanup now invokes the existing private
+  `onRemoveIpcDirectory` seam, performs ENOENT-only absence verification, and
+  calls `readdir()` only when verification returns false. Retained-entry
+  diagnostics therefore describe the post-removal filesystem state rather than
+  a pre-removal snapshot.
+- The controlled normal-cleanup proof creates `stale-before-removal`, then its
+  removal callback recursively removes the directory, recreates it at mode
+  `0700`, and writes `retained-after-removal`. The cleanup aggregate contains
+  only the post-removal marker, excludes the stale marker, observes graceful
+  child exit, and proves the directory exists at diagnosis time. A nested test
+  `finally` removes the recreated marker/directory on every assertion path and
+  the test then proves actual absence.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "reports only IPC entries
+retained after normal recursive removal"`. It exited `1`; 1 test failed and 18
+  were skipped in 1.65 seconds, with the test taking 319 milliseconds. Normal
+  close ignored the seam, removed the directory, and returned a successful
+  `CleanupResult` instead of the expected aggregate.
+- GREEN used the same command and exited `0`; 1 test passed and 18 were skipped
+  in 1.76 seconds, with the test taking 398 milliseconds. After the worker
+  callback renames, the same test remained green in 1.18 seconds with a
+  305-millisecond test body.
+- Worker function-valued parameters are now `onClose` in `captureClose()` and
+  `onHandler` in the pending-startup transport's `subscribe()` and `respond()`;
+  only parameter names and their direct calls changed.
+- The native moved suite passed all 19 tests in 31.31 seconds. The native
+  seven-file affected regression passed all 117 tests in 31.71 seconds. Both
+  TypeScript no-emit checks, focused JS/TS ESLint, full ESLint, and cleanup
+  enforcement passed. The focused worker stale-callback scan exited `1` with no
+  matches. Assigned-file formatting and `git diff --check` passed. Full
+  `pnpm verify` was intentionally deferred.
+- No production code, dependency, public contract, framework source, guide
+  documentation, or build configuration changed. Actual immutable
+  implementation metadata remains existing role `implementer`, model
+  `gpt-5.6-terra`, reasoning `medium`; no subagents or Git mutation, and the
+  coordinator-owned review log was not edited.
+
+### Coordinator Wave 11 Fix Verification - 2026-07-14
+
+- Inspected the complete fix. Normal cleanup invokes its removal seam, verifies
+  ENOENT-only absence, and lists retained entries only after a false result.
+  The controlled proof includes the post-removal marker, excludes the stale
+  marker, and always removes the recreated directory. Worker callback renames
+  are behavior-neutral and complete at the reported sites.
+- Fresh native affected regression passed seven files and all 117 tests in
+  32.42 seconds. Both TypeScript no-emit checks, full lint and cleanup
+  enforcement, formatting, callback scan, and `git diff --check` passed.
+- Every Wave 11 finding is resolved. Commit the fix/evidence batch and rerun the
+  affected canonical concerns in Wave 12.
 
 ## Skill Applicability
 

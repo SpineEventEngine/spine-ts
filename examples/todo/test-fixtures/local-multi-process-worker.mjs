@@ -107,9 +107,9 @@ async function shutdown(exitCode = 0) {
   await stopping;
 }
 
-async function captureClose(label, close, failures) {
+async function captureClose(label, onClose, failures) {
   try {
-    await close();
+    await onClose();
     if (injectedCloseFailures.has(label)) {
       throw new Error(`Injected ${label} close failure.`);
     }
@@ -164,9 +164,9 @@ function pendingStartupTransport(delegate, gate) {
   let pending = true;
   return {
     publish: (operation) => delegate.publish(operation),
-    subscribe: (subscription, handler) => delegate.subscribe(subscription, handler),
+    subscribe: (subscription, onHandler) => delegate.subscribe(subscription, onHandler),
     request: (operation) => delegate.request(operation),
-    async respond(subscription, handler) {
+    async respond(subscription, onHandler) {
       if (pending) {
         pending = false;
         const marker = path.join(ipcDirectory, "startup-pending");
@@ -177,7 +177,7 @@ function pendingStartupTransport(delegate, gate) {
           await rm(marker, { force: true });
         }
       }
-      return await delegate.respond(subscription, handler);
+      return await delegate.respond(subscription, onHandler);
     },
     close: () => delegate.close(),
   };
