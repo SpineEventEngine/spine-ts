@@ -1,6 +1,6 @@
 # T-0039a: Canonical Specification And Status Reconciliation
 
-Status: Final rereview fix handback ready
+Status: Final clean-wave assignment
 
 Started: `2026-07-14T09:57:00Z`
 
@@ -362,3 +362,12 @@ inventory. Run focused docs/status lint before any reviewer assignment.
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. `receiving-code-review` and
   `verification-before-completion` were read and applied.
+
+## Final Clean-Wave Assignment
+
+- `2026-07-14T11:05:11Z`: coordinator accepted endpoint `5c153752` after
+  focused D-0085/D-0086 status scans, four-path Prettier, `docs:check`,
+  synchronized status/scope/generated checks, and `git diff --check`.
+- Assign documentation at explicit Luna Medium and style/reliability at explicit
+  Terra High, read-only/no subagents. API retains its clean unaffected result;
+  security remains deferred to T-0041.

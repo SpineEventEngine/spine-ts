@@ -1,6 +1,6 @@
 # T-0039a Review Log
 
-Status: Final rereview fix handback ready
+Status: Final clean-wave assignment
 
 ## Review Scope
 
@@ -241,3 +241,13 @@ Status: Final rereview fix handback ready
 - Actual immutable profile: existing implementer, `gpt-5.6-terra` / `medium`;
   no subagents. `receiving-code-review` and
   `verification-before-completion` were applied.
+
+## Final Clean-Wave Assignment
+
+- `2026-07-14T11:05:11Z`: accepted endpoint `5c153752`; focused coordinator
+  evidence is clean.
+- Documentation: existing role, explicit `gpt-5.6-luna` / medium.
+  Style/maintainability and performance/reliability: existing roles, explicit
+  `gpt-5.6-terra` / high. Read-only/no subagents.
+- TypeScript/API docs retains its clean wave-3 result because the historical
+  decision-label fix changes no public-contract surface. Security is deferred.
