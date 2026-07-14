@@ -1,6 +1,6 @@
 # T-0040a Review Log
 
-Status: Wave 9 fix verified - Wave 10 pending
+Status: Wave 10 fixes verified - Wave 11 pending
 
 Baseline: `24d1ef37`
 
@@ -56,7 +56,9 @@ overstate future production policy.
 - Reviewer wave 7: complete, fixed, verified, and closed.
 - Reviewer wave 8: complete, fixed, verified, and closed.
 - Reviewer wave 9: complete and closed; its accepted finding is fixed and
-  coordinator-verified. Wave 10 is pending.
+  coordinator-verified.
+- Reviewer wave 10: complete and closed; all accepted findings are fixed and
+  coordinator-verified. Wave 11 is pending.
 
 ## Coordinator Pre-Review Audit - 2026-07-14T14:45:31Z
 
@@ -827,3 +829,99 @@ canonical concern.
   formatting, and `git diff --check` passed.
 - Wave 9 is fully fixed and verified. Wave 10 must rerun all four canonical
   concerns against a new literal-endpoint package after the fix commit.
+
+## Reviewer Wave 10 Assignments - 2026-07-14
+
+Fix endpoint: `6eb4aa57`
+
+Review package:
+`.superpowers/sdd/review-24d1ef37..6eb4aa57.diff` (224,361 bytes)
+
+Pre-review lint found current status mirrors, bounded shared timeout/policy
+owners, no package-internal import or public export, no tracked generated
+output, and no production-policy overclaim. The parent test's `packCommand()`
+is the accepted public transport stimulus, not an end-user handler.
+
+Dispatch these independent read-only, no-subagent assignments:
+
+- Existing `style_maintainability_reviewer`, expected immutable
+  `gpt-5.6-terra` / high.
+- Existing `documentation_reviewer`, expected immutable `gpt-5.6-luna` /
+  medium.
+- Existing `typescript_api_docs_reviewer`, expected immutable
+  `gpt-5.6-terra` / high.
+- Existing `performance_reliability_reviewer`, expected immutable
+  `gpt-5.6-terra` / high.
+
+Scope every lane to the package, affected example paths, complete requirements
+ledger, and its distinct concern. Regress every accepted prior finding,
+especially ENOENT-only path polling and cleanup verification, bounded deadline
+delays, exact query ID filters, bounded diagnostics, real-query-first behavior,
+process cleanup, active status accuracy, and public/internal boundaries.
+Historical superseded text is out of scope unless a current task record or
+changed public document claims it as active. Report only concrete line-specific
+defects.
+
+Explicit dispatch fields and immutable Desktop role metadata agree:
+
+- Style/maintainability: agent
+  `019f61b5-23a7-73e0-b079-7bbab2d9aad4`, existing
+  `style_maintainability_reviewer`, actual `gpt-5.6-terra` / high.
+- Documentation: agent `019f61b5-47a6-7261-a75c-a4ff8c4e0d11`, existing
+  `documentation_reviewer`, actual `gpt-5.6-luna` / medium.
+- TypeScript/API docs: agent `019f61b5-6f5d-7ce0-a011-5878ff6780e7`, existing
+  `typescript_api_docs_reviewer`, actual `gpt-5.6-terra` / high.
+- Performance/reliability: agent
+  `019f61b5-9654-7e20-8c87-2c9a2ead2d04`, existing
+  `performance_reliability_reviewer`, actual `gpt-5.6-terra` / high.
+
+Complete results and closure remain pending; do not return a partial wave to
+implementation.
+
+## Reviewer Wave 10 Results - 2026-07-14
+
+Every read-only reviewer completed without subagents and was closed. Explicit
+dispatch and immutable Desktop role metadata agreed:
+
+- Style/maintainability: `019f61b5-23a7-73e0-b079-7bbab2d9aad4`, existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+- Documentation: `019f61b5-47a6-7261-a75c-a4ff8c4e0d11`, existing
+  `documentation_reviewer`, `gpt-5.6-luna` / medium.
+- TypeScript/API docs: `019f61b5-6f5d-7ce0-a011-5878ff6780e7`, existing
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+- Performance/reliability: `019f61b5-9654-7e20-8c87-2c9a2ead2d04`, existing
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted complete finding batch:
+
+1. **P2, setup absence verification:** partial-setup cleanup removes the IPC
+   directory but does not run the active ENOENT-only absence check or report
+   retained entries. Pass the existing stat seam, verify absence after removal,
+   aggregate operational/non-absent errors, and prove a retained-directory
+   setup failure.
+2. **P2, stale assignment metadata:** the work log says reviewer IDs/runtime
+   metadata will be recorded only after closure even though the review log
+   already records them. Reconcile the current statement.
+3. **P2, expected-skills path:** the task's skill-applicability record names
+   nonexistent `build-protocol/EXPECTED_SKILLS.md`; use
+   `build-protocol/skills/EXPECTED_SKILLS.md`.
+4. **P3, callback names:** rename callback parameters `predicate`, `next`, and
+   `operation` to `onPredicate`, `onNext`, and `onOperation` under the active
+   cleanup-era callback rule.
+
+No other documentation, API, public export, type/runtime, query, deadline,
+diagnostic, or lifecycle finding remains. Return the entire batch to existing
+immutable implementer `019f610b-c8d9-7282-a3ec-9a2d2cc3d84b`, actual
+`gpt-5.6-terra` / medium, no subagents or Git mutation. Wave 11 remains required.
+
+## Reviewer Wave 10 Fix Verification - 2026-07-14
+
+- The coordinator confirmed the full batch: ENOENT-only setup absence
+  verification with retained-entry diagnostics and ordered aggregation, all
+  three callback renames, the corrected expected-skills path, and reconciled
+  assignment metadata wording.
+- Fresh native affected regression passed seven files and all 116 tests in
+  31.88 seconds. Both TypeScript checks, full lint and cleanup enforcement,
+  formatting, focused stale scans, and `git diff --check` passed.
+- Wave 10 is fully fixed and verified. Wave 11 must rerun every canonical
+  concern against a new literal-endpoint package after the fix commit.

@@ -402,6 +402,10 @@ describe("local multi-process to-do mode", () => {
       const setupFailure = new Error("Injected partial fixture setup failure.");
       const parentCloseFailure = new Error("Injected setup parent transport close failure.");
       const directoryRemovalFailure = new Error("Injected setup directory removal failure.");
+      const verificationFailure = Object.assign(
+        new Error("Injected setup directory stat failure"),
+        { code: "EACCES" },
+      );
       let resources: FixtureSetupResources | undefined;
       let unexpectedFixture: LocalMultiProcessFixture | undefined;
       let rejection: unknown;
@@ -420,6 +424,7 @@ describe("local multi-process to-do mode", () => {
             await rm(ipcDirectory, { recursive: true, force: true });
             throw directoryRemovalFailure;
           },
+          onStatIpcDirectory: () => Promise.reject(verificationFailure),
         });
       } catch (error) {
         rejection = error;
@@ -434,8 +439,60 @@ describe("local multi-process to-do mode", () => {
       expect(rejection.errors[0]).toBe(setupFailure);
       expect(rejection.errors[1]).toBe(parentCloseFailure);
       expect(rejection.errors[2]).toBe(directoryRemovalFailure);
+      expect(asError(rejection.errors[3]).message).toBe(
+        "Local multi-process setup IPC directory absence verification failed: " +
+          "Injected setup directory stat failure.",
+      );
       expect(await resources?.childExit).toEqual({ code: 0, signal: null });
       expect(await isAbsent(resources?.ipcDirectory ?? "")).toBe(true);
+    },
+    outerTestTimeoutMs,
+  );
+
+  it(
+    "reports retained IPC entries when partial-setup removal leaves the directory present",
+    async () => {
+      const setupFailure = new Error("Injected retained-directory setup failure.");
+      const retainedEntry = "retained-marker";
+      let resources: FixtureSetupResources | undefined;
+      let unexpectedFixture: LocalMultiProcessFixture | undefined;
+      let rejection: unknown;
+
+      try {
+        unexpectedFixture = await LocalMultiProcessFixture.create({
+          onResourcesAcquired: (acquired) => {
+            resources = acquired;
+            throw setupFailure;
+          },
+          onRemoveIpcDirectory: async (ipcDirectory) => {
+            await writeFile(path.join(ipcDirectory, retainedEntry), "retained", "utf8");
+          },
+        });
+      } catch (error) {
+        rejection = error;
+      }
+
+      const acquired = requireSetupResources(resources);
+      try {
+        expect(rejection).toBeInstanceOf(AggregateError);
+        if (!(rejection instanceof AggregateError)) {
+          throw new Error("Partial fixture setup did not diagnose its retained directory.");
+        }
+        expect(rejection.errors[0]).toBe(setupFailure);
+        expect(asError(rejection.errors[1]).message).toContain(
+          "Private IPC directory remains after setup cleanup; retained entries [",
+        );
+        expect(asError(rejection.errors[1]).message).toContain(retainedEntry);
+        expect(await acquired.childExit).toEqual({ code: 0, signal: null });
+        expect(await isAbsent(acquired.ipcDirectory)).toBe(false);
+      } finally {
+        try {
+          await unexpectedFixture?.close(undefined);
+        } finally {
+          await rm(acquired.ipcDirectory, { recursive: true, force: true });
+        }
+      }
+      expect(await isAbsent(acquired.ipcDirectory)).toBe(true);
     },
     outerTestTimeoutMs,
   );
@@ -739,6 +796,7 @@ class LocalMultiProcessFixture {
         trackedChild,
         onCloseParentTransport: options.onCloseParentTransport,
         onRemoveIpcDirectory: options.onRemoveIpcDirectory,
+        onStatIpcDirectory: options.onStatIpcDirectory,
       });
       if (cleanupFailures.length === 0) {
         throw error;
@@ -980,11 +1038,11 @@ class LocalMultiProcessFixture {
     };
   }
 
-  async #eventually(predicate: () => boolean, phase: string, timeoutMs: number): Promise<void> {
+  async #eventually(onPredicate: () => boolean, phase: string, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       this.#throwChildFailure(phase);
-      if (predicate()) {
+      if (onPredicate()) {
         return;
       }
       const remainingMs = deadline - Date.now();
@@ -1050,6 +1108,7 @@ async function cleanupFailedFixtureSetup(options: {
   readonly trackedChild: TrackedChild | undefined;
   readonly onCloseParentTransport: FixtureCreateOptions["onCloseParentTransport"];
   readonly onRemoveIpcDirectory: FixtureCreateOptions["onRemoveIpcDirectory"];
+  readonly onStatIpcDirectory: FixtureCreateOptions["onStatIpcDirectory"];
 }): Promise<Error[]> {
   const failures: Error[] = [];
   if (options.parentTransport !== undefined) {
@@ -1077,6 +1136,22 @@ async function cleanupFailedFixtureSetup(options: {
     await (options.onRemoveIpcDirectory ?? removeDirectory)(options.ipcDirectory);
   } catch (error) {
     failures.push(asError(error));
+  }
+  let ipcDirectoryRemoved: boolean | undefined;
+  try {
+    ipcDirectoryRemoved = await isAbsent(options.ipcDirectory, options.onStatIpcDirectory);
+  } catch (error) {
+    failures.push(
+      phaseError("setup IPC directory absence verification", error, options.ipcDirectory),
+    );
+  }
+  if (ipcDirectoryRemoved === false) {
+    const retainedEntries = await readdir(options.ipcDirectory).catch(() => [] as string[]);
+    failures.push(
+      new Error(
+        `Private IPC directory remains after setup cleanup; retained entries [${retainedEntries.join(", ")}].`,
+      ),
+    );
   }
   return failures;
 }
@@ -1144,8 +1219,8 @@ function immediateErrorQueryInterceptor(onAttempt: () => void): Interceptor {
 }
 
 function statelessQueryRowInterceptor(): Interceptor {
-  return (next) => async (request) => {
-    const response = await next(request);
+  return (onNext) => async (request) => {
+    const response = await onNext(request);
     if (response.stream) {
       return response;
     }
@@ -1390,13 +1465,13 @@ async function settles(promise: Promise<unknown>, timeoutMs: number): Promise<bo
 }
 
 async function capture(
-  operation: () => Promise<void>,
+  onOperation: () => Promise<void>,
   phase: string,
   failures: Error[],
   ipcDirectory: string,
 ): Promise<void> {
   try {
-    await operation();
+    await onOperation();
   } catch (error) {
     failures.push(phaseError(phase, error, ipcDirectory));
   }

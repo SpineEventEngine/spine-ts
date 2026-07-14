@@ -1,6 +1,6 @@
 # T-0040a: Local Multi-Process To-Do Mode
 
-Status: In progress - Wave 9 fix verified; Wave 10 pending
+Status: In progress - Wave 10 fixes verified; Wave 11 pending
 
 Started: `2026-07-14T14:20:28Z`
 
@@ -600,9 +600,63 @@ after 1000ms` diagnostic instead of the injected `EACCES` error.
   dependency, public contract, framework source, guide documentation, or build
   configuration changed. Commit this fix and run all four concerns in Wave 10.
 
+### Reviewer Wave 10 Fixes - 2026-07-14
+
+- Partial fixture setup now passes its existing private `onStatIpcDirectory`
+  seam into cleanup and verifies ENOENT-only absence after the directory-removal
+  attempt. A remaining directory appends its current retained entries; a
+  non-ENOENT stat failure appends a sanitized setup absence-verification error.
+  Both follow parent-transport close, child shutdown/termination, and removal in
+  deterministic order without replacing the primary or earlier cleanup errors.
+- The retained-directory scenario makes the removal callback return successfully
+  after writing `retained-marker`. It proves the primary setup error remains
+  first, the retained-entry diagnostic follows, the child exits gracefully, the
+  directory really remains at diagnosis time, and a nested test `finally`
+  removes it before proving actual absence. The existing multi-failure setup
+  scenario now injects `EACCES` and proves that stat diagnostic remains fourth
+  after the primary, parent-close, and directory-removal errors.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+examples/todo/test/local-multi-process.test.ts -t "partial-setup"`. It exited
+  `1`; both selected tests failed with 16 skipped in 1.80 seconds. The existing
+  aggregate had no fourth verification error, and the successful no-op removal
+  returned only its primary setup error instead of a retained-directory
+  aggregate.
+- GREEN used the same command and exited `0`; both tests passed with 16 skipped
+  in 1.75 seconds. After callback-name refactoring, the same selection remained
+  green in 1.71 seconds.
+- Renamed the reported callback parameters to `onPredicate`, `onNext`, and
+  `onOperation`. Corrected the skill inventory path to
+  `build-protocol/skills/EXPECTED_SKILLS.md`; the Wave 10 assignment now states
+  that IDs and immutable metadata were already recorded and only results/closure
+  had remained pending.
+- The native moved suite passed all 18 tests in 31.32 seconds. The native
+  seven-file affected regression passed all 116 tests in 31.57 seconds. Both
+  TypeScript no-emit checks, focused and full ESLint, and cleanup enforcement
+  passed. Focused stale callback-name, skill-path, and assignment-wording scans
+  exited `1` with no matches. Assigned-file formatting and `git diff --check`
+  passed. Full `pnpm verify` was intentionally deferred.
+- No production code, worker behavior, dependency, public contract, framework
+  source, guide documentation, build configuration, or coordinator-owned review
+  log changed. Actual immutable implementation metadata remains existing role
+  `implementer`, model `gpt-5.6-terra`, reasoning `medium`; no subagents or Git
+  mutation.
+
+### Coordinator Wave 10 Fix Verification - 2026-07-14
+
+- Inspected the complete fix diff. Partial-setup cleanup now uses the same
+  ENOENT-only stat seam after removal, preserves primary and prior cleanup
+  errors, reports retained entries, and the controlled retained-directory test
+  removes its artifact in a nested `finally` before proving actual absence.
+- Fresh native affected regression passed seven files and all 116 tests in
+  31.88 seconds. Both TypeScript no-emit checks, full lint and cleanup
+  enforcement, formatting, targeted stale-name/path scans, and
+  `git diff --check` passed.
+- Every Wave 10 finding is resolved. Commit the fix/evidence batch and rerun all
+  four canonical concerns in Wave 11.
+
 ## Skill Applicability
 
-- Inventories checked: `build-protocol/EXPECTED_SKILLS.md`, installed skill
+- Inventories checked: `build-protocol/skills/EXPECTED_SKILLS.md`, installed skill
   manifests under `/Users/armiol/.agents/skills`, and
   `/Users/armiol/.agents/.skill-lock.json`.
 - Read for coordination/design: `using-git-worktrees`,
