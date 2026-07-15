@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 20 assigned; dedicated security re-review
-pending
+Status: In progress - Canonical Wave 20 findings accepted; correction assigned;
+dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2415,3 +2415,31 @@ Subscription cancellation failed.` instead of `AggregateError`.
   D-0087-D-0090, affected IPC lifecycle paths, current security artifacts, and
   superseded-history exclusion. Aggregate before action; dedicated final
   security review remains pending.
+
+## Canonical Review Wave 20 Result And Fix Assignment
+
+- Complete result: TypeScript/API is clean. Documentation/style duplicate one
+  P2 because active SF-010/TM-007/TM-011 shutdown-control claims lack exact
+  current source/test anchors. Style adds a P2 because
+  `expectCloseBlocksNativeOperation` exceeds four semantic components and a P3
+  because publisher coverage constructs an unused subscription.
+- Reliability adds two P2s: request has no paused-recheck shutdown regression;
+  and request plus pre-bound publisher cleanup can replace an initiating error
+  when socket close also throws, unlike subscriber/responder ordered
+  `AggregateError` composition.
+- Immutable role evidence: style agent
+  `019f651b-abc5-7792-a719-5d724ed0ff48`, Terra High; docs agent
+  `019f651b-af0f-7352-9495-182a7340674e`, Luna Medium; API agent
+  `019f651b-a733-7191-a42e-180ca449e3bd`, Terra High; reliability agent
+  `019f651d-5895-7b03-b8f7-0aa0b612743a`, Terra High. Every explicit dispatch
+  used its tool-enforced immutable actual profile, no child or Git mutation,
+  and all four are closed.
+- Resume the existing implementer context, expected original explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. TDD request recheck shutdown and
+  request/publisher ordered primary-plus-cleanup failure composition; extend the
+  concise operation/boundary matrix, shorten the helper name, construct
+  subscriptions only for operations that use them, and add exact stable active
+  security anchors after code settles. Preserve public API, path policy,
+  cleanup/close bounds, package/Proto/generated boundaries, and error order.
+  Focused native transport verification and all Canonical Wave 21 lanes follow
+  before dedicated security review.

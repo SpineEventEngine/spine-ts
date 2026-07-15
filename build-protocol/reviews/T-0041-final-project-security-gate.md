@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 20 assigned; dedicated security re-review pending
+Status: Canonical Wave 20 findings accepted; correction assigned; dedicated
+security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2515,3 +2516,39 @@ verify` remains reserved.
   dispatched explicitly as existing `performance_reliability_reviewer` with
   immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
   Aggregate style, docs, API, and reliability before action.
+
+## Canonical Review Wave 20 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f651b-abc5-7792-a719-5d724ed0ff48`: P2 for missing exact active security
+  anchors; P2 for the five-component helper name; P3 for constructing a
+  subscription in publisher coverage that does not use it. Production gates
+  are symmetric and correctly placed.
+- Documentation, immutable Luna Medium,
+  `019f651b-af0f-7352-9495-182a7340674e`: duplicate P2 for missing exact
+  SF-010/TM-007/TM-011 source/test anchors; otherwise clean.
+- TypeScript/API, immutable Terra High,
+  `019f651b-a733-7191-a42e-180ca449e3bd`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f651d-5895-7b03-b8f7-0aa0b612743a`: P2 because request recheck lacks a
+  close-race regression; P2 because request `finally` and pre-bound publisher
+  cleanup can replace the initiating failure when socket close also throws.
+- Every role used the explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator inspection accepts
+  the complete deduplicated batch.
+
+## Canonical Wave 20 Fix Assignment
+
+- Resume existing implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad`, expected
+  its original explicit immutable `gpt-5.6-terra` / medium dispatch, as sole
+  writer for the complete Wave 20 RED/GREEN/docs/status batch.
+- Extend the operation/boundary shutdown matrix to request recheck while proving
+  no connect/send; preserve primary then cleanup failure order for request and
+  pre-bound publisher close; route close through the existing package-private
+  socket seam for deterministic injection; shorten the helper name to four or
+  fewer semantic components; create subscriptions only for operations that use
+  them; add exact current source/test/native-evidence anchors to SF-010 and
+  TM-007/TM-011. Preserve public/package/Proto/generated boundaries, path
+  hardening, close bounds, and error order. Require focused native transport,
+  generated typecheck, docs/lint/format/status/boundary/diff checks; all four
+  Canonical Wave 21 lanes follow before dedicated security review.
