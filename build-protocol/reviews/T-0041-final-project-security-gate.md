@@ -3398,3 +3398,14 @@ verify` remains reserved.
   Terra Medium, remained childless and Git-clean and is closed. Freeze the
   endpoint and re-review style, docs, and TypeScript/API only; reliability's
   clean disposition remains accepted because no runtime path changed.
+
+## D-0094 Union-Correlation Pre-Review Lint Result
+
+- Current statuses and security provenance agree; the prior security package is
+  historical and no future dispatch is overclaimed.
+- Cap/codec production ownership remains singular, API exposure is intentional
+  at 18/6, frame-2 docs are kind-specific, generated output is absent, and no
+  unsupported future policy is promised.
+- Style, documentation, and TypeScript/API must re-review. Performance/
+  reliability is N/A for another wave because the correction contains no
+  runtime execution-path change and the previous lane is clean.

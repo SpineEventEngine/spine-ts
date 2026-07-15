@@ -3372,3 +3372,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
   mutation and is closed. Freeze this correction and re-review style,
   documentation, and TypeScript/API. Reliability's clean disposition remains
   valid because no runtime execution path changed.
+
+## D-0094 Union-Correlation Pre-Review Lint
+
+- Current task/work/review/security headers agree that implementation is
+  complete and affected canonical re-review is pending. The old final-security
+  package and reviewer are explicitly historical, with no replacement claimed.
+- The private 8 MiB cap and codec dispatch retain one production owner each.
+  Distributive operation aliases add no schema/socket/reply public leakage and
+  exact API counts remain 18 root / 6 ZeroMQ.
+- Changed docs now state Buf frame 2 only for command/event and private V8 for
+  reserved kinds. No future codec, topology, scheduler, monitor, backoff,
+  catch-up, or remote-adapter policy is promised; generated outputs remain
+  absent from Git.
+- Style, documentation, and TypeScript/API are affected. Performance/
+  reliability remains N/A for another wave because inspection and diff show no
+  runtime execution-path change and its prior clean disposition remains valid.
