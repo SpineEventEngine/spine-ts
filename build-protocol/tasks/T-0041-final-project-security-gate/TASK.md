@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 13 correction verified; wave 14 package pending
+Status: In progress - canonical review wave 14 assigned
 
 Started: `2026-07-14`
 
@@ -1822,6 +1822,20 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   not implementation evidence. Generate a literal baseline package after this
   reconciliation, then run all four Canonical Wave 14 lanes. Dedicated security
   review remains pending.
+
+## Canonical Review Wave 14 Assignment
+
+- Immutable review endpoint `4b7b3541`; package
+  `.superpowers/sdd/review-39f2c6f7..4b7b3541.diff` contains 64 commits and
+  683,360 bytes. Substantive implementation endpoint remains `fe207c7e`.
+- Dispatch all four existing roles read-only with explicit immutable profiles:
+  style Terra High, documentation Luna Medium, TypeScript/API Terra High, and
+  reliability Terra High. Require full ledger, D-0087 through D-0090, current
+  security artifacts, exact package/affected paths, no subagents or Git
+  mutation, findings or clean, and superseded-history exclusion. D-0089's
+  locally typed runtime structural observer is accepted and must not be
+  relitigated as public leakage absent emitted API evidence. Aggregate before
+  action; dedicated security review remains pending.
 
 ## Wave 13 Coordinator Evidence Correction Result
 

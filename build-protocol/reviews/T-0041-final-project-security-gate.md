@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 13 correction verified; wave 14 package pending
+Status: Canonical review wave 14 assigned
 
 Baseline: `39f2c6f7`
 
@@ -1666,6 +1666,25 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   later review/status commits are not implementation evidence.
 - Generate the literal package after provenance reconciliation, then run every
   Canonical Wave 14 concern. Dedicated final security review remains pending.
+
+## Canonical Review Wave 14 Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..4b7b3541.diff`, endpoint
+  `4b7b3541`, baseline `39f2c6f7`, 64 commits, 683,360 bytes. Substantive
+  implementation evidence ends at `fe207c7e`.
+- Style Terra High: D-0090 helper/test/doc maintainability, exact TypeError,
+  symmetric fixture tests, names/duplication, docs/log structure.
+- Documentation Luna Medium: TTL/status/TypeDoc/architecture mirrors,
+  D-0087-D-0090, security provenance/exclusions, no future-policy overclaim.
+- TypeScript/API Terra High: public TTL narrowing/TSDoc/runtime agreement,
+  D-0088/D-0089 boundaries, seven entry points, exact-six ZeroMQ gate,
+  declarations/TypeDoc/package/Proto/generated boundaries. D-0089 expressly
+  permits locally typed runtime structural observation.
+- Reliability Terra High: max/overflow TTL timing and storage behavior,
+  expiry/cancel/recovery invariants, both shared close deadlines and cleanup,
+  publisher/requester/replier timeout scope, races and resource bounds.
+- All are read-only and use the full ledger plus superseded-history rule.
+  Aggregate before action; dedicated security review remains pending.
 
 ## Wave 13 Coordinator Evidence Correction Result
 
