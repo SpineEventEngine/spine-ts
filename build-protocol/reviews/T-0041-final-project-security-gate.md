@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 11 fixes committed; canonical wave 12 packaging pending
+Status: Canonical review wave 12 assigned
 
 Baseline: `39f2c6f7`
 
@@ -1418,3 +1418,18 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   later review/status commits are not implementation evidence.
 - Generate the literal package after this reconciliation, then run all four
   Canonical Wave 12 concerns. Dedicated security review remains pending.
+
+## Canonical Review Wave 12 Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..74665f82.diff`, endpoint
+  `74665f82`, baseline `39f2c6f7`, 55 commits, 622,051 bytes. Substantive
+  implementation/docs endpoint `a0f40f04`.
+- Style Terra High: docs/log structure and complete milestone maintainability.
+- Documentation Luna Medium: all subscription capacity/expiry/cancellation
+  mirrors, six-name subpath mirrors, current status/provenance/exclusions.
+- TypeScript/API Terra High: public/internal options and complete docs/declaration
+  alignment, six-symbol gate, package/Proto boundaries.
+- Reliability Terra High: observer, request/close, cancellation/expiry, race and
+  resource behavior plus docs accuracy.
+- All are read-only and use the full ledger/superseded-history rule. Aggregate
+  before action; dedicated security review remains pending.
