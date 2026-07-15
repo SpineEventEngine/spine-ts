@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 12 correction verified; wave 13 package pending
+Status: In progress - canonical review wave 13 assigned
 
 Started: `2026-07-14`
 
@@ -1665,3 +1665,16 @@ succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
   not implementation evidence. Generate a literal baseline package after this
   reconciliation, then run all four Canonical Wave 13 lanes. Dedicated security
   review remains pending.
+
+## Canonical Review Wave 13 Assignment
+
+- Immutable review endpoint `182f2f96`; package
+  `.superpowers/sdd/review-39f2c6f7..182f2f96.diff` contains 59 commits and
+  645,058 bytes. Substantive implementation endpoint remains `0d8135aa`.
+- Dispatch all four existing roles read-only with explicit immutable profiles:
+  style Terra High, documentation Luna Medium, TypeScript/API Terra High, and
+  reliability Terra High. Require the full ledger, D-0087 through D-0089,
+  current security artifacts, exact package and affected paths, no subagents or
+  Git mutation, concrete findings or clean, and superseded-history exclusion.
+  Re-review all Wave 12 corrections and retain complete T-0041 scope. Aggregate
+  before action; dedicated security review remains pending.

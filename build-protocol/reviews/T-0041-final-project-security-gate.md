@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 12 correction verified; wave 13 package pending
+Status: Canonical review wave 13 assigned
 
 Baseline: `39f2c6f7`
 
@@ -1518,3 +1518,21 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   later review/status commits are not implementation evidence.
 - Generate the literal package after provenance reconciliation, then run every
   Canonical Wave 13 concern. Dedicated final security review remains pending.
+
+## Canonical Review Wave 13 Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..182f2f96.diff`, endpoint
+  `182f2f96`, baseline `39f2c6f7`, 59 commits, 645,058 bytes. Substantive
+  implementation evidence ends at `0d8135aa`.
+- Style Terra High: complete milestone maintainability, test seams, names,
+  duplication, docs/log structure, and Wave 12 correction scope.
+- Documentation Luna Medium: inactive-expiry/cancellation mirrors, D-0088
+  request/reply-only wording, current status/provenance/exclusions, six-name
+  public subpath, and no future-policy overclaim.
+- TypeScript/API Terra High: D-0088 socket scope, public/internal options,
+  declarations/TypeDoc, exact six-symbol gate, package and Proto boundaries.
+- Reliability Terra High: publisher/requester/replier timeout scope, independent
+  shared cleanup bounds and directory removal, inactive-expiry failure/capacity/
+  timer behavior, races, observer behavior, and resource cleanup.
+- All are read-only and use the full ledger plus superseded-history rule.
+  Aggregate before action; dedicated security review remains pending.
