@@ -215,11 +215,14 @@ describe("check-release-readiness", () => {
     withTempRepository((repoRoot) => {
       writeRuntimePackage(repoRoot, {
         source: [
+          'import { writeFileSync } from "node:fs";',
           'process.on("SIGTERM", () => {});',
+          'writeFileSync(new URL("../../../import-ready", import.meta.url), "ready");',
           "setTimeout(() => process.exit(0), 1_000);",
           "await new Promise(() => {});",
         ].join("\n"),
       });
+      const readinessMarker = join(repoRoot, "import-ready");
       const startedAt = Date.now();
 
       const failure = captureFailure(() => runReleaseReadiness(repoRoot, { importTimeoutMs: 250 }));
@@ -229,6 +232,7 @@ describe("check-release-readiness", () => {
       expect(failure.message).toContain(
         "Timed out package export after 250 ms: packages/runtime: @example/runtime",
       );
+      expect(existsSync(readinessMarker)).toBe(true);
     });
   });
 });

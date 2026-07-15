@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - Wave 3 focused validation clean; affected re-review pending
+Status: In progress - Wave 4 focused validation clean; affected re-review pending
 
 Started: `2026-07-15`
 
@@ -329,3 +329,62 @@ scripts/check-release-readiness.test.mjs` failed as expected with
 - The fix changes no manifest, public export, declaration, TypeDoc, Protobuf,
   lockfile, generated API, runtime source, example, or security boundary. It
   makes no future runtime or production-policy claim.
+
+## 2026-07-15 - Wave 4 Assignment
+
+- Immutable endpoint: `db7dc05b` (`Harden release import timeout`).
+  Package: `.superpowers/sdd/review-7678d36c..db7dc05b.diff`, 170,926 bytes
+  across six T-0042 commits.
+- Rerun style/maintainability, documentation, and performance/reliability
+  against the corrected timeout/count endpoint. Carry TypeScript/API and
+  security dispositions forward for their unchanged-input reasons.
+- Spawned style `019f6741-94ee-7000-989f-6ef588d9716b`, documentation
+  `019f6741-97fe-7132-ab2d-1adb22f6e656`, and reliability
+  `019f6741-9b3c-7390-bd89-9e274ad3754f`.
+
+## 2026-07-15 - Wave 4 Results And Fix Scope
+
+- Collected all three results before action and closed every reviewer.
+  Documentation is clean and confirms the prior count mismatch is closed.
+- Style and reliability independently reported one shared test-integrity
+  finding. The child installs its `SIGTERM` handler during module evaluation,
+  after the parent starts the timeout. Under exceptional startup load, a
+  reverted default-`SIGTERM` implementation could kill the child before the
+  handler exists and still satisfy the current elapsed/diagnostic assertions.
+- Production `killSignal: "SIGKILL"` is otherwise accepted as closing the
+  boundedness defect. Add a fixture readiness marker immediately after handler
+  installation and assert it exists after the check. A pre-handler timeout must
+  then fail the test instead of falsely passing.
+- Resume the same Terra Medium implementer for this test-and-record-only fix.
+  RED should assert the absent marker before the fixture writes it; GREEN adds
+  the post-handler marker. Do not change production checker behavior.
+- Implementation resumed under assignment
+  `019f6718-1df9-77d0-ac05-e83591cba9ca`. RED will first assert the readiness
+  marker exists after the timed-out check while the fixture still does not
+  write it; GREEN will add only the post-handler marker write.
+- Wave 4 RED: focused Vitest passed 7/8 tests. The timeout regression returned
+  in 309 ms with its existing actionable timeout diagnostic, then failed only
+  because `import-ready` did not exist. This proves the assertion detects the
+  missing handler-installed marker.
+- Wave 4 GREEN: after adding only the marker write immediately after handler
+  registration, the focused suite passed 1 file / 8 tests in 891 ms. The marker
+  assertion now proves the handler-installed path ran before the hard timeout.
+- Final focused evidence: 1 file / 8 tests passed in 917 ms; direct checker
+  passed at 58 imports / 107 links; tooling typecheck, focused test ESLint,
+  cleanup, focused Prettier, generated-clean, and `git diff --check` all
+  exited 0. Production checker behavior remained unchanged; full verify remains
+  coordinator-owned.
+
+## 2026-07-15 - Wave 5 Pre-Review Verification
+
+- Coordinator-focused Vitest passed 1 file / 8 tests in 1.67 seconds; direct
+  release readiness passed at 58 imports / 107 links.
+- Tooling typecheck, focused test ESLint, cleanup, focused Prettier,
+  generated-clean, and `git diff --check` all exited 0.
+- Lightweight lint confirms synchronized active statuses and an exact
+  one-test-plus-three-record delta. The readiness marker is fixture-local and
+  removed with the temp repository; no production policy is duplicated.
+- Rerun style/maintainability and performance/reliability because they raised
+  the marker finding. Documentation carries forward clean because no current
+  release/documentation claim changed; TypeScript/API and security retain their
+  unchanged-input dispositions.

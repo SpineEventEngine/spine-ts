@@ -1,6 +1,6 @@
 # T-0042 Review Log
 
-Status: In progress - Wave 3 focused validation clean; affected re-review pending
+Status: In progress - Wave 4 focused validation clean; affected re-review pending
 
 Baseline: `7678d36c`
 
@@ -466,3 +466,103 @@ implementer context, and repeat only affected concerns until clean.
 - No public/package/declaration/TypeDoc/Protobuf/lockfile/generated API/runtime/
   example/security input changed. TypeScript/API and security dispositions
   remain carried forward for the same concrete reasons.
+
+## Wave 4 Assignment
+
+- Immutable endpoint: `db7dc05b` (`Harden release import timeout`).
+- Package:
+  `.superpowers/sdd/review-7678d36c..db7dc05b.diff` (170,926 bytes, six
+  T-0042 commits).
+- Style/maintainability: existing immutable
+  `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / high;
+  bounded to the explicit kill signal, stubborn-child test design, and active
+  status chronology.
+- Documentation: existing immutable `documentation_reviewer`, explicit
+  `gpt-5.6-luna` / medium; bounded to corrected current gate counts, current
+  command/evidence truth, and no future-policy overclaim.
+- Performance/reliability: existing immutable
+  `performance_reliability_reviewer`, explicit `gpt-5.6-terra` / high;
+  bounded to hard timeout behavior, timing-test determinism, emergency cleanup,
+  diagnostics, and final-gate reproducibility.
+- Historical/superseded text is not a finding unless current task logs, the
+  brief, active status mirrors, or changed public docs adopt it as active. All
+  assignments are read-only, Git-read-only, childless, and must report bounded
+  skill applicability.
+- TypeScript/API carries forward clean because no affected API input changed.
+  Security remains N/A because no production trust boundary changed. Aggregate
+  the complete three-lane wave before action.
+
+### Wave 4 Dispatch Evidence
+
+- Style: `019f6741-94ee-7000-989f-6ef588d9716b`; immutable role binding and
+  explicit dispatch `gpt-5.6-terra` / high.
+- Documentation: `019f6741-97fe-7132-ab2d-1adb22f6e656`; immutable role
+  binding and explicit dispatch `gpt-5.6-luna` / medium.
+- Reliability: `019f6741-9b3c-7390-bd89-9e274ad3754f`; immutable role binding
+  and explicit dispatch `gpt-5.6-terra` / high.
+- Parent-visible immutable role metadata supplies actual-profile evidence and
+  matches every explicit dispatch. Results remain pending until complete-wave
+  aggregation.
+
+## Wave 4 Results
+
+- Collected all three affected results before action and closed every reviewer.
+  Actual immutable role profiles match explicit dispatch fields.
+- Documentation `019f6741-97fe-7132-ab2d-1adb22f6e656`: clean. The current
+  74-file/1,775-test count, 58/107 command evidence, historical counts, and
+  release limitations agree.
+- Style `019f6741-94ee-7000-989f-6ef588d9716b` and reliability
+  `019f6741-9b3c-7390-bd89-9e274ad3754f`: one shared actionable finding.
+  Timeout starts at spawn, but the child installs its `SIGTERM` handler only
+  during module evaluation. Without a readiness assertion, a startup race under
+  a reverted default-`SIGTERM` implementation could still pass the wall-clock
+  and timeout-diagnostic assertions.
+- Accepted correction: have the fixture write a readiness marker immediately
+  after handler installation and assert the marker exists after the checker
+  returns. This proves the intended stubborn-child path ran. Temp-repository
+  cleanup already removes the marker.
+- Production `killSignal: "SIGKILL"` is otherwise clean and accepted for the
+  supported macOS/Unix gate. TypeScript/API and security carry forward for
+  unchanged-input reasons.
+
+## Wave 4 Fix Assignment
+
+- Resume existing implementer `019f6718-1df9-77d0-ac05-e83591cba9ca`;
+  parent-runtime immutable and expected `gpt-5.6-terra` / medium.
+- Ownership: checker test and active T-0042 records only. No production,
+  manifest, public API, dependency, lockfile, runtime, generated, example, or
+  security change; no Git mutation or subagents.
+- Test-first proof: add the readiness assertion before the fixture writes the
+  marker and observe the focused RED, then write it after handler registration
+  and rerun focused validation.
+
+### Wave 4 Implementation Record
+
+- Existing implementer `019f6718-1df9-77d0-ac05-e83591cba9ca` resumed under
+  parent-runtime immutable `gpt-5.6-terra` / medium. Assertion-first RED will
+  prove the marker is absent before the fixture writes it; production checker
+  behavior remains untouched.
+- RED confirmed: 7/8 focused tests passed; the timeout path returned in 309 ms
+  with the expected diagnostic and failed only because the asserted
+  `import-ready` marker was absent.
+- GREEN confirmed after the test-only marker write: 1 file / 8 tests passed in
+  891 ms, and the marker assertion proves handler registration occurred before
+  the child was hard-killed.
+- Final focused evidence passed: 1 file / 8 tests in 917 ms; standalone checker
+  58 imports / 107 links; tooling typecheck, focused test ESLint, cleanup,
+  focused Prettier, generated-clean, and diff checks all clean. Production
+  behavior is unchanged; full verify remains coordinator-owned.
+
+## Wave 5 Pre-Review Verification
+
+- Coordinator-focused Vitest passed 1 file / 8 tests in 1.67 seconds;
+  standalone checker 58 imports / 107 links; tooling typecheck, focused test
+  ESLint, cleanup, focused Prettier, generated-clean, and diff checks all
+  exited 0.
+- Lightweight lint confirms synchronized active statuses, one test plus three
+  record changes, fixture-scoped marker cleanup, one production timeout/kill
+  policy owner, and no current or future-policy documentation change.
+- Style/maintainability and performance/reliability are affected and must
+  rerun. Documentation carries its clean Wave 4 result because no documentation
+  or current release claim changed. TypeScript/API and security remain N/A for
+  unchanged-input reasons.
