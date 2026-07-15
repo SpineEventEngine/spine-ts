@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: In progress - D-0096 canonical review clean; final security review pending
+Status: In progress - final security review clean; full task verification pending
 
 Baseline: `39f2c6f7`
 
@@ -3827,6 +3827,19 @@ verify` remains reserved.
   residual wording rather than demanding the declined native solution. Exact
   Buf/frame/cap/trailer/reply/type/predicate boundaries and historical-text rule
   are binding.
+
+## Focused Final Security Review Result
+
+- Reviewer `019f66ab-ff43-7951-9f7a-7052210d7ff9`, explicit/tool-enforced
+  actual immutable Terra High: clean, childless, read-only, Git-read-only, and
+  closed.
+- No release blocker: command/event wire is Buf-only; V8 is confined to reserved
+  kinds/private results; all inbound roles have the per-frame cap; prefix-only
+  consumption and generated-result rejection are correct; runtime validation,
+  public boundaries, prior SF controls, and documentation remain intact.
+- SF-013 is the sole accepted residual in this focused scope. Fresh full/prod/
+  dev audits have zero advisories and all 235 signatures verify. Full task
+  verification is the remaining acceptance gate.
 
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 

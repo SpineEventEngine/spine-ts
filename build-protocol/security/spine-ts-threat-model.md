@@ -3,7 +3,8 @@
 Status: T-0041 working threat model; SF-013 is a human-accepted Medium same-UID
 local IPC availability residual under D-0093. D-0094 remains accepted;
 D-0096's top-level-only predicate correction is coordinator-verified and
-canonically clean. Final focused security re-review is pending.
+canonically clean. Final focused security re-review is clean; full task
+verification remains pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.

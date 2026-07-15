@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0096 canonical review clean; final security review pending
+Status: In progress - final security review clean; full task verification pending
 
 Started: `2026-07-14`
 
@@ -3871,6 +3871,20 @@ Subscription cancellation failed.` instead of `AggregateError`.
   generated-reply rejection, kind/envelope correlation, predicate non-validation,
   and no accidental trust/public-policy change. Historical superseded text is
   not active. Full task verification follows only after a clean security result.
+
+## Focused Final Security Review Result
+
+- Security reviewer `019f66ab-ff43-7951-9f7a-7052210d7ff9`, explicit and
+  tool-enforced actual immutable Terra High: clean; childless, read-only,
+  Git-read-only, and closed.
+- Buf-only Proto command/event wire, reserved-kind/private-result V8, all three
+  inbound per-frame caps, prefix-only consumption, generated-result rejection,
+  runtime intake validation, public boundary, and current docs are accepted.
+  Earlier SF-007 through SF-012 controls are not weakened. SF-013 remains the
+  sole explicit accepted residual in this focused scope.
+- Fresh native registry checks also pass: full/prod/dev audits report zero
+  advisories at 235/7/189 dependencies, and all 235 registry signatures verify.
+  Proceed to the full native T-0041 gate; no release blocker remains from review.
 
 ## D-0096 Source TypeDoc P2 Implementation
 
