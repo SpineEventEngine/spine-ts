@@ -2362,3 +2362,26 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - All three are read-only, childless, and Git-read-only with distinct bounded
   concerns. Reliability remains queued for platform capacity; aggregate the
   complete four-lane wave before action.
+
+## Canonical Review Wave 19 Dispatch Continuation
+
+- The explicit lightweight docs/status lint confirms synchronized active
+  Wave 19 status and `cbad2d78` provenance, one D-0090 runtime source for its
+  default/maximum policy, no changed public export for the internal activation
+  failure composition, no active future-policy overclaim, and clean immutable-
+  package diff integrity. The scan's other `30_000`/int32 values belong to
+  distinct delivery, repository, metadata, or test contracts rather than a
+  duplicated subscription policy.
+- Documentation agent `019f6507-f939-7540-a3ad-a65a29b7953d` completed clean
+  under its tool-enforced immutable actual `gpt-5.6-luna` / medium role and is
+  closed. It found no current docs defect after excluding superseded history;
+  acceptance waits for complete-wave aggregation.
+- Performance/reliability agent `019f650a-1ab9-7092-869a-f414b04fcde9` was
+  dispatched explicitly as existing `performance_reliability_reviewer` with
+  immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
+  Aggregate style, docs, API, and reliability before action.
+- Style/maintainability agent `019f6507-f1f6-7a31-891a-fe7fdc49606f`
+  completed clean under its tool-enforced immutable actual `gpt-5.6-terra` /
+  high role, made no child/Git mutation, and is closed. It accepted the ordered
+  failure composition, regression ownership, private/public naming, active
+  anchors, and chronology; acceptance waits for complete-wave aggregation.
