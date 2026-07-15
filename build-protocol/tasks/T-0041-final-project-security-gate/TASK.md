@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review findings assigned
+Status: In progress - canonical fixes coordinator-verified; re-review pending
 
 Started: `2026-07-14`
 
@@ -472,3 +472,46 @@ directory replaced immediately after successful creation'` exited 1 with 1
   `gpt-5.6-terra` / medium, for the complete seven-item TDD fix batch. All
   reviewers are closed and dedicated security re-review waits for a corrected
   canonical endpoint.
+
+## Canonical Fix Coordinator Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, all seven findings addressed, no subagents or Git
+  mutation, and is closed.
+- Fresh coordinator native verification passed SpineServices and signal
+  transport: 2 files/144 tests. Build/tooling typechecks, docs/API generation,
+  focused ESLint/Prettier, status/naming/wording scans, generated tracking, and
+  `git diff --check` passed.
+- The corrected endpoint is ready to commit and package for the next four-lane
+  canonical wave. Dedicated security re-review and task closure remain pending.
+
+## Canonical Review Fix Batch Implementation
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` completed the
+  batch with actual immutable `gpt-5.6-terra` / medium, no subagents, and no Git
+  state mutation.
+- Subscription reservation acquisition now reports ownership. A duplicate
+  in-flight same-ID recovery returns before CAS and only the operation that
+  inserted the reservation may release it.
+- In-flight requests are tracked through IPC preparation/recheck. Close waits
+  for them, and closed state is rechecked before native connect/send.
+- IPC preparation is split into lexical walk/anchor, missing-suffix
+  create/verify, and final validate/freeze stages. Replacement prevention now
+  covers subscriber/request connect and responder/publisher bind; requested
+  identifier and documentation corrections are applied.
+- Focused RED evidence: the same-ID recovery test exited 1 with 1 failed/114
+  skipped because a distinct subscription was admitted instead of returning
+  `ResourceExhausted`; the request-close test exited 1 with 1 failed/28 skipped
+  because close settled while preparation was paused. Two intermediate
+  post-reservation-fix runs timed out while the concurrency harness was being
+  bounded; the final deterministic harness supersedes them.
+- Focused GREEN evidence: same-ID recovery exited 0 with 1 passed/114 skipped;
+  the four recovery cases exited 0 with 4 passed/111 skipped; request-close
+  exited 0 with 1 passed/28 skipped; request-close plus all four replacement
+  paths exited 0 with 2 passed/27 skipped.
+- Full native affected files exited 0: SpineServices 115/115 and signal
+  transport 29/29. An initial sandboxed SpineServices run had 19 loopback
+  failures with `listen EPERM`; the native rerun supersedes that environment
+  denial. `typecheck:generated`, focused ESLint, focused Prettier check,
+  `docs:check`, and `git diff --check` all exit 0. Final dedicated security
+  re-review and task closure remain pending.

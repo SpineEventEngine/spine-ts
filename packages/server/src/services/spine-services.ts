@@ -313,7 +313,9 @@ export class SpineServices {
       expiresAtMs: Date.now() + this.#inactiveTtlMs,
       queueLimit: this.#queueLimit,
     });
-    this.#reserveSubscription(id);
+    if (!this.#reserveSubscription(id)) {
+      throw new ConnectError("Subscription ID is already reserved.", Code.AlreadyExists);
+    }
     return this.#completeSubscription(record, subscription);
   }
 
@@ -501,8 +503,10 @@ export class SpineServices {
           return undefined;
         }
 
-        this.#reserveSubscription(record.id);
-        reserved = true;
+        reserved = this.#reserveSubscription(record.id);
+        if (!reserved) {
+          return undefined;
+        }
         if (!(await storage.compareAndSet(id, durable, undefined))) {
           this.#releaseSubscription(record.id);
           reserved = false;
@@ -638,14 +642,15 @@ export class SpineServices {
     return createSubscriptionStorage(store);
   }
 
-  #reserveSubscription(id: string): void {
+  #reserveSubscription(id: string): boolean {
     if (this.#subscriptionReservations.has(id)) {
-      return;
+      return false;
     }
     if (this.#subscriptionReservations.size >= this.#subscriptionLimit) {
       throw new ConnectError("Subscription capacity is exhausted.", Code.ResourceExhausted);
     }
     this.#subscriptionReservations.add(id);
+    return true;
   }
 
   #releaseSubscription(id: string): void {

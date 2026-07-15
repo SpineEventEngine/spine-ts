@@ -1,10 +1,10 @@
 # Spine TS Threat Model
 
-Status: Initial T-0041 artifact; TM entries are hypotheses, not confirmed
-findings. Dedicated security review is pending.
+Status: Post-fix T-0041 model; TM entries remain hypotheses, not confirmed
+findings. Canonical corrections are implemented in the working tree but remain
+uncommitted, and final dedicated security re-review is pending.
 
-Baseline: `39f2c6f7`. Artifact source HEAD:
-`6f4e9bca5993932d348f6009856406f28dae1a64`.
+Baseline: `39f2c6f7`. Committed security-fix source: `5714e97c`.
 
 ## Scope and assumptions
 

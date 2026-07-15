@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security Round 1 fixes pending canonical review corrections
+Status: Canonical fixes coordinator-verified; re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -349,3 +349,37 @@ Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
   `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable
   `gpt-5.6-terra` / medium. No partial-wave fixes, subagents, or Git mutation;
   dedicated security re-review waits for the corrected canonical endpoint.
+
+## Canonical Fix Coordinator Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, all seven findings addressed, and is closed without
+  subagents or Git mutation.
+- Fresh native affected verification passed 2 files/144 tests. Build/tooling
+  typechecks, docs generation/API counts, focused ESLint/Prettier, status and
+  targeted wording/naming scans, generated tracking, and diff integrity passed.
+- Commit and package this endpoint, then repeat all four canonical concerns as
+  one complete wave before dedicated project security re-review.
+
+## Canonical Review Fix Batch Evidence
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, resolved all seven deduplicated findings
+  without subagents or Git mutation.
+- Behavior RED/GREEN was observed for both reliability defects: same-ID
+  recovery changed from 1 failed/114 skipped to 1 passed/114 skipped, and the
+  paused request-close race changed from 1 failed/28 skipped to 1 passed/28
+  skipped. Intermediate recovery harness timeouts were superseded by the final
+  bounded deterministic test.
+- Focused regression evidence is green for four recovery paths (4 passed/111
+  skipped) and request-close plus all four native replacement paths (2
+  passed/27 skipped). Full native affected files are green: SpineServices
+  115/115 and signal transport 29/29. The initial sandboxed server run's 19
+  `listen EPERM` failures were environment-only and superseded by the native
+  pass.
+- Generated build/tooling typechecks, focused ESLint, ten-file Prettier check,
+  docs generation/API validation, and `git diff --check` all exit 0. The docs
+  check verified 25 copied Proto checksums and API counts
+  `100/28/205/19/17/3`; generated outputs remain ignored.
+- The corrected endpoint is ready for canonical and dedicated security
+  re-review. No review is marked complete here, and T-0041 remains open.

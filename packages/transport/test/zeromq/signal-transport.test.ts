@@ -261,6 +261,65 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
+  it("waits for racing request preparation and blocks native connect and send", async () => {
+    const prepareDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+    let startPrepare!: () => void;
+    let releasePrepare!: () => void;
+    const started = new Promise<void>((resolve) => {
+      startPrepare = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      releasePrepare = resolve;
+    });
+    const prepare = vi
+      .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+      .mockImplementationOnce(async (ipcDirectory) => {
+        startPrepare();
+        await released;
+        return await prepareDirectory(ipcDirectory);
+      });
+    const connect = vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
+      throw new Error("native connect reached");
+    });
+    const send = vi
+      .spyOn(zeroMqSocketAccess, "sendRequest")
+      .mockRejectedValue(new Error("native send reached"));
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const topic = createTransportTopic({
+          signalKind: "command",
+          messageTypeUrl: "type.spine.io/example.ClosingRequestSetupTask",
+        });
+        const request = transport.request({ topic, envelope: { requested: true } });
+        await started;
+
+        let closeSettled = false;
+        const close = transport.close().finally(() => {
+          closeSettled = true;
+        });
+
+        try {
+          await waitFor(0);
+          expect(closeSettled).toBe(false);
+
+          releasePrepare();
+          await expect(request).rejects.toThrow("ZeroMQ signal transport is closed.");
+          await close;
+          expect(connect).not.toHaveBeenCalled();
+          expect(send).not.toHaveBeenCalled();
+        } finally {
+          releasePrepare();
+          await Promise.allSettled([request, close]);
+        }
+      });
+    } finally {
+      send.mockRestore();
+      connect.mockRestore();
+      prepare.mockRestore();
+    }
+  });
+
   it("leaves sibling-owned pathnames intact when connect-only sockets close", async () => {
     await withSharedZeroMqTransports(async (ownerTransport, connectorTransport, ipcDirectory) => {
       const eventTopic = createTransportTopic({
@@ -795,7 +854,7 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
-  it("prevents native bind and connect after prepared-directory replacement", async () => {
+  it("prevents all native operations after prepared-directory replacement", async () => {
     const topic = createTransportTopic({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.RecheckReplacementTask",
@@ -806,11 +865,17 @@ describe("ZeroMQ SignalTransport", () => {
       mode: "competing-consumer",
     });
 
-    await expectReplacementToPreventNativeOperation("connect", async (transport) => {
+    await expectNativeOperationBlocked("subscriber-connect", async (transport) => {
       await transport.subscribe(subscription, () => undefined);
     });
-    await expectReplacementToPreventNativeOperation("bind", async (transport) => {
+    await expectNativeOperationBlocked("request-connect", async (transport) => {
+      await transport.request({ topic, envelope: { requested: true } });
+    });
+    await expectNativeOperationBlocked("responder-bind", async (transport) => {
       await transport.respond(subscription, () => ({ accepted: true }));
+    });
+    await expectNativeOperationBlocked("publisher-bind", async (transport) => {
+      await transport.publish({ topic, envelope: { published: true } });
     });
   });
 
@@ -933,8 +998,8 @@ async function withSharedZeroMqTransports<T>(
   }
 }
 
-async function expectReplacementToPreventNativeOperation(
-  operation: "bind" | "connect",
+async function expectNativeOperationBlocked(
+  operation: "publisher-bind" | "request-connect" | "responder-bind" | "subscriber-connect",
   run: (transport: ReturnType<typeof createZeroMqTransport>) => Promise<unknown>,
 ): Promise<void> {
   const ipcDirectory = await mkdtemp(path.join(tmpdir(), `sz-recheck-${operation}-`));
@@ -955,11 +1020,14 @@ async function expectReplacementToPreventNativeOperation(
       await mkdir(prepared.path, { mode: 0o700 });
       return prepared;
     });
-  const nativeOperation =
-    operation === "connect"
-      ? vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
-          throw new Error("native connect reached");
-        })
+  const nativeOperation = operation.endsWith("connect")
+    ? vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
+        throw new Error("native connect reached");
+      })
+    : operation === "publisher-bind"
+      ? vi
+          .spyOn(zeroMqSocketAccess, "bindPublisher")
+          .mockRejectedValue(new Error("native bind reached"))
       : vi
           .spyOn(zeroMqSocketAccess, "bindReply")
           .mockRejectedValue(new Error("native bind reached"));

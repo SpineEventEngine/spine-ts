@@ -838,9 +838,9 @@ framework-to-storage safety cap of 1,000 rows without requiring ordering;
 explicit limits from 1 through 1,000 retain their ordering requirement. Use
 proto column names such as `open_task_count`, not
 generated TS local names such as `openTaskCount`. Undeclared columns,
-unsupported operators, nested/disjunctive composites, limits without ordering,
-missing criteria, and `include_all = false` return `INVALID_QUERY` before
-reading Stand storage.
+unsupported operators, nested/disjunctive composites, positive limits without
+ordering, missing criteria, and `include_all = false` return `INVALID_QUERY`
+before reading Stand storage.
 
 `SubscriptionService.Subscribe` accepts known registered state targets and
 known event targets exposed by built-context event dispatchers. Unknown or

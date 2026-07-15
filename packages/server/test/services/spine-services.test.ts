@@ -3098,6 +3098,70 @@ describe("SpineServices", () => {
     }
   });
 
+  it("keeps the winning same-ID recovery reservation after concurrent CAS loss", async () => {
+    const contextName = "ConcurrentSameIdRecovery";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+      subscriptionLimit: 1,
+    });
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const firstStarted = deferred<undefined>();
+    const firstReleased = deferred<undefined>();
+    const firstCasDone = deferred<boolean>();
+    const secondCasDone = deferred<boolean>();
+    let casCall = 0;
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      const call = casCall;
+      casCall += 1;
+      if (call === 0) {
+        firstStarted.resolve(undefined);
+        await firstReleased.promise;
+      }
+      const result = await compareAndSet();
+      if (call === 0) {
+        firstCasDone.resolve(result);
+      } else {
+        secondCasDone.resolve(result);
+      }
+      return result;
+    };
+    const first = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const second = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const firstNext = first.next();
+    await firstStarted.promise;
+    const secondNext = second.next();
+    await withTimeout(
+      Promise.race([secondCasDone.promise, secondNext.then(() => false)]),
+      "duplicate recovery decision",
+    );
+    firstReleased.resolve(undefined);
+    await withTimeout(firstCasDone.promise, "owning recovery compare-and-set");
+
+    let distinct: Subscription | undefined;
+    let capacityError: unknown;
+    try {
+      distinct = await secondHandlers.subscribe(createTopic());
+    } catch (error) {
+      capacityError = error;
+    }
+
+    try {
+      expect(capacityError).toMatchObject({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>);
+    } finally {
+      if (distinct !== undefined) {
+        await secondHandlers.cancel(distinct);
+      }
+      await secondHandlers.cancel(recoverable);
+      await withTimeout(Promise.all([firstNext, secondNext]), "recovery cleanup");
+    }
+  });
+
   it("recovers inactive event subscriptions across service adapter restart", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstContext = createEventSubscriptionContext(
@@ -4507,6 +4571,7 @@ class FaultingSubscriptionStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #subscriptionContextName: string;
   compareAndSetError: Error | undefined;
+  compareAndSetHook: ((compareAndSet: () => Promise<boolean>) => Promise<boolean>) | undefined;
   compareAndSetResult: boolean | undefined;
   deleteCalls = 0;
   deleteError: Error | undefined;
@@ -4576,6 +4641,11 @@ class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
     expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
   ): Promise<boolean> {
+    if (this.#faults.compareAndSetHook !== undefined) {
+      return this.#faults.compareAndSetHook(() =>
+        this.#delegate.compareAndSet(id, expected?.record, next?.record),
+      );
+    }
     if (this.#faults.compareAndSetError !== undefined) {
       return Promise.reject(this.#faults.compareAndSetError);
     }
@@ -5175,6 +5245,17 @@ async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
       clearTimeout(timeout);
     }
   }
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 function delay(milliseconds: number): Promise<void> {

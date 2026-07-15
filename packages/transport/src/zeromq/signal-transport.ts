@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { BigIntStats } from "node:fs";
 import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { deserialize, serialize } from "node:v8";
@@ -45,8 +46,8 @@ const closeDelayMs = 0;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
 const privateDirectoryModeBigInt = 0o700n;
-const posixPermissionAndSpecialBits = 0o7777n;
-const posixGroupOrWorldWriteBits = 0o022n;
+const posixModeMask = 0o7777n;
+const posixWriteMask = 0o022n;
 const isPosix = process.platform !== "win32";
 
 interface PreparedIpcDirectory {
@@ -55,6 +56,16 @@ interface PreparedIpcDirectory {
     readonly device: bigint;
     readonly inode: bigint;
   };
+}
+
+interface IpcPathPlan {
+  readonly anchorPath: string;
+  readonly missingComponents: readonly string[];
+}
+
+interface IpcPathWalk {
+  readonly existingPath: string;
+  readonly missingComponents: readonly string[];
 }
 
 /** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
@@ -67,6 +78,9 @@ export function createZeroMqTransport(
 
 /** @internal Package-private native socket/filesystem seam used by deterministic tests. */
 export const zeroMqSocketAccess = {
+  async bindPublisher(socket: Publisher, address: string): Promise<void> {
+    await socket.bind(address);
+  },
   async bindReply(socket: Reply, address: string): Promise<void> {
     await socket.bind(address);
   },
@@ -85,6 +99,9 @@ export const zeroMqSocketAccess = {
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
     await recheckIpcDirectory(prepared);
   },
+  async sendRequest(socket: Request, frames: MessageLike[]): Promise<void> {
+    await socket.send(frames);
+  },
 };
 
 class ZeroMqSignalTransport implements SignalTransport {
@@ -96,6 +113,7 @@ class ZeroMqSignalTransport implements SignalTransport {
   readonly #publisherBinds = new Map<string, Promise<BoundPublisher>>();
   readonly #responderBinds = new Set<Promise<TransportSubscriptionHandle>>();
   readonly #subscriberOpens = new Set<Promise<TransportSubscriptionHandle>>();
+  readonly #requests = new Set<Promise<unknown>>();
   readonly #activeHandles = new Set<ActiveHandle>();
   #closed = false;
   #close: Promise<void> | undefined;
@@ -190,7 +208,21 @@ class ZeroMqSignalTransport implements SignalTransport {
     operation: RequestTransportOperation<RequestEnvelope, Kind>,
   ): Promise<ResponseEnvelope> {
     this.#requireOpen();
+    const request = this.#performRequest<RequestEnvelope, ResponseEnvelope, Kind>(operation);
+    this.#requests.add(request);
+
+    try {
+      return await request;
+    } finally {
+      this.#requests.delete(request);
+    }
+  }
+
+  async #performRequest<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
+    operation: RequestTransportOperation<RequestEnvelope, Kind>,
+  ): Promise<ResponseEnvelope> {
     const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const requester = new Request({
       linger: closeDelayMs,
@@ -200,9 +232,10 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     try {
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
       const endpoint = endpointFor(this.#config, prepared.path, operation.topic, "request");
       zeroMqSocketAccess.connect(requester, endpoint.address);
-      await requester.send([
+      await zeroMqSocketAccess.sendRequest(requester, [
         operation.topic.routing.routingKey,
         encodeEnvelope(operation.envelope),
       ]);
@@ -339,8 +372,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     try {
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
       const endpoint = endpointFor(this.#config, prepared.path, topic, "publish");
-      const nativeBind = publisher.bind(endpoint.address);
-      await nativeBind;
+      await zeroMqSocketAccess.bindPublisher(publisher, endpoint.address);
 
       const cleanup = new ZeroMqSocketCleanup(publisher, endpoint.filePath, () => {
         this.#publishers.delete(key);
@@ -450,6 +482,7 @@ class ZeroMqSignalTransport implements SignalTransport {
       ...this.#publisherBinds.values(),
       ...this.#responderBinds,
       ...this.#subscriberOpens,
+      ...this.#requests,
     ]);
 
     for (const handle of [...this.#activeHandles]) {
@@ -628,20 +661,38 @@ function decodeEnvelope(frame: Buffer | undefined): unknown {
 }
 
 async function prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
+  const plan = await inspectIpcPath(ipcDirectory);
+  const completedPath = await createIpcSuffix(plan.anchorPath, plan.missingComponents);
+  return await finalizeIpcDirectory(completedPath);
+}
+
+async function inspectIpcPath(ipcDirectory: string): Promise<IpcPathPlan> {
   const parsed = path.parse(ipcDirectory);
   const components = ipcDirectory
     .slice(parsed.root.length)
     .split(path.sep)
     .filter((component) => component.length > 0);
-  let deepestExistingPath = parsed.root;
-  let missingComponents: readonly string[] = [];
+  const walk = await walkLexicalPath(parsed.root, components);
+  const followedAnchor = await stat(walk.existingPath, { bigint: true });
+  const anchorPath = await realpath(walk.existingPath);
+  const anchorEntry = await lstat(anchorPath, { bigint: true });
+  requireMatchingIdentity(anchorEntry, followedAnchor, "canonical anchor");
+
+  return {
+    anchorPath,
+    missingComponents: walk.missingComponents,
+  };
+}
+
+async function walkLexicalPath(root: string, components: readonly string[]): Promise<IpcPathWalk> {
+  let existingPath = root;
 
   for (let index = 0; index < components.length; index += 1) {
     const component = components[index];
     if (component === undefined) {
       continue;
     }
-    const candidate = path.join(deepestExistingPath, component);
+    const candidate = path.join(existingPath, component);
     let lexicalEntry;
 
     try {
@@ -650,33 +701,41 @@ async function prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDir
       if (!hasErrorCode(error, "ENOENT")) {
         throw error;
       }
-      missingComponents = components.slice(index);
-      break;
+      return { existingPath, missingComponents: components.slice(index) };
     }
 
-    const isFinal = index === components.length - 1;
-    if (lexicalEntry.isSymbolicLink()) {
-      if (isFinal) {
-        throw new Error("ZeroMQ adapter ipcDirectory final component must not be a symlink.");
-      }
-      if (isPosix) {
-        await requireImmutablePosixAncestorAlias(candidate, lexicalEntry.uid);
-      }
-    }
-
-    const followed = await stat(candidate, { bigint: true });
-    if (!followed.isDirectory()) {
-      throw new Error("ZeroMQ adapter ipcDirectory path components must be directories.");
-    }
-    deepestExistingPath = candidate;
+    await validatePathEntry(candidate, index === components.length - 1, lexicalEntry);
+    existingPath = candidate;
   }
 
-  const followedAnchor = await stat(deepestExistingPath, { bigint: true });
-  const canonicalAnchor = await realpath(deepestExistingPath);
-  const canonicalAnchorEntry = await lstat(canonicalAnchor, { bigint: true });
-  requireMatchingIdentity(canonicalAnchorEntry, followedAnchor, "canonical anchor");
+  return { existingPath, missingComponents: [] };
+}
 
-  let completedPath = canonicalAnchor;
+async function validatePathEntry(
+  candidate: string,
+  isFinal: boolean,
+  lexicalEntry: BigIntStats,
+): Promise<void> {
+  if (lexicalEntry.isSymbolicLink()) {
+    if (isFinal) {
+      throw new Error("ZeroMQ adapter ipcDirectory final component must not be a symlink.");
+    }
+    if (isPosix) {
+      await validatePosixAlias(candidate, lexicalEntry.uid);
+    }
+  }
+
+  const followed = await stat(candidate, { bigint: true });
+  if (!followed.isDirectory()) {
+    throw new Error("ZeroMQ adapter ipcDirectory path components must be directories.");
+  }
+}
+
+async function createIpcSuffix(
+  anchorPath: string,
+  missingComponents: readonly string[],
+): Promise<string> {
+  let completedPath = anchorPath;
   for (const component of missingComponents) {
     const next = path.join(completedPath, component);
     try {
@@ -692,7 +751,10 @@ async function prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDir
     }
     completedPath = next;
   }
+  return completedPath;
+}
 
+async function finalizeIpcDirectory(completedPath: string): Promise<PreparedIpcDirectory> {
   const canonicalCompletedPath = await realpath(completedPath);
   if (canonicalCompletedPath !== completedPath) {
     throw new Error("ZeroMQ adapter ipcDirectory must resolve to its canonical path.");
@@ -731,12 +793,9 @@ async function recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void
   }
 }
 
-async function requireImmutablePosixAncestorAlias(
-  aliasPath: string,
-  aliasUid: bigint,
-): Promise<void> {
+async function validatePosixAlias(aliasPath: string, aliasUid: bigint): Promise<void> {
   const parent = await stat(path.dirname(aliasPath), { bigint: true });
-  if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixGroupOrWorldWriteBits) !== 0n) {
+  if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixWriteMask) !== 0n) {
     throw new Error(
       "ZeroMQ adapter ipcDirectory ancestor symlink must be an immutable root-owned alias.",
     );
@@ -762,7 +821,7 @@ function requirePrivateFinalDirectory(entry: {
   if (effectiveUserId === undefined || entry.uid !== BigInt(effectiveUserId)) {
     throw new Error("ZeroMQ adapter ipcDirectory must be owned by the effective user.");
   }
-  if ((entry.mode & posixPermissionAndSpecialBits) !== privateDirectoryModeBigInt) {
+  if ((entry.mode & posixModeMask) !== privateDirectoryModeBigInt) {
     throw new Error("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
   }
 }
