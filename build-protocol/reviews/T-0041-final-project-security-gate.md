@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical review clean; dedicated security re-review pending
+Status: Dedicated security re-review found SF-011 and SF-012; architecture
+assignment pending
 
 Baseline: `39f2c6f7`
 
@@ -2914,3 +2915,19 @@ verify` remains reserved.
 - Agent `019f656c-92bb-75f0-80e7-3f4bb8151057` was dispatched explicitly under
   the existing immutable `gpt-5.6-terra` / high security role, read-only,
   childless, and Git-read-only, against the exact package.
+
+## Dedicated Security Re-Review Result
+
+- Agent `019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit tool-enforced
+  immutable actual Terra High, reported two Medium/high-confidence availability
+  findings and is closed with no child or Git mutation.
+- `SF-011`: receiving ZeroMQ sockets use native unlimited
+  `maxMessageSize = -1`, so an authorized same-UID IPC peer can force unbounded
+  frame handling before V8 decode rejection.
+- `SF-012`: durable subscription recovery invokes UTF-8/JSON/Base64 decoding
+  without first bounding encoded record bytes, so corrupt/faulty-adapter rows
+  can force disproportionate parse/allocation work.
+- Every other TM/SF disposition remains clean or an accepted deployment/trusted-
+  build residual. Assign Sol High architecture for exact private limits,
+  persisted compatibility, tests, canonical review relevance, and security
+  re-review scope before implementation.

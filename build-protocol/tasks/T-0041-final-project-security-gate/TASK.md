@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review clean; dedicated security re-review
-pending
+Status: In progress - dedicated security re-review found SF-011 and SF-012;
+architecture assignment pending
 
 Started: `2026-07-14`
 
@@ -2779,3 +2779,25 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Security agent `019f656c-92bb-75f0-80e7-3f4bb8151057` was dispatched
   explicitly as the existing immutable `gpt-5.6-terra` / high role, read-only,
   childless, and Git-read-only, against the exact canonical-closure package.
+
+## Dedicated Security Re-Review Result And Architecture Assignment
+
+- Security agent `019f656c-92bb-75f0-80e7-3f4bb8151057` completed under its
+  explicit, tool-enforced immutable actual Terra High profile, made no Git
+  mutation, spawned no child, and is closed.
+- Accepted Medium/high-confidence `SF-011`: same-UID trusted-directory ZeroMQ
+  peers can send unlimited native frames because receiving sockets retain
+  `maxMessageSize = -1` before V8 deserialization.
+- Accepted Medium/high-confidence `SF-012`: corrupt/faulty-adapter durable
+  subscription rows reach UTF-8/JSON/Base64 decoding without an encoded-byte
+  ceiling, permitting disproportionate parse/allocation work.
+- SF-001-SF-010 retain their dispositions. TM-001-TM-005 and TM-008-TM-012 are
+  otherwise clean/accepted residuals; TM-006/TB-04 remains unresolved only for
+  SF-012 and TM-007/TB-06 only for SF-011.
+- Because exact native-frame limits and persisted-record compatibility are
+  architecture/security-significant, assign the existing requirements splitter,
+  expected explicit immutable `gpt-5.6-sol` / high, read-only and childless.
+  Select exact private caps, socket coverage, pre-allocation checks, compatibility
+  disposition, smallest TDD cases, canonical review relevance, and security
+  re-review scope without changing public options, D-0088, Publisher timeout,
+  copied contracts, or deployment ownership.
