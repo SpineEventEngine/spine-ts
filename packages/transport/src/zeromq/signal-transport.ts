@@ -51,6 +51,7 @@ interface RequestHandlerEntry {
 const defaultRequestTimeoutMs = 2_000;
 const defaultReceiveTimeoutMs = 250;
 const closeDelayMs = 0;
+const nativeMessageMaxBytes = 8_388_608;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
 const privateModeBits = 0o700n;
@@ -186,6 +187,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     const subscriber = new Subscriber({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#receiveTimeoutMs,
     });
     const entry: PublishHandlerEntry = {
@@ -254,6 +256,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     const requester = new Request({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#requestTimeoutMs,
       sendTimeout: this.#requestTimeoutMs,
     });
@@ -313,6 +316,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     const replier = new Reply({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#receiveTimeoutMs,
       sendTimeout: this.#requestTimeoutMs,
     });

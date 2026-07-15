@@ -4573,6 +4573,201 @@ describe("SpineServices", () => {
     }
   });
 
+  it("rejects oversized durable states before decoder and parser work", () => {
+    const value = new Uint8Array(33_554_433);
+    const records = [
+      "DurableSubscriptionRecord",
+      "DurableSubscriptionClaim",
+      "DurableSubscriptionCancel",
+      "UnknownDurableSubscriptionState",
+    ].map((type) =>
+      create(AnySchema, {
+        typeUrl: `type.spine-ts.dev/internal/${type}`,
+        value,
+      }),
+    );
+    const decode = vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(() => {
+      throw new Error("UTF-8 decode reached");
+    });
+    const parse = vi.spyOn(JSON, "parse");
+
+    try {
+      for (const record of records) {
+        expect(() => DurableSubscriptionRecords.readState(record)).toThrow(
+          "Durable subscription record exceeds 33554432 encoded bytes.",
+        );
+      }
+      expect(decode).not.toHaveBeenCalled();
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+      decode.mockRestore();
+    }
+  });
+
+  it("accepts the exact durable byte boundary and rejects one byte more", () => {
+    const id = "s-durable-byte-boundary";
+    const source = DurableSubscriptionRecords.write({
+      id,
+      kind: "state",
+      targetType: deriveTypeUrl(ProjectionStateSchema),
+      subscription: create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: id }),
+        topic: createTopic(),
+      }),
+      expiresAtMs: 1,
+    });
+    const padded = new Uint8Array(33_554_433).fill(0x20);
+    padded.set(source.value);
+    const legal = create(AnySchema, {
+      typeUrl: source.typeUrl,
+      value: padded.subarray(0, 33_554_432),
+    });
+    const oversized = create(AnySchema, { typeUrl: source.typeUrl, value: padded });
+
+    expect(DurableSubscriptionRecords.read(legal)).toMatchObject({ id, expiresAtMs: 1 });
+    expect(() => DurableSubscriptionRecords.read(oversized)).toThrow(
+      "Durable subscription record exceeds 33554432 encoded bytes.",
+    );
+  });
+
+  it("round-trips the exact supported durable compatibility arithmetic", () => {
+    const id = `s-${"a".repeat(36)}`;
+    const targetType = `${"\u0001".repeat(4_194_272)}${"a".repeat(12)}""`;
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "t-" }),
+      target: create(TargetSchema, {
+        type: targetType,
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: id }),
+      topic,
+    });
+    const topicBinary = toBinary(TopicSchema, topic);
+    const subscriptionBinary = toBinary(SubscriptionSchema, subscription);
+    const subscriptionBase64 = Buffer.from(subscriptionBinary).toString("base64");
+    const durable = DurableSubscriptionRecords.write({
+      id,
+      kind: "state",
+      targetType,
+      subscription,
+      expiresAtMs: 0,
+    });
+
+    expect(topicBinary.byteLength).toBe(4_194_304);
+    expect(subscriptionBinary.byteLength).toBe(4_194_351);
+    expect(subscriptionBase64.length).toBe(5_592_468);
+    expect(durable.value.byteLength).toBe(30_758_240);
+
+    const restored = DurableSubscriptionRecords.read(durable);
+    expect(restored.id).toBe(id);
+    expect(Buffer.compare(Buffer.from(restored.targetType), Buffer.from(targetType))).toBe(0);
+    expect(
+      Buffer.compare(
+        Buffer.from(toBinary(SubscriptionSchema, restored.subscription)),
+        Buffer.from(subscriptionBinary),
+      ),
+    ).toBe(0);
+  });
+
+  it("keeps oversized inactive recovery inert and continues with valid activation", async () => {
+    const contextName = "OversizedRecoveredSubscriptions";
+    const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const attach = vi.spyOn(context.stand(), "subscribe");
+    const handlers = registeredSubscriptionHandlers(context);
+    const oversizedId = "s-oversized-recovery";
+    const oversized = oversizedDurableSubscriptionRecord();
+    storageFactory.seed(oversizedId, oversized);
+
+    try {
+      const oversizedResult = await handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: oversizedId }),
+          }),
+        )
+        [Symbol.asyncIterator]()
+        .next();
+
+      expect(oversizedResult).toEqual({ done: true, value: undefined });
+      expect(storageFactory.casCalls).toBe(0);
+      expect(attach).not.toHaveBeenCalled();
+      expect(await readDurableSubscriptionRecord(storageFactory, contextName, oversizedId)).toBe(
+        oversized,
+      );
+
+      const validId = "s-valid-after-oversized";
+      const validSubscription = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: validId }),
+        topic: createTopic(),
+      });
+      await writeDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        DurableSubscriptionRecords.write({
+          id: validId,
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscription: validSubscription,
+          expiresAtMs: Date.now() + 60_000,
+        }),
+      );
+      const activation = handlers.activate(validSubscription)[Symbol.asyncIterator]();
+      const next = activation.next();
+      await delay(25);
+      await context
+        .stand()
+        .update(ProjectionStateSchema, createState("valid-after-oversized", "Recovered"));
+
+      await expect(
+        withTimeout(next, "valid activation after oversized row"),
+      ).resolves.toMatchObject({ done: false });
+      expect(attach).toHaveBeenCalledTimes(1);
+      await activation.return?.();
+    } finally {
+      attach.mockRestore();
+    }
+  });
+
+  it("keeps oversized cancellation generic, unchanged, and retryable after repair", async () => {
+    const contextName = "OversizedCanceledSubscriptions";
+    const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const id = "s-oversized-cancel";
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: id }),
+      topic: createTopic(),
+    });
+    const oversized = oversizedDurableSubscriptionRecord();
+    storageFactory.seed(id, oversized);
+
+    await expect(Promise.resolve(handlers.cancel(subscription))).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    expect(storageFactory.casCalls).toBe(0);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, id)).toBe(oversized);
+
+    await writeDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      DurableSubscriptionRecords.write({
+        id,
+        kind: "state",
+        targetType: deriveTypeUrl(ProjectionStateSchema),
+        subscription,
+        expiresAtMs: Date.now() + 60_000,
+      }),
+    );
+    await handlers.cancel(subscription);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, id)).toBeUndefined();
+  });
+
   it("rejects malformed durable subscription record payloads", () => {
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "s-valid" }),
@@ -6644,6 +6839,15 @@ function durableAny(value: unknown): Any {
     typeUrl: "type.spine-ts.dev/internal/DurableSubscriptionRecord",
     value: durableRecord(value),
   });
+}
+
+function oversizedDurableSubscriptionRecord(): Any {
+  const record = {
+    typeUrl: "type.spine-ts.dev/internal/DurableSubscriptionRecord",
+    value: { byteLength: 33_554_433 } as Uint8Array,
+    clone: () => record,
+  };
+  return record as unknown as Any;
 }
 
 function durableStateAny(type: string, value: unknown): Any {

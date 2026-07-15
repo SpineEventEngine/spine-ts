@@ -114,11 +114,11 @@ interface StoredSubscriptionRecord {
 const durableRecordTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionRecord";
 const claimTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionClaim";
 const cancelTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionCancel";
-const canonicalBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const durableRecordMaxBytes = 33_554_432;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 function readSubscription(encoded: string, recordId: string): Subscription {
-  if (!canonicalBase64.test(encoded)) {
+  if (!hasCanonicalBase64Alphabet(encoded)) {
     throw new Error("Durable subscription payload must be canonical Base64.");
   }
   const binary = Buffer.from(encoded, "base64");
@@ -130,6 +130,30 @@ function readSubscription(encoded: string, recordId: string): Subscription {
     throw new Error("Durable subscription payload ID does not match record ID.");
   }
   return subscription;
+}
+
+function hasCanonicalBase64Alphabet(encoded: string): boolean {
+  if (encoded.length % 4 !== 0) {
+    return false;
+  }
+
+  let padding = 0;
+  for (let index = 0; index < encoded.length; index += 1) {
+    const code = encoded.charCodeAt(index);
+    const isAlphabet =
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a) ||
+      (code >= 0x30 && code <= 0x39) ||
+      code === 0x2b ||
+      code === 0x2f;
+    if (isAlphabet && padding === 0) {
+      continue;
+    }
+    if (code !== 0x3d || index < encoded.length - 2 || ++padding > 2) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function readState(record: Any): DurableSubscriptionState {
@@ -184,6 +208,9 @@ function readStoredRecord(record: Any): StoredSubscriptionRecord {
 }
 
 function readJsonObject(record: Any): Record<string, unknown> {
+  if (record.value.byteLength > durableRecordMaxBytes) {
+    throw new Error("Durable subscription record exceeds 33554432 encoded bytes.");
+  }
   const decoded = JSON.parse(utf8Decoder.decode(record.value)) as unknown;
   if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
     throw new Error("Durable subscription record is not a JSON object.");

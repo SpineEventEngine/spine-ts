@@ -2843,3 +2843,57 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Implementer `019f658b-c226-78d3-9079-88d275dcd054` was dispatched explicitly
   under the existing immutable `gpt-5.6-terra` / medium role as sole writer,
   childless and without Git-state mutation, for the exact D-0091 contract.
+
+## D-0091 Coordinator Test Finding
+
+- Final diff inspection found the raw Publisher-to-Subscriber and
+  Request-to-Reply tests put 8,388,609 bytes in the routing frame. Existing
+  route mismatch behavior could therefore preserve handler non-reachability
+  without the D-0091 cap, so those cases do not prove the accepted envelope-
+  frame control.
+- Return the finding to implementer `019f658b-c226-78d3-9079-88d275dcd054`:
+  send the exact valid routing key followed by an oversized serialized-envelope
+  frame, preserve later valid continuation, and rerun focused plus complete
+  native transport/server files from the final state. Also correct fresh-
+  implementer provenance wording in the logs.
+
+## D-0091 Implementation And Correction Verification
+
+- SF-011 is implemented with one private `nativeMessageMaxBytes = 8_388_608`
+  on `Subscriber`, `Request`, and `Reply` construction before native endpoint
+  work. `Publisher` remains uncapped and retains `sendTimeout = -1`; no public
+  option or sender preflight was added.
+- SF-012 is implemented with one private `durableRecordMaxBytes = 33_554_432`
+  as the first common JSON-reader operation. The exact error is
+  `Durable subscription record exceeds 33554432 encoded bytes.` The compatible
+  4 MiB arithmetic remains 4,194,351 binary bytes, 5,592,468 Base64 bytes, and
+  30,758,240 JSON bytes.
+- Focused and full affected-file correction verification is current. Complete
+  four-lane canonical review and focused security re-review remain pending.
+
+## D-0091 Coordinator Test Correction
+
+- Corrected both raw Publisher-to-Subscriber and Request-to-Reply regressions
+  to send the exact topic routing key as frame 1 and an 8,388,609-byte envelope
+  as frame 2. Handler non-reachability now exercises the D-0091 receive cap;
+  both cases retain later valid continuation.
+- Fresh final-state verification passed the five focused transport security
+  cases, the complete native transport file 53/53, and the complete affected
+  server file 149/149. Focused ESLint, exact changed-path Prettier, and diff/
+  anchor scans passed. Complete four-lane canonical review and focused security
+  re-review remain pending.
+
+## D-0091 Final Coordinator Verification
+
+- Fresh coordinator-native verification passed the five focused durable-record
+  cases, all 53 ZeroMQ transport tests, and all 149 server-service tests.
+- Generated typecheck, docs/API generation and export counts, focused four-file
+  ESLint, generated-output cleanliness, exact nine-path Prettier, public-root
+  diff scan, and `git diff --check` passed. Generated output remains ignored
+  and untracked.
+- Source and test inspection confirms the native caps cover only receiving
+  sockets, the durable cap precedes decoder/parser work, canonical Base64
+  behavior remains enforced without the former whole-string regex, and raw
+  publish/request cases use an exact route plus the oversized envelope frame.
+  Complete four-lane canonical review and focused security re-review remain
+  pending.

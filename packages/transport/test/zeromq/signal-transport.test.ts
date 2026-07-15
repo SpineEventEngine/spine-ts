@@ -1,9 +1,10 @@
 import { chmod, mkdir, mkdtemp, readdir, realpath, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { serialize } from "node:v8";
 
 import { describe, expect, it, vi } from "vitest";
-import { Publisher } from "zeromq";
+import { Publisher, Reply, Request, Subscriber } from "zeromq";
 
 import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
@@ -95,6 +96,227 @@ describe("ZeroMQ SignalTransport", () => {
       );
     } finally {
       bindPublisher.mockRestore();
+    }
+  });
+
+  it("sets receiver message caps before native endpoint work", async () => {
+    const observed = new Map<string, number>();
+    const connect = vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation((socket) => {
+      observed.set(socket.constructor.name, socket.maxMessageSize);
+      throw new Error("stop after observing receiver options");
+    });
+    const bindReply = vi.spyOn(zeroMqSocketAccess, "bindReply").mockImplementation((socket) => {
+      observed.set(socket.constructor.name, socket.maxMessageSize);
+      return Promise.reject(new Error("stop after observing receiver options"));
+    });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const eventTopic = createTransportTopic({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.ReceiverCapEvent",
+        });
+        await expect(
+          transport.subscribe(
+            createTransportSubscription({
+              subscriberId: "receiver-cap-subscriber",
+              topic: eventTopic,
+            }),
+            () => undefined,
+          ),
+        ).rejects.toThrow("stop after observing receiver options");
+      });
+      await withZeroMqTransport(async (transport) => {
+        const commandTopic = createTransportTopic({
+          signalKind: "command",
+          messageTypeUrl: "type.spine.io/example.ReceiverCapCommand",
+        });
+        await expect(
+          transport.request({ topic: commandTopic, envelope: { observed: true } }),
+        ).rejects.toThrow("stop after observing receiver options");
+        await expect(
+          transport.respond(
+            createTransportSubscription({
+              subscriberId: "receiver-cap-replier",
+              topic: commandTopic,
+              mode: "competing-consumer",
+            }),
+            () => ({ observed: true }),
+          ),
+        ).rejects.toThrow("stop after observing receiver options");
+      });
+
+      expect(observed).toEqual(
+        new Map([
+          [Subscriber.name, 8_388_608],
+          [Request.name, 8_388_608],
+          [Reply.name, 8_388_608],
+        ]),
+      );
+    } finally {
+      bindReply.mockRestore();
+      connect.mockRestore();
+    }
+  });
+
+  it("drops an oversized raw publish frame and receives a later valid delivery", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    let subscriberAddress: string | undefined;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        subscriberAddress = address;
+        connectSocket(socket, address);
+      });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const topic = createTransportTopic({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.OversizedRawPublish",
+        });
+        const received: string[] = [];
+        const handle = await transport.subscribe<{ readonly value: string }, "event">(
+          createTransportSubscription({ subscriberId: "oversized-raw-publish", topic }),
+          ({ envelope }) => {
+            received.push(envelope.value);
+          },
+        );
+        if (subscriberAddress === undefined) {
+          throw new Error("Expected subscriber endpoint address.");
+        }
+        const publisher = new Publisher({ linger: 0 });
+
+        try {
+          await publisher.bind(subscriberAddress);
+          await waitFor(25);
+          await publisher.send([topic.routing.routingKey, Buffer.alloc(8_388_609, 0x61)]);
+          await waitFor(receiveTimeoutMs + 25);
+          expect(received).toEqual([]);
+
+          await publishUntil(
+            async () => {
+              await publisher.send([topic.routing.routingKey, serialize({ value: "valid" })]);
+            },
+            () => received.includes("valid"),
+          );
+          expect(received).toEqual(["valid"]);
+        } finally {
+          publisher.close();
+          await handle.close();
+        }
+      });
+    } finally {
+      connect.mockRestore();
+    }
+  });
+
+  it("drops an oversized raw request frame and serves a later valid request", async () => {
+    const bindSocket = zeroMqSocketAccess.bindReply.bind(zeroMqSocketAccess);
+    let replyAddress: string | undefined;
+    const bind = vi.spyOn(zeroMqSocketAccess, "bindReply").mockImplementation((socket, address) => {
+      replyAddress = address;
+      return bindSocket(socket, address);
+    });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const topic = createTransportTopic({
+          signalKind: "command",
+          messageTypeUrl: "type.spine.io/example.OversizedRawRequest",
+        });
+        const received: string[] = [];
+        const handle = await transport.respond<
+          { readonly value: string },
+          { readonly ok: boolean },
+          "command"
+        >(
+          createTransportSubscription({
+            subscriberId: "oversized-raw-request",
+            topic,
+            mode: "competing-consumer",
+          }),
+          ({ envelope }) => {
+            received.push(envelope.value);
+            return { ok: true };
+          },
+        );
+        if (replyAddress === undefined) {
+          throw new Error("Expected replier endpoint address.");
+        }
+        const requester = new Request({ linger: 0, receiveTimeout: 100, sendTimeout: 100 });
+
+        try {
+          requester.connect(replyAddress);
+          await requester.send([topic.routing.routingKey, Buffer.alloc(8_388_609, 0x61)]);
+          await expect(requester.receive()).rejects.toBeInstanceOf(Error);
+          expect(received).toEqual([]);
+        } finally {
+          requester.close();
+        }
+
+        await expect(
+          transport.request<{ readonly value: string }, { readonly ok: boolean }, "command">({
+            topic,
+            envelope: { value: "valid" },
+          }),
+        ).resolves.toEqual({ ok: true });
+        expect(received).toEqual(["valid"]);
+        await handle.close();
+      });
+    } finally {
+      bind.mockRestore();
+    }
+  });
+
+  it("bounds an oversized raw reply and accepts a later valid reply", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    const addressReady = deferred<string>();
+    let captured = false;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        connectSocket(socket, address);
+        if (socket instanceof Request && !captured) {
+          captured = true;
+          addressReady.resolve(address);
+        }
+      });
+    const replier = new Reply({ linger: 0, receiveTimeout: 1_000, sendTimeout: 1_000 });
+
+    try {
+      await withZeroMqTransport(
+        async (transport) => {
+          const topic = createTransportTopic({
+            signalKind: "command",
+            messageTypeUrl: "type.spine.io/example.OversizedRawReply",
+          });
+          const oversized = transport.request({ topic, envelope: { value: "oversized" } });
+          await replier.bind(await addressReady.promise);
+          await replier.receive();
+          await replier.send(Buffer.alloc(8_388_609, 0xff));
+
+          await expect(
+            withHarnessDeadline(oversized, "oversized raw reply timeout", 1_000),
+          ).rejects.toThrow(/temporarily unavailable|timed out|EAGAIN/iu);
+
+          const valid = transport.request<
+            { readonly value: string },
+            { readonly ok: boolean },
+            "command"
+          >({
+            topic,
+            envelope: { value: "valid" },
+          });
+          await replier.receive();
+          await replier.send(serialize({ status: "accepted", envelope: { ok: true } }));
+          await expect(valid).resolves.toEqual({ ok: true });
+        },
+        { requestTimeoutMs: 500 },
+      );
+    } finally {
+      replier.close();
+      connect.mockRestore();
     }
   });
 

@@ -2964,3 +2964,34 @@ verify` remains reserved.
 - Implementer `019f658b-c226-78d3-9079-88d275dcd054` was dispatched explicitly
   under the existing immutable Terra Medium role as sole writer, childless and
   without Git-state mutation, for the exact accepted D-0091 contract.
+
+## D-0091 Coordinator Test Finding
+
+- Raw publish/request tests currently oversize the route frame instead of using
+  the valid route plus an oversized envelope frame. Route mismatch alone can
+  keep handlers untouched without the cap, so correct both cases and rerun
+  final focused/full native files before coordinator acceptance.
+
+## D-0091 Coordinator Test Correction
+
+- The test-only correction now sends the exact routing key followed by an
+  8,388,609-byte envelope frame in both raw publish and request cases. Later
+  valid continuation remains asserted.
+- Fresh focused transport security passed 5/5 with 48 skipped; complete native
+  transport passed 53/53; complete affected server passed 149/149. No production,
+  public/package/Proto/storage/serialized contract changed. Focused ESLint,
+  exact changed-path Prettier, and diff/anchor scans passed. Four-lane canonical
+  review and focused security re-review remain pending.
+
+## D-0091 Final Coordinator Verification
+
+- Fresh coordinator-native durable focus 5/5, complete ZeroMQ transport 53/53,
+  and complete affected server services 149/149 passed.
+- Generated typecheck, docs/API export checks, focused four-file ESLint,
+  generated-clean, exact nine-path formatting, public-root boundary scan, and
+  diff integrity passed. Coordinator inspection accepts the private cap
+  placement, pre-decoding durable guard, canonical Base64 parity, exact-route
+  raw-peer tests, and continuation behavior.
+- Implementation is ready to freeze. All four canonical concerns remain
+  pending against the new literal endpoint; focused SF-011/SF-012 security
+  re-review follows only after canonical closure.
