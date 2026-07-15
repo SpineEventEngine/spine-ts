@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 5 assigned
+Status: In progress - canonical wave 5 findings pending fix
 
 Started: `2026-07-14`
 
@@ -837,6 +837,32 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   explicit immutable `gpt-5.6-terra` / high, the identical package and bounded
   concern, and require verifiable actual metadata. Other wave 5 lanes continue;
   aggregate only valid complete results before fixes.
+
+## Canonical Review Wave 5 Result
+
+- The coordinator's multi-agent runtime schema confirms immutable role profiles
+  and both explicit dispatch fields: style/API/reliability actual Terra High and
+  documentation actual Luna Medium. This system metadata is authoritative even
+  where a child's own workspace could not display it. The second style
+  redispatch performed no review and is excluded; all agents are closed.
+- Style agent `019f63af-3c54-7b30-b0ba-32123ff926a9`: one P1 test-determinism
+  finding. Two recovery-blocking tests use a 25 ms race that can pass before the
+  post-read gate is actually exercised.
+- Documentation agent `019f63af-4027-7961-bab2-6ec6a2bd6138`: two P2 findings.
+  Threat-model line anchors are stale, and public docs omit exact `INTERNAL`
+  cancellation failure plus same-ID retry guidance.
+- TypeScript/API agent `019f63b1-fdc3-7aa3-a3a1-a95d39e9c868`: one P1 codec
+  finding. Permissive Base64 can turn malformed payloads into decodable empty
+  subscriptions, and embedded subscription ID is not required to match the
+  durable record ID, contradicting inert-malformed behavior and permitting
+  mismatched delivered metadata.
+- Reliability agent `019f63af-437a-7242-89e1-5dbef9a5684d`: one P1 ambiguous
+  persistence finding. `write()` may commit then reject; the subscribe catch
+  releases capacity before suppressed cleanup failure, leaving unbounded
+  unreturned durable IDs.
+- Return the complete five-item batch to the existing Terra Medium implementer
+  with behavior-first tests, no subagents/Git mutation, and current docs/logs.
+  Dedicated security review remains pending.
 
 ## Wave 4 Coordinator Retry RED
 

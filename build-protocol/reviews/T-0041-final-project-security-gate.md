@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 5 assigned
+Status: Canonical wave 5 findings pending fix
 
 Baseline: `39f2c6f7`
 
@@ -682,6 +682,28 @@ bytes).
 - Redispatch the same role with explicit immutable Terra High and require a
   fresh independent result plus actual profile attestation. Keep the other
   three lane results and aggregate all valid lanes before action.
+
+## Canonical Review Wave 5 Result
+
+- Runtime attribution: the orchestrator-visible multi-agent schema fixes each
+  existing role's immutable actual profile, and explicit dispatch matched it.
+  Style/API/reliability are Terra High; docs is Luna Medium. The child-local
+  metadata visibility warning is superseded by this system runtime evidence.
+  The no-review second style redispatch is excluded. Every agent is closed.
+- Style: P1 deterministic coverage gap at the two 25 ms negative-CAS races.
+- Documentation: P2 stale threat-model line anchors; P2 missing public
+  cancellation `INTERNAL`/same-ID retry workflow.
+- TypeScript/API: P1 permissive Base64 plus absent embedded-ID equality can
+  decode malformed inactive rows, delete them despite inert docs, or emit an
+  update carrying a different subscription ID.
+- Performance/reliability: P1 commit-then-reject initial persistence plus
+  cleanup failure releases capacity and can leave unbounded durable rows whose
+  generated IDs were never returned.
+- Return the complete deduplicated five-item batch to existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable Terra
+  Medium. Require deterministic RED/GREEN, focused/full service verification,
+  current docs/security anchors, and a fresh package. Dedicated security review
+  remains pending.
 
 ## Wave 4 Coordinator Retry RED
 
