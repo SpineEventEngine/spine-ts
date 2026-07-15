@@ -1,6 +1,6 @@
 # T-0042 Review Log
 
-Status: In progress - Wave 4 focused validation clean; affected re-review pending
+Status: Clean - all final specialist concerns closed; final branch gate pending
 
 Baseline: `7678d36c`
 
@@ -566,3 +566,58 @@ implementer context, and repeat only affected concerns until clean.
   rerun. Documentation carries its clean Wave 4 result because no documentation
   or current release claim changed. TypeScript/API and security remain N/A for
   unchanged-input reasons.
+
+## Wave 5 Assignment
+
+- Immutable endpoint: `4d2d0776`
+  (`Prove release timeout fixture readiness`).
+- Package:
+  `.superpowers/sdd/review-7678d36c..4d2d0776.diff` (183,831 bytes, seven
+  T-0042 commits).
+- Style/maintainability: existing immutable role, explicit
+  `gpt-5.6-terra` / high; bounded to marker clarity/path ownership,
+  test maintainability, and closure of its prior false-pass finding.
+- Performance/reliability: existing immutable role, explicit
+  `gpt-5.6-terra` / high; bounded to proof the handler-installed path ran,
+  timing determinism, marker cleanup, and closure of its prior finding.
+- Both are read-only, Git-read-only, childless, and must report bounded skill
+  applicability. Historical/superseded text is not a finding unless an active
+  task/status/current-doc claim adopts it.
+- Documentation carries forward clean; TypeScript/API and security retain
+  unchanged-input dispositions. Aggregate both affected results before action.
+
+### Wave 5 Dispatch Evidence
+
+- Style: `019f6749-2e78-7d80-ad17-9912ef368c15`; immutable role binding and
+  explicit dispatch `gpt-5.6-terra` / high.
+- Reliability: `019f6749-31eb-76c2-9ad9-efc093954ed1`; immutable role binding
+  and explicit dispatch `gpt-5.6-terra` / high.
+- Parent runtime metadata supplies matching actual-profile evidence. Results
+  remain pending until both are collected.
+
+## Wave 5 Results
+
+- Collected both affected results before action and closed both reviewers.
+- Style `019f6749-2e78-7d80-ad17-9912ef368c15`: clean. The marker is clear,
+  fixture-owned, removed with the temp repository, and adds no duplicate
+  production policy.
+- Reliability `019f6749-31eb-76c2-9ad9-efc093954ed1`: clean. Handler
+  registration precedes the marker; a reverted implementation now fails both
+  pre-handler and post-handler race paths; production `SIGKILL` is unchanged.
+- Both completed bounded skill checks with `code-review-excellence`, remained
+  read-only/childless, and matched explicit immutable Terra High profiles.
+
+## Final Specialist Dispositions
+
+- Style/maintainability: clean at Wave 5.
+- Documentation: clean at Wave 4; later changes are fixture/test evidence only
+  and do not change a current release/documentation claim.
+- TypeScript/API docs: clean at Wave 2; every later correction changes no
+  manifest, export, declaration, TypeDoc, Protobuf, generated API, or public
+  source input.
+- Performance/reliability: clean at Wave 5.
+- Security: N/A for T-0042 because no correction changes a production trust
+  boundary; T-0041 is the clean final project security gate with
+  human-accepted SF-013.
+- All reviewers and the implementer are closed. No actionable specialist
+  finding remains. Native final branch verification is the next gate.
