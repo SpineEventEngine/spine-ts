@@ -755,9 +755,20 @@ transport or contract.
 The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
 envelopes, dispatching by the transport topic's signal kind. Its reserved
 `query`, `subscription`, and `system` kinds have no Protobuf wire contract and
-currently retain private V8 encoding. Publish/request traffic keeps route plus
-payload frames and receivers consume only that prefix; reply consumers read one
-private V8 result frame. Ignored multipart trailers are an accepted D-0093
-same-UID local availability residual, not an aggregate allocation control. Its
-`ipc://` frames are trusted same-host runtime traffic only, and `ipcDirectory`
-must be a private directory shared only by the cooperating runtime peers.
+currently retain private V8 encoding. The public `TransportSignalEnvelope`
+conditional correlates `command` with generated `Command`, `event` with
+generated `Event`, and preserves caller-selected envelope types for the other
+kinds.
+
+Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
+8,388,608-byte rejection ceiling; ordinary frames allocate their actual sizes,
+not a fixed 8 MiB. Publish and request traffic places the route in frame 1 and
+the Buf command/event payload in frame 2. The existing private successful-result
+wrapper is V8-encoded in reply frame 1 and is not Spine `Ack`. Buf
+generated-message-shaped replies, including every object with a string
+`$typeName`, are rejected rather than V8-serialized. Receivers ignore trailers
+only after zeromq.js has materialized the multipart message, so SF-013 remains
+accepted and unbounded in aggregate. Old peers that use V8 for command/event
+frames cannot interoperate with the Buf wire and all cooperating peers must
+upgrade together. The `ipc://` frames are trusted same-host runtime traffic
+only, and `ipcDirectory` must be private to the cooperating runtime peers.

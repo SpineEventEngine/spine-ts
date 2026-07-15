@@ -166,6 +166,7 @@ const expectedTransportExports = [
   "SignalTransport",
   "TransportRoutingDescriptor",
   "TransportSemanticTag",
+  "TransportSignalEnvelope",
   "TransportSignalKind",
   "TransportSubscription",
   "TransportSubscriptionHandle",

@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -7,6 +9,7 @@ import {
   type RequestTransportHandler,
   type RequestTransportOperation,
   type SignalTransport,
+  type TransportSignalEnvelope,
   type TransportSignalKind,
   createTransportSubscription,
   createTransportTopic,
@@ -204,10 +207,24 @@ describe("@spine-ts/transport", () => {
       "command" | "event" | "query" | "subscription" | "system"
     >();
 
-    expectTypeOf<PublishTransportOperation<{ id: string }, "event">>().toExtend<{
-      readonly topic: object;
-      readonly envelope: { id: string };
+    expectTypeOf<TransportSignalEnvelope<"command", { id: string }>>().toEqualTypeOf<Command>();
+    expectTypeOf<TransportSignalEnvelope<"event", { id: string }>>().toEqualTypeOf<Event>();
+    expectTypeOf<TransportSignalEnvelope<"system", { id: string }>>().toEqualTypeOf<{
+      id: string;
     }>();
+    expectTypeOf<TransportSignalEnvelope<"query", { id: string }>>().toEqualTypeOf<{
+      id: string;
+    }>();
+
+    expectTypeOf<
+      PublishTransportOperation<{ id: string }, "event">["envelope"]
+    >().toEqualTypeOf<Event>();
+    expectTypeOf<
+      Parameters<PublishTransportHandler<{ id: string }, "event">>[0]["envelope"]
+    >().toEqualTypeOf<Event>();
+    expectTypeOf<
+      Parameters<RequestTransportHandler<{ id: string }, unknown, "command">>[0]["envelope"]
+    >().toEqualTypeOf<Command>();
     expectTypeOf<RequestTransportOperation<{ id: string }, "query">>().toExtend<{
       readonly topic: object;
       readonly envelope: { id: string };
@@ -225,5 +242,37 @@ describe("@spine-ts/transport", () => {
     expectTypeOf<AsyncCloseable["close"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["publish"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["request"]>().returns.resolves.toEqualTypeOf<unknown>();
+
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    const eventTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/spine.core.Event",
+    });
+    const commandOperation: PublishTransportOperation<{ id: string }, "command"> = {
+      topic: commandTopic,
+      envelope: create(CommandSchema),
+    };
+    const eventOperation: RequestTransportOperation<{ id: string }, "event"> = {
+      topic: eventTopic,
+      envelope: create(EventSchema),
+    };
+    const invalidCommandOperation: PublishTransportOperation<{ id: string }, "command"> = {
+      topic: commandTopic,
+      // @ts-expect-error command topics require the generated Command envelope.
+      envelope: { id: "plain-command" },
+    };
+    const invalidEventOperation: RequestTransportOperation<{ id: string }, "event"> = {
+      topic: eventTopic,
+      // @ts-expect-error event topics require the generated Event envelope.
+      envelope: { id: "plain-event" },
+    };
+
+    expectTypeOf(commandOperation.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(eventOperation.envelope).toEqualTypeOf<Event>();
+    expectTypeOf(invalidCommandOperation.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(invalidEventOperation.envelope).toEqualTypeOf<Event>();
   });
 });

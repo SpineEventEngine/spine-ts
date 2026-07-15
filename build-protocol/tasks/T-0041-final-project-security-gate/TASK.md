@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0094 public-contract correction assigned
+Status: In progress - D-0094 implementation complete; re-review pending
 
 Started: `2026-07-14`
 
@@ -3236,3 +3236,35 @@ Subscription cancellation failed.` instead of `AggregateError`.
   all active records/docs; run focused root/ZeroMQ/runtime/cross-process,
   generated typecheck, lint, formatting, docs/API, generated-clean, and diff
   checks. No full verify before re-review closure.
+
+## D-0094 Implementation Progress
+
+- Added the public `TransportSignalEnvelope` conditional and applied it to
+  operation and handler envelope types without changing generic or method
+  order. Command/event now correlate with generated `Command`/`Event`; other
+  kinds preserve caller-selected types. The intentional root/subpath counts are
+  18/6.
+- The private ZeroMQ reply guard now uses Buf `isMessage(value)` without a
+  schema. Generated-message-shaped results, including string `$typeName`, are
+  rejected; plain private objects remain supported and are not Spine `Ack`.
+- Compile/runtime RED/GREEN and focused final checks are recorded in the work
+  log. Canonical and final security re-review remain pending.
+
+## D-0094 Coordinator Acceptance For Re-Review
+
+- The coordinator independently inspected the conditional public contract,
+  schema-free Buf reply guard, exact malformed-command reply assertion,
+  continuation behavior, affected server fixtures, API checker, and current
+  public/security documentation. The implementation matches D-0093 and D-0094.
+- Fresh native verification passed 4 files / 87 tests for transport, runtime,
+  and cross-process behavior and 2 files / 63 tests for the additionally
+  affected server lifecycle paths. Tooling and generated build typechecks,
+  focused ESLint, generated API docs at counts `100/28/205/19/18/6/3`, Proto
+  generated cleanliness, exact changed-path Prettier, and `git diff --check`
+  all passed.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e` retained its explicit and
+  actual immutable Terra Medium profile, remained childless and without Git
+  mutation, and is closed. Exactly the 16 assigned paths remain modified.
+- This is acceptance to freeze and re-review the correction, not task closure.
+  All four canonical concerns must re-review it; the focused final security
+  review follows only after canonical closure.

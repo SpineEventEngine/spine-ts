@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readdir, realpath, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { serialize } from "node:v8";
+import { deserialize, serialize } from "node:v8";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
@@ -220,7 +220,9 @@ describe("ZeroMQ SignalTransport", () => {
         async (transport) => {
           const handle = await transport.subscribe<Event, "event">(
             createTransportSubscription({ subscriberId: "buf-inbound-event", topic }),
-            ({ envelope }) => received.push(envelope),
+            ({ envelope }) => {
+              received.push(envelope);
+            },
           );
           if (subscriberAddress === undefined) {
             throw new Error("Expected subscriber endpoint address.");
@@ -231,12 +233,11 @@ describe("ZeroMQ SignalTransport", () => {
           try {
             await publisher.bind(subscriberAddress);
             await waitFor(25);
-            await publisher.send([
-              topic.routing.routingKey,
-              Buffer.from([0x80]),
-              "ignored trailer",
-            ]);
-            await waitFor(() => failures.length > 0);
+            await publishUntil(
+              () =>
+                publisher.send([topic.routing.routingKey, Buffer.from([0x80]), "ignored trailer"]),
+              () => failures.length > 0,
+            );
             await publishUntil(
               () =>
                 publisher.send([
@@ -294,7 +295,14 @@ describe("ZeroMQ SignalTransport", () => {
         try {
           requester.connect(replyAddress);
           await requester.send([topic.routing.routingKey, Buffer.from([0x80])]);
-          await expect(requester.receive()).resolves.toHaveLength(1);
+          const [malformedReply] = await requester.receive();
+          if (malformedReply === undefined) {
+            throw new Error("Expected malformed-command failure reply.");
+          }
+          expect(deserialize(malformedReply)).toEqual({
+            status: "failed",
+            message: "ZeroMQ request handler failed.",
+          });
           expect(received).toEqual([]);
 
           await requester.send([
@@ -360,7 +368,7 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
-  it("rejects a generated Proto successful reply", async () => {
+  it("rejects a generated Proto successful reply and serves a later plain result", async () => {
     const commandTopic = createTransportTopic({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.ProtoReplyRejected",
@@ -372,15 +380,59 @@ describe("ZeroMQ SignalTransport", () => {
     });
 
     await withZeroMqTransport(async (transport) => {
-      const handle = await transport.respond<Command, Event, "command">(subscription, () =>
-        create(EventSchema),
-      );
+      let attempt = 0;
+      const handle = await transport.respond<
+        Command,
+        Event | { readonly accepted: boolean },
+        "command"
+      >(subscription, () => {
+        attempt += 1;
+        return attempt === 1 ? create(EventSchema) : { accepted: true };
+      });
 
       await expect(
-        transport.request<Command, Event, "command">({
+        transport.request<Command, Event | { readonly accepted: boolean }, "command">({
           topic: commandTopic,
           envelope: create(CommandSchema),
         }),
+      ).rejects.toThrow("ZeroMQ request handler failed.");
+      await expect(
+        transport.request<Command, { readonly accepted: boolean }, "command">({
+          topic: commandTopic,
+          envelope: create(CommandSchema),
+        }),
+      ).resolves.toEqual({ accepted: true });
+      expect(attempt).toBe(2);
+      await handle.close();
+    });
+  });
+
+  it("reserves string $typeName on private successful replies", async () => {
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.ReservedReplyTypeName",
+    });
+
+    await withZeroMqTransport(async (transport) => {
+      const handle = await transport.respond<
+        Command,
+        { readonly $typeName: string; readonly accepted: boolean },
+        "command"
+      >(
+        createTransportSubscription({
+          subscriberId: "reserved-reply-type-name",
+          topic,
+          mode: "competing-consumer",
+        }),
+        () => ({ $typeName: "private.Result", accepted: true }),
+      );
+
+      await expect(
+        transport.request<
+          Command,
+          { readonly $typeName: string; readonly accepted: boolean },
+          "command"
+        >({ topic, envelope: create(CommandSchema) }),
       ).rejects.toThrow("ZeroMQ request handler failed.");
       await handle.close();
     });
@@ -403,7 +455,7 @@ describe("ZeroMQ SignalTransport", () => {
           messageTypeUrl: "type.spine.io/example.OversizedRawPublish",
         });
         const received: string[] = [];
-        const handle = await transport.subscribe<{ readonly value: string }, "event">(
+        const handle = await transport.subscribe<{ readonly value: string }, "system">(
           createTransportSubscription({ subscriberId: "oversized-raw-publish", topic }),
           ({ envelope }) => {
             received.push(envelope.value);
@@ -456,7 +508,7 @@ describe("ZeroMQ SignalTransport", () => {
         const handle = await transport.respond<
           { readonly value: string },
           { readonly ok: boolean },
-          "command"
+          "system"
         >(
           createTransportSubscription({
             subscriberId: "oversized-raw-request",
@@ -483,7 +535,7 @@ describe("ZeroMQ SignalTransport", () => {
         }
 
         await expect(
-          transport.request<{ readonly value: string }, { readonly ok: boolean }, "command">({
+          transport.request<{ readonly value: string }, { readonly ok: boolean }, "system">({
             topic,
             envelope: { value: "valid" },
           }),
@@ -530,7 +582,7 @@ describe("ZeroMQ SignalTransport", () => {
           const valid = transport.request<
             { readonly value: string },
             { readonly ok: boolean },
-            "command"
+            "system"
           >({
             topic,
             envelope: { value: "valid" },
@@ -716,7 +768,7 @@ describe("ZeroMQ SignalTransport", () => {
       });
       const received: string[] = [];
 
-      const handle = await transport.subscribe<{ readonly taskId: string }, "event">(
+      const handle = await transport.subscribe<{ readonly taskId: string }, "system">(
         subscription,
         (operation) => {
           received.push(operation.envelope.taskId);
@@ -753,7 +805,7 @@ describe("ZeroMQ SignalTransport", () => {
       const handle = await transport.respond<
         { readonly taskId: string },
         { readonly found: boolean; readonly taskId: string },
-        "command"
+        "system"
       >(subscription, (operation) => ({
         found: true,
         taskId: operation.envelope.taskId,
@@ -762,7 +814,7 @@ describe("ZeroMQ SignalTransport", () => {
       const response = await transport.request<
         { readonly taskId: string },
         { readonly found: boolean; readonly taskId: string },
-        "command"
+        "system"
       >({
         topic,
         envelope: { taskId: "task-456" },
@@ -1115,7 +1167,7 @@ describe("ZeroMQ SignalTransport", () => {
           topic,
         });
         const received: string[] = [];
-        const subscribe = subscriberTransport.subscribe<{ readonly taskId: string }, "event">(
+        const subscribe = subscriberTransport.subscribe<{ readonly taskId: string }, "system">(
           subscription,
           (operation) => {
             received.push(operation.envelope.taskId);
@@ -1452,7 +1504,7 @@ describe("ZeroMQ SignalTransport", () => {
         });
         const received: string[] = [];
 
-        const handle = await transport.subscribe<{ readonly taskId: string }, "event">(
+        const handle = await transport.subscribe<{ readonly taskId: string }, "system">(
           subscription,
           (operation) => {
             received.push(operation.envelope.taskId);
@@ -1511,7 +1563,7 @@ describe("ZeroMQ SignalTransport", () => {
           subscriberId: "projection-worker-1",
           topic,
         });
-        const handle = await transport.subscribe<{ readonly taskId: string }, "event">(
+        const handle = await transport.subscribe<{ readonly taskId: string }, "system">(
           subscription,
           () => {
             throw new Error("timed out");

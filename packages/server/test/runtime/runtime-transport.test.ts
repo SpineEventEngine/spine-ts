@@ -15,15 +15,17 @@ import {
   type Command,
   type Event,
 } from "@spine-ts/proto";
-import type {
-  PublishTransportHandler,
-  PublishTransportOperation,
-  RequestTransportHandler,
-  RequestTransportOperation,
-  SignalTransport,
-  TransportSignalKind,
-  TransportSubscription,
-  TransportSubscriptionHandle,
+import {
+  createTransportSubscription,
+  createTransportTopic,
+  type PublishTransportHandler,
+  type PublishTransportOperation,
+  type RequestTransportHandler,
+  type RequestTransportOperation,
+  type SignalTransport,
+  type TransportSignalKind,
+  type TransportSubscription,
+  type TransportSubscriptionHandle,
 } from "@spine-ts/transport";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -118,10 +120,9 @@ describe("RuntimeTransportBinding", () => {
 
     const result = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: CommandSchema.typeName,
-        message: { typeUrl: deriveTypeUrl(EventSchema) },
-      },
+      envelope: create(CommandSchema, {
+        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+      }),
     });
 
     expect(result).toEqual({
@@ -161,20 +162,17 @@ describe("RuntimeTransportBinding", () => {
 
     const nonObject = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: undefined,
+      envelope: undefined as unknown as Command,
     });
     const wrongEnvelope = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: EventSchema.typeName,
-        message: { typeUrl: deriveTypeUrl(EventSchema) },
-      },
+      envelope: create(EventSchema, {
+        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+      }) as unknown as Command,
     });
     const missingMessage = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: CommandSchema.typeName,
-      },
+      envelope: create(CommandSchema),
     });
 
     expect(nonObject).toMatchObject({
@@ -224,7 +222,7 @@ describe("RuntimeTransportBinding", () => {
           typeUrl: deriveTypeUrl(CommandSchema),
           value: "not bytes",
         },
-      },
+      } as unknown as Command,
     });
 
     expect(result).toMatchObject({
@@ -262,10 +260,9 @@ describe("RuntimeTransportBinding", () => {
     await expect(
       transport.publish({
         topic: requireFirst(plan.events.topics),
-        envelope: {
-          $typeName: EventSchema.typeName,
-          message: { typeUrl: "" },
-        },
+        envelope: create(EventSchema, {
+          message: create(AnySchema, { typeUrl: "" }),
+        }),
       }),
     ).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(RuntimeTransportEnvelopeError);
@@ -549,6 +546,55 @@ describe("RuntimeTransportBinding", () => {
       });
       expect(observed).toContain("command:type.spine.io/spine.core.Command");
       expect(observed).toContain("event:type.spine.io/spine.core.Event");
+
+      await handle.close();
+    } finally {
+      await transport.close();
+      await rm(ipcDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps plain private ZeroMQ results and reserves string $typeName results", async () => {
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-runtime-private-"));
+    const transport = createZeroMqTransport(
+      createZeroMqAdapterConfig({
+        ipcDirectory,
+        adapterIdentity: `runtime-private-${String(process.pid)}-${String(Date.now())}`,
+      }),
+    );
+    const topic = createTransportTopic({
+      signalKind: "system",
+      messageTypeUrl: "type.spine.io/runtime.PrivateResult",
+    });
+    const subscription = createTransportSubscription({
+      subscriberId: "runtime-private-result",
+      topic,
+      mode: "competing-consumer",
+    });
+
+    try {
+      const handle = await transport.respond<
+        { readonly result: "plain" | "reserved" },
+        { readonly accepted: true } | { readonly $typeName: string; readonly accepted: true },
+        "system"
+      >(subscription, ({ envelope }) =>
+        envelope.result === "plain"
+          ? { accepted: true }
+          : { $typeName: "private.RuntimeResult", accepted: true },
+      );
+
+      await expect(
+        transport.request<{ readonly result: "plain" }, { readonly accepted: true }, "system">({
+          topic,
+          envelope: { result: "plain" },
+        }),
+      ).resolves.toEqual({ accepted: true });
+      await expect(
+        transport.request<{ readonly result: "reserved" }, { readonly accepted: true }, "system">({
+          topic,
+          envelope: { result: "reserved" },
+        }),
+      ).rejects.toThrow("ZeroMQ request handler failed.");
 
       await handle.close();
     } finally {

@@ -4,7 +4,7 @@ import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { fromBinary, isMessage, toBinary } from "@bufbuild/protobuf";
 import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { Publisher, Reply, Request, Subscriber, type Socket, type MessageLike } from "zeromq";
 
@@ -748,12 +748,7 @@ function decodeEnvelope(topic: TransportTopic, frame: Buffer | undefined): unkno
 }
 
 function rejectGeneratedProtoReply(envelope: unknown): void {
-  if (
-    envelope !== null &&
-    typeof envelope === "object" &&
-    "$typeName" in envelope &&
-    typeof envelope.$typeName === "string"
-  ) {
+  if (isMessage(envelope)) {
     throw new Error("ZeroMQ transport cannot encode generated Protobuf replies.");
   }
 }

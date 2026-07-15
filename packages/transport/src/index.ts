@@ -1,5 +1,13 @@
+import type { Command, Event } from "@spine-ts/proto";
+
 /** Transport-owned signal kinds for local routing contracts. */
 export type TransportSignalKind = "command" | "event" | "query" | "subscription" | "system";
+
+/** Envelope carried by a signal kind, with caller-owned shapes for non-Proto kinds. */
+export type TransportSignalEnvelope<
+  Kind extends TransportSignalKind,
+  OtherEnvelope = unknown,
+> = Kind extends "command" ? Command : Kind extends "event" ? Event : OtherEnvelope;
 
 const transportSignalKinds = ["command", "event", "query", "subscription", "system"] as const;
 const transportSignalKindSet = new Set<string>(transportSignalKinds);
@@ -79,7 +87,7 @@ export interface PublishTransportOperation<
   /** Transport-owned topic/routing contract. */
   readonly topic: TransportTopic<Kind>;
   /** Caller-owned envelope already shaped by an upstream package. */
-  readonly envelope: Envelope;
+  readonly envelope: TransportSignalEnvelope<Kind, Envelope>;
 }
 
 /** Request-style transport operation contract. */
@@ -90,7 +98,7 @@ export interface RequestTransportOperation<
   /** Transport-owned topic/routing contract. */
   readonly topic: TransportTopic<Kind>;
   /** Caller-owned request envelope already shaped by an upstream package. */
-  readonly envelope: RequestEnvelope;
+  readonly envelope: TransportSignalEnvelope<Kind, RequestEnvelope>;
 }
 
 /** Handler for one publish-style operation. */

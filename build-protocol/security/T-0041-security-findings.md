@@ -3,8 +3,8 @@
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
-UID local availability residual. D-0093 Buf wire implementation is complete;
-final focused security re-review is pending.
+UID local availability residual. D-0094 implementation and focused mechanical
+verification are complete; final focused security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -155,3 +155,25 @@ Native-IPC regressions cover exact bytes, raw decoding, malformed continuation,
 and ignored protocol trailers. SF-013 remains accepted and unbounded in
 aggregate: zeromq.js allocates multipart frames before the adapter ignores
 trailers. Final focused security re-review is still required.
+
+## D-0094 Type Contract And Reply Guard Evidence
+
+The transport root now correlates `command` and `event` kinds with the
+generated `Command` and `Event` envelopes through
+`TransportSignalEnvelope`; the intentional public export counts are 18 for the
+transport root and 6 for the ZeroMQ subpath. The private ZeroMQ result guard
+uses Buf `isMessage()` without a schema and rejects every
+generated-message-shaped successful result, including an object with a string
+`$typeName`, before V8 serialization. Plain private non-generated results
+remain supported and are not Spine `Ack` values. Regressions assert the exact
+generic malformed-command failure payload and prove that the same responder
+continues from a rejected generated result to a later successful plain result.
+
+This correction does not reduce SF-013. Each inbound frame has the existing
+8,388,608-byte rejection ceiling, but ignored trailers have already been
+materialized by zeromq.js and aggregate multipart allocation remains accepted
+and unbounded. RED rejected the missing public conditional/export and stale
+private-object command/event fixtures; GREEN passed 87/87 required native tests,
+63/63 additionally affected server tests, both typechecks, focused ESLint, and
+the intentional 18/6 transport export checks. Focused final security re-review
+remains pending.

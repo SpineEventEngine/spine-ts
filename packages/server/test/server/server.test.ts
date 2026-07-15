@@ -288,7 +288,7 @@ describe("Server", () => {
   it("removes local publish handlers when the last subscription closes", async () => {
     const environment = ServerEnvironment.local();
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
     });
     const subscription = createTransportSubscription({
@@ -322,7 +322,7 @@ describe("Server", () => {
   it("routes local request handlers and rejects duplicate responders", async () => {
     const environment = ServerEnvironment.local();
     const topic = createTransportTopic({
-      signalKind: "command",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.LookupTask",
     });
     const subscription = createTransportSubscription({
@@ -334,7 +334,7 @@ describe("Server", () => {
     const handlePromise = environment.transport.respond<
       { readonly taskId: string },
       { readonly found: boolean; readonly taskId: string },
-      "command"
+      "system"
     >(subscription, (operation) => ({
       found: true,
       taskId: operation.envelope.taskId,
@@ -349,7 +349,7 @@ describe("Server", () => {
     const handle = await handlePromise;
     await expect(
       environment.transport.respond(subscription, () => ({ found: false, taskId: "duplicate" })),
-    ).rejects.toThrow('Local transport responder is already registered for "command:');
+    ).rejects.toThrow('Local transport responder is already registered for "system:');
     await expect(
       environment.transport.request({
         topic,
@@ -364,14 +364,14 @@ describe("Server", () => {
         topic,
         envelope: { taskId: "task-1" },
       }),
-    ).rejects.toThrow('No local transport responder is registered for "command:');
+    ).rejects.toThrow('No local transport responder is registered for "system:');
     await environment.close();
   });
 
   it("rejects local transport work after environment close", async () => {
     const environment = ServerEnvironment.local();
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.ClosedTransportTask",
     });
     const subscription = createTransportSubscription({

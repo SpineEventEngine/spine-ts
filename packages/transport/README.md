@@ -68,13 +68,23 @@ For `command` and `event` topics, the private adapter writes and reads the
 generated Spine `Command` and `Event` envelopes as Buf Protobuf binary with
 unknown fields disabled. No Protobuf wire contract is defined for `query`,
 `subscription`, or `system`; the current adapter retains their private V8
-encoding.
-Publish/request receivers consume the route and payload prefix only; a request
-reply consumes its one private V8 result frame. Surplus multipart trailers are
-ignored after native receipt, not bounded in aggregate. Treat every `ipc://`
-frame as trusted runtime data: only same-host Spine TS runtime peers that
-already trust each other should share the transport, and `ipcDirectory` must be
-private to those peers.
+encoding. `TransportSignalEnvelope` makes the public `command`/`event` envelope
+types the generated `Command`/`Event` types while preserving caller-selected
+types for the other signal kinds.
+
+Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
+8,388,608-byte rejection ceiling. This is a per-frame maximum, not a fixed
+allocation for ordinary traffic. Publish and request messages place the route
+in frame 1 and the Buf payload in frame 2. A successful request result uses the
+existing private V8 wrapper in reply frame 1; it is not Spine `Ack`. Generated-
+message-shaped results, including any object with a string `$typeName`, are
+rejected before V8 serialization. Receivers consume only those protocol frames
+and ignore trailers after zeromq.js has already materialized the full multipart
+message. SF-013 therefore remains accepted and unbounded in aggregate. Peers
+using the old V8 command/event wire are incompatible with Buf-wire peers and
+must upgrade together. Treat every `ipc://` frame as trusted runtime data: only
+same-host Spine TS runtime peers that already trust each other should share the
+transport, and `ipcDirectory` must be private to those peers.
 
 `createZeroMqTransport()` bounds request/reply send and receive work with
 `requestTimeoutMs`, which defaults to 2,000 milliseconds. When supplied, it

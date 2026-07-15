@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: In progress - D-0094 public-contract correction assigned
+Status: In progress - D-0094 implementation complete; re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -3270,3 +3270,38 @@ verify` remains reserved.
   `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original explicit/actual
   immutable Terra Medium, for one RED/GREEN correction. All four lanes re-review
   the correction; focused final security review follows only after closure.
+
+## D-0094 Implementer Evidence Pending Re-Review
+
+- The correction exports and applies `TransportSignalEnvelope`, preserving
+  generic/method order while correlating command/event with generated envelopes
+  and preserving non-Proto generic values. API expectation is intentionally
+  18 root / 6 ZeroMQ exports.
+- The reply guard uses schema-free Buf `isMessage()`. Generated-message-shaped
+  results and string `$typeName` are reserved/rejected; a later plain private
+  result succeeds through the same responder. Malformed-command failure bytes
+  are decoded and asserted exactly.
+- Public docs now record the exact per-frame ceiling, frame positions, private
+  non-`Ack` result, coordinated mixed-wire incompatibility, trailer timing, and
+  accepted/unbounded SF-013. RED was the missing conditional/API export plus
+  stale arbitrary command/event fixtures; GREEN is 87/87 required focused
+  native tests, 63/63 additionally affected server tests, clean tooling/build
+  typechecks and ESLint, and API counts `100/28/205/19/18/6/3`. Exact commands
+  are recorded in the work log; this section is not a reviewer disposition.
+
+## D-0094 Coordinator Acceptance And Re-Review Boundary
+
+- Coordinator-native focused verification passed 87/87 required transport,
+  runtime, and cross-process tests plus 63/63 additionally affected server
+  lifecycle tests. Tooling/build typechecks, focused ESLint, generated docs/API
+  counts `100/28/205/19/18/6/3`, Proto cleanliness, exact-path formatting, and
+  diff integrity are clean.
+- Coordinator inspection accepts the correction as matching D-0093/D-0094 and
+  the complete first-wave findings. Implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable Terra
+  Medium, is closed after remaining childless and Git-clean.
+- Freeze the correction endpoint. Before reviewer dispatch, run the lightweight
+  status/docs lint for stale active claims, duplicated wire/limit constants,
+  public leakage, generated output, and future-policy overclaim. Re-review all
+  four canonical concerns against the compact correction package and aggregate
+  the complete wave before any further fix.

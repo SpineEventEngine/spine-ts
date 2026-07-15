@@ -1,8 +1,9 @@
 # Spine TS Threat Model
 
 Status: T-0041 working threat model; SF-013 is a human-accepted Medium same-UID
-local IPC availability residual under D-0093. Buf wire implementation is
-complete; final focused security re-review is pending.
+local IPC availability residual under D-0093. D-0094 implementation and focused
+mechanical verification are complete; final focused security re-review is
+pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
@@ -163,3 +164,24 @@ continuation, generated Proto reply rejection, and prefix-only trailer use.
 This does not reduce SF-013: multipart trailers are ignored only after native
 materialization, so aggregate multipart allocation remains explicitly accepted
 and unbounded for an authorized same-UID peer.
+
+## D-0094 Type And Reply Boundary Progress
+
+The public transport type contract now binds command/event topics to generated
+`Command`/`Event` envelopes while preserving caller-selected envelopes for
+reserved non-Proto kinds. The private reply boundary now uses Buf
+`isMessage()` without a schema, so generated-message-shaped results, including
+objects carrying a string `$typeName`, are rejected before the V8 result
+wrapper. Plain non-generated private results remain supported; the wrapper is
+not a Spine `Ack`. Responder-continuation coverage proves a generated-result
+failure does not poison a later plain-result request on the same registration.
+
+The wire boundary remains route frame 1 plus Buf payload frame 2 for inbound
+command/event traffic and private result frame 1 for requester replies. The
+8,388,608-byte ceiling is per inbound frame, not a fixed allocation bound;
+trailers are ignored only after native multipart allocation. SF-013 therefore
+remains accepted and unbounded in aggregate. RED exposed the missing correlated
+public contract/export and stale private-object command/event fixtures; GREEN
+passed the required 87 native transport/runtime/cross-process regressions, 63
+additionally affected server regressions, both typechecks, focused ESLint, and
+the intentional 18/6 export boundary.
