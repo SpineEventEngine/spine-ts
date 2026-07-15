@@ -3335,3 +3335,40 @@ Subscription cancellation failed.` instead of `AggregateError`.
   lint, formatting, generated-clean, and diff checks. Do not alter the runtime
   codec, frame cap, trailer behavior, accepted SF-013 decision, or run full
   `pnpm verify` in this inner loop.
+
+## D-0094 Union-Correlation Fix Implementation
+
+- The publish/request operation aliases are now distributive tagged unions over
+  `Kind`, preserving generic argument order and literal-kind/non-Proto behavior
+  while keeping each topic correlated with its generated or caller-selected
+  envelope. Public handler aliases retain their existing order and signatures;
+  only adapter-private erased handler storage changed to accommodate the
+  corrected public union, with no wire/runtime logic change.
+- Compile-time regressions reject plain command/event envelopes through widened
+  and union `Kind` operation aliases and through explicit generic
+  `SignalTransport.publish()`/`request()` calls. Valid generated widened values
+  and reserved-kind caller envelopes remain accepted.
+- The duplicated server-runtime direct ZeroMQ reply test is removed; the unique
+  generated-reply continuation and reserved `$typeName` coverage remains in the
+  transport adapter suite. Both public wire docs now distinguish Buf frame 2
+  for command/event from private V8 frame 2 for reserved kinds.
+- Exact RED/GREEN and focused final evidence are recorded in the work log.
+  Implementation is complete; style, documentation, and TypeScript/API
+  re-review are pending. Reliability remains unchanged because runtime behavior
+  did not change, and focused final security has not yet been dispatched.
+
+## D-0094 Union-Correlation Coordinator Acceptance
+
+- Coordinator inspection accepts the distributive operation aliases, four
+  widened/union compile regressions, adapter-private type erasure, duplicate
+  test removal, exact frame-2 wording, and historical security assignment.
+  Runtime codec/frame/socket logic is unchanged.
+- Fresh coordinator checks passed both tooling and generated build typechecks,
+  the complete affected transport/runtime suite at 3 files / 79 tests, focused
+  ESLint, generated docs/API counts `100/28/205/19/18/6/3`, Proto cleanliness,
+  exact 11-path Prettier, and `git diff --check`.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit and actual
+  immutable Terra Medium, remained sole writer, childless, and without Git
+  mutation and is closed. Freeze this correction and re-review style,
+  documentation, and TypeScript/API. Reliability's clean disposition remains
+  valid because no runtime execution path changed.

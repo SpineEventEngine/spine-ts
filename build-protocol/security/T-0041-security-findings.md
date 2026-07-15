@@ -3,8 +3,9 @@
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
-UID local availability residual. D-0094 implementation and focused mechanical
-verification are complete; final focused security re-review is pending.
+UID local availability residual. The D-0094 canonical union-correlation
+correction implementation is complete and affected canonical re-review is
+pending. Focused final security re-review has not yet been dispatched.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -14,16 +15,36 @@ evidence. The preceding canonical review was clean; dedicated security re-review
 found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
 Canonical Wave 23 is clean; SF-012 is clean and D-0093 records the human's
 explicit SF-013 residual-risk acceptance. Final security acceptance still waits
-for focused re-review.
+for the current canonical correction/re-review and a later focused security
+dispatch.
 
-Dedicated final re-review package is
+Historical dedicated re-review package was
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
-bytes). Existing `security_reviewer`, expected explicit immutable
-`gpt-5.6-terra` / high, is assigned to re-adjudicate all TM/SF entries and the
-full task threat-check ledger before the task gate.
+bytes). That package predates the current D-0094 correction and is not the
+active final-security package.
 
-Dedicated reviewer dispatch: `019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit
-immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
+Historical dedicated reviewer dispatch:
+`019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit immutable
+`gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No current
+final-security package or reviewer dispatch exists; the coordinator will create
+and record them only after the canonical correction and affected re-review
+close.
+
+## D-0094 Union-Correlation Correction State
+
+Compile RED proved that widened and union transport kinds could pair a
+command/event topic with a plain caller envelope. The distributive public
+operation aliases close that static contract hole without changing runtime wire
+logic. Focused GREEN is tooling typecheck, transport root 6/6, both retained
+adapter reply proofs 1/1, generated API counts `100/28/205/19/18/6/3`, and clean
+Proto generation. The duplicate server-runtime adapter proof is removed, and
+the public docs now distinguish Buf command/event frame 2 from private V8
+reserved-kind frame 2.
+
+This implementation awaits affected canonical re-review. The prior final
+security package and reviewer are historical; no replacement final-security
+package or dispatch exists yet. SF-013 remains accepted and unbounded in
+aggregate.
 
 ## Command and evidence ledger
 

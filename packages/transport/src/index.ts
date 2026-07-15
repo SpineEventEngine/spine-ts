@@ -80,26 +80,30 @@ export interface TransportSubscription<Kind extends TransportSignalKind = Transp
 }
 
 /** Publish-style transport operation contract. */
-export interface PublishTransportOperation<
+export type PublishTransportOperation<
   Envelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
-> {
-  /** Transport-owned topic/routing contract. */
-  readonly topic: TransportTopic<Kind>;
-  /** Caller-owned envelope already shaped by an upstream package. */
-  readonly envelope: TransportSignalEnvelope<Kind, Envelope>;
-}
+> = Kind extends TransportSignalKind
+  ? {
+      /** Transport-owned topic/routing contract. */
+      readonly topic: TransportTopic<Kind>;
+      /** Caller-owned envelope already shaped by an upstream package. */
+      readonly envelope: TransportSignalEnvelope<Kind, Envelope>;
+    }
+  : never;
 
 /** Request-style transport operation contract. */
-export interface RequestTransportOperation<
+export type RequestTransportOperation<
   RequestEnvelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
-> {
-  /** Transport-owned topic/routing contract. */
-  readonly topic: TransportTopic<Kind>;
-  /** Caller-owned request envelope already shaped by an upstream package. */
-  readonly envelope: TransportSignalEnvelope<Kind, RequestEnvelope>;
-}
+> = Kind extends TransportSignalKind
+  ? {
+      /** Transport-owned topic/routing contract. */
+      readonly topic: TransportTopic<Kind>;
+      /** Caller-owned request envelope already shaped by an upstream package. */
+      readonly envelope: TransportSignalEnvelope<Kind, RequestEnvelope>;
+    }
+  : never;
 
 /** Handler for one publish-style operation. */
 export type PublishTransportHandler<

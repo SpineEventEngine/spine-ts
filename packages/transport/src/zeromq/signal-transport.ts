@@ -41,13 +41,17 @@ interface InternalTransportOptions extends ZeroMqTransportOptions {
 }
 
 type ActiveHandle = TransportSubscriptionHandle;
+interface InternalTransportOperation {
+  readonly topic: TransportTopic;
+  readonly envelope: unknown;
+}
 interface PublishHandlerEntry {
   readonly subscription: TransportSubscription;
-  readonly handler: PublishTransportHandler;
+  readonly handler: (operation: InternalTransportOperation) => void | Promise<void>;
 }
 interface RequestHandlerEntry {
   readonly subscription: TransportSubscription;
-  readonly handler: RequestTransportHandler;
+  readonly handler: (operation: InternalTransportOperation) => unknown;
 }
 
 const defaultRequestTimeoutMs = 2_000;
@@ -194,7 +198,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     });
     const entry: PublishHandlerEntry = {
       subscription,
-      handler: handler as PublishTransportHandler,
+      handler: handler as PublishHandlerEntry["handler"],
     };
 
     let handle: ZeroMqSubscriptionHandle<Kind> | undefined;
@@ -324,7 +328,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     });
     const entry: RequestHandlerEntry = {
       subscription,
-      handler: handler as RequestTransportHandler,
+      handler: handler as RequestHandlerEntry["handler"],
     };
     let handle: ZeroMqSubscriptionHandle<Kind> | undefined;
 

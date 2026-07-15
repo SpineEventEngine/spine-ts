@@ -16,8 +16,6 @@ import {
   type Event,
 } from "@spine-ts/proto";
 import {
-  createTransportSubscription,
-  createTransportTopic,
   type PublishTransportHandler,
   type PublishTransportOperation,
   type RequestTransportHandler,
@@ -546,55 +544,6 @@ describe("RuntimeTransportBinding", () => {
       });
       expect(observed).toContain("command:type.spine.io/spine.core.Command");
       expect(observed).toContain("event:type.spine.io/spine.core.Event");
-
-      await handle.close();
-    } finally {
-      await transport.close();
-      await rm(ipcDirectory, { recursive: true, force: true });
-    }
-  });
-
-  it("keeps plain private ZeroMQ results and reserves string $typeName results", async () => {
-    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-runtime-private-"));
-    const transport = createZeroMqTransport(
-      createZeroMqAdapterConfig({
-        ipcDirectory,
-        adapterIdentity: `runtime-private-${String(process.pid)}-${String(Date.now())}`,
-      }),
-    );
-    const topic = createTransportTopic({
-      signalKind: "system",
-      messageTypeUrl: "type.spine.io/runtime.PrivateResult",
-    });
-    const subscription = createTransportSubscription({
-      subscriberId: "runtime-private-result",
-      topic,
-      mode: "competing-consumer",
-    });
-
-    try {
-      const handle = await transport.respond<
-        { readonly result: "plain" | "reserved" },
-        { readonly accepted: true } | { readonly $typeName: string; readonly accepted: true },
-        "system"
-      >(subscription, ({ envelope }) =>
-        envelope.result === "plain"
-          ? { accepted: true }
-          : { $typeName: "private.RuntimeResult", accepted: true },
-      );
-
-      await expect(
-        transport.request<{ readonly result: "plain" }, { readonly accepted: true }, "system">({
-          topic,
-          envelope: { result: "plain" },
-        }),
-      ).resolves.toEqual({ accepted: true });
-      await expect(
-        transport.request<{ readonly result: "reserved" }, { readonly accepted: true }, "system">({
-          topic,
-          envelope: { result: "reserved" },
-        }),
-      ).rejects.toThrow("ZeroMQ request handler failed.");
 
       await handle.close();
     } finally {

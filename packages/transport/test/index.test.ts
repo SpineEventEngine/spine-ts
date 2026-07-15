@@ -251,6 +251,10 @@ describe("@spine-ts/transport", () => {
       signalKind: "event",
       messageTypeUrl: "type.spine.io/spine.core.Event",
     });
+    const systemTopic = createTransportTopic({
+      signalKind: "system",
+      messageTypeUrl: "type.spine.io/private.SystemMessage",
+    });
     const commandOperation: PublishTransportOperation<{ id: string }, "command"> = {
       topic: commandTopic,
       envelope: create(CommandSchema),
@@ -269,10 +273,46 @@ describe("@spine-ts/transport", () => {
       // @ts-expect-error event topics require the generated Event envelope.
       envelope: { id: "plain-event" },
     };
+    const validWidenedCommand: PublishTransportOperation<{ id: string }> = {
+      topic: commandTopic,
+      envelope: create(CommandSchema),
+    };
+    const validUnionSystem: RequestTransportOperation<{ id: string }, "event" | "system"> = {
+      topic: systemTopic,
+      envelope: { id: "plain-system" },
+    };
+
+    // @ts-expect-error a widened kind must keep a command topic correlated with Command.
+    const invalidWidenedPublish: PublishTransportOperation<{ id: string }> = {
+      topic: commandTopic,
+      envelope: { id: "plain-command" },
+    };
+    // @ts-expect-error a union kind must keep an event topic correlated with Event.
+    const invalidUnionRequest: RequestTransportOperation<{ id: string }, "event" | "system"> = {
+      topic: eventTopic,
+      envelope: { id: "plain-event" },
+    };
+    const assertExplicitGenericCalls = (transport: SignalTransport): void => {
+      // @ts-expect-error explicit widened publish generics cannot bypass command correlation.
+      void transport.publish<{ id: string }, TransportSignalKind>({
+        topic: commandTopic,
+        envelope: { id: "plain-command" },
+      });
+      // @ts-expect-error explicit union request generics cannot bypass event correlation.
+      void transport.request<{ id: string }, unknown, "event" | "system">({
+        topic: eventTopic,
+        envelope: { id: "plain-event" },
+      });
+    };
 
     expectTypeOf(commandOperation.envelope).toEqualTypeOf<Command>();
     expectTypeOf(eventOperation.envelope).toEqualTypeOf<Event>();
     expectTypeOf(invalidCommandOperation.envelope).toEqualTypeOf<Command>();
     expectTypeOf(invalidEventOperation.envelope).toEqualTypeOf<Event>();
+    expectTypeOf(validWidenedCommand.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(validUnionSystem.envelope).toEqualTypeOf<{ id: string }>();
+    void invalidWidenedPublish;
+    void invalidUnionRequest;
+    void assertExplicitGenericCalls;
   });
 });

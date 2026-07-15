@@ -8,7 +8,11 @@ import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/
 import { describe, expect, it, vi } from "vitest";
 import { Publisher, Reply, Request, Subscriber } from "zeromq";
 
-import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
+import {
+  createTransportSubscription,
+  createTransportTopic,
+  type TransportTopic,
+} from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
 import {
   createZeroMqAdapterConfig,
@@ -2116,11 +2120,11 @@ interface PausedBoundary {
 }
 
 interface CloseBlockedOperationCase {
-  readonly signalKind: "system" | "event";
+  readonly signalKind: "system";
   readonly nativeGuards: readonly (() => NativeCallGuard)[];
   open(
     transport: ReturnType<typeof createZeroMqTransport>,
-    topic: ReturnType<typeof createTransportTopic>,
+    topic: TransportTopic<"system">,
     subscriberId: string,
   ): Promise<unknown>;
 }

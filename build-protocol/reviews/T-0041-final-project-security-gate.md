@@ -3365,3 +3365,36 @@ verify` remains reserved.
   every accepted wire/runtime/risk decision and method generic order.
 - Style, docs, and TypeScript/API re-review the correction. Reliability retains
   clean unless coordinator inspection finds runtime or execution-path changes.
+
+## D-0094 Union-Correlation Implementer Evidence Pending Re-Review
+
+- RED tooling reported four unused rejection directives, proving widened/union
+  operation aliases and explicit publish/request generics accepted plain
+  command/event envelopes. GREEN tooling consumes all four after making the
+  operation aliases distributive over `Kind`; valid generated and reserved-kind
+  values still compile, and the transport-root file passes 6/6.
+- The adapter-private handler storage explicitly erases the now-distributive
+  public operation only after typed registration. No runtime wire statement or
+  behavior changed. The duplicated server runtime adapter test is deleted, and
+  both retained transport-suite reply proofs pass independently 1/1.
+- Transport package/API docs now say frame 2 is Buf for command/event and
+  private V8 for query/subscription/system. Generated docs retain exact public
+  export counts `100/28/205/19/18/6/3`; Proto generation is clean.
+- Implementation is complete. Style, documentation, and TypeScript/API
+  re-review remain pending; reliability retains its clean disposition unless
+  coordinator inspection finds an execution-path change. No final security
+  package or dispatch is claimed.
+
+## D-0094 Union-Correlation Coordinator Acceptance
+
+- Coordinator inspection accepts the distributive public operation contract,
+  compile regressions, necessary private type erasure, documentation/status
+  corrections, and duplicate-test removal. No runtime execution statement or
+  behavior changed.
+- Both typechecks, the complete affected native suite at 3 files / 79 tests,
+  focused ESLint, generated docs/API counts `100/28/205/19/18/6/3`, Proto
+  cleanliness, exact formatting, and diff integrity are clean.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained childless and Git-clean and is closed. Freeze the
+  endpoint and re-review style, docs, and TypeScript/API only; reliability's
+  clean disposition remains accepted because no runtime path changed.

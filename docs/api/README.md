@@ -741,15 +741,16 @@ correlates command/event operations and handlers with generated `Command` and
 `Event` while preserving caller-selected types for other kinds. Every inbound
 `Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
 ceiling, not a fixed allocation. Publish and request messages use route frame 1
-and Buf payload frame 2. A successful request result uses the private V8 wrapper
-in reply frame 1 and is not Spine `Ack`; generated-message-shaped results,
-including objects with a string `$typeName`, are rejected before V8
-serialization. Trailers are ignored only after zeromq.js materializes the full
-multipart message, so SF-013 remains accepted and unbounded in aggregate. Old
-V8 command/event peers are wire-incompatible with Buf peers and cooperating
-peers must upgrade together. The adapter is for trusted same-host runtime peers
-only; `ipcDirectory` must be private to those peers. Managed sandboxes may
-reject ZeroMQ `ipc://` binds with `EPERM`, so live
+and payload frame 2: command/event payloads use Buf, while reserved
+query/subscription/system payloads use private V8. A successful request result
+uses the private V8 wrapper in reply frame 1 and is not Spine `Ack`; generated-
+message-shaped results, including objects with a string `$typeName`, are
+rejected before V8 serialization. Trailers are ignored only after zeromq.js
+materializes the full multipart message, so SF-013 remains accepted and
+unbounded in aggregate. Old V8 command/event peers are wire-incompatible with
+Buf peers and cooperating peers must upgrade together. The adapter is for
+trusted same-host runtime peers only; `ipcDirectory` must be private to those
+peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
 local IPC tests can require native IPC filesystem/socket permissions outside
 the sandbox. `requestTimeoutMs` defaults to 2,000 milliseconds and accepts only
 integers from 1 through 2,147,483,647; invalid values fail before filesystem or
