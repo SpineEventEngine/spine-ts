@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 16 assigned
+Status: Canonical review wave 16 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1955,3 +1955,32 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   immutable `gpt-5.6-terra` / high, read-only, childless, and without Git
   mutation. No finding may be acted on until style, API, and reliability have
   also completed and closed.
+
+## Canonical Review Wave 16 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f64c3-f5fc-7a03-be07-984bd75e3605`: low finding that private
+  `privateDirectoryModeBigInt` exceeds the binding four-semantic-component
+  limit; rename only that constant and use.
+- Documentation, immutable Luna Medium,
+  `019f64c3-f993-7661-a31d-4c5a466508b5`: P2 that the to-do user guide's
+  public inactive-TTL workflow omits D-0090 normalization and synchronous
+  maximum-value failure; add the exact mirror sentence. No other docs finding.
+- TypeScript/API docs, immutable Terra High,
+  `019f64c3-fd33-7792-a2bc-adc45de972d1`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f64c6-99b1-76a2-b764-e427c5c850da`: clean.
+- Every role used the explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator source/rule
+  inspection accepts the complete two-finding batch.
+
+## Canonical Wave 16 Fix Assignment
+
+- One fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, is the sole writer for the exact example D-0090
+  sentence, private bigint-mode constant rename/use, and synchronized current
+  status in task/work/review and both security artifacts.
+- No runtime behavior, public API, package/dependency/Proto, generated output,
+  or D-0087-D-0090 contract change is authorized. Require focused docs, lint,
+  exact format, naming/status, and diff integrity. All four Canonical Wave 17
+  lanes rerun before dedicated final security review.

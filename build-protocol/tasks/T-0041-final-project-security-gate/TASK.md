@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 16 assigned
+Status: In progress - canonical review wave 16 findings accepted
 
 Started: `2026-07-14`
 
@@ -2059,3 +2059,25 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   full human ledger plus D-0087-D-0090, and exclude superseded history unless a
   current record claims it active. Aggregate the complete wave before action;
   dedicated final security review remains pending.
+
+## Canonical Review Wave 16 Result And Fix Assignment
+
+- Complete result: TypeScript/API docs and performance/reliability are clean.
+  Documentation found one P2 because `examples/todo/USER_GUIDE.md` names the
+  configurable inactive TTL and default but omits D-0090 normalization and the
+  synchronous maximum-value error. Style found one low-severity defect because
+  private `privateDirectoryModeBigInt` has five semantic components.
+- Immutable role evidence: style agent
+  `019f64c3-f5fc-7a03-be07-984bd75e3605`, Terra High; documentation agent
+  `019f64c3-f993-7661-a31d-4c5a466508b5`, Luna Medium; TypeScript/API agent
+  `019f64c3-fd33-7792-a2bc-adc45de972d1`, Terra High; reliability agent
+  `019f64c6-99b1-76a2-b764-e427c5c850da`, Terra High. Every explicit dispatch
+  used its tool-enforced immutable actual role profile, no child or Git
+  mutation, and all four agents are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. Add the exact D-0090 sentence to the
+  example guide, rename only the private bigint mode constant and use, and
+  reconcile task/work/review plus both security artifacts to correction/review
+  pending. Run focused docs, lint, format, naming/status, and diff checks; no
+  runtime behavior, public API, package, Proto, dependency, or generated change
+  is authorized. All four Canonical Wave 17 lanes follow.
