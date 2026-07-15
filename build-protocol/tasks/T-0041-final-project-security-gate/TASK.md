@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 7 correction contract assigned for implementation
+Status: In progress - wave 7 corrections coordinator-verified; wave 8 pending
 
 Started: `2026-07-14`
 
@@ -1113,3 +1113,54 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   for the complete four-slice TDD/docs/decision/log batch. It must not spawn
   subagents or mutate Git and must keep private names within four semantic
   components. All four canonical lanes rerun afterward.
+
+## Wave 7 Implementer Progress
+
+- Existing implementer is the sole writer with explicit immutable
+  `gpt-5.6-terra` / medium dispatch, no subagents, and no Git-state mutation.
+- Deterministic RED/GREEN covers ambiguous exact claim adoption and
+  reconciliation-read failure retained for same-instance cancellation; timerless
+  retained cleanup now has a two-attempt runner budget after the initial failed
+  cancellation; and invalid ZeroMQ request timeout values fail synchronously
+  before IPC preparation. Final focused/native validation remains pending.
+
+## Wave 7 Coordinator Native Test Correction
+
+- Fresh native server selection passed 4/4 with 136 skipped.
+- Native ZeroMQ timeout/close selection executed both tests successfully but
+  exited 1 because the unanswered request rejected with `EAGAIN` during
+  `close()` before the test attached its later assertion; Vitest reported one
+  unhandled rejection and `PromiseRejectionHandledWarning`.
+- Return this bounded test-only correction to implementer
+  `019f63f4-5b91-7a53-bcdc-9f626ee6bf28`, explicit immutable Terra Medium.
+  Attach a rejection observer immediately when creating the request, preserve
+  the sent-request/close ordering and assertions, rerun focused native evidence,
+  and update durable logs. No production or contract change is assigned.
+
+## Wave 7 Native Test Correction Progress
+
+- The resumed immutable Terra Medium implementer attached a rejection observer
+  when the request promise is created, while retaining the handler-started proof,
+  separate close harness deadline, and direct rejected-request assertion.
+- The invalid-timeout table now explicitly includes `-2` and `-Infinity`.
+  Production code, documentation, decisions, and contracts are unchanged;
+  the exact native focused command passes 2/2 with no unhandled rejection.
+  Focused ESLint, exact-file Prettier, and diff integrity are clean.
+
+## Wave 7 Coordinator Verification
+
+- Direct inspection accepts exact claim reconciliation and explicit
+  outcome-unknown retention, the one-runner/two-attempt timerless budget,
+  D-0088 request-timeout validation, docs, security provenance, and the corrected
+  immediate request-rejection observer.
+- Fresh native claim/timerless selection passed 4/4 with 136 skipped; corrected
+  native timeout/close selection passed 2/2 with 29 skipped and no warning.
+  Fresh full native `spine-services.test.ts` passed 140/140 and full native
+  `signal-transport.test.ts` passed 31/31.
+- Fresh `typecheck:generated`, `docs:check`, focused four-file ESLint, exact
+  twelve-file Prettier, status/provenance/public-policy/generated/manifest scans,
+  and `git diff --check` exited 0. Docs verified 25 copied Proto checksums and
+  TypeDoc counts `100/28/205/19/17/3`.
+- Accept the substantive batch for commit. After its hash exists, update only
+  durable provenance to name that implementation endpoint, then package and run
+  canonical Wave 8. Dedicated security review and T-0041 closure remain pending.

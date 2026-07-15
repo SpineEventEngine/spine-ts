@@ -719,8 +719,13 @@ with Node's V8 serializer and is for
 trusted same-host runtime peers only; `ipcDirectory` must be private to those
 peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
 local IPC tests can require native IPC filesystem/socket permissions outside
-the sandbox. Runtime transport tests now include a native ZeroMQ-backed command
-and event callback proof through the public `SignalTransport` contract.
+the sandbox. `requestTimeoutMs` defaults to 2,000 milliseconds and accepts only
+integers from 1 through 2,147,483,647; invalid values fail before filesystem or
+socket work. It bounds request/reply send and receive but does not actively
+cancel an already-sent request, while `receiveTimeoutMs` remains the separate
+background-worker setting. Runtime transport tests now include a native
+ZeroMQ-backed command and event callback proof through the public
+`SignalTransport` contract.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

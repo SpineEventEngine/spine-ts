@@ -22,7 +22,12 @@ import { endpointFileAccess } from "./endpoint-files.js";
 
 /** Optional tuning for the adapter-scoped local IPC transport. */
 export interface ZeroMqTransportOptions {
-  /** Milliseconds used for bounded request/reply sends and receives. */
+  /**
+   * Milliseconds used for bounded request/reply sends and receives.
+   *
+   * Defaults to 2,000. Explicit values must be integers from 1 through
+   * 2,147,483,647.
+   */
   readonly requestTimeoutMs?: number;
   /** Milliseconds used by background worker sockets while waiting for messages. */
   readonly receiveTimeoutMs?: number;
@@ -120,7 +125,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
   constructor(config: ZeroMqAdapterConfig, options: ZeroMqTransportOptions) {
     this.#config = config;
-    this.#requestTimeoutMs = options.requestTimeoutMs ?? defaultRequestTimeoutMs;
+    this.#requestTimeoutMs = requestTimeoutMs(options.requestTimeoutMs);
     this.#receiveTimeoutMs = options.receiveTimeoutMs ?? defaultReceiveTimeoutMs;
     this.#onBackgroundFailure = options.onBackgroundFailure;
   }
@@ -520,6 +525,18 @@ class ZeroMqSignalTransport implements SignalTransport {
       // Background diagnostics must not terminate transport receive loops.
     }
   }
+}
+
+function requestTimeoutMs(value: number | undefined): number {
+  if (value === undefined) {
+    return defaultRequestTimeoutMs;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) {
+    throw new TypeError(
+      "ZeroMQ transport requestTimeoutMs must be an integer from 1 through 2147483647.",
+    );
+  }
+  return value;
 }
 
 interface BoundPublisher {

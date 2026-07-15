@@ -1,13 +1,12 @@
 # T-0041 Security Findings and Evidence
 
-Status: SF-007 through SF-010, D-0087, and the canonical wave 6 corrections are
-coordinator-verified in the working tree; canonical wave 7 and dedicated
-security re-review are pending.
+Status: SF-007 through SF-010, D-0087/D-0088, and the canonical wave 7
+corrections are coordinator-verified in the working tree; canonical wave 8 and
+dedicated security re-review are pending.
 
-Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. The wave 5
-implementation endpoint remains log-owned in the T-0041 task, work, and review
-records until the coordinator creates its immutable commit; no security
-acceptance is claimed.
+Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
+implementation evidence ends at `6f45be80`; later review/status commits are not
+implementation evidence. No security acceptance is claimed.
 
 ## Command and evidence ledger
 

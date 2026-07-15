@@ -354,8 +354,19 @@ export class SpineServices {
     } catch {
       this.#subscriptions.set(record.id, record);
       queueMicrotask(() => {
-        void this.#removeSubscription(record.id).catch(() => undefined);
+        void this.#runTimerlessCleanup(record);
       });
+    }
+  }
+
+  async #runTimerlessCleanup(record: SubscriptionRecord): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await this.#removeSubscription(record.id);
+        return;
+      } catch {
+        // A retained failed Subscribe is bounded and inert after both attempts.
+      }
     }
   }
 
@@ -642,9 +653,10 @@ export class SpineServices {
 
     const storage = this.#subscriptionStorage(record.route.context);
     try {
-      claim.claimed = await this.#claimDurable(storage, record, claim.state);
+      const durableOutcome = await this.#claimDurable(storage, record, claim);
+      claim.claimed = durableOutcome === "claimed";
       if (!claim.claimed) {
-        return claim.canceled ? "canceled" : "lost";
+        return claim.canceled || durableOutcome === "canceled" ? "canceled" : "lost";
       }
       record.durableState = claim.state;
       if (claim.canceled) {
@@ -708,7 +720,7 @@ export class SpineServices {
   }
 
   #finishClaim(record: SubscriptionRecord, claim: SubscriptionClaim): void {
-    if (claim.claimed || claim.canceled) {
+    if (claim.claimed || claim.canceled || claim.unknown) {
       return;
     }
     if (this.#claims.get(record.id) === claim) {
@@ -722,15 +734,44 @@ export class SpineServices {
   async #claimDurable(
     storage: RecordStorage<string, Any> | undefined,
     record: SubscriptionRecord,
-    claim: Any,
-  ): Promise<boolean> {
+    claim: SubscriptionClaim,
+  ): Promise<DurableClaimOutcome> {
     if (storage === undefined) {
-      return true;
+      return "claimed";
     }
     if (record.durableState === undefined) {
-      return false;
+      return "lost";
     }
-    return storage.compareAndSet(record.id, record.durableState, claim);
+    try {
+      return (await storage.compareAndSet(record.id, record.durableState, claim.state))
+        ? "claimed"
+        : "lost";
+    } catch (error) {
+      let current: Any | undefined;
+      try {
+        current = await storage.read(record.id);
+      } catch {
+        claim.unknown = true;
+        throw error;
+      }
+      if (sameAny(current, claim.state)) {
+        return "claimed";
+      }
+      if (sameAny(current, record.durableState)) {
+        throw error;
+      }
+      if (current === undefined) {
+        return "lost";
+      }
+      try {
+        return DurableSubscriptionRecords.readState(current, record.id).type === "cancel"
+          ? "canceled"
+          : "lost";
+      } catch {
+        claim.unknown = true;
+        throw error;
+      }
+    }
   }
 
   #restoreSubscription(stored: DurableSubscriptionRecord): SubscriptionRecord | undefined {
@@ -995,6 +1036,7 @@ interface SubscriptionReservation {
 interface SubscriptionClaim {
   canceled: boolean;
   claimed: boolean;
+  unknown: boolean;
   readonly owner: string;
   readonly record: SubscriptionRecord;
   readonly state: Any;
@@ -1009,6 +1051,8 @@ interface SubscriptionRemoval {
 type SubscriptionRecoveryOutcome =
   | { readonly status: "continue" }
   | { readonly status: "complete"; readonly record: SubscriptionRecord | undefined };
+
+type DurableClaimOutcome = "claimed" | "lost" | "canceled";
 
 type SubscriptionClaimOutcome = "claimed" | "duplicate" | "lost" | "canceled";
 
@@ -1470,10 +1514,18 @@ function createSubscriptionClaim(record: SubscriptionRecord): SubscriptionClaim 
   return {
     canceled: false,
     claimed: false,
+    unknown: false,
     owner,
     record,
     state: DurableSubscriptionRecords.claim(record.id, owner),
   };
+}
+
+function sameAny(left: Any | undefined, right: Any | undefined): boolean {
+  return (
+    left?.typeUrl === right?.typeUrl &&
+    Buffer.from(left?.value ?? []).equals(Buffer.from(right?.value ?? []))
+  );
 }
 
 function foreignSubscriptionError(): ConnectError {

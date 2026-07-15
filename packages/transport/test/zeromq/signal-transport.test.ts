@@ -14,6 +14,43 @@ const publishCadenceMs = 20;
 const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 describe("ZeroMQ SignalTransport", () => {
+  it("rejects invalid request timeouts before IPC preparation", async () => {
+    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-timeout-validation-"));
+    const prepare = vi.spyOn(zeroMqSocketAccess, "prepareIpcDirectory");
+    const config = createZeroMqAdapterConfig({
+      ipcDirectory,
+      adapterIdentity: `timeout-validation-${String(process.pid)}-${String(Date.now())}`,
+    });
+
+    try {
+      for (const requestTimeoutMs of [
+        0,
+        -1,
+        -2,
+        1.5,
+        Number.NaN,
+        Infinity,
+        -Infinity,
+        2_147_483_648,
+      ]) {
+        expect(() => createZeroMqTransport(config, { requestTimeoutMs })).toThrow(
+          new TypeError(
+            "ZeroMQ transport requestTimeoutMs must be an integer from 1 through 2147483647.",
+          ),
+        );
+      }
+      expect(() => createZeroMqTransport(config)).not.toThrow();
+      expect(() => createZeroMqTransport(config, { requestTimeoutMs: 1 })).not.toThrow();
+      expect(() =>
+        createZeroMqTransport(config, { requestTimeoutMs: 2_147_483_647 }),
+      ).not.toThrow();
+      expect(prepare).not.toHaveBeenCalled();
+    } finally {
+      prepare.mockRestore();
+      await rm(ipcDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
@@ -82,6 +119,40 @@ describe("ZeroMQ SignalTransport", () => {
 
       await handle.close();
     });
+  });
+
+  it("bounds close after an already-sent unanswered request", async () => {
+    await withZeroMqTransport(
+      async (transport) => {
+        const topic = createTransportTopic({
+          signalKind: "command",
+          messageTypeUrl: "type.spine.io/example.UnansweredCloseRequest",
+        });
+        const started = deferred<undefined>();
+        await transport.respond(
+          createTransportSubscription({
+            subscriberId: "unanswered-close-worker",
+            topic,
+            mode: "competing-consumer",
+          }),
+          async () => {
+            started.resolve(undefined);
+            return await new Promise<never>(() => undefined);
+          },
+        );
+
+        const request = transport.request({ topic, envelope: { requested: true } });
+        const observedRequest = request.catch((error: unknown) => error);
+        await started.promise;
+
+        await expect(
+          withHarnessDeadline(transport.close(), "unanswered request close"),
+        ).resolves.toBeUndefined();
+        await expect(request).rejects.toThrow();
+        await expect(observedRequest).resolves.toBeInstanceOf(Error);
+      },
+      { requestTimeoutMs: 25 },
+    );
   });
 
   it("removes a replier IPC pathname when its registration closes", async () => {
@@ -1066,4 +1137,30 @@ async function waitFor(milliseconds: number): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+async function withHarnessDeadline<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Timed out waiting for ${label}.`));
+        }, 1_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }

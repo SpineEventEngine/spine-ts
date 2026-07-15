@@ -2736,6 +2736,105 @@ describe("SpineServices", () => {
     }
   });
 
+  it("retries timerless retained cleanup once after its first runner failure", async () => {
+    const contextName = "TimerlessRetainedCleanupRetry";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    let readCalls = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      readCalls += 1;
+      if (readCalls <= 2) {
+        throw new Error(`cleanup read failure ${String(readCalls)}`);
+      }
+      return await readRecord();
+    };
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(storageFactory.cancelCleanupCalls).toBe(1);
+      expect(storageFactory.readCalls).toBe(3);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      timer.mockRestore();
+      storageFactory.writeCommitError = undefined;
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it("retains one inert timerless slot after both runner attempts fail", async () => {
+    const contextName = "TimerlessRetainedCleanupExhaustion";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    storageFactory.readHook = () => Promise.reject(new Error("cleanup read failed"));
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(storageFactory.cancelCleanupCalls).toBe(0);
+      expect(storageFactory.readCalls).toBe(3);
+      storageFactory.readHook = undefined;
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeDefined();
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({ code: Code.ResourceExhausted }),
+      );
+
+      await flushMicrotasks();
+      expect(storageFactory.readCalls).toBe(4);
+      const activation = handlers
+        .activate(
+          create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: retainedId }) }),
+        )
+        [Symbol.asyncIterator]();
+      await expect(activation.next()).resolves.toEqual({ done: true, value: undefined });
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
   it("releases capacity when process-local subscription registration fails", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
@@ -4018,6 +4117,82 @@ describe("SpineServices", () => {
     ).toBeUndefined();
     const replacement = await handlers.subscribe(createTopic());
     await handlers.cancel(replacement);
+  });
+
+  it("continues activation when ambiguous claim CAS reconciles to its exact claim", async () => {
+    const contextName = "AmbiguousClaimCommitted";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimError = new Error("claim outcome is ambiguous");
+    let failed = false;
+    storageFactory.casStateHook = async (transition) => {
+      const state =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      if (!failed && transition.id === subscriptionId && state?.type === "claim") {
+        failed = true;
+        await transition.apply();
+        throw claimError;
+      }
+      return await transition.apply();
+    };
+
+    const activation = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = activation.next();
+    await flushMicrotasks();
+    await context.stand().update(ProjectionStateSchema, createState("ambiguous-claim", "Claimed"));
+
+    await expect(withTimeout(next, "reconciled claim activation")).resolves.toMatchObject({
+      done: false,
+    });
+    await handlers.cancel(subscription);
+  });
+
+  it("retains an unknown exact claim for same-instance cancellation", async () => {
+    const contextName = "AmbiguousClaimUnknown";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimError = new Error("claim outcome is ambiguous");
+    let failed = false;
+    storageFactory.casStateHook = async (transition) => {
+      const state =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      if (!failed && transition.id === subscriptionId && state?.type === "claim") {
+        failed = true;
+        await transition.apply();
+        throw claimError;
+      }
+      return await transition.apply();
+    };
+    let reads = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      reads += 1;
+      if (reads === 1) {
+        throw new Error("claim reconciliation read failed");
+      }
+      return await readRecord();
+    };
+
+    const activation = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expect(activation.next()).rejects.toBe(claimError);
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    storageFactory.readHook = undefined;
+    await handlers.cancel(subscription);
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
   });
 
   it("settles concurrent inactive cancellations across instances", async () => {

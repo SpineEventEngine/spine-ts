@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 7 correction contract assigned for implementation
+Status: Wave 7 corrections coordinator-verified; canonical wave 8 pending
 
 Baseline: `39f2c6f7`
 
@@ -936,3 +936,46 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   evidence. Assign one fresh existing implementer, explicit immutable Terra
   Medium, for the complete batch. All four canonical lanes rerun afterward;
   dedicated security review remains pending.
+
+## Wave 7 Implementer Progress
+
+- The existing Terra Medium implementer is applying the accepted four-slice
+  contract directly, without subagents or Git mutation. Review findings are
+  being treated as verified behavioral requirements: exact claim reconciliation,
+  finite timerless cleanup, request-timeout validation, and security provenance.
+- This is implementation evidence only. Canonical wave 8 and dedicated security
+  review remain pending and are not accepted here.
+
+## Wave 7 Coordinator Native Test Correction
+
+- Native server correction selection passed 4/4. Native ZeroMQ selection
+  executed both tests but exited 1 because the request timed out during close
+  before the test attached its rejection assertion, producing one unhandled
+  `EAGAIN` plus `PromiseRejectionHandledWarning`.
+- Resume implementer `019f63f4-5b91-7a53-bcdc-9f626ee6bf28`, explicit immutable
+  Terra Medium, for immediate rejection observation in the test only. Preserve
+  sent-request/close liveness semantics; canonical/security review remains
+  pending.
+
+## Wave 7 Native Test Correction Progress
+
+- The resumed Terra Medium implementer made only the assigned transport-test
+  and durable-log changes. Immediate rejection observation removes the native
+  unhandled-rejection window without changing request/close ordering or runtime
+  behavior; the boundary table now includes `-2` and `-Infinity`.
+- Exact native focused verification passes 2/2 with no unhandled rejection;
+  focused lint, formatting, and diff integrity are clean. Canonical/security
+  re-review remains pending.
+
+## Wave 7 Coordinator Verification
+
+- Coordinator inspection accepts all four correction contracts and the native
+  test-only follow-up. Explicit runtime ownership remained immutable Terra
+  Medium and the implementer is closed.
+- Fresh native selections passed server 4/4 and transport 2/2; full native
+  affected suites passed server 140/140 and transport 31/31. Typecheck, docs/API
+  generation, focused lint, exact formatting, current pre-review scans, and diff
+  integrity all exited 0.
+- Commit the substantive batch, then write one provenance-only follow-up naming
+  its immutable hash before canonical Wave 8 packaging. Dedicated security
+  review remains pending and no task completion is claimed.

@@ -66,3 +66,9 @@ The adapter serializes envelopes with Node's V8 serializer. Treat every
 `ipc://` frame as trusted runtime data, not as an untrusted network protocol:
 only same-host Spine TS runtime peers that already trust each other should share
 the transport, and `ipcDirectory` must be private to those peers.
+
+`createZeroMqTransport()` bounds request/reply send and receive work with
+`requestTimeoutMs`, which defaults to 2,000 milliseconds. When supplied, it
+must be an integer from 1 through 2,147,483,647; invalid values throw before
+filesystem or socket work. `receiveTimeoutMs` remains a separate background
+worker setting, and an already-sent request is not actively cancelled.

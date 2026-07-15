@@ -3991,3 +3991,31 @@ Consequences:
   feature.
 - No public service, package export, `RecordStorage`, generated Protobuf,
   manifest, or lockfile change is introduced.
+
+Clarification (2026-07-15): when an inactive-to-claim CAS reports an error,
+the same storage handle reads once to reconcile it. Only byte-exact proposed
+claims are adopted and continue activation; the exact prior inactive record
+propagates the original error, while absent or changed valid states retain the
+existing lost/canceled result. If the reconciliation read or decode fails, the
+original CAS error is propagated but the exact local owner token and reservation
+remain inert for same-instance `Cancel`; no attachment occurs. Foreign or stale
+claims are never adopted.
+
+## D-0088: Bound ZeroMQ Request Timeouts
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision: `ZeroMqTransportOptions.requestTimeoutMs` defaults to 2,000 when
+omitted. Explicit values must be integers from 1 through 2,147,483,647; every
+other value throws `TypeError: ZeroMQ transport requestTimeoutMs must be an
+integer from 1 through 2147483647.` synchronously before filesystem or socket
+work. This bounds request/reply send and receive waits only. `receiveTimeoutMs`
+is unchanged, and no active cancellation of an already-sent request is added.
+
+Consequences: callers cannot select zero, negative, fractional, non-finite, or
+overflowing request timeouts that could permit an indefinitely blocked request
+or close. The public type remains `number`; runtime validation is the contract.
