@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 8 fixes committed; canonical wave 9 packaging pending
+Status: In progress - canonical review wave 9 assigned
 
 Started: `2026-07-14`
 
@@ -1261,3 +1261,17 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   not implementation evidence. Generate a literal package from `39f2c6f7` after
   this reconciliation, then run all four canonical Wave 9 lanes. Dedicated
   security review remains pending.
+
+## Canonical Review Wave 9 Assignment
+
+- Immutable review endpoint `173bf3b4`; package
+  `.superpowers/sdd/review-39f2c6f7..173bf3b4.diff` contains 41 commits and
+  537,157 bytes. Substantive implementation endpoint remains `430b1eaf`.
+- Dispatch all four existing canonical roles read-only with explicit immutable
+  profiles: style/maintainability Terra High, documentation Luna Medium,
+  TypeScript/API Terra High, and performance/reliability Terra High. Require the
+  complete task ledger, D-0087/D-0088, exact package/affected paths, no
+  subagents or Git mutation, concrete findings or clean, and superseded-history
+  exclusion. Focus re-review on the three Wave 8 corrections while retaining
+  project-wide T-0041 scope. Aggregate the complete wave before action;
+  dedicated security review remains pending.
