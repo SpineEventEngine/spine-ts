@@ -3074,3 +3074,14 @@ verify` remains reserved.
   childless, and Git-read-only. Canonical Wave 23 has no actionable findings.
   Generate a focused security package; full `pnpm verify` remains reserved for
   a clean security result.
+
+## Focused SF-011/SF-012 Security Re-Review Assignment
+
+- Package: `.superpowers/sdd/review-d72e264e..be925aa3.diff`; 12 commits;
+  153,976 bytes.
+- Existing security reviewer; expected explicit and actual immutable Terra High;
+  read-only, childless, Git-read-only. Scope SF-011/SF-012 and D-0091 controls,
+  threat mapping, compatibility, resource bounds, bypasses, continuation,
+  persistence behavior, and introduced regressions only.
+- Historical superseded text and unrelated accepted deployment residuals are not
+  findings unless the current security artifacts reactivate them.

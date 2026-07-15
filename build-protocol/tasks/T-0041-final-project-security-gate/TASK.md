@@ -2983,3 +2983,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - All accepted reviewers performed the skill-applicability check, remained
   read-only/childless/Git-read-only, and are closed. Canonical Wave 23 is clean;
   generate the focused SF-011/SF-012 security package next.
+
+## Focused SF-011/SF-012 Security Re-Review Assignment
+
+- Literal package `.superpowers/sdd/review-d72e264e..be925aa3.diff` contains 12
+  commits and 153,976 bytes from the previously accepted canonical/security
+  endpoint `d72e264e` through Wave 23 closure `be925aa3`.
+- Assign the existing `security_reviewer`, expected explicit immutable
+  `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. Re-adjudicate
+  SF-011/TM-007/TB-06 and SF-012/TM-006/TB-04, plus any regression introduced
+  by D-0091, without reopening accepted unrelated residuals or superseded text.
+- Require concrete remaining finding evidence or an explicit clean result.
+  Full `pnpm verify` follows only after clean focused security closure.
