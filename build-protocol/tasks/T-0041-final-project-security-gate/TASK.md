@@ -1654,3 +1654,14 @@ succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
 - Accept this bounded correction for commit. Its immutable implementation
   endpoint must be reconciled into security provenance before generating the
   Canonical Wave 13 package; dedicated security review remains pending.
+
+## Wave 12 Immutable Implementation Endpoint
+
+- Commit `0d8135aa` contains the coordinator-verified D-0088 publisher scope,
+  shared-fixture cleanup bound, inactive-expiry regression, public-doc mirrors,
+  and durable evidence corrections.
+- Both security artifacts now identify `0d8135aa` as substantive implementation
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal baseline package after this
+  reconciliation, then run all four Canonical Wave 13 lanes. Dedicated security
+  review remains pending.

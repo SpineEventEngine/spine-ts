@@ -5,7 +5,7 @@ corrections are coordinator-verified and committed; canonical wave 12 and
 dedicated security re-review are pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
-implementation evidence ends at `a0f40f04`; later provenance/review/status
+implementation evidence ends at `0d8135aa`; later provenance/review/status
 commits are not implementation evidence. No security acceptance is claimed.
 
 ## Command and evidence ledger

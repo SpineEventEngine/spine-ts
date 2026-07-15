@@ -1510,3 +1510,11 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
 - Commit the substantive correction and update its immutable security
   provenance before Canonical Wave 13. Every canonical concern reruns; the
   dedicated final security reviewer remains pending.
+
+## Wave 12 Immutable Implementation Endpoint
+
+- Commit `0d8135aa` is the substantive Wave 12 implementation endpoint. Both
+  security artifacts identify it directly; this provenance-only follow-up and
+  later review/status commits are not implementation evidence.
+- Generate the literal package after provenance reconciliation, then run every
+  Canonical Wave 13 concern. Dedicated final security review remains pending.
