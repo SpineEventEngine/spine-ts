@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 2 findings assigned
+Status: In progress - canonical wave 2 fixes coordinator-verified
 
 Started: `2026-07-14`
 
@@ -511,6 +511,18 @@ directory replaced immediately after successful creation'` exited 1 with 1
   Set-backed capacity authority while adding exact ownership/cancel
   coordination; dedicated security re-review remains pending.
 
+## Canonical Wave 2 Fix Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, the complete three-item batch, no subagents or Git
+  mutation, and is closed.
+- Fresh coordinator native SpineServices verification passed 117/117. Build
+  and tooling typechecks, docs/API generation, focused ESLint/Prettier,
+  status/provenance/per-instance scans, generated tracking, and
+  `git diff --check` passed.
+- The endpoint is ready for commit and canonical wave 3. Dedicated security
+  re-review and task closure remain pending.
+
 ## Canonical Review Fix Batch Implementation
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` completed the
@@ -541,3 +553,28 @@ directory replaced immediately after successful creation'` exited 1 with 1
   denial. `typecheck:generated`, focused ESLint, focused Prettier check,
   `docs:check`, and `git diff --check` all exit 0. Final dedicated security
   re-review and task closure remain pending.
+
+## Canonical Wave 2 Fix Implementation
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` completed the
+  three-item batch with actual immutable `gpt-5.6-terra` / medium, no subagents,
+  and no Git state mutation.
+- The Set remains the authoritative per-instance capacity collection. Private
+  owner tokens prevent ID-only release, and paused recovery cancellation
+  retains its token through CAS settlement and durable deletion before release.
+  Cancellation is checked immediately after CAS with no await before a possible
+  synchronous remember.
+- Focused RED exited 1 with 1 failed/115 skipped because cancellation admitted
+  a distinct subscription while the only recovery slot was still owned. One
+  intermediate post-fix run timed out because the test incorrectly expected
+  deletion before recovery settlement; the corrected schedule produced GREEN
+  with 1 passed/115 skipped. Cleanup-failure coverage passed 1/1, and the
+  focused lifecycle set passed 18/18.
+- Public TSDoc, user/package docs, and security artifacts now state that each
+  `SpineServices` instance has an independent limit. Threat/findings provenance
+  uses fixed baseline `39f2c6f7` and delegates immutable endpoints to the
+  T-0041 records without a moving hash.
+- Full native SpineServices passed 117/117. Generated build/tooling typechecks,
+  docs/API validation, focused ESLint, wording/provenance scans, and formatting
+  plus diff integrity are green. Canonical re-review, dedicated security
+  re-review, and task closure remain pending.

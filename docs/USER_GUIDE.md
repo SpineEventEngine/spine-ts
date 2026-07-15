@@ -346,11 +346,12 @@ the inactive record before attaching delivery; updates from before activation
 are not replayed. Active streams and queued updates are process-local, with a
 default queue cap of 100 updates. Exceeding that cap closes the stream and
 discards its queued updates. `SpineServicesOptions.subscriptionLimit` defaults
-to 100 and bounds all process-local pending, inactive, active, and recovered
-subscriptions; configure a positive safe integer for local capacity planning.
-This is not a distributed quota. Active streams and their queues are not recovered
-or replayed after disconnection or process restart, so clients must query
-current state when they need a fresh view.
+to 100 and bounds pending, inactive, active, and recovered subscriptions owned
+by that `SpineServices` instance; configure a positive safe integer for
+instance-local capacity planning. Each instance has an independent limit, so
+this is neither a process-wide nor a distributed quota. Active streams and
+their queues are not recovered or replayed after disconnection or process
+restart, so clients must query current state when they need a fresh view.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.

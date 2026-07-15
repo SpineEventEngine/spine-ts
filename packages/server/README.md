@@ -877,16 +877,17 @@ activation iterator closes, an inactive record expires, or the active queue
 limit is exceeded. Malformed and inconsistent durable rows are deleted instead
 of failing repeatedly. The inactive TTL defaults to 30 seconds and the active
 queue limit defaults to 100 queued updates. `SpineServicesOptions.subscriptionLimit`
-is a positive safe integer that defaults to 100 and bounds process-local pending,
-inactive, active, and recovered subscriptions. It is not a distributed tenant quota.
-Capacity is released before durable cleanup, so cleanup failures remain observable
-without retaining process-local capacity. Active service streams, queued updates,
-direct Stand subscriptions, Stand version metadata, and the in-memory storage
-adapter's backing data remain process-local development/test state, not durable
-delivery or catch-up storage. Cross-context fallback, client query DSLs,
-comparison subscription operators, retained update replay, active-stream
-persistence, and durable cross-process delivery/subscription recovery catch-up
-remain outside this slice.
+is a positive safe integer that defaults to 100 and bounds pending, inactive,
+active, and recovered subscriptions owned by one `SpineServices` instance.
+Each instance has an independent limit; it is neither a process-wide nor a
+distributed tenant quota. Capacity is released before ordinary durable cleanup,
+so cleanup failures remain observable without retaining instance capacity.
+Active service streams, queued updates, direct Stand subscriptions, Stand
+version metadata, and the in-memory storage adapter's backing data remain
+process-local development/test state, not durable delivery or catch-up storage.
+Cross-context fallback, client query DSLs, comparison subscription operators,
+retained update replay, active-stream persistence, and durable cross-process
+delivery/subscription recovery catch-up remain outside this slice.
 
 ## Local Server Lifecycle
 

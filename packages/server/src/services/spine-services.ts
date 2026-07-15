@@ -123,6 +123,7 @@ export class SpineServices {
   readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
   readonly #subscriptionReservations = new Set<string>();
+  readonly #recoveries = new Map<string, SubscriptionRecovery>();
   readonly #subscriptionStores: readonly SubscriptionStore[];
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
@@ -313,9 +314,11 @@ export class SpineServices {
       expiresAtMs: Date.now() + this.#inactiveTtlMs,
       queueLimit: this.#queueLimit,
     });
-    if (!this.#reserveSubscription(id)) {
+    const reservation = this.#reserveSubscription(id);
+    if (reservation === undefined) {
       throw new ConnectError("Subscription ID is already reserved.", Code.AlreadyExists);
     }
+    record.reservation = reservation;
     return this.#completeSubscription(record, subscription);
   }
 
@@ -328,7 +331,7 @@ export class SpineServices {
       this.#rememberSubscription(record);
       return clone(SubscriptionSchema, subscription);
     } catch (error) {
-      this.#releaseSubscription(record.id);
+      this.#releaseRecord(record);
       try {
         await this.#deleteDurableSubscription(record.id, record.route.context);
       } catch {
@@ -455,13 +458,36 @@ export class SpineServices {
   async #removeSubscription(id: string): Promise<void> {
     const record = this.#subscriptions.get(id);
 
-    this.#releaseSubscription(id);
-    if (record !== undefined) {
-      clearInactiveTimer(record);
-      record.delivery.close();
-      this.#subscriptions.delete(id);
+    if (record === undefined) {
+      const recovery = this.#recoveries.get(id);
+      if (recovery !== undefined) {
+        recovery.canceled = true;
+        const cancellation = recovery.cancellation ?? this.#cancelRecovery(id, recovery);
+        recovery.cancellation = cancellation;
+        await cancellation;
+        return;
+      }
+      await this.#deleteDurableSubscription(id);
+      return;
     }
-    await this.#deleteDurableSubscription(id, record?.route.context);
+
+    this.#releaseRecord(record);
+    clearInactiveTimer(record);
+    record.delivery.close();
+    this.#subscriptions.delete(id);
+    await this.#deleteDurableSubscription(id, record.route.context);
+  }
+
+  async #cancelRecovery(id: string, recovery: SubscriptionRecovery): Promise<void> {
+    try {
+      await recovery.settled;
+      await this.#deleteDurableSubscription(id);
+    } finally {
+      this.#releaseSubscription(recovery.reservation);
+      if (this.#recoveries.get(id) === recovery) {
+        this.#recoveries.delete(id);
+      }
+    }
   }
 
   async #persistSubscription(record: SubscriptionRecord): Promise<void> {
@@ -489,7 +515,7 @@ export class SpineServices {
   async #recoverSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     for (const store of this.#subscriptionStores) {
       const storage = createSubscriptionStorage(store);
-      let reserved = false;
+      let recovery: SubscriptionRecovery | undefined;
 
       try {
         const durable = await storage.read(id);
@@ -503,13 +529,18 @@ export class SpineServices {
           return undefined;
         }
 
-        reserved = this.#reserveSubscription(record.id);
-        if (!reserved) {
+        const reservation = this.#reserveSubscription(record.id);
+        if (reservation === undefined) {
           return undefined;
         }
-        if (!(await storage.compareAndSet(id, durable, undefined))) {
-          this.#releaseSubscription(record.id);
-          reserved = false;
+        record.reservation = reservation;
+        recovery = createSubscriptionRecovery(reservation);
+        this.#recoveries.set(id, recovery);
+        const consumed = await storage.compareAndSet(id, durable, undefined);
+        if (recovery.canceled) {
+          return undefined;
+        }
+        if (!consumed) {
           continue;
         }
 
@@ -517,8 +548,6 @@ export class SpineServices {
         try {
           this.#rememberSubscription(record);
         } catch (error) {
-          this.#releaseSubscription(record.id);
-          reserved = false;
           try {
             await storage.delete(id);
           } catch {
@@ -526,18 +555,33 @@ export class SpineServices {
           }
           throw error;
         }
+        recovery.remembered = true;
         return record;
-      } catch (error) {
-        if (reserved) {
-          this.#releaseSubscription(id);
-        }
-        throw error;
       } finally {
-        storage.close();
+        try {
+          storage.close();
+        } finally {
+          this.#settleRecovery(id, recovery);
+        }
       }
     }
 
     return undefined;
+  }
+
+  #settleRecovery(id: string, recovery: SubscriptionRecovery | undefined): void {
+    if (recovery === undefined) {
+      return;
+    }
+    if (!recovery.canceled) {
+      if (!recovery.remembered) {
+        this.#releaseSubscription(recovery.reservation);
+      }
+      if (this.#recoveries.get(id) === recovery) {
+        this.#recoveries.delete(id);
+      }
+    }
+    recovery.settle();
   }
 
   #restoreSubscription(durable: Any, id: string): SubscriptionRecord | undefined {
@@ -642,19 +686,32 @@ export class SpineServices {
     return createSubscriptionStorage(store);
   }
 
-  #reserveSubscription(id: string): boolean {
+  #reserveSubscription(id: string): SubscriptionReservation | undefined {
     if (this.#subscriptionReservations.has(id)) {
-      return false;
+      return undefined;
     }
     if (this.#subscriptionReservations.size >= this.#subscriptionLimit) {
       throw new ConnectError("Subscription capacity is exhausted.", Code.ResourceExhausted);
     }
     this.#subscriptionReservations.add(id);
-    return true;
+    return { id, released: false };
   }
 
-  #releaseSubscription(id: string): void {
-    this.#subscriptionReservations.delete(id);
+  #releaseSubscription(reservation: SubscriptionReservation): void {
+    if (reservation.released) {
+      return;
+    }
+    reservation.released = true;
+    this.#subscriptionReservations.delete(reservation.id);
+  }
+
+  #releaseRecord(record: SubscriptionRecord): void {
+    const reservation = record.reservation;
+    if (reservation === undefined) {
+      return;
+    }
+    record.reservation = undefined;
+    this.#releaseSubscription(reservation);
   }
 }
 
@@ -675,9 +732,11 @@ export interface SpineServicesOptions {
    */
   readonly queueLimit?: number;
   /**
-   * Maximum process-local subscriptions, including pending, inactive, active, and recovered work.
+   * Maximum subscriptions owned by this `SpineServices` instance.
    *
-   * Defaults to 100 and must be a positive safe integer. This is not a distributed quota.
+   * The limit includes pending, inactive, active, and recovered work. It defaults
+   * to 100 and must be a positive safe integer. Each instance has an independent
+   * limit; this is neither a process-wide nor a distributed quota.
    */
   readonly subscriptionLimit?: number;
 }
@@ -713,6 +772,21 @@ interface SubscriptionRecordBase {
   readonly delivery: SubscriptionDelivery;
   durableConsumed: boolean;
   inactiveTimer: ReturnType<typeof setTimeout> | undefined;
+  reservation: SubscriptionReservation | undefined;
+}
+
+interface SubscriptionReservation {
+  readonly id: string;
+  released: boolean;
+}
+
+interface SubscriptionRecovery {
+  canceled: boolean;
+  cancellation: Promise<void> | undefined;
+  remembered: boolean;
+  readonly reservation: SubscriptionReservation;
+  readonly settled: Promise<void>;
+  readonly settle: () => void;
 }
 
 type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
@@ -1159,7 +1233,23 @@ function createSubscriptionRecord(input: {
     delivery: new SubscriptionDelivery(input.queueLimit),
     durableConsumed: false,
     inactiveTimer: undefined,
+    reservation: undefined,
     ...input.shape,
+  };
+}
+
+function createSubscriptionRecovery(reservation: SubscriptionReservation): SubscriptionRecovery {
+  let settle!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    canceled: false,
+    cancellation: undefined,
+    remembered: false,
+    reservation,
+    settled,
+    settle,
   };
 }
 

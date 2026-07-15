@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 2 findings assigned
+Status: Canonical wave 2 fixes coordinator-verified
 
 Baseline: `39f2c6f7`
 
@@ -398,6 +398,17 @@ bytes).
   no post-cancel remember, no capacity bypass, synchronized docs/provenance,
   and focused evidence before a new package. All reviewers are closed.
 
+## Canonical Wave 2 Fix Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, all three findings addressed, and is closed without
+  subagents or Git mutation.
+- Fresh native service verification passed 117/117. Typechecks, docs/API,
+  focused lint/format, status/provenance/per-instance scans, generated tracking,
+  and diff integrity passed.
+- Commit and package this endpoint, then repeat all four canonical concerns as
+  one wave before dedicated security re-review.
+
 ## Canonical Review Fix Batch Evidence
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -420,3 +431,23 @@ bytes).
   `100/28/205/19/17/3`; generated outputs remain ignored.
 - The corrected endpoint is ready for canonical and dedicated security
   re-review. No review is marked complete here, and T-0041 remains open.
+
+## Canonical Wave 2 Fix Evidence
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, resolved the complete three-item batch
+  without subagents or Git mutation.
+- Paused-CAS cancellation changed from 1 failed/115 skipped to 1 passed/115
+  skipped. One intermediate timeout was test-ordering-only and is superseded by
+  the final deterministic schedule. The cleanup-failure case passed 1/1 and the
+  focused lifecycle regression set passed 18/18.
+- Owner tokens preserve the Set-backed capacity bound; canceled recovery waits
+  through CAS and durable deletion before owner release, cannot remember after
+  the final cancellation check, and removes token/cancellation state on success
+  or observable deletion failure.
+- Per-instance scope wording and stable log-owned provenance are synchronized.
+  Full native SpineServices passed 117/117; typecheck, docs/API validation,
+  focused ESLint, Prettier, targeted wording/provenance scans, and diff integrity
+  are green.
+- Canonical re-review and dedicated security re-review remain pending. This log
+  does not mark the wave, security gate, or T-0041 complete.
