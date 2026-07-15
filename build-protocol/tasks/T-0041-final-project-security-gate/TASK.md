@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Wave 19 finding fixed; correction verification current;
-Canonical Wave 20 and dedicated security re-review pending
+Status: In progress - Canonical Wave 20 assigned; dedicated security re-review
+pending
 
 Started: `2026-07-14`
 
@@ -2389,3 +2389,14 @@ Subscription cancellation failed.` instead of `AggregateError`.
   exact changed-path proof, and `git diff --check` passed. Accept the Wave 19
   correction for commit; Canonical Wave 20 and dedicated security re-review
   remain pending.
+
+## Wave 19 Immutable Endpoint And Wave 20 Status
+
+- Commit `0b7fa354` is the substantive coordinator-verified Wave 19 IPC
+  shutdown-gate and regression correction. Later provenance/review/status
+  commits are not implementation evidence.
+- Canonical Wave 20 is assigned before package generation. Run all four
+  immutable canonical roles over the full ledger, D-0087-D-0090, affected IPC
+  lifecycle paths, current security artifacts, and superseded-history
+  exclusion; aggregate before action. Dedicated final security re-review
+  remains pending.

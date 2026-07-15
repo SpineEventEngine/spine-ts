@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 19 finding fixed; correction verification current; Canonical Wave
-20 and dedicated security re-review pending
+Status: Canonical Wave 20 assigned; dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2449,3 +2448,15 @@ verify` remains reserved.
   publisher path and one parameterized six-case regression without a public or
   test-only seam. Commit and run all four Canonical Wave 20 lanes before the
   dedicated security review.
+
+## Wave 19 Immutable Endpoint And Canonical Wave 20 Assignment
+
+- Substantive implementation evidence is commit `0b7fa354`; this follow-up is
+  provenance/status only.
+- Canonical Wave 20 assigns existing style/maintainability Terra High,
+  documentation Luna Medium, TypeScript/API Terra High, and performance/
+  reliability Terra High roles over a fresh literal package. Every role gets
+  the full ledger, D-0087-D-0090, affected IPC lifecycle paths, current
+  security artifacts, no-child/Git-read-only rules, and superseded-history
+  exclusion. Aggregate before action; dedicated security re-review remains
+  pending.
