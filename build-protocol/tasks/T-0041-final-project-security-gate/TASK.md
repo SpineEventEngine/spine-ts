@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - pre-review lint fix assigned
+Status: In progress - pre-review lint accepted; canonical wave 5 pending
 
 Started: `2026-07-14`
 
@@ -798,6 +798,18 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   subagents. Focused test, typecheck, ESLint, Prettier, and diff integrity are
   required before packaging.
 
+## Wave 4 Pre-Review Lint Acceptance
+
+- Existing implementer returned with actual immutable `gpt-5.6-terra` /
+  medium, exact strings/codes unchanged, no subagents or Git mutation, and is
+  closed.
+- Fresh coordinator conflict tests passed 2/2 (131 skipped).
+  `typecheck:generated`, focused ESLint/Prettier, one-occurrence literal scans,
+  and `git diff --check` exited 0.
+- The endpoint is ready for one fresh immutable package and canonical review
+  wave 5. Dedicated security review remains pending until canonical concerns
+  are clean.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -827,3 +839,18 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   public API, storage interface, generated contract, package export, manifest,
   lockfile, or policy documentation changed. Status is coordinator retry fixed;
   coordinator re-verification and canonical/security review remain pending.
+
+## Wave 4 Pre-Review Lint Fix
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable runtime `gpt-5.6-terra` / medium, replaced the two duplicated
+  cancellation `Aborted` policy literals with private shared constants used by
+  both error factories and `isCancellationConflict()`.
+- The narrow characterization command passed before and after the refactor with
+  2 passed/131 skipped. Exact messages, `Code.Aborted`, runtime behavior, docs,
+  tests, public/generated APIs, exports, manifests, and locks are unchanged.
+- Status is pre-review lint fixed; coordinator verification and canonical/
+  dedicated security review remain pending.
+- Final `typecheck:generated`, focused ESLint, four-file Prettier, literal-count
+  scan, and `git diff --check` exited 0; the final focused test rerun remained
+  2 passed/131 skipped.

@@ -1393,6 +1393,9 @@ const DEFAULT_INACTIVE_TTL_MS = 30_000;
 const DEFAULT_QUEUE_LIMIT = 100;
 const DEFAULT_SUBSCRIPTION_LIMIT = 100;
 const MAX_CANCEL_RETRIES = 3;
+const FOREIGN_SUBSCRIPTION_MESSAGE = "Subscription is active in another service instance.";
+const CONCURRENT_CANCELLATION_MESSAGE =
+  "Subscription cancellation could not settle concurrent storage changes.";
 const MAX_QUERY_ID_FILTER_IDS = 100;
 const MAX_QUERY_SIMPLE_FILTERS = 16;
 const MAX_QUERY_COMPOSITE_FILTERS = 8;
@@ -1461,7 +1464,7 @@ function createSubscriptionClaim(record: SubscriptionRecord): SubscriptionClaim 
 }
 
 function foreignSubscriptionError(): ConnectError {
-  return new ConnectError("Subscription is active in another service instance.", Code.Aborted);
+  return new ConnectError(FOREIGN_SUBSCRIPTION_MESSAGE, Code.Aborted);
 }
 
 function cancellationFailedError(): ConnectError {
@@ -1469,18 +1472,15 @@ function cancellationFailedError(): ConnectError {
 }
 
 function concurrentCancellationError(): ConnectError {
-  return new ConnectError(
-    "Subscription cancellation could not settle concurrent storage changes.",
-    Code.Aborted,
-  );
+  return new ConnectError(CONCURRENT_CANCELLATION_MESSAGE, Code.Aborted);
 }
 
 function isCancellationConflict(error: unknown): error is ConnectError {
   return (
     error instanceof ConnectError &&
     error.code === Code.Aborted &&
-    (error.rawMessage === "Subscription is active in another service instance." ||
-      error.rawMessage === "Subscription cancellation could not settle concurrent storage changes.")
+    (error.rawMessage === FOREIGN_SUBSCRIPTION_MESSAGE ||
+      error.rawMessage === CONCURRENT_CANCELLATION_MESSAGE)
   );
 }
 

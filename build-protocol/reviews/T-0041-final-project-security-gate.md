@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Pre-review lint fix assigned
+Status: Pre-review lint accepted; canonical wave 5 pending
 
 Baseline: `39f2c6f7`
 
@@ -644,6 +644,15 @@ bytes).
   It must preserve exact errors and rerun focused mechanical evidence before a
   new package. Canonical/security review remains pending.
 
+## Wave 4 Pre-Review Lint Acceptance
+
+- Existing implementer returned with matching immutable Terra Medium metadata
+  and is closed. Coordinator conflict tests passed 2/2; typecheck, lint,
+  formatting, literal-deduplication, and diff checks are green.
+- The pre-review lint pass is clean. Generate a fresh immutable package from
+  baseline `39f2c6f7` and dispatch all four canonical concerns as wave 5 before
+  dedicated security re-review.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -663,3 +672,16 @@ bytes).
   skipped); and full native SpineServices passed 133/133.
 - Coordinator re-verification and canonical/dedicated security review remain
   pending. This record does not mark T-0041 complete.
+
+## Wave 4 Pre-Review Lint Fix Result
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, completed the private two-constant cleanup
+  without subagents or Git-state mutation.
+- Both exact cancellation conflict tests passed before and after the refactor:
+  2 passed/131 skipped. No behavior or public/documented contract changed.
+- Coordinator verification and canonical/dedicated security review remain
+  pending; T-0041 is not complete.
+- Generated/tooling typecheck, focused ESLint/Prettier, exact-literal scan, final
+  2-test rerun, and diff integrity are green. Only source and three durable logs
+  changed.
