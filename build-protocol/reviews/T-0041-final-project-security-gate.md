@@ -3492,6 +3492,20 @@ verify` remains reserved.
 - Every lane is read-only, childless, Git-read-only, helper-scoped, and subject
   to the historical-text rule. Reliability remains N/A under D-0095.
 
+## D-0095 Canonical Re-Review Wave Result
+
+- Style `019f6665-7053-75b1-a79a-f9fd1fb4eea4`, explicit/actual immutable Terra
+  High: accepted Medium subscription-to-`never` overload defect; closed.
+- Documentation `019f6665-7582-7b83-9bb4-8ffe3902836c`, explicit/actual
+  immutable Luna Medium: accepted P2 three stale active matrix counts; closed.
+- TypeScript/API `019f6665-78ec-7911-8dd6-b2e07cced2b4`, explicit/actual
+  immutable Terra High: accepted High structural-topic wrong-kind result;
+  closed.
+- Reliability remains N/A. Return the complete batch to existing implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected immutable Terra Medium, for
+  overload restriction, canonical topic precedence, compile/runtime regressions,
+  and active matrix correction only.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,

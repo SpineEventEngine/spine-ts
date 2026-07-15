@@ -3491,6 +3491,23 @@ Subscription cancellation failed.` instead of `AggregateError`.
   execution-path rationale. Aggregate all three affected results before final
   canonical closure or another correction.
 
+## D-0095 Canonical Re-Review Result And Fix Assignment
+
+- Style `019f6665-7053-75b1-a79a-f9fd1fb4eea4`, explicit/actual immutable Terra
+  High: accepted Medium overbroad operation overload that admits subscriptions
+  and narrows them to `never`; closed.
+- Documentation `019f6665-7582-7b83-9bb4-8ffe3902836c`, explicit/actual
+  immutable Luna Medium: accepted P2 active release-matrix transport count 17
+  versus current 19 at three locations; closed.
+- TypeScript/API `019f6665-78ec-7911-8dd6-b2e07cced2b4`, explicit/actual
+  immutable Terra High: accepted High structural-topic misclassification when
+  a valid topic also has a `topic` property; closed.
+- Reliability remains N/A. Resume implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original explicit immutable
+  Terra Medium, sole writer and childless. Restrict operation narrowing to an
+  envelope-bearing operation, prioritize top-level `signalKind` for topic
+  values, add compile/runtime regressions, and update the three active counts.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
