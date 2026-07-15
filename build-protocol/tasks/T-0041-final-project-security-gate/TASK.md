@@ -3624,6 +3624,17 @@ Subscription cancellation failed.` instead of `AggregateError`.
   future-policy overclaim. Style, docs, and TypeScript/API re-review; reliability
   remains N/A under D-0096's stateless/no-I/O/no-adapter-path rationale.
 
+## D-0096 Canonical Re-Review Assignment
+
+- Frozen endpoint `3a6026a4`; baseline `caf59f58`; exact package
+  `.superpowers/sdd/review-caf59f58..3a6026a4.diff`; 2 commits; 71,736 bytes.
+- Dispatch existing style/maintainability and TypeScript/API as explicit
+  immutable Terra High and documentation as explicit immutable Luna Medium.
+  All are read-only, childless, Git-read-only, D-0096-scoped, and subject to the
+  historical-text rule.
+- Reliability remains N/A. Aggregate all three affected results before closure
+  or any complete fix batch.
+
 ## D-0096 Fixed-Path Predicate Implementation
 
 - Removed unmerged `hasTransportSignalKind()` without an alias. Added

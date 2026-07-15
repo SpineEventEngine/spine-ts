@@ -3599,6 +3599,16 @@ verify` remains reserved.
 - Style, docs, and TypeScript/API are affected; reliability remains N/A under
   D-0096.
 
+## D-0096 Canonical Re-Review Package And Assignment
+
+- Exact package `.superpowers/sdd/review-caf59f58..3a6026a4.diff`; baseline
+  `caf59f58`; endpoint `3a6026a4`; 2 commits; 71,736 bytes.
+- Style/maintainability and TypeScript/API: existing roles, expected explicit
+  immutable Terra High. Documentation: existing role, expected explicit
+  immutable Luna Medium.
+- Every lane is read-only, childless, Git-read-only, D-0096-scoped, and subject
+  to the historical-text rule. Reliability remains N/A.
+
 ## D-0096 Implementer Evidence Pending Re-Review
 
 - RED tooling exited 2 with missing fixed-path exports, unresolved narrowing,
