@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 10 findings accepted; fix assigned
+Status: Canonical wave 10 coordinator naming correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1267,3 +1267,33 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   delivery. Run focused native and generated/docs/lint/format/integrity checks,
   no Git mutation or subagents. All four canonical lanes rerun before dedicated
   security review.
+
+## Canonical Wave 10 Correction Evidence
+
+- The assigned sole writer corrected every accepted docs/test/name finding
+  without changing production behavior or public contracts. The observer
+  regression records an `Error`, throws from the private observer, and still
+  proves later subscriber delivery; the runtime's swallowed-observer behavior
+  is therefore covered. Both close assertions share the single test-only
+  275 ms deadline.
+- Documentation now makes D-0087's bounded unknown-removal admission and
+  pre-storage `RESOURCE_EXHAUSTED` outcome explicit, scopes same-ID coalescing
+  to one `SpineServices` instance, preserves foreign `ABORTED`, records
+  inactive-expiry failure retention/no automatic retry with explicit same-ID
+  cancellation retry, and lists exactly the six public ZeroMQ subpath names.
+- Fresh validation: approved native transport `31/31`; approved native
+  cross-process server `7/7`; generated build typecheck; docs check with 25
+  Proto checksums and `100/28/205/19/17/6/3`; focused ESLint; exact Prettier;
+  generated-clean; manifest/lock inspection; and `git diff --check` all exited 0. The sandbox transport attempt had only expected native IPC `EPERM`.
+- The assignment's explicit profile is `gpt-5.6-terra` / medium; this surface
+  exposes no immutable actual profile metadata. No child or Git mutation was
+  used. All four canonical lanes require their next read-only disposition before
+  the dedicated security review.
+
+## Wave 10 Coordinator Naming Correction
+
+- Coordinator inspection accepts all behavior/docs corrections but rejects the
+  incomplete private-name cleanup: `missingDeclaredZeroMqExports` still exceeds
+  four semantic components. Resume the same immutable Terra Medium implementer
+  for that local rename and focused API/lint/format/diff evidence only. No other
+  scope is authorized before Canonical Wave 11.

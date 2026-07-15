@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 10 findings accepted; fix assigned
+Status: In progress - canonical wave 10 coordinator naming correction assigned
 
 Started: `2026-07-14`
 
@@ -1412,3 +1412,36 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   D-0087/D-0088/D-0089 change is authorized. Run focused native and docs/type/
   lint/format checks; no Git mutation or subagents. All four canonical lanes
   rerun afterward; dedicated security review remains pending.
+
+## Canonical Review Wave 10 Correction
+
+- The sole existing implementer corrected only the assigned docs/test/name
+  batch. Class TSDoc now identifies durable inactive records and recovery before
+  expiry; architecture, API, server, and transport docs now qualify cancellation
+  admission/capacity, same-instance coalescing, expiry-cleanup retention/no
+  automatic retry, explicit retry, and all six public ZeroMQ subpath names.
+- The existing subscriber-recovery regression now records its `Error` and
+  throws from the internal observer while later delivery still completes. One
+  shared test-only 275 ms close deadline covers both close checks. Private Wave
+  9 helper names and API-gate diagnostics were shortened and reflowed; public
+  contracts, exports, runtime behavior, generated output, packages, and
+  D-0087/D-0088/D-0089 remain unchanged.
+- Fresh evidence: native transport test `31/31`, native cross-process server
+  test `7/7`, generated build typecheck, docs check (25 Proto checksums and
+  export counts `100/28/205/19/17/6/3`), focused ESLint, exact Prettier,
+  generated-clean, manifest/lock diff inspection, and `git diff --check` all
+  exited 0. The sandbox transport attempt was blocked by expected native IPC
+  `EPERM`; the approved native rerun is the validation evidence.
+- Assignment specifies `gpt-5.6-terra` / medium. This execution surface exposes
+  no immutable runtime-profile metadata, and no child work was dispatched or
+  accepted. No Git mutation occurred. Canonical re-review remains pending.
+
+## Wave 10 Coordinator Naming Correction
+
+- Coordinator inspection accepts the docs, throwing-observer regression, shared
+  deadline, public/internal boundary, and all other shortened names. One assigned
+  hygiene item remains: `missingDeclaredZeroMqExports` still has five semantic
+  components. Resume the same immutable Terra Medium implementer context to
+  rename only this private API-checker local (for example
+  `missingZeroMqDeclarations`), update durable evidence, and rerun the API gate,
+  focused ESLint/Prettier, and diff integrity. No other change is authorized.
