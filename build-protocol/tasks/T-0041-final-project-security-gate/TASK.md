@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 21 architecture accepted; correction
-assigned; dedicated security re-review pending
+Status: In progress - Canonical Wave 21 findings fixed; correction verification
+current; Canonical Wave 22 and dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2565,3 +2565,44 @@ Subscription cancellation failed.` instead of `AggregateError`.
   anchors/status after code settles. Preserve public/package/Proto/generated
   boundaries and all accepted decisions. Run focused native transport and
   Canonical Wave 22 before dedicated security review.
+
+## Canonical Wave 21 Correction
+
+- Implemented the accepted “gate, track, close, then drain” contract. Public
+  publish gates and tracks its complete private operation; the private path
+  gates immediately after publisher lookup before package-private native send.
+  Close preserves setup/request and active-handle ordering, closes publisher
+  cleanup before draining tracked publishes, and keeps publish/send failures
+  with callers while close retains only cleanup failures and retry behavior.
+- Valid unrestricted RED was 3 failed/3 passed/43 skipped: all three publisher
+  lifecycle cases exposed the missing gate/drain, while the native-default
+  publisher timeout and two request-cleanup characterizations passed. The
+  identical GREEN was 6 passed/43 skipped. Unrestricted full transport
+  verification passed 49/49 and generated build typecheck exited 0.
+- D-0088 remains unchanged, Publisher `sendTimeout` remains native `-1`, and no
+  public option, timeout/cancellation policy, or delivery guarantee was added.
+  Canonical Wave 21 findings are fixed and correction verification is current;
+  Canonical Wave 22 and dedicated security re-review remain pending. No
+  acceptance is claimed.
+- Final narrow verification passed generated build typecheck, `docs:check`,
+  focused ESLint, generated-clean, exact seven-path Prettier, synchronized
+  status/current and stale-anchor scans, public-package boundaries, exact
+  changed paths, and diff integrity. Full `pnpm verify` remained reserved.
+
+## Canonical Wave 21 Coordinator Verification
+
+- The implementer returned under its original explicit, tool-enforced immutable
+  actual `gpt-5.6-terra` / medium profile, made no Git-state mutation, spawned
+  no child, and is closed.
+- Fresh unrestricted coordinator verification passed the six focused lifecycle
+  and request-cleanup cases with 43 skipped, then passed the complete native
+  ZeroMQ transport file 49/49.
+- Generated build typecheck, `docs:check` with 25 copied Proto checksums and API
+  counts `100/28/205/19/17/6/3`, focused ESLint, generated-clean policy, exact
+  seven-path Prettier, synchronized status/anchor and public-boundary scans,
+  exact changed paths, and `git diff --check` all passed.
+- Direct source inspection accepts the post-lookup gate, complete publish
+  tracking, publisher cleanup before publish drain, caller-owned publish errors,
+  close-owned cleanup errors, unchanged retry order, and unchanged D-0088/native
+  publisher timeout. Commit the correction and assign Canonical Wave 22 before
+  generating its immutable review package.

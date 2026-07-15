@@ -107,6 +107,9 @@ export const zeroMqSocketAccess = {
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
     await recheckIpcDirectory(prepared);
   },
+  async sendPublisher(socket: Publisher, frames: MessageLike[]): Promise<void> {
+    await socket.send(frames);
+  },
   async sendRequest(socket: Request, frames: MessageLike[]): Promise<void> {
     await socket.send(frames);
   },
@@ -119,6 +122,7 @@ class ZeroMqSignalTransport implements SignalTransport {
   readonly #onBackgroundFailure: ((error: Error) => void) | undefined;
   readonly #publishers = new Map<string, BoundPublisher>();
   readonly #publisherBinds = new Map<string, Promise<BoundPublisher>>();
+  readonly #publishes = new Set<Promise<void>>();
   readonly #responderBinds = new Set<Promise<TransportSubscriptionHandle>>();
   readonly #subscriberOpens = new Set<Promise<TransportSubscriptionHandle>>();
   readonly #requests = new Set<Promise<unknown>>();
@@ -137,8 +141,22 @@ class ZeroMqSignalTransport implements SignalTransport {
     operation: PublishTransportOperation<Envelope, Kind>,
   ): Promise<void> {
     this.#requireOpen();
+    const publish = this.#performPublish(operation);
+    this.#publishes.add(publish);
+
+    try {
+      await publish;
+    } finally {
+      this.#publishes.delete(publish);
+    }
+  }
+
+  async #performPublish<Envelope, Kind extends TransportSignalKind>(
+    operation: PublishTransportOperation<Envelope, Kind>,
+  ): Promise<void> {
     const publisher = await this.#publisherFor(operation.topic);
-    await publisher.socket.send([
+    this.#requireOpen();
+    await zeroMqSocketAccess.sendPublisher(publisher.socket, [
       operation.topic.routing.routingKey,
       encodeEnvelope(operation.envelope),
     ]);
@@ -520,6 +538,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     for (const publisher of this.#publishers.values()) {
       await captureCleanupFailure(() => publisher.cleanup.close(), failures);
     }
+    await Promise.allSettled(this.#publishes);
 
     if (failures.length > 0) {
       throw cleanupFailure(failures, "ZeroMQ signal transport close failed.");

@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 21 architecture accepted; correction assigned; dedicated
-security re-review pending
+Status: Canonical Wave 21 findings fixed; correction verification current;
+Canonical Wave 22 and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2719,3 +2719,43 @@ verify` remains reserved.
   SF-007/SF-008/SF-009/TM-004 and refreshed SF-010/TM-011 evidence anchors and
   synchronized status. Run focused native gates; all four Canonical Wave 22
   lanes follow before dedicated security review.
+
+## Canonical Wave 21 Correction Evidence
+
+- Valid unrestricted behavior RED exited 1 with 3 failed/3 passed/43 skipped:
+  the pre-bound post-close send and both close-before-publish-settlement cases
+  failed, while native Publisher `sendTimeout: -1` and the two request cleanup
+  characterizations passed. The identical GREEN exited 0 with 6 passed/43
+  skipped.
+- Production now gates and tracks each complete publish, calls native send
+  immediately after the post-lookup gate, closes publishers before draining
+  tracked publishes, and isolates send errors from close cleanup errors. The
+  cleanup-failure case proves the same publish/close separation and successful
+  close retry. Successful requests close their exact socket once before
+  resolution, and cleanup-only failure remains the direct rejection.
+- Unrestricted full transport verification passed 49/49; generated build
+  typecheck and focused ESLint exited 0. D-0088, native Publisher timeout,
+  public/package/Proto/generated boundaries, and retry order remain unchanged.
+  Canonical Wave 21 findings are fixed and correction verification is current;
+  Canonical Wave 22 and dedicated security re-review remain pending. No
+  acceptance is claimed.
+- `docs:check` verified 25 Proto checksums and API counts
+  `100/28/205/19/17/6/3`; generated-clean, exact seven-path Prettier,
+  status/active-anchor/stale-anchor, public-boundary, exact changed-path, and
+  diff-integrity checks passed. Full `pnpm verify` remained reserved.
+
+## Canonical Wave 21 Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` returned under its
+  original explicit, tool-enforced immutable actual Terra Medium role, made no
+  Git mutation, spawned no child, and is closed.
+- Fresh coordinator-native verification passed the six focused publish/close
+  and request-cleanup cases with 43 skipped and the unrestricted transport file
+  49/49. Generated typecheck, docs/API, focused ESLint, generated-clean, exact
+  formatting, status/anchor, public-boundary, changed-path, and diff-integrity
+  checks passed.
+- Inspection accepts the complete Wave 21 correction and its evidence anchors.
+  No finding is silently resolved by changing D-0088, publisher timeout,
+  public/package/Proto/generated boundaries, retry behavior, or error ownership.
+  Canonical Wave 22 must review the fresh committed endpoint before dedicated
+  security re-review.

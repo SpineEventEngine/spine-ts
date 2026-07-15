@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
+import { Publisher } from "zeromq";
 
 import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
@@ -97,6 +98,163 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
+  it("blocks a pre-bound publish when close starts after publisher lookup", async () => {
+    const topic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.PreBoundClosingPublish",
+    });
+    await withZeroMqTransport(async (transport) => {
+      await transport.publish({ topic, envelope: { sequence: 1 } });
+      const send = vi.spyOn(Publisher.prototype, "send");
+
+      try {
+        const publish = transport.publish({ topic, envelope: { sequence: 2 } });
+        const close = transport.close();
+
+        await expect(publish).rejects.toThrow("ZeroMQ signal transport is closed.");
+        await close;
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        send.mockRestore();
+      }
+    });
+  });
+
+  it("closes a publisher before draining its already-started send", async () => {
+    const topic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.PausedClosingPublish",
+    });
+    const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
+    const pathnameRemoved = deferred<undefined>();
+    const remove = vi.spyOn(endpointFileAccess, "remove").mockImplementation(async (filePath) => {
+      await removeEndpoint(filePath);
+      pathnameRemoved.resolve(undefined);
+    });
+
+    try {
+      await withZeroMqTransport(async (transport, ipcDirectory) => {
+        await transport.publish({ topic, envelope: { sequence: 1 } });
+        const sendFailure = new Error("injected publisher send failure");
+        const sendStarted = deferred<undefined>();
+        const sendReleased = deferred<undefined>();
+        const send = vi.spyOn(Publisher.prototype, "send").mockImplementationOnce(async () => {
+          sendStarted.resolve(undefined);
+          await sendReleased.promise;
+          throw sendFailure;
+        });
+        const order: string[] = [];
+        let closeSettled = false;
+
+        const publish = transport.publish({ topic, envelope: { sequence: 2 } });
+        const publishOutcome = publish.then(
+          () => undefined,
+          (error: unknown) => {
+            order.push("publish-settled");
+            return error;
+          },
+        );
+        await sendStarted.promise;
+        const close = transport.close().then(() => {
+          closeSettled = true;
+          order.push("close-complete");
+        });
+
+        try {
+          await pathnameRemoved.promise;
+          await waitFor(0);
+          expect(closeSettled).toBe(false);
+
+          sendReleased.resolve(undefined);
+          await expect(publishOutcome).resolves.toBe(sendFailure);
+          await close;
+
+          expect(order).toEqual(["publish-settled", "close-complete"]);
+          expect(await readdir(ipcDirectory)).toEqual([]);
+        } finally {
+          sendReleased.resolve(undefined);
+          await Promise.allSettled([publishOutcome, close]);
+          send.mockRestore();
+        }
+      });
+    } finally {
+      remove.mockRestore();
+    }
+  });
+
+  it("keeps paused publish and cleanup failures with their initiating callers", async () => {
+    const topic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.PausedClosingCleanupFailure",
+    });
+    const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
+    const cleanupFailure = new Error("injected publisher pathname cleanup failure");
+    const cleanupAttempted = deferred<undefined>();
+    const remove = vi
+      .spyOn(endpointFileAccess, "remove")
+      .mockImplementationOnce(() => {
+        cleanupAttempted.resolve(undefined);
+        return Promise.reject(cleanupFailure);
+      })
+      .mockImplementation(removeEndpoint);
+
+    try {
+      await withZeroMqTransport(async (transport, ipcDirectory) => {
+        await transport.publish({ topic, envelope: { sequence: 1 } });
+        const sendFailure = new Error("injected paused publisher send failure");
+        const sendStarted = deferred<undefined>();
+        const sendReleased = deferred<undefined>();
+        const send = vi.spyOn(Publisher.prototype, "send").mockImplementationOnce(async () => {
+          sendStarted.resolve(undefined);
+          await sendReleased.promise;
+          throw sendFailure;
+        });
+        const order: string[] = [];
+        let closeSettled = false;
+
+        const publish = transport.publish({ topic, envelope: { sequence: 2 } });
+        const publishOutcome = publish.then(
+          () => undefined,
+          (error: unknown) => {
+            order.push("publish-settled");
+            return error;
+          },
+        );
+        await sendStarted.promise;
+        const closeOutcome = transport.close().then(
+          () => undefined,
+          (error: unknown) => {
+            closeSettled = true;
+            order.push("close-settled");
+            return error;
+          },
+        );
+
+        try {
+          await cleanupAttempted.promise;
+          await waitFor(0);
+          const closeSettledBeforeSend = closeSettled;
+
+          sendReleased.resolve(undefined);
+          await expect(publishOutcome).resolves.toBe(sendFailure);
+          await expect(closeOutcome).resolves.toBe(cleanupFailure);
+          expect(order).toEqual(["publish-settled", "close-settled"]);
+
+          await transport.close();
+          expect(await readdir(ipcDirectory)).toEqual([]);
+          expect(remove).toHaveBeenCalledTimes(2);
+          expect(closeSettledBeforeSend).toBe(false);
+        } finally {
+          sendReleased.resolve(undefined);
+          await Promise.allSettled([publishOutcome, closeOutcome]);
+          send.mockRestore();
+        }
+      });
+    } finally {
+      remove.mockRestore();
+    }
+  });
+
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
@@ -165,6 +323,90 @@ describe("ZeroMQ SignalTransport", () => {
 
       await handle.close();
     });
+  });
+
+  it("closes the successful request socket exactly once before resolving", async () => {
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanup",
+    });
+    const sendRequest = zeroMqSocketAccess.sendRequest.bind(zeroMqSocketAccess);
+    let requester!: Parameters<typeof zeroMqSocketAccess.sendRequest>[0];
+    const send = vi
+      .spyOn(zeroMqSocketAccess, "sendRequest")
+      .mockImplementation(async (socket, frames) => {
+        requester = socket;
+        await sendRequest(socket, frames);
+      });
+    const close = vi.spyOn(zeroMqSocketAccess, "close");
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const handle = await transport.respond(
+          createTransportSubscription({
+            subscriberId: "successful-request-cleanup-worker",
+            topic,
+            mode: "competing-consumer",
+          }),
+          () => ({ accepted: true }),
+        );
+
+        await expect(transport.request({ topic, envelope: { requested: true } })).resolves.toEqual({
+          accepted: true,
+        });
+        expect(close.mock.calls.filter(([socket]) => socket === requester)).toHaveLength(1);
+
+        await handle.close();
+      });
+    } finally {
+      close.mockRestore();
+      send.mockRestore();
+    }
+  });
+
+  it("surfaces successful request cleanup failure without aggregation", async () => {
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanupFailure",
+    });
+    const sendRequest = zeroMqSocketAccess.sendRequest.bind(zeroMqSocketAccess);
+    const closeSocket = zeroMqSocketAccess.close.bind(zeroMqSocketAccess);
+    const cleanupFailure = new Error("injected successful requester cleanup failure");
+    let requester!: Parameters<typeof zeroMqSocketAccess.sendRequest>[0];
+    const send = vi
+      .spyOn(zeroMqSocketAccess, "sendRequest")
+      .mockImplementation(async (socket, frames) => {
+        requester = socket;
+        await sendRequest(socket, frames);
+      });
+    const close = vi.spyOn(zeroMqSocketAccess, "close").mockImplementation((socket) => {
+      closeSocket(socket);
+      if (socket === requester) {
+        throw cleanupFailure;
+      }
+    });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const handle = await transport.respond(
+          createTransportSubscription({
+            subscriberId: "successful-request-cleanup-failure-worker",
+            topic,
+            mode: "competing-consumer",
+          }),
+          () => ({ accepted: true }),
+        );
+
+        await expect(transport.request({ topic, envelope: { requested: true } })).rejects.toBe(
+          cleanupFailure,
+        );
+
+        await handle.close();
+      });
+    } finally {
+      close.mockRestore();
+      send.mockRestore();
+    }
   });
 
   it("bounds close after an already-sent unanswered request", async () => {
