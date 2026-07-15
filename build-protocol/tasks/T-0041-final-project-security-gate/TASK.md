@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - pre-review lint accepted; canonical wave 5 pending
+Status: In progress - canonical review wave 5 assigned
 
 Started: `2026-07-14`
 
@@ -809,6 +809,23 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
 - The endpoint is ready for one fresh immutable package and canonical review
   wave 5. Dedicated security review remains pending until canonical concerns
   are clean.
+
+## Canonical Review Wave 5 Assignment
+
+- Immutable endpoint `b4274b06`; package
+  `.superpowers/sdd/review-39f2c6f7..b4274b06.diff` contains 25 commits and
+  401,247 bytes.
+- Dispatch existing style/maintainability reviewer with explicit immutable
+  `gpt-5.6-terra` / high; documentation reviewer with explicit immutable
+  `gpt-5.6-luna` / medium; TypeScript/API reviewer with explicit immutable
+  `gpt-5.6-terra` / high; and performance/reliability reviewer with explicit
+  immutable `gpt-5.6-terra` / high.
+- Every lane is read-only, must attest actual profile metadata, perform its
+  skill check, spawn no subagents or Git mutation, and ignore historical
+  superseded text unless current records/docs claim it active. Review D-0087
+  exact CAS ownership, all cleanup/failure paths, finite bounds, backward wire
+  compatibility, public/internal boundaries, current docs, and tests. Aggregate
+  all four results before fixes. Dedicated security review remains pending.
 
 ## Wave 4 Coordinator Retry RED
 

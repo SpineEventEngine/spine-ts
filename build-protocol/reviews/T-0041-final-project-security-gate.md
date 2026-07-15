@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Pre-review lint accepted; canonical wave 5 pending
+Status: Canonical review wave 5 assigned
 
 Baseline: `39f2c6f7`
 
@@ -652,6 +652,27 @@ bytes).
 - The pre-review lint pass is clean. Generate a fresh immutable package from
   baseline `39f2c6f7` and dispatch all four canonical concerns as wave 5 before
   dedicated security re-review.
+
+## Canonical Review Wave 5 Assignment
+
+Package: `.superpowers/sdd/review-39f2c6f7..b4274b06.diff` (25 commits, 401,247
+bytes).
+
+- `style_maintainability_reviewer`: explicit immutable Terra High; review
+  state-machine readability, ownership, method size, naming, duplication, and
+  behavior-focused test maintainability.
+- `documentation_reviewer`: explicit immutable Luna Medium; review current
+  status/provenance, public cancellation behavior, finite bounds, compatibility,
+  stale-claim/malformed-row residuals, and excluded future policy.
+- `typescript_api_docs_reviewer`: explicit immutable Terra High; review public
+  runtime/declarations/TSDoc/TypeDoc agreement, package-private state isolation,
+  stable Connect errors, and wire compatibility.
+- `performance_reliability_reviewer`: explicit immutable Terra High; review
+  every activation/cancel CAS ordering, failure/retry ownership, cleanup,
+  capacity, malformed/stale states, adapter atomicity, and deterministic tests.
+- All lanes are read-only, no subagents/Git mutation, exact profile attestation,
+  mandatory skill check, current-state scope, and full-wave aggregation before
+  fixes. Dedicated security re-review follows only after canonical closure.
 
 ## Wave 4 Coordinator Retry RED
 
