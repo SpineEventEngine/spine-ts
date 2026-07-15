@@ -3085,3 +3085,9 @@ verify` remains reserved.
   persistence behavior, and introduced regressions only.
 - Historical superseded text and unrelated accepted deployment residuals are not
   findings unless the current security artifacts reactivate them.
+
+## Focused Security Re-Review Dispatch
+
+- Security `019f65ae-5b69-7761-8323-d3ddfbc785d7`: explicit immutable Terra
+  High, read-only, childless, Git-read-only, exact focused package. Await result
+  before full verification or closure.

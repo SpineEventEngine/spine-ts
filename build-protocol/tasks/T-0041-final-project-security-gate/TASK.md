@@ -2995,3 +2995,9 @@ Subscription cancellation failed.` instead of `AggregateError`.
   by D-0091, without reopening accepted unrelated residuals or superseded text.
 - Require concrete remaining finding evidence or an explicit clean result.
   Full `pnpm verify` follows only after clean focused security closure.
+
+## Focused Security Re-Review Dispatch
+
+- Security agent `019f65ae-5b69-7761-8323-d3ddfbc785d7` is dispatched
+  explicitly under the existing immutable `gpt-5.6-terra` / high role,
+  read-only, childless, and Git-read-only, against the exact focused package.

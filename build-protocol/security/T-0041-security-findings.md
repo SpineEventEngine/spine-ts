@@ -128,7 +128,7 @@ release-blocking and needs focused behavior regression evidence.
 | 10    | Dedicated security re-review             | SF-011/SF-012 accepted; reviewer closed.                                    |
 | 11    | D-0091 implementation                    | Coordinator-verified at `da730e04`.                                         |
 | 12    | Canonical Wave 23                        | All four concerns clean; reviewers closed.                                  |
-| 13    | Focused SF-011/SF-012 security re-review | Package frozen; Terra High dispatch assigned.                               |
+| 13    | Focused SF-011/SF-012 security re-review | Terra High agent `019f65ae...` dispatched.                                  |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.
