@@ -1,6 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 18 findings accepted
+Status: In progress - Wave 18 findings fixed; correction verification current;
+Canonical Wave 19 and dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2262,3 +2263,50 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   Run focused native service tests, generated typecheck, docs, lint/format,
   status/anchor/boundary/diff checks. All Canonical Wave 19 lanes follow before
   dedicated final security review.
+
+## 2026-07-15 - Wave 18 Reliability And Evidence Correction
+
+- RED: the new persisted-subscription regression ran with
+  `pnpm exec vitest run packages/server/test/services/spine-services.test.ts -t
+'preserves attachment failure when durable activation cleanup also fails'` and
+  failed because the iterator rejected with `ConnectError: [internal]
+Subscription cancellation failed.` instead of `AggregateError`.
+- GREEN: `#activate()` now retains both failures as `AggregateError` errors in
+  attachment-then-cleanup order. The regression proves retained durable cancel
+  fence/capacity while cleanup fails, then same returned `Subscription`
+  cancellation and replacement subscription success after the fault clears.
+- Wave 18 findings are fixed and correction verification is current; Canonical
+  Wave 19 and dedicated security re-review remain pending. No acceptance is
+  claimed.
+- Final focused verification passed: related activation/cancellation/capacity
+  tests, generated build typecheck, docs, focused ESLint, exact seven-path
+  Prettier, D-0090/IPC/status/public-boundary/generated scans, and diff
+  integrity. Full `pnpm verify` was not run by assignment.
+
+## Wave 18 Coordinator Anchor Correction
+
+- Fresh coordinator line inspection found that the activation fix shifted the
+  active D-0090 source policy to `spine-services.ts:1468-1501`; both security
+  artifacts still cite the superseded `1461-1493` range. The test evidence at
+  `spine-services.test.ts:2429-2495` remains exact.
+- Resume the same explicitly dispatched immutable Terra Medium implementer to
+  correct only the two active security-artifact source anchors and rerun exact
+  formatting, anchor, changed-path, and diff-integrity checks. No runtime,
+  test, public API, package/dependency, Proto, generated-output, or D-0090
+  contract change is authorized.
+
+## Wave 18 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` used the original explicit,
+  tool-enforced immutable actual `gpt-5.6-terra` / medium profile for both the
+  correction batch and resumed two-anchor edit, spawned no child, made no Git
+  mutation, and is closed.
+- Fresh coordinator regression verification passed `1/1`; the related
+  activation/cancellation/capacity selection passed `5/5` with `139` skipped.
+  Generated build typecheck passed, and `docs:check` validated 25 copied Proto
+  checksums plus API counts `100/28/205/19/17/6/3`.
+- Focused ESLint, generated-clean policy, exact seven-path Prettier, positive
+  `1468-1501` and negative stale-anchor scans, synchronized status, public/
+  package boundary inspection, exact changed-path proof, and `git diff --check`
+  all passed. Accept the Wave 18 correction for commit; Canonical Wave 19 and
+  dedicated security re-review remain pending.

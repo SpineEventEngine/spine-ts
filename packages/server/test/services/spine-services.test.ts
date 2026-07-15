@@ -4940,6 +4940,45 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(1);
   });
 
+  it("preserves attachment failure when durable activation cleanup also fails", async () => {
+    const contextName = "FailedActivationCleanup";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const attachmentError = new Error("activation attachment failed");
+    const cleanupFault = new Error("activation cleanup failed");
+    const cleanupError = new ConnectError("Subscription cancellation failed.", Code.Internal);
+    vi.spyOn(context.stand(), "subscribe").mockImplementation(() => {
+      throw attachmentError;
+    });
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    storageFactory.cancelCleanupError = cleanupFault;
+
+    const error = await handlers
+      .activate(subscription)
+      [Symbol.asyncIterator]()
+      .next()
+      .catch((rejection: unknown) => rejection);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([attachmentError, cleanupError]);
+    expect(
+      DurableSubscriptionRecords.readState(
+        (await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)) ??
+          create(AnySchema),
+      ).type,
+    ).toBe("cancel");
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    storageFactory.cancelCleanupError = undefined;
+    await handlers.cancel(subscription);
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
     const callbacks: ((update: {

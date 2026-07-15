@@ -421,7 +421,14 @@ export class SpineServices {
     try {
       this.#activateRecord(record);
     } catch (error) {
-      await this.#removeSubscription(id);
+      try {
+        await this.#removeSubscription(id);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Subscription activation and cleanup failed.",
+        );
+      }
       throw error;
     }
 

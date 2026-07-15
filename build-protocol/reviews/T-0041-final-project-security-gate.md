@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 18 findings accepted; correction assigned
+Status: Wave 18 findings fixed; correction verification current; Canonical Wave
+19 and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2264,3 +2265,50 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   D-0087-D-0090 contract change is authorized. Require focused native tests,
   generated typecheck, docs, lint/format, status/anchor/boundary/diff checks;
   all four Canonical Wave 19 lanes rerun before dedicated security review.
+
+## Wave 18 Correction Implementation Evidence
+
+- RED proves the reliability finding: the new focused persisted-subscription
+  regression failed because cleanup's `ConnectError` replaced the attachment
+  failure. GREEN passes after ordered `AggregateError` preservation, including
+  durable cancellation-fence/capacity retention and same-message retry.
+- Generated build typecheck and `docs:check` passed; the latter validated 25
+  copied Proto checksums and API counts `100/28/205/19/17/6/3`. Focused related
+  service lifecycle tests and ESLint passed. Exact changed-path formatting,
+  status/anchor/public-boundary/generated/diff checks remain the final
+  implementer verification below.
+- Wave 18 findings are fixed and correction verification is current; Canonical
+  Wave 19 and dedicated security re-review remain pending. No acceptance is
+  claimed.
+- Final exact seven-path Prettier, generated-clean, status/D-0090/IPC-anchor,
+  public-boundary, and diff-integrity checks passed. Full `pnpm verify` remains
+  intentionally unrun by assignment.
+
+## Wave 18 Coordinator Anchor Correction
+
+- Coordinator line inspection found both active D-0090 security references
+  stale after the activation fix shifted the policy implementation. The exact
+  source range is now `spine-services.ts:1468-1501`; the test range
+  `spine-services.test.ts:2429-2495` remains exact.
+- Resume the same existing implementer
+  `019f64f8-06cf-7b03-adc9-5792d886d8ad` under its original explicit immutable
+  `gpt-5.6-terra` / medium dispatch. Its sole scope is the two security-artifact
+  source anchors plus exact format/anchor/changed-path/diff verification. No
+  behavior or contract edit is authorized.
+
+## Wave 18 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` has matching explicit
+  dispatch and tool-enforced immutable actual `gpt-5.6-terra` / medium evidence
+  for the initial and resumed correction, with no child or Git mutation; it is
+  closed.
+- Fresh coordinator evidence: regression `1/1`; related lifecycle selection
+  `5/5` with `139` skipped; generated typecheck; `docs:check` with 25 Proto
+  checksums and API counts `100/28/205/19/17/6/3`; focused ESLint; generated-
+  clean policy; exact seven-path Prettier; current/stale anchor, status, public/
+  package-boundary, changed-path, and diff-integrity checks all passed.
+- Direct inspection accepts ordered attachment/cleanup aggregation, retained
+  durable cancellation fence and capacity, same-message recovery, exact
+  D-0090/IPC evidence, and separated canonical/security provenance. Commit this
+  correction and run all four Canonical Wave 19 lanes before dedicated security
+  review.
