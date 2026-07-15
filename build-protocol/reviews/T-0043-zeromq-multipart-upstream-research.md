@@ -90,3 +90,16 @@ verdict, and closure evidence remain pending.
   TypeScript/API docs, performance/reliability implementation review, and
   per-task security remain N/A for the recorded reasons. No finding batch or
   rereview is required.
+
+## Integration Closure
+
+- Exact reviewed endpoint `9038eb77` was pushed to the preserved remote task
+  branch and merged into `main` as `31fc4bbe`.
+- The focused gate passed again on the exact branch endpoint and post-merge:
+  tracked formatting, 58 package imports, 111 relative Markdown links,
+  generated-clean state, and diff integrity.
+- The task worktree was Git-clean, merged, and removed without force; the local
+  task branch was deleted and the remote task branch preserved.
+- No review concern is reopened. The final main closure commit's explicit
+  contract is push-exact-and-confirm because its own SHA cannot be recorded
+  inside itself.

@@ -124,12 +124,13 @@ gate. The dated Starting State above is historical plan-creation context.
   self-reference. Its contract is therefore explicit: run the full native gate
   against that exact commit, push it to `origin/main`, and confirm the remote
   ref externally without creating another status-only commit.
-- The ZeroMQ multipart-allocation issue research below is being executed as
-  post-completion T-0043. Its durable report is
-  [`ZEROMQ_MULTIPART_LIMIT_RESEARCH.md`](research/ZEROMQ_MULTIPART_LIMIT_RESEARCH.md).
-  Research and documentation review are complete and clean. Integration,
-  remote synchronization, and cleanup remain before that reporting obligation
-  is durably closed; it is not unfinished initial-release work.
+- The ZeroMQ multipart-allocation post-completion obligation is complete. T-0043
+  records the durable report in
+  [`ZEROMQ_MULTIPART_LIMIT_RESEARCH.md`](research/ZEROMQ_MULTIPART_LIMIT_RESEARCH.md),
+  has a clean documentation review, is integrated as `31fc4bbe`, and has its
+  clean task worktree/local branch removed while preserving the remote task
+  branch. It was not unfinished initial-release work and did not reopen the
+  accepted release.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
@@ -138,7 +139,7 @@ allocation residual. Report whether the behavior is already known, documented
 workarounds or upstream proposals, and whether Spine TS appears to have found a
 previously undocumented limitation. This research follows completion and does
 not block the initial release definition of done. T-0043 owns the tracked
-research, review, push, and cleanup closure.
+research, review, push, and cleanup closure, now complete.
 
 ## Initial Release Scope
 

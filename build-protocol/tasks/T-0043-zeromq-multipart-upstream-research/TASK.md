@@ -1,6 +1,6 @@
 # T-0043: ZeroMQ Multipart Upstream Research
 
-Status: Research and review complete - integration pending
+Status: Complete - integrated, verified, remotely synchronized, and cleaned
 
 Started: `2026-07-15`
 
@@ -77,3 +77,19 @@ reasoning behind the implemented wire boundary in a durable report.
 
 Historical and superseded text is non-actionable unless the current task,
 completion plan, D-0093, or changed research report claims it as active state.
+
+## Closure
+
+- Research endpoint `529d01bb` and clean review endpoint `9038eb77` are
+  preserved on `origin/task/T-0043-zeromq-multipart-upstream-research`.
+- T-0043 is integrated by merge commit `31fc4bbe`.
+- Branch and post-merge focused gates passed formatting, all 58 package imports,
+  111 tracked relative Markdown links, generated-clean verification, and diff
+  integrity. The branch gate also rebuilt generated TypeScript successfully and
+  verified all 25 copied Spine Proto checksums.
+- The clean merged task worktree and local task branch were removed. The remote
+  task branch remains preserved.
+- The final closure commit cannot embed its own content-addressed SHA. Its
+  remote-synchronization contract is to push that exact commit to `origin/main`
+  and confirm the remote ref externally. No additional status-only commit is
+  required after that confirmation.
