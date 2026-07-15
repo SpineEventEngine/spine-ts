@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: T-0042 integrated and post-merge verified; remote closure pending
+Status: Complete - accepted initial release closed
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0042 remote synchronization, cleanup, and final closure
+Active implementation frontier: None
 
 ## Purpose
 
@@ -97,9 +97,35 @@ all final specialist dispositions, and the native branch gate are clean. The
 branch gate passed 74 files / 1,780 tests in both ordinary and coverage runs at
 90.04% branches. Closure-record review is clean. T-0042 is integrated at
 `b3bb4adb`, and the native post-merge gate passed with the same evidence.
-Remote sync, clean T-0042 worktree removal, and the final verified closure
-record remain. The dated Starting State above is historical plan-creation
-context.
+The remote task and integrated main refs were synchronized, and the clean
+T-0042 worktree/local branch were removed while the remote task branch was
+preserved. This final closure record is verified and pushed as the last release
+gate. The dated Starting State above is historical plan-creation context.
+
+## Initial Release Completion Record
+
+- Framework runtime, public TypeScript/Protobuf contracts, package docs,
+  architecture docs, user guide, to-do example, real single-process and local
+  multi-process acceptance, and final security gate are complete together.
+- Final branch and post-merge gates each passed 74 files / 1,780 tests with
+  90.04% branch coverage and all TypeDoc/API, Proto, generated-clean, and
+  58-import/107-link release checks.
+- Capability taxonomy is closed at 27 `IMPLEMENTED`, 4
+  `DOCUMENTED_EXCLUSION`, and zero defect/security/example/status routes.
+- T-0042 task endpoint `2a7e4652` is preserved on
+  `origin/task/T-0042-release-readiness-project-closure`; integration merge is
+  `b3bb4adb`; the first remotely synchronized post-merge evidence commit is
+  `40d48f1b`.
+- The T-0042 worktree and local task branch are removed. No other historical
+  worktree qualifies for non-force cleanup: the sole merged one is dirty, and
+  the rest are unmerged archival branches.
+- Root `human-review-1-jul.md` remains user-owned, untouched, and untracked.
+- The final closure commit cannot record its own content-addressed SHA without
+  self-reference. Its contract is therefore explicit: run the full native gate
+  against that exact commit, push it to `origin/main`, and confirm the remote
+  ref externally without creating another status-only commit.
+- The ZeroMQ multipart-allocation issue research below remains a
+  post-completion reporting obligation, not unfinished initial-release work.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,

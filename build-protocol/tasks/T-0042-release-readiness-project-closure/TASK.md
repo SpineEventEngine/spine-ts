@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: Integrated and post-merge verified; remote sync and cleanup pending
+Status: Complete - integrated, verified, remotely synchronized, and cleaned
 
 Started: `2026-07-15`
 
@@ -489,3 +489,27 @@ scripts/check-release-readiness.test.mjs` failed as expected with
 - The merge changes no reviewed tree content beyond integrating the accepted
   task branch. Remote synchronization, clean T-0042 worktree/local-branch
   removal, and the final verified main closure record remain.
+
+## 2026-07-15 - Remote Sync, Cleanup, And Final Closure
+
+- Pushed remote task ref to `2a7e4652` and remote `main` to post-merge
+  evidence commit `40d48f1b`; `git ls-remote` confirmed both exact values.
+- Removed the Git-clean merged T-0042 worktree without force and deleted only
+  its merged local branch. The pushed remote task branch remains.
+- Conservative cleanup found no other safe candidate. The only other
+  main-merged worktree, T-0012-11b, is dirty with tracked deletions and is
+  preserved; every other remaining worktree is unmerged archival history.
+- All T-0042 subagents are closed. Root still contains only the protected
+  untracked user file, which never entered project input or Git staging.
+- All nine acceptance criteria are satisfied: integrated prior work; clean
+  generated state; 74/1,780 full gate at 90.04% branches; real black-box and
+  multi-process acceptance; public/docs/package checks; clean review
+  dispositions; reconciled records/exclusions; integration/post-merge
+  verification; remote sync and clean task cleanup.
+- Final closure-commit contract: after committing this record, run native
+  `pnpm --config.verify-deps-before-run=false verify` against that exact commit,
+  push `main`, and externally confirm `origin/main` equals local `HEAD`.
+  The content-addressed commit cannot include its own SHA; external confirmation
+  avoids an infinite chain of status-only commits.
+- The required public ZeroMQ/libzmq/zeromq.js issue research begins only after
+  this initial-release closure and does not reopen T-0042.
