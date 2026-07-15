@@ -3562,6 +3562,19 @@ verify` remains reserved.
   topic predicates against mechanically proven key exclusion. Preserve all
   runtime wire/risk decisions and method generic order.
 
+## D-0096 Architecture Result And Fix Assignment
+
+- Splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit/actual immutable Sol
+  High, selected two fixed-path predicates, made no mutation, spawned no child,
+  and is closed.
+- D-0096 removes the unmerged overloaded helper and negative-key classification,
+  adds `isTransportOperationKind()` plus `isTransportTopicKind()`, and sets root
+  exports to 20/6. Open/index-signature and dual-shaped values are sound because
+  the function name fixes the runtime path.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected immutable
+  Terra Medium, for exact RED/GREEN, docs/checker/matrix/log updates, and P2
+  runtime wording. Preserve all adapter/server/wire/risk behavior.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,

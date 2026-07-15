@@ -4376,3 +4376,56 @@ Consequences:
   performance/reliability remains unaffected; focused final security confirms
   the helper is not represented as input validation and that D-0093 remains
   unchanged.
+
+## D-0096: Separate Transport Operation And Topic Kind Predicates
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Supersedes: D-0095's single overloaded-helper decision only. D-0094's
+distributive kind/envelope correlation remains accepted.
+
+Context: Repeated TypeScript/API review showed that one overloaded predicate
+must choose a runtime path from overlapping structural shapes. Optional-`never`
+exclusions reject known intersections but open/string-index types can erase
+those negative constraints and restore false predicate guarantees. Exact-object
+typing is not available for this public structural contract.
+
+Decision:
+
+- Remove unmerged `hasTransportSignalKind()` without a deprecated alias.
+- Add `isTransportOperationKind()`, which always compares
+  `operation.topic.signalKind`, and `isTransportTopicKind()`, which always
+  compares `topic.signalKind`.
+- Preserve every operation/topic shape and `SignalTransport` generic order.
+  Both names satisfy the four-component public-name limit.
+- Keep the predicates as typed narrowing aids, not validators of untrusted
+  values or envelopes. Neither predicate inspects the envelope.
+- Transport root exports become 20; ZeroMQ remains 6.
+
+Reasoning:
+
+- Function identity now selects the runtime path. Extra properties, open index
+  signatures, and dual-shaped values cannot redirect either implementation.
+- A single helper with `keyof` or negative-key exclusions remains unsound after
+  widening to key-erasing structural supertypes. `NoInfer` controls inference;
+  it does not create exact object types.
+- Keeping only an operation helper leaves widened topics unresolved, while
+  removing both helpers forces duplicated custom guards or casts throughout
+  consumers.
+
+Consequences:
+
+- Compile and runtime tests cover widened/restricted publish, request, and topic
+  inputs; open/index-signature types; dual-shaped values; invalid pair
+  preservation; fixed runtime paths; and zero envelope access.
+- Remove optional-`never`, shape classification, collision precedence, and
+  collision rejection from the D-0095 implementation. Update active API and
+  release inventory counts from 19 to 20.
+- Public helper runtime code changes. ZeroMQ, adapter, server, wire, frame,
+  allocation, concurrency, lifecycle, and accepted SF-013 behavior do not.
+- Re-review style/maintainability, documentation, and TypeScript/API.
+  Performance/reliability remains N/A for stateless equality predicates.

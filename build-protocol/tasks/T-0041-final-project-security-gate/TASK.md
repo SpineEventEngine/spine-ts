@@ -3579,6 +3579,21 @@ Subscription cancellation failed.` instead of `AggregateError`.
   helper versus separate operation/topic predicates or a mechanically sound
   key-exclusion design. Preserve generic order and all wire decisions.
 
+## D-0096 Architecture Result And Fix Assignment
+
+- Splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit/actual immutable Sol
+  High, selected separate `isTransportOperationKind()` and
+  `isTransportTopicKind()` predicates, remained read-only, childless,
+  Git-read-only, and is closed.
+- D-0096 supersedes only D-0095's overloaded helper. Function identity fixes the
+  runtime path for open/index-signature and dual-shaped values; no negative-key
+  proof or shape classification remains. Root exports become 20; ZeroMQ stays 6.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original
+  explicit immutable Terra Medium, sole writer, childless, and without Git
+  mutation. Replace the unmerged helper, add the full open/dual-shape RED/GREEN
+  matrix, update docs/checker/matrix/logs, and correct the P2 runtime wording.
+  No ZeroMQ/server changes or full verify.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
