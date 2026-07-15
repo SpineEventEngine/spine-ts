@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 6 assigned
+Status: In progress - canonical wave 6 findings assigned for fix
 
 Started: `2026-07-14`
 
@@ -986,3 +986,26 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   and must ignore superseded historical text unless a current status or changed
   public document claims it as active. Aggregate the complete wave before any
   fix. Dedicated security review remains pending.
+
+## Canonical Review Wave 6 Result And Fix Assignment
+
+- Style/maintainability agent `019f63cf-f179-7bd1-8c33-30ddeba05379`, actual
+  immutable `gpt-5.6-terra` / high, found P1: if initial registration, durable
+  cleanup, and the retained timer registration all fail, the unreturned closed
+  record has no remaining cleanup owner and permanently holds capacity.
+- Documentation agent `019f63cf-eaa8-7132-b83a-929936409252`, actual immutable
+  `gpt-5.6-luna` / medium, found Low: threat-model provenance still says the
+  wave 5 endpoint lacks a commit although `113934d2` now freezes it.
+- TypeScript/API agent `019f63cf-ee39-7672-b539-3405844fae99`, actual immutable
+  `gpt-5.6-terra` / high, found Medium: API and architecture docs say every
+  unordered limit is invalid, but absent/zero wire limits receive the implicit
+  1,000-row cap; only positive limits require ordering.
+- Performance/reliability agent `019f63d2-24ea-7570-b5e3-50ba4e2a1a95`, actual
+  immutable `gpt-5.6-terra` / high, reported clean after tracing bounds, CAS
+  orderings, malformed-row handling, and lifecycle cleanup. All four agents
+  are closed; explicit dispatch matched immutable runtime metadata.
+- Assign one fresh existing `implementer` role with explicit immutable
+  `gpt-5.6-terra` / medium because the prior implementation context is closed.
+  It owns the complete three-item TDD/docs/log fix, must not spawn subagents or
+  mutate Git, and must preserve public/wire contracts and finite cleanup.
+  Canonical re-review and dedicated security review remain pending.

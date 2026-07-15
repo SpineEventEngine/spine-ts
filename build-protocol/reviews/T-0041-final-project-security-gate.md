@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 6 assigned
+Status: Canonical wave 6 findings assigned for fix
 
 Baseline: `39f2c6f7`
 
@@ -816,3 +816,29 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   mutation, concrete file/line findings, and the superseded-history exclusion.
   Aggregate the complete wave before fixes; dedicated security review remains
   pending.
+
+## Canonical Review Wave 6 Result
+
+- Runtime profile gate passed for all explicit dispatches. Style agent
+  `019f63cf-f179-7bd1-8c33-30ddeba05379` was immutable Terra High; docs agent
+  `019f63cf-eaa8-7132-b83a-929936409252` was immutable Luna Medium; API agent
+  `019f63cf-ee39-7672-b539-3405844fae99` and reliability agent
+  `019f63d2-24ea-7570-b5e3-50ba4e2a1a95` were immutable Terra High. Every
+  reviewer is closed.
+- Style/maintainability: P1 combined timer-registration plus durable-cleanup
+  failure can leave an unreturned closed record with no cleanup path and a
+  permanently held reservation.
+- Documentation: Low stale threat-model provenance omits committed endpoint
+  `113934d2`; all requested public cancellation/setup/codec wording and anchors
+  otherwise match.
+- TypeScript/API: Medium stale query-limit wording in API and architecture docs;
+  absent/zero wire limits use the implicit 1,000-row cap, while only positive
+  limits require ordering. Public exports, Protobuf/type URLs, strict decoder,
+  and internal boundaries otherwise remain coherent.
+- Performance/reliability: clean after bounds, persistence, CAS ordering,
+  cleanup, malformed-row, and transport-lifecycle tracing.
+- Return the complete three-item batch to one fresh existing `implementer`,
+  explicit immutable Terra Medium, because the prior context is closed.
+  Require deterministic TDD for the P1, focused/full affected verification,
+  exact docs/provenance correction, and fresh canonical re-review. Dedicated
+  security review remains pending.
