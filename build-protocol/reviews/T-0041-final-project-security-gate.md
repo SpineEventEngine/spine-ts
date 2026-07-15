@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 7 findings; requirements split assigned
+Status: Wave 7 correction contract assigned for implementation
 
 Baseline: `39f2c6f7`
 
@@ -915,3 +915,24 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   requirements splitter, explicit immutable Sol High, for a read-only bounded
   correction design before one Terra Medium implementation batch. Dedicated
   security review remains pending.
+
+## Wave 7 Requirements Split Result
+
+- Splitter `019f63ea-f80b-7291-bf00-4f6f704b119b`, actual immutable Sol High,
+  completed read-only and is closed.
+- Claim CAS: one exact reconciliation read; adopt only the proposed claim,
+  release only after exact prior inactive proves no commit, use existing
+  lost/canceled outcomes for changed/absent state, and retain an explicit
+  outcome-unknown owner/reservation when reconciliation cannot establish state.
+- Failed setup: one private runner, two sequential exact cleanup attempts, no
+  recursive queue/timer/repeat, success release, exhausted bounded inert
+  retention. Add bounded success-after-first-failure and exhausted/no-third-
+  attempt regressions.
+- ZeroMQ: new D-0088, default 2,000, explicit request timeout integer range
+  1..2,147,483,647, exact synchronous `TypeError` before I/O, boundary table,
+  and sent-unanswered-request plus close liveness evidence. Do not change
+  `receiveTimeoutMs` or add active cancellation.
+- Provenance: both security artifacts identify `6f45be80` as substantive
+  evidence. Assign one fresh existing implementer, explicit immutable Terra
+  Medium, for the complete batch. All four canonical lanes rerun afterward;
+  dedicated security review remains pending.

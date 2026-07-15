@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 7 findings; requirements split assigned
+Status: In progress - wave 7 correction contract assigned for implementation
 
 Started: `2026-07-14`
 
@@ -1087,3 +1087,29 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   review-lane impact. It is read-only, must not spawn subagents or mutate Git,
   and must preserve D-0087, finite cleanup, no public scheduler, exact type
   URLs, and accepted stale-claim residuals.
+
+## Wave 7 Requirements Split And Implementation Assignment
+
+- Requirements splitter `019f63ea-f80b-7291-bf00-4f6f704b119b`, actual
+  immutable `gpt-5.6-sol` / high, completed read-only and is closed. Local Spine
+  JVM notes confirmed the familiar opaque Subscribe/Activate/Cancel lifecycle;
+  the referenced source checkout was unavailable, so no broader JVM behavior is
+  inferred.
+- Clarify D-0087: reconcile one ambiguous claim CAS using the same storage
+  handle. Adopt only the exact proposed claim; exact prior inactive propagates
+  the original error and releases; changed/absent state uses existing loss/
+  cancellation semantics; unreadable/unparseable outcome retains the exact
+  owner token and reservation inertly for same-instance cancellation.
+- Timerless failed setup uses one scheduled private runner with exactly two
+  sequential exact cancellation attempts. Success releases; exhaustion retains
+  one inert bounded slot with no repeat, recursion, timer, or spin. The complete
+  path has at most three cleanup attempts including the initial one.
+- Add D-0088: omitted ZeroMQ `requestTimeoutMs` remains 2,000; accepted explicit
+  values are integers 1..2,147,483,647. Reject all other values synchronously
+  with exact `TypeError` before filesystem/socket work. `receiveTimeoutMs` and
+  active request cancellation remain out of scope.
+- Security artifacts anchor substantive evidence to `6f45be80`. Assign one
+  fresh existing `implementer`, explicit immutable `gpt-5.6-terra` / medium,
+  for the complete four-slice TDD/docs/decision/log batch. It must not spawn
+  subagents or mutate Git and must keep private names within four semantic
+  components. All four canonical lanes rerun afterward.
