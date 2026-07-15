@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 6 fixes coordinator-verified; canonical wave 7 pending
+Status: Canonical review wave 7 assigned
 
 Baseline: `39f2c6f7`
 
@@ -873,3 +873,22 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
 - Commit the accepted batch and generate a literal endpoint package for
   canonical Wave 7. Dedicated security review remains pending; no T-0041
   completion is claimed.
+
+## Canonical Review Wave 7 Assignment
+
+- Immutable endpoint `6f45be80`; package
+  `.superpowers/sdd/review-39f2c6f7..6f45be80.diff` from baseline `39f2c6f7`
+  contains 32 commits and 474,837 bytes.
+- Style/maintainability: existing role, explicit immutable Terra High; private
+  fallback structure and deterministic test quality.
+- Documentation: existing role, explicit immutable Luna Medium; current public
+  query/setup/cancel behavior, security provenance, anchors, and exclusions.
+- TypeScript/API: existing role, explicit immutable Terra High; public/type/
+  runtime contract, compatibility, exports, Protobuf, and TypeDoc boundaries.
+- Performance/reliability: existing role, explicit immutable Terra High;
+  one-shot cleanup ordering, capacity retention/release, persistence ambiguity,
+  CAS concurrency, bounds, and no-spin evidence.
+- All reviewers are read-only, inspect the ledger, use exact current package
+  evidence, ignore superseded history unless currently claimed, and report
+  concrete findings or clean. Aggregate the complete wave before fixes;
+  dedicated security review remains pending.

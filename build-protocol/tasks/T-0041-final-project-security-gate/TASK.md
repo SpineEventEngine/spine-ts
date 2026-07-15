@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 6 fixes coordinator-verified; canonical wave 7 pending
+Status: In progress - canonical review wave 7 assigned
 
 Started: `2026-07-14`
 
@@ -1049,3 +1049,18 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   TypeDoc public counts `100/28/205/19/17/3`.
 - The complete Wave 6 fix batch is accepted for commit and immutable canonical
   Wave 7 review. Dedicated security review and T-0041 closure remain pending.
+
+## Canonical Review Wave 7 Assignment
+
+- Wave 6 fixes are committed at immutable endpoint `6f45be80`; review package
+  `.superpowers/sdd/review-39f2c6f7..6f45be80.diff` contains 32 commits and
+  474,837 bytes from baseline `39f2c6f7`.
+- Dispatch all four existing canonical roles read-only with explicit immutable
+  profiles: style/maintainability Terra High, documentation Luna Medium,
+  TypeScript/API Terra High, and performance/reliability Terra High.
+- All concerns remain relevant because the batch changed private cleanup
+  behavior, deterministic tests, public API/architecture wording, security
+  provenance, and durable status. Require ledger inspection, no subagents/Git
+  mutation, exact file/line findings, and the superseded-history exclusion.
+  Aggregate the complete wave before any fix. Dedicated security review remains
+  pending.
