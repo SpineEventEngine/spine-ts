@@ -2600,6 +2600,74 @@ describe("SpineServices", () => {
     expect(storageFactory.deleteCalls).toBe(0);
   });
 
+  it("retains ambiguous persistence until inactive cleanup settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "AmbiguousSubscriptionPersistence";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const writeError = new Error("write outcome is ambiguous");
+      storageFactory.writeCommitError = writeError;
+      let readCalls = 0;
+      storageFactory.readHook = async (_id, readRecord) => {
+        readCalls += 1;
+        if (readCalls === 1) {
+          throw new Error("initial cleanup read failed");
+        }
+        return await readRecord();
+      };
+      const cleanupDone = deferred<undefined>();
+      storageFactory.cancelCleanupHook = async (cleanup) => {
+        const cleaned = await cleanup();
+        cleanupDone.resolve(undefined);
+        return cleaned;
+      };
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 10, subscriptionLimit: 1 },
+      );
+
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      const retained = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: retainedId }),
+      });
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeDefined();
+      storageFactory.writeCommitError = undefined;
+      let capacityError: unknown;
+      try {
+        await handlers.subscribe(createTopic());
+      } catch (error) {
+        capacityError = error;
+      }
+      expect(capacityError).toMatchObject({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>);
+      await expect(handlers.activate(retained)[Symbol.asyncIterator]().next()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      });
+
+      await vi.advanceTimersByTimeAsync(10);
+      await cleanupDone.promise;
+      await flushMicrotasks();
+
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+      expect(storageFactory.cancelCleanupCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("releases capacity when process-local subscription registration fails", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
@@ -3550,7 +3618,6 @@ describe("SpineServices", () => {
     const subscriptionId = subscription.id?.value ?? "missing";
     const cleanupStarted = deferred<undefined>();
     const cleanupReleased = deferred<undefined>();
-    const casStarted = deferred<undefined>();
     let cleanupPaused = false;
     let casCalls = 0;
     storageFactory.cancelCleanupHook = async (cleanup) => {
@@ -3567,18 +3634,16 @@ describe("SpineServices", () => {
         DurableSubscriptionRecords.readState(transition.next).type === "claim"
       ) {
         casCalls += 1;
-        casStarted.resolve(undefined);
       }
       return await transition.apply();
     };
     const cancel = Promise.resolve(handlers.cancel(subscription));
     await cleanupStarted.promise;
+    const readsBeforeRecovery = storageFactory.readCalls;
     const recovery = handlers.activate(subscription)[Symbol.asyncIterator]();
     const next = recovery.next();
-    const recoveryState = await Promise.race([
-      casStarted.promise.then(() => "cas" as const),
-      delay(25).then(() => "blocked" as const),
-    ]);
+    await expectPending(next);
+    expect(storageFactory.readCalls).toBe(readsBeforeRecovery);
 
     expect(() => handlers.subscribe(createTopic())).toThrow(
       expect.objectContaining({
@@ -3607,7 +3672,6 @@ describe("SpineServices", () => {
     const reusable = await handlers.subscribe(createTopic());
     await handlers.cancel(reusable);
 
-    expect(recoveryState).toBe("blocked");
     expect(casCalls).toBe(0);
     expect(result).toEqual({ done: true, value: undefined });
     expect(postCancel).toEqual({ done: true, value: undefined });
@@ -3628,9 +3692,9 @@ describe("SpineServices", () => {
     const recoveredId = recoverable.id?.value ?? "missing";
     const readStarted = deferred<undefined>();
     const readReleased = deferred<undefined>();
+    const readReturned = deferred<undefined>();
     const cleanupStarted = deferred<undefined>();
     const cleanupReleased = deferred<undefined>();
-    const casStarted = deferred<undefined>();
     let readPaused = false;
     let cleanupPaused = false;
     let casCalls = 0;
@@ -3640,6 +3704,7 @@ describe("SpineServices", () => {
         readPaused = true;
         readStarted.resolve(undefined);
         await readReleased.promise;
+        readReturned.resolve(undefined);
       }
       return durable;
     };
@@ -3657,7 +3722,6 @@ describe("SpineServices", () => {
         DurableSubscriptionRecords.readState(transition.next).type === "claim"
       ) {
         casCalls += 1;
-        casStarted.resolve(undefined);
       }
       return await transition.apply();
     };
@@ -3667,10 +3731,8 @@ describe("SpineServices", () => {
     const cancel = Promise.resolve(secondHandlers.cancel(recoverable));
     await cleanupStarted.promise;
     readReleased.resolve(undefined);
-    const recoveryState = await Promise.race([
-      casStarted.promise.then(() => "cas" as const),
-      delay(25).then(() => "blocked" as const),
-    ]);
+    await readReturned.promise;
+    await expectPending(next);
 
     cleanupReleased.resolve(undefined);
     await cancel;
@@ -3679,7 +3741,6 @@ describe("SpineServices", () => {
     const replacement = await secondHandlers.subscribe(createTopic());
     await secondHandlers.cancel(replacement);
 
-    expect(recoveryState).toBe("blocked");
     expect(casCalls).toBe(0);
     expect(result).toEqual({ done: true, value: undefined });
     expect(durable).toBeUndefined();
@@ -4159,6 +4220,57 @@ describe("SpineServices", () => {
     ).toBeDefined();
   });
 
+  it("keeps noncanonical and ID-mismatched inactive records inert", async () => {
+    const valid = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-invalid-base64" }),
+      topic: createTopic(),
+    });
+    const binary = Buffer.from(toBinary(SubscriptionSchema, valid)).toString("base64");
+    const mismatched = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-embedded-other" }),
+      topic: createTopic(),
+    });
+    const cases = [
+      {
+        id: "s-invalid-base64",
+        payload: `${binary.slice(0, 4)}!${binary.slice(4)}`,
+      },
+      {
+        id: "s-mismatched-payload",
+        payload: Buffer.from(toBinary(SubscriptionSchema, mismatched)).toString("base64"),
+      },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      const contextName = `InertInvalidSubscription${String(index)}`;
+      const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+      const durable = durableAny({
+        id: testCase.id,
+        kind: "state",
+        targetType: deriveTypeUrl(ProjectionStateSchema),
+        subscriptionBinaryBase64: testCase.payload,
+        expiresAtMs: Date.now() + 60_000,
+      });
+      storageFactory.seed(testCase.id, durable);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+      );
+      const activation = handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: testCase.id }),
+          }),
+        )
+        [Symbol.asyncIterator]();
+
+      await expect(activation.next()).resolves.toEqual({ done: true, value: undefined });
+      expect(storageFactory.casCalls).toBe(0);
+      expect(await readDurableSubscriptionRecord(storageFactory, contextName, testCase.id)).toEqual(
+        durable,
+      );
+    }
+  });
+
   it("rejects malformed durable subscription record payloads", () => {
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "s-valid" }),
@@ -4230,11 +4342,36 @@ describe("SpineServices", () => {
         }),
         message: "Durable subscription expiry must be a non-negative finite number.",
       },
+      ...["AA=A", "AAAA=", "Zh=="].map((subscriptionBinaryBase64) => ({
+        record: durableAny({
+          id: "s-invalid-base64",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64,
+          expiresAtMs: 1,
+        }),
+        message: "Durable subscription payload must be canonical Base64.",
+      })),
     ];
 
     for (const { record, message } of cases) {
       expect(() => DurableSubscriptionRecords.read(record)).toThrow(message);
     }
+
+    const missingId = Buffer.from(
+      toBinary(SubscriptionSchema, create(SubscriptionSchema, { topic: createTopic() })),
+    ).toString("base64");
+    expect(() =>
+      DurableSubscriptionRecords.read(
+        durableAny({
+          id: "s-missing-payload-id",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64: missingId,
+          expiresAtMs: 1,
+        }),
+      ),
+    ).toThrow("Durable subscription payload ID does not match record ID.");
   });
 
   it("keeps inactive wire compatibility and encodes exact claim states", () => {
@@ -5277,6 +5414,7 @@ class SeededSubscriptionStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #seededRecords = new Map<string, Any>();
   readonly #subscriptionContextName: string;
+  casCalls = 0;
 
   constructor(contextName: string) {
     super();
@@ -5297,7 +5435,9 @@ class SeededSubscriptionStorageFactory extends StorageFactory {
     ) {
       return asRequestedRecordStorage<I, R>(
         recordSpec,
-        createSeededDurableSubscriptionStorage(context, this.#delegate, this.#seededRecords),
+        createSeededDurableSubscriptionStorage(context, this.#delegate, this.#seededRecords, () => {
+          this.casCalls += 1;
+        }),
       );
     }
 
@@ -5315,10 +5455,17 @@ function createSeededDurableSubscriptionStorage(
   context: StorageContext,
   delegate: StorageFactory,
   seededRecords: Map<string, Any>,
+  onCompareAndSet: () => void,
 ): RecordStorage<string, Any> {
   const storage = delegate.createRecordStorage(context, durableSubscriptionRecordSpec);
 
-  return new SeededRecordStorage(context, durableSubscriptionRecordSpec, storage, seededRecords);
+  return new SeededRecordStorage(
+    context,
+    durableSubscriptionRecordSpec,
+    storage,
+    seededRecords,
+    onCompareAndSet,
+  );
 }
 
 function asRequestedRecordStorage<I, R extends Message>(
@@ -5334,6 +5481,7 @@ function asRequestedRecordStorage<I, R extends Message>(
 
 class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #delegate: RecordStorage<I, R>;
+  readonly #onCompareAndSet: () => void;
   readonly #seededRecords: Map<I, R>;
 
   constructor(
@@ -5341,10 +5489,12 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     recordSpec: RecordSpec<I, R>,
     delegate: RecordStorage<I, R>,
     seededRecords: Map<I, R>,
+    onCompareAndSet: () => void,
   ) {
     super(context, recordSpec);
     this.#delegate = delegate;
     this.#seededRecords = seededRecords;
+    this.#onCompareAndSet = onCompareAndSet;
   }
 
   protected override deleteRecord(id: I): Promise<boolean> {
@@ -5368,6 +5518,7 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    this.#onCompareAndSet();
     if (this.#seededRecords.has(id)) {
       return Promise.resolve(false);
     }
@@ -5403,13 +5554,16 @@ class FaultingSubscriptionStorageFactory extends StorageFactory {
   cancelCleanupCalls = 0;
   cancelCleanupError: Error | undefined;
   cancelCleanupHook: ((cleanup: () => Promise<boolean>) => Promise<boolean>) | undefined;
+  committedId: string | undefined;
   deleteCalls = 0;
   deleteError: Error | undefined;
   deleteHook: ((id: string, deleteRecord: () => Promise<boolean>) => Promise<boolean>) | undefined;
   readHook:
     | ((id: string, readRecord: () => Promise<Any | undefined>) => Promise<Any | undefined>)
     | undefined;
+  readCalls = 0;
   writeError: Error | undefined;
+  writeCommitError: Error | undefined;
 
   constructor(contextName: string) {
     super();
@@ -5470,6 +5624,7 @@ class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
   }
 
   protected override readRecord(id: string): Promise<Any | undefined> {
+    this.#faults.readCalls += 1;
     if (this.#faults.readHook !== undefined) {
       return this.#faults.readHook(id, () => this.#delegate.read(id));
     }
@@ -5530,9 +5685,15 @@ class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
   protected override writeRecord(
     record: ReturnType<RecordSpec<string, Any>["materialize"]>,
   ): Promise<void> {
-    return this.#faults.writeError === undefined
-      ? this.#delegate.write(record.record)
-      : Promise.reject(this.#faults.writeError);
+    if (this.#faults.writeError !== undefined) {
+      return Promise.reject(this.#faults.writeError);
+    }
+    if (this.#faults.writeCommitError !== undefined) {
+      const commitError = this.#faults.writeCommitError;
+      this.#faults.committedId = record.id;
+      return this.#delegate.write(record.record).then(() => Promise.reject(commitError));
+    }
+    return this.#delegate.write(record.record);
   }
 }
 
@@ -6136,6 +6297,26 @@ function deferred<T>(): {
     resolve = settle;
   });
   return { promise, resolve };
+}
+
+async function flushMicrotasks(turns = 12): Promise<void> {
+  for (let turn = 0; turn < turns; turn += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function expectPending(promise: Promise<unknown>): Promise<void> {
+  let settled = false;
+  void promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await flushMicrotasks();
+  expect(settled).toBe(false);
 }
 
 function delay(milliseconds: number): Promise<void> {

@@ -336,13 +336,23 @@ export class SpineServices {
       this.#rememberSubscription(record);
       return clone(SubscriptionSchema, subscription);
     } catch (error) {
-      this.#releaseRecord(record);
       try {
         await this.#cancelPersistence(record.id, record.route.context, undefined);
       } catch {
-        // Preserve the originating persistence or process-local registration failure.
+        this.#retainFailedSetup(record);
+        throw error;
       }
+      this.#releaseRecord(record);
       throw error;
+    }
+  }
+
+  #retainFailedSetup(record: SubscriptionRecord): void {
+    record.delivery.close();
+    try {
+      this.#rememberSubscription(record);
+    } catch {
+      this.#subscriptions.set(record.id, record);
     }
   }
 

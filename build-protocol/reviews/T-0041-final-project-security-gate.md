@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 5 findings pending fix
+Status: Wave 5 fixes coordinator-verified; canonical wave 6 pending
 
 Baseline: `39f2c6f7`
 
@@ -705,6 +705,45 @@ bytes).
   current docs/security anchors, and a fresh package. Dedicated security review
   remains pending.
 
+## Canonical Wave 5 Fix Result
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, reproduced the ambiguous-persistence
+  finding without subagents or Git mutation. The focused command for `retains
+ambiguous persistence until inactive cleanup settles` exited 1 with 1
+  failed/133 skipped because no `ResourceExhausted` error was raised after the
+  committed write rejected and immediate cleanup read failed.
+- After the minimal retention fix, the identical command exited 0 with 1
+  passed/133 skipped. The original subscribe error remains observable; the
+  unreturned record is inert and capacity-held until its inactive timer settles
+  exact persistent cancellation. This is implementer evidence only; the rest
+  of wave 5 had not yet been applied; coordinator/canonical/security
+  verification remained pending.
+- Strict-codec RED exited 1 with 1 failed/134 skipped because a noncanonical
+  payload reached claim CAS. The identical GREEN exited 0 with 1 passed/134
+  skipped after canonical Base64 plus exact embedded-ID validation; combined
+  direct/recovery codec evidence passed 2/2 with 133 skipped.
+- Both timing-based removal-gate tests passed before and after conversion (2/2,
+  133 skipped). They now use explicit pre-read/post-read storage barriers and a
+  deterministic microtask pending assertion; neither relies on 25 ms elapsed
+  time to establish absence of claim CAS.
+- Public cancellation failure/retry wording, SF-008 evidence, wave 5
+  provenance, and current tenant anchors are updated. Status is wave 5 fixes
+  implemented; coordinator verification, canonical review, dedicated security
+  re-review, and T-0041 closure remain pending.
+- The final five-finding focused set passed 5/5 with 130 skipped. The broader
+  lifecycle set encountered sandbox-only loopback `EPERM` after 41 passes, then
+  passed natively with 42/42 and 93 skipped. Final native affected-file
+  verification passed 135/135.
+- Generated/tooling typecheck and docs checks exited 0; docs verified 25 Proto
+  checksums and public counts `100/28/205/19/17/3`. Focused ESLint and Prettier
+  exit 0 after two test-fixture-only lint corrections. Coordinator
+  verification and both review gates remain pending.
+- Final status/provenance/anchor/residual scans matched the documented scope;
+  public-export, retired-race, generated, manifest/lock, and package-root scans
+  found no drift. `git diff --check` exited 0. This remains implementer evidence,
+  not canonical or security acceptance.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -737,3 +776,20 @@ bytes).
 - Generated/tooling typecheck, focused ESLint/Prettier, exact-literal scan, final
   2-test rerun, and diff integrity are green. Only source and three durable logs
   changed.
+
+## Wave 5 Coordinator Verification
+
+- The coordinator accepts all five fixes after direct diff inspection. The
+  ambiguous-write path no longer releases capacity before durable deletion is
+  established; strict decoding binds canonical bytes and embedded ID before
+  recovery mutation; both negative-CAS tests use deterministic gates; and the
+  public/security documentation matches the implemented failure contract.
+- Fresh native focused verification passed 5/5 with 130 skipped and fresh
+  native full affected-file verification passed 135/135.
+- Generated typecheck, docs generation/check, focused ESLint, ten-file
+  Prettier, pre-review status/public-policy scans, and `git diff --check` all
+  exited 0. No public root, manifest, lockfile, or generated tracked output
+  changed.
+- Freeze the fix endpoint in one commit, generate a literal-baseline/literal-
+  endpoint package, and dispatch canonical wave 6. Dedicated security review
+  remains pending; no completion disposition is recorded here.

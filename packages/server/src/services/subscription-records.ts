@@ -70,10 +70,7 @@ export const DurableSubscriptionRecords: Readonly<{
       kind: stored.kind,
       targetType: stored.targetType,
       ...(stored.tenantId === undefined ? {} : { tenantId: stored.tenantId }),
-      subscription: fromBinary(
-        SubscriptionSchema,
-        Buffer.from(stored.subscriptionBinaryBase64, "base64"),
-      ),
+      subscription: readSubscription(stored.subscriptionBinaryBase64, stored.id),
       expiresAtMs: stored.expiresAtMs,
     });
   },
@@ -117,7 +114,23 @@ interface StoredSubscriptionRecord {
 const durableRecordTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionRecord";
 const claimTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionClaim";
 const cancelTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionCancel";
+const canonicalBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+function readSubscription(encoded: string, recordId: string): Subscription {
+  if (!canonicalBase64.test(encoded)) {
+    throw new Error("Durable subscription payload must be canonical Base64.");
+  }
+  const binary = Buffer.from(encoded, "base64");
+  if (binary.toString("base64") !== encoded) {
+    throw new Error("Durable subscription payload must be canonical Base64.");
+  }
+  const subscription = fromBinary(SubscriptionSchema, binary);
+  if (subscription.id?.value !== recordId) {
+    throw new Error("Durable subscription payload ID does not match record ID.");
+  }
+  return subscription;
+}
 
 function readState(record: Any): DurableSubscriptionState {
   if (record.typeUrl === durableRecordTypeUrl) {

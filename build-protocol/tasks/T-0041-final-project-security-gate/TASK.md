@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 5 findings pending fix
+Status: In progress - wave 5 fixes coordinator-verified; canonical wave 6 pending
 
 Started: `2026-07-14`
 
@@ -864,6 +864,49 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   with behavior-first tests, no subagents/Git mutation, and current docs/logs.
   Dedicated security review remains pending.
 
+## Canonical Wave 5 Fix Result
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable runtime `gpt-5.6-terra` / medium, is applying receiving-review and
+  strict TDD guidance directly without subagents or Git-state mutation.
+- Ambiguous-persistence RED: `pnpm --config.verify-deps-before-run=false exec
+vitest run packages/server/test/services/spine-services.test.ts -t 'retains
+ambiguous persistence until inactive cleanup settles'` exited 1 with 1
+  failed/133 skipped because a second subscription was admitted instead of
+  receiving `ResourceExhausted` after commit-then-reject plus cleanup-read
+  failure.
+- The subscribe failure path now preserves the originating error, closes and
+  retains inert local cleanup ownership and its reservation when durable
+  cancellation cannot settle, and uses the retained inactive timer for one
+  internal cleanup retry. Focused GREEN for the same command exited 0 with 1
+  passed/133 skipped. At that checkpoint, the remaining wave 5 fixes had not
+  yet been applied.
+- Strict-codec RED: the focused `keeps noncanonical and ID-mismatched inactive
+records inert` command exited 1 with 1 failed/134 skipped because recovery
+  attempted one claim CAS for a noncanonical payload. Canonical Base64 and
+  exact embedded-ID binding are now required before decode/recovery mutation;
+  the identical GREEN exited 0 with 1 passed/134 skipped. Direct malformed
+  codec coverage also includes alphabet, length/padding, canonical re-encoding,
+  and missing embedded ID.
+- The two removal-gate regressions passed 2/2 (133 skipped) before conversion
+  and again after replacing both 25 ms negative races with deterministic
+  pre-read/post-read barriers plus microtask settlement checks. No production
+  timing option or test-only public seam was added.
+- Public cancellation retry wording and current tenant/restored-tenant threat
+  anchors are updated. Status is wave 5 fixes implemented; coordinator
+  verification, canonical review, dedicated security re-review, and task
+  closure remain pending.
+- Final focused wave 5 command passed 5/5 with 130 skipped. The broader
+  claim/cancel/codec/ambiguous-write lifecycle command hit sandbox-only
+  `listen EPERM` after 41 passes, then passed natively with 42/42 and 93
+  skipped. The final native `spine-services.test.ts` rerun passed 135/135.
+- Final `typecheck:generated` exited 0. `docs:check` exited 0 with 25 copied
+  Proto checksums and TypeDoc counts `100/28/205/19/17/3`. Focused ESLint and
+  Prettier checks exit 0 after correcting two test-fixture lint findings. Final
+  status/provenance/anchor/residual scans matched the pending-review contract;
+  public-export, retired-race, generated-tracking, and manifest/lock/package-root
+  scans returned no matches. `git diff --check` exited 0.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -908,3 +951,22 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
 - Final `typecheck:generated`, focused ESLint, four-file Prettier, literal-count
   scan, and `git diff --check` exited 0; the final focused test rerun remained
   2 passed/131 skipped.
+
+## Wave 5 Coordinator Verification
+
+- The coordinator inspected the complete ten-file diff. Ambiguous committed
+  subscription writes now retain a closed local record and its reservation
+  when immediate durable cancellation cannot settle; the existing inactive
+  timer retries exact cleanup. Strict inactive decoding rejects noncanonical
+  Base64 and embedded/durable subscription-ID mismatch before recovery CAS.
+- Fresh native focused verification passed 5/5 with 130 skipped, covering the
+  ambiguous-write regression, strict codec and ID binding, both deterministic
+  cancellation/recovery barriers, and direct malformed-record validation.
+  Fresh native full affected-file verification passed 135/135.
+- `typecheck:generated`, `docs:check`, focused ESLint, ten-file Prettier, and
+  `git diff --check` exited 0. TypeDoc retained expected public counts
+  `100/28/205/19/17/3` and the Proto workflow verified 25 copied checksums.
+- The lightweight pre-review status/provenance, duplicate-policy,
+  public-export, manifest/lock, generated-output, future-policy, and threat
+  anchor scans found no changed-surface drift. Canonical wave 6 and the
+  dedicated security re-review remain pending; T-0041 is not complete.
