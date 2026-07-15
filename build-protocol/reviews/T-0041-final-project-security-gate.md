@@ -2800,3 +2800,13 @@ verify` remains reserved.
 - Every dispatched role is read-only, childless, and Git-read-only with its
   distinct concern. Reliability remains queued for platform capacity;
   complete-wave aggregation remains mandatory.
+
+## Canonical Wave 22 Dispatch Continuation
+
+- Documentation agent `019f6555-96b6-71b3-838a-abc7e6c7e279` used its
+  explicit, tool-enforced immutable actual Luna Medium profile and reported
+  clean documentation/status/anchor/trust-boundary review. It made no Git
+  mutation, spawned no child, and is closed.
+- Reliability agent `019f6557-7839-7801-bd4f-4bdf0a09ea79` was dispatched
+  explicitly under the existing immutable Terra High role, read-only,
+  childless, and Git-read-only. Complete-wave aggregation remains mandatory.

@@ -2653,3 +2653,13 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - All are read-only, childless, and Git-read-only with distinct bounded
   concerns. Reliability waits only for execution-surface capacity; aggregate
   the complete four-lane wave before action.
+
+## Canonical Wave 22 Dispatch Continuation
+
+- Documentation agent `019f6555-96b6-71b3-838a-abc7e6c7e279` completed clean
+  under its explicit, tool-enforced immutable actual `gpt-5.6-luna` / medium
+  role, made no Git mutation, spawned no child, and is closed.
+- Reliability agent `019f6557-7839-7801-bd4f-4bdf0a09ea79` was dispatched
+  explicitly as the existing immutable `gpt-5.6-terra` / high role, read-only,
+  childless, and Git-read-only. Retain the clean docs result and aggregate all
+  four lanes before action.
