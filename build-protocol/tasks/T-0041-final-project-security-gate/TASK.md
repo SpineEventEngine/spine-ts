@@ -2620,3 +2620,16 @@ Subscription cancellation failed.` instead of `AggregateError`.
   transport lifecycle/error paths, and superseded-history exclusion.
 - Aggregate the complete four-lane wave before action. Dedicated final security
   re-review remains pending until canonical closure.
+
+## Canonical Wave 22 Pre-Review Lint
+
+- Current task/work/review and both security-artifact statuses agree: Wave 21
+  correction is current; Wave 22 and dedicated security re-review are pending.
+- Targeted full-range scans found no duplicated new transport policy constant,
+  no new transport public export, no generated output, and no active promise of
+  monitoring, scheduling, backoff, catch-up, multi-host topology, or automatic
+  reclamation. Matching future-policy text is an explicit exclusion/residual.
+- The sole public-root file in the full range is the intentional existing
+  `BoundedContextFixtureOptions.inactiveTtlMs` TSDoc clarification already owned
+  by SF-008/D-0090; no internal callback, lifecycle, retry, or IPC primitive is
+  exported. Range diff integrity and worktree status are clean.

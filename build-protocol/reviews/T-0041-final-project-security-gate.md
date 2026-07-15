@@ -2772,3 +2772,13 @@ verify` remains reserved.
   error paths, no subagents or Git mutation, and the rule that superseded
   historical text is inactive unless current task status or changed docs claim
   it. Aggregate before fixes; dedicated security re-review remains pending.
+
+## Canonical Wave 22 Pre-Review Lint
+
+- Status/provenance mirrors, duplicate-policy ownership, accidental public
+  exports, generated output, current security anchors, future-policy claims,
+  package-boundary changes, and range diff integrity were checked locally.
+- The audit is clean. The one full-range public-root change clarifies the
+  existing testing fixture option for D-0090; it exports no new concept.
+  Future-policy matches are explicit exclusions/residuals, and no transport
+  internals leak from package roots.
