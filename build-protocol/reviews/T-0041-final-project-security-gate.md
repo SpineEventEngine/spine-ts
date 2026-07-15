@@ -1941,3 +1941,17 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
 - All three are read-only, childless, and scoped to their distinct concern.
   Reliability remains queued for platform capacity; no finding may be acted on
   until the complete four-lane wave is aggregated.
+
+## Canonical Review Wave 16 Dispatch Continuation
+
+- Documentation agent `019f64c3-f993-7661-a31d-4c5a466508b5` completed under
+  its tool-enforced immutable `gpt-5.6-luna` / medium role and is closed. It
+  reported one provisional P2: `examples/todo/USER_GUIDE.md` documents the
+  configurable inactive TTL and default but omits D-0090 normalization and the
+  synchronous maximum-value `TypeError`. No other documentation finding was
+  reported; acceptance waits for complete-wave aggregation.
+- Performance/reliability agent `019f64c6-99b1-76a2-b764-e427c5c850da` was
+  dispatched explicitly as existing `performance_reliability_reviewer` with
+  immutable `gpt-5.6-terra` / high, read-only, childless, and without Git
+  mutation. No finding may be acted on until style, API, and reliability have
+  also completed and closed.
