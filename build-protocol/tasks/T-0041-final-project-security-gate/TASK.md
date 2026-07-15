@@ -3797,3 +3797,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Aggregate all three results before any finding disposition or closure.
   Performance/reliability remains N/A because neither predicate runtime body
   nor any adapter/server execution path changed.
+
+## D-0096 Top-Level-Only Re-Review Result And Fix Assignment
+
+- Documentation `019f669f-1e29-7203-b009-5d8d17057b61`, tool-enforced immutable
+  Luna Medium: clean; TypeScript/API `019f669f-1ae8-7130-9794-57e7c3836328`,
+  tool-enforced immutable Terra High: clean. Style/maintainability
+  `019f669f-16a8-7283-8408-22e1ac904d93`, tool-enforced immutable Terra High:
+  accepted P2 that the source TypeDoc says top-level but does not explicitly
+  preserve the crucial no-routing-narrowing boundary. All are closed.
+- The role runtime configuration is immutable and supplies the exact actual
+  profiles; child-visible labels exposed only generic GPT-5 identity and no
+  contrary profile. Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`,
+  expected original immutable Terra Medium, for one TypeDoc sentence plus
+  durable evidence. No test or runtime behavior changes; re-review all three
+  affected lanes afterward. Reliability remains N/A.

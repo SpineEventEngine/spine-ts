@@ -3756,3 +3756,18 @@ verify` remains reserved.
 - Aggregate the complete wave. Reliability remains N/A because this package
   changes a predicate return type, tests, docs, decisions, and active status,
   but no executable predicate body or adapter/server path.
+
+## D-0096 Top-Level-Only Re-Review Wave Result
+
+- Documentation `019f669f-1e29-7203-b009-5d8d17057b61`, immutable Luna Medium:
+  clean; TypeScript/API `019f669f-1ae8-7130-9794-57e7c3836328`, immutable Terra
+  High: clean. Style `019f669f-16a8-7283-8408-22e1ac904d93`, immutable Terra
+  High: accepted P2 that the source TypeDoc omits the explicit no-routing-
+  narrowing statement needed to preserve the subtle soundness boundary. All
+  are closed, childless, read-only, and Git-read-only.
+- Exact profiles are tool-enforced by immutable existing-role runtime
+  configuration. Child-visible output supplied only a generic GPT-5 label and
+  no contrary exact profile.
+- Return one complete fix to the existing Terra Medium implementer: expand only
+  the predicate TypeDoc and durable evidence, then re-review the same three
+  concerns. Reliability remains N/A because no execution path changes.
