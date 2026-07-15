@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security Round 1 fixes assigned
+Status: Security Round 1 fixes coordinator-verified; review pending
 
 Baseline: `39f2c6f7`
 
@@ -74,6 +74,79 @@ tracked generated output, dependency-audit freshness, and diff integrity.
   production-code changes, subagents, or Git mutation.
 - The dedicated `security_reviewer` remains pending until the artifact commit
   and focused mechanical checks are complete.
+
+## Security Fix Implementation Evidence
+
+- Existing `implementer`, expected/actual immutable `gpt-5.6-terra` / medium,
+  resumed the accepted three-slice TDD sequence at `869a225d`, without
+  subagents or Git mutation.
+- Slice 1 RED begins with public constructor validation for both SF-007 message
+  bounds. Exact command/result evidence follows in this section as each cycle
+  completes.
+- Slice 1 validation RED command: `pnpm
+--config.verify-deps-before-run=false exec vitest run
+packages/server/test/server/server.test.ts -t 'rejects invalid network message
+bounds'`; exit 1, exactly 1 failed/21 skipped, expected throw absent. The
+  whole-file sandbox `listen EPERM` attempt is excluded from behavior evidence.
+- Slice 1 validation GREEN: the same command exited 0 with 1 passed/21 skipped.
+- The next tracer is a real uncompressed command above a 512-byte public
+  `readMaxBytes` bound; forwarding is temporarily absent to establish RED.
+- Slice 1 uncompressed native RED: the focused services test exited 1 with 1
+  failed/98 skipped because the oversized command resolved successfully. The
+  preceding sandbox `listen EPERM` result is classified as environment-only.
+- Slice 1 uncompressed native GREEN: same focused command exited 0 with 1
+  passed/98 skipped. Compressed request and response-bound regressions were
+  added next. Response forwarding native RED exited 1 with 1 failed/100 skipped
+  because the oversized query response resolved successfully.
+- Configured-bound native GREEN exited 0 with 3 passed/98 skipped. The exact
+  4,194,304-byte default request-bound tracer is next; default behavior RED is
+  confirmed natively: exit 1, 1 failed/101 skipped because the oversized
+  payload resolved. The finite default is restored; GREEN is pending.
+- Slice 1 default native GREEN exited 0 with 1 passed/101 skipped. SF-007 is
+  implemented with public validation/TSDoc, direct Connect forwarding,
+  configured compressed/uncompressed request and response tests, exact default
+  behavior, and docs/security-artifact updates. Security re-review is pending.
+- Slice 2 capacity RED exited 1 with 2 failed/102 skipped for the focused
+  validation/concurrent-persistence command; the identical GREEN exited 0 with
+  2 passed/102 skipped after the validated default-100 option and private ID
+  reservation set were added.
+- Slice 2 query RED exited 1 with 2 failed/104 skipped: implicit queries lacked
+  a storage limit and a 1,001-row tenant returned all rows. The identical GREEN
+  exited 0 with 2 passed/104 skipped after absent/zero wire limits began
+  carrying the common 1,000-row storage cap.
+- Focused rollback/release coverage exited 0 with 8 passed/103 skipped;
+  recovery/CAS/queue/activation coverage exited 0 with 5 passed/109 skipped.
+  Evidence covers pending, inactive, active, and recovery reservations,
+  persistence/remember cleanup, observable delete failure after release,
+  duplicate activation retention, capacity-before-CAS, unconsumed recovery on
+  exhaustion, CAS loss/error release, queue overflow, and activation failure.
+  SF-008/SF-009 are implemented pending re-review; SF-010 remains.
+- Slice 2 full-file native verification passed 114/114; the preceding sandbox
+  run's 19 loopback `listen EPERM` failures are environment-only.
+- Slice 3 lexical/ownership/mode RED exited 1 with 4 failed/20 skipped; the
+  identical GREEN exited 0 with 4 passed/20 skipped. A separate recheck RED
+  exited 1 with 1 failed/26 skipped because mocked native connect was reached;
+  restoring the immediate recheck yielded 1 passed/26 skipped.
+- Native canonical alias/replacement coverage passed 3/3, the full ZeroMQ
+  transport file passed 27/27, and the focused adapter/smoke/transport/
+  cross-process set passed 4 files/40 tests after short macOS `/tmp` aliases
+  replaced overlong test socket paths. Build typechecking passed.
+- SF-010 now uses canonical one-component creation, exact POSIX owner/mode,
+  prepared identity, and immediate native-boundary rechecks. The documented
+  pathname post-check substitution residual remains deployment-owned. All four
+  findings are implemented, but dedicated security re-review and task closure
+  remain pending.
+- Final focused runtime verification passed: the Server/SpineServices command
+  exited 0 with 2 files/136 tests, and the native ZeroMQ adapter/smoke/
+  transport/cross-process command exited 0 with 4 files/40 tests.
+- `typecheck:generated` initially exited 2 on two test-only typing defects; after
+  optional-state handling and a narrowed test-storage cast, the identical
+  command exited 0 for both `tsc -b` and tooling `tsc --noEmit`.
+- `docs:check` exited 0, verified 25 copied proto checksums, and verified 100
+  proto, 28 core, 205 server, 19 storage, 17 transport, and 3 testing exports.
+  Focused ESLint, Prettier check, and `git diff --check` all exited 0. Generated
+  output remains ignored. These checks do not substitute for pending canonical
+  review, final security re-review, full verification, or task closure.
 
 ## Coordinator Artifact Verification - Finding Batch 1
 
@@ -191,3 +264,42 @@ tracked generated output, dependency-audit freshness, and diff integrity.
 - Each native bind/connect receives an immediate canonical-path, final-object,
   ownership, mode, and identity recheck. Non-POSIX behavior and the residual
   pathname race are documented without overclaiming portable guarantees.
+
+## Coordinator Fix-Endpoint Finding
+
+- SF-010 implementation currently rechecks a missing suffix component only on
+  the `mkdir()` `EEXIST` path. A successful creation advances without the
+  architecture-required immediate `lstat()` non-link/directory verification.
+- Return this confirmed contract gap to the existing implementer with expected
+  explicit immutable `gpt-5.6-terra` / medium. Canonical concern review and
+  dedicated security re-review remain blocked on the corrected committed
+  endpoint.
+
+## Coordinator Fix-Endpoint Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, the required immediate successful-create check,
+  focused RED/GREEN evidence, and no subagents or Git mutation; it is closed.
+- Coordinator native affected verification passed 6 files/177 tests.
+  Build/tooling typechecks, docs generation and exact API counts, focused
+  ESLint/Prettier, status/public-leak/duplicate-policy/overclaim scans,
+  generated-output tracking, and diff integrity all passed.
+- Review basis may now advance to the committed complete-fix endpoint. Run all
+  four canonical concerns as one wave before any fixes, then rerun the dedicated
+  project security reviewer against the post-canonical endpoint.
+
+## Coordinator IPC Correction Evidence
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, immutable
+  actual `gpt-5.6-terra` / medium, used one package-private filesystem seam and
+  changed no public interface or Git state.
+- Focused RED exited 1 with 1 failed/27 skipped: replacing a successfully
+  created first suffix with a symlink led to the later canonical-path error,
+  proving immediate verification was absent.
+- The minimal correction performs the same `lstat()` non-link/directory check
+  after both successful `mkdir()` and `EEXIST`, before advancing. Focused GREEN
+  exited 0 with 1 passed/27 skipped; full native signal-transport regression
+  exited 0 with 1 file/28 tests.
+- SF-010 is restored to implemented pending dedicated security re-review.
+  Canonical review, full verification, integration, and task closure remain
+  pending.

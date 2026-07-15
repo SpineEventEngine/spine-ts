@@ -57,6 +57,17 @@ describe("Server", () => {
     expect(() => new Server({ host: " \t " })).toThrow("Server host must not be blank.");
   });
 
+  it("rejects invalid network message bounds before opening a listener", () => {
+    for (const value of [0, 1.5, 0x1_0000_0000, Number.NaN]) {
+      expect(() => new Server({ readMaxBytes: value })).toThrow(
+        "Server readMaxBytes must be an integer from 1 through 4294967295.",
+      );
+      expect(() => new Server({ writeMaxBytes: value })).toThrow(
+        "Server writeMaxBytes must be an integer from 1 through 4294967295.",
+      );
+    }
+  });
+
   it("closes active HTTP/2 sessions before owned resources", async () => {
     const order: string[] = [];
     const server = await Server.atPort(0)

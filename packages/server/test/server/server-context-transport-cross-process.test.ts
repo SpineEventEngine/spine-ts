@@ -30,6 +30,7 @@ const phaseTimeoutMs = 5_000;
 const shutdownGraceMs = 1_000;
 const observationQuietMs = 200;
 const adapterIdentity = "t0038b-parent-context-transport";
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 const commandEntityId = "cross-process-command";
 const inboundEventEntityId = "cross-process-inbound-event";
 const childPath = fileURLToPath(new URL("./server-context-transport-child.mjs", import.meta.url));
@@ -313,7 +314,7 @@ describe("Server context transport across Node processes", () => {
   }, 10_000);
 
   it("reports retained IPC entries before removing the directory", async () => {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "spine-t0038b-leak-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "spine-t0038b-leak-"));
     await writeFile(path.join(ipcDirectory, "retained.sock"), "retained");
     const failures: Error[] = [];
 
@@ -348,7 +349,7 @@ class CrossProcessFixture {
   #trackedChild: TrackedChild;
 
   static async create(options: FixtureCreateOptions = {}): Promise<CrossProcessFixture> {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "spine-t0038b-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "spine-t0038b-"));
     let parentTransport: SignalTransport | undefined;
     let child: ChildProcess | undefined;
     let trackedChild: TrackedChild | undefined;
@@ -797,7 +798,7 @@ async function withinPhase<Value>(
 async function runChildBoundary(
   environment: Readonly<Record<string, string>>,
 ): Promise<ChildBoundaryResult> {
-  const ipcDirectory = await mkdtemp(path.join(tmpdir(), "szb-"));
+  const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "szb-"));
   await chmod(ipcDirectory, 0o700);
   const child = fork(childPath, [], {
     cwd: process.cwd(),

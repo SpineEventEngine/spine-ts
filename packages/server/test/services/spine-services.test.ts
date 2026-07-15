@@ -1,5 +1,5 @@
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -84,7 +84,7 @@ import {
   type RecordSpec,
   type StorageContext,
 } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -301,6 +301,103 @@ describe("SpineServices", () => {
       expect(ack.status?.status.value).toEqual(create(EmptySchema));
       expect(ack.messageId?.typeUrl).toBe(deriveTypeUrl(CommandIdSchema));
       expect(observed).toEqual(["command-1"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects an uncompressed request message above the configured network bound", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: server.baseUrl, writeMaxBytes: 10_000 }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("oversized-command", undefined, "x".repeat(2_000))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("defaults the request message bound to 4,194,304 uncompressed bytes", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context] }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: server.baseUrl, writeMaxBytes: 5_000_000 }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("default-bound", undefined, "x".repeat(4_194_304))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a compressed request whose uncompressed message exceeds the network bound", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({
+          baseUrl: server.baseUrl,
+          writeMaxBytes: 10_000,
+          sendCompression: compressionGzip,
+          compressMinBytes: 0,
+        }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("compressed-command", undefined, "x".repeat(2_000))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a response message above the configured network bound", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "x".repeat(2_000)));
+    const server = await new Server({ contexts: [context], writeMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        QueryService,
+        createGrpcTransport({ baseUrl: server.baseUrl, readMaxBytes: 10_000 }),
+      );
+
+      await expect(client.read(createQuery("task-1"))).rejects.toMatchObject({
+        code: Code.ResourceExhausted,
+      } satisfies Partial<ConnectError>);
     } finally {
       await server.close();
     }
@@ -754,6 +851,73 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("error");
     expect(responseErrorMessage(response)).toBe("QueryService.Read limit requires ordering.");
+  });
+
+  it("adds the implicit storage query cap without requiring ordering", async () => {
+    const observedQueries: RecordQuery<unknown>[] = [];
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      queryVersioned: (_schema, query) => {
+        observedQueries.push(query as RecordQuery<unknown>);
+        return Promise.resolve([]);
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    await handlers.read(createIncludeAllQuery());
+    await handlers.read(createFormattedQuery(create(ResponseFormatSchema, { limit: 0 })));
+    await handlers.read(
+      createFormattedColumnFilterQuery("name", packStringId("Open"), create(ResponseFormatSchema)),
+    );
+    await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          limit: 7,
+          orderBy: [
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    expect(observedQueries.map((query) => query.limit)).toEqual([1_000, 1_000, 1_000, 7]);
+  });
+
+  it("applies tenant filtering before the implicit storage query cap", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+    const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
+      context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          createState(`tenant-a-${String(index)}`, `Tenant A ${String(index)}`),
+          { tenantId: "tenant-a" },
+        ),
+    );
+    await Promise.all(tenantAUpdates);
+    await context.stand().update(ProjectionStateSchema, createState("tenant-b-1", "Tenant B 1"), {
+      tenantId: "tenant-b",
+    });
+    await context.stand().update(ProjectionStateSchema, createState("tenant-b-2", "Tenant B 2"), {
+      tenantId: "tenant-b",
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const tenantA = await handlers.read(createIncludeAllQuery("tenant-a"));
+    const tenantB = await handlers.read(createIncludeAllQuery("tenant-b"));
+
+    expect(tenantA.message).toHaveLength(1_000);
+    expect(tenantB.message.map((message) => unpackProjectionState(message.state)?.id)).toEqual([
+      "tenant-b-1",
+      "tenant-b-2",
+    ]);
   });
 
   it("rejects malformed ordering before reading storage", async () => {
@@ -2271,6 +2435,127 @@ describe("SpineServices", () => {
     expect(() => handlers.subscribe(createTopic())).not.toThrow();
   });
 
+  it("validates the process-local subscription capacity", () => {
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+
+    for (const subscriptionLimit of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() => new SpineServices({ contexts: [context], subscriptionLimit })).toThrow(
+        "subscriptionLimit must be a positive safe integer",
+      );
+    }
+  });
+
+  it("reserves capacity synchronously across concurrent subscription persistence", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const first = handlers.subscribe(createTopic());
+
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      }),
+    );
+
+    const subscription = await first;
+    await handlers.cancel(subscription);
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("defaults the process-local subscription capacity to 100", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const subscriptions = await Promise.all(
+      Array.from({ length: 100 }, () => Promise.resolve(handlers.subscribe(createTopic()))),
+    );
+
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await Promise.all(
+      subscriptions.map((subscription) => Promise.resolve(handlers.cancel(subscription))),
+    );
+  });
+
+  it("releases capacity and cleans durable state after subscription persistence fails", async () => {
+    const contextName = "FailedSubscriptionPersistence";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    storageFactory.writeError = new Error("write failed");
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("write failed");
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("write failed");
+    expect(storageFactory.deleteCalls).toBe(2);
+  });
+
+  it("releases capacity when process-local subscription registration fails", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementationOnce(() => {
+      throw new Error("timer registration failed");
+    });
+
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("timer registration failed");
+    timer.mockRestore();
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("releases capacity before surfacing durable subscription deletion failure", async () => {
+    const contextName = "FailedSubscriptionDelete";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    storageFactory.deleteError = new Error("delete failed");
+
+    await expect(handlers.cancel(subscription)).rejects.toThrow("delete failed");
+    const replacement = await handlers.subscribe(createTopic());
+    await expect(handlers.cancel(replacement)).rejects.toThrow("delete failed");
+  });
+
+  it("keeps active subscription capacity reserved across duplicate activation", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const active = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const activeNext = active.next();
+    await delay(10);
+
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await handlers.cancel(subscription);
+    await activeNext;
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
   it("keeps missing subscription IDs inert", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
@@ -2753,6 +3038,64 @@ describe("SpineServices", () => {
       createState("task-recovered", "Recovered"),
     );
     await iterator.return?.();
+  });
+
+  it("leaves durable recovery unconsumed when process-local capacity is exhausted", async () => {
+    const contextName = "CapacityBoundRecovery";
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+      subscriptionLimit: 1,
+    });
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const local = await secondHandlers.subscribe(createTopic());
+
+    await expect(
+      secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+    expect(
+      await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        recoverable.id?.value ?? "missing",
+      ),
+    ).toBeDefined();
+
+    await secondHandlers.cancel(local);
+    const recovered = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const next = recovered.next();
+    await delay(10);
+    await secondHandlers.cancel(recoverable);
+    await expect(next).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("releases recovery capacity after compare-and-set loss and error", async () => {
+    for (const failure of ["loss", "error"] as const) {
+      const contextName = `RecoveryCas${failure}`;
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const firstContext = createSubscriptionContext(contextName, storageFactory);
+      const secondContext = createSubscriptionContext(contextName, storageFactory);
+      const firstHandlers = registeredSubscriptionHandlers(firstContext);
+      const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+        subscriptionLimit: 1,
+      });
+      const recoverable = await firstHandlers.subscribe(createTopic());
+      if (failure === "loss") {
+        storageFactory.compareAndSetResult = false;
+        await expect(
+          secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+        ).resolves.toEqual({ done: true, value: undefined });
+      } else {
+        storageFactory.compareAndSetError = new Error("compare-and-set failed");
+        await expect(
+          secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+        ).rejects.toThrow("compare-and-set failed");
+      }
+
+      await expect(secondHandlers.subscribe(createTopic())).resolves.toBeDefined();
+    }
   });
 
   it("recovers inactive event subscriptions across service adapter restart", async () => {
@@ -3492,7 +3835,10 @@ describe("SpineServices", () => {
         };
       },
     });
-    const handlers = registeredSubscriptionHandlers(context, { queueLimit: 1 });
+    const handlers = registeredSubscriptionHandlers(context, {
+      queueLimit: 1,
+      subscriptionLimit: 1,
+    });
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
@@ -3519,6 +3865,25 @@ describe("SpineServices", () => {
 
     expect(next.done).toBe(true);
     expect(unsubscribeCount).toBe(1);
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("releases subscription capacity after activation attachment fails", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({
+        stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+        subscribe: () => {
+          throw new Error("activation failed");
+        },
+      }),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow(
+      "activation failed",
+    );
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
   });
 
   it("fails unsupported subscription topics contractually", async () => {
@@ -3749,14 +4114,14 @@ function createRollingBackTransitionRepository(): Repository<
   });
 }
 
-function createProjectionCommand(id: string, tenantId?: TenantInput) {
+function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Task") {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
     schema: ProjectionStateSchema,
-    message: createState("task-1", "Task"),
+    message: createState("task-1", name),
   });
 }
 
@@ -4135,6 +4500,103 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   ): Promise<void> {
     this.#seededRecords.delete(record.id);
     return this.#delegate.write(record.record);
+  }
+}
+
+class FaultingSubscriptionStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #subscriptionContextName: string;
+  compareAndSetError: Error | undefined;
+  compareAndSetResult: boolean | undefined;
+  deleteCalls = 0;
+  deleteError: Error | undefined;
+  writeError: Error | undefined;
+
+  constructor(contextName: string) {
+    super();
+    this.#subscriptionContextName = `${contextName}:subscriptions`;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const delegate = this.#delegate.createRecordStorage(context, recordSpec);
+
+    if (
+      context.name !== this.#subscriptionContextName ||
+      !isDurableSubscriptionRecordSpec(recordSpec)
+    ) {
+      return delegate;
+    }
+
+    return new FaultingSubscriptionRecordStorage(
+      context,
+      recordSpec,
+      delegate as unknown as RecordStorage<string, Any>,
+      this,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
+  readonly #delegate: RecordStorage<string, Any>;
+  readonly #faults: FaultingSubscriptionStorageFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    delegate: RecordStorage<string, Any>,
+    faults: FaultingSubscriptionStorageFactory,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#faults = faults;
+  }
+
+  protected override deleteRecord(id: string): Promise<boolean> {
+    this.#faults.deleteCalls += 1;
+    return this.#faults.deleteError === undefined
+      ? this.#delegate.delete(id)
+      : Promise.reject(this.#faults.deleteError);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<string>,
+  ): Promise<readonly RecordEntry<string, Any>[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected override readRecord(id: string): Promise<Any | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected override compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.#faults.compareAndSetError !== undefined) {
+      return Promise.reject(this.#faults.compareAndSetError);
+    }
+    if (this.#faults.compareAndSetResult !== undefined) {
+      return Promise.resolve(this.#faults.compareAndSetResult);
+    }
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected override writeAllRecords(
+    records: readonly ReturnType<RecordSpec<string, Any>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected override writeRecord(
+    record: ReturnType<RecordSpec<string, Any>["materialize"]>,
+  ): Promise<void> {
+    return this.#faults.writeError === undefined
+      ? this.#delegate.write(record.record)
+      : Promise.reject(this.#faults.writeError);
   }
 }
 

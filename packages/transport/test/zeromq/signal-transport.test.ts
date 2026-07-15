@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, realpath, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,6 +11,7 @@ import { zeroMqSocketAccess } from "../../src/zeromq/signal-transport.js";
 
 const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 describe("ZeroMQ SignalTransport", () => {
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
@@ -208,7 +209,7 @@ describe("ZeroMQ SignalTransport", () => {
       .mockImplementationOnce(async (ipcDirectory) => {
         preparationStarted();
         await released;
-        await prepareIpcDirectory(ipcDirectory);
+        return await prepareIpcDirectory(ipcDirectory);
       });
 
     try {
@@ -644,10 +645,10 @@ describe("ZeroMQ SignalTransport", () => {
       await chmod(ipcDirectory, 0o755);
 
       await expect(transport.publish({ topic, envelope: "unsafe" })).rejects.toThrow(
-        "ZeroMQ adapter ipcDirectory must be private to the current user.",
+        "ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.",
       );
       await expect(transport.request({ topic, envelope: "unsafe" })).rejects.toThrow(
-        "ZeroMQ adapter ipcDirectory must be private to the current user.",
+        "ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.",
       );
       await expect(
         transport.respond(
@@ -658,12 +659,198 @@ describe("ZeroMQ SignalTransport", () => {
           }),
           () => "unsafe",
         ),
-      ).rejects.toThrow("ZeroMQ adapter ipcDirectory must be private to the current user.");
+      ).rejects.toThrow("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
     } finally {
       await transport.close();
       await rm(ipcDirectory, { recursive: true, force: true });
     }
   });
+
+  it("rejects a final IPC directory symlink", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "sz-final-link-"));
+    const target = path.join(parent, "target");
+    const link = path.join(parent, "ipc-link");
+
+    try {
+      await mkdir(target, { mode: 0o700 });
+      await symlink(target, link, "dir");
+
+      await expect(zeroMqSocketAccess.prepareIpcDirectory(link)).rejects.toThrow(/symlink/iu);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "rejects a user-owned ancestor IPC directory symlink",
+    async () => {
+      const parent = await mkdtemp(path.join(tmpdir(), "sz-ancestor-link-"));
+      const target = path.join(parent, "target");
+      const link = path.join(parent, "alias");
+
+      try {
+        await mkdir(path.join(target, "ipc"), { recursive: true, mode: 0o700 });
+        await symlink(target, link, "dir");
+
+        await expect(
+          zeroMqSocketAccess.prepareIpcDirectory(path.join(link, "ipc")),
+        ).rejects.toThrow(/ancestor symlink/iu);
+      } finally {
+        await rm(parent, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform !== "darwin")(
+    "uses the canonical endpoint behind the macOS system temporary-directory alias",
+    async () => {
+      const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-ca-"));
+      const canonicalDirectory = await realpath(ipcDirectory);
+      const config = createZeroMqAdapterConfig({
+        ipcDirectory,
+        adapterIdentity: `system-alias-${String(process.pid)}`,
+      });
+      const transport = createZeroMqTransport(config);
+      const nativeBind = zeroMqSocketAccess.bindReply.bind(zeroMqSocketAccess);
+      let boundAddress: string | undefined;
+      const bind = vi
+        .spyOn(zeroMqSocketAccess, "bindReply")
+        .mockImplementation((socket, address) => {
+          boundAddress = address;
+          return nativeBind(socket, address);
+        });
+
+      try {
+        const topic = createTransportTopic({
+          signalKind: "command",
+          messageTypeUrl: "type.spine.io/example.CanonicalAliasTask",
+        });
+        const handle = await transport.respond(
+          createTransportSubscription({
+            subscriberId: "canonical-alias-worker",
+            topic,
+            mode: "competing-consumer",
+          }),
+          () => ({ accepted: true }),
+        );
+
+        expect(canonicalDirectory).not.toBe(ipcDirectory);
+        expect(boundAddress?.startsWith(`ipc://${canonicalDirectory}${path.sep}`)).toBe(true);
+        await handle.close();
+      } finally {
+        bind.mockRestore();
+        await transport.close();
+        await rm(ipcDirectory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects replacement of a prepared IPC directory by device/inode identity", async () => {
+    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-replaced-"));
+    const prepared = await zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory);
+    const replaced = `${prepared.path}-replaced`;
+
+    try {
+      await rename(prepared.path, replaced);
+      await mkdir(prepared.path, { mode: 0o700 });
+
+      await expect(zeroMqSocketAccess.recheckIpcDirectory(prepared)).rejects.toThrow(
+        /identity changed/iu,
+      );
+    } finally {
+      await rm(prepared.path, { recursive: true, force: true });
+      await rm(replaced, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a suffix directory replaced immediately after successful creation", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "sz-created-race-"));
+    const target = path.join(parent, "target");
+    const requested = path.join(parent, "missing", "child");
+    const createIpcDirectoryComponent =
+      zeroMqSocketAccess.createIpcDirectoryComponent.bind(zeroMqSocketAccess);
+    let replacementPath: string | undefined;
+    const createComponent = vi
+      .spyOn(zeroMqSocketAccess, "createIpcDirectoryComponent")
+      .mockImplementation(async (directory) => {
+        await createIpcDirectoryComponent(directory);
+        if (replacementPath === undefined) {
+          replacementPath = `${directory}-original`;
+          await rename(directory, replacementPath);
+          await symlink(target, directory, "dir");
+        }
+      });
+
+    try {
+      await mkdir(target, { mode: 0o700 });
+
+      await expect(zeroMqSocketAccess.prepareIpcDirectory(requested)).rejects.toThrow(
+        "ZeroMQ adapter ipcDirectory creation encountered an unsafe path.",
+      );
+      expect(createComponent).toHaveBeenCalledTimes(1);
+      expect(await readdir(target)).toEqual([]);
+    } finally {
+      createComponent.mockRestore();
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("prevents native bind and connect after prepared-directory replacement", async () => {
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.RecheckReplacementTask",
+    });
+    const subscription = createTransportSubscription({
+      subscriberId: "recheck-worker",
+      topic,
+      mode: "competing-consumer",
+    });
+
+    await expectReplacementToPreventNativeOperation("connect", async (transport) => {
+      await transport.subscribe(subscription, () => undefined);
+    });
+    await expectReplacementToPreventNativeOperation("bind", async (transport) => {
+      await transport.respond(subscription, () => ({ accepted: true }));
+    });
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "requires exact POSIX 0700 mode including special bits",
+    async () => {
+      const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-exact-mode-"));
+
+      try {
+        await chmod(ipcDirectory, 0o700);
+        await expect(zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)).resolves.toBeDefined();
+
+        for (const mode of [0o710, 0o1700]) {
+          await chmod(ipcDirectory, mode);
+          await expect(zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)).rejects.toThrow(
+            /exact POSIX mode 0700/iu,
+          );
+        }
+      } finally {
+        await rm(ipcDirectory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "rejects an IPC directory owned by a different effective user",
+    async () => {
+      const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-foreign-owner-"));
+      const getEuid = vi.spyOn(process, "geteuid").mockReturnValue((process.geteuid?.() ?? 0) + 1);
+
+      try {
+        await expect(zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)).rejects.toThrow(
+          /effective user/iu,
+        );
+      } finally {
+        getEuid.mockRestore();
+        await rm(ipcDirectory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("closes registrations and rejects later operations without exposing adapter details", async () => {
     await withZeroMqTransport(async (transport) => {
@@ -706,7 +893,7 @@ async function withZeroMqTransport<T>(
     readonly onBackgroundFailure?: (error: Error) => void;
   } = {},
 ): Promise<T> {
-  const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-"));
+  const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
   const transport = createZeroMqTransport(
     createZeroMqAdapterConfig({
       ipcDirectory,
@@ -730,7 +917,7 @@ async function withSharedZeroMqTransports<T>(
     ipcDirectory: string,
   ) => Promise<T>,
 ): Promise<T> {
-  const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-"));
+  const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
   const config = createZeroMqAdapterConfig({
     ipcDirectory,
     adapterIdentity: `test-${String(process.pid)}-${String(Date.now())}`,
@@ -743,6 +930,51 @@ async function withSharedZeroMqTransports<T>(
   } finally {
     await Promise.all([firstTransport.close(), secondTransport.close()]);
     await rm(ipcDirectory, { recursive: true, force: true });
+  }
+}
+
+async function expectReplacementToPreventNativeOperation(
+  operation: "bind" | "connect",
+  run: (transport: ReturnType<typeof createZeroMqTransport>) => Promise<unknown>,
+): Promise<void> {
+  const ipcDirectory = await mkdtemp(path.join(tmpdir(), `sz-recheck-${operation}-`));
+  const transport = createZeroMqTransport(
+    createZeroMqAdapterConfig({
+      ipcDirectory,
+      adapterIdentity: `recheck-${operation}-${String(process.pid)}-${String(Date.now())}`,
+    }),
+  );
+  const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+  let replacedPath: string | undefined;
+  const prepare = vi
+    .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+    .mockImplementationOnce(async (directory) => {
+      const prepared = await prepareIpcDirectory(directory);
+      replacedPath = `${prepared.path}-original`;
+      await rename(prepared.path, replacedPath);
+      await mkdir(prepared.path, { mode: 0o700 });
+      return prepared;
+    });
+  const nativeOperation =
+    operation === "connect"
+      ? vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
+          throw new Error("native connect reached");
+        })
+      : vi
+          .spyOn(zeroMqSocketAccess, "bindReply")
+          .mockRejectedValue(new Error("native bind reached"));
+
+  try {
+    await expect(run(transport)).rejects.toThrow(/identity changed/iu);
+    expect(nativeOperation).not.toHaveBeenCalled();
+  } finally {
+    nativeOperation.mockRestore();
+    prepare.mockRestore();
+    await transport.close();
+    await rm(ipcDirectory, { recursive: true, force: true });
+    if (replacedPath !== undefined) {
+      await rm(replacedPath, { recursive: true, force: true });
+    }
   }
 }
 

@@ -122,15 +122,20 @@ export class SpineServices {
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+  readonly #subscriptionReservations = new Set<string>();
   readonly #subscriptionStores: readonly SubscriptionStore[];
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
+  readonly #subscriptionLimit: number;
 
   /** Create service adapters over the passed built bounded contexts. */
   constructor(options: SpineServicesOptions) {
     this.#contexts = Object.freeze([...options.contexts]);
     this.#inactiveTtlMs = positiveInteger(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
     this.#queueLimit = positiveInteger(options.queueLimit ?? DEFAULT_QUEUE_LIMIT);
+    this.#subscriptionLimit = subscriptionLimit(
+      options.subscriptionLimit ?? DEFAULT_SUBSCRIPTION_LIMIT,
+    );
 
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
@@ -308,11 +313,27 @@ export class SpineServices {
       expiresAtMs: Date.now() + this.#inactiveTtlMs,
       queueLimit: this.#queueLimit,
     });
-    return this.#persistSubscription(record).then(() => {
-      this.#rememberSubscription(record);
+    this.#reserveSubscription(id);
+    return this.#completeSubscription(record, subscription);
+  }
 
+  async #completeSubscription(
+    record: SubscriptionRecord,
+    subscription: Subscription,
+  ): Promise<Subscription> {
+    try {
+      await this.#persistSubscription(record);
+      this.#rememberSubscription(record);
       return clone(SubscriptionSchema, subscription);
-    });
+    } catch (error) {
+      this.#releaseSubscription(record.id);
+      try {
+        await this.#deleteDurableSubscription(record.id, record.route.context);
+      } catch {
+        // Preserve the originating persistence or process-local registration failure.
+      }
+      throw error;
+    }
   }
 
   #rememberSubscription(record: SubscriptionRecord): void {
@@ -432,6 +453,7 @@ export class SpineServices {
   async #removeSubscription(id: string): Promise<void> {
     const record = this.#subscriptions.get(id);
 
+    this.#releaseSubscription(id);
     if (record !== undefined) {
       clearInactiveTimer(record);
       record.delivery.close();
@@ -465,6 +487,7 @@ export class SpineServices {
   async #recoverSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     for (const store of this.#subscriptionStores) {
       const storage = createSubscriptionStorage(store);
+      let reserved = false;
 
       try {
         const durable = await storage.read(id);
@@ -478,13 +501,33 @@ export class SpineServices {
           return undefined;
         }
 
+        this.#reserveSubscription(record.id);
+        reserved = true;
         if (!(await storage.compareAndSet(id, durable, undefined))) {
+          this.#releaseSubscription(record.id);
+          reserved = false;
           continue;
         }
 
         record.durableConsumed = true;
-        this.#rememberSubscription(record);
+        try {
+          this.#rememberSubscription(record);
+        } catch (error) {
+          this.#releaseSubscription(record.id);
+          reserved = false;
+          try {
+            await storage.delete(id);
+          } catch {
+            // Preserve the process-local registration failure.
+          }
+          throw error;
+        }
         return record;
+      } catch (error) {
+        if (reserved) {
+          this.#releaseSubscription(id);
+        }
+        throw error;
       } finally {
         storage.close();
       }
@@ -594,6 +637,20 @@ export class SpineServices {
 
     return createSubscriptionStorage(store);
   }
+
+  #reserveSubscription(id: string): void {
+    if (this.#subscriptionReservations.has(id)) {
+      return;
+    }
+    if (this.#subscriptionReservations.size >= this.#subscriptionLimit) {
+      throw new ConnectError("Subscription capacity is exhausted.", Code.ResourceExhausted);
+    }
+    this.#subscriptionReservations.add(id);
+  }
+
+  #releaseSubscription(id: string): void {
+    this.#subscriptionReservations.delete(id);
+  }
 }
 
 /** Options for registering Spine service adapters over built bounded contexts. */
@@ -612,6 +669,12 @@ export interface SpineServicesOptions {
    * Defaults to 100. Non-positive or non-finite values are coerced to 1.
    */
   readonly queueLimit?: number;
+  /**
+   * Maximum process-local subscriptions, including pending, inactive, active, and recovered work.
+   *
+   * Defaults to 100 and must be a positive safe integer. This is not a distributed quota.
+   */
+  readonly subscriptionLimit?: number;
 }
 
 interface CommandRoute {
@@ -996,7 +1059,7 @@ function toRecordFilter(filter: Filter): RecordFilter {
 
 function formatQuery(format: Query["format"]): RecordQuery<unknown> {
   if (format === undefined) {
-    return {};
+    return { limit: MAX_QUERY_LIMIT };
   }
 
   const sort = format.orderBy.map(toRecordOrder);
@@ -1004,7 +1067,7 @@ function formatQuery(format: Query["format"]): RecordQuery<unknown> {
   return {
     ...(format.fieldMask === undefined ? {} : { mask: format.fieldMask.paths }),
     ...(sort.length === 0 ? {} : { sort }),
-    ...(format.limit > 0 ? { limit: format.limit } : {}),
+    limit: format.limit > 0 ? format.limit : MAX_QUERY_LIMIT,
   };
 }
 
@@ -1039,6 +1102,7 @@ function invalidCriterionError(): ContractError {
 
 const DEFAULT_INACTIVE_TTL_MS = 30_000;
 const DEFAULT_QUEUE_LIMIT = 100;
+const DEFAULT_SUBSCRIPTION_LIMIT = 100;
 const MAX_QUERY_ID_FILTER_IDS = 100;
 const MAX_QUERY_SIMPLE_FILTERS = 16;
 const MAX_QUERY_COMPOSITE_FILTERS = 8;
@@ -1057,6 +1121,14 @@ const MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH = 128;
 
 function positiveInteger(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
+function subscriptionLimit(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("SpineServices subscriptionLimit must be a positive safe integer.");
+  }
+
+  return value;
 }
 
 function clearInactiveTimer(record: SubscriptionRecord): void {

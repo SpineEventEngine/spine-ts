@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security fixes assigned
+Status: In progress - security fixes coordinator-verified; review pending
 
 Started: `2026-07-14`
 
@@ -284,6 +284,74 @@ example.
 - TDD order: `SF-007`; `SF-008` plus `SF-009`; then `SF-010`. Update source,
   behavior tests, public TSDoc/docs, security artifacts, and durable records.
 
+## Security Fix Implementation Session
+
+- Existing `implementer`, previously dispatched explicitly as
+  `gpt-5.6-terra` / medium, resumed at `869a225d` with immutable actual runtime
+  metadata `gpt-5.6-terra` / medium. No subagents or Git mutation.
+- Slice 1 starts with a public-constructor behavior test requiring both network
+  message bounds to reject non-integers and values outside `1..0xffffffff`.
+  Exact RED and GREEN commands/results are recorded in the work/review logs.
+- Slice 1 validation RED is confirmed: the focused constructor test exited 1
+  because invalid values were accepted. Implementation now exposes the two
+  top-level options, validates them, and forwards them directly to Connect;
+  constructor GREEN passed. Native uncompressed forwarding RED then confirmed
+  the command was accepted when forwarding was absent; GREEN remains pending.
+- Slice 1 complete: constructor validation GREEN passed; native configured
+  forwarding RED/GREEN covered compressed and uncompressed requests and
+  oversized responses; exact default RED/GREEN proved 4,194,304 bytes. SF-007
+  is implemented pending security re-review.
+- Slice 2 capacity RED: `pnpm --config.verify-deps-before-run=false exec vitest
+run packages/server/test/services/spine-services.test.ts -t 'validates the
+process-local subscription capacity|reserves capacity synchronously'` exited
+  1 with 2 failed/102 skipped because invalid limits were accepted and a second
+  pending subscription was not rejected. The identical GREEN exited 0 with 2
+  passed/102 skipped after adding the validated default-100 option and private
+  ID reservation set.
+- Slice 2 query RED: the focused `-t 'adds the implicit storage query
+cap|applies tenant filtering before the implicit storage query cap'` command
+  exited 1 with 2 failed/104 skipped: three implicit queries had no storage
+  limit and a 1,001-row tenant returned 1,001 rows. The identical GREEN exited
+  0 with 2 passed/104 skipped after applying `MAX_QUERY_LIMIT=1000` for absent
+  or zero wire limits.
+- Slice 2 lifecycle/recovery coverage passed in two focused runs: 8 passed/103
+  skipped for option/default, persistence/remember rollback, deletion failure,
+  and duplicate activation; 5 passed/109 skipped for capacity-preserving
+  recovery, CAS loss/error release, queue overflow, and activation failure.
+  SF-008/SF-009 are implemented pending security re-review; SF-010 remains.
+- Slice 2 full-file verification first produced 19 sandbox-only loopback
+  `listen EPERM` failures while 95 non-network tests passed. The approved native
+  rerun superseded it and exited 0 with 114/114 tests passed.
+- Slice 3 path-policy RED: `pnpm --config.verify-deps-before-run=false exec
+vitest run packages/transport/test/zeromq/signal-transport.test.ts -t 'final
+IPC directory symlink|ancestor IPC directory symlink|exact POSIX
+0700|different effective user'` exited 1 with 4 failed/20 skipped because
+  links, special mode, and foreign effective ownership were accepted. The
+  identical GREEN exited 0 with 4 passed/20 skipped after canonical preparation
+  and exact final-directory validation.
+- Slice 3 pre-native recheck RED temporarily omitted only the subscriber
+  recheck; the focused replacement test exited 1 with 1 failed/26 skipped
+  because mocked native connect was reached. Restoring the recheck made the
+  identical command exit 0 with 1 passed/26 skipped.
+- Canonical alias/replacement coverage needed native IPC after a sandbox
+  `Operation not permitted`; the native run exited 0 with 3 passed/24 skipped.
+  Full native `signal-transport.test.ts` then passed 27/27. The first four-file
+  native smoke/cross-process run exposed three macOS socket-path `File name too
+long` failures; short `/tmp` aliases now canonicalize to `/private/tmp`, and
+  the rerun passed 4 files/40 tests. `typecheck:build:generated` exited 0.
+- SF-010 is implemented pending security re-review. The accepted residual is
+  explicit: pathname ZeroMQ cannot eliminate substitutions after the final
+  check, so deployment must select a canonical directory beneath a
+  non-attacker-writable parent. Task closure remains pending.
+- Endpoint checks: native Server/SpineServices verification exited 0 with 2
+  files/136 tests; native ZeroMQ adapter/smoke/transport/cross-process
+  verification exited 0 with 4 files/40 tests. `typecheck:generated` first
+  exited 2 on two test-only typing defects, then exited 0 after correction.
+  `docs:check` exited 0 with 25 copied proto checksums and expected export counts
+  of 100/28/205/19/17/3. Focused ESLint, Prettier check, and `git diff --check`
+  exited 0. Dedicated re-review, canonical reviews, full verification, and task
+  completion remain pending.
+
 ## IPC Architecture Validation Finding
 
 - Native macOS evidence shows `os.tmpdir()` resolves through `/var`, while
@@ -326,3 +394,48 @@ example.
   behavior tests, public TSDoc/docs, security artifacts, and durable records.
 - Each slice must show the focused red/green evidence before the next slice;
   generated Protobuf output remains untracked.
+
+## Coordinator Fix-Endpoint Finding
+
+- `prepareIpcDirectory()` verifies a missing component only when `mkdir()`
+  reports `EEXIST`. After successful creation it advances without immediately
+  checking that the new object is still the intended non-link directory.
+- This contradicts the accepted SF-010 rule to re-run `lstat()` for every
+  created or raced suffix component before descending. Resume implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable
+  `gpt-5.6-terra` / medium, for one focused TDD correction; no subagents or Git
+  mutation.
+
+## Coordinator Fix-Endpoint Acceptance
+
+- The resumed implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, immediate successful-create `lstat` verification,
+  deterministic RED/GREEN evidence, and no Git mutation or child agents; it is
+  closed.
+- Fresh native affected verification passed 6 files and 177 tests. Build and
+  tooling typechecks, docs/API generation, focused ESLint/Prettier, lightweight
+  docs/status/public-leak/duplicate-policy/overclaim scans, generated-output
+  tracking check, and `git diff --check` all passed.
+- Security fixes are ready for one immutable package, the four canonical
+  concern lanes, and dedicated security re-review. Task closure remains
+  pending.
+
+## Coordinator IPC Correction Evidence
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` resumed with
+  expected/actual immutable `gpt-5.6-terra` / medium, no subagents and no Git
+  mutation.
+- Focused RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/transport/test/zeromq/signal-transport.test.ts -t 'rejects a suffix
+directory replaced immediately after successful creation'` exited 1 with 1
+  failed/27 skipped. Replacing the first successfully created suffix with a
+  symlink produced only the later canonical-path error instead of immediate
+  unsafe-component rejection.
+- A package-private filesystem seam wraps the existing `mkdir()` only for
+  deterministic race injection. The suffix loop now performs `lstat()` after
+  both successful creation and `EEXIST`, rejects a symlink/non-directory, and
+  only then advances. No public interface changed.
+- Focused GREEN: the identical command exited 0 with 1 passed/27 skipped. Full
+  native `signal-transport.test.ts` exited 0 with 1 file/28 tests. Security
+  fixes are implemented; dedicated security re-review and task closure remain
+  pending.

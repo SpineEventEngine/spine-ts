@@ -47,6 +47,21 @@ with `EPERM`, so live
 local IPC runs can require native IPC filesystem/socket permissions outside the
 sandbox. This adapter's supported scope ends at one host.
 
+IPC directory preparation walks the lexical path before canonicalizing it.
+The final component cannot be a symlink. On POSIX, an ancestor symlink is
+accepted only for immutable root-owned system aliases such as macOS `/tmp` and
+`/var`; the canonical final directory must be owned by the effective user with
+exact mode `0700`. Missing components are created one at a time. The adapter
+pins the prepared directory identity and rechecks canonical path, type,
+ownership, mode, device, and inode immediately before each native bind or
+connect. Non-POSIX hosts reject a final link/junction and recheck canonical
+directory identity where stable, but do not claim POSIX UID/mode enforcement.
+
+ZeroMQ binds pathname endpoints and cannot bind relative to a held directory
+descriptor. A directory substitution after the final recheck therefore remains
+possible. Deploy the canonical IPC directory beneath a non-attacker-writable
+parent, and grant access only to trusted same-host peers.
+
 The adapter serializes envelopes with Node's V8 serializer. Treat every
 `ipc://` frame as trusted runtime data, not as an untrusted network protocol:
 only same-host Spine TS runtime peers that already trust each other should share

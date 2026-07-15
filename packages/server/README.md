@@ -84,7 +84,9 @@ Current slice exposes:
 - `Server`, `ServerOptions`, and `RunningServer` for a small framework-owned
   HTTP/2 listener lifecycle over `SpineServices`. The default host is
   local-only `127.0.0.1`; broad binding such as `0.0.0.0` is an explicit
-  caller choice. `RunningServer.close()` stops network intake, closes active
+  caller choice. Request and response messages each default to a 4,194,304-byte
+  uncompressed limit; set top-level `readMaxBytes` and `writeMaxBytes` only to
+  integer values from 1 through 4,294,967,295. `RunningServer.close()` stops network intake, closes active
   HTTP/2 sessions, waits until active work can no longer use its dependencies,
   then closes contexts, resources, and any server-owned environment;
   and
@@ -831,7 +833,10 @@ ID filters on any registered state route and projection-state
 `EQUAL` filters over declared projection `(column)` proto field names,
 `ResponseFormat.field_mask`, repeated `ResponseFormat.order_by` over declared
 proto column names, and positive `limit` values when at least one ordering
-directive is present. Use proto column names such as `open_task_count`, not
+directive is present. A missing format or wire limit of zero applies a
+framework-to-storage safety cap of 1,000 rows without requiring ordering;
+explicit limits from 1 through 1,000 retain their ordering requirement. Use
+proto column names such as `open_task_count`, not
 generated TS local names such as `openTaskCount`. Undeclared columns,
 unsupported operators, nested/disjunctive composites, limits without ordering,
 missing criteria, and `include_all = false` return `INVALID_QUERY` before
@@ -871,7 +876,11 @@ durable inactive records. Cleanup is idempotent when a client cancels, an
 activation iterator closes, an inactive record expires, or the active queue
 limit is exceeded. Malformed and inconsistent durable rows are deleted instead
 of failing repeatedly. The inactive TTL defaults to 30 seconds and the active
-queue limit defaults to 100 queued updates. Active service streams, queued updates,
+queue limit defaults to 100 queued updates. `SpineServicesOptions.subscriptionLimit`
+is a positive safe integer that defaults to 100 and bounds process-local pending,
+inactive, active, and recovered subscriptions. It is not a distributed tenant quota.
+Capacity is released before durable cleanup, so cleanup failures remain observable
+without retaining process-local capacity. Active service streams, queued updates,
 direct Stand subscriptions, Stand version metadata, and the in-memory storage
 adapter's backing data remain process-local development/test state, not durable
 delivery or catch-up storage. Cross-context fallback, client query DSLs,
@@ -909,6 +918,9 @@ adapters, supervision, and retry policy out of the public API.
 `Server.atPort(port)` binds to `127.0.0.1`; pass `{ host: "0.0.0.0" }` only
 when this process should accept non-local clients. The returned `RunningServer`
 exposes `host`, `port`, `baseUrl`, and an idempotent `close()`.
+`ServerOptions.readMaxBytes` and `writeMaxBytes` are forwarded directly to
+Connect and default to 4,194,304 uncompressed bytes per request or response
+message. They bound decompressed messages as well as uncompressed traffic.
 
 The server uses a small explicit `ServerEnvironment`. Omitting it creates a
 server-owned local environment with `InMemoryStorageFactory` and same-process

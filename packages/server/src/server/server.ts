@@ -17,6 +17,8 @@ import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
+const defaultMessageMaxBytes = 4_194_304;
+const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 
@@ -31,6 +33,8 @@ type ServerContext = BoundedContext | BoundedContextBuilder;
 export class Server {
   readonly #host: string;
   readonly #port: number;
+  readonly #readMaxBytes: number;
+  readonly #writeMaxBytes: number;
   readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
@@ -44,6 +48,14 @@ export class Server {
   constructor(options: ServerOptions = {}) {
     this.#host = normalizeHost(options.host);
     this.#port = options.port ?? defaultPort;
+    this.#readMaxBytes = normalizeMessageMaxBytes(
+      options.readMaxBytes ?? defaultMessageMaxBytes,
+      "readMaxBytes",
+    );
+    this.#writeMaxBytes = normalizeMessageMaxBytes(
+      options.writeMaxBytes ?? defaultMessageMaxBytes,
+      "writeMaxBytes",
+    );
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
@@ -192,7 +204,12 @@ export class Server {
       ...this.#services,
     });
     const sessions = new Set<http2.ServerHttp2Session>();
-    const httpServer = createHttpServer(services, sessions);
+    const httpServer = createHttpServer(
+      services,
+      sessions,
+      this.#readMaxBytes,
+      this.#writeMaxBytes,
+    );
     const address = await listen(httpServer, this.#host, this.#port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
@@ -406,6 +423,18 @@ export interface ServerOptions {
   /** Listener port. Defaults to `0`, asking the OS for a free port. */
   readonly port?: number;
   /**
+   * Maximum uncompressed bytes accepted for one RPC request message.
+   * Defaults to 4,194,304 bytes. Must be an integer from 1 through
+   * 4,294,967,295.
+   */
+  readonly readMaxBytes?: number;
+  /**
+   * Maximum uncompressed bytes emitted for one RPC response message.
+   * Defaults to 4,194,304 bytes. Must be an integer from 1 through
+   * 4,294,967,295.
+   */
+  readonly writeMaxBytes?: number;
+  /**
    * Built bounded contexts or builders owned by this server assembly.
    *
    * Builders in this list are assembled during {@link Server.start} before
@@ -581,12 +610,16 @@ async function buildContexts(
 function createHttpServer(
   services: SpineServices,
   sessions: Set<http2.ServerHttp2Session>,
+  readMaxBytes: number,
+  writeMaxBytes: number,
 ): http2.Http2Server {
   const server = http2.createServer(
     connectNodeAdapter({
       routes: (router) => {
         services.register(router);
       },
+      readMaxBytes,
+      writeMaxBytes,
     }),
   );
   server.on("session", (session) => {
@@ -757,4 +790,11 @@ function normalizeHost(host: string | undefined): string {
     throw new Error("Server host must not be blank.");
   }
   return normalized;
+}
+
+function normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {
+  if (!Number.isInteger(value) || value < 1 || value > maximumMessageMaxBytes) {
+    throw new Error(`Server ${name} must be an integer from 1 through 4294967295.`);
+  }
+  return value;
 }
