@@ -2860,3 +2860,14 @@ verify` remains reserved.
 - Inspection accepts the short declarative helper decomposition without a
   production or behavior change. Commit and rerun only style/maintainability;
   the three clean Wave 22 lanes remain accepted.
+
+## Wave 22 Focused Style Re-Review Assignment
+
+- Test-only correction endpoint is `fdd9da0a`. Documentation, TypeScript/API,
+  and performance/reliability remain accepted clean because their concerns did
+  not change.
+- Assign existing `style_maintainability_reviewer`, expected explicit immutable
+  `gpt-5.6-terra` / high, read-only, childless, and Git-read-only, against a
+  fresh full-range package. Scope only to the accepted long-helper finding,
+  equivalent matrix/assertion preservation, naming/complexity, active anchors,
+  and status chronology. Historical superseded text remains inactive.

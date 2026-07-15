@@ -2720,3 +2720,14 @@ Subscription cancellation failed.` instead of `AggregateError`.
   small native guards. All prior cases/assertions remain, and no production
   source changed. Commit and run only the focused style re-review unless later
   edits expand scope.
+
+## Wave 22 Correction Endpoint And Focused Style Assignment
+
+- Commit `fdd9da0a` freezes the test-only Wave 22 correction and coordinator
+  evidence. Documentation, TypeScript/API, and performance/reliability remain
+  clean because no production, public, docs-behavior, or boundary scope changed.
+- Assign the existing style/maintainability role, expected explicit immutable
+  `gpt-5.6-terra` / high, read-only and childless, over a fresh literal package.
+  Review only the accepted helper-shape finding, equivalent case/assertion
+  preservation, naming/complexity, current anchors/status, and correction
+  chronology. Dedicated security re-review remains pending.
