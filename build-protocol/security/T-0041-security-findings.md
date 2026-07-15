@@ -2,7 +2,7 @@
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
-complete four-lane canonical review and focused security re-review are pending.
+Canonical Wave 23 is clean and focused security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -10,7 +10,7 @@ maintainability correction is `fdd9da0a`. D-0091 implementation evidence is
 `da730e04`. Later provenance/review/status commits are not implementation
 evidence. The preceding canonical review was clean; dedicated security re-review
 found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
-Canonical Wave 23 and focused security re-review are pending. No security
+Canonical Wave 23 is clean; focused security re-review is pending. No security
 acceptance is claimed.
 
 Dedicated final re-review package is
@@ -110,24 +110,25 @@ release-blocking and needs focused behavior regression evidence.
 
 ## Review rounds and exit checklist
 
-| Round | Scope                                   | Status                                                                      |
-| ----- | --------------------------------------- | --------------------------------------------------------------------------- |
-| 0     | Requirements splitter                   | Accepted: ten TB boundaries and TM-001..TM-012.                             |
-| 1     | Artifact author                         | Finding Batch 1 corrected; coordinator checks clean.                        |
-| 2     | Dedicated security reviewer, Terra High | Round 1: four confirmed blockers; reviewer closed.                          |
-| 2a    | Fix implementation                      | SF-007..010 implemented with focused RED/GREEN evidence; re-review pending. |
-| 3     | Canonical Wave 16                       | Findings fixed; correction verification complete.                           |
-| 3a    | Wave 16 correction                      | Coordinator-verified at `b70ecb08`.                                         |
-| 4     | Canonical Wave 17                       | Findings fixed; correction verification complete.                           |
-| 4a    | Wave 17 correction                      | Coordinator-verified at `fa5e4b65`.                                         |
-| 5     | Canonical Wave 18                       | Findings fixed; correction verification current.                            |
-| 6     | Canonical Wave 19                       | Finding fixed; correction verification current.                             |
-| 7     | Canonical Wave 20                       | Findings fixed; correction verification current.                            |
-| 8     | Canonical Wave 21                       | Findings fixed; correction verification current.                            |
-| 9     | Canonical Wave 22                       | Test finding corrected; focused style re-review clean.                      |
-| 10    | Dedicated security re-review            | SF-011/SF-012 accepted; reviewer closed.                                    |
-| 11    | D-0091 implementation                   | Coordinator-verified at `da730e04`.                                         |
-| 12    | Canonical Wave 23                       | Assigned; pre-review lint in progress.                                      |
+| Round | Scope                                    | Status                                                                      |
+| ----- | ---------------------------------------- | --------------------------------------------------------------------------- |
+| 0     | Requirements splitter                    | Accepted: ten TB boundaries and TM-001..TM-012.                             |
+| 1     | Artifact author                          | Finding Batch 1 corrected; coordinator checks clean.                        |
+| 2     | Dedicated security reviewer, Terra High  | Round 1: four confirmed blockers; reviewer closed.                          |
+| 2a    | Fix implementation                       | SF-007..010 implemented with focused RED/GREEN evidence; re-review pending. |
+| 3     | Canonical Wave 16                        | Findings fixed; correction verification complete.                           |
+| 3a    | Wave 16 correction                       | Coordinator-verified at `b70ecb08`.                                         |
+| 4     | Canonical Wave 17                        | Findings fixed; correction verification complete.                           |
+| 4a    | Wave 17 correction                       | Coordinator-verified at `fa5e4b65`.                                         |
+| 5     | Canonical Wave 18                        | Findings fixed; correction verification current.                            |
+| 6     | Canonical Wave 19                        | Finding fixed; correction verification current.                             |
+| 7     | Canonical Wave 20                        | Findings fixed; correction verification current.                            |
+| 8     | Canonical Wave 21                        | Findings fixed; correction verification current.                            |
+| 9     | Canonical Wave 22                        | Test finding corrected; focused style re-review clean.                      |
+| 10    | Dedicated security re-review             | SF-011/SF-012 accepted; reviewer closed.                                    |
+| 11    | D-0091 implementation                    | Coordinator-verified at `da730e04`.                                         |
+| 12    | Canonical Wave 23                        | All four concerns clean; reviewers closed.                                  |
+| 13    | Focused SF-011/SF-012 security re-review | Pending package and dispatch.                                               |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.

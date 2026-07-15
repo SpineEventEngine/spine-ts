@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - SF-011/SF-012 implemented and coordinator-verified;
-Canonical Wave 23 assigned
+Status: In progress - Canonical Wave 23 clean; focused SF-011/SF-012 security
+re-review pending
 
 Started: `2026-07-14`
 
@@ -2960,3 +2960,26 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - The later style dispatch `019f65a6-a66b-75e1-ae16-8393ee0648bf` was therefore
   a duplicate caused by the missing tool result. It was shut down while running;
   no result from it is accepted. Performance/reliability remains outstanding.
+
+## Canonical Wave 23 Reliability Dispatch
+
+- Performance/reliability agent `019f65a8-d035-7390-9ffc-1a3b4877e13f` is
+  dispatched explicitly under the existing immutable `gpt-5.6-terra` / high
+  role, read-only, childless, and Git-read-only, against the exact Wave 23
+  package. Complete-wave aggregation waits for its result.
+
+## Canonical Wave 23 Result
+
+- Style/maintainability `019f65a4-6a9b-7361-9c09-57e9bb9b8e46`, actual
+  immutable Terra High: clean.
+- Documentation `019f65a4-6df3-7022-884d-9fa1c69621ec`, actual immutable Luna
+  Medium: clean.
+- TypeScript/API `019f65a4-719e-7b72-95c6-11e419328364`, actual immutable Terra
+  High: clean.
+- Performance/reliability `019f65a8-d035-7390-9ffc-1a3b4877e13f`, actual
+  immutable Terra High: clean and closed after confirming cap placement,
+  continuation, boundary compatibility, malformed-input parity, and bounded
+  persistence behavior.
+- All accepted reviewers performed the skill-applicability check, remained
+  read-only/childless/Git-read-only, and are closed. Canonical Wave 23 is clean;
+  generate the focused SF-011/SF-012 security package next.
