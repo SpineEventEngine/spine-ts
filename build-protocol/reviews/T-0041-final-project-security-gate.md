@@ -3771,3 +3771,32 @@ verify` remains reserved.
 - Return one complete fix to the existing Terra Medium implementer: expand only
   the predicate TypeDoc and durable evidence, then re-review the same three
   concerns. Reliability remains N/A because no execution path changes.
+
+## D-0096 Source TypeDoc Correction Acceptance
+
+- The source TypeDoc now explicitly preserves the same top-level-only and
+  no-routing-narrowing boundary as D-0096, tests, and public docs; no signature
+  or runtime body changed.
+- Coordinator passed both typechecks, root 10/10, focused lint/formatting,
+  generated docs at `100/28/205/19/20/6/3`, and Proto cleanliness. Implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra Medium, is
+  closed after remaining childless and Git-read-only.
+- Freeze this four-path comment/evidence correction and re-review style, docs,
+  and TypeScript/API. Reliability remains N/A under the unchanged-runtime
+  rationale.
+
+## D-0096 Source TypeDoc P2 Implementer Evidence
+
+- Resolved the accepted style/maintainability P2 by documenting directly above
+  `isTransportTopicKind()` that it narrows top-level `topic.signalKind` and does
+  not validate or narrow `topic.routing.signalKind`. The signature and runtime
+  body are unchanged.
+- Existing regression evidence passes 10/10; both typechecks and focused source
+  lint exit 0; generated API docs pass with exact counts
+  `100/28/205/19/20/6/3`; generated Proto output remains clean. No new failing
+  test was fabricated for this comment-only correction.
+- Changed scope is source TypeDoc plus task/work/review evidence only. Exact
+  formatting/diff/status/generated/ZeroMQ/server scans are recorded in the work
+  log. The bounded correction is implementation-complete; affected D-0096
+  re-review remains pending. Reliability remains N/A because no execution path
+  changed.

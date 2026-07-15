@@ -205,7 +205,11 @@ export function isTransportOperationKind<
   return operation.topic.signalKind === signalKind;
 }
 
-/** Narrow a transport topic through its canonical top-level kind. */
+/**
+ * Narrow a transport topic through its top-level `topic.signalKind`.
+ *
+ * This does not validate or narrow `topic.routing.signalKind`.
+ */
 export function isTransportTopicKind<
   Topic extends TransportTopic,
   Kind extends Topic["signalKind"],

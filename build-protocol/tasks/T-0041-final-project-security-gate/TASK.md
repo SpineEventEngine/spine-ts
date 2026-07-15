@@ -3812,3 +3812,29 @@ Subscription cancellation failed.` instead of `AggregateError`.
   expected original immutable Terra Medium, for one TypeDoc sentence plus
   durable evidence. No test or runtime behavior changes; re-review all three
   affected lanes afterward. Reliability remains N/A.
+
+## D-0096 Source TypeDoc Correction Acceptance
+
+- Expanded only the topic predicate TypeDoc to say it narrows top-level
+  `topic.signalKind` and does not validate or narrow
+  `topic.routing.signalKind`; signature and runtime body are unchanged.
+- Coordinator independently passed both typechecks, transport root 10/10,
+  focused source ESLint, exact four-path formatting, generated docs/API counts
+  `100/28/205/19/20/6/3`, and Proto cleanliness. Implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra Medium,
+  remained childless and Git-read-only and is closed. Freeze for the final
+  three-lane D-0096 re-review; reliability remains N/A.
+
+## D-0096 Source TypeDoc P2 Implementation
+
+- Expanded only `isTransportTopicKind()` source TypeDoc to preserve the
+  accepted soundness boundary for maintainers: the predicate observes and
+  narrows top-level `topic.signalKind`; it does not validate or narrow
+  `topic.routing.signalKind`.
+- No signature, test, README, decision, checker, matrix, adapter, server,
+  runtime, wire, security-policy, or generated Proto source changed. The
+  existing cast-free regression remains the behavior proof and passes 10/10.
+- Both typechecks, focused source ESLint, generated API docs at exact counts
+  `100/28/205/19/20/6/3`, and Proto cleanliness passed. Exact formatting and
+  final scope evidence are recorded in the work log. This bounded P2 is
+  implementation-complete; affected D-0096 re-review remains pending.
