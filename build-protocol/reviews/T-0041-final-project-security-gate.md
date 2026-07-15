@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 12 assigned
+Status: Canonical review wave 12 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1433,3 +1433,44 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   resource behavior plus docs accuracy.
 - All are read-only and use the full ledger/superseded-history rule. Aggregate
   before action; dedicated security review remains pending.
+
+## Canonical Review Wave 12 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f6457-5eb4-7530-ac6a-c8f1810ca278`: P2 because
+  `docs/api/README.md` and `packages/server/README.md` omit normal inactive-
+  expiry cleanup failure after timer clearance, retained local record/capacity,
+  no automatic retry, and explicit same-ID `Cancel`; P2 because no direct fake-
+  timer behavior test proves that lifecycle through capacity release.
+- Documentation, immutable Luna Medium,
+  `019f6457-57c6-7a33-94ec-6ea33d4f400a`: clean for current subscription and
+  six-name mirrors, status/provenance, exclusions, and future-policy claims.
+- TypeScript/API, immutable Terra High,
+  `019f6457-5b04-73f0-bd12-cc3468d806de`: P2 because
+  `SignalTransport.#bindPublisher()` applies `requestTimeoutMs` as publisher
+  `sendTimeout`, contradicting D-0088's request/reply-only contract; public API,
+  declaration, TypeDoc, six-symbol subpath, package, and Proto boundaries are
+  otherwise clean.
+- Performance/reliability, immutable Terra High,
+  `019f6459-5354-71b1-a19d-86c472a0e132`: P2 because
+  `withSharedZeroMqTransports()` awaits both closes without the existing 275 ms
+  harness deadline, so paused preparation can hang cleanup; observer, requester
+  settlement, cancellation/expiry, races, and other resource behavior are clean.
+- Every reviewer used its explicit immutable project role profile, spawned no
+  children, made no Git mutation, and is closed. Coordinator inspection confirms
+  each named defect in the immutable package endpoint.
+
+## Canonical Wave 12 Correction Assignment
+
+- One fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, owns the complete accepted finding batch. Add
+  failing regressions first, then restore D-0088's request/reply-only timeout,
+  bound shared fixture close while still attempting temporary-directory removal,
+  prove normal inactive-expiry failure retains one inert slot with no new timer
+  until same-ID cancellation succeeds, and align API/server wording while
+  removing duplicate unknown-pool prose.
+- No public symbol, dependency, package/Proto, generated-output, or accepted
+  D-0087/D-0089 behavior may change. Require focused native transport/server
+  tests, generated typecheck/docs, focused lint/format, generated and manifest/
+  lock cleanliness, and diff integrity. Run all four Canonical Wave 13 lanes
+  before the dedicated final security reviewer.

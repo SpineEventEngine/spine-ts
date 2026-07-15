@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 12 assigned
+Status: In progress - canonical review wave 12 findings accepted; correction assigned
 
 Started: `2026-07-14`
 
@@ -1585,3 +1585,29 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   mutation, findings or clean, and superseded-history exclusion. Re-review Wave
   11 mirrors and complete T-0041 scope. Aggregate before action; dedicated
   security review remains pending.
+
+## Canonical Review Wave 12 Result And Correction Assignment
+
+- The complete Wave 12 result is accepted after coordinator source inspection.
+  Documentation is clean. Style found missing public expiry-failure mirrors and
+  the matching normal inactive-expiry regression. TypeScript/API found that the
+  publisher incorrectly receives D-0088's request/reply-only timeout.
+  Performance/reliability found unbounded shared ZeroMQ fixture close cleanup.
+- Explicit immutable Desktop profiles: style
+  `019f6457-5eb4-7530-ac6a-c8f1810ca278` Terra High; documentation
+  `019f6457-57c6-7a33-94ec-6ea33d4f400a` Luna Medium; TypeScript/API
+  `019f6457-5b04-73f0-bd12-cc3468d806de` Terra High; reliability
+  `019f6459-5354-71b1-a19d-86c472a0e132` Terra High. The immutable role
+  settings are runtime metadata; all four agents are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as the sole writer for the complete bounded batch.
+  Restore D-0088 by removing publisher `sendTimeout` while retaining bounded
+  requester send/receive waits; add a test-first publisher-option regression;
+  bound both shared fixture closes independently and retain directory-removal
+  cleanup with a paused-preparation regression; add a fake-timer regression for
+  normal inactive-expiry persistence failure retaining capacity without a new
+  timer until same-ID `Cancel` succeeds; and mirror those semantics in API and
+  server docs while consolidating duplicate unknown-pool wording. No public
+  API, dependency, package, Proto, generated-output, or broader policy change
+  is authorized. Run focused affected checks; all four canonical lanes rerun
+  before dedicated security review.
