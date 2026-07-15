@@ -45,7 +45,7 @@ type AggregateState = Message<"AggregateState"> & {
   readonly archived: boolean;
 };
 
-type ZeroMqTransportTestOptions = ZeroMqTransportOptions & {
+type TestTransportOptions = ZeroMqTransportOptions & {
   readonly onBackgroundFailure?: (error: Error) => void;
 };
 type ProjectionState = Message<"ProjectionState"> & {
@@ -370,7 +370,7 @@ class CrossProcessFixture {
 
       const config = createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity });
       const backgroundFailures: string[] = [];
-      const transportOptions: ZeroMqTransportTestOptions = {
+      const transportOptions: TestTransportOptions = {
         requestTimeoutMs: transportTimeoutMs,
         receiveTimeoutMs: 100,
         onBackgroundFailure: (error) => backgroundFailures.push(safeMessage(error, ipcDirectory)),

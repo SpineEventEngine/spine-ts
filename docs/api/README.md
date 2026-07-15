@@ -273,7 +273,9 @@ options; multitenant subscriptions require `tenantId`; state and event
 delivery are scoped to that tenant slice. Unknown, canceled, expired,
 malformed, inconsistent, and already active IDs complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
-subscription returns OK. An exact inactive row or same-instance claim moves
+subscription returns OK only after admission to the bounded unknown-removal
+pool. Overflow returns `RESOURCE_EXHAUSTED` before storage access. An exact
+inactive row or same-instance claim moves
 through a cancel marker to absence; a foreign active claim returns `ABORTED`.
 Cleanup is idempotent across cancellation, activation-stream finalization,
 inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
@@ -713,10 +715,12 @@ values, retry policy, durable storage, runtime handler invocation, or server
 runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
-adapter-scoped `@spine-ts/transport/zeromq` subpath exports
-`createZeroMqAdapterConfig()` and `createZeroMqTransport()` for local IPC
-deployments. It derives deterministic IPC endpoints from adapter config and
-transport routing descriptors internally, then exposes only the
+adapter-scoped `@spine-ts/transport/zeromq` subpath exports exactly
+`createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
+`ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
+IPC endpoints from adapter config and transport routing descriptors internally,
+then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint
 strings, multipart frames, and native binding types remain absent from the root
 API; remote transport, broker topology, process supervision, worker

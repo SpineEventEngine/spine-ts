@@ -176,7 +176,7 @@ const expectedTransportExports = [
   "createTransportSubscription",
   "createTransportTopic",
 ];
-const expectedZeroMqTransportExports = [
+const expectedZeroMqExports = [
   "ZeroMqAdapterConfig",
   "ZeroMqAdapterConfigInput",
   "ZeroMqTransportOptions",
@@ -400,7 +400,7 @@ const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
-const zeroMqTransportIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
+const zeroMqIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -435,10 +435,7 @@ const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
-const zeroMqTransportModuleNames = collectDirectModuleNames(
-  apiDocs,
-  "packages/transport/src/zeromq",
-);
+const zeroMqModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src/zeromq");
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -739,7 +736,7 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
-const declaredZeroMqTransportExports = collectNamedExports(zeroMqTransportIndexPath);
+const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -765,14 +762,12 @@ const missingDeclaredTestingExports = expectedTestingExports.filter(
 const unexpectedTestingExports = declaredTestingExports.filter(
   (name) => !expectedTestingExports.includes(name),
 );
-const missingZeroMqTransportExports = expectedZeroMqTransportExports.filter(
-  (name) => !zeroMqTransportModuleNames.has(name),
+const missingZeroMqExports = expectedZeroMqExports.filter((name) => !zeroMqModuleNames.has(name));
+const missingZeroMqDeclarations = expectedZeroMqExports.filter(
+  (name) => !declaredZeroMqExports.includes(name),
 );
-const missingDeclaredZeroMqTransportExports = expectedZeroMqTransportExports.filter(
-  (name) => !declaredZeroMqTransportExports.includes(name),
-);
-const unexpectedZeroMqTransportExports = declaredZeroMqTransportExports.filter(
-  (name) => !expectedZeroMqTransportExports.includes(name),
+const unexpectedZeroMqExports = declaredZeroMqExports.filter(
+  (name) => !expectedZeroMqExports.includes(name),
 );
 
 if (missingExports.length > 0) {
@@ -840,23 +835,26 @@ if (missingTransportExports.length > 0) {
   process.exit(1);
 }
 
-if (missingZeroMqTransportExports.length > 0) {
+if (missingZeroMqExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/transport/zeromq exports: ${missingZeroMqTransportExports.join(", ")}`,
+    "TypeDoc JSON is missing expected @spine-ts/transport/zeromq exports: " +
+      missingZeroMqExports.join(", "),
   );
   process.exit(1);
 }
 
-if (missingDeclaredZeroMqTransportExports.length > 0) {
+if (missingZeroMqDeclarations.length > 0) {
   console.error(
-    `@spine-ts/transport/zeromq root is missing expected exports: ${missingDeclaredZeroMqTransportExports.join(", ")}`,
+    "@spine-ts/transport/zeromq root is missing expected exports: " +
+      missingZeroMqDeclarations.join(", "),
   );
   process.exit(1);
 }
 
-if (unexpectedZeroMqTransportExports.length > 0) {
+if (unexpectedZeroMqExports.length > 0) {
   console.error(
-    `@spine-ts/transport/zeromq exports changed without updating docs expectations: ${unexpectedZeroMqTransportExports.join(", ")}`,
+    "@spine-ts/transport/zeromq exports changed without updating docs expectations: " +
+      unexpectedZeroMqExports.join(", "),
   );
   process.exit(1);
 }
@@ -939,7 +937,7 @@ console.log(
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
     `${expectedTransportExports.length} expected @spine-ts/transport exports`,
-    `${expectedZeroMqTransportExports.length} expected @spine-ts/transport/zeromq exports`,
+    `${expectedZeroMqExports.length} expected @spine-ts/transport/zeromq exports`,
     `${expectedTestingExports.length} expected @spine-ts/testing exports.`,
   ].join(", "),
 );

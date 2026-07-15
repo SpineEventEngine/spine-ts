@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 10 coordinator naming correction assigned
+Status: In progress - canonical wave 10 corrections coordinator-verified; commit pending
 
 Started: `2026-07-14`
 
@@ -1445,3 +1445,31 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   rename only this private API-checker local (for example
   `missingZeroMqDeclarations`), update durable evidence, and rerun the API gate,
   focused ESLint/Prettier, and diff integrity. No other change is authorized.
+
+## Wave 10 Coordinator Naming Correction Result
+
+- Renamed only the private API-checker local and references from
+  `missingDeclaredZeroMqExports` to `missingZeroMqDeclarations`. No source,
+  documentation, test behavior, public API, package, generated policy, or
+  runtime contract changed.
+- Direct `node scripts/check-api-docs.mjs` exited 0 with exact export counts
+  `100/28/205/19/17/6/3`. Focused ESLint and Prettier for the checker, followed
+  by final Prettier over the checker and T-0041 logs, and `git diff --check`
+  exited 0.
+- The existing explicit immutable implementer assignment remains
+  `gpt-5.6-terra` / medium. No subagent or Git mutation was used. Canonical
+  re-review remains pending.
+
+## Wave 10 Coordinator Verification
+
+- The resumed immutable Terra Medium implementer completed the final private
+  rename and is closed. Direct inspection accepts all docs, TSDoc,
+  throwing-observer recovery, shared deadline, short private names, and API
+  diagnostics without production/public contract change.
+- Fresh native affected suites passed 38/38 (transport 31, cross-process server
+  7). Fresh generated typecheck, docs/API generation, generated-clean check,
+  focused ESLint, exact twelve-file Prettier, manifest/lock/package-map
+  integrity, tracked-generated absence, and `git diff --check` all exited 0.
+  Docs verified 25 Proto checksums and counts `100/28/205/19/17/6/3`.
+- Accept the complete Wave 10 correction for commit. Canonical Wave 11 and
+  dedicated security review remain pending.

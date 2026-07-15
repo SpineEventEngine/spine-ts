@@ -107,17 +107,19 @@ import {
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed
- * by built-context event dispatchers with `include_all = true`. It creates an
- * inactive process-local record and attaches delivery only when the opaque
- * subscription ID is activated: state subscriptions attach to `Stand`, while
+ * by built-context event dispatchers with `include_all = true`. It stores a
+ * durable inactive record that can be recovered before expiry, and attaches
+ * delivery only when the opaque subscription ID is activated: state
+ * subscriptions attach to `Stand`, while
  * event subscriptions attach to a framework-internal `EventBus` listener.
  * Filtered state topics deliver matching states, emit `no_longer_matching`
  * when previous state matched and new state does not, and apply topic masks
  * only to delivered states. Event topics stream wire-level `event_updates`
  * containing cloned framework `Event` envelopes; application code remains on
  * generated domain event messages through handler dispatch. Unknown or
- * duplicate activation IDs complete without updates, and cancellation of
- * unknown or already-cleaned IDs returns OK.
+ * duplicate activation IDs complete without updates. Cancellation of unknown
+ * or already-cleaned IDs returns OK after admission to the bounded
+ * unknown-removal pool.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];

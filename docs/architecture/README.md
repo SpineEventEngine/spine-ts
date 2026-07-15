@@ -404,14 +404,18 @@ over the same storage factory can recover it by opaque subscription ID.
 Activation atomically replaces the exact inactive row with a unique-owner claim
 before live attachment and retains that claim while active. Cancellation moves
 an exact inactive row or same-instance claim through a marker to absence; a
-foreign active claim returns `ABORTED`. Unknown-ID cancellation work uses a
+foreign active claim returns `ABORTED`. Same-ID cancellation coalescing applies
+only within one `SpineServices` instance. Unknown-ID cancellation work uses a
 separate per-instance pool bounded by `subscriptionLimit`; exhaustion returns
 `RESOURCE_EXHAUSTED` before storage access. Known local cleanup retains its
 subscription capacity until persistence settles; marker-cleanup failure returns
 `INTERNAL` and a same-ID retry can settle the retained marker. Confirmed absence
-returns `OK`, while concurrent same-ID cancellation shares one exact outcome.
-A crashed owner can leave a stale claim because
-this release adds no lease, heartbeat, routing, supervision, or reclamation. State
+returns `OK`, while concurrent same-ID cancellation within one instance shares
+one exact outcome. If inactive-expiry cleanup fails after its timer is cleared,
+the instance retains the local record and its capacity with no automatic retry;
+an explicit same-ID `Cancel` can retry persistence cleanup. A crashed owner can
+leave a stale claim because this release adds no lease, heartbeat, routing,
+supervision, or reclamation. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
@@ -427,8 +431,9 @@ subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant slice. Activation
 and cancellation are keyed by subscription ID: unknown, canceled, expired, and
 already-active activations complete without updates; confirmed absence returns
-`OK`, concurrent same-ID cancellation shares one exact outcome, and foreign
-active ownership returns `ABORTED`. Cleanup is idempotent across cancel, stream
+`OK`, concurrent same-ID cancellation within one `SpineServices` instance
+shares one exact outcome, and foreign active ownership returns `ABORTED`.
+Cleanup is idempotent across cancel, stream
 finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
 sets, active service delivery handles, queued updates, Stand version metadata,
 and in-memory storage adapter backing data are local process state; this slice

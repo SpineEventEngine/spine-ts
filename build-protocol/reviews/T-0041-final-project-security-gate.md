@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 10 coordinator naming correction assigned
+Status: Canonical wave 10 corrections coordinator-verified; commit pending
 
 Baseline: `39f2c6f7`
 
@@ -1297,3 +1297,27 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   four semantic components. Resume the same immutable Terra Medium implementer
   for that local rename and focused API/lint/format/diff evidence only. No other
   scope is authorized before Canonical Wave 11.
+
+## Wave 10 Coordinator Naming Correction Evidence
+
+- The only residual private local is now `missingZeroMqDeclarations`; all three
+  former `missingDeclaredZeroMqExports` references are gone. The change is a
+  behavior-neutral private rename in `scripts/check-api-docs.mjs`.
+- Direct API checking exited 0 with counts `100/28/205/19/17/6/3`; focused
+  checker ESLint/Prettier, final checker/log Prettier, and `git diff --check`
+  exited 0.
+- The same explicit immutable `gpt-5.6-terra` / medium implementer completed
+  the correction without a subagent or Git mutation. Canonical re-review is the
+  next gate.
+
+## Wave 10 Coordinator Verification
+
+- The resumed immutable Terra Medium implementer completed the final private
+  rename and is closed. Coordinator inspection accepts the full docs/test/name
+  correction without production or public-contract change.
+- Fresh native transport/cross-process tests passed 38/38. Generated typecheck,
+  docs/API counts `100/28/205/19/17/6/3`, generated-clean validation, focused
+  lint, exact formatting, manifest/lock/export integrity, tracked-generated
+  absence, and diff integrity all exited 0.
+- Accept the substantive batch for commit. Record its immutable endpoint before
+  Canonical Wave 11; dedicated security review remains pending.

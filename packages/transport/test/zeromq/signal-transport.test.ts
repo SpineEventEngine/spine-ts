@@ -17,7 +17,6 @@ const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
 const unansweredRequestTimeoutMs = 25;
 const closeDeadlineMs = 275;
-const finallyCloseDeadlineMs = 275;
 const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 type IsExact<T, Expected> = [T] extends [Expected]
@@ -25,11 +24,11 @@ type IsExact<T, Expected> = [T] extends [Expected]
     ? true
     : false
   : false;
-const canonicalZeroMqTransportOptionKeys: IsExact<
+const zeroMqOptionKeys: IsExact<
   keyof ZeroMqTransportOptions,
   "requestTimeoutMs" | "receiveTimeoutMs"
 > = true;
-void canonicalZeroMqTransportOptionKeys;
+void zeroMqOptionKeys;
 
 describe("ZeroMQ SignalTransport", () => {
   it("rejects invalid request timeouts before IPC preparation", async () => {
@@ -677,7 +676,12 @@ describe("ZeroMQ SignalTransport", () => {
 
         await handle.close();
       },
-      { onBackgroundFailure: (error) => failures.push(error) },
+      {
+        onBackgroundFailure: (error) => {
+          failures.push(error);
+          throw new Error("observer failure");
+        },
+      },
     );
   });
 
@@ -1051,7 +1055,7 @@ async function withZeroMqTransport<T>(
     transport: ReturnType<typeof createZeroMqTransport>,
     ipcDirectory: string,
   ) => Promise<T>,
-  options: ZeroMqTransportTestOptions = {},
+  options: TestTransportOptions = {},
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
   const transport = createZeroMqTransport(
@@ -1066,18 +1070,14 @@ async function withZeroMqTransport<T>(
     return await runTest(transport, ipcDirectory);
   } finally {
     try {
-      await withHarnessDeadline(
-        transport.close(),
-        "ZeroMQ test fixture close",
-        finallyCloseDeadlineMs,
-      );
+      await withHarnessDeadline(transport.close(), "ZeroMQ test fixture close", closeDeadlineMs);
     } finally {
       await rm(ipcDirectory, { recursive: true, force: true });
     }
   }
 }
 
-type ZeroMqTransportTestOptions = Parameters<typeof createZeroMqTransport>[1] & {
+type TestTransportOptions = Parameters<typeof createZeroMqTransport>[1] & {
   readonly onBackgroundFailure?: (error: Error) => void;
 };
 

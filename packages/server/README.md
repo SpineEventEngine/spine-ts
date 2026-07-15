@@ -872,7 +872,9 @@ multitenant subscriptions require `tenantId`; state and event delivery are scope
 tenant slice. Missing, unknown, canceled, or expired activation IDs complete
 without updates, and duplicate activation for an already-active ID completes
 without updates while leaving the active stream attached. `Cancel` returns OK
-for unknown, missing, canceled, or already-cleaned IDs. It transitions an exact
+for unknown, missing, canceled, or already-cleaned IDs only after admission to
+the bounded unknown-ID cancellation pool; overflow returns `RESOURCE_EXHAUSTED`
+before storage access. It transitions an exact
 inactive row or same-instance owner claim through a cancellation marker to
 absence. A claim owned by another `SpineServices` instance fails with
 `ABORTED` and message `Subscription is active in another service instance.`
