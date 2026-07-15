@@ -3551,6 +3551,17 @@ Subscription cancellation failed.` instead of `AggregateError`.
   docs, and TypeScript/API re-review this correction; reliability remains N/A
   under D-0095's stateless/no-I/O/no-execution-path rationale.
 
+## D-0095 Soundness Re-Review Assignment
+
+- Frozen endpoint `9cf19932`; baseline `a0b7993c`; exact package
+  `.superpowers/sdd/review-a0b7993c..9cf19932.diff`; 2 commits; 54,397 bytes.
+- Dispatch style/maintainability and TypeScript/API as explicit immutable Terra
+  High and documentation as explicit immutable Luna Medium. All existing roles
+  are read-only, childless, Git-read-only, correction-scoped, and subject to the
+  historical-text rule.
+- Reliability remains N/A. Aggregate all three affected results before closure
+  or another complete fix batch.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
