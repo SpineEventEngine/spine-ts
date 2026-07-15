@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 6 findings assigned for fix
+Status: Wave 6 fixes coordinator-verified; canonical wave 7 pending
 
 Baseline: `39f2c6f7`
 
@@ -842,3 +842,34 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   Require deterministic TDD for the P1, focused/full affected verification,
   exact docs/provenance correction, and fresh canonical re-review. Dedicated
   security review remains pending.
+
+## Canonical Review Wave 6 Fix Evidence
+
+- Existing implementer, explicit immutable `gpt-5.6-terra` / medium, resolved
+  the complete batch in the assigned worktree with no subagents or Git mutation.
+- The deterministic combined timer/persistence RED exited 1 with the expected
+  timeout before a fallback existed. The identical GREEN exited 0 with 1
+  passed/135 skipped. A private one-shot microtask now owns one exact
+  cancellation attempt only when retained inactive-timer registration fails;
+  it preserves the originating Subscribe error, keeps closed state inert and
+  capacity-held until durable cancellation succeeds, and cannot spin.
+- API/architecture query-limit wording now matches runtime behavior, and threat
+  model provenance records `113934d2` while canonical and dedicated security
+  review remain pending. `typecheck:generated`, `docs:check`, focused ESLint,
+  exact-file Prettier, provenance/generated-output scans, and `git diff --check`
+  are green. Full SpineServices verification requires coordinator native rerun:
+  117 tests passed and 19 real-gRPC tests were sandbox-blocked at
+  `listen EPERM: operation not permitted 127.0.0.1`.
+
+## Wave 6 Coordinator Verification
+
+- Coordinator inspection accepts the finite one-shot fallback, deterministic
+  combined-failure evidence, exact query-limit wording, and immutable threat
+  provenance correction.
+- Fresh native focused verification passed 1/1 with 135 skipped; fresh native
+  full affected verification passed 136/136. Generated/tooling typecheck,
+  docs/API generation, focused ESLint, exact formatting, pre-review scans, and
+  diff integrity all exited 0.
+- Commit the accepted batch and generate a literal endpoint package for
+  canonical Wave 7. Dedicated security review remains pending; no T-0041
+  completion is claimed.

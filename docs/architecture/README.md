@@ -377,10 +377,12 @@ ID-filter reads for any registered state route use the same path with a storage
 ID filter. Projection queries also support top-level `EQUAL` filters over
 declared projection `(column)` proto field names, field masks, repeated ordering
 directives over declared proto column names, and positive limits when ordering
-is present; non-negative storage offsets are applied after sorting and before
+is present. Absent or zero wire limits use an implicit 1,000-row cap without
+requiring ordering; only a positive limit without ordering returns
+`INVALID_QUERY`. Non-negative storage offsets are applied after sorting and before
 limits. Use proto column names such as `open_task_count`, not generated TS
 local names such as `openTaskCount`. Undeclared columns, unsupported operators,
-nested or `EITHER` composites, limits without ordering, missing criteria, and
+nested or `EITHER` composites, positive limits without ordering, missing criteria, and
 `include_all = false` return `INVALID_QUERY` before Stand storage reads.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and

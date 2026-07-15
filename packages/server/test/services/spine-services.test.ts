@@ -2668,6 +2668,74 @@ describe("SpineServices", () => {
     }
   });
 
+  it("falls back to one owned cleanup when retained setup cannot register its timer", async () => {
+    const contextName = "TimerlessFailedSubscriptionSetup";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    const fallbackStarted = deferred<undefined>();
+    const fallbackReleased = deferred<undefined>();
+    const cleanupDone = deferred<undefined>();
+    let readCalls = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      readCalls += 1;
+      if (readCalls === 1) {
+        throw new Error("initial cleanup read failed");
+      }
+      fallbackStarted.resolve(undefined);
+      await fallbackReleased.promise;
+      return await readRecord();
+    };
+    storageFactory.cancelCleanupHook = async (cleanup) => {
+      const cleaned = await cleanup();
+      cleanupDone.resolve(undefined);
+      return cleaned;
+    };
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await fallbackStarted.promise;
+      storageFactory.writeCommitError = undefined;
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({
+          code: Code.ResourceExhausted,
+          rawMessage: "Subscription capacity is exhausted.",
+        } satisfies Partial<ConnectError>),
+      );
+
+      fallbackReleased.resolve(undefined);
+      await cleanupDone.promise;
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      expect(readCalls).toBe(3);
+      expect(storageFactory.cancelCleanupCalls).toBe(1);
+      timer.mockRestore();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
   it("releases capacity when process-local subscription registration fails", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),

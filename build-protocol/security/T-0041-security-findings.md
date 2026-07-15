@@ -1,7 +1,7 @@
 # T-0041 Security Findings and Evidence
 
-Status: SF-007 through SF-010, D-0087, and the canonical wave 5 corrections are
-coordinator-verified in the working tree; canonical wave 6 and dedicated
+Status: SF-007 through SF-010, D-0087, and the canonical wave 6 corrections are
+coordinator-verified in the working tree; canonical wave 7 and dedicated
 security re-review are pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. The wave 5

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 6 findings assigned for fix
+Status: In progress - wave 6 fixes coordinator-verified; canonical wave 7 pending
 
 Started: `2026-07-14`
 
@@ -1009,3 +1009,43 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   It owns the complete three-item TDD/docs/log fix, must not spawn subagents or
   mutate Git, and must preserve public/wire contracts and finite cleanup.
   Canonical re-review and dedicated security review remain pending.
+
+## Canonical Review Wave 6 Fix
+
+- Existing `implementer`, explicit immutable `gpt-5.6-terra` / medium, is the
+  sole writer in the assigned existing worktree with no subagents or Git-state
+  mutation.
+- RED: the deterministic combined timer/persistence regression exited 1 with
+  one timeout because no cleanup began after a commit-then-reject Subscribe,
+  failed initial cancellation, and two timer-registration failures.
+- GREEN: the identical focused command exited 0 with 1 passed/135 skipped. A
+  private one-shot microtask invokes existing exact cancellation only when the
+  retained timer cannot register; it preserves the originating Subscribe error,
+  keeps the closed record inert and capacity-reserved until cancellation settles,
+  and cannot spin.
+- Public API/architecture docs now state that absent/zero wire query limits use
+  an implicit 1,000-row cap and only positive unordered limits are
+  `INVALID_QUERY`. Threat-model provenance names immutable Wave 5 endpoint
+  `113934d2`; canonical and dedicated security review remain pending.
+- `typecheck:generated` and `docs:check` exited 0. Focused ESLint, exact-file
+  Prettier, pre-review provenance/generated-output scans, and `git diff --check`
+  are clean. The full affected SpineServices file is sandbox-blocked only:
+  117 tests passed, while 19 real-gRPC tests failed at loopback bind with
+  `listen EPERM: operation not permitted 127.0.0.1`; coordinator native rerun
+  remains required.
+
+## Wave 6 Coordinator Verification
+
+- Direct inspection confirms the fallback queues exactly one existing removal
+  attempt only when retained timer registration fails. The local record remains
+  closed and reserved until exact cancellation succeeds; a failed fallback is
+  retained without another automatic attempt, so there is no retry spin.
+- Fresh native focused verification passed 1/1 with 135 skipped. Fresh native
+  full `spine-services.test.ts` verification passed 136/136, resolving the
+  worker's sandbox-only loopback limitation.
+- Fresh `typecheck:generated`, `docs:check`, focused ESLint, eight-file
+  Prettier, current-status/public-policy/generated-output scans, and
+  `git diff --check` exited 0. Docs verified 25 copied Proto checksums and
+  TypeDoc public counts `100/28/205/19/17/3`.
+- The complete Wave 6 fix batch is accepted for commit and immutable canonical
+  Wave 7 review. Dedicated security review and T-0041 closure remain pending.

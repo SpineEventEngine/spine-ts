@@ -239,10 +239,12 @@ route and projection-state `Target.include_all = true` reads, packing
 `Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
 filters over declared projection `(column)` proto field names, field masks,
 repeated ordering directives over declared proto column names, and positive
-limits when ordering is present. Use proto column names such as
+limits when ordering is present. Absent or zero wire limits use an implicit
+1,000-row cap without requiring ordering; only a positive limit without
+ordering returns `INVALID_QUERY`. Use proto column names such as
 `open_task_count`, not generated TS local names such as `openTaskCount`.
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
-without ordering, missing criteria, and `include_all = false` return
+with a positive value but without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
 `Subscribe` allocates opaque IDs, validates subscription criteria,
 `Activate` attaches delivery, and `Cancel`/stream finalization release

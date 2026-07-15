@@ -353,6 +353,9 @@ export class SpineServices {
       this.#rememberSubscription(record);
     } catch {
       this.#subscriptions.set(record.id, record);
+      queueMicrotask(() => {
+        void this.#removeSubscription(record.id).catch(() => undefined);
+      });
     }
   }
 
