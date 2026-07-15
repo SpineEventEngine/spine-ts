@@ -15,6 +15,9 @@ bytes). Existing `security_reviewer`, expected explicit immutable
 `gpt-5.6-terra` / high, is assigned to re-adjudicate all TM/SF entries and the
 full task threat-check ledger before the task gate.
 
+Dedicated reviewer dispatch: `019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit
+immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
+
 ## Command and evidence ledger
 
 | Source                               | Command/evidence                                                                                                  | Result                                                                                                                                                                                                                                                                                                                     | Attribution                                                              |

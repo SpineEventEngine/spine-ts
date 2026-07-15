@@ -2908,3 +2908,9 @@ verify` remains reserved.
   evidence/control/smallest-correction for any finding, or a clean result.
   Superseded history is inactive unless current status/security artifacts claim
   it. Full task verification waits for a clean security result.
+
+## Dedicated Security Re-Review Dispatch
+
+- Agent `019f656c-92bb-75f0-80e7-3f4bb8151057` was dispatched explicitly under
+  the existing immutable `gpt-5.6-terra` / high security role, read-only,
+  childless, and Git-read-only, against the exact package.

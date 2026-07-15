@@ -2773,3 +2773,9 @@ Subscription cancellation failed.` instead of `AggregateError`.
   asset, severity/confidence, evidence, current control, and smallest fix, or
   report the final security gate clean. Full `pnpm verify` follows only after a
   clean security result.
+
+## Dedicated Security Re-Review Dispatch
+
+- Security agent `019f656c-92bb-75f0-80e7-3f4bb8151057` was dispatched
+  explicitly as the existing immutable `gpt-5.6-terra` / high role, read-only,
+  childless, and Git-read-only, against the exact canonical-closure package.
