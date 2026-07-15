@@ -1903,3 +1903,26 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   pending before package generation. Run all four explicit immutable canonical
   roles and aggregate before action; dedicated final security review remains
   pending.
+
+## Canonical Review Wave 16 Package And Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..5dff87c1.diff`, endpoint
+  `5dff87c1`, baseline `39f2c6f7`, 73 commits, 726,056 bytes. Substantive
+  implementation evidence remains `68d54fc6`.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, including log chronology,
+  cleanup-helper ownership, tests, naming, and complete maintainability.
+- Documentation: existing `documentation_reviewer`, expected explicit immutable
+  `gpt-5.6-luna` / medium, including current status/provenance, D-0090, security
+  artifacts, and active documentation mirrors.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, including declarations, TypeDoc,
+  package/Proto boundaries, D-0088-D-0090, and runtime/type agreement.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit immutable `gpt-5.6-terra` / high, including all-settlement,
+  cleanup/failure precedence, pending handles, TTL, and complete T-0041 resource
+  behavior.
+- Every assignment is read-only with the full ledger, D-0087-D-0090, no
+  subagents or Git mutation, concrete findings or clean, and superseded-history
+  exclusion. Aggregate before action; dedicated final security review remains
+  pending.

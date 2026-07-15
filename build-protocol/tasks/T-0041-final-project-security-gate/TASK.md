@@ -2044,3 +2044,18 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   assigned/pending before package generation. Run all four immutable canonical
   roles with D-0087-D-0090 and superseded-history exclusion; aggregate before
   action. Dedicated security review remains pending.
+
+## Canonical Review Wave 16 Package And Assignment
+
+- Immutable endpoint `5dff87c1`; package
+  `.superpowers/sdd/review-39f2c6f7..5dff87c1.diff` contains 73 commits and
+  726,056 bytes. Substantive implementation evidence remains `68d54fc6`.
+- Dispatch the existing `style_maintainability_reviewer`, explicit immutable
+  `gpt-5.6-terra` / high; `documentation_reviewer`, explicit immutable
+  `gpt-5.6-luna` / medium; `typescript_api_docs_reviewer`, explicit immutable
+  `gpt-5.6-terra` / high; and `performance_reliability_reviewer`, explicit
+  immutable `gpt-5.6-terra` / high.
+- All assignments are read-only, prohibit subagents and Git mutation, use the
+  full human ledger plus D-0087-D-0090, and exclude superseded history unless a
+  current record claims it active. Aggregate the complete wave before action;
+  dedicated final security review remains pending.
