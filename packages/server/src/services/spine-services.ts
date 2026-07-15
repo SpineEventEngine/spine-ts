@@ -95,12 +95,14 @@ import {
  * `QueryService.Read` supports ID filters for any registered state route,
  * projection-state `include_all = true` reads, top-level equality filters over
  * declared projection `(column)` proto field names, field masks, ordering by
- * declared proto columns, and positive limits when at least one ordering
- * directive is present. Use proto column names such as `open_task_count`, not
- * generated TS local names such as `openTaskCount`; undeclared columns return
- * stable `INVALID_QUERY` responses before Stand storage is read. Unsupported
- * query operators and shapes also return stable `INVALID_QUERY` responses
- * before Stand storage is read.
+ * declared proto columns, and bounded result sets. An absent response format or
+ * zero wire limit receives an implicit 1,000-row cap without requiring
+ * ordering; a positive limit requires at least one ordering directive. Use
+ * proto column names such as `open_task_count`, not generated TS local names
+ * such as `openTaskCount`; undeclared columns return stable `INVALID_QUERY`
+ * responses before Stand storage is read. Unsupported query operators and
+ * shapes also return stable `INVALID_QUERY` responses before Stand storage is
+ * read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed
@@ -124,6 +126,7 @@ export class SpineServices {
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
   readonly #subscriptionReservations = new Set<string>();
   readonly #recoveries = new Map<string, SubscriptionRecovery>();
+  readonly #removals = new Map<string, SubscriptionRemoval>();
   readonly #subscriptionStores: readonly SubscriptionStore[];
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
@@ -455,7 +458,32 @@ export class SpineServices {
     stateRecord.delivery.attach(standSubscription);
   }
 
-  async #removeSubscription(id: string): Promise<void> {
+  #removeSubscription(id: string): Promise<void> {
+    const existing = this.#removals.get(id);
+    if (existing !== undefined) {
+      return existing.settled;
+    }
+
+    const removal = createSubscriptionRemoval();
+    this.#removals.set(id, removal);
+    void this.#runRemoval(id, removal);
+    return removal.settled;
+  }
+
+  async #runRemoval(id: string, removal: SubscriptionRemoval): Promise<void> {
+    try {
+      await this.#removeSubscriptionOnce(id);
+      removal.resolve();
+    } catch (error) {
+      removal.reject(error);
+    } finally {
+      if (this.#removals.get(id) === removal) {
+        this.#removals.delete(id);
+      }
+    }
+  }
+
+  async #removeSubscriptionOnce(id: string): Promise<void> {
     const record = this.#subscriptions.get(id);
 
     if (record === undefined) {
@@ -514,59 +542,94 @@ export class SpineServices {
 
   async #recoverSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     for (const store of this.#subscriptionStores) {
-      const storage = createSubscriptionStorage(store);
-      let recovery: SubscriptionRecovery | undefined;
-
-      try {
-        const durable = await storage.read(id);
-        if (durable === undefined) {
-          continue;
-        }
-
-        const record = this.#restoreSubscription(durable, id);
-        if (record === undefined) {
-          await storage.delete(id);
-          return undefined;
-        }
-
-        const reservation = this.#reserveSubscription(record.id);
-        if (reservation === undefined) {
-          return undefined;
-        }
-        record.reservation = reservation;
-        recovery = createSubscriptionRecovery(reservation);
-        this.#recoveries.set(id, recovery);
-        const consumed = await storage.compareAndSet(id, durable, undefined);
-        if (recovery.canceled) {
-          return undefined;
-        }
-        if (!consumed) {
-          continue;
-        }
-
-        record.durableConsumed = true;
-        try {
-          this.#rememberSubscription(record);
-        } catch (error) {
-          try {
-            await storage.delete(id);
-          } catch {
-            // Preserve the process-local registration failure.
-          }
-          throw error;
-        }
-        recovery.remembered = true;
-        return record;
-      } finally {
-        try {
-          storage.close();
-        } finally {
-          this.#settleRecovery(id, recovery);
-        }
+      const removal = this.#removals.get(id);
+      if (removal !== undefined) {
+        await observeRemoval(removal);
+        return undefined;
+      }
+      const outcome = await this.#recoverFromStore(id, store);
+      if (outcome.status === "complete") {
+        return outcome.record;
       }
     }
 
     return undefined;
+  }
+
+  async #recoverFromStore(
+    id: string,
+    store: SubscriptionStore,
+  ): Promise<SubscriptionRecoveryOutcome> {
+    const storage = createSubscriptionStorage(store);
+    let recovery: SubscriptionRecovery | undefined;
+    try {
+      const durable = await storage.read(id);
+      const record = durable === undefined ? undefined : this.#restoreSubscription(durable, id);
+      const removal = this.#removals.get(id);
+      if (removal !== undefined) {
+        await observeRemoval(removal);
+        return { status: "complete", record: undefined };
+      }
+      if (durable === undefined) {
+        return { status: "continue" };
+      }
+      if (record === undefined) {
+        await storage.delete(id);
+        return { status: "complete", record: undefined };
+      }
+      recovery = this.#beginRecovery(id, record);
+      if (recovery === undefined) {
+        return { status: "complete", record: undefined };
+      }
+      return await this.#consumeRecovery(storage, id, durable, record, recovery);
+    } finally {
+      try {
+        storage.close();
+      } finally {
+        this.#settleRecovery(id, recovery);
+      }
+    }
+  }
+
+  #beginRecovery(id: string, record: SubscriptionRecord): SubscriptionRecovery | undefined {
+    const reservation = this.#reserveSubscription(record.id);
+    if (reservation === undefined) {
+      return undefined;
+    }
+    record.reservation = reservation;
+    const recovery = createSubscriptionRecovery(reservation);
+    this.#recoveries.set(id, recovery);
+    return recovery;
+  }
+
+  async #consumeRecovery(
+    storage: RecordStorage<string, Any>,
+    id: string,
+    durable: Any,
+    record: SubscriptionRecord,
+    recovery: SubscriptionRecovery,
+  ): Promise<SubscriptionRecoveryOutcome> {
+    const consumed = await storage.compareAndSet(id, durable, undefined);
+    if (recovery.canceled) {
+      return { status: "complete", record: undefined };
+    }
+    if (!consumed) {
+      return { status: "continue" };
+    }
+
+    record.durableConsumed = true;
+    try {
+      this.#rememberSubscription(record);
+    } catch (error) {
+      try {
+        await storage.delete(id);
+      } catch {
+        // Preserve the process-local registration failure.
+      }
+      throw error;
+    }
+    recovery.remembered = true;
+    return { status: "complete", record };
   }
 
   #settleRecovery(id: string, recovery: SubscriptionRecovery | undefined): void {
@@ -788,6 +851,16 @@ interface SubscriptionRecovery {
   readonly settled: Promise<void>;
   readonly settle: () => void;
 }
+
+interface SubscriptionRemoval {
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: () => void;
+  readonly settled: Promise<void>;
+}
+
+type SubscriptionRecoveryOutcome =
+  | { readonly status: "continue" }
+  | { readonly status: "complete"; readonly record: SubscriptionRecord | undefined };
 
 type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 
@@ -1251,6 +1324,26 @@ function createSubscriptionRecovery(reservation: SubscriptionReservation): Subsc
     settled,
     settle,
   };
+}
+
+function createSubscriptionRemoval(): SubscriptionRemoval {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: () => void;
+  const settled = new Promise<void>((settle, fail) => {
+    reject = fail;
+    resolve = () => {
+      settle();
+    };
+  });
+  return { reject, resolve, settled };
+}
+
+async function observeRemoval(removal: SubscriptionRemoval): Promise<void> {
+  try {
+    await removal.settled;
+  } catch {
+    // The cancellation caller observes deletion failure; recovery remains inert.
+  }
 }
 
 function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {

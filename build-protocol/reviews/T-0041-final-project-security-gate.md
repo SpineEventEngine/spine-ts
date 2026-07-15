@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 3 findings assigned
+Status: Canonical wave 3 fixes coordinator-verified
 
 Baseline: `39f2c6f7`
 
@@ -443,6 +443,44 @@ bytes).
   recovery waits/refuses; deterministic delayed-delete race; per-store method
   extraction; class TSDoc and security provenance/path fixes. All reviewers are
   closed; dedicated security re-review remains pending.
+
+## Canonical Wave 3 Fix Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, all findings addressed, and is closed without
+  subagents or Git mutation.
+- Fresh native service verification passed 120/120. Typechecks, docs/API,
+  focused lint/format, status/provenance/path/TSDoc scans, generated tracking,
+  and diff integrity passed.
+- Commit and package the corrected endpoint, then repeat all four canonical
+  concerns before dedicated security re-review.
+
+## Canonical Wave 3 Fix Evidence
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, implemented all four deduplicated findings
+  without subagents or Git mutation.
+- Resident cancel/recovery RED exited 1 with 1 failed/117 skipped because
+  activation reached CAS during paused durable deletion. The identical command
+  is GREEN with 1 passed/117 skipped after synchronously installing a shared
+  per-ID removal operation before local release and retaining it through delete
+  settlement.
+- The after-read recovery gate passed 1/1 (118 skipped). Concurrent resident
+  cancellation with injected delete failure passed 1/1 (119 skipped), proving
+  one shared delete, observable errors for both callers, tombstone cleanup, and
+  reusable capacity.
+- Recovery now has a bounded outer iterator plus explicit per-store and consume
+  stages. The existing recovery-owner cancellation remains intact. Public query
+  cap TSDoc, fixed `ffd8549e` runtime package provenance, and the package README
+  evidence path are corrected. Canonical and dedicated security re-review and
+  T-0041 closure remain pending.
+- Focused lifecycle verification passed 21/21 and full native SpineServices
+  passed 120/120. The final combined three-case run passed 3/3. Generated/tooling
+  typechecks, docs/API checks, focused ESLint, seven-file Prettier, fixed-status
+  and provenance/path/TSDoc scans, generated tracking, and diff integrity are
+  green. Docs verified 25 Proto checksums and API counts
+  `100/28/205/19/17/3`; one intermediate ESLint brace-style failure was
+  corrected before the green rerun.
 
 ## Canonical Review Fix Batch Evidence
 

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 3 findings assigned
+Status: In progress - canonical wave 3 fixes coordinator-verified
 
 Started: `2026-07-14`
 
@@ -549,6 +549,53 @@ directory replaced immediately after successful creation'` exited 1 with 1
   the deduplicated four-item batch: per-ID removal coordination held through
   durable deletion, recovery exclusion/await, deterministic race regression,
   recovery method split, query-cap TSDoc, and security provenance/path fixes.
+
+## Canonical Wave 3 Fix Acceptance
+
+- Existing implementer returned with actual immutable
+  `gpt-5.6-terra` / medium, all four findings addressed, no subagents or Git
+  mutation, and is closed.
+- Fresh coordinator native service verification passed 120/120. Build/tooling
+  typechecks, docs/API generation, focused ESLint/Prettier,
+  status/provenance/path/TSDoc scans, generated tracking, and diff integrity
+  passed.
+- Commit and package this endpoint for canonical wave 4. Dedicated security
+  re-review and T-0041 closure remain pending.
+
+## Canonical Wave 3 Fix Implementation
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, implemented the complete batch without
+  subagents or Git state mutation. Canonical and dedicated security re-review
+  remain pending.
+- RED command: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/server/test/services/spine-services.test.ts -t 'blocks resident
+recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
+  Recovery reached CAS while resident durable deletion was paused, proving the
+  canceled ID could revive.
+- GREEN rerun of that command exited 0 with 1 passed/117 skipped. A second
+  post-read gate regression exited 0 with 1 passed/118 skipped, and the shared
+  cancellation/delete-failure cleanup regression exited 0 with 1 passed/119
+  skipped.
+- A package-private per-ID removal operation is installed before resident
+  release/removal, shared by concurrent cancellation, and retained through
+  durable-delete settlement. Recovery observes it before each store read and
+  after an awaited read/restore; the existing recovery-owner token path remains
+  intact. Recovery is split into a small outer iterator and explicit per-store
+  attempt/consume stages.
+- Public class TSDoc now distinguishes the absent/zero implicit 1,000-row cap
+  from positive ordered limits. Security artifacts name runtime basis
+  `ffd8549e`, its immutable review package, and the corrected package README
+  evidence path without claiming security acceptance.
+- The focused lifecycle command exited 0 with 21 passed/99 skipped; the full
+  native SpineServices file exited 0 with 120/120. A final combined run of the
+  three new cases exited 0 with 3 passed/117 skipped.
+- `typecheck:generated` exited 0. `docs:check` exited 0 with 25 copied Proto
+  checksums and API counts `100/28/205/19/17/3`. Focused ESLint initially
+  reported one void-arrow brace style error; after the brace-only correction,
+  ESLint and seven-file Prettier checks exited 0. Status/provenance/path/TSDoc
+  scans match the pending-review contract, generated output is untracked, and
+  `git diff --check` exited 0.
 
 ## Canonical Review Fix Batch Implementation
 

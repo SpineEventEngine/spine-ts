@@ -3271,6 +3271,178 @@ describe("SpineServices", () => {
     await secondHandlers.cancel(replacement);
   });
 
+  it("blocks resident recovery while durable cancellation is pending", async () => {
+    const contextName = "ResidentCancelRecovery";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const deleteStarted = deferred<undefined>();
+    const deleteReleased = deferred<undefined>();
+    const casStarted = deferred<undefined>();
+    let deletePaused = false;
+    let casCalls = 0;
+    storageFactory.deleteHook = async (id, deleteRecord) => {
+      if (id === subscriptionId && !deletePaused) {
+        deletePaused = true;
+        deleteStarted.resolve(undefined);
+        await deleteReleased.promise;
+      }
+      return await deleteRecord();
+    };
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      casCalls += 1;
+      casStarted.resolve(undefined);
+      return await compareAndSet();
+    };
+    const cancel = Promise.resolve(handlers.cancel(subscription));
+    await deleteStarted.promise;
+    const recovery = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = recovery.next();
+    const recoveryState = await Promise.race([
+      casStarted.promise.then(() => "cas" as const),
+      delay(25).then(() => "blocked" as const),
+    ]);
+
+    let replacement: Subscription | undefined;
+    let capacityError: unknown;
+    try {
+      replacement = await handlers.subscribe(createTopic());
+    } catch (error) {
+      capacityError = error;
+    }
+
+    deleteReleased.resolve(undefined);
+    await cancel;
+    await context
+      .stand()
+      .update(ProjectionStateSchema, createState("task-resident-cancel", "Canceled"));
+    const result = await withTimeout(next, "resident cancellation recovery close");
+    const postCancel = await withTimeout(
+      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "post-resident-cancel activation close",
+    );
+    const durable = await readDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      subscriptionId,
+    );
+
+    if (replacement !== undefined) {
+      await handlers.cancel(replacement);
+    }
+    await handlers.cancel(subscription);
+    const reusable = await handlers.subscribe(createTopic());
+    await handlers.cancel(reusable);
+
+    expect(recoveryState).toBe("blocked");
+    expect(casCalls).toBe(0);
+    expect(capacityError).toBeUndefined();
+    expect(result).toEqual({ done: true, value: undefined });
+    expect(postCancel).toEqual({ done: true, value: undefined });
+    expect(durable).toBeUndefined();
+  });
+
+  it("blocks recovery when cancellation begins during the durable read", async () => {
+    const contextName = "CancelDuringRecoveryRead";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const recoveredId = recoverable.id?.value ?? "missing";
+    const readStarted = deferred<undefined>();
+    const readReleased = deferred<undefined>();
+    const deleteStarted = deferred<undefined>();
+    const deleteReleased = deferred<undefined>();
+    const casStarted = deferred<undefined>();
+    let readPaused = false;
+    let deletePaused = false;
+    let casCalls = 0;
+    storageFactory.readHook = async (id, readRecord) => {
+      const durable = await readRecord();
+      if (id === recoveredId && !readPaused) {
+        readPaused = true;
+        readStarted.resolve(undefined);
+        await readReleased.promise;
+      }
+      return durable;
+    };
+    storageFactory.deleteHook = async (id, deleteRecord) => {
+      if (id === recoveredId && !deletePaused) {
+        deletePaused = true;
+        deleteStarted.resolve(undefined);
+        await deleteReleased.promise;
+      }
+      return await deleteRecord();
+    };
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      casCalls += 1;
+      casStarted.resolve(undefined);
+      return await compareAndSet();
+    };
+    const recovery = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const next = recovery.next();
+    await readStarted.promise;
+    const cancel = Promise.resolve(secondHandlers.cancel(recoverable));
+    await deleteStarted.promise;
+    readReleased.resolve(undefined);
+    const recoveryState = await Promise.race([
+      casStarted.promise.then(() => "cas" as const),
+      delay(25).then(() => "blocked" as const),
+    ]);
+
+    deleteReleased.resolve(undefined);
+    await cancel;
+    const result = await withTimeout(next, "read-racing cancellation recovery close");
+    const durable = await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId);
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(replacement);
+
+    expect(recoveryState).toBe("blocked");
+    expect(casCalls).toBe(0);
+    expect(result).toEqual({ done: true, value: undefined });
+    expect(durable).toBeUndefined();
+  });
+
+  it("shares resident cancellation and clears a failed removal tombstone", async () => {
+    const contextName = "SharedResidentCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const deleteError = new Error("resident delete failed");
+    storageFactory.deleteError = deleteError;
+
+    const results = await Promise.allSettled([
+      Promise.resolve(handlers.cancel(subscription)),
+      Promise.resolve(handlers.cancel(subscription)),
+    ]);
+
+    expect(results).toEqual([
+      { status: "rejected", reason: deleteError },
+      { status: "rejected", reason: deleteError },
+    ]);
+    expect(storageFactory.deleteCalls).toBe(1);
+
+    storageFactory.deleteError = undefined;
+    await handlers.cancel(subscription);
+    expect(storageFactory.deleteCalls).toBe(2);
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
   it("recovers inactive event subscriptions across service adapter restart", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstContext = createEventSubscriptionContext(
@@ -4685,6 +4857,9 @@ class FaultingSubscriptionStorageFactory extends StorageFactory {
   deleteCalls = 0;
   deleteError: Error | undefined;
   deleteHook: ((id: string, deleteRecord: () => Promise<boolean>) => Promise<boolean>) | undefined;
+  readHook:
+    | ((id: string, readRecord: () => Promise<Any | undefined>) => Promise<Any | undefined>)
+    | undefined;
   writeError: Error | undefined;
 
   constructor(contextName: string) {
@@ -4746,6 +4921,9 @@ class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
   }
 
   protected override readRecord(id: string): Promise<Any | undefined> {
+    if (this.#faults.readHook !== undefined) {
+      return this.#faults.readHook(id, () => this.#delegate.read(id));
+    }
     return this.#delegate.read(id);
   }
 
