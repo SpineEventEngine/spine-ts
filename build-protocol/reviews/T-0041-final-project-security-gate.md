@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 11 assigned
+Status: Canonical wave 11 documentation findings accepted; fix assigned
 
 Baseline: `39f2c6f7`
 
@@ -1346,3 +1346,33 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   request/close and cleanup bounds, D-0087/D-0088 races/resources/no leaks.
 - All are read-only and use the full ledger plus superseded-history rule.
   Aggregate before action; dedicated security review remains pending.
+
+## Canonical Review Wave 11 Result
+
+- Style, immutable Terra High, `019f6447-b99d-7012-8ed6-a369ee72532e`: clean
+  for names, shared deadline, observer test, diagnostics, docs/log structure,
+  and milestone maintainability.
+- Documentation, immutable Luna Medium,
+  `019f6447-b5c5-7870-978a-0ac7487e2915`: P2 because user-guide unknown-removal
+  pool text omits `RESOURCE_EXHAUSTED` before storage; P2 because user guide
+  omits inactive-expiry cleanup failure retaining capacity/no automatic retry/
+  explicit same-ID Cancel; P2 because a later architecture transport section
+  names two rather than all six public ZeroMQ subpath symbols.
+- TypeScript/API, immutable Terra High,
+  `019f6447-bd61-76e1-b127-50ad057aee45`: clean for TSDoc, exact public/private
+  boundary, six-symbol gate, package declarations, and Proto.
+- Reliability, immutable Terra High,
+  `019f6449-cf0f-7662-bb0c-51e6f855e02a`: clean for observer isolation,
+  request/close cleanup bounds, cancellation/expiry capacity, races, and leaks.
+- Successful explicit immutable dispatch is Desktop runtime evidence; child
+  sessions exposed no finer label. All agents are closed.
+
+## Canonical Wave 11 Docs Fix Assignment
+
+- One fresh existing implementer, explicit immutable Terra Medium, updates only
+  `docs/USER_GUIDE.md`, the later `docs/architecture/README.md` transport
+  section, and durable logs to mirror already accepted semantics and exact six
+  public names. No behavior, public contract, test, package/Proto/dependency,
+  generated, or future-policy change. Require docs/format/link/status/diff
+  evidence, no Git mutation or subagents, then rerun all canonical lanes before
+  dedicated security review.

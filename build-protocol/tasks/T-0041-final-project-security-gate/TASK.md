@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 11 assigned
+Status: In progress - canonical wave 11 documentation findings accepted; fix assigned
 
 Started: `2026-07-14`
 
@@ -1498,3 +1498,27 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   superseded-history exclusion. Re-review all Wave 10 corrections and retain
   complete T-0041 scope. Aggregate before action; dedicated security review
   remains pending.
+
+## Canonical Review Wave 11 Result And Docs Fix Assignment
+
+- Complete wave: style, TypeScript/API, and performance/reliability are clean.
+  Documentation found three P2 mirror gaps: `docs/USER_GUIDE.md` omits unknown-
+  removal pool exhaustion before storage and inactive-expiry cleanup failure
+  retaining local record/capacity with no automatic retry; the later transport
+  section of `docs/architecture/README.md` lists only the config helper and
+  factory instead of all six ZeroMQ subpath names.
+- Explicit immutable Desktop profiles: style
+  `019f6447-b99d-7012-8ed6-a369ee72532e` Terra High; docs
+  `019f6447-b5c5-7870-978a-0ac7487e2915` Luna Medium; API
+  `019f6447-bd61-76e1-b127-50ad057aee45` Terra High; reliability
+  `019f6449-cf0f-7662-bb0c-51e6f855e02a` Terra High. Child sessions exposed no
+  finer profile metadata. All four reviewers are closed.
+- Assign one fresh existing `implementer`, explicit immutable Terra Medium, for
+  docs and durable logs only. Mirror current accepted wording exactly: unknown-
+  pool overflow is `RESOURCE_EXHAUSTED` before storage; inactive-expiry cleanup
+  failure retains local record/capacity after timer clearance with no automatic
+  retry and explicit same-ID `Cancel` retry; architecture enumerates the same
+  six public ZeroMQ names as API/transport docs. No runtime, test, public,
+  package/Proto/dependency/generated, or policy change; no Git mutation or
+  subagents. Run docs check, exact formatting, link/status scans, and diff
+  integrity. All four canonical lanes rerun; security remains pending.
