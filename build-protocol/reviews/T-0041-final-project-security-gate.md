@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 8 fixes coordinator-verified; commit pending
+Status: Wave 8 fixes committed; canonical wave 9 packaging pending
 
 Baseline: `39f2c6f7`
 
@@ -1085,3 +1085,11 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
 - Accept the substantive fix batch for commit. Record the new immutable endpoint
   before generating canonical Wave 9; dedicated security review remains
   pending.
+
+## Wave 8 Immutable Implementation Endpoint
+
+- Commit `430b1eaf` is the substantive Wave 8 implementation endpoint. Security
+  artifacts identify it directly; this provenance-only follow-up and later
+  review/status commits are not implementation evidence.
+- Generate the literal package after this reconciliation, then run all four
+  canonical Wave 9 concerns. Dedicated security review remains pending.

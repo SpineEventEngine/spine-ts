@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 8 fixes coordinator-verified; commit pending
+Status: In progress - wave 8 fixes committed; canonical wave 9 packaging pending
 
 Started: `2026-07-14`
 
@@ -1251,3 +1251,13 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   Prettier, and `git diff --check` all exited 0. Docs verified 25 Proto source
   checksums and TypeDoc export counts `100/28/205/19/17/3`. Accept this bounded
   batch for commit; canonical Wave 9 and dedicated security review remain.
+
+## Wave 8 Immutable Implementation Endpoint
+
+- Commit `430b1eaf` contains the coordinator-verified Wave 8 source refactor,
+  tightened liveness regression, public API documentation, and durable evidence.
+- Security provenance now names `430b1eaf` as substantive implementation
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal package from `39f2c6f7` after
+  this reconciliation, then run all four canonical Wave 9 lanes. Dedicated
+  security review remains pending.

@@ -1,16 +1,16 @@
 # Spine TS Threat Model
 
 Status: T-0041 working threat model; TM entries remain hypotheses, not confirmed
-findings. Wave 7 corrections are coordinator-verified in the working tree;
-canonical wave 8 and dedicated security re-review are pending.
+findings. Wave 8 corrections are coordinator-verified and committed; canonical
+wave 9 and dedicated security re-review are pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
 Committed canonical wave 5 finding basis: `b43cf705`. The substantive
-implementation-evidence endpoint is `732409ff`; later review/status commits
-are not implementation evidence. Canonical review and dedicated security
-re-review remain pending; no security acceptance is claimed.
+implementation-evidence endpoint is `430b1eaf`; later provenance/review/status
+commits are not implementation evidence. Canonical review and dedicated
+security re-review remain pending; no security acceptance is claimed.
 
 ## Scope and assumptions
 
