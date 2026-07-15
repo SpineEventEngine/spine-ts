@@ -3609,6 +3609,18 @@ verify` remains reserved.
 - Every lane is read-only, childless, Git-read-only, D-0096-scoped, and subject
   to the historical-text rule. Reliability remains N/A.
 
+## D-0096 Canonical Re-Review Wave Result
+
+- Documentation `019f668d-b7de-7fa1-9d33-6e2335d80b6c`, explicit/actual
+  immutable Luna Medium: clean; closed.
+- Style `019f668d-b3dc-76c2-a390-003979feacb2` and TypeScript/API
+  `019f668d-bb15-7183-8edd-132e8c17e065`, explicit/actual immutable Terra High:
+  accepted the same P1 unobserved routing-kind narrowing; both closed.
+- Reliability remains N/A. Return the complete batch to implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected immutable Terra Medium, to
+  narrow only top-level `signalKind`, add inconsistent-topic regression, and
+  correct tests/docs/logs without changing names, counts, or runtime paths.
+
 ## D-0096 Implementer Evidence Pending Re-Review
 
 - RED tooling exited 2 with missing fixed-path exports, unresolved narrowing,

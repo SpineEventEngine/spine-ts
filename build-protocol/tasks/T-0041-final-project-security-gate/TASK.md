@@ -3635,6 +3635,22 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Reliability remains N/A. Aggregate all three affected results before closure
   or any complete fix batch.
 
+## D-0096 Canonical Re-Review Result And Fix Assignment
+
+- Documentation `019f668d-b7de-7fa1-9d33-6e2335d80b6c`, explicit/actual
+  immutable Luna Medium: clean; closed.
+- Style `019f668d-b3dc-76c2-a390-003979feacb2`, explicit/actual immutable Terra
+  High, and TypeScript/API `019f668d-bb15-7183-8edd-132e8c17e065`, explicit/
+  actual immutable Terra High, independently accepted the same P1: the topic
+  predicate checks only top-level `signalKind` but also narrows unobserved
+  `routing.signalKind`; both are closed.
+- Reliability remains N/A. Resume implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original immutable Terra
+  Medium, sole writer/childless/Git-read-only. Narrow only the observed top-level
+  field, add a cast-free inconsistent widened-topic regression proving routing
+  remains widened, and correct tests/docs/logs. Preserve all D-0096 fixed paths,
+  names, counts, and transport runtime scope.
+
 ## D-0096 Fixed-Path Predicate Implementation
 
 - Removed unmerged `hasTransportSignalKind()` without an alias. Added
