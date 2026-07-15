@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 2 assigned
+Status: In progress - canonical wave 2 findings assigned
 
 Started: `2026-07-14`
 
@@ -493,6 +493,23 @@ directory replaced immediately after successful creation'` exited 1 with 1
   style Terra High, documentation Luna Medium, TypeScript/API Terra High, and
   performance/reliability Terra High. Read-only, no subagents or Git mutation;
   aggregate the complete wave before fixes.
+
+## Canonical Review Wave 2 Result
+
+- Style/maintainability is CLEAN: agent
+  `019f633d-911a-75e3-b87f-bf42a589a6db`, actual immutable Terra High.
+- Documentation agent `019f633d-8995-7b41-b811-4fcae0beeeed`, actual immutable
+  Luna Medium, found stale post-commit threat-model provenance.
+- TypeScript/API agent `019f633d-8d8c-76c1-a270-dd17692f4252`, actual immutable
+  Terra High, found that public prose incorrectly implies a process-wide limit
+  instead of one limit per `SpineServices` instance.
+- Performance/reliability agent `019f633f-0ce6-7322-abcd-8cd8f3dea9c0`, actual
+  immutable Terra High, found cancel-versus-recovery can release a reservation
+  it does not own and later revive the canceled subscription.
+- All reviewers are closed. Resume existing implementer, expected immutable
+  Terra Medium, for this complete three-item TDD/docs batch. Preserve the
+  Set-backed capacity authority while adding exact ownership/cancel
+  coordination; dedicated security re-review remains pending.
 
 ## Canonical Review Fix Batch Implementation
 

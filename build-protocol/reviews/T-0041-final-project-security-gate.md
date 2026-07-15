@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 2 assigned
+Status: Canonical wave 2 findings assigned
 
 Baseline: `39f2c6f7`
 
@@ -380,6 +380,23 @@ bytes).
 - Every lane is read-only, has no subagents or Git mutation, ignores historical
   superseded text unless current records/docs claim it active, and must attest
   its immutable role profile. Aggregate the full wave before fixes.
+
+## Canonical Review Wave 2 Result
+
+- Style/maintainability: CLEAN; agent
+  `019f633d-911a-75e3-b87f-bf42a589a6db`, actual immutable Terra High.
+- Documentation: one low stale-provenance finding; agent
+  `019f633d-8995-7b41-b811-4fcae0beeeed`, actual immutable Luna Medium.
+- TypeScript/API docs: one medium per-instance-vs-process-wide claim mismatch;
+  agent `019f633d-8d8c-76c1-a270-dd17692f4252`, actual immutable Terra High.
+- Performance/reliability: one high cancel-versus-recovery ownership/revival
+  race; agent `019f633f-0ce6-7322-abcd-8cd8f3dea9c0`, actual immutable Terra
+  High.
+- Return the complete three-item batch to existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable Terra
+  Medium. Require owner-scoped release, cancellation observed during paused CAS,
+  no post-cancel remember, no capacity bypass, synchronized docs/provenance,
+  and focused evidence before a new package. All reviewers are closed.
 
 ## Canonical Review Fix Batch Evidence
 
