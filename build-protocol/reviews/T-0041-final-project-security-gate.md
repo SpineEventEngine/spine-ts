@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 10 assigned
+Status: Canonical review wave 10 findings accepted; fix assigned
 
 Baseline: `39f2c6f7`
 
@@ -1232,3 +1232,38 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   bounds and no race/spin/leak regressions.
 - All are read-only and use the full ledger plus superseded-history rule.
   Aggregate before action; dedicated security review remains pending.
+
+## Canonical Review Wave 10 Result
+
+- Style, immutable Terra High, `019f6432-2b8e-7571-84e2-f1760b376bd7`: P2
+  because API/server docs promise unknown cancellation `OK` despite pool
+  `RESOURCE_EXHAUSTED`; P3 for overlong new identifiers, duplicate 275 ms
+  constants, and an overlong API-check diagnostic.
+- Documentation, immutable Luna Medium,
+  `019f6432-27ca-7ac3-b353-660f6f61ee1f`: P2 for omitted inactive-expiry
+  cleanup failure retention/no automatic retry; P2 for missing per-instance
+  same-ID coalescing scope; P2 because API/transport docs list only two
+  functions rather than all six public ZeroMQ subpath names.
+- TypeScript/API, immutable Terra High,
+  `019f6432-2ef4-7893-ac23-ab296761a92a`: P2 because class-level public TSDoc
+  still calls storage-backed inactive subscriptions process-local; otherwise
+  the D-0089/public/export/TypeDoc/Proto boundary is clean.
+- Reliability, immutable Terra High,
+  `019f6434-9e06-7ff1-9989-4b127fbb5b32`: P2 because swallowed exceptions from
+  the internal observer lack regression coverage; otherwise request/close,
+  cleanup, D-0087/D-0088, races, and bounds are clean.
+- Successful explicit immutable role dispatch is Desktop runtime evidence;
+  child sessions exposed no finer label. All agents are closed and every finding
+  is accepted after source inspection.
+
+## Canonical Wave 10 Fix Assignment
+
+- One fresh existing implementer, explicit immutable Terra Medium, is sole
+  writer for the complete docs/test/name batch. No production behavior, public
+  symbol, package/Proto/dependency/generated, or D-0087/D-0089 change.
+- Correct the named docs/TSDoc; shorten every new Wave 9 identifier beyond four
+  components; share one 275 ms test deadline; reflow diagnostics; and make the
+  existing subscriber-recovery test throw from its observer while proving later
+  delivery. Run focused native and generated/docs/lint/format/integrity checks,
+  no Git mutation or subagents. All four canonical lanes rerun before dedicated
+  security review.

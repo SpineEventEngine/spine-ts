@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 10 assigned
+Status: In progress - canonical wave 10 findings accepted; fix assigned
 
 Started: `2026-07-14`
 
@@ -1385,3 +1385,30 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   superseded-history exclusion. Re-review all Wave 9 corrections and retain the
   complete T-0041 milestone scope. Aggregate the full wave before action;
   dedicated security review remains pending.
+
+## Canonical Review Wave 10 Result And Fix Assignment
+
+- Complete accepted wave: documentation found three P2 gaps for expiry-cleanup
+  failure retention/no automatic retry, per-instance same-ID cancellation scope,
+  and incomplete six-symbol ZeroMQ subpath descriptions. TypeScript/API found
+  one P2 stale class TSDoc sentence calling durable inactive records
+  process-local. Style found one P2 unknown-cancel `OK` overclaim under pool
+  exhaustion and one P3 naming/duplicate-deadline/diagnostic hygiene issue.
+  Reliability found one P2 missing regression that a throwing internal observer
+  is swallowed while later delivery continues.
+- Tool-enforced immutable runtime profiles: style
+  `019f6432-2b8e-7571-84e2-f1760b376bd7` Terra High; docs
+  `019f6432-27ca-7ac3-b353-660f6f61ee1f` Luna Medium; API
+  `019f6432-2ef4-7893-ac23-ab296761a92a` Terra High; reliability
+  `019f6434-9e06-7ff1-9989-4b127fbb5b32` Terra High. Child sessions exposed no
+  finer profile metadata. All four reviewers are closed.
+- Assign one fresh existing `implementer`, explicit immutable Terra Medium, as
+  sole writer. This is a bounded docs/test/name correction, not public-contract
+  redesign: align architecture/API/server/transport docs and class TSDoc; rename
+  every new Wave 9 identifier exceeding four semantic components; share one 275
+  ms test deadline; reflow the API diagnostic; and make the existing subscriber
+  recovery test's observer throw while proving later delivery. No production
+  behavior, public names, exports, package/Proto/dependency/generated policy, or
+  D-0087/D-0088/D-0089 change is authorized. Run focused native and docs/type/
+  lint/format checks; no Git mutation or subagents. All four canonical lanes
+  rerun afterward; dedicated security review remains pending.
