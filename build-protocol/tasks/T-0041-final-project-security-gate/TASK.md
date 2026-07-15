@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0093 coordinator-verified; canonical and focused
-security review pending
+Status: In progress - D-0093 canonical findings accepted; public-contract
+correction architecture pending
 
 Started: `2026-07-14`
 
@@ -3183,3 +3183,33 @@ Subscription cancellation failed.` instead of `AggregateError`.
   run pre-review lint and all four relevant canonical concerns before focused
   final security re-review.
 - D-0093 implementation commit: `031f497e`.
+
+## D-0093 Canonical Wave Result And Architecture Follow-Up
+
+- All four assigned reviewers completed mandatory skill checks under matching
+  explicit/tool-enforced immutable actual profiles, made no repository/Git
+  mutation, spawned no child, and are closed: style
+  `019f660c-3140-7bb3-bfb5-3ba26c100799` Terra High; documentation
+  `019f660c-6fbd-70d0-bf6d-7c20c88a959f` Luna Medium; TypeScript/API
+  `019f660c-af27-7fa0-9fdb-24c1243c3030` Terra High; performance/reliability
+  `019f660c-ed5f-7170-93b3-172d5316e831` Terra High.
+- Accepted P1: public `SignalTransport` generics still promise any envelope for
+  every kind, while the ZeroMQ adapter now treats `command` and `event` as
+  concrete generated `Command`/`Event`. Moving generic tests to `system` hid
+  rather than resolved that type/runtime mismatch.
+- Accepted P2: generated-Proto reply rejection currently treats any object with
+  a string `$typeName` as Proto, rejecting legitimate plain private replies that
+  use that property.
+- Accepted bounded corrections: align stale explicit test generic kinds with
+  `system`; decode/assert the malformed-command generic failure; prove a later
+  valid request after Proto-reply rejection; and complete the three wire docs
+  with exact 8 MiB rejection/non-allocation semantics, frame positions, private
+  non-`Ack` reply/rejection, and coordinated-peer incompatibility.
+- Because the P1 correction changes a public type contract and the prior
+  architecture packet's source-compatibility assumption is disproven, resume
+  the same requirements splitter context
+  `019f65eb-1eff-78d2-9bc7-cada7d23c056`, expected explicit immutable
+  `gpt-5.6-sol` / high, read-only, childless, and Git-read-only. Select the
+  smallest honest kind-to-envelope type correlation, exact compatibility/docs/
+  tests, and narrow generated-Proto reply detection without reopening the human
+  wire/risk decisions or adding a codec-option abstraction.

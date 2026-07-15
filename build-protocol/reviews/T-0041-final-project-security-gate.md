@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: In progress - D-0093 coordinator-verified; canonical and focused
-security review pending
+Status: In progress - D-0093 canonical findings accepted; public-contract
+correction architecture pending
 
 Baseline: `39f2c6f7`
 
@@ -3235,3 +3235,22 @@ verify` remains reserved.
 - Every reviewer receives this exact package plus the D-0093 human ledger,
   accepted architecture, current security artifacts, focused test evidence,
   public-boundary rules, and historical-text rule.
+
+## D-0093 Canonical Wave Findings
+
+- Style `019f660c-3140-7bb3-bfb5-3ba26c100799`, explicit/actual immutable Terra
+  High: two accepted findings for stale `system`-topic generic kind arguments
+  and an unasserted malformed-command failure payload; closed.
+- Documentation `019f660c-6fbd-70d0-bf6d-7c20c88a959f`, explicit/actual
+  immutable Luna Medium: four accepted omissions for 8 MiB rejection versus
+  allocation, exact frame positions, private non-`Ack` reply/rejection, and
+  coordinated-peer incompatibility; closed.
+- TypeScript/API `019f660c-af27-7fa0-9fdb-24c1243c3030`, explicit/actual
+  immutable Terra High: P1 public generic kind/envelope false promise and P2
+  overbroad `$typeName` reply rejection; closed.
+- Performance/reliability `019f660c-ed5f-7170-93b3-172d5316e831`, explicit/
+  actual immutable Terra High: one accepted missing continuation regression
+  after generated-Proto reply rejection; closed.
+- The complete wave is aggregated. Resume the same Sol High requirements
+  splitter for only the architecture-significant P1/P2 correction, then return
+  one deduplicated batch to the existing Terra Medium implementation context.
