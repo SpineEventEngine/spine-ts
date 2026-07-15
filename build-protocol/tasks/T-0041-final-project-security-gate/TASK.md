@@ -3388,3 +3388,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Style, documentation, and TypeScript/API are affected. Performance/
   reliability remains N/A for another wave because inspection and diff show no
   runtime execution-path change and its prior clean disposition remains valid.
+
+## D-0094 Union-Correlation Re-Review Assignment
+
+- Frozen endpoint `deac2198`; baseline `6f0ea76e`; exact package
+  `.superpowers/sdd/review-6f0ea76e..deac2198.diff`; 2 commits; 46,504 bytes.
+- Dispatch existing style/maintainability and TypeScript/API reviewers under
+  explicit immutable Terra High and documentation under explicit immutable
+  Luna Medium. All are read-only, childless, Git-read-only, correction-scoped,
+  and subject to the historical-text rule.
+- Performance/reliability retains N/A for this wave because no runtime
+  execution path changed. Aggregate all three affected results before any
+  further correction; focused final security follows only after clean closure.

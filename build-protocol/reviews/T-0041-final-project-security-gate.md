@@ -3409,3 +3409,14 @@ verify` remains reserved.
 - Style, documentation, and TypeScript/API must re-review. Performance/
   reliability is N/A for another wave because the correction contains no
   runtime execution-path change and the previous lane is clean.
+
+## D-0094 Union-Correlation Re-Review Package And Assignment
+
+- Exact package `.superpowers/sdd/review-6f0ea76e..deac2198.diff`; frozen
+  baseline `6f0ea76e`; endpoint `deac2198`; 2 commits; 46,504 bytes.
+- Style/maintainability: existing role, expected explicit immutable Terra High.
+- Documentation: existing role, expected explicit immutable Luna Medium.
+- TypeScript/API: existing role, expected explicit immutable Terra High.
+- Every lane is read-only, childless, Git-read-only, correction-scoped, and
+  must ignore superseded historical text unless current state claims it active.
+  Reliability is N/A under the recorded no-runtime-change rationale.
