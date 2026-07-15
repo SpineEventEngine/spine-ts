@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 4 fixes assigned
+Status: In progress - coordinator retry finding assigned
 
 Started: `2026-07-14`
 
@@ -78,6 +78,22 @@ example.
 - CI, generated-registry loading, and dependency installation are
   developer/operator-controlled surfaces, but malicious package or tampered
   generated artifact scenarios remain in supply-chain scope.
+
+## Wave 4 Implementation Status
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` has actual
+  immutable runtime `gpt-5.6-terra` / medium, matching the explicit dispatch.
+  No subagent or Git-state mutation was used.
+- D-0087 is implemented in the working tree: compatible inactive records,
+  unique exact active claims, exact cancel markers, owner-aware CAS activation
+  and cancellation, bounded unknown removals, and deterministic cross-instance
+  race/failure coverage.
+- Focused RED/GREEN evidence is durable in the work/review logs. The final
+  native affected service suite passes 130/130; generated/tooling typecheck,
+  docs, focused lint/format, provenance/export/policy/generated scans, and diff
+  integrity are green.
+- Canonical review, dedicated security re-review, full final verification,
+  integration, remote sync, and T-0041 closure remain pending.
 
 ## Acceptance Criteria
 
@@ -616,6 +632,36 @@ directory replaced immediately after successful creation'` exited 1 with 1
   runtime, docs, security-artifact, and durable-log batch. No subagents or Git
   mutation. Canonical and dedicated security review remain pending.
 
+## Wave 4 Implementer Skill Applicability
+
+- Before code actions, existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23` confirmed the Desktop runtime metadata
+  matches the explicit immutable `gpt-5.6-terra` / medium assignment. No
+  subagents or Git-state mutation are authorized.
+- Session inventory, `build-protocol/skills/EXPECTED_SKILLS.md`, the full
+  `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` inventory,
+  and readable `/Users/armiol/.agents/.skill-lock.json` were checked. The lock
+  confirms the expected `obra/superpowers` and `wshobson/agents` sources; the
+  session also exposes the task-provided Codex security skill.
+- Fully read and selected: `test-driven-development` plus its testing
+  anti-pattern reference, `javascript-testing-patterns` plus its advanced async
+  and integration reference, `typescript-advanced-types`,
+  `nodejs-backend-patterns`, `security-best-practices`,
+  `receiving-code-review`, and `verification-before-completion`. They govern
+  strict RED/GREEN evidence, deterministic shared-storage tests, compact
+  discriminated internal states, stable Connect errors, secure exact-CAS
+  transitions, review verification, and evidence-before-claims.
+- The security skill has no Connect/Node backend reference; its Express and
+  Next.js references are not applicable. Project-owned ingress/TLS/rate policy
+  and D-0087 override generic backend suggestions. Planning, worktree,
+  subagent-development, and Git skills are skipped because architecture is
+  accepted, this worktree already exists, and this assignment forbids
+  subagents/Git mutation.
+- Reconfirmed the splitter's recorded inspection of current service/storage
+  code and task-relevant Spine JVM evidence. D-0087 and existing repository
+  behavior define this fix; no lease, heartbeat, routing, supervision,
+  reclamation, or other JVM-inspired behavior is added.
+
 ## Canonical Wave 3 Fix Implementation
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -706,3 +752,22 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   docs/API validation, focused ESLint, wording/provenance scans, and formatting
   plus diff integrity are green. Canonical re-review, dedicated security
   re-review, and task closure remain pending.
+
+## Wave 4 Coordinator Retry Finding
+
+- Fresh coordinator native verification passed the focused ownership/capacity
+  set 9/9 and full `spine-services.test.ts` 130/130. Generated/tooling
+  typecheck, docs/API checks with counts `100/28/205/19/17/3`, focused ESLint,
+  12-file Prettier, and `git diff --check` also passed.
+- Source inspection found one uncovered high-confidence failure path. A known
+  local owner is always removed from `#claims` and its reservation released when
+  cancellation rejects, even if storage failed before installing a cancel
+  marker. Its exact persisted claim then remains, the same instance's retry
+  misclassifies it as foreign, and new capacity is admitted before persistence
+  settles. This contradicts D-0087.
+- Resume existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected
+  explicit immutable Terra Medium, for one RED/GREEN correction: retain local
+  owner and reservation through failed persistent cancellation, allow same-ID
+  retry to clean it, then release exactly once. Remove dead claim bookkeeping
+  only if the focused behavior remains unchanged. Canonical/security re-review
+  remains pending.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 4 fixes assigned
+Status: Coordinator retry finding assigned
 
 Baseline: `39f2c6f7`
 
@@ -509,6 +509,39 @@ bytes).
   fresh immutable package. Canonical and dedicated security re-review remain
   pending.
 
+## Wave 4 Implementer Applicability Gate
+
+- Before code actions, implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`
+  confirmed actual immutable Desktop runtime `gpt-5.6-terra` / medium, matching
+  the explicit assignment. No subagents or Git-state mutation are authorized.
+- Session inventory, expected-skill manifest, complete bounded installed-skill
+  entrypoint listing, and readable installed lock were checked. Applicable
+  TDD/testing, TypeScript, Node backend, security, receiving-review, and final
+  verification guidance was fully read, including referenced testing material.
+- No exact Connect/Node security reference exists. Deployment-owned generic
+  policy is not converted into framework scope. Existing recorded Spine JVM
+  evidence was reconfirmed only as a guardrail; D-0087 remains the complete
+  accepted behavior and excludes lease/liveness/reclamation expansion.
+
+## Wave 4 Implementer Result
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23` reports actual
+  immutable `gpt-5.6-terra` / medium, matching dispatch, with no subagents or
+  Git-state mutation.
+- D-0087 exact inactive/owner-claim/cancel-marker CAS lifecycle and separate
+  bounded unknown-removal pool are implemented without public/generated API,
+  storage interface, package-root export, manifest, or lockfile changes.
+- Recorded RED/GREEN covers codec absence, both cross-instance CAS orderings,
+  unknown-removal storage-failure normalization/release, and recovered local
+  registration rollback. Additional deterministic green coverage exercises
+  both same-instance orderings, concurrent inactive cancellation, marker
+  failure/fencing/retry, capacity retention, and legacy inactive compatibility.
+- Native `spine-services.test.ts` passes 130/130. Generated/tooling typecheck,
+  docs, focused lint/format, provenance/export/policy/generated scans, and diff
+  integrity are green and recorded in the work/task logs.
+- Wave 4 implementation is ready for a fresh canonical review package and then
+  dedicated security re-review. Neither review nor T-0041 is complete.
+
 ## Canonical Wave 3 Fix Evidence
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
@@ -578,3 +611,16 @@ bytes).
   are green.
 - Canonical re-review and dedicated security re-review remain pending. This log
   does not mark the wave, security gate, or T-0041 complete.
+
+## Wave 4 Coordinator Pre-Review Finding
+
+- Fresh coordinator verification reproduced 9 focused and 130 full native
+  service passes plus green type/docs/lint/format/diff checks.
+- Pre-review source inspection nevertheless found one D-0087 failure-path gap:
+  a failed known-local cancellation forgets its exact owner claim and releases
+  capacity even when no marker was installed, so retry sees the surviving claim
+  as foreign.
+- Return this one confirmed finding to the existing Terra Medium implementer.
+  Require RED/GREEN for local owner/capacity retention through pre-marker
+  storage failure, successful same-ID retry cleanup, and exact-once release.
+  Canonical review package generation waits for that correction.
