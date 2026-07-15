@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: T-0042 final branch gate clean; integration and post-merge closure pending
+Status: T-0042 final branch gate clean; closure documentation review pending
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0042 integration and post-merge closure
+Active implementation frontier: T-0042 closure review, integration, and post-merge closure
 
 ## Purpose
 
