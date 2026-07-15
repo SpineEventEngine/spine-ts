@@ -3612,6 +3612,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Terra Medium, remained sole writer, childless, and Git-clean and is closed.
   Freeze and re-review style, docs, and TypeScript/API; reliability remains N/A.
 
+## D-0096 Pre-Review Lint
+
+- Current task/work/review statuses agree on D-0096 implementation complete and
+  re-review pending. Old-helper and optional-negative-key matches are historical
+  chronology only; current source/docs/checker contain neither.
+- Two intentional predicate exports produce 20/6 counts, active matrix claims
+  are 20, no policy duplication or schema/validator/adapter/server leakage is
+  present, and generated output is absent.
+- Docs distinguish the two fixed paths and narrowing from validation, with no
+  future-policy overclaim. Style, docs, and TypeScript/API re-review; reliability
+  remains N/A under D-0096's stateless/no-I/O/no-adapter-path rationale.
+
 ## D-0096 Fixed-Path Predicate Implementation
 
 - Removed unmerged `hasTransportSignalKind()` without an alias. Added
