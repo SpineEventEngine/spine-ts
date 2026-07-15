@@ -4123,3 +4123,16 @@ Subscription cancellation failed.` instead of `AggregateError`.
   change, no duplicated policy, API leakage, or future-policy claim, and no
   change to any human decision. Freeze for compact style and reliability
   re-review; all other lane N/A dispositions remain valid.
+
+## Full Gate Branch-Coverage Fix Re-Review Assignment
+
+- Correction commit `337ed380`; baseline `621bf2b2`; exact package
+  `.superpowers/sdd/review-621bf2b2..337ed380.diff`; 1 commit; 21,154 bytes.
+- Re-dispatch existing style/maintainability and performance/reliability under
+  explicit immutable Terra High, read-only, childless, Git-read-only, and
+  restricted to the two accepted findings and correction scope. Aggregate both
+  before closure. Historical superseded text is not active.
+- Style must establish independent V8-byte protection without brittle helper
+  coupling or excess duplication. Reliability must establish the deadline,
+  cleanup, continuation, and deterministic frame observation. Documentation,
+  TypeScript/API, and security remain N/A for the test-only correction.
