@@ -3297,3 +3297,26 @@ Subscription cancellation failed.` instead of `AggregateError`.
   correction and affected paths, and must ignore superseded historical text
   unless current task records or changed docs claim it as active. Aggregate the
   entire wave before accepting findings or assigning a correction.
+
+## D-0094 Canonical Re-Review Result
+
+- Style/maintainability `019f6635-f851-7982-9b05-6f2a365ff5c6`, explicit and
+  tool-enforced actual immutable Terra High: accepted the widened-kind
+  correlation defect and one duplicated transport-only test in the server
+  runtime suite; closed.
+- Documentation `019f6635-fbf3-7d01-90b8-b31f79313cfd`, explicit and
+  tool-enforced actual immutable Luna Medium: accepted two ambiguous frame-2
+  Buf claims and an active security header that still names a superseded
+  package/reviewer; closed.
+- TypeScript/API `019f6635-ff98-7861-81f6-8fdc2ecadeb6`, explicit and
+  tool-enforced actual immutable Terra High: independently reproduced the
+  high-severity widened-kind correlation defect; closed.
+- Performance/reliability `019f6636-0300-74e2-8016-6ce36ae87e54`, explicit and
+  tool-enforced actual immutable Terra High: clean within the accepted SF-013
+  residual; closed.
+- The complete wave is aggregated. Correct the operation shapes as a
+  distributive tagged union over `Kind`, add widened/union compile-time
+  regressions, remove the duplicated server test, qualify frame-2 docs by kind,
+  and replace the stale active security assignment. Re-review affected lanes;
+  reliability may retain its clean disposition because no runtime behavior is
+  intended to change.

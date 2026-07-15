@@ -3331,3 +3331,25 @@ verify` remains reserved.
   instructed to ignore superseded historical text unless current records or
   changed docs claim it as active. Results are not accepted until the entire
   wave is complete and deduplicated.
+
+## D-0094 Canonical Re-Review Wave Result
+
+- Style `019f6635-f851-7982-9b05-6f2a365ff5c6`, explicit/actual immutable Terra
+  High: accepted Medium widened-kind correlation bypass and Low duplicated
+  transport-only server test; closed.
+- Documentation `019f6635-fbf3-7d01-90b8-b31f79313cfd`, explicit/actual
+  immutable Luna Medium: accepted P2 frame-2 Buf overgeneralization and P1
+  stale active security package/reviewer; closed.
+- TypeScript/API `019f6635-ff98-7861-81f6-8fdc2ecadeb6`, explicit/actual
+  immutable Terra High: accepted High non-distributive operation contract; a
+  widened `Kind` permits a command topic with a plain non-command envelope;
+  closed.
+- Performance/reliability `019f6636-0300-74e2-8016-6ce36ae87e54`, explicit/
+  actual immutable Terra High: clean within the accepted SF-013 residual;
+  closed.
+- Complete wave accepted. One bounded fix must make publish/request operation
+  types distributive over `Kind`, add union/widened compile regressions, remove
+  the duplicated direct-adapter server test, qualify command/event versus
+  reserved-kind frame-2 docs, and correct the active security assignment.
+  Re-run style, docs, and TypeScript/API; reliability is unaffected unless the
+  correction changes runtime code or execution behavior.
