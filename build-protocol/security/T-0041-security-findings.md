@@ -1,14 +1,14 @@
 # T-0041 Security Findings and Evidence
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
-verified. Canonical Wave 21 is assigned; dedicated security re-review is
-pending.
+verified. Canonical Wave 21 findings are accepted and architecture assignment
+is pending; dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
 implementation evidence ends at `b9f1ea58`; later provenance/review/status
-commits are not implementation evidence. Canonical Wave 21 is assigned and
-dedicated security re-review remains pending. No security acceptance is
-claimed.
+commits are not implementation evidence. Canonical Wave 21 architecture/
+correction and dedicated security re-review remain pending. No security
+acceptance is claimed.
 
 ## Command and evidence ledger
 
@@ -97,7 +97,7 @@ release-blocking and needs focused behavior regression evidence.
 | 5     | Canonical Wave 18                       | Findings fixed; correction verification current.                            |
 | 6     | Canonical Wave 19                       | Finding fixed; correction verification current.                             |
 | 7     | Canonical Wave 20                       | Findings fixed; correction verification current.                            |
-| 8     | Canonical Wave 21                       | Assigned; dedicated security re-review pending.                             |
+| 8     | Canonical Wave 21                       | Findings accepted; architecture assignment pending.                         |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.

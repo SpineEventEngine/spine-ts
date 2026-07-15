@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 21 assigned; dedicated security re-review pending
+Status: Canonical Wave 21 findings accepted; architecture assignment pending;
+dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2652,3 +2653,33 @@ verify` remains reserved.
   dispatched explicitly as existing `performance_reliability_reviewer` with
   immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
   Aggregate style, docs, API, and reliability before action.
+
+## Canonical Review Wave 21 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f6534-1166-75b0-89a5-4076ed9abbd6`: clean.
+- Documentation, immutable Luna Medium,
+  `019f6534-0cde-7da2-b401-ffd9f67fc2a4`: P2 because active implemented/tested
+  SF-007/SF-008/SF-009 and TM-004 claims lack exact source, test, and native-
+  evidence anchors; otherwise clean.
+- TypeScript/API, immutable Terra High,
+  `019f6534-1592-7830-8442-2918b0b4cf3e`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f6536-40b6-7f31-8c54-173bae2354cb`: P1 because already-bound publisher
+  send has no post-await open gate or tracked operation and is absent from close
+  drain; P2 because normal successful-request cleanup and cleanup-only failure
+  lack behavior coverage.
+- Every role used its explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator inspection accepts
+  the complete batch but rejects silently applying a finite publisher timeout:
+  D-0088 and its regression explicitly keep publisher send at native default.
+
+## Canonical Wave 21 Architecture Assignment
+
+- Assign existing `requirements_splitter`, expected explicit immutable
+  `gpt-5.6-sol` / high, read-only, childless, and Git-read-only. Determine the
+  smallest publish/close lifecycle correction that adds the post-await gate,
+  accounts for in-flight sends, avoids native work after close, and guarantees
+  safe settlement without silently changing D-0088/public options or inventing
+  production policy. State whether a decision amendment is unavoidable and
+  provide exact RED/GREEN cases. Implementation remains pending.

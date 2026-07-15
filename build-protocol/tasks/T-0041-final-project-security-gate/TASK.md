@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 21 assigned; dedicated security re-review
-pending
+Status: In progress - Canonical Wave 21 findings accepted; architecture
+assignment pending; dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2507,3 +2507,30 @@ Subscription cancellation failed.` instead of `AggregateError`.
   D-0087-D-0090, affected IPC lifecycle/error paths, current security artifacts,
   and superseded-history exclusion. Aggregate before action; dedicated final
   security review remains pending.
+
+## Canonical Review Wave 21 Result And Architecture Assignment
+
+- Complete result: style and TypeScript/API are clean. Documentation found one
+  P2: active SF-007/SF-008/SF-009 and TM-004 implemented/tested claims lack
+  exact current source, test, and native-evidence anchors.
+- Reliability found P1 because an already-bound publisher can pass the initial
+  open check, race close across `await #publisherFor()`, and send without a
+  second gate or tracked in-flight operation; close currently drains binds,
+  responders, subscribers, and requests only. It also found P2 because ordinary
+  successful-request cleanup and cleanup-only failure lack behavior coverage.
+- Immutable role evidence: style agent
+  `019f6534-1166-75b0-89a5-4076ed9abbd6`, Terra High; docs agent
+  `019f6534-0cde-7da2-b401-ffd9f67fc2a4`, Luna Medium; API agent
+  `019f6534-1592-7830-8442-2918b0b4cf3e`, Terra High; reliability agent
+  `019f6536-40b6-7f31-8c54-173bae2354cb`, Terra High. Every role used its
+  explicit tool-enforced immutable actual profile, no child or Git mutation,
+  and all four are closed.
+- The P1's finite publisher-timeout suggestion conflicts with accepted D-0088,
+  which bounds request/reply only, and with explicit native-default publisher
+  coverage. Assign existing `requirements_splitter`, expected explicit
+  immutable `gpt-5.6-sol` / high, read-only and childless, to select the
+  smallest concurrency/lifecycle correction that prevents post-close native
+  work and settles in-flight publish/close safely without silently changing
+  D-0088 or public options. It must decide whether D-0088 must change and give
+  exact behavior-focused acceptance tests. Implementation waits for this
+  architecture result; dedicated security review remains pending.
