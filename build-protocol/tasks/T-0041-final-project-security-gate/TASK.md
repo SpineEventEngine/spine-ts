@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 15 findings accepted; correction assigned
+Status: In progress - canonical wave 15 correction verified; wave 16 package pending
 
 Started: `2026-07-14`
 
@@ -1993,3 +1993,44 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   Wave 15 and dedicated security pending. No production runtime/public/package/
   Proto/dependency/generated change. Focused checks and all four Canonical Wave
   16 lanes follow.
+
+## Canonical Wave 15 Fix In Progress
+
+- The existing implementer is the sole writer for the accepted test-fixture and
+  security-header correction; no subagents or Git-state mutation. Production
+  runtime, public API/symbols, packages/dependencies, Proto/generated output,
+  D-0087 through D-0090, and other docs remain unchanged.
+- RED: the new pending-sibling regression failed against the prior
+  `Promise.all()` cleanup with `ENOENT` after directory removal at 75 ms, before
+  the sibling bounded close settled. GREEN: cleanup now waits for both
+  independently deadline-wrapped close outcomes, attempts removal, then throws
+  the first close failure in transport order; a removal-only failure remains
+  observable. The two explicit first/second paused-close cases, their inner
+  labels, pending-operation settlement, short helper, and finite outer
+  deadlines remain intact.
+- Both security artifact headers now identify the Wave 14 correction as
+  coordinator-verified while retaining provenance `56934655`, Wave 15 pending,
+  dedicated security pending, and no security acceptance claim. Focused
+  validation passed: ESLint, exact Prettier, `docs:check` (25 copied Proto
+  checksums; API counts `100/28/205/19/17/6/3`), generated-clean, status and
+  public-boundary/manifest/lock scans, and `git diff --check`. Status remains
+  correction in progress pending Canonical Wave 16 and dedicated security
+  review.
+
+## Canonical Wave 15 Correction Coordinator Verification
+
+- Existing implementer `019f64b3-a0af-7ac0-97cc-d6df74a2411c` has matching
+  explicit and actual immutable `gpt-5.6-terra` / medium evidence, spawned no
+  children, made no Git mutation, and is closed.
+- Coordinator inspection accepts all-settlement before removal, deterministic
+  first close failure precedence, removal-only failure preservation, finite
+  underlying-close handling, pending-sibling RED/GREEN coverage, and current
+  security header leads without acceptance.
+- Fresh native transport passed 35/35. Generated build typecheck, docs/API
+  generation with 25 Proto checksums and counts `100/28/205/19/17/6/3`,
+  generated-clean, focused ESLint, exact Prettier, status/resource/public-
+  boundary scans, manifest/lock/package-map integrity, tracked-generated
+  absence, and `git diff --check` all exited 0.
+- Accept for commit. Reconcile immutable provenance and advance all general and
+  security status records to Wave 16 before its package generation. Dedicated
+  security review remains pending.

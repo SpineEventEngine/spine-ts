@@ -1,7 +1,7 @@
 # Spine TS Threat Model
 
 Status: T-0041 working threat model; TM entries remain hypotheses, not confirmed
-findings. Wave 12 is coordinator-verified; Canonical Wave 15 review
+findings. Wave 14 correction is coordinator-verified; Canonical Wave 15 review
 is current and pending, and the dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded

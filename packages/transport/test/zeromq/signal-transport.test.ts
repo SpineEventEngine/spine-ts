@@ -406,6 +406,49 @@ describe("ZeroMQ SignalTransport", () => {
     });
   });
 
+  it("waits for a pending sibling bounded close before removing the shared fixture directory", async () => {
+    const firstCloseFailure = new Error("first shared fixture close failure");
+    const pendingSecondClose = deferred<undefined>();
+    let ipcDirectory: string | undefined;
+    let fixtureOutcome: Promise<unknown> = Promise.resolve<unknown>(undefined);
+    let restoreFirstClose: (() => void) | undefined;
+    let restoreSecondClose: (() => void) | undefined;
+
+    try {
+      fixtureOutcome = withSharedZeroMqTransports((firstTransport, secondTransport, directory) => {
+        ipcDirectory = directory;
+        const firstClose = vi
+          .spyOn(firstTransport, "close")
+          .mockRejectedValueOnce(firstCloseFailure);
+        const secondClose = vi
+          .spyOn(secondTransport, "close")
+          .mockImplementationOnce(() => pendingSecondClose.promise);
+        restoreFirstClose = () => {
+          firstClose.mockRestore();
+        };
+        restoreSecondClose = () => {
+          secondClose.mockRestore();
+        };
+        return Promise.resolve();
+      }).catch((error: unknown) => error);
+
+      await waitFor(closeDeadlineMs / 4);
+      await expect(readdir(ipcDirectory ?? "")).resolves.toEqual([]);
+      await expect(
+        withHarnessDeadline(
+          fixtureOutcome,
+          "outer pending sibling shared fixture cleanup",
+          closeDeadlineMs * 2,
+        ),
+      ).resolves.toBe(firstCloseFailure);
+    } finally {
+      pendingSecondClose.resolve(undefined);
+      await fixtureOutcome;
+      restoreFirstClose?.();
+      restoreSecondClose?.();
+    }
+  });
+
   it("waits for racing request preparation and blocks native connect and send", async () => {
     const prepareDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
     let startPrepare!: () => void;
@@ -1148,22 +1191,45 @@ async function withSharedZeroMqTransports<T>(
   try {
     return await runTest(firstTransport, secondTransport, ipcDirectory);
   } finally {
-    try {
-      await Promise.all([
-        withHarnessDeadline(
-          firstTransport.close(),
-          "first ZeroMQ shared test fixture close",
-          closeDeadlineMs,
-        ),
-        withHarnessDeadline(
-          secondTransport.close(),
-          "second ZeroMQ shared test fixture close",
-          closeDeadlineMs,
-        ),
-      ]);
-    } finally {
-      await rm(ipcDirectory, { recursive: true, force: true });
-    }
+    await closeSharedTransports(firstTransport, secondTransport, ipcDirectory);
+  }
+}
+
+async function closeSharedTransports(
+  firstTransport: ReturnType<typeof createZeroMqTransport>,
+  secondTransport: ReturnType<typeof createZeroMqTransport>,
+  ipcDirectory: string,
+): Promise<void> {
+  const closeOutcomes = await Promise.allSettled([
+    withHarnessDeadline(
+      firstTransport.close(),
+      "first ZeroMQ shared test fixture close",
+      closeDeadlineMs,
+    ),
+    withHarnessDeadline(
+      secondTransport.close(),
+      "second ZeroMQ shared test fixture close",
+      closeDeadlineMs,
+    ),
+  ]);
+  const firstCloseFailure = closeOutcomes.find(
+    (closeOutcome) => closeOutcome.status === "rejected",
+  );
+  let removalFailure: Error | undefined;
+  try {
+    await rm(ipcDirectory, { recursive: true, force: true });
+  } catch (error) {
+    removalFailure =
+      error instanceof Error
+        ? error
+        : new Error("ZeroMQ shared test fixture directory removal failed.");
+  }
+
+  if (firstCloseFailure?.status === "rejected") {
+    throw firstCloseFailure.reason;
+  }
+  if (removalFailure !== undefined) {
+    throw removalFailure;
   }
 }
 

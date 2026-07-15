@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 15 findings accepted; correction assigned
+Status: Canonical wave 15 correction verified; wave 16 package pending
 
 Baseline: `39f2c6f7`
 
@@ -1853,3 +1853,44 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   output, or D-0087-D-0090 behavior changes.
 - Run focused native transport/docs/lint/format/status/diff checks. All four
   Canonical Wave 16 lanes rerun before dedicated final security review.
+
+## Canonical Wave 15 Fix In Progress
+
+- The existing implementer is the sole writer for the accepted bounded batch;
+  no subagents or Git-state mutation. The test fixture now awaits settled
+  outcomes from both existing independently deadline-wrapped closes before
+  attempting IPC-directory removal, then deterministically throws the first
+  transport-order close failure. If no close fails, removal failure remains the
+  result. No production/runtime/public/package/Proto/generated or D-0087-
+  D-0090 change occurred.
+- Mutation/RED evidence: the pending-sibling regression failed against the old
+  `Promise.all()` cleanup because removal made `readdir()` reject `ENOENT` at
+  75 ms, before the sibling bounded close settled. GREEN: the new regression
+  and the retained explicit first/second paused-close cases passed 3/3; it
+  retains the short `expectPausedSharedClose` helper, inner labels,
+  pending-operation settlement, and finite outer deadlines.
+- Fresh focused ESLint and exact Prettier passed. The sandbox suite's IPC
+  `EPERM` was reproduced, then an approved native rerun passed 1 file / 35
+  tests. `docs:check` passed with 25 copied Proto checksums and API counts
+  `100/28/205/19/17/6/3`. Header leads now identify the Wave 14 correction as
+  coordinator-verified while preserving provenance `56934655`, Wave 15 and
+  dedicated-security pending state, and no acceptance claim. Generated-clean,
+  manifest/lock/package-map and public-boundary scans are clean; no stale Wave
+  12 lead remains, and `git diff --check` passed. Full verification was not
+  run; correction remains in progress.
+
+## Canonical Wave 15 Correction Coordinator Verification
+
+- Implementer `019f64b3-a0af-7ac0-97cc-d6df74a2411c` has matching explicit and
+  actual immutable Terra Medium evidence, used no child or Git mutation, and is
+  closed.
+- Coordinator inspection accepts both bounded outcomes before removal, failure
+  precedence, pending-sibling regression, and security leads with no production
+  or public-contract change.
+- Fresh native transport passed 35/35. Generated typecheck, docs/API counts
+  `100/28/205/19/17/6/3`, generated cleanliness, focused lint/format, status and
+  resource scans, package/manifest/lock/generated integrity, and diff integrity
+  passed.
+- Commit and reconcile the endpoint. Advance all general/security status records
+  to Wave 16 before package generation; dedicated final security review remains
+  pending.

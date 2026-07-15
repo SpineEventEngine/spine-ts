@@ -1,7 +1,7 @@
 # T-0041 Security Findings and Evidence
 
-Status: SF-007 through SF-010, D-0087 through D-0090, and Canonical Wave 12
-are coordinator-verified; Canonical Wave 15 review is current and
+Status: SF-007 through SF-010, D-0087 through D-0090, and the Wave 14
+correction are coordinator-verified; Canonical Wave 15 review is current and
 pending, and the dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
