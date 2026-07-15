@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 13 assigned
+Status: Canonical wave 13 findings accepted; timer architecture split assigned
 
 Baseline: `39f2c6f7`
 
@@ -1536,3 +1536,42 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   timer behavior, races, observer behavior, and resource cleanup.
 - All are read-only and use the full ledger plus superseded-history rule.
   Aggregate before action; dedicated security review remains pending.
+
+## Canonical Review Wave 13 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f646c-42ea-7fa3-b6cf-faed12248409`: P2 because the publisher test proves
+  only that timeout is not the caller's 123 rather than proving omission/native
+  default; P2 because shared cleanup covers only the first close, not the
+  symmetric second deadline; P2 stale security-artifact status.
+- Documentation, immutable Luna Medium,
+  `019f646c-464b-7b61-ad30-fc382b6b2b28`: P2 stale security-artifact status; P3
+  architecture text promises a different future transport behind the same
+  contract rather than stating only the initial-release exclusion. All other
+  active subscription, D-0088, six-name, limitation, and link mirrors are clean.
+- TypeScript/API, immutable Terra High,
+  `019f646c-3ea4-78d3-b599-2a94d6b0be96`: Medium because API README verification
+  lists six rather than seven TypeDoc entry points and omits the exact-six
+  ZeroMQ gate. Its High proposal to strip the structural observer at runtime is
+  rejected: D-0089 explicitly preserves that non-exported runtime/test extension
+  and locally typed structural input through the unchanged public factory.
+- Performance/reliability, immutable Terra High,
+  `019f646e-359d-7cd0-8cef-a7b1f5cf541c`: P1 because the public service option
+  accepts long positive `inactiveTtlMs` values but Node clamps delays above
+  2,147,483,647 ms to approximately 1 ms, immediately expiring a subscription
+  that promised a long lifetime.
+- All reviewers used explicit immutable role profiles, spawned no children,
+  made no Git mutation, and are closed. Coordinator inspection and direct Node
+  timer evidence confirm every accepted item.
+
+## Long-TTL Architecture Assignment
+
+- Existing `requirements_splitter`, expected explicit immutable
+  `gpt-5.6-sol` / high, reviews only the long-TTL public contract and lifecycle.
+  Inspect relevant Spine JVM evidence, Node timer bounds, current option TSDoc,
+  storage expiry timestamp semantics, fake-timer tests, and active docs. Choose
+  the smallest correction preserving truthful behavior, with exact acceptance
+  criteria and test/docs scope. Do not implement, mutate Git, or spawn children.
+- One Terra Medium implementer will receive the accepted architecture plus every
+  other Wave 13 finding as a single bounded batch. All four canonical concerns
+  rerun afterward; dedicated final security review remains pending.

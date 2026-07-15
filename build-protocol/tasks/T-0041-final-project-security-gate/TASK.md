@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 13 assigned
+Status: In progress - canonical wave 13 findings accepted; timer architecture split assigned
 
 Started: `2026-07-14`
 
@@ -1678,3 +1678,33 @@ succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
   Git mutation, concrete findings or clean, and superseded-history exclusion.
   Re-review all Wave 12 corrections and retain complete T-0041 scope. Aggregate
   before action; dedicated security review remains pending.
+
+## Canonical Review Wave 13 Result And Architecture Assignment
+
+- Complete accepted findings after coordinator inspection: stale Wave 11/12
+  status in both security artifacts; one architecture sentence overcommitting a
+  future multi-host transport; publisher regression asserting only `not 123`
+  instead of omission/native default; no symmetric second shared-close deadline
+  regression; API README omitting the seventh TypeDoc entry point and exact-six
+  ZeroMQ gate; and P1 immediate expiry when a configured `inactiveTtlMs` exceeds
+  Node's 2,147,483,647 ms timer bound.
+- Explicit immutable Desktop profiles: style
+  `019f646c-42ea-7fa3-b6cf-faed12248409` Terra High; documentation
+  `019f646c-464b-7b61-ad30-fc382b6b2b28` Luna Medium; TypeScript/API
+  `019f646c-3ea4-78d3-b599-2a94d6b0be96` Terra High; reliability
+  `019f646e-359d-7cd0-8cef-a7b1f5cf541c` Terra High. All four spawned no
+  children, made no Git mutation, and are closed.
+- Reject the API lane's proposed removal of runtime structural
+  `onBackgroundFailure`: D-0089 lines 4042-4045 explicitly preserve runtime
+  failure observation through a non-exported internal options extension and
+  permit repository tests to pass a locally typed structural value through the
+  unchanged public factory. The public type/export/TypeDoc boundary remains
+  clean.
+- Assign the existing `requirements_splitter`, expected explicit immutable
+  `gpt-5.6-sol` / high, read-only, to choose the smallest truthful correction
+  for the long-TTL public contract. It must inspect relevant Spine JVM material,
+  Node timer semantics, current TSDoc/docs/tests, and decide between validation
+  or bounded re-arming without changing unrelated queue-limit behavior. No
+  subagents or Git mutation. One Terra Medium implementer receives the complete
+  deduplicated batch after the split; all four canonical lanes rerun before the
+  dedicated security review.
