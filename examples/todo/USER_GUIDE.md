@@ -294,6 +294,9 @@ client, the client has no subscription ID it can cancel. Session abort still
 closes the client transport, while any server record created but never
 activated is removed by the configurable server inactive TTL
 (`SpineServicesOptions.inactiveTtlMs`), which defaults to 30 seconds.
+Non-positive or non-finite values become 1; positive finite values are floored;
+effective values above 2,147,483,647 milliseconds synchronously throw TypeError
+before storage or timer work.
 
 ```js
 import { log } from "node:console";

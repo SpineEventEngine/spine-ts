@@ -333,19 +333,44 @@ Use the generated `QueryService` for registered aggregate or projection state.
 It supports ID-target reads and projection `include_all` reads. Projection
 queries can use declared proto `column` names, equality filters, field masks,
 ordering, and positive limits from `1` through `1000` when ordering is present.
-Invalid criteria fail before state storage is read.
+When the format is absent or its wire limit is zero, the framework applies a
+1,000-row storage safety cap without requiring ordering. Invalid criteria fail
+before state storage is read, and tenant selection is applied before this cap.
 
 Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
 returned `Subscription` message, not its opaque ID alone; pass that message
 when the client is finished. State topics support ID and equality filters;
 event topics currently support `include_all`. Inactive subscription records
-are storage-backed and have a default TTL of 30 seconds. Activation consumes
-the inactive record before attaching delivery; updates from before activation
-are not replayed. Active streams and queued updates are process-local, with a
+are storage-backed and have a default TTL of 30 seconds. Non-positive or
+non-finite values become 1, positive finite values are floored, and an effective
+TTL above 2,147,483,647 milliseconds throws synchronously before storage or
+timer work. Activation atomically
+replaces the inactive row with an owner claim before attaching delivery and
+retains the claim while active; updates from before activation are not replayed.
+Cancel removes an inactive row or same-instance claim through a marker. A claim
+owned by another service instance returns `ABORTED`; a crashed owner may leave a
+stale claim because this release has no claim lease or automatic reclamation.
+Active streams and queued updates are process-local, with a
 default queue cap of 100 updates. Exceeding that cap closes the stream and
-discards its queued updates. Active streams and their queues are not recovered
-or replayed after disconnection or process restart, so clients must query
-current state when they need a fresh view.
+discards its queued updates. `SpineServicesOptions.subscriptionLimit` defaults
+to 100 and bounds pending, inactive, active, and recovered subscriptions owned
+by that `SpineServices` instance; configure a positive safe integer for
+instance-local capacity planning. Each instance has an independent limit, so
+this is neither a process-wide nor a distributed quota. Unknown-ID cancellation
+work uses a separate internal pool with the same bound. Pool exhaustion returns
+Connect `RESOURCE_EXHAUSTED` before storage access. If known-local durable
+cancellation persistence fails, `Cancel` returns Connect `INTERNAL` with
+`Subscription cancellation failed.`, retains that instance's capacity, and the
+client should retry `Cancel` with the same returned `Subscription` message
+containing its ID. This
+retry guidance applies only to an ID returned by `Subscribe`; cleanup after an
+initial failed `Subscribe` stays internal and uses the inactive TTL when its
+timer can be retained. If inactive-expiry cleanup fails after its timer is
+cleared, the instance retains its local record and capacity with no automatic
+retry; explicit `Cancel` with that same returned `Subscription` message
+containing its ID can retry persistence cleanup. Active streams and their queues are not recovered or replayed after
+disconnection or process restart, so clients must query current state when they
+need a fresh view.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -427,6 +452,12 @@ with `createGrpcTransport({ baseUrl: running.baseUrl })`, and exercise command,
 query, and subscription services. This verifies the actual HTTP/2 service
 boundary; it needs an environment that permits loopback listeners.
 
+Network request and response messages default to a 4,194,304-byte uncompressed
+limit. Configure `Server.atPort(port, { readMaxBytes, writeMaxBytes })` only when
+the application needs a different finite bound; both values must be integers
+from 1 through 4,294,967,295. These framework bounds complement, rather than
+replace, deployment ingress and rate limits.
+
 ## 11. Delivery, IPC, and release limits
 
 Process-manager reactions and projection `@Subscribe` handler delivery use
@@ -445,7 +476,12 @@ guarantee.
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and
-keep the directory private. The adapter has no transport-owned retry loops and
+keep the canonical directory beneath a non-attacker-writable parent. POSIX
+directories must be owned by the effective user with exact mode `0700`; final
+links are rejected, while immutable root-owned macOS `/tmp` and `/var` aliases
+are canonicalized. The adapter rechecks the directory immediately before
+native bind/connect, but pathname ZeroMQ cannot eliminate substitution after
+that check. The adapter has no transport-owned retry loops and
 provides no retry or restart guarantee. It also does not provide remote
 transport, durable redelivery, exactly-once delivery, process supervision,
 broad health checks, or production topology.

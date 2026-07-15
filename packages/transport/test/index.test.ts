@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -7,9 +9,13 @@ import {
   type RequestTransportHandler,
   type RequestTransportOperation,
   type SignalTransport,
+  type TransportSignalEnvelope,
   type TransportSignalKind,
+  type TransportTopic,
   createTransportSubscription,
   createTransportTopic,
+  isTransportOperationKind,
+  isTransportTopicKind,
 } from "../src/index.js";
 
 describe("@spine-ts/transport", () => {
@@ -204,10 +210,24 @@ describe("@spine-ts/transport", () => {
       "command" | "event" | "query" | "subscription" | "system"
     >();
 
-    expectTypeOf<PublishTransportOperation<{ id: string }, "event">>().toExtend<{
-      readonly topic: object;
-      readonly envelope: { id: string };
+    expectTypeOf<TransportSignalEnvelope<"command", { id: string }>>().toEqualTypeOf<Command>();
+    expectTypeOf<TransportSignalEnvelope<"event", { id: string }>>().toEqualTypeOf<Event>();
+    expectTypeOf<TransportSignalEnvelope<"system", { id: string }>>().toEqualTypeOf<{
+      id: string;
     }>();
+    expectTypeOf<TransportSignalEnvelope<"query", { id: string }>>().toEqualTypeOf<{
+      id: string;
+    }>();
+
+    expectTypeOf<
+      PublishTransportOperation<{ id: string }, "event">["envelope"]
+    >().toEqualTypeOf<Event>();
+    expectTypeOf<
+      Parameters<PublishTransportHandler<{ id: string }, "event">>[0]["envelope"]
+    >().toEqualTypeOf<Event>();
+    expectTypeOf<
+      Parameters<RequestTransportHandler<{ id: string }, unknown, "command">>[0]["envelope"]
+    >().toEqualTypeOf<Command>();
     expectTypeOf<RequestTransportOperation<{ id: string }, "query">>().toExtend<{
       readonly topic: object;
       readonly envelope: { id: string };
@@ -225,5 +245,276 @@ describe("@spine-ts/transport", () => {
     expectTypeOf<AsyncCloseable["close"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["publish"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["request"]>().returns.resolves.toEqualTypeOf<unknown>();
+
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    const eventTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/spine.core.Event",
+    });
+    const systemTopic = createTransportTopic({
+      signalKind: "system",
+      messageTypeUrl: "type.spine.io/private.SystemMessage",
+    });
+    const commandOperation: PublishTransportOperation<{ id: string }, "command"> = {
+      topic: commandTopic,
+      envelope: create(CommandSchema),
+    };
+    const eventOperation: RequestTransportOperation<{ id: string }, "event"> = {
+      topic: eventTopic,
+      envelope: create(EventSchema),
+    };
+    const invalidCommandOperation: PublishTransportOperation<{ id: string }, "command"> = {
+      topic: commandTopic,
+      // @ts-expect-error command topics require the generated Command envelope.
+      envelope: { id: "plain-command" },
+    };
+    const invalidEventOperation: RequestTransportOperation<{ id: string }, "event"> = {
+      topic: eventTopic,
+      // @ts-expect-error event topics require the generated Event envelope.
+      envelope: { id: "plain-event" },
+    };
+    const validWidenedCommand: PublishTransportOperation<{ id: string }> = {
+      topic: commandTopic,
+      envelope: create(CommandSchema),
+    };
+    const validUnionSystem: RequestTransportOperation<{ id: string }, "event" | "system"> = {
+      topic: systemTopic,
+      envelope: { id: "plain-system" },
+    };
+
+    // @ts-expect-error a widened kind must keep a command topic correlated with Command.
+    const invalidWidenedPublish: PublishTransportOperation<{ id: string }> = {
+      topic: commandTopic,
+      envelope: { id: "plain-command" },
+    };
+    // @ts-expect-error a union kind must keep an event topic correlated with Event.
+    const invalidUnionRequest: RequestTransportOperation<{ id: string }, "event" | "system"> = {
+      topic: eventTopic,
+      envelope: { id: "plain-event" },
+    };
+    const assertExplicitGenericCalls = (transport: SignalTransport): void => {
+      // @ts-expect-error explicit widened publish generics cannot bypass command correlation.
+      void transport.publish<{ id: string }, TransportSignalKind>({
+        topic: commandTopic,
+        envelope: { id: "plain-command" },
+      });
+      // @ts-expect-error explicit union request generics cannot bypass event correlation.
+      void transport.request<{ id: string }, unknown, "event" | "system">({
+        topic: eventTopic,
+        envelope: { id: "plain-event" },
+      });
+    };
+
+    expectTypeOf(commandOperation.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(eventOperation.envelope).toEqualTypeOf<Event>();
+    expectTypeOf(invalidCommandOperation.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(invalidEventOperation.envelope).toEqualTypeOf<Event>();
+    expectTypeOf(validWidenedCommand.envelope).toEqualTypeOf<Command>();
+    expectTypeOf(validUnionSystem.envelope).toEqualTypeOf<{ id: string }>();
+    void invalidWidenedPublish;
+    void invalidUnionRequest;
+    void assertExplicitGenericCalls;
+  });
+
+  it("narrows widened and open operations and topics through fixed kind paths", () => {
+    interface PrivateEnvelope {
+      readonly id: string;
+    }
+    type OpenPublishOperation = PublishTransportOperation<PrivateEnvelope> & {
+      readonly [key: string]: unknown;
+      readonly operationRefinement: "open-operation";
+    };
+    type OpenTopic = TransportTopic & {
+      readonly [key: string]: unknown;
+      readonly topicRefinement: "open-topic";
+    };
+    type OpenDualValue = PublishTransportOperation<PrivateEnvelope> &
+      TransportTopic & {
+        readonly [key: string]: unknown;
+        readonly dualRefinement: "dual";
+      };
+
+    const narrowPublish = (operation: PublishTransportOperation<PrivateEnvelope>): void => {
+      if (operation.topic.signalKind === "command") {
+        // @ts-expect-error a nested kind check does not narrow the complete operation union.
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+      }
+      if (isTransportOperationKind(operation, "command")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+      }
+      if (isTransportOperationKind(operation, "system")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
+      }
+    };
+    const narrowRequest = (
+      operation: RequestTransportOperation<PrivateEnvelope, "event" | "query">,
+    ): void => {
+      if (operation.topic.signalKind === "event") {
+        // @ts-expect-error a nested kind check does not narrow the complete operation union.
+        expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
+      }
+      if (isTransportOperationKind(operation, "event")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
+      }
+      if (isTransportOperationKind(operation, "query")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
+      }
+      // @ts-expect-error restricted operation kinds reject kinds outside their union.
+      isTransportOperationKind(operation, "command");
+    };
+    const narrowTopic = (topic: TransportTopic): void => {
+      if (topic.signalKind === "command") {
+        // @ts-expect-error a nested kind check does not narrow the complete topic contract.
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+      }
+      if (isTransportTopicKind(topic, "command")) {
+        expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
+      }
+    };
+    const rejectUnrelatedTopicKind = (topic: TransportTopic<"command" | "system">): void => {
+      // @ts-expect-error restricted topic kinds reject kinds outside their union.
+      isTransportTopicKind(topic, "event");
+    };
+    const rejectSubscription = (): void => {
+      const subscription = createTransportSubscription({
+        subscriberId: "projection-worker",
+        topic: {
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.TaskCreated",
+        },
+      });
+
+      // @ts-expect-error subscriptions are topic-only containers, not transport operations.
+      isTransportOperationKind(subscription, "event");
+    };
+    const narrowOpenOperation = (operation: OpenPublishOperation): void => {
+      if (isTransportOperationKind(operation, "command")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+        expectTypeOf(operation.operationRefinement).toEqualTypeOf<"open-operation">();
+      }
+    };
+    const narrowOpenTopic = (topic: OpenTopic): void => {
+      if (isTransportTopicKind(topic, "event")) {
+        expectTypeOf(topic.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
+        expectTypeOf(topic.topicRefinement).toEqualTypeOf<"open-topic">();
+      }
+    };
+    const narrowDualValue = (value: OpenDualValue): void => {
+      if (isTransportOperationKind(value, "command")) {
+        expectTypeOf(value.envelope).toEqualTypeOf<Command>();
+        expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
+      }
+      if (isTransportTopicKind(value, "event")) {
+        expectTypeOf(value.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(value.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
+        expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
+      }
+    };
+
+    void narrowPublish;
+    void narrowRequest;
+    void narrowTopic;
+    void rejectUnrelatedTopicKind;
+    void rejectSubscription;
+    void narrowOpenOperation;
+    void narrowOpenTopic;
+    void narrowDualValue;
+  });
+
+  it("narrows only a widened topic's observed top-level signal kind", () => {
+    const widenTopic = (topic: TransportTopic): TransportTopic => topic;
+    const topic = widenTopic(
+      Object.freeze({
+        signalKind: "command",
+        messageTypeUrl: "type.spine.io/spine.core.Command",
+        semanticTags: Object.freeze([]),
+        routing: Object.freeze({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/spine.core.Event",
+          semanticTags: Object.freeze([]),
+          routingKey: "event:type.spine.io%2Fspine.core.Event:",
+        }),
+      }),
+    );
+
+    if (isTransportTopicKind(topic, "command")) {
+      expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
+      expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
+      // @ts-expect-error the helper does not observe or narrow the routing descriptor.
+      expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+    }
+
+    expect(isTransportTopicKind(topic, "command")).toBe(true);
+    expect(topic.routing.signalKind).toBe("event");
+  });
+
+  it("uses each fixed path for an open dual-shaped value without reading its envelope", () => {
+    type OpenDualValue = PublishTransportOperation &
+      TransportTopic & {
+        readonly [key: string]: unknown;
+        readonly dualRefinement: "dual";
+      };
+    const widenDualValue = (value: OpenDualValue): OpenDualValue => value;
+    const eventTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/spine.core.Event",
+    });
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    let envelopeReads = 0;
+    const dualValue = widenDualValue(
+      Object.freeze({
+        ...eventTopic,
+        topic: commandTopic,
+        dualRefinement: "dual",
+        get envelope(): Command {
+          envelopeReads += 1;
+          return create(CommandSchema);
+        },
+      }),
+    );
+
+    expect(isTransportOperationKind(dualValue, "command")).toBe(true);
+    expect(isTransportOperationKind(dualValue, "event")).toBe(false);
+    expect(isTransportTopicKind(dualValue, "event")).toBe(true);
+    expect(isTransportTopicKind(dualValue, "command")).toBe(false);
+    expect(envelopeReads).toBe(0);
+  });
+
+  it("classifies accepted topic and operation domains without inspecting envelopes", () => {
+    const widenTopic = (value: TransportTopic) => value;
+    const widenOperation = (value: PublishTransportOperation) => value;
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    const topic = widenTopic(commandTopic);
+    let envelopeReads = 0;
+    const command = create(CommandSchema);
+    const operation = widenOperation(
+      Object.freeze({
+        topic: commandTopic,
+        get envelope(): Command {
+          envelopeReads += 1;
+          return command;
+        },
+      }),
+    );
+
+    expect(isTransportTopicKind(topic, "command")).toBe(true);
+    expect(isTransportTopicKind(topic, "event")).toBe(false);
+    expect(isTransportOperationKind(operation, "command")).toBe(true);
+    expect(isTransportOperationKind(operation, "event")).toBe(false);
+    expect(envelopeReads).toBe(0);
+    expect(operation.topic).toBe(topic);
+    expect(Object.isFrozen(operation)).toBe(true);
+    expect(Object.isFrozen(topic)).toBe(true);
   });
 });

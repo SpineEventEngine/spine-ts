@@ -94,6 +94,14 @@ remotely synchronized. T-0041 final project-wide security review is the active
 implementation frontier. The dated Starting State above is historical
 plan-creation context.
 
+Post-completion obligation: immediately after T-0042 establishes project
+completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
+documentation, and technical discussions for the accepted D-0093 multipart-
+allocation residual. Report whether the behavior is already known, documented
+workarounds or upstream proposals, and whether Spine TS appears to have found a
+previously undocumented limitation. This research follows completion and does
+not block the initial release definition of done.
+
 ## Initial Release Scope
 
 ### Included

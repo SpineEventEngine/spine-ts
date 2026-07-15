@@ -3924,3 +3924,513 @@ D-0085's environment-owned bounded delivery lifecycle; integrated T-0038b
 uses that completed lifecycle for same-host context transport composition.
 The child sequence remains historical decomposition, not a public API or a
 commitment to excluded policy.
+
+## D-0087: Fence Subscription Activation With Persisted Ownership
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: T-0041 canonical review wave 4 proved that process-local removal
+coordination cannot fence a second `SpineServices` instance sharing the same
+durable subscription storage. Recovery currently CAS-deletes the inactive row
+before remembering the subscription locally, so another instance can report a
+successful cancellation while the winner retains an active process-local
+stream. The same review also proved that arbitrary distinct unknown cancel IDs
+create unbounded process-local removal operations and storage fan-out.
+
+Decision:
+
+- Keep the existing durable inactive-subscription representation compatible,
+  and add package-private JSON-in-`Any` claim and cancellation-marker states.
+  These are internal storage states, not public or generated Protobuf contracts.
+  The shared record spec extracts the ID from all three states.
+- Activation and recovery atomically CAS the exact inactive record to an exact
+  persisted claim containing a unique owner token. The claim remains persisted
+  for the process-local active stream's lifetime. A local record retains the
+  exact claim value needed for later cleanup.
+- Cancellation and terminal cleanup transition an exact owned claim, or an
+  exact inactive record, to a cancellation marker and then conditionally remove
+  that exact marker. Activation, recovery, and cancellation do not use
+  unconditional deletion for lifecycle transitions.
+- A cancellation that wins before activation returns success only after marker
+  cleanup. Same-instance cancellation owns and removes its claim. A cancel that
+  observes another instance's active claim returns `Code.Aborted` with
+  `Subscription is active in another service instance.` because no cross-process
+  channel can close that process-local stream truthfully.
+- Same-ID cancels share one local removal operation. Two instances cancelling
+  one inactive record may both succeed after absence is established. Missing-ID
+  and confirmed-absent cancellation remain idempotent successes.
+- Marker cleanup/storage failure returns `Code.Internal` with `Subscription
+cancellation failed.` and leaves a marker when one was installed, so later
+  activation remains fenced and a later cancellation can retry cleanup.
+  Repeated concurrent changes use at most three state retries before
+  `Code.Aborted` with `Subscription cancellation could not settle concurrent
+storage changes.`
+- Distinct non-local cancellation operations use a separate per-instance set
+  bounded by `subscriptionLimit`. Same-ID work shares one slot. Overflow is
+  rejected before any storage operation with `Code.ResourceExhausted` and
+  `Subscription cancellation capacity is exhausted.` Known local cleanup keeps
+  its normal subscription reservation until persistence settles and does not
+  consume the unknown-cancellation pool.
+- Recovery that observes a claim or cancellation marker never reserves,
+  remembers, or attaches the subscription. It may conditionally clean a marker.
+  Existing inactive records need no migration.
+
+Consequences:
+
+- A successful cancellation cannot coexist with an activation revived from the
+  canceled persistent record. If remote activation already won, cancellation
+  reports conflict instead of false success.
+- Process crashes may leave an active claim without a live stream. Without a
+  lease or cross-process liveness protocol, other instances cannot distinguish
+  that stale claim from a live owner. Recovery remains blocked and remote
+  cancellation remains `Aborted`; lease reclamation is a separate excluded
+  feature.
+- No public service, package export, `RecordStorage`, generated Protobuf,
+  manifest, or lockfile change is introduced.
+
+Clarification (2026-07-15): when an inactive-to-claim CAS reports an error,
+the same storage handle reads once to reconcile it. Only byte-exact proposed
+claims are adopted and continue activation; the exact prior inactive record
+propagates the original error, while absent or changed valid states retain the
+existing lost/canceled result. If the reconciliation read or decode fails, the
+original CAS error is propagated but the exact local owner token and reservation
+remain inert for same-instance `Cancel`; no attachment occurs. Foreign or stale
+claims are never adopted.
+
+## D-0088: Bound ZeroMQ Request Timeouts
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision: `ZeroMqTransportOptions.requestTimeoutMs` defaults to 2,000 when
+omitted. Explicit values must be integers from 1 through 2,147,483,647; every
+other value throws `TypeError: ZeroMQ transport requestTimeoutMs must be an
+integer from 1 through 2147483647.` synchronously before filesystem or socket
+work. This bounds request/reply send and receive waits only. `receiveTimeoutMs`
+is unchanged, and no active cancellation of an already-sent request is added.
+
+Consequences: callers cannot select zero, negative, fractional, non-finite, or
+overflowing request timeouts that could permit an indefinitely blocked request
+or close. The public type remains `number`; runtime validation is the contract.
+
+## D-0089: Keep ZeroMQ Failure Observation Internal
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: Canonical review found that `ZeroMqTransportOptions` emits
+`onBackgroundFailure` publicly even though its TSDoc and design treat it as an
+adapter-private test/failure-observation hook. The initial release has no public
+monitoring subsystem, while repository transport and cross-process tests still
+need deterministic observation of background-loop failures.
+
+Decision:
+
+- The public `ZeroMqTransportOptions` contains exactly `requestTimeoutMs` and
+  `receiveTimeoutMs`. Remove `onBackgroundFailure` from that interface rather
+  than stabilizing or documenting a new public monitoring extension point.
+- Preserve existing runtime failure observation, including swallowed observer
+  exceptions, through a non-exported internal options extension. Repository
+  tests may pass a locally typed structural value; no internal option type or
+  observer is exported from `@spine-ts/transport/zeromq`.
+- Keep the public factory signature and package export map unchanged. Add the
+  existing published ZeroMQ subpath index as a distinct TypeDoc entry point and
+  gate its exact six public names independently from the 17 root transport
+  names. Explicitly reject the private observer from generated API metadata.
+- Test-only liveness deadlines and cleanup bounds may prove request settlement
+  before close completion. They do not introduce production timers,
+  cancellation, monitoring, retry, or scheduler policy.
+
+Consequences:
+
+- This is an intentional pre-release source-contract correction with no runtime
+  behavior removal for repository tests. Consumers receive a smaller truthful
+  public options type and complete docs/export regression coverage for the
+  already-published ZeroMQ subpath.
+- Public logging callbacks, event emitters, health interfaces, and broader
+  monitoring remain excluded. D-0087, D-0088, Protobuf contracts, dependencies,
+  package entrypoints, and generated-output policy remain unchanged.
+
+## D-0090: Bound Inactive Subscription TTLs
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision: `SpineServicesOptions.inactiveTtlMs` defaults to 30,000 milliseconds.
+It preserves existing normalization: non-positive or non-finite values become
+1; positive finite values are floored. After normalization, an effective value
+above 2,147,483,647 throws synchronously before storage or timer work with
+`TypeError: SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.`
+
+Consequences: an accepted subscription has one absolute durable `expiresAtMs`
+and one unref'ed expiry timer. Activation and cancellation still clear that
+timer; recovery and expiry-cleanup failure retention remain unchanged. Expiry
+cleanup failure has no automatic retry, and same-ID `Cancel` remains the
+explicit retry path. No value capping, timer chunking, re-arming policy,
+`queueLimit` behavior, or shared `positiveInteger()` behavior is introduced.
+
+## D-0091: Bound Private Transport And Durable Record Bytes
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision:
+
+- Every application-message-receiving ZeroMQ `Subscriber`, `Request`, and
+  `Reply` socket sets the private native `maxMessageSize` option to 8,388,608
+  bytes before any connect, bind, receive, send, or handler work. `Publisher`
+  does not receive application messages and keeps its native
+  `sendTimeout = -1`. No sender preflight or public transport option is added.
+- Durable subscription JSON-in-`Any` state rejects `Any.value.byteLength`
+  above 33,554,432 before UTF-8 decoding, JSON parsing, Base64 validation or
+  expansion, and Protobuf decoding. The one guard applies to inactive, claim,
+  cancellation-marker, and unknown internal stored type URLs because they
+  converge on one JSON reader.
+- The 8 MiB frame cap leaves more than 4 MiB headroom above current V8 envelope
+  and accepted-reply encodings of a 4,194,304-byte Protobuf message. The 32 MiB
+  durable cap covers current worst-case service-supported subscription
+  encoding: 4,194,351 binary bytes, 5,592,468 Base64 bytes, and 30,758,240 JSON
+  bytes with adversarial sixfold escaping, leaving 2,796,192 bytes headroom.
+
+Consequences:
+
+- No type URL, JSON property, Base64 representation, `Any`, Protobuf, storage
+  interface, package export, or public option changes. Existing durable values
+  at or below 32 MiB remain byte-for-byte compatible and need no migration.
+  Values above 32 MiB become inert malformed state because they are outside the
+  supported service-generated envelope.
+- Oversized native frames are rejected by libzmq before V8 deserialization and
+  handler invocation. Oversized durable values fail before parser/decoder work;
+  existing malformed-row recovery/cancellation semantics keep them unchanged
+  and fail closed while unrelated valid work continues.
+- D-0087 through D-0090 remain unchanged. Deployment continues to own ingress,
+  rate limits, same-host process isolation, and persistence-adapter integrity.
+
+Clarification (2026-07-15): `maxMessageSize` is a per-ZeroMQ-frame limit. It
+rejects an oversized individual frame before that frame's payload allocation,
+but does not limit multipart frame count or aggregate multipart bytes and must
+not be cited as an aggregate bound.
+
+## D-0092: Reject Single-Frame Encoding As A Native Multipart Bound
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: SF-013 established that zeromq.js 6.5.0 materializes every part of an
+inbound multipart ZeroMQ message as `Buffer[]` before returning from
+`receive()`. Consolidating valid publish and request traffic into one frame
+would bound each conforming message, but a peer could still append arbitrarily
+many individually bounded or empty frames. JavaScript exact-one-frame
+validation would run only after the complete multipart message had been
+allocated. Delimiter-free route concatenation is also unsafe because canonical
+routing keys are not prefix-free; a NUL delimiter removes that ambiguity but
+does not remove the allocation bypass.
+
+Decision:
+
+- Do not adopt single-frame encoding as the SF-013 correction and do not
+  describe `maxMessageSize` as an aggregate inbound-message bound.
+- Preserve D-0088 and D-0091, including Publisher `sendTimeout = -1`, while
+  applying D-0091's native limit only as a per-frame control.
+- T-0041 remains release-blocked until the receiving implementation rejects an
+  inbound part before allocation when either the permitted frame count or
+  aggregate byte count would be exceeded. Subscriber and Reply require at most
+  two parts and Request at most one; every inbound application message has an
+  8,388,608-byte aggregate maximum.
+- JavaScript exact-frame validation may be added as defense in depth, but is not
+  native/V8 allocation prevention and cannot close SF-013.
+- Without a native or replacement-binding control, the unbounded same-host DoS
+  residual requires explicit human risk acceptance.
+
+Consequences:
+
+- No public/package/Proto/storage contract changes are accepted by this
+  decision. Existing valid wire traffic and deployment responsibilities remain
+  unchanged.
+- Native dependency selection must account for cross-platform prebuilds,
+  lockfile/install-script provenance, continuation after peer rejection, and
+  focused SF-013 security review.
+
+## D-0093: Use Protobuf Wire Encoding And Accept Multipart Trailer Risk
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: The SF-013 investigation established two separate facts. First,
+`maxMessageSize = 8_388_608` is a maximum accepted size for each inbound frame;
+it does not reserve or allocate 8 MiB for every ordinary frame. A small routing
+key and small signal therefore retain their actual small buffer sizes. Second,
+zeromq.js 6.5.0 materializes the complete multipart message before JavaScript
+can ignore trailers, so consuming only the protocol prefix does not prevent a
+peer from forcing native allocation with arbitrarily many individually valid
+frames.
+
+The human explicitly challenged the prior design and then selected the release
+policy in these terms:
+
+- "The 8MiB size just to send signals is bullshit. They are typically tiny."
+- "Buf's implementation has Proto-compatible serialization mechanism. I don't
+  understand why we don't use that, but use some generic V8 stuff. This is also
+  not OK to me."
+- "Use Buf's serialization, not V8's when dealing with Proto messages."
+- "Keep 8 MiB as a hard upper limit."
+- "Take only two first frames from the payload. Ignore the rest."
+- "On this stage I don't care if someone breaks into our ZeroMQ server and
+  feeds a lot of junk to it."
+
+Decision:
+
+- Protobuf signal messages crossing the ZeroMQ adapter use the generated Buf
+  Protobuf schemas and binary encoding. Node V8 serialization must not encode
+  or decode those Protobuf messages.
+- Preserve `8_388_608` bytes as the hard inbound limit for each ZeroMQ frame.
+  This is a rejection ceiling, not an expected frame size or a fixed per-send
+  allocation.
+- Preserve routing plus serialized signal as the normal two-frame publish and
+  request wire shape. Receivers consume only the protocol-defined prefix,
+  never more than the first two frames. A reply that defines one meaningful
+  frame consumes that frame. Any later multipart frames are ignored.
+- Accept SF-013 for the initial release: a process able to connect to the
+  private same-host IPC endpoint can append unlimited individually bounded
+  frames, and zeromq.js may allocate them before application code ignores them.
+  Do not build or fork a native receive path for this release.
+- After the framework, documentation, user guide, example, and release closure
+  are complete, perform a separate Internet review of known ZeroMQ/libzmq and
+  zeromq.js multipart-allocation issues and discussions. Report whether SF-013
+  is already known, available workarounds, upstream proposals, and whether the
+  project appears to have found a previously undocumented limitation.
+
+Reasoning:
+
+- Schema-aware Buf binary encoding preserves the actual Protobuf wire contract,
+  avoids a Node/V8-specific object serialization layer, and makes payload size
+  and compatibility reasoning correspond to generated message schemas.
+- Eight MiB remains a conservative hard ceiling while ordinary signals retain
+  their actual typically small allocations. The ceiling does not imply two
+  8 MiB allocations per dispatch.
+- Ignoring trailers gives deterministic application semantics for the accepted
+  two-frame protocol. It does not mitigate native multipart allocation; that
+  distinction remains explicit rather than being claimed as a security control.
+- The remaining attack requires access to the private same-host IPC endpoint.
+  The human accepts that availability risk at this stage and prefers completing
+  the framework over introducing a native dependency fork or replacement.
+
+Consequences:
+
+- D-0092 remains technically accurate about zeromq.js allocation behavior, but
+  its release-blocking disposition is superseded by this explicit human risk
+  acceptance.
+- T-0041 must implement and test Buf encoding for Protobuf signal envelopes,
+  preserve the per-frame cap, and characterize prefix-only trailer handling.
+- Because the change concerns a serialized boundary and may affect the public
+  adapter-neutral transport contract, a bounded architecture split must first
+  select the smallest compatible ownership seam and exact tests. It must not
+  broaden the public API unnecessarily.
+- SF-013 remains documented as an accepted Medium same-UID local availability
+  residual. It is not described as fixed, bounded in aggregate, or prevented by
+  ignoring trailers.
+- The post-completion Internet review is a required follow-up, but it does not
+  block initial project completion or T-0041 security acceptance.
+
+## D-0094: Correlate Transport Kinds With Protobuf Envelopes
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: D-0093 made ZeroMQ `command` and `event` frames concrete Buf binary,
+but the adapter-neutral TypeScript contract still allowed callers to choose an
+unrelated generic envelope for either kind. The concrete adapter cast that
+generic to `Command` or `Event`, so the public type promised values the runtime
+would not preserve. Canonical TypeScript/API review correctly rejected that
+false promise. The same review found that manual `$typeName` detection for
+successful replies was undocumented and appeared to reject arbitrary objects.
+
+Decision:
+
+- Add public conditional type `TransportSignalEnvelope<Kind, OtherEnvelope>`.
+  It resolves `command` to generated `Command`, `event` to generated `Event`,
+  and preserves `OtherEnvelope` for `query`, `subscription`, and `system`.
+- Apply that conditional to publish/request operations and their handlers while
+  preserving existing generic parameter order. Correct command/event uses stay
+  source-compatible; incorrect arbitrary command/event envelopes become compile
+  errors.
+- Export `TransportSignalEnvelope` from the transport root. This is one
+  intentional public type correction; the root export count becomes 18 and the
+  ZeroMQ subpath remains 6. No codec option, schema registry, or public socket
+  concept is introduced.
+- Replace the manual reply-shape check with Buf's official `isMessage(value)`
+  predicate without a schema argument. The ZeroMQ private reply wrapper rejects
+  every generated-message-shaped successful reply instead of V8-serializing it.
+  Do not introduce or special-case `Ack`.
+- For this ZeroMQ reply seam, an object with a string `$typeName` is reserved as
+  a Buf generated-message shape. Document that adapter behavior. A caller that
+  needs a plain private result must not use the reserved generated-message
+  discriminator.
+
+Reasoning:
+
+- Correlating kinds and envelopes makes TypeScript describe the actual wire and
+  handler values; moving tests to another kind cannot substitute for an honest
+  public contract.
+- The conditional type preserves caller-selected values for kinds that have no
+  Proto contract and avoids a larger codec-registration abstraction.
+- Buf 2.12.1 implements `isMessage(value)` using the generated-message
+  `$typeName` convention. Schema-specific checks for only `Command` and `Event`
+  would permit another Proto message such as `Ack` to fall through to V8,
+  contradicting D-0093 and the human's explicit no-V8-for-Proto rule.
+- Reserving the discriminator on this private reply seam is smaller and more
+  honest than inventing a public reply Proto or pretending arbitrary generated
+  schemas can be encoded without their descriptors.
+
+Consequences:
+
+- Add compile-time coverage for command/event correlation, non-Proto generic
+  preservation, generated-message acceptance, and plain-object rejection.
+- Correct stale test generic kinds, assert the exact malformed-command failure,
+  and prove the responder continues after rejected Proto reply values.
+- Public wire docs state exact frame positions, per-frame ceiling versus actual
+  allocation, private non-`Ack` replies, the reserved `$typeName` reply shape,
+  mixed-version incompatibility, and the accepted aggregate residual.
+- All four canonical lanes re-review the correction before focused final
+  security review. D-0093's wire, cap, framing, and risk acceptance remain
+  unchanged.
+
+## D-0095: Narrow Transport Unions Through The Canonical Topic Kind
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: D-0094's distributive operation aliases reject invalid widened or
+union topic/envelope pairs. TypeScript does not, however, propagate a check of
+the nested `operation.topic.signalKind` discriminator to the outer operation
+union. A valid widened handler therefore cannot recover the promised concrete
+envelope type, and a widened topic is similarly awkward to consume.
+
+Decision:
+
+- Add public overloaded predicate `hasTransportSignalKind()` for transport
+  operations and topics. It compares only the canonical
+  `topic.signalKind` value and narrows the complete operation or topic to the
+  selected kind.
+- Keep operation object shapes, topic shapes, method generic order, and runtime
+  wire behavior unchanged. The helper adds one root export, taking the
+  transport root count from 18 to 19; the ZeroMQ subpath remains 6.
+- Treat the predicate as a typed narrowing aid, not as validation of untrusted
+  input or envelope content. It must not inspect or mutate the envelope.
+- Mechanically prove the proposed generic `Extract` predicate with the project
+  TypeScript version before acceptance. If it cannot narrow publish, request,
+  and widened-topic cases as specified, return to architecture instead of
+  adding duplicated state or reshaping the public contract.
+
+Reasoning:
+
+- A top-level operation `signalKind` would make native switch narrowing easy,
+  but duplicates `topic.signalKind`, makes all existing operation literals
+  source-incompatible, creates mismatch states, and requires runtime consistency
+  validation.
+- Making `TransportTopic` distributive does not solve nested-discriminant
+  narrowing for the outer operation. Flattening the operation would cause
+  broader public and adapter churn.
+- An additive predicate preserves existing construction and inference while
+  giving callers an explicit, standard TypeScript narrowing mechanism backed
+  by the one canonical runtime kind.
+
+Consequences:
+
+- Add compile-time tests for command/event and reserved-kind operation
+  narrowing, restricted-kind rejection, widened-topic/routing narrowing, and
+  preservation of all invalid-pair regressions.
+- Add small runtime tests proving true/false comparison through the canonical
+  topic kind without envelope inspection or mutation.
+- Document the helper and update exact TypeDoc/API export checks to 19/6. Do not
+  commit generated documentation or declarations.
+- Re-review style/maintainability, documentation, and TypeScript/API. Runtime
+  performance/reliability remains unaffected; focused final security confirms
+  the helper is not represented as input validation and that D-0093 remains
+  unchanged.
+
+## D-0096: Separate Transport Operation And Topic Kind Predicates
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Supersedes: D-0095's single overloaded-helper decision only. D-0094's
+distributive kind/envelope correlation remains accepted.
+
+Context: Repeated TypeScript/API review showed that one overloaded predicate
+must choose a runtime path from overlapping structural shapes. Optional-`never`
+exclusions reject known intersections but open/string-index types can erase
+those negative constraints and restore false predicate guarantees. Exact-object
+typing is not available for this public structural contract.
+
+Decision:
+
+- Remove unmerged `hasTransportSignalKind()` without a deprecated alias.
+- Add `isTransportOperationKind()`, which always compares
+  `operation.topic.signalKind`, and `isTransportTopicKind()`, which always
+  compares `topic.signalKind`.
+- Each predicate narrows only what its fixed path establishes. The operation
+  predicate narrows the correlated operation union; the topic predicate narrows
+  only top-level `topic.signalKind` and does not validate or narrow
+  `topic.routing.signalKind`.
+- Preserve every operation/topic shape and `SignalTransport` generic order.
+  Both names satisfy the four-component public-name limit.
+- Keep the predicates as typed narrowing aids, not validators of untrusted
+  values or envelopes. Neither predicate inspects the envelope.
+- Transport root exports become 20; ZeroMQ remains 6.
+
+Reasoning:
+
+- Function identity now selects the runtime path. Extra properties, open index
+  signatures, and dual-shaped values cannot redirect either implementation.
+- A single helper with `keyof` or negative-key exclusions remains unsound after
+  widening to key-erasing structural supertypes. `NoInfer` controls inference;
+  it does not create exact object types.
+- Keeping only an operation helper leaves widened topics unresolved, while
+  removing both helpers forces duplicated custom guards or casts throughout
+  consumers.
+
+Consequences:
+
+- Compile and runtime tests cover widened/restricted publish, request, and topic
+  inputs; open/index-signature types; dual-shaped values; invalid pair
+  preservation; fixed runtime paths; zero envelope access; and an intentionally
+  inconsistent widened topic proving unobserved routing remains widened.
+- Remove optional-`never`, shape classification, collision precedence, and
+  collision rejection from the D-0095 implementation. Update active API and
+  release inventory counts from 19 to 20.
+- Public helper runtime code changes. ZeroMQ, adapter, server, wire, frame,
+  allocation, concurrency, lifecycle, and accepted SF-013 behavior do not.
+- Re-review style/maintainability, documentation, and TypeScript/API.
+  Performance/reliability remains N/A for stateless equality predicates.

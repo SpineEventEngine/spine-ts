@@ -1,5 +1,5 @@
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -84,7 +84,7 @@ import {
   type RecordSpec,
   type StorageContext,
 } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -301,6 +301,103 @@ describe("SpineServices", () => {
       expect(ack.status?.status.value).toEqual(create(EmptySchema));
       expect(ack.messageId?.typeUrl).toBe(deriveTypeUrl(CommandIdSchema));
       expect(observed).toEqual(["command-1"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects an uncompressed request message above the configured network bound", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: server.baseUrl, writeMaxBytes: 10_000 }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("oversized-command", undefined, "x".repeat(2_000))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("defaults the request message bound to 4,194,304 uncompressed bytes", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context] }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: server.baseUrl, writeMaxBytes: 5_000_000 }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("default-bound", undefined, "x".repeat(4_194_304))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a compressed request whose uncompressed message exceeds the network bound", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        CommandService,
+        createGrpcTransport({
+          baseUrl: server.baseUrl,
+          writeMaxBytes: 10_000,
+          sendCompression: compressionGzip,
+          compressMinBytes: 0,
+        }),
+      );
+
+      await expect(
+        client.post(createProjectionCommand("compressed-command", undefined, "x".repeat(2_000))),
+      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+      expect(observed).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a response message above the configured network bound", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "x".repeat(2_000)));
+    const server = await new Server({ contexts: [context], writeMaxBytes: 512 }).start();
+
+    try {
+      const client = createClient(
+        QueryService,
+        createGrpcTransport({ baseUrl: server.baseUrl, readMaxBytes: 10_000 }),
+      );
+
+      await expect(client.read(createQuery("task-1"))).rejects.toMatchObject({
+        code: Code.ResourceExhausted,
+      } satisfies Partial<ConnectError>);
     } finally {
       await server.close();
     }
@@ -754,6 +851,73 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("error");
     expect(responseErrorMessage(response)).toBe("QueryService.Read limit requires ordering.");
+  });
+
+  it("adds the implicit storage query cap without requiring ordering", async () => {
+    const observedQueries: RecordQuery<unknown>[] = [];
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      queryVersioned: (_schema, query) => {
+        observedQueries.push(query as RecordQuery<unknown>);
+        return Promise.resolve([]);
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    await handlers.read(createIncludeAllQuery());
+    await handlers.read(createFormattedQuery(create(ResponseFormatSchema, { limit: 0 })));
+    await handlers.read(
+      createFormattedColumnFilterQuery("name", packStringId("Open"), create(ResponseFormatSchema)),
+    );
+    await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          limit: 7,
+          orderBy: [
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    expect(observedQueries.map((query) => query.limit)).toEqual([1_000, 1_000, 1_000, 7]);
+  });
+
+  it("applies tenant filtering before the implicit storage query cap", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+    const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
+      context
+        .stand()
+        .update(
+          ProjectionStateSchema,
+          createState(`tenant-a-${String(index)}`, `Tenant A ${String(index)}`),
+          { tenantId: "tenant-a" },
+        ),
+    );
+    await Promise.all(tenantAUpdates);
+    await context.stand().update(ProjectionStateSchema, createState("tenant-b-1", "Tenant B 1"), {
+      tenantId: "tenant-b",
+    });
+    await context.stand().update(ProjectionStateSchema, createState("tenant-b-2", "Tenant B 2"), {
+      tenantId: "tenant-b",
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const tenantA = await handlers.read(createIncludeAllQuery("tenant-a"));
+    const tenantB = await handlers.read(createIncludeAllQuery("tenant-b"));
+
+    expect(tenantA.message).toHaveLength(1_000);
+    expect(tenantB.message.map((message) => unpackProjectionState(message.state)?.id)).toEqual([
+      "tenant-b-1",
+      "tenant-b-2",
+    ]);
   });
 
   it("rejects malformed ordering before reading storage", async () => {
@@ -2271,6 +2435,623 @@ describe("SpineServices", () => {
     expect(() => handlers.subscribe(createTopic())).not.toThrow();
   });
 
+  it("keeps the maximum inactive subscription TTL as one absolute durable expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-15T00:00:00.000Z"));
+      const contextName = "MaximumInactiveSubscriptionTtl";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 2_147_483_647 },
+      );
+      const startedAtMs = Date.now();
+      const subscription = await handlers.subscribe(createTopic());
+      const subscriptionId = subscription.id?.value ?? "missing";
+      const durable = await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        subscriptionId,
+      );
+
+      expect(vi.getTimerCount()).toBe(1);
+      expect(DurableSubscriptionRecords.read(durable ?? create(AnySchema)).expiresAtMs).toBe(
+        startedAtMs + 2_147_483_647,
+      );
+
+      await handlers.cancel(subscription);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects oversized effective inactive subscription TTLs before timer or storage work", () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "OversizedInactiveSubscriptionTtl";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const context = createSubscriptionContext(contextName, storageFactory);
+      const timer = vi.spyOn(globalThis, "setTimeout");
+
+      try {
+        for (const inactiveTtlMs of [
+          2_147_483_648,
+          Number.MAX_SAFE_INTEGER,
+          Number.MAX_SAFE_INTEGER + 1,
+        ]) {
+          expect(() => new SpineServices({ contexts: [context], inactiveTtlMs })).toThrow(
+            new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds."),
+          );
+        }
+
+        expect(timer).not.toHaveBeenCalled();
+        expect(storageFactory.subscriptionStorageCalls).toBe(0);
+      } finally {
+        timer.mockRestore();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("validates the per-instance subscription capacity", () => {
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+
+    for (const subscriptionLimit of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() => new SpineServices({ contexts: [context], subscriptionLimit })).toThrow(
+        "subscriptionLimit must be a positive safe integer",
+      );
+    }
+  });
+
+  it("reserves capacity synchronously across concurrent subscription persistence", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const first = handlers.subscribe(createTopic());
+
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      }),
+    );
+
+    const subscription = await first;
+    await handlers.cancel(subscription);
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("defaults the per-instance subscription capacity to 100", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const subscriptions = await Promise.all(
+      Array.from({ length: 100 }, () => Promise.resolve(handlers.subscribe(createTopic()))),
+    );
+
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await Promise.all(
+      subscriptions.map((subscription) => Promise.resolve(handlers.cancel(subscription))),
+    );
+  });
+
+  it("bounds unknown cancellations separately and shares duplicate work", async () => {
+    const contextName = "BoundedUnknownCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 2 },
+    );
+    const started = new Map<string, ReturnType<typeof deferred<undefined>>>();
+    const released = new Map<string, ReturnType<typeof deferred<undefined>>>();
+    const reads: string[] = [];
+    for (const id of ["unknown-a", "unknown-b", "unknown-c"]) {
+      started.set(id, deferred<undefined>());
+      released.set(id, deferred<undefined>());
+    }
+    storageFactory.readHook = async (id, readRecord) => {
+      reads.push(id);
+      started.get(id)?.resolve(undefined);
+      await released.get(id)?.promise;
+      return await readRecord();
+    };
+    const unknown = (id: string) =>
+      create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: id }) });
+
+    const first = Promise.resolve(handlers.cancel(unknown("unknown-a")));
+    const duplicate = Promise.resolve(handlers.cancel(unknown("unknown-a")));
+    const second = Promise.resolve(handlers.cancel(unknown("unknown-b")));
+    await Promise.all([started.get("unknown-a")?.promise, started.get("unknown-b")?.promise]);
+
+    await expect(handlers.cancel(unknown("unknown-c"))).rejects.toMatchObject({
+      code: Code.ResourceExhausted,
+      rawMessage: "Subscription cancellation capacity is exhausted.",
+    } satisfies Partial<ConnectError>);
+    expect(reads).toEqual(["unknown-a", "unknown-b"]);
+
+    released.get("unknown-a")?.resolve(undefined);
+    await Promise.all([first, duplicate]);
+    const third = Promise.resolve(handlers.cancel(unknown("unknown-c")));
+    await started.get("unknown-c")?.promise;
+    released.get("unknown-b")?.resolve(undefined);
+    released.get("unknown-c")?.resolve(undefined);
+    await Promise.all([second, third]);
+
+    expect(reads).toEqual(["unknown-a", "unknown-b", "unknown-c"]);
+  });
+
+  it("releases unknown cancellation capacity after a storage failure", async () => {
+    const contextName = "FailedUnknownCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    let failed = false;
+    storageFactory.readHook = async (id, readRecord) => {
+      if (!failed) {
+        failed = true;
+        throw new ConnectError("storage unavailable", Code.Unavailable);
+      }
+      return await readRecord();
+    };
+    const unknown = (id: string) =>
+      create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: id }) });
+
+    await expect(handlers.cancel(unknown("unknown-failed"))).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    await expect(handlers.cancel(unknown("unknown-retry"))).resolves.toBeDefined();
+  });
+
+  it("bounds cancellation CAS conflicts and releases unknown capacity", async () => {
+    const contextName = "ConflictingUnknownCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const creator = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await creator.subscribe(createTopic());
+    storageFactory.compareAndSetResult = false;
+
+    await expect(handlers.cancel(subscription)).rejects.toMatchObject({
+      code: Code.Aborted,
+      rawMessage: "Subscription cancellation could not settle concurrent storage changes.",
+    } satisfies Partial<ConnectError>);
+    expect(storageFactory.compareAndSetCalls).toBe(3);
+
+    storageFactory.compareAndSetResult = undefined;
+    const unknown = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "unknown-after-conflict" }),
+    });
+    await expect(handlers.cancel(unknown)).resolves.toBeDefined();
+  });
+
+  it("releases capacity and cleans durable state after subscription persistence fails", async () => {
+    const contextName = "FailedSubscriptionPersistence";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    storageFactory.writeError = new Error("write failed");
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("write failed");
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("write failed");
+    expect(storageFactory.deleteCalls).toBe(0);
+  });
+
+  it("retains ambiguous persistence until inactive cleanup settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "AmbiguousSubscriptionPersistence";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const writeError = new Error("write outcome is ambiguous");
+      storageFactory.writeCommitError = writeError;
+      let readCalls = 0;
+      storageFactory.readHook = async (_id, readRecord) => {
+        readCalls += 1;
+        if (readCalls === 1) {
+          throw new Error("initial cleanup read failed");
+        }
+        return await readRecord();
+      };
+      const cleanupDone = deferred<undefined>();
+      storageFactory.cancelCleanupHook = async (cleanup) => {
+        const cleaned = await cleanup();
+        cleanupDone.resolve(undefined);
+        return cleaned;
+      };
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 10, subscriptionLimit: 1 },
+      );
+
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      const retained = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: retainedId }),
+      });
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeDefined();
+      storageFactory.writeCommitError = undefined;
+      let capacityError: unknown;
+      try {
+        await handlers.subscribe(createTopic());
+      } catch (error) {
+        capacityError = error;
+      }
+      expect(capacityError).toMatchObject({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>);
+      await expect(handlers.activate(retained)[Symbol.asyncIterator]().next()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      });
+
+      await vi.advanceTimersByTimeAsync(10);
+      await cleanupDone.promise;
+      await flushMicrotasks();
+
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+      expect(storageFactory.cancelCleanupCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to one owned cleanup when retained setup cannot register its timer", async () => {
+    const contextName = "TimerlessFailedSubscriptionSetup";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    const fallbackStarted = deferred<undefined>();
+    const fallbackReleased = deferred<undefined>();
+    const cleanupDone = deferred<undefined>();
+    let readCalls = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      readCalls += 1;
+      if (readCalls === 1) {
+        throw new Error("initial cleanup read failed");
+      }
+      fallbackStarted.resolve(undefined);
+      await fallbackReleased.promise;
+      return await readRecord();
+    };
+    storageFactory.cancelCleanupHook = async (cleanup) => {
+      const cleaned = await cleanup();
+      cleanupDone.resolve(undefined);
+      return cleaned;
+    };
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await fallbackStarted.promise;
+      storageFactory.writeCommitError = undefined;
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({
+          code: Code.ResourceExhausted,
+          rawMessage: "Subscription capacity is exhausted.",
+        } satisfies Partial<ConnectError>),
+      );
+
+      fallbackReleased.resolve(undefined);
+      await cleanupDone.promise;
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      expect(readCalls).toBe(3);
+      expect(storageFactory.cancelCleanupCalls).toBe(1);
+      timer.mockRestore();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it("retries timerless retained cleanup once after its first runner failure", async () => {
+    const contextName = "TimerlessRetainedCleanupRetry";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    let readCalls = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      readCalls += 1;
+      if (readCalls <= 2) {
+        throw new Error(`cleanup read failure ${String(readCalls)}`);
+      }
+      return await readRecord();
+    };
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(storageFactory.cancelCleanupCalls).toBe(1);
+      expect(storageFactory.readCalls).toBe(3);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeUndefined();
+      timer.mockRestore();
+      storageFactory.writeCommitError = undefined;
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it("retains one inert timerless slot after both runner attempts fail", async () => {
+    const contextName = "TimerlessRetainedCleanupExhaustion";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const writeError = new Error("write outcome is ambiguous");
+    storageFactory.writeCommitError = writeError;
+    storageFactory.readHook = () => Promise.reject(new Error("cleanup read failed"));
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementationOnce(() => {
+        throw new Error("initial timer registration failed");
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("retained timer registration failed");
+      });
+
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toBe(writeError);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      const retainedId = storageFactory.committedId;
+      if (retainedId === undefined) {
+        throw new Error("Expected a committed subscription ID.");
+      }
+      expect(storageFactory.cancelCleanupCalls).toBe(0);
+      expect(storageFactory.readCalls).toBe(3);
+      storageFactory.readHook = undefined;
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, retainedId),
+      ).toBeDefined();
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({ code: Code.ResourceExhausted }),
+      );
+
+      await flushMicrotasks();
+      expect(storageFactory.readCalls).toBe(4);
+      const activation = handlers
+        .activate(
+          create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: retainedId }) }),
+        )
+        [Symbol.asyncIterator]();
+      await expect(activation.next()).resolves.toEqual({ done: true, value: undefined });
+    } finally {
+      timer.mockRestore();
+    }
+  });
+
+  it("releases capacity when process-local subscription registration fails", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementationOnce(() => {
+      throw new Error("timer registration failed");
+    });
+
+    await expect(handlers.subscribe(createTopic())).rejects.toThrow("timer registration failed");
+    timer.mockRestore();
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("retains capacity until durable cancellation cleanup succeeds", async () => {
+    const contextName = "FailedSubscriptionDelete";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoveryHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    storageFactory.cancelCleanupError = new Error("marker cleanup failed");
+
+    await expect(handlers.cancel(subscription)).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    const marker = await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId);
+    if (marker === undefined) {
+      throw new Error("Expected failed cancellation marker.");
+    }
+    expect(DurableSubscriptionRecords.readState(marker).type).toBe("cancel");
+    await expect(
+      recoveryHandlers.activate(subscription)[Symbol.asyncIterator]().next(),
+    ).resolves.toEqual({ done: true, value: undefined });
+
+    storageFactory.cancelCleanupError = undefined;
+    await handlers.cancel(subscription);
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
+  });
+
+  it("retains an active owner and capacity after pre-marker cancellation failure", async () => {
+    const contextName = "FailedActiveClaimCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await delay(10);
+    await context.stand().update(ProjectionStateSchema, createState("task-active-owner", "Active"));
+    await expect(first).resolves.toMatchObject({ done: false });
+    let failed = false;
+    storageFactory.readHook = async (_id, readRecord) => {
+      if (!failed) {
+        failed = true;
+        throw new Error("cancellation read failed");
+      }
+      return await readRecord();
+    };
+
+    await expect(handlers.cancel(subscription)).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>),
+    );
+
+    await handlers.cancel(subscription);
+    expect(storageFactory.cancelCleanupCalls).toBe(1);
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+    expect(storageFactory.cancelCleanupCalls).toBe(2);
+    await iterator.return?.();
+  });
+
+  it("retains inert inactive cleanup ownership after cancellation failure", async () => {
+    const contextName = "FailedInactiveCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    let failed = false;
+    storageFactory.readHook = async (_id, readRecord) => {
+      if (!failed) {
+        failed = true;
+        throw new Error("inactive cancellation read failed");
+      }
+      return await readRecord();
+    };
+
+    await expect(handlers.cancel(subscription)).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    let claimCalls = 0;
+    storageFactory.casStateHook = async (transition) => {
+      if (
+        transition.next !== undefined &&
+        DurableSubscriptionRecords.readState(transition.next).type === "claim"
+      ) {
+        claimCalls += 1;
+      }
+      return await transition.apply();
+    };
+
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(claimCalls).toBe(0);
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await handlers.cancel(subscription);
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
+  it("keeps active subscription capacity reserved across duplicate activation", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const active = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const activeNext = active.next();
+    await delay(10);
+
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await handlers.cancel(subscription);
+    await activeNext;
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
   it("keeps missing subscription IDs inert", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
@@ -2755,6 +3536,765 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("leaves durable recovery unconsumed when process-local capacity is exhausted", async () => {
+    const contextName = "CapacityBoundRecovery";
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+      subscriptionLimit: 1,
+    });
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const local = await secondHandlers.subscribe(createTopic());
+
+    await expect(
+      secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+    expect(
+      await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        recoverable.id?.value ?? "missing",
+      ),
+    ).toBeDefined();
+
+    await secondHandlers.cancel(local);
+    const recovered = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const next = recovered.next();
+    await delay(10);
+    await secondHandlers.cancel(recoverable);
+    await expect(next).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("releases recovery capacity after compare-and-set loss and error", async () => {
+    for (const failure of ["loss", "error"] as const) {
+      const contextName = `RecoveryCas${failure}`;
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const firstContext = createSubscriptionContext(contextName, storageFactory);
+      const secondContext = createSubscriptionContext(contextName, storageFactory);
+      const firstHandlers = registeredSubscriptionHandlers(firstContext);
+      const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+        subscriptionLimit: 1,
+      });
+      const recoverable = await firstHandlers.subscribe(createTopic());
+      if (failure === "loss") {
+        storageFactory.compareAndSetResult = false;
+        await expect(
+          secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+        ).resolves.toEqual({ done: true, value: undefined });
+      } else {
+        storageFactory.compareAndSetError = new Error("compare-and-set failed");
+        await expect(
+          secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+        ).rejects.toThrow("compare-and-set failed");
+      }
+
+      await expect(secondHandlers.subscribe(createTopic())).resolves.toBeDefined();
+    }
+  });
+
+  it("removes a recovered claim when local registration fails", async () => {
+    const contextName = "FailedRecoveredRegistration";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const recoveredId = recoverable.id?.value ?? "missing";
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementationOnce(() => {
+      throw new Error("recovery registration failed");
+    });
+
+    await expect(
+      secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+    ).rejects.toThrow("recovery registration failed");
+    timer.mockRestore();
+
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId),
+    ).toBeUndefined();
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(replacement);
+  });
+
+  it("retains a recovered owner when registration cleanup fails", async () => {
+    const contextName = "FailedRecoveryCleanup";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const recoveredId = recoverable.id?.value ?? "missing";
+    let readCalls = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      readCalls += 1;
+      const durable = await readRecord();
+      if (readCalls === 2) {
+        throw new Error("registration cleanup read failed");
+      }
+      return durable;
+    };
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementationOnce(() => {
+      throw new Error("recovery registration failed");
+    });
+
+    try {
+      await expect(
+        secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+      ).rejects.toThrow("recovery registration failed");
+    } finally {
+      timer.mockRestore();
+    }
+    const claim = await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId);
+    if (claim === undefined) {
+      throw new Error("Expected retained recovery claim.");
+    }
+    expect(DurableSubscriptionRecords.readState(claim).type).toBe("claim");
+    expect(() => secondHandlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    await secondHandlers.cancel(recoverable);
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId),
+    ).toBeUndefined();
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(replacement);
+  });
+
+  it("keeps the winning same-ID recovery reservation after concurrent CAS loss", async () => {
+    const contextName = "ConcurrentSameIdRecovery";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+      subscriptionLimit: 1,
+    });
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const firstStarted = deferred<undefined>();
+    const firstReleased = deferred<undefined>();
+    const firstCasDone = deferred<boolean>();
+    const secondCasDone = deferred<boolean>();
+    let casCall = 0;
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      const call = casCall;
+      casCall += 1;
+      if (call === 0) {
+        firstStarted.resolve(undefined);
+        await firstReleased.promise;
+      }
+      const result = await compareAndSet();
+      if (call === 0) {
+        firstCasDone.resolve(result);
+      } else {
+        secondCasDone.resolve(result);
+      }
+      return result;
+    };
+    const first = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const second = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const firstNext = first.next();
+    await firstStarted.promise;
+    const secondNext = second.next();
+    await withTimeout(
+      Promise.race([secondCasDone.promise, secondNext.then(() => false)]),
+      "duplicate recovery decision",
+    );
+    firstReleased.resolve(undefined);
+    await withTimeout(firstCasDone.promise, "owning recovery compare-and-set");
+
+    let distinct: Subscription | undefined;
+    let capacityError: unknown;
+    try {
+      distinct = await secondHandlers.subscribe(createTopic());
+    } catch (error) {
+      capacityError = error;
+    }
+
+    try {
+      expect(capacityError).toMatchObject({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>);
+    } finally {
+      if (distinct !== undefined) {
+        await secondHandlers.cancel(distinct);
+      }
+      await secondHandlers.cancel(recoverable);
+      await withTimeout(Promise.all([firstNext, secondNext]), "recovery cleanup");
+    }
+  });
+
+  it("keeps cancel ownership while durable recovery is paused", async () => {
+    const contextName = "CanceledPausedRecovery";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, {
+      subscriptionLimit: 1,
+    });
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const recoveredId = recoverable.id?.value ?? "missing";
+    const casStarted = deferred<undefined>();
+    const casReleased = deferred<undefined>();
+    const casDone = deferred<boolean>();
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      casStarted.resolve(undefined);
+      await casReleased.promise;
+      const result = await compareAndSet();
+      casDone.resolve(result);
+      return result;
+    };
+    const recovery = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const delayed = recovery.next();
+    await casStarted.promise;
+    const cancel = Promise.resolve(secondHandlers.cancel(recoverable));
+
+    let overflow: Subscription | undefined;
+    let capacityError: unknown;
+    try {
+      overflow = await secondHandlers.subscribe(createTopic());
+    } catch (error) {
+      capacityError = error;
+    }
+    if (overflow !== undefined) {
+      await secondHandlers.cancel(overflow);
+    }
+
+    casReleased.resolve(undefined);
+    await expect(casDone.promise).resolves.toBe(true);
+    await cancel;
+    await secondContext
+      .stand()
+      .update(ProjectionStateSchema, createState("task-after-cancel", "After cancel"));
+    const delayedResult = await withTimeout(delayed, "canceled paused recovery close");
+    const thirdResult = await withTimeout(
+      secondHandlers.activate(recoverable)[Symbol.asyncIterator]().next(),
+      "post-cancel durable recovery close",
+    );
+    const durable = await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId);
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(recoverable);
+    await secondHandlers.cancel(replacement);
+    const afterCleanup = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(afterCleanup);
+
+    expect(capacityError).toMatchObject({
+      code: Code.ResourceExhausted,
+      rawMessage: "Subscription capacity is exhausted.",
+    } satisfies Partial<ConnectError>);
+    expect(delayedResult).toEqual({ done: true, value: undefined });
+    expect(thirdResult).toEqual({ done: true, value: undefined });
+    expect(durable).toBeUndefined();
+  });
+
+  it("releases canceled recovery ownership after marker cleanup failure", async () => {
+    const contextName = "CanceledRecoveryDeleteFailure";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const casStarted = deferred<undefined>();
+    const casReleased = deferred<undefined>();
+    storageFactory.compareAndSetHook = async (compareAndSet) => {
+      casStarted.resolve(undefined);
+      await casReleased.promise;
+      return await compareAndSet();
+    };
+    const recovery = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const delayed = recovery.next();
+    await casStarted.promise;
+    storageFactory.cancelCleanupError = new Error("cancel marker cleanup failed");
+    const cancel = Promise.resolve(secondHandlers.cancel(recoverable));
+
+    casReleased.resolve(undefined);
+    await expect(delayed).resolves.toEqual({ done: true, value: undefined });
+    await expect(cancel).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    storageFactory.cancelCleanupError = undefined;
+    await secondHandlers.cancel(recoverable);
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(replacement);
+  });
+
+  it("blocks resident recovery while durable cancellation is pending", async () => {
+    const contextName = "ResidentCancelRecovery";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const cleanupStarted = deferred<undefined>();
+    const cleanupReleased = deferred<undefined>();
+    let cleanupPaused = false;
+    let casCalls = 0;
+    storageFactory.cancelCleanupHook = async (cleanup) => {
+      if (!cleanupPaused) {
+        cleanupPaused = true;
+        cleanupStarted.resolve(undefined);
+        await cleanupReleased.promise;
+      }
+      return await cleanup();
+    };
+    storageFactory.casStateHook = async (transition) => {
+      if (
+        transition.next !== undefined &&
+        DurableSubscriptionRecords.readState(transition.next).type === "claim"
+      ) {
+        casCalls += 1;
+      }
+      return await transition.apply();
+    };
+    const cancel = Promise.resolve(handlers.cancel(subscription));
+    await cleanupStarted.promise;
+    const readsBeforeRecovery = storageFactory.readCalls;
+    const recovery = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = recovery.next();
+    await expectPending(next);
+    expect(storageFactory.readCalls).toBe(readsBeforeRecovery);
+
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({
+        code: Code.ResourceExhausted,
+        rawMessage: "Subscription capacity is exhausted.",
+      } satisfies Partial<ConnectError>),
+    );
+
+    cleanupReleased.resolve(undefined);
+    await cancel;
+    await context
+      .stand()
+      .update(ProjectionStateSchema, createState("task-resident-cancel", "Canceled"));
+    const result = await withTimeout(next, "resident cancellation recovery close");
+    const postCancel = await withTimeout(
+      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "post-resident-cancel activation close",
+    );
+    const durable = await readDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      subscriptionId,
+    );
+
+    await handlers.cancel(subscription);
+    const reusable = await handlers.subscribe(createTopic());
+    await handlers.cancel(reusable);
+
+    expect(casCalls).toBe(0);
+    expect(result).toEqual({ done: true, value: undefined });
+    expect(postCancel).toEqual({ done: true, value: undefined });
+    expect(durable).toBeUndefined();
+  });
+
+  it("blocks recovery when cancellation begins during the durable read", async () => {
+    const contextName = "CancelDuringRecoveryRead";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const recoverable = await firstHandlers.subscribe(createTopic());
+    const recoveredId = recoverable.id?.value ?? "missing";
+    const readStarted = deferred<undefined>();
+    const readReleased = deferred<undefined>();
+    const readReturned = deferred<undefined>();
+    const cleanupStarted = deferred<undefined>();
+    const cleanupReleased = deferred<undefined>();
+    let readPaused = false;
+    let cleanupPaused = false;
+    let casCalls = 0;
+    storageFactory.readHook = async (id, readRecord) => {
+      const durable = await readRecord();
+      if (id === recoveredId && !readPaused) {
+        readPaused = true;
+        readStarted.resolve(undefined);
+        await readReleased.promise;
+        readReturned.resolve(undefined);
+      }
+      return durable;
+    };
+    storageFactory.cancelCleanupHook = async (cleanup) => {
+      if (!cleanupPaused) {
+        cleanupPaused = true;
+        cleanupStarted.resolve(undefined);
+        await cleanupReleased.promise;
+      }
+      return await cleanup();
+    };
+    storageFactory.casStateHook = async (transition) => {
+      if (
+        transition.next !== undefined &&
+        DurableSubscriptionRecords.readState(transition.next).type === "claim"
+      ) {
+        casCalls += 1;
+      }
+      return await transition.apply();
+    };
+    const recovery = secondHandlers.activate(recoverable)[Symbol.asyncIterator]();
+    const next = recovery.next();
+    await readStarted.promise;
+    const cancel = Promise.resolve(secondHandlers.cancel(recoverable));
+    await cleanupStarted.promise;
+    readReleased.resolve(undefined);
+    await readReturned.promise;
+    await expectPending(next);
+
+    cleanupReleased.resolve(undefined);
+    await cancel;
+    const result = await withTimeout(next, "read-racing cancellation recovery close");
+    const durable = await readDurableSubscriptionRecord(storageFactory, contextName, recoveredId);
+    const replacement = await secondHandlers.subscribe(createTopic());
+    await secondHandlers.cancel(replacement);
+
+    expect(casCalls).toBe(0);
+    expect(result).toEqual({ done: true, value: undefined });
+    expect(durable).toBeUndefined();
+  });
+
+  it("shares resident cancellation and clears a failed removal tombstone", async () => {
+    const contextName = "SharedResidentCancellation";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    storageFactory.cancelCleanupError = new Error("marker cleanup failed");
+
+    const results = await Promise.allSettled([
+      Promise.resolve(handlers.cancel(subscription)),
+      Promise.resolve(handlers.cancel(subscription)),
+    ]);
+
+    for (const result of results) {
+      if (result.status !== "rejected") {
+        throw new Error("Expected shared cancellation to reject.");
+      }
+      expect(result.reason).toMatchObject({
+        code: Code.Internal,
+        rawMessage: "Subscription cancellation failed.",
+      } satisfies Partial<ConnectError>);
+    }
+    expect(storageFactory.cancelCleanupCalls).toBe(1);
+
+    storageFactory.cancelCleanupError = undefined;
+    await handlers.cancel(subscription);
+    expect(storageFactory.cancelCleanupCalls).toBe(2);
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
+  it("fences remote recovery when cancellation wins before claim CAS", async () => {
+    const contextName = "CancelWinsRemoteClaim";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const secondHandlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const subscription = await firstHandlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const casStarted = deferred<undefined>();
+    const casReleased = deferred<undefined>();
+    let proposedState = "unobserved";
+    storageFactory.casStateHook = async (transition) => {
+      if (transition.id === subscriptionId && proposedState === "unobserved") {
+        proposedState =
+          transition.next === undefined
+            ? "absent"
+            : DurableSubscriptionRecords.readState(transition.next).type;
+        casStarted.resolve(undefined);
+        await casReleased.promise;
+      }
+      return await transition.apply();
+    };
+    const iterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    try {
+      await withTimeout(casStarted.promise, "remote recovery claim CAS");
+      expect(proposedState).toBe("claim");
+      await firstHandlers.cancel(subscription);
+      casReleased.resolve(undefined);
+
+      await expect(next).resolves.toEqual({ done: true, value: undefined });
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+      ).toBeUndefined();
+    } finally {
+      casReleased.resolve(undefined);
+      await Promise.resolve(secondHandlers.cancel(subscription)).catch(() => undefined);
+      await next.catch(() => undefined);
+    }
+  });
+
+  it("rejects remote cancellation after another instance claims activation", async () => {
+    const contextName = "RemoteClaimWinsCancel";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
+    const subscription = await firstHandlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimWon = deferred<undefined>();
+    const claimReleased = deferred<undefined>();
+    let transitionPaused = false;
+    storageFactory.casStateHook = async (transition) => {
+      const won = await transition.apply();
+      if (transition.id === subscriptionId && !transitionPaused) {
+        transitionPaused = true;
+        claimWon.resolve(undefined);
+        await claimReleased.promise;
+      }
+      return won;
+    };
+    const iterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    try {
+      await withTimeout(claimWon.promise, "remote activation claim win");
+      await expect(firstHandlers.cancel(subscription)).rejects.toMatchObject({
+        code: Code.Aborted,
+        rawMessage: "Subscription is active in another service instance.",
+      } satisfies Partial<ConnectError>);
+      claimReleased.resolve(undefined);
+      await delay(0);
+
+      await secondContext
+        .stand()
+        .update(ProjectionStateSchema, createState("task-remote-claim", "Claimed"));
+      const delivered = await withTimeout(next, "remote claimed subscription update");
+      expect(delivered.done).toBe(false);
+    } finally {
+      claimReleased.resolve(undefined);
+      await Promise.resolve(secondHandlers.cancel(subscription)).catch(() => undefined);
+      await next.catch(() => undefined);
+    }
+  });
+
+  it("lets same-instance cancellation win before activation claim CAS", async () => {
+    const contextName = "LocalCancelWinsClaim";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimStarted = deferred<undefined>();
+    const claimReleased = deferred<undefined>();
+    let paused = false;
+    storageFactory.casStateHook = async (transition) => {
+      const next =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      if (!paused && transition.id === subscriptionId && next?.type === "claim") {
+        paused = true;
+        claimStarted.resolve(undefined);
+        await claimReleased.promise;
+      }
+      return await transition.apply();
+    };
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await claimStarted.promise;
+    await handlers.cancel(subscription);
+    claimReleased.resolve(undefined);
+
+    await expect(next).resolves.toEqual({ done: true, value: undefined });
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
+  it("lets same-instance cancellation remove a won claim before attach", async () => {
+    const contextName = "LocalClaimWinsCancel";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimWon = deferred<undefined>();
+    const claimReleased = deferred<undefined>();
+    let paused = false;
+    storageFactory.casStateHook = async (transition) => {
+      const next =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      const won = await transition.apply();
+      if (!paused && transition.id === subscriptionId && next?.type === "claim") {
+        paused = true;
+        claimWon.resolve(undefined);
+        await claimReleased.promise;
+      }
+      return won;
+    };
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await claimWon.promise;
+    await handlers.cancel(subscription);
+    claimReleased.resolve(undefined);
+
+    await expect(next).resolves.toEqual({ done: true, value: undefined });
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
+  it("continues activation when ambiguous claim CAS reconciles to its exact claim", async () => {
+    const contextName = "AmbiguousClaimCommitted";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimError = new Error("claim outcome is ambiguous");
+    let failed = false;
+    storageFactory.casStateHook = async (transition) => {
+      const state =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      if (!failed && transition.id === subscriptionId && state?.type === "claim") {
+        failed = true;
+        await transition.apply();
+        throw claimError;
+      }
+      return await transition.apply();
+    };
+
+    const activation = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = activation.next();
+    await flushMicrotasks();
+    await context.stand().update(ProjectionStateSchema, createState("ambiguous-claim", "Claimed"));
+
+    await expect(withTimeout(next, "reconciled claim activation")).resolves.toMatchObject({
+      done: false,
+    });
+    await handlers.cancel(subscription);
+  });
+
+  it("retains an unknown exact claim for same-instance cancellation", async () => {
+    const contextName = "AmbiguousClaimUnknown";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    const claimError = new Error("claim outcome is ambiguous");
+    let failed = false;
+    storageFactory.casStateHook = async (transition) => {
+      const state =
+        transition.next === undefined
+          ? undefined
+          : DurableSubscriptionRecords.readState(transition.next);
+      if (!failed && transition.id === subscriptionId && state?.type === "claim") {
+        failed = true;
+        await transition.apply();
+        throw claimError;
+      }
+      return await transition.apply();
+    };
+    let reads = 0;
+    storageFactory.readHook = async (_id, readRecord) => {
+      reads += 1;
+      if (reads === 1) {
+        throw new Error("claim reconciliation read failed");
+      }
+      return await readRecord();
+    };
+
+    const activation = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expect(activation.next()).rejects.toBe(claimError);
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    storageFactory.readHook = undefined;
+    await handlers.cancel(subscription);
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
+  });
+
+  it("settles concurrent inactive cancellations across instances", async () => {
+    const contextName = "ConcurrentInactiveCancel";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const creator = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const first = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const second = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const subscription = await creator.subscribe(createTopic());
+    const cleanupStarted = deferred<undefined>();
+    const cleanupReleased = deferred<undefined>();
+    let paused = false;
+    storageFactory.cancelCleanupHook = async (cleanup) => {
+      if (!paused) {
+        paused = true;
+        cleanupStarted.resolve(undefined);
+        await cleanupReleased.promise;
+      }
+      return await cleanup();
+    };
+
+    const firstCancel = Promise.resolve(first.cancel(subscription));
+    await cleanupStarted.promise;
+    const secondCancel = Promise.resolve(second.cancel(subscription));
+    await secondCancel;
+    cleanupReleased.resolve(undefined);
+    await firstCancel;
+
+    expect(
+      await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        subscription.id?.value ?? "missing",
+      ),
+    ).toBeUndefined();
+  });
+
   it("recovers inactive event subscriptions across service adapter restart", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstContext = createEventSubscriptionContext(
@@ -2897,6 +4437,10 @@ describe("SpineServices", () => {
     const firstHandlers = registeredSubscriptionHandlers(firstContext);
     const secondHandlers = registeredSubscriptionHandlers(secondContext);
     const subscription = await firstHandlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value;
+    if (subscriptionId === undefined) {
+      throw new Error("Expected durable subscription id.");
+    }
     const firstIterator = firstHandlers.activate(subscription)[Symbol.asyncIterator]();
     const secondIterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
 
@@ -2927,20 +4471,25 @@ describe("SpineServices", () => {
       expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
         createState("task-local-activated", "Activated"),
       );
-      const subscriptionId = subscription.id;
-      if (subscriptionId === undefined) {
-        throw new Error("Expected durable subscription id.");
+      const durable = await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        subscriptionId,
+      );
+      if (durable === undefined) {
+        throw new Error("Expected active subscription claim.");
       }
-      expect(
-        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId.value),
-      ).toBe(undefined);
+      expect(DurableSubscriptionRecords.readState(durable).type).toBe("claim");
     } finally {
       await secondIterator.return?.();
       await firstIterator.return?.();
     }
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeUndefined();
   });
 
-  it("deletes malformed durable subscription records during recovery", async () => {
+  it("keeps malformed durable subscription records inert during recovery", async () => {
     const contextName = "MalformedRecoveredSubscriptions";
     const storageFactory = new SeededSubscriptionStorageFactory(contextName);
     const context = createSubscriptionContext(contextName, storageFactory);
@@ -2968,9 +4517,255 @@ describe("SpineServices", () => {
     );
 
     expect(activation.done).toBe(true);
-    expect(await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)).toBe(
-      undefined,
+    expect(
+      await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+    ).toBeDefined();
+  });
+
+  it("keeps noncanonical and ID-mismatched inactive records inert", async () => {
+    const valid = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-invalid-base64" }),
+      topic: createTopic(),
+    });
+    const binary = Buffer.from(toBinary(SubscriptionSchema, valid)).toString("base64");
+    const mismatched = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-embedded-other" }),
+      topic: createTopic(),
+    });
+    const cases = [
+      {
+        id: "s-invalid-base64",
+        payload: `${binary.slice(0, 4)}!${binary.slice(4)}`,
+      },
+      {
+        id: "s-mismatched-payload",
+        payload: Buffer.from(toBinary(SubscriptionSchema, mismatched)).toString("base64"),
+      },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      const contextName = `InertInvalidSubscription${String(index)}`;
+      const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+      const durable = durableAny({
+        id: testCase.id,
+        kind: "state",
+        targetType: deriveTypeUrl(ProjectionStateSchema),
+        subscriptionBinaryBase64: testCase.payload,
+        expiresAtMs: Date.now() + 60_000,
+      });
+      storageFactory.seed(testCase.id, durable);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+      );
+      const activation = handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: testCase.id }),
+          }),
+        )
+        [Symbol.asyncIterator]();
+
+      await expect(activation.next()).resolves.toEqual({ done: true, value: undefined });
+      expect(storageFactory.casCalls).toBe(0);
+      expect(await readDurableSubscriptionRecord(storageFactory, contextName, testCase.id)).toEqual(
+        durable,
+      );
+    }
+  });
+
+  it("rejects oversized durable states before decoder and parser work", () => {
+    const value = new Uint8Array(33_554_433);
+    const records = [
+      "DurableSubscriptionRecord",
+      "DurableSubscriptionClaim",
+      "DurableSubscriptionCancel",
+      "UnknownDurableSubscriptionState",
+    ].map((type) =>
+      create(AnySchema, {
+        typeUrl: `type.spine-ts.dev/internal/${type}`,
+        value,
+      }),
     );
+    const decode = vi.spyOn(TextDecoder.prototype, "decode").mockImplementation(() => {
+      throw new Error("UTF-8 decode reached");
+    });
+    const parse = vi.spyOn(JSON, "parse");
+
+    try {
+      for (const record of records) {
+        expect(() => DurableSubscriptionRecords.readState(record)).toThrow(
+          "Durable subscription record exceeds 33554432 encoded bytes.",
+        );
+      }
+      expect(decode).not.toHaveBeenCalled();
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+      decode.mockRestore();
+    }
+  });
+
+  it("accepts the exact durable byte boundary and rejects one byte more", () => {
+    const id = "s-durable-byte-boundary";
+    const source = DurableSubscriptionRecords.write({
+      id,
+      kind: "state",
+      targetType: deriveTypeUrl(ProjectionStateSchema),
+      subscription: create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: id }),
+        topic: createTopic(),
+      }),
+      expiresAtMs: 1,
+    });
+    const padded = new Uint8Array(33_554_433).fill(0x20);
+    padded.set(source.value);
+    const legal = create(AnySchema, {
+      typeUrl: source.typeUrl,
+      value: padded.subarray(0, 33_554_432),
+    });
+    const oversized = create(AnySchema, { typeUrl: source.typeUrl, value: padded });
+
+    expect(DurableSubscriptionRecords.read(legal)).toMatchObject({ id, expiresAtMs: 1 });
+    expect(() => DurableSubscriptionRecords.read(oversized)).toThrow(
+      "Durable subscription record exceeds 33554432 encoded bytes.",
+    );
+  });
+
+  it("round-trips the exact supported durable compatibility arithmetic", () => {
+    const id = `s-${"a".repeat(36)}`;
+    const targetType = `${"\u0001".repeat(4_194_272)}${"a".repeat(12)}""`;
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "t-" }),
+      target: create(TargetSchema, {
+        type: targetType,
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: id }),
+      topic,
+    });
+    const topicBinary = toBinary(TopicSchema, topic);
+    const subscriptionBinary = toBinary(SubscriptionSchema, subscription);
+    const subscriptionBase64 = Buffer.from(subscriptionBinary).toString("base64");
+    const durable = DurableSubscriptionRecords.write({
+      id,
+      kind: "state",
+      targetType,
+      subscription,
+      expiresAtMs: 0,
+    });
+
+    expect(topicBinary.byteLength).toBe(4_194_304);
+    expect(subscriptionBinary.byteLength).toBe(4_194_351);
+    expect(subscriptionBase64.length).toBe(5_592_468);
+    expect(durable.value.byteLength).toBe(30_758_240);
+
+    const restored = DurableSubscriptionRecords.read(durable);
+    expect(restored.id).toBe(id);
+    expect(Buffer.compare(Buffer.from(restored.targetType), Buffer.from(targetType))).toBe(0);
+    expect(
+      Buffer.compare(
+        Buffer.from(toBinary(SubscriptionSchema, restored.subscription)),
+        Buffer.from(subscriptionBinary),
+      ),
+    ).toBe(0);
+  });
+
+  it("keeps oversized inactive recovery inert and continues with valid activation", async () => {
+    const contextName = "OversizedRecoveredSubscriptions";
+    const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const attach = vi.spyOn(context.stand(), "subscribe");
+    const handlers = registeredSubscriptionHandlers(context);
+    const oversizedId = "s-oversized-recovery";
+    const oversized = oversizedDurableSubscriptionRecord();
+    storageFactory.seed(oversizedId, oversized);
+
+    try {
+      const oversizedResult = await handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: oversizedId }),
+          }),
+        )
+        [Symbol.asyncIterator]()
+        .next();
+
+      expect(oversizedResult).toEqual({ done: true, value: undefined });
+      expect(storageFactory.casCalls).toBe(0);
+      expect(attach).not.toHaveBeenCalled();
+      expect(await readDurableSubscriptionRecord(storageFactory, contextName, oversizedId)).toBe(
+        oversized,
+      );
+
+      const validId = "s-valid-after-oversized";
+      const validSubscription = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: validId }),
+        topic: createTopic(),
+      });
+      await writeDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        DurableSubscriptionRecords.write({
+          id: validId,
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscription: validSubscription,
+          expiresAtMs: Date.now() + 60_000,
+        }),
+      );
+      const activation = handlers.activate(validSubscription)[Symbol.asyncIterator]();
+      const next = activation.next();
+      await delay(25);
+      await context
+        .stand()
+        .update(ProjectionStateSchema, createState("valid-after-oversized", "Recovered"));
+
+      await expect(
+        withTimeout(next, "valid activation after oversized row"),
+      ).resolves.toMatchObject({ done: false });
+      expect(attach).toHaveBeenCalledTimes(1);
+      await activation.return?.();
+    } finally {
+      attach.mockRestore();
+    }
+  });
+
+  it("keeps oversized cancellation generic, unchanged, and retryable after repair", async () => {
+    const contextName = "OversizedCanceledSubscriptions";
+    const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+    const handlers = registeredSubscriptionHandlers(
+      createSubscriptionContext(contextName, storageFactory),
+    );
+    const id = "s-oversized-cancel";
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: id }),
+      topic: createTopic(),
+    });
+    const oversized = oversizedDurableSubscriptionRecord();
+    storageFactory.seed(id, oversized);
+
+    await expect(Promise.resolve(handlers.cancel(subscription))).rejects.toMatchObject({
+      code: Code.Internal,
+      rawMessage: "Subscription cancellation failed.",
+    } satisfies Partial<ConnectError>);
+    expect(storageFactory.casCalls).toBe(0);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, id)).toBe(oversized);
+
+    await writeDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      DurableSubscriptionRecords.write({
+        id,
+        kind: "state",
+        targetType: deriveTypeUrl(ProjectionStateSchema),
+        subscription,
+        expiresAtMs: Date.now() + 60_000,
+      }),
+    );
+    await handlers.cancel(subscription);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, id)).toBeUndefined();
   });
 
   it("rejects malformed durable subscription record payloads", () => {
@@ -3044,10 +4839,99 @@ describe("SpineServices", () => {
         }),
         message: "Durable subscription expiry must be a non-negative finite number.",
       },
+      ...["AA=A", "AAAA=", "Zh=="].map((subscriptionBinaryBase64) => ({
+        record: durableAny({
+          id: "s-invalid-base64",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64,
+          expiresAtMs: 1,
+        }),
+        message: "Durable subscription payload must be canonical Base64.",
+      })),
     ];
 
     for (const { record, message } of cases) {
       expect(() => DurableSubscriptionRecords.read(record)).toThrow(message);
+    }
+
+    const missingId = Buffer.from(
+      toBinary(SubscriptionSchema, create(SubscriptionSchema, { topic: createTopic() })),
+    ).toString("base64");
+    expect(() =>
+      DurableSubscriptionRecords.read(
+        durableAny({
+          id: "s-missing-payload-id",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64: missingId,
+          expiresAtMs: 1,
+        }),
+      ),
+    ).toThrow("Durable subscription payload ID does not match record ID.");
+  });
+
+  it("keeps inactive wire compatibility and encodes exact claim states", () => {
+    const id = "s-durable-state";
+    const inactive = DurableSubscriptionRecords.write({
+      id,
+      kind: "state",
+      targetType: deriveTypeUrl(ProjectionStateSchema),
+      subscription: create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: id }),
+        topic: createTopic(),
+      }),
+      expiresAtMs: Date.now() + 60_000,
+    });
+    const claim = DurableSubscriptionRecords.claim(id, "owner-1");
+    const cancel = DurableSubscriptionRecords.cancel(id);
+
+    expect(inactive.typeUrl).toBe("type.spine-ts.dev/internal/DurableSubscriptionRecord");
+    expect(claim.typeUrl).toBe("type.spine-ts.dev/internal/DurableSubscriptionClaim");
+    expect(cancel.typeUrl).toBe("type.spine-ts.dev/internal/DurableSubscriptionCancel");
+    expect(DurableSubscriptionRecords.readState(inactive)).toMatchObject({ type: "inactive", id });
+    expect(DurableSubscriptionRecords.readState(claim)).toEqual({
+      type: "claim",
+      id,
+      owner: "owner-1",
+    });
+    expect(DurableSubscriptionRecords.readState(cancel)).toEqual({ type: "cancel", id });
+    expect([
+      durableSubscriptionRecordSpec.idValueIn(inactive),
+      durableSubscriptionRecordSpec.idValueIn(claim),
+      durableSubscriptionRecordSpec.idValueIn(cancel),
+    ]).toEqual([id, id, id]);
+
+    expect(() => DurableSubscriptionRecords.claim(id, " ")).toThrow(
+      "Durable subscription owner is required.",
+    );
+    expect(() =>
+      DurableSubscriptionRecords.readState(
+        durableStateAny("DurableSubscriptionClaim", { id, owner: "owner-1", extra: true }),
+      ),
+    ).toThrow("Durable subscription claim must contain exactly id and owner.");
+    expect(() =>
+      DurableSubscriptionRecords.readState(
+        durableStateAny("DurableSubscriptionCancel", { id, extra: true }),
+      ),
+    ).toThrow("Durable subscription cancel must contain exactly id.");
+    expect(() => DurableSubscriptionRecords.readState(cancel, "s-other-storage-key")).toThrow(
+      "Durable subscription record ID does not match storage key.",
+    );
+    expect(() =>
+      DurableSubscriptionRecords.readState(
+        durableStateAny("UnknownDurableSubscriptionState", { id }),
+      ),
+    ).toThrow("Durable subscription record type URL is invalid.");
+
+    for (const state of [
+      durableStateAny("DurableSubscriptionClaim", { id: ` ${id}`, owner: "owner-1" }),
+      durableStateAny("DurableSubscriptionClaim", { id, owner: "owner-1 " }),
+      durableStateAny("DurableSubscriptionCancel", { id: `${id} ` }),
+    ]) {
+      expect(() => DurableSubscriptionRecords.readState(state)).toThrow(
+        /must not have surrounding whitespace/u,
+      );
     }
   });
 
@@ -3269,6 +5153,45 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(1);
   });
 
+  it("preserves attachment failure when durable activation cleanup also fails", async () => {
+    const contextName = "FailedActivationCleanup";
+    const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const attachmentError = new Error("activation attachment failed");
+    const cleanupFault = new Error("activation cleanup failed");
+    const cleanupError = new ConnectError("Subscription cancellation failed.", Code.Internal);
+    vi.spyOn(context.stand(), "subscribe").mockImplementation(() => {
+      throw attachmentError;
+    });
+    const handlers = registeredSubscriptionHandlers(context, { subscriptionLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const subscriptionId = subscription.id?.value ?? "missing";
+    storageFactory.cancelCleanupError = cleanupFault;
+
+    const error = await handlers
+      .activate(subscription)
+      [Symbol.asyncIterator]()
+      .next()
+      .catch((rejection: unknown) => rejection);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([attachmentError, cleanupError]);
+    expect(
+      DurableSubscriptionRecords.readState(
+        (await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)) ??
+          create(AnySchema),
+      ).type,
+    ).toBe("cancel");
+    expect(() => handlers.subscribe(createTopic())).toThrow(
+      expect.objectContaining({ code: Code.ResourceExhausted }),
+    );
+
+    storageFactory.cancelCleanupError = undefined;
+    await handlers.cancel(subscription);
+    const replacement = await handlers.subscribe(createTopic());
+    await handlers.cancel(replacement);
+  });
+
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
     const callbacks: ((update: {
@@ -3469,6 +5392,50 @@ describe("SpineServices", () => {
     expect(activeStandSubscriptions).toEqual([]);
   });
 
+  const inactiveCleanupName =
+    "retains an inactive subscription without retrying expiry cleanup until same-ID cancellation succeeds";
+  it(inactiveCleanupName, async () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "InactiveExpiryCleanupFailure";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 10, subscriptionLimit: 1 },
+      );
+      const subscription = await handlers.subscribe(createTopic());
+      const subscriptionId = subscription.id?.value ?? "missing";
+      storageFactory.cancelCleanupError = new Error("inactive expiry cleanup failed");
+
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(10);
+      await flushMicrotasks();
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+      ).toBeDefined();
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({
+          code: Code.ResourceExhausted,
+          rawMessage: "Subscription capacity is exhausted.",
+        } satisfies Partial<ConnectError>),
+      );
+
+      storageFactory.cancelCleanupError = undefined;
+      await handlers.cancel(subscription);
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+      ).toBeUndefined();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
     let deliverUpdate:
       | ((update: {
@@ -3492,7 +5459,10 @@ describe("SpineServices", () => {
         };
       },
     });
-    const handlers = registeredSubscriptionHandlers(context, { queueLimit: 1 });
+    const handlers = registeredSubscriptionHandlers(context, {
+      queueLimit: 1,
+      subscriptionLimit: 1,
+    });
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
@@ -3519,6 +5489,25 @@ describe("SpineServices", () => {
 
     expect(next.done).toBe(true);
     expect(unsubscribeCount).toBe(1);
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+  });
+
+  it("releases subscription capacity after activation attachment fails", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({
+        stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+        subscribe: () => {
+          throw new Error("activation failed");
+        },
+      }),
+      { subscriptionLimit: 1 },
+    );
+    const subscription = await handlers.subscribe(createTopic());
+
+    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow(
+      "activation failed",
+    );
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
   });
 
   it("fails unsupported subscription topics contractually", async () => {
@@ -3749,14 +5738,14 @@ function createRollingBackTransitionRepository(): Repository<
   });
 }
 
-function createProjectionCommand(id: string, tenantId?: TenantInput) {
+function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Task") {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
     schema: ProjectionStateSchema,
-    message: createState("task-1", "Task"),
+    message: createState("task-1", name),
   });
 }
 
@@ -4023,6 +6012,7 @@ class SeededSubscriptionStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #seededRecords = new Map<string, Any>();
   readonly #subscriptionContextName: string;
+  casCalls = 0;
 
   constructor(contextName: string) {
     super();
@@ -4043,7 +6033,9 @@ class SeededSubscriptionStorageFactory extends StorageFactory {
     ) {
       return asRequestedRecordStorage<I, R>(
         recordSpec,
-        createSeededDurableSubscriptionStorage(context, this.#delegate, this.#seededRecords),
+        createSeededDurableSubscriptionStorage(context, this.#delegate, this.#seededRecords, () => {
+          this.casCalls += 1;
+        }),
       );
     }
 
@@ -4061,10 +6053,17 @@ function createSeededDurableSubscriptionStorage(
   context: StorageContext,
   delegate: StorageFactory,
   seededRecords: Map<string, Any>,
+  onCompareAndSet: () => void,
 ): RecordStorage<string, Any> {
   const storage = delegate.createRecordStorage(context, durableSubscriptionRecordSpec);
 
-  return new SeededRecordStorage(context, durableSubscriptionRecordSpec, storage, seededRecords);
+  return new SeededRecordStorage(
+    context,
+    durableSubscriptionRecordSpec,
+    storage,
+    seededRecords,
+    onCompareAndSet,
+  );
 }
 
 function asRequestedRecordStorage<I, R extends Message>(
@@ -4080,6 +6079,7 @@ function asRequestedRecordStorage<I, R extends Message>(
 
 class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #delegate: RecordStorage<I, R>;
+  readonly #onCompareAndSet: () => void;
   readonly #seededRecords: Map<I, R>;
 
   constructor(
@@ -4087,10 +6087,12 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     recordSpec: RecordSpec<I, R>,
     delegate: RecordStorage<I, R>,
     seededRecords: Map<I, R>,
+    onCompareAndSet: () => void,
   ) {
     super(context, recordSpec);
     this.#delegate = delegate;
     this.#seededRecords = seededRecords;
+    this.#onCompareAndSet = onCompareAndSet;
   }
 
   protected override deleteRecord(id: I): Promise<boolean> {
@@ -4114,6 +6116,7 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    this.#onCompareAndSet();
     if (this.#seededRecords.has(id)) {
       return Promise.resolve(false);
     }
@@ -4136,6 +6139,170 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     this.#seededRecords.delete(record.id);
     return this.#delegate.write(record.record);
   }
+}
+
+class FaultingSubscriptionStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #subscriptionContextName: string;
+  compareAndSetError: Error | undefined;
+  compareAndSetCalls = 0;
+  compareAndSetHook: ((compareAndSet: () => Promise<boolean>) => Promise<boolean>) | undefined;
+  compareAndSetResult: boolean | undefined;
+  casStateHook: ((transition: SubscriptionCasTransition) => Promise<boolean>) | undefined;
+  cancelCleanupCalls = 0;
+  cancelCleanupError: Error | undefined;
+  cancelCleanupHook: ((cleanup: () => Promise<boolean>) => Promise<boolean>) | undefined;
+  committedId: string | undefined;
+  deleteCalls = 0;
+  deleteError: Error | undefined;
+  deleteHook: ((id: string, deleteRecord: () => Promise<boolean>) => Promise<boolean>) | undefined;
+  readHook:
+    | ((id: string, readRecord: () => Promise<Any | undefined>) => Promise<Any | undefined>)
+    | undefined;
+  readCalls = 0;
+  subscriptionStorageCalls = 0;
+  writeError: Error | undefined;
+  writeCommitError: Error | undefined;
+
+  constructor(contextName: string) {
+    super();
+    this.#subscriptionContextName = `${contextName}:subscriptions`;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const delegate = this.#delegate.createRecordStorage(context, recordSpec);
+
+    if (
+      context.name !== this.#subscriptionContextName ||
+      !isDurableSubscriptionRecordSpec(recordSpec)
+    ) {
+      return delegate;
+    }
+
+    this.subscriptionStorageCalls += 1;
+
+    return new FaultingSubscriptionRecordStorage(
+      context,
+      recordSpec,
+      delegate as unknown as RecordStorage<string, Any>,
+      this,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class FaultingSubscriptionRecordStorage extends RecordStorage<string, Any> {
+  readonly #delegate: RecordStorage<string, Any>;
+  readonly #faults: FaultingSubscriptionStorageFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    delegate: RecordStorage<string, Any>,
+    faults: FaultingSubscriptionStorageFactory,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#faults = faults;
+  }
+
+  protected override deleteRecord(id: string): Promise<boolean> {
+    this.#faults.deleteCalls += 1;
+    if (this.#faults.deleteHook !== undefined) {
+      return this.#faults.deleteHook(id, () => this.#delegate.delete(id));
+    }
+    return this.#faults.deleteError === undefined
+      ? this.#delegate.delete(id)
+      : Promise.reject(this.#faults.deleteError);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<string>,
+  ): Promise<readonly RecordEntry<string, Any>[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected override readRecord(id: string): Promise<Any | undefined> {
+    this.#faults.readCalls += 1;
+    if (this.#faults.readHook !== undefined) {
+      return this.#faults.readHook(id, () => this.#delegate.read(id));
+    }
+    return this.#delegate.read(id);
+  }
+
+  protected override compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    this.#faults.compareAndSetCalls += 1;
+    const apply = () => this.#applyCas(id, expected?.record, next?.record);
+    if (this.#faults.casStateHook !== undefined) {
+      return this.#faults.casStateHook({
+        id,
+        expected: expected?.record,
+        next: next?.record,
+        apply,
+      });
+    }
+    if (this.#faults.compareAndSetHook !== undefined) {
+      return this.#faults.compareAndSetHook(apply);
+    }
+    if (this.#faults.compareAndSetError !== undefined) {
+      return Promise.reject(this.#faults.compareAndSetError);
+    }
+    if (this.#faults.compareAndSetResult !== undefined) {
+      return Promise.resolve(this.#faults.compareAndSetResult);
+    }
+    return apply();
+  }
+
+  #applyCas(id: string, expected: Any | undefined, next: Any | undefined): Promise<boolean> {
+    const cleanup =
+      expected !== undefined &&
+      next === undefined &&
+      DurableSubscriptionRecords.readState(expected).type === "cancel";
+    if (!cleanup) {
+      return this.#delegate.compareAndSet(id, expected, next);
+    }
+    this.#faults.cancelCleanupCalls += 1;
+    const apply = () => this.#delegate.compareAndSet(id, expected, next);
+    if (this.#faults.cancelCleanupHook !== undefined) {
+      return this.#faults.cancelCleanupHook(apply);
+    }
+    return this.#faults.cancelCleanupError === undefined
+      ? apply()
+      : Promise.reject(this.#faults.cancelCleanupError);
+  }
+
+  protected override writeAllRecords(
+    records: readonly ReturnType<RecordSpec<string, Any>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected override writeRecord(
+    record: ReturnType<RecordSpec<string, Any>["materialize"]>,
+  ): Promise<void> {
+    if (this.#faults.writeError !== undefined) {
+      return Promise.reject(this.#faults.writeError);
+    }
+    if (this.#faults.writeCommitError !== undefined) {
+      const commitError = this.#faults.writeCommitError;
+      this.#faults.committedId = record.id;
+      return this.#delegate.write(record.record).then(() => Promise.reject(commitError));
+    }
+    return this.#delegate.write(record.record);
+  }
+}
+
+interface SubscriptionCasTransition {
+  readonly id: string;
+  readonly expected: Any | undefined;
+  readonly next: Any | undefined;
+  readonly apply: () => Promise<boolean>;
 }
 
 function createTopic(tenantId?: TenantInput) {
@@ -4694,6 +6861,22 @@ function durableAny(value: unknown): Any {
   });
 }
 
+function oversizedDurableSubscriptionRecord(): Any {
+  const record = {
+    typeUrl: "type.spine-ts.dev/internal/DurableSubscriptionRecord",
+    value: { byteLength: 33_554_433 } as Uint8Array,
+    clone: () => record,
+  };
+  return record as unknown as Any;
+}
+
+function durableStateAny(type: string, value: unknown): Any {
+  return create(AnySchema, {
+    typeUrl: `type.spine-ts.dev/internal/${type}`,
+    value: durableRecord(value),
+  });
+}
+
 function durableRecord(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
 }
@@ -4713,6 +6896,37 @@ async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
       clearTimeout(timeout);
     }
   }
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+async function flushMicrotasks(turns = 12): Promise<void> {
+  for (let turn = 0; turn < turns; turn += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function expectPending(promise: Promise<unknown>): Promise<void> {
+  let settled = false;
+  void promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await flushMicrotasks();
+  expect(settled).toBe(false);
 }
 
 function delay(milliseconds: number): Promise<void> {

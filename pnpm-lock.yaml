@@ -141,6 +141,12 @@ importers:
 
   packages/transport:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
       zeromq:
         specifier: 6.5.0
         version: 6.5.0

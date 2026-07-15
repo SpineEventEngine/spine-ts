@@ -1,0 +1,228 @@
+# T-0041 Security Findings and Evidence
+
+Status: Final security gate complete. SF-007 through SF-012 controls and all
+accepted corrections are verified; Canonical Wave 23 and the focused final
+security re-review are clean. SF-013 remains the explicit human-accepted Medium
+same-UID local availability residual. Full task verification passes; integration
+is pending.
+
+Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
+production implementation evidence is `c7f8a901`; the later test-only
+maintainability correction is `fdd9da0a`. D-0091 implementation evidence is
+`da730e04`. Later provenance/review/status commits are not implementation
+evidence. The preceding canonical review was clean; dedicated security re-review
+found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
+Canonical Wave 23 is clean; SF-012 is clean and D-0093 records the human's
+explicit SF-013 residual-risk acceptance. The replacement focused final
+security review and full task verification are complete.
+
+Final native task evidence: `pnpm --config.verify-deps-before-run=false verify`
+passes 73 files / 1,772 tests in ordinary and coverage runs, with 90.04% branch
+coverage; all TypeScript, lint/format, TypeDoc/API, Proto, and generated-clean
+gates pass. Dependency audits remain zero-advisory and all 235 registry
+signatures verify. SF-013 is the sole accepted security residual.
+
+Historical dedicated re-review package was
+`.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
+bytes). That package predates the current D-0096 correction and is not the
+active final-security package.
+
+Historical dedicated reviewer dispatch:
+`019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit immutable
+`gpt-5.6-terra` / high, read-only, childless, and Git-read-only. The replacement
+focused final reviewer is `019f66ab-ff43-7951-9f7a-7052210d7ff9`; it is clean
+and closed, with its exact package and evidence in the T-0041 logs.
+
+## D-0094 Union-Correlation Correction State
+
+Compile RED proved that widened and union transport kinds could pair a
+command/event topic with a plain caller envelope. The distributive public
+operation aliases close that static contract hole without changing runtime wire
+logic. Focused GREEN is tooling typecheck, transport root 6/6, both retained
+adapter reply proofs 1/1, generated API counts `100/28/205/19/18/6/3`, and clean
+Proto generation. The duplicate server-runtime adapter proof is removed, and
+the public docs now distinguish Buf command/event frame 2 from private V8
+reserved-kind frame 2.
+
+The later D-0094 union-correlation and D-0096 fixed-path predicate corrections
+are coordinator-verified and canonically clean. The prior final-security package
+and reviewer are historical; the replacement focused review is clean. SF-013
+remains accepted and unbounded in aggregate.
+
+## Command and evidence ledger
+
+Rows below retain the evidence available at their recorded wave. Any row that
+says a later review or verification was pending is historical and is superseded
+by the final status and final native evidence above.
+
+| Source                               | Command/evidence                                                                                                  | Result                                                                                                                                                                                                                                                                                                                     | Attribution                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Coordinator                          | Frozen offline install                                                                                            | No lockfile mutation; only `@bufbuild/buf` and `zeromq` allowed build scripts; no ignored builds.                                                                                                                                                                                                                          | Coordinator-run; `work-logs/T-0041.md`.                                  |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm audit --json`                                                                                               | Exit 0; zero advisories; 7 dependencies + 228 dev + 40 optional = 235.                                                                                                                                                                                                                                                     | Coordinator-run native/network-complete evidence.                        |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm audit --prod --json`                                                                                        | Exit 0; zero advisories; 7 total.                                                                                                                                                                                                                                                                                          | Coordinator-run native/network-complete evidence.                        |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm audit --dev --json`                                                                                         | Exit 0; zero advisories; 1 dependency + 188 dev = 189.                                                                                                                                                                                                                                                                     | Coordinator-run native/network-complete evidence.                        |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm audit signatures`                                                                                           | Exit 0; 235 audited and all 235 verified.                                                                                                                                                                                                                                                                                  | Coordinator-run native/network-complete evidence.                        |
+| Coordinator                          | `pnpm --config.verify-deps-before-run=false proto:generate`                                                       | Exit 0; 25 copied Spine checksums verified.                                                                                                                                                                                                                                                                                | Coordinator-run fresh-worktree evidence.                                 |
+| Coordinator                          | `typecheck:build:generated` after generation                                                                      | Exit 0.                                                                                                                                                                                                                                                                                                                    | Coordinator-run fresh-worktree evidence.                                 |
+| Coordinator                          | Splitter-defined 19-file security regression command after generation                                             | Native pass: 19 files, 780 tests, 0 failures.                                                                                                                                                                                                                                                                              | Coordinator-run focused verification evidence.                           |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm view zeromq@6.5.0 version dist.integrity scripts engines os cpu --json`                                     | Exit 0; integrity `sha512-vWOrt19lvcXTxu5tiHXfEGQuldSlU+qZn2TT+4EbRQzaciWGwNZ99QQTolQOmcwVgZLodv+1QfC6UZs2PX/6pQ==`; install script `node ./script/install.js`; Node >=12.                                                                                                                                                 | Coordinator-run registry verification.                                   |
+| Coordinator, 2026-07-14, pnpm 11.9.0 | `pnpm view @bufbuild/buf@1.71.0 version dist.integrity scripts engines os cpu --json`                             | Exit 0; integrity `sha512-GDcjBCwLgHT/4nX4YSnYatZ7sDZDpHV6dxQvoT2/P6gKvV23O6hl8NryzLIRKmeau0FRXpQKHVy1dMfnBSpy+w==`; postinstall `node ./install.js`, prepack `node ./prepack.js`; Node >=12.                                                                                                                              | Coordinator-run registry verification.                                   |
+| Wave 5 implementer start             | `git rev-parse HEAD`                                                                                              | `b43cf7054b4b087465a1c92bbd73358d5fcdfd86`, the committed finding basis; the implementation endpoint remains log-owned pending coordinator commit.                                                                                                                                                                         | Implementer-run read-only check.                                         |
+| Artifact author                      | `git ls-files 'packages/*/generated/**' 'examples/*/generated/**'`                                                | No output: no generated output tracked.                                                                                                                                                                                                                                                                                    | Author-run read-only check.                                              |
+| Wave 4 implementer                   | Focused D-0087 RED/GREEN commands                                                                                 | Codec: RED 1 failed/120 skipped, GREEN 2 passed/119 skipped. Cross-instance orderings: RED 1 failed/121 skipped and 1 failed/122 skipped, GREEN 2 passed/121 skipped. Capacity failure: RED 1 failed/124 skipped, GREEN 2 passed/123 skipped. Registration rollback: RED 1 failed/128 skipped, GREEN 3 passed/126 skipped. | Implementer-run local evidence; exact commands in `work-logs/T-0041.md`. |
+| Wave 4 implementer                   | `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/services/spine-services.test.ts` | Native exit 0; 130 tests passed.                                                                                                                                                                                                                                                                                           | Implementer-run after final source/test changes.                         |
+| Wave 4 implementer                   | `pnpm --config.verify-deps-before-run=false typecheck:generated` and `docs:check`                                 | Both exit 0; 25 Proto checksums verified; public API counts `100/28/205/19/17/3`.                                                                                                                                                                                                                                          | Implementer-run focused endpoint evidence.                               |
+| Wave 5 implementer                   | Focused ambiguous-write and strict-codec RED/GREEN commands                                                       | Ambiguous write: RED 1 failed/133 skipped, GREEN 1 passed/133 skipped. Strict codec: RED 1 failed/134 skipped, GREEN 1 passed/134 skipped; combined recovery/direct codec passed 2/2 with 133 skipped.                                                                                                                     | Implementer-run; exact commands in `work-logs/T-0041.md`.                |
+| Wave 5 implementer                   | Deterministic removal-gate and lifecycle regressions                                                              | Removal-gate tests passed 2/2 with 133 skipped before and after barrier conversion. Five wave 5 cases passed 5/5 with 130 skipped. Native lifecycle set passed 42/42 with 93 skipped after the sandbox-only run stopped at 41 passes with loopback `EPERM`.                                                                | Implementer-run focused evidence.                                        |
+| Wave 5 implementer                   | `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/services/spine-services.test.ts` | Native exit 0; 135 tests passed.                                                                                                                                                                                                                                                                                           | Implementer-run after wave 5 source/test changes.                        |
+| Wave 5 implementer                   | `typecheck:generated`, `docs:check`, focused ESLint and Prettier                                                  | Typecheck/docs exit 0; docs verified 25 Proto checksums and public API counts `100/28/205/19/17/3`. Initial focused lint identified two test-fixture style errors; corrected rerun and focused Prettier check exit 0.                                                                                                      | Implementer-run focused endpoint evidence.                               |
+
+## Dependency reachability and install scripts
+
+| Category                     | Packages/reachability                                                                                                                                             | Evidence/disposition                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Runtime direct               | `@bufbuild/protobuf@2.12.1`, `@connectrpc/connect@2.1.2`, `@connectrpc/connect-node@2.1.2`, `@spine-event-engine/validation-ts@2.0.0-snapshot.4`, `zeromq@6.5.0`. | `packages/{core,server,storage,transport}/package.json`; `pnpm-lock.yaml:49-58,77-83,143-146`.                                       |
+| Development/build            | `@bufbuild/buf@1.71.0` and tooling.                                                                                                                               | Root `package.json:18-48`; Buf is dev-only and used by `proto:generate`.                                                             |
+| Runtime exposure constrained | `zeromq@6.5.0`.                                                                                                                                                   | Direct transport dependency, reachable only through explicit `@spine-ts/transport/zeromq` (`packages/transport/package.json:11-23`). |
+| Audit-unreachable            | No advisory package in full, prod, or dev audit output.                                                                                                           | This does not claim all transitive packages are unreachable.                                                                         |
+| Accepted install residual    | Native `zeromq`; Buf platform binary.                                                                                                                             | Only allowed build-script packages; exact registry scripts above; no ignored builds.                                                 |
+
+`@bufbuild/buf` is root dev dependency used by `proto:generate`
+(`package.json:28-31,36-38`) and has platform optionals
+(`pnpm-lock.yaml:171-213,1274-1303`). `zeromq` is direct runtime dependency
+of adapter-only transport; native sockets are imported only at
+`packages/transport/src/zeromq/signal-transport.ts:1-7`. These scripts are
+supply-chain exposure needing lock/signature review, not discovered defects.
+The initial pre-generation focused-regression attempt is invalid setup and is
+superseded by the successful generated-output rerun above. Generated outputs
+remain ignored.
+
+## Findings
+
+Round 1 confirmed four framework defects. Stable IDs preserve every original
+disposition and the new release-blocking findings.
+
+| ID     | Status/severity                               | Attacker prerequisite                                                                                                                         | Asset/boundary               | Evidence/control                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Residual and smallest correction                                                                                                                                                                                                                                                                                                                      |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SF-001 | Contractual residual / High if misdeployed    | Consumer broad-binds without TLS, authn, tenant-binding authz, or rates.                                                                      | Remote; TB-01..03            | Local default `server.ts:18-19,55-57`; exclusions `README.md:15-24`, `packages/server/README.md:86-87`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Deployment owns ingress; correct only framework claim/bypass.                                                                                                                                                                                                                                                                                         |
+| SF-002 | Superseded by SF-010                          | Same-host attacker can alter/access IPC directory.                                                                                            | IPC; TB-06                   | The initial mode-only disposition omitted symlink and ownership checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | See confirmed `SF-010`.                                                                                                                                                                                                                                                                                                                               |
+| SF-003 | Contractual residual / Medium                 | Generated module/path/root or developer/CI is controlled.                                                                                     | Node execution; TB-07,08     | `generated-registry-discovery.ts:174-258`; dynamic import executes selected code.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Trusted root required; no speculative sandbox.                                                                                                                                                                                                                                                                                                        |
+| SF-004 | Evidence observation / No advisory            | Audited lock closure remains current.                                                                                                         | Dependencies; TB-09          | Coordinator zero-advisory and 235-signature evidence; lock integrity anchors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Re-run after dependency change; reviewer verifies freshness.                                                                                                                                                                                                                                                                                          |
+| SF-005 | Partially superseded by SF-007..SF-009        | Exposed caller or trusted handler drives valid work.                                                                                          | Availability; TB-01,02,04,05 | Existing per-operation limits do not cover the three confirmed gaps below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Retain only trusted-handler/deployment residuals.                                                                                                                                                                                                                                                                                                     |
+| SF-006 | Evidence observation / Low                    | Caller induces failure and reads output.                                                                                                      | Sensitive data; TB-10        | Allowlist `signal-intake.ts:58-115`; redaction test `signal-transport.test.ts:1089-1120`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Log sink policy external; regression only for framework leak.                                                                                                                                                                                                                                                                                         |
+| SF-007 | Implemented / Correction verification current | Caller reaches the HTTP/2 listener and sends a very large message.                                                                            | Availability; TB-01          | The 4,194,304-byte defaults, validation, options, and direct Connect forwarding are at `server.ts:18-21,48-58,202-212,420-436,610-624,795-800`. Constructor validation is at `server.test.ts:60-69`; native configured/default compressed and uncompressed request/response regressions are at `spine-services.test.ts:309-404`. Native RED/GREEN evidence is at `work-logs/T-0041.md:163-199`, and the coordinator native security suite is at `work-logs/T-0041.md:122-131`.                                                                                                                                                                                                                                                  | Canonical review clean; prior security disposition retained. Deployment ingress/rate policy remains external.                                                                                                                                                                                                                                         |
+| SF-008 | Implemented / Correction verification current | Valid caller reaches Subscribe or Cancel and repeatedly creates subscription or unknown-ID cancellation work in one `SpineServices` instance. | Availability; TB-01/TB-02    | Default/validated per-instance reservations and unknown-removal admission are at `spine-services.ts:124-146,511-535,960-980,1468-1510`; D-0090 remains at `spine-services.ts:1468-1501`. Capacity, unknown-cancel, and failure-retention regressions are at `spine-services.test.ts:2429-2595,2648-2675`, with D-0090 at `spine-services.test.ts:2429-2495`. Focused RED/GREEN and related coverage are at `work-logs/T-0041.md:201-232`; the coordinator native security suite is at `work-logs/T-0041.md:122-131`. Exact owner claims, strict persisted decoding, CAS fencing, and later lifecycle regressions remain part of the implemented control.                                                                        | Canonical review clean; prior security disposition retained. Re-review lifecycle, strict codec, and adapter CAS conformance. A crashed owner may leave a stale claim; no lease, heartbeat, routing, supervision, or automatic reclamation is promised. Each instance has independent bounds; deployment owns distributed/per-tenant quotas and rates. |
+| SF-009 | Implemented / Correction verification current | Authorized caller queries a tenant containing more than 1,000 matching projection rows.                                                       | Availability; TB-01/TB-02    | `createReadQuery()` and `MAX_QUERY_LIMIT=1000` are at `spine-services.ts:1340-1437,1482`; missing/zero-format and tenant-first cap regressions are at `spine-services.test.ts:856-921`, with explicit maximum rejection at `spine-services.test.ts:1070-1108`. Focused RED/GREEN is at `work-logs/T-0041.md:212-217`; the coordinator native security suite is at `work-logs/T-0041.md:122-131`.                                                                                                                                                                                                                                                                                                                                | Canonical review clean; prior security disposition retained. Re-review storage-adapter conformance; deployments may impose lower API limits.                                                                                                                                                                                                          |
+| SF-010 | Implemented / Correction verification current | Same-host attacker can substitute a configured path component before preparation or between asynchronous checks.                              | IPC; TB-06                   | Lexical preparation, canonical identity, ownership/mode, and recheck controls are at `signal-transport.ts:723-897`; setup paths gate before native work at `signal-transport.ts:180-233,249-290,307-364,401-455`. Publish gate/track/send and close-before-drain are at `signal-transport.ts:110-163,524-546`; request and publisher error composition remains at `signal-transport.ts:249-290,432-453`. Wave 21 lifecycle/request regressions are at `signal-transport.test.ts:72-256,328-410`; composition and eight-boundary regressions are at `signal-transport.test.ts:522-590,770-781,1602-1785`. Fresh unrestricted/native 49/49 evidence is recorded in the current Wave 22 correction entry in `work-logs/T-0041.md`. | Canonical review clean; prior security disposition retained. The accepted pathname residual remains unchanged.                                                                                                                                                                                                                                        |
+| SF-011 | Implemented / Correction verification current | Same-UID process can access the private IPC directory and act as a peer.                                                                      | Availability; TB-06          | Private `nativeMessageMaxBytes = 8_388_608` is set on Reply, Subscriber, and Request before endpoint/native work. Raw Publisher→Subscriber, Request→Reply, and Reply→Request +1-byte regressions prove non-reachability and later valid continuation; full native file 53/53 passed.                                                                                                                                                                                                                                                                                                                                                                                                                                            | Complete four-lane canonical review and focused security re-review remain pending.                                                                                                                                                                                                                                                                    |
+| SF-012 | Implemented / Correction verification current | Attacker corrupts/writes a durable subscription row, or a faulty persistence adapter returns one.                                             | Availability; TB-04          | Private `durableRecordMaxBytes = 33_554_432` rejects at the first common JSON-reader line before decode/parse/Base64/Protobuf work. Tests cover decoder/parser non-reachability, boundary, exact 4 MiB arithmetic, inert recovery, valid continuation, and fail-closed cancellation retry; full server file 149/149 passed.                                                                                                                                                                                                                                                                                                                                                                                                     | Complete four-lane canonical review and focused security re-review remain pending.                                                                                                                                                                                                                                                                    |
+| SF-013 | Accepted residual / Medium                    | Same-UID process can access the private IPC directory and act as a peer.                                                                      | Availability; TB-06          | Native `maxMessageSize` is per frame; the binding materializes full multipart `Buffer[]` values while publish/request/reply consumers ignore surplus frames. A valid prefix plus arbitrarily many individually bounded frames bypasses aggregate receive accounting. One-frame valid traffic still permits appended multipart trailers. D-0093 requires protocol-prefix consumption and preserves the 8 MiB per-frame limit without claiming an aggregate bound.                                                                                                                                                                                                                                                                | The human explicitly accepts this initial-release availability residual and declines native/replacement receive work at this stage. Trailers are ignored after allocation. Post-completion Internet research must identify known upstream issues/workarounds or evidence the limitation was undocumented.                                             |
+
+Architecture dispatch: requirements splitter
+`019f6575-3f28-7410-ae39-3ef51476c44b`, explicit immutable
+`gpt-5.6-sol` / high, read-only, childless, and Git-read-only.
+
+Coordinator correction evidence: SF-011 raw Publisher-to-Subscriber and
+Request-to-Reply tests now send the exact routing key as frame 1 and an
+8,388,609-byte envelope frame as frame 2; Reply-to-Request retains its
+8,388,609-byte reply. Fresh final-state focused transport security passed 5/5,
+complete native transport passed 53/53, and complete affected server passed
+149/149. The four-lane canonical review and focused security re-review are now
+clean.
+
+## Accepted-residual contract
+
+The initial-release contract assigns TLS, authentication, authorization, rate
+limits, secrets, host security, production persistence adapters/deployment,
+worker supervision, and production retry monitoring to consumers/deployment.
+Framework storage, tenant propagation/isolation, and delivery behavior remain
+in scope alongside structural validation, resource limits, private IPC
+handling, lifecycle cleanup, and diagnostic redaction. A proven bypass is
+release-blocking and needs focused behavior regression evidence.
+
+## Review rounds and exit checklist
+
+| Round | Scope                                    | Status                                                                      |
+| ----- | ---------------------------------------- | --------------------------------------------------------------------------- |
+| 0     | Requirements splitter                    | Accepted: ten TB boundaries and TM-001..TM-012.                             |
+| 1     | Artifact author                          | Finding Batch 1 corrected; coordinator checks clean.                        |
+| 2     | Dedicated security reviewer, Terra High  | Round 1: four confirmed blockers; reviewer closed.                          |
+| 2a    | Fix implementation                       | SF-007..010 implemented with focused RED/GREEN evidence; re-review pending. |
+| 3     | Canonical Wave 16                        | Findings fixed; correction verification complete.                           |
+| 3a    | Wave 16 correction                       | Coordinator-verified at `b70ecb08`.                                         |
+| 4     | Canonical Wave 17                        | Findings fixed; correction verification complete.                           |
+| 4a    | Wave 17 correction                       | Coordinator-verified at `fa5e4b65`.                                         |
+| 5     | Canonical Wave 18                        | Findings fixed; correction verification current.                            |
+| 6     | Canonical Wave 19                        | Finding fixed; correction verification current.                             |
+| 7     | Canonical Wave 20                        | Findings fixed; correction verification current.                            |
+| 8     | Canonical Wave 21                        | Findings fixed; correction verification current.                            |
+| 9     | Canonical Wave 22                        | Test finding corrected; focused style re-review clean.                      |
+| 10    | Dedicated security re-review             | SF-011/SF-012 accepted; reviewer closed.                                    |
+| 11    | D-0091 implementation                    | Coordinator-verified at `da730e04`.                                         |
+| 12    | Canonical Wave 23                        | All four concerns clean; reviewers closed.                                  |
+| 13    | Focused SF-011/SF-012 security re-review | SF-013 confirmed; SF-012 clean; reviewer closed.                            |
+| 14    | SF-013 architecture                      | Native multipart limit unavailable; human accepted residual in D-0093.      |
+| 15    | D-0093 wire correction                   | Coordinator-verified; canonical and focused security review pending.        |
+
+- [x] Threat model TB-01..TB-10 / TM-001..TM-012.
+- [x] Coordinator audit, signature, and registry-script evidence.
+- [x] Coordinator generation, generated typecheck, and 19-file security
+      regression evidence.
+- [x] Reachability categories and accepted-residual contract.
+- [x] Generated output checked untracked by author.
+- [x] Focused documentation checks after artifact write.
+- [ ] Dedicated security review, any focused fix/regression, canonical review
+      dispositions, full verification, integration, remote sync, and task closure.
+
+## D-0093 Implementation Evidence
+
+The private ZeroMQ adapter now uses Buf binary for `command` and `event`
+envelopes, retains V8 for reserved non-Proto kinds and the existing private
+request-result wrapper, and rejects generated Protobuf successful replies.
+Native-IPC regressions cover exact bytes, raw decoding, malformed continuation,
+and ignored protocol trailers. SF-013 remains accepted and unbounded in
+aggregate: zeromq.js allocates multipart frames before the adapter ignores
+trailers. Final focused security re-review is still required.
+
+## D-0094 Type Contract And Reply Guard Evidence
+
+The transport root now correlates `command` and `event` kinds with the
+generated `Command` and `Event` envelopes through
+`TransportSignalEnvelope`; the intentional public export counts are 18 for the
+transport root and 6 for the ZeroMQ subpath. The private ZeroMQ result guard
+uses Buf `isMessage()` without a schema and rejects every
+generated-message-shaped successful result, including an object with a string
+`$typeName`, before V8 serialization. Plain private non-generated results
+remain supported and are not Spine `Ack` values. Regressions assert the exact
+generic malformed-command failure payload and prove that the same responder
+continues from a rejected generated result to a later successful plain result.
+
+This correction does not reduce SF-013. Each inbound frame has the existing
+8,388,608-byte rejection ceiling, but ignored trailers have already been
+materialized by zeromq.js and aggregate multipart allocation remains accepted
+and unbounded. RED rejected the missing public conditional/export and stale
+private-object command/event fixtures; GREEN passed 87/87 required native tests,
+63/63 additionally affected server tests, both typechecks, focused ESLint, and
+the intentional 18/6 transport export checks. Focused final security re-review
+is clean.
+
+## D-0096 Fixed-Path Predicate Evidence
+
+The public transport root exposes separate operation and topic predicates so
+function identity fixes the compared path even for open or dual-shaped values.
+The operation predicate narrows the correlated operation union from
+`operation.topic.signalKind`. The topic predicate compares only top-level
+`topic.signalKind` and promises only that observed fact; it does not validate or
+narrow `routing.signalKind`. A cast-free widened topic with top-level command
+and routing event proves the distinction at compile time and runtime. These
+typed narrowing aids do not alter ZeroMQ parsing, framing, allocation, or trust
+boundaries, and they do not reduce or expand accepted SF-013.
+
+## Final Focused Security And Audit Evidence
+
+Security reviewer `019f66ab-ff43-7951-9f7a-7052210d7ff9`, immutable Terra High,
+found no new release blocker from D-0093 through D-0096 and confirmed prior
+controls remain intact. SF-013 is the sole explicit accepted residual in this
+focused scope. Fresh native full, production-only, and development-only audits
+all report zero advisories; all 235 registry signatures verify. Full task and
+verification passes; post-merge verification remains pending.

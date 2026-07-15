@@ -377,27 +377,47 @@ ID-filter reads for any registered state route use the same path with a storage
 ID filter. Projection queries also support top-level `EQUAL` filters over
 declared projection `(column)` proto field names, field masks, repeated ordering
 directives over declared proto column names, and positive limits when ordering
-is present; non-negative storage offsets are applied after sorting and before
+is present. Absent or zero wire limits use an implicit 1,000-row cap without
+requiring ordering; only a positive limit without ordering returns
+`INVALID_QUERY`. Non-negative storage offsets are applied after sorting and before
 limits. Use proto column names such as `open_task_count`, not generated TS
 local names such as `openTaskCount`. Undeclared columns, unsupported operators,
-nested or `EITHER` composites, limits without ordering, missing criteria, and
+nested or `EITHER` composites, positive limits without ordering, missing criteria, and
 `include_all = false` return `INVALID_QUERY` before Stand storage reads.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
-subscription ID, abandoned inactive subscriptions expire after a small
-configurable TTL, slow consumers are bounded by a small configurable update
-queue, and stream/cancel cleanup releases the direct Stand or event-bus
-listener handle. `Subscribe` accepts registered state targets and event targets
+subscription ID. Never-activated durable records become ineligible for
+activation after the configurable `inactiveTtlMs` (default 30 seconds;
+non-positive or non-finite values coerce to 1, positive finite values are
+floored, and an effective value above 2,147,483,647 milliseconds throws
+synchronously before storage or timer work), and slow consumers are bounded
+by the configurable `queueLimit`. Each `SpineServices` instance also has an
+independent `subscriptionLimit` (default 100; positive safe integer) covering
+pending, inactive, active, and recovered records. Stream/cancel cleanup releases
+the direct Stand or event-bus listener handle. `Subscribe` accepts registered state targets and event targets
 exposed by built-context event dispatchers. It rejects unknown/private targets,
 invalid criteria, unsupported comparison operators, event filters, event field
 masks, and unknown subscription field paths before creating a service-owned
 inactive record or attaching a listener. The inactive record is stored through
 the owning bounded context storage factory, so a fresh `SpineServices` adapter
 over the same storage factory can recover it by opaque subscription ID.
-Activation consumes the durable row before live attachment, so that storage
-contains inactive records only. State
+Activation atomically replaces the exact inactive row with a unique-owner claim
+before live attachment and retains that claim while active. Cancellation moves
+an exact inactive row or same-instance claim through a marker to absence; a
+foreign active claim returns `ABORTED`. Same-ID cancellation coalescing applies
+only within one `SpineServices` instance. Unknown-ID cancellation work uses a
+separate per-instance pool bounded by `subscriptionLimit`; exhaustion returns
+`RESOURCE_EXHAUSTED` before storage access. Known local cleanup retains its
+subscription capacity until persistence settles; marker-cleanup failure returns
+`INTERNAL` and a same-ID retry can settle the retained marker. Confirmed absence
+returns `OK`, while concurrent same-ID cancellation within one instance shares
+one exact outcome. If inactive-expiry cleanup fails after its timer is cleared,
+the instance retains the local record and its capacity with no automatic retry;
+an explicit same-ID `Cancel` can retry persistence cleanup. A crashed owner can
+leave a stale claim because this release adds no lease, heartbeat, routing,
+supervision, or reclamation. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
@@ -412,8 +432,10 @@ messages; framework envelopes stay inside service/runtime data. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant slice. Activation
 and cancellation are keyed by subscription ID: unknown, canceled, expired, and
-already-active activations complete without updates, and unknown or duplicate
-cancellations return OK. Cleanup is idempotent across cancel, stream
+already-active activations complete without updates; confirmed absence returns
+`OK`, concurrent same-ID cancellation within one `SpineServices` instance
+shares one exact outcome, and foreign active ownership returns `ABORTED`.
+Cleanup is idempotent across cancel, stream
 finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
 sets, active service delivery handles, queued updates, Stand version metadata,
 and in-memory storage adapter backing data are local process state; this slice
@@ -702,8 +724,10 @@ tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
-`@spine-ts/transport/zeromq` subpath exposes the local IPC config helper and a
-`SignalTransport` factory. The adapter derives compact deterministic IPC socket
+`@spine-ts/transport/zeromq` subpath exposes exactly
+`createZeroMqAdapterConfig`, `createZeroMqTransport`, `ZeroMqAdapterConfig`,
+`ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket
 paths from `ZeroMqAdapterConfig` plus transport routing descriptors and keeps
 endpoint strings, multipart frames, socket classes, and native module types out
 of framework APIs. Native tests prove publish/subscribe, request/reply, and
@@ -723,10 +747,28 @@ checks. The workspace explicitly approves the `zeromq` install script in pnpm
 configuration, so dependency restoration must run in an environment that
 permits native package build/install scripts. Managed sandboxes may reject
 ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
-IPC filesystem/socket permissions outside the sandbox. Per D-0007, this adapter
-path is for same-host IPC only; scaling beyond one host remains the job of a
-different transport behind the same public contract.
+IPC filesystem/socket permissions outside the sandbox. Per D-0007, this
+initial-release adapter path is limited to same-host IPC; remote and multi-host
+transport are excluded. That exclusion makes no commitment about a future
+transport or contract.
 
-The ZeroMQ adapter serializes envelopes with Node's V8 serializer. Its `ipc://`
-frames are trusted same-host runtime traffic only, and `ipcDirectory` must be a
-private directory shared only by the cooperating runtime peers.
+The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
+envelopes, dispatching by the transport topic's signal kind. Its reserved
+`query`, `subscription`, and `system` kinds have no Protobuf wire contract and
+currently retain private V8 encoding. The public `TransportSignalEnvelope`
+conditional correlates `command` with generated `Command`, `event` with
+generated `Event`, and preserves caller-selected envelope types for the other
+kinds.
+
+Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
+8,388,608-byte rejection ceiling; ordinary frames allocate their actual sizes,
+not a fixed 8 MiB. Publish and request traffic places the route in frame 1 and
+the Buf command/event payload in frame 2. The existing private successful-result
+wrapper is V8-encoded in reply frame 1 and is not Spine `Ack`. Buf
+generated-message-shaped replies, including every object with a string
+`$typeName`, are rejected rather than V8-serialized. Receivers ignore trailers
+only after zeromq.js has materialized the multipart message, so SF-013 remains
+accepted and unbounded in aggregate. Old peers that use V8 for command/event
+frames cannot interoperate with the Buf wire and all cooperating peers must
+upgrade together. The `ipc://` frames are trusted same-host runtime traffic
+only, and `ipcDirectory` must be private to the cooperating runtime peers.

@@ -239,15 +239,20 @@ route and projection-state `Target.include_all = true` reads, packing
 `Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
 filters over declared projection `(column)` proto field names, field masks,
 repeated ordering directives over declared proto column names, and positive
-limits when ordering is present. Use proto column names such as
+limits when ordering is present. Absent or zero wire limits use an implicit
+1,000-row cap without requiring ordering; only a positive limit without
+ordering returns `INVALID_QUERY`. Use proto column names such as
 `open_task_count`, not generated TS local names such as `openTaskCount`.
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
-without ordering, missing criteria, and `include_all = false` return
+with a positive value but without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
 `Subscribe` allocates opaque IDs, validates subscription criteria,
 `Activate` attaches delivery, and `Cancel`/stream finalization release
 in-process handles. Never-activated subscriptions have a configurable inactive
-TTL, and active delivery uses a configurable queue limit for slow consumers.
+TTL: it defaults to 30 seconds; non-positive or non-finite values become 1;
+positive finite values are floored; and an effective value above 2,147,483,647
+milliseconds throws synchronously before storage or timer work. Active delivery
+uses a configurable queue limit for slow consumers.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters, event field masks,
@@ -265,20 +270,37 @@ continue to receive generated domain event messages; framework envelopes remain
 service/runtime data. Activation is by opaque ID. Inactive records are stored
 through the owning bounded context storage factory, so a new `SpineServices`
 instance over the same storage factory can activate a previously returned ID.
-Activation consumes the durable row before live attachment, so durable storage
-contains inactive records only. Single-tenant subscriptions reject tenant
+Activation compare-and-sets the exact inactive row to a unique-owner claim and
+retains that claim while the local stream is active. Single-tenant subscriptions reject tenant
 options; multitenant subscriptions require `tenantId`; state and event
 delivery are scoped to that tenant slice. Unknown, canceled, expired,
 malformed, inconsistent, and already active IDs complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
-subscription returns OK. Cleanup is idempotent across cancellation,
-activation-stream finalization, inactive expiry, malformed/inconsistent-row
-rejection, and slow-consumer queue closure. Defaults are 30 seconds for
-inactive expiry and 100 queued updates per active subscription. Active streams
-and queued updates remain process-local and are not replayed after activation
-or restart. This is not a client DSL, broad server lifecycle, projection
-catch-up loop, cross-process stream ownership, or durable retained update
-queue.
+subscription returns OK only after admission to the bounded unknown-removal
+pool. Overflow returns `RESOURCE_EXHAUSTED` before storage access. An exact
+inactive row or same-instance claim moves
+through a cancel marker to absence; a foreign active claim returns `ABORTED`.
+Cleanup is idempotent across cancellation, activation-stream finalization,
+inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
+inert. `SpineServicesOptions.subscriptionLimit` defaults to 100 and must be a
+positive safe integer; it bounds pending, inactive, active, and recovered
+subscriptions owned by one `SpineServices` instance. Each instance has its own
+bound, not a process-wide or distributed quota. Unknown-ID cancellation uses a
+separate internal pool of the same size. Known-local cancellation retains its
+normal subscription capacity until durable cancellation settles. If that
+persistence fails, `Cancel` returns Connect `INTERNAL` with `Subscription
+cancellation failed.`; retry `Cancel` with the same returned `Subscription`
+message containing its ID. That retry contract does not apply to internal cleanup after an
+initial failed `Subscribe`. If a normal inactive-expiry timer fires and durable
+cleanup fails, its timer stays cleared, the local record and its capacity remain,
+and no automatic retry or new timer is scheduled; `Cancel` with that same
+returned `Subscription` message containing its ID can retry the durable cleanup and release the capacity. Defaults are 30 seconds for inactive expiry and 100
+queued updates per active subscription. Active streams and queued updates remain
+process-local and are not replayed after activation or restart. This is not a
+client DSL, broad server lifecycle, projection catch-up loop, cross-process
+stream ownership, or durable retained update queue. A crashed owner can leave a
+stale claim because this contract has no lease, heartbeat, routing, supervision,
+or automatic reclamation.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
 `ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select
@@ -686,10 +708,12 @@ manage delivery, or fan out to subscribers.
 Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,
 `TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
+`TransportSignalEnvelope`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`. This root surface is contract-only: it defines
+`createTransportSubscription()`, `isTransportOperationKind()`, and
+`isTransportTopicKind()`. This root surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
 routing keys, handler callback signatures, and graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
@@ -699,22 +723,73 @@ values, retry policy, durable storage, runtime handler invocation, or server
 runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
-adapter-scoped `@spine-ts/transport/zeromq` subpath exports
-`createZeroMqAdapterConfig()` and `createZeroMqTransport()` for local IPC
-deployments. It derives deterministic IPC endpoints from adapter config and
-transport routing descriptors internally, then exposes only the
+adapter-scoped `@spine-ts/transport/zeromq` subpath exports exactly
+`createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
+`ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
+IPC endpoints from adapter config and transport routing descriptors internally,
+then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint
 strings, multipart frames, and native binding types remain absent from the root
 API; remote transport, broker topology, process supervision, worker
 registration handshakes, delivery retries, and broad health checks are outside
 the initial release. The adapter provides no exactly-once, durable-redelivery,
-retry, restart, or remote-delivery guarantee. The adapter serializes envelopes
-with Node's V8 serializer and is for
+retry, restart, or remote-delivery guarantee. For transport topics marked
+`command` or `event`, the private adapter uses generated Buf Protobuf binary;
+the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
+contract and currently retain private V8 encoding. `TransportSignalEnvelope`
+correlates command/event operations and handlers with generated `Command` and
+`Event` while preserving caller-selected types for other kinds. Widened or
+union operations and topics can be narrowed through their fixed canonical kind
+paths:
+
+```ts
+import {
+  isTransportOperationKind,
+  isTransportTopicKind,
+  type RequestTransportOperation,
+  type TransportTopic,
+} from "@spine-ts/transport";
+
+function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
+  if (isTransportOperationKind(operation, "command")) {
+    operation.envelope; // Inferred as the generated Command type.
+  }
+}
+
+function onTransportTopic(topic: TransportTopic): void {
+  if (isTransportTopicKind(topic, "event")) {
+    topic.signalKind; // Inferred as "event".
+  }
+}
+```
+
+`isTransportOperationKind()` always compares `operation.topic.signalKind`, and
+`isTransportTopicKind()` always compares `topic.signalKind`. They provide type
+narrowing, not validation of untrusted input or envelope content, and neither
+inspects the envelope. The topic helper narrows only the top-level
+`signalKind`; it does not validate or narrow the routing descriptor or
+`routing.signalKind`. Every inbound
+`Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
+ceiling, not a fixed allocation. Publish and request messages use route frame 1
+and payload frame 2: command/event payloads use Buf, while reserved
+query/subscription/system payloads use private V8. A successful request result
+uses the private V8 wrapper in reply frame 1 and is not Spine `Ack`; generated-
+message-shaped results, including objects with a string `$typeName`, are
+rejected before V8 serialization. Trailers are ignored only after zeromq.js
+materializes the full multipart message, so SF-013 remains accepted and
+unbounded in aggregate. Old V8 command/event peers are wire-incompatible with
+Buf peers and cooperating peers must upgrade together. The adapter is for
 trusted same-host runtime peers only; `ipcDirectory` must be private to those
 peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
 local IPC tests can require native IPC filesystem/socket permissions outside
-the sandbox. Runtime transport tests now include a native ZeroMQ-backed command
-and event callback proof through the public `SignalTransport` contract.
+the sandbox. `requestTimeoutMs` defaults to 2,000 milliseconds and accepts only
+integers from 1 through 2,147,483,647; invalid values fail before filesystem or
+socket work. It bounds request/reply send and receive but does not actively
+cancel an already-sent request, while `receiveTimeoutMs` remains the separate
+background-worker setting. Runtime transport tests now include a native
+ZeroMQ-backed command and event callback proof through the public
+`SignalTransport` contract.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
@@ -728,10 +803,12 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
-`@spine-ts/storage`, `@spine-ts/transport`, and `@spine-ts/testing`
-entry-point exports are present in the API model, checks
+`docs:check` also emits temporary TypeDoc JSON and verifies seven expected
+entry points in the API model: `@spine-ts/proto`, `@spine-ts/core`,
+`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/transport`,
+`@spine-ts/transport/zeromq`, and `@spine-ts/testing`. The
+`@spine-ts/transport/zeromq` entry point has its own exact-six-public-export
+gate. It also checks
 `@spine-ts/server` and `@spine-ts/storage` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

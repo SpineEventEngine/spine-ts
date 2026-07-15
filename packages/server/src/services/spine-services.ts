@@ -87,6 +87,7 @@ import { CommandRefusalError } from "./command-errors.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
+  type DurableSubscriptionRecord,
 } from "./subscription-records.js";
 
 /**
@@ -95,26 +96,30 @@ import {
  * `QueryService.Read` supports ID filters for any registered state route,
  * projection-state `include_all = true` reads, top-level equality filters over
  * declared projection `(column)` proto field names, field masks, ordering by
- * declared proto columns, and positive limits when at least one ordering
- * directive is present. Use proto column names such as `open_task_count`, not
- * generated TS local names such as `openTaskCount`; undeclared columns return
- * stable `INVALID_QUERY` responses before Stand storage is read. Unsupported
- * query operators and shapes also return stable `INVALID_QUERY` responses
- * before Stand storage is read.
+ * declared proto columns, and bounded result sets. An absent response format or
+ * zero wire limit receives an implicit 1,000-row cap without requiring
+ * ordering; a positive limit requires at least one ordering directive. Use
+ * proto column names such as `open_task_count`, not generated TS local names
+ * such as `openTaskCount`; undeclared columns return stable `INVALID_QUERY`
+ * responses before Stand storage is read. Unsupported query operators and
+ * shapes also return stable `INVALID_QUERY` responses before Stand storage is
+ * read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed
- * by built-context event dispatchers with `include_all = true`. It creates an
- * inactive process-local record and attaches delivery only when the opaque
- * subscription ID is activated: state subscriptions attach to `Stand`, while
+ * by built-context event dispatchers with `include_all = true`. It stores a
+ * durable inactive record that can be recovered before expiry, and attaches
+ * delivery only when the opaque subscription ID is activated: state
+ * subscriptions attach to `Stand`, while
  * event subscriptions attach to a framework-internal `EventBus` listener.
  * Filtered state topics deliver matching states, emit `no_longer_matching`
  * when previous state matched and new state does not, and apply topic masks
  * only to delivered states. Event topics stream wire-level `event_updates`
  * containing cloned framework `Event` envelopes; application code remains on
  * generated domain event messages through handler dispatch. Unknown or
- * duplicate activation IDs complete without updates, and cancellation of
- * unknown or already-cleaned IDs returns OK.
+ * duplicate activation IDs complete without updates. Cancellation of unknown
+ * or already-cleaned IDs returns OK after admission to the bounded
+ * unknown-removal pool.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -122,15 +127,23 @@ export class SpineServices {
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+  readonly #subscriptionReservations = new Set<string>();
+  readonly #claims = new Map<string, SubscriptionClaim>();
+  readonly #removals = new Map<string, SubscriptionRemoval>();
+  readonly #unknownRemovals = new Set<string>();
   readonly #subscriptionStores: readonly SubscriptionStore[];
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
+  readonly #subscriptionLimit: number;
 
   /** Create service adapters over the passed built bounded contexts. */
   constructor(options: SpineServicesOptions) {
     this.#contexts = Object.freeze([...options.contexts]);
-    this.#inactiveTtlMs = positiveInteger(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
+    this.#inactiveTtlMs = inactiveTtl(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
     this.#queueLimit = positiveInteger(options.queueLimit ?? DEFAULT_QUEUE_LIMIT);
+    this.#subscriptionLimit = subscriptionLimit(
+      options.subscriptionLimit ?? DEFAULT_SUBSCRIPTION_LIMIT,
+    );
 
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
@@ -308,11 +321,55 @@ export class SpineServices {
       expiresAtMs: Date.now() + this.#inactiveTtlMs,
       queueLimit: this.#queueLimit,
     });
-    return this.#persistSubscription(record).then(() => {
-      this.#rememberSubscription(record);
+    const reservation = this.#reserveSubscription(id);
+    if (reservation === undefined) {
+      throw new ConnectError("Subscription ID is already reserved.", Code.AlreadyExists);
+    }
+    record.reservation = reservation;
+    return this.#completeSubscription(record, subscription);
+  }
 
+  async #completeSubscription(
+    record: SubscriptionRecord,
+    subscription: Subscription,
+  ): Promise<Subscription> {
+    try {
+      await this.#persistSubscription(record);
+      this.#rememberSubscription(record);
       return clone(SubscriptionSchema, subscription);
-    });
+    } catch (error) {
+      try {
+        await this.#cancelPersistence(record.id, record.route.context, undefined);
+      } catch {
+        this.#retainFailedSetup(record);
+        throw error;
+      }
+      this.#releaseRecord(record);
+      throw error;
+    }
+  }
+
+  #retainFailedSetup(record: SubscriptionRecord): void {
+    record.delivery.close();
+    try {
+      this.#rememberSubscription(record);
+    } catch {
+      this.#subscriptions.set(record.id, record);
+      queueMicrotask(() => {
+        void this.#runTimerlessCleanup(record);
+      });
+    }
+  }
+
+  async #runTimerlessCleanup(record: SubscriptionRecord): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await this.#removeSubscription(record.id);
+        return;
+      } catch {
+        // A retained failed Subscribe is bounded and inert after both attempts.
+      }
+    }
   }
 
   #rememberSubscription(record: SubscriptionRecord): void {
@@ -328,12 +385,17 @@ export class SpineServices {
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
     const id = subscription.id?.value;
-    const record =
-      id === undefined
-        ? undefined
-        : (this.#subscriptions.get(id) ?? (await this.#recoverSubscription(id)));
+    if (id === undefined) {
+      return;
+    }
 
-    if (id === undefined || record === undefined) {
+    const local = this.#subscriptions.get(id);
+    if (local?.delivery.closed === true) {
+      return;
+    }
+    const record = local ?? (await this.#recoverSubscription(id));
+
+    if (record === undefined) {
       return;
     }
 
@@ -341,20 +403,37 @@ export class SpineServices {
       return;
     }
 
-    if (!record.durableConsumed && !(await this.#consumeDurableSubscription(record))) {
-      await this.#removeSubscription(id);
+    if (local !== undefined) {
+      const outcome = await this.#claimSubscription(record, false);
+      if (outcome !== "claimed") {
+        if (outcome === "lost") {
+          this.#forgetSubscription(record);
+        }
+        return;
+      }
+    }
+
+    const claim = this.#claims.get(id);
+    if (record.delivery.closed || claim?.canceled === true) {
       return;
     }
 
     try {
       this.#activateRecord(record);
     } catch (error) {
-      await this.#removeSubscription(id);
+      try {
+        await this.#removeSubscription(id);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Subscription activation and cleanup failed.",
+        );
+      }
       throw error;
     }
 
     try {
-      while (!record.delivery.closed) {
+      for (;;) {
         const update = await record.delivery.next();
         if (update === undefined) {
           return;
@@ -429,34 +508,82 @@ export class SpineServices {
     stateRecord.delivery.attach(standSubscription);
   }
 
-  async #removeSubscription(id: string): Promise<void> {
-    const record = this.#subscriptions.get(id);
+  #removeSubscription(id: string): Promise<void> {
+    const existing = this.#removals.get(id);
+    if (existing !== undefined) {
+      return existing.settled;
+    }
 
-    if (record !== undefined) {
-      clearInactiveTimer(record);
-      record.delivery.close();
+    const record = this.#subscriptions.get(id);
+    const claim = this.#claims.get(id);
+    const local = record ?? claim?.record;
+    const unknown = local === undefined;
+    if (unknown && this.#unknownRemovals.size >= this.#subscriptionLimit) {
+      return Promise.reject(
+        new ConnectError(
+          "Subscription cancellation capacity is exhausted.",
+          Code.ResourceExhausted,
+        ),
+      );
+    }
+    if (unknown) {
+      this.#unknownRemovals.add(id);
+    } else {
+      if (claim !== undefined) {
+        claim.canceled = true;
+      }
+      clearInactiveTimer(local);
+      local.delivery.close();
       this.#subscriptions.delete(id);
     }
-    await this.#deleteDurableSubscription(id, record?.route.context);
+
+    const removal = createSubscriptionRemoval();
+    this.#removals.set(id, removal);
+    void this.#runRemoval(id, removal, local, claim, unknown);
+    return removal.settled;
+  }
+
+  async #runRemoval(
+    id: string,
+    removal: SubscriptionRemoval,
+    record: SubscriptionRecord | undefined,
+    claim: SubscriptionClaim | undefined,
+    unknown: boolean,
+  ): Promise<void> {
+    try {
+      await this.#cancelPersistence(id, record?.route.context, claim?.owner);
+      this.#releaseLocal(id, record, claim);
+      removal.resolve();
+    } catch (error) {
+      this.#retainRecord(record);
+      removal.reject(error);
+    } finally {
+      if (unknown) {
+        this.#unknownRemovals.delete(id);
+      }
+      if (this.#removals.get(id) === removal) {
+        this.#removals.delete(id);
+      }
+    }
   }
 
   async #persistSubscription(record: SubscriptionRecord): Promise<void> {
+    const durable = DurableSubscriptionRecords.write({
+      id: record.id,
+      kind: record.kind,
+      targetType: record.route.typeUrl,
+      ...(record.tenantId === undefined ? {} : { tenantId: record.tenantId }),
+      subscription: record.subscription,
+      expiresAtMs: record.expiresAtMs,
+    });
+    record.durableState = durable;
     const storage = this.#subscriptionStorage(record.route.context);
     if (storage === undefined) {
       return;
     }
 
     try {
-      await storage.write(
-        DurableSubscriptionRecords.write({
-          id: record.id,
-          kind: record.kind,
-          targetType: record.route.typeUrl,
-          ...(record.tenantId === undefined ? {} : { tenantId: record.tenantId }),
-          subscription: record.subscription,
-          expiresAtMs: record.expiresAtMs,
-        }),
-      );
+      await storage.write(durable);
     } finally {
       storage.close();
     }
@@ -464,124 +591,359 @@ export class SpineServices {
 
   async #recoverSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     for (const store of this.#subscriptionStores) {
-      const storage = createSubscriptionStorage(store);
-
-      try {
-        const durable = await storage.read(id);
-        if (durable === undefined) {
-          continue;
-        }
-
-        const record = this.#restoreSubscription(durable, id);
-        if (record === undefined) {
-          await storage.delete(id);
-          return undefined;
-        }
-
-        if (!(await storage.compareAndSet(id, durable, undefined))) {
-          continue;
-        }
-
-        record.durableConsumed = true;
-        this.#rememberSubscription(record);
-        return record;
-      } finally {
-        storage.close();
+      const removal = this.#removals.get(id);
+      if (removal !== undefined) {
+        await observeRemoval(removal);
+        return undefined;
+      }
+      const outcome = await this.#recoverFromStore(id, store);
+      if (outcome.status === "complete") {
+        return outcome.record;
       }
     }
 
     return undefined;
   }
 
-  #restoreSubscription(durable: Any, id: string): SubscriptionRecord | undefined {
+  async #recoverFromStore(
+    id: string,
+    store: SubscriptionStore,
+  ): Promise<SubscriptionRecoveryOutcome> {
+    const storage = createSubscriptionStorage(store);
     try {
-      const stored = DurableSubscriptionRecords.read(durable, id);
-
-      if (stored.expiresAtMs <= Date.now()) {
-        return undefined;
+      const durable = await storage.read(id);
+      const removal = this.#removals.get(id);
+      if (removal !== undefined) {
+        await observeRemoval(removal);
+        return { status: "complete", record: undefined };
+      }
+      if (durable === undefined) {
+        return { status: "continue" };
       }
 
-      const route =
-        stored.kind === "event"
-          ? this.#eventRoutes.get(stored.targetType)
-          : this.#stateRoutes.get(stored.targetType);
-      const topic = stored.subscription.topic;
-      const target = topic?.target;
-
-      if (
-        route === undefined ||
-        topic === undefined ||
-        target?.type !== stored.targetType ||
-        topicTenant(topic) !== stored.tenantId
-      ) {
-        return undefined;
+      let state;
+      try {
+        state = DurableSubscriptionRecords.readState(durable, id);
+      } catch {
+        return { status: "complete", record: undefined };
+      }
+      if (state.type === "claim") {
+        return { status: "complete", record: undefined };
+      }
+      if (state.type === "cancel") {
+        await this.#clearMarker(storage, id, durable);
+        return { status: "complete", record: undefined };
       }
 
-      const tenantError = tenantMismatch(
-        route.context.isMultitenant,
-        stored.tenantId,
-        "subscription",
-      );
-      if (tenantError !== undefined) {
-        return undefined;
+      const record = this.#restoreSubscription(state.record);
+      if (record === undefined) {
+        await this.#clearInactive(storage, id, durable);
+        return { status: "complete", record: undefined };
       }
-
-      return createSubscriptionRecord({
-        id: stored.id,
-        subscription: stored.subscription,
-        shape: createSubscriptionShape(topic, route),
-        tenantId: stored.tenantId,
-        expiresAtMs: stored.expiresAtMs,
-        queueLimit: this.#queueLimit,
-      });
-    } catch {
-      return undefined;
+      record.durableState = durable;
+      const outcome = await this.#claimSubscription(record, true);
+      return {
+        status: "complete",
+        record: outcome === "claimed" ? record : undefined,
+      };
+    } finally {
+      storage.close();
     }
   }
 
-  async #deleteDurableSubscription(id: string, context?: BoundedContext): Promise<void> {
+  async #claimSubscription(
+    record: SubscriptionRecord,
+    remember: boolean,
+  ): Promise<SubscriptionClaimOutcome> {
+    const claim = this.#beginClaim(record);
+    if (claim === undefined) {
+      return "duplicate";
+    }
+
+    const storage = this.#subscriptionStorage(record.route.context);
+    try {
+      const durableOutcome = await this.#claimDurable(storage, record, claim);
+      claim.claimed = durableOutcome === "claimed";
+      if (!claim.claimed) {
+        return claim.canceled || durableOutcome === "canceled" ? "canceled" : "lost";
+      }
+      record.durableState = claim.state;
+      if (claim.canceled) {
+        return "canceled";
+      }
+      if (remember) {
+        await this.#rememberClaim(record, claim, storage);
+      }
+      return "claimed";
+    } finally {
+      storage?.close();
+      this.#finishClaim(record, claim);
+    }
+  }
+
+  #beginClaim(record: SubscriptionRecord): SubscriptionClaim | undefined {
+    if (this.#claims.has(record.id)) {
+      return undefined;
+    }
+    const reservation = record.reservation ?? this.#reserveSubscription(record.id);
+    if (reservation === undefined) {
+      return undefined;
+    }
+    record.reservation = reservation;
+    const claim = createSubscriptionClaim(record);
+    this.#claims.set(record.id, claim);
+    return claim;
+  }
+
+  async #rememberClaim(
+    record: SubscriptionRecord,
+    claim: SubscriptionClaim,
+    storage: RecordStorage<string, Any> | undefined,
+  ): Promise<void> {
+    try {
+      this.#rememberSubscription(record);
+    } catch (error) {
+      claim.canceled = true;
+      await this.#rollbackClaim(record, claim, storage);
+      throw error;
+    }
+  }
+
+  async #rollbackClaim(
+    record: SubscriptionRecord,
+    claim: SubscriptionClaim,
+    storage: RecordStorage<string, Any> | undefined,
+  ): Promise<void> {
+    let settled = storage === undefined;
+    if (storage !== undefined) {
+      try {
+        await this.#cancelStored(storage, record.id, claim.owner);
+        settled = true;
+      } catch {
+        // Preserve the process-local registration failure.
+      }
+    }
+    if (settled) {
+      this.#releaseLocal(record.id, record, claim);
+    }
+  }
+
+  #finishClaim(record: SubscriptionRecord, claim: SubscriptionClaim): void {
+    if (claim.claimed || claim.canceled || claim.unknown) {
+      return;
+    }
+    if (this.#claims.get(record.id) === claim) {
+      this.#claims.delete(record.id);
+    }
+    if (!this.#subscriptions.has(record.id)) {
+      this.#releaseRecord(record);
+    }
+  }
+
+  async #claimDurable(
+    storage: RecordStorage<string, Any> | undefined,
+    record: SubscriptionRecord,
+    claim: SubscriptionClaim,
+  ): Promise<DurableClaimOutcome> {
+    if (storage === undefined) {
+      return "claimed";
+    }
+    if (record.durableState === undefined) {
+      return "lost";
+    }
+    try {
+      return (await storage.compareAndSet(record.id, record.durableState, claim.state))
+        ? "claimed"
+        : "lost";
+    } catch (error) {
+      return await this.#reconcileClaimError(storage, record, claim, error);
+    }
+  }
+
+  async #reconcileClaimError(
+    storage: RecordStorage<string, Any>,
+    record: SubscriptionRecord,
+    claim: SubscriptionClaim,
+    error: unknown,
+  ): Promise<DurableClaimOutcome> {
+    let current: Any | undefined;
+    try {
+      current = await storage.read(record.id);
+    } catch {
+      claim.unknown = true;
+      throw error;
+    }
+    if (sameAny(current, claim.state)) {
+      return "claimed";
+    }
+    if (sameAny(current, record.durableState)) {
+      throw error;
+    }
+    if (current === undefined) {
+      return "lost";
+    }
+    try {
+      return DurableSubscriptionRecords.readState(current, record.id).type === "cancel"
+        ? "canceled"
+        : "lost";
+    } catch {
+      claim.unknown = true;
+      throw error;
+    }
+  }
+
+  #restoreSubscription(stored: DurableSubscriptionRecord): SubscriptionRecord | undefined {
+    if (stored.expiresAtMs <= Date.now()) {
+      return undefined;
+    }
+
+    const route =
+      stored.kind === "event"
+        ? this.#eventRoutes.get(stored.targetType)
+        : this.#stateRoutes.get(stored.targetType);
+    const topic = stored.subscription.topic;
+    const target = topic?.target;
+
+    if (
+      route === undefined ||
+      topic === undefined ||
+      target?.type !== stored.targetType ||
+      topicTenant(topic) !== stored.tenantId
+    ) {
+      return undefined;
+    }
+
+    const tenantError = tenantMismatch(
+      route.context.isMultitenant,
+      stored.tenantId,
+      "subscription",
+    );
+    if (tenantError !== undefined) {
+      return undefined;
+    }
+
+    return createSubscriptionRecord({
+      id: stored.id,
+      subscription: stored.subscription,
+      shape: createSubscriptionShape(topic, route),
+      tenantId: stored.tenantId,
+      expiresAtMs: stored.expiresAtMs,
+      queueLimit: this.#queueLimit,
+    });
+  }
+
+  async #cancelPersistence(
+    id: string,
+    context: BoundedContext | undefined,
+    owner: string | undefined,
+  ): Promise<void> {
     const stores =
       context === undefined
         ? this.#subscriptionStores
         : this.#subscriptionStores.filter((store) => store.context === context);
 
-    await Promise.all(
-      stores.map(async (store) => {
-        const storage = createSubscriptionStorage(store);
-
-        try {
-          await storage.delete(id);
-        } finally {
-          storage.close();
-        }
-      }),
-    );
+    for (const store of stores) {
+      const storage = createSubscriptionStorage(store);
+      try {
+        await this.#cancelStored(storage, id, owner);
+      } finally {
+        storage.close();
+      }
+    }
   }
 
-  async #consumeDurableSubscription(record: SubscriptionRecord): Promise<boolean> {
-    const storage = this.#subscriptionStorage(record.route.context);
-    if (storage === undefined) {
-      record.durableConsumed = true;
-      return true;
-    }
-
+  async #cancelStored(
+    storage: RecordStorage<string, Any>,
+    id: string,
+    owner: string | undefined,
+  ): Promise<void> {
     try {
-      const durable = await storage.read(record.id);
-      if (durable === undefined) {
-        return false;
+      await this.#settleCancellation(storage, id, owner);
+    } catch (error) {
+      if (isCancellationConflict(error)) {
+        throw error;
       }
+      throw cancellationFailedError();
+    }
+  }
 
-      const stored = this.#restoreSubscription(durable, record.id);
-      if (stored === undefined) {
-        await storage.delete(record.id);
-        return false;
+  async #settleCancellation(
+    storage: RecordStorage<string, Any>,
+    id: string,
+    owner: string | undefined,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < MAX_CANCEL_RETRIES; attempt += 1) {
+      const current = await storage.read(id);
+      if (current === undefined) {
+        return;
       }
+      const state = DurableSubscriptionRecords.readState(current, id);
+      if (state.type === "claim" && state.owner !== owner) {
+        throw foreignSubscriptionError();
+      }
+      const marker = state.type === "cancel" ? current : DurableSubscriptionRecords.cancel(id);
+      if (state.type !== "cancel" && !(await storage.compareAndSet(id, current, marker))) {
+        continue;
+      }
+      if (await storage.compareAndSet(id, marker, undefined)) {
+        return;
+      }
+      if ((await storage.read(id)) === undefined) {
+        return;
+      }
+    }
+    throw concurrentCancellationError();
+  }
 
-      const consumed = await storage.compareAndSet(record.id, durable, undefined);
-      record.durableConsumed = consumed;
-      return consumed;
-    } finally {
-      storage.close();
+  async #clearMarker(storage: RecordStorage<string, Any>, id: string, marker: Any): Promise<void> {
+    try {
+      await storage.compareAndSet(id, marker, undefined);
+    } catch {
+      // Preserve the marker as a recovery fence.
+    }
+  }
+
+  async #clearInactive(
+    storage: RecordStorage<string, Any>,
+    id: string,
+    inactive: Any,
+  ): Promise<void> {
+    const marker = DurableSubscriptionRecords.cancel(id);
+    try {
+      if (await storage.compareAndSet(id, inactive, marker)) {
+        await storage.compareAndSet(id, marker, undefined);
+      }
+    } catch {
+      // Invalid or expired durable state remains inert on cleanup failure.
+    }
+  }
+
+  #forgetSubscription(record: SubscriptionRecord): void {
+    clearInactiveTimer(record);
+    record.delivery.close();
+    this.#subscriptions.delete(record.id);
+    this.#releaseRecord(record);
+  }
+
+  #releaseLocal(
+    id: string,
+    record: SubscriptionRecord | undefined,
+    claim: SubscriptionClaim | undefined,
+  ): void {
+    if (record !== undefined) {
+      if (this.#subscriptions.get(id) === record) {
+        this.#subscriptions.delete(id);
+      }
+      this.#releaseRecord(record);
+    }
+    if (claim !== undefined && this.#claims.get(id) === claim) {
+      this.#claims.delete(id);
+    }
+  }
+
+  #retainRecord(record: SubscriptionRecord | undefined): void {
+    if (record !== undefined && !this.#subscriptions.has(record.id)) {
+      this.#subscriptions.set(record.id, record);
     }
   }
 
@@ -594,6 +956,34 @@ export class SpineServices {
 
     return createSubscriptionStorage(store);
   }
+
+  #reserveSubscription(id: string): SubscriptionReservation | undefined {
+    if (this.#subscriptionReservations.has(id)) {
+      return undefined;
+    }
+    if (this.#subscriptionReservations.size >= this.#subscriptionLimit) {
+      throw new ConnectError("Subscription capacity is exhausted.", Code.ResourceExhausted);
+    }
+    this.#subscriptionReservations.add(id);
+    return { id, released: false };
+  }
+
+  #releaseSubscription(reservation: SubscriptionReservation): void {
+    if (reservation.released) {
+      return;
+    }
+    reservation.released = true;
+    this.#subscriptionReservations.delete(reservation.id);
+  }
+
+  #releaseRecord(record: SubscriptionRecord): void {
+    const reservation = record.reservation;
+    if (reservation === undefined) {
+      return;
+    }
+    record.reservation = undefined;
+    this.#releaseSubscription(reservation);
+  }
 }
 
 /** Options for registering Spine service adapters over built bounded contexts. */
@@ -601,9 +991,10 @@ export interface SpineServicesOptions {
   /** Contexts exposed by these service adapters. */
   readonly contexts: readonly BoundedContext[];
   /**
-   * Milliseconds before never-activated process-local subscriptions are discarded.
+   * Milliseconds until a never-activated durable subscription record becomes ineligible for activation.
    *
-   * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1.
+   * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1;
+   * positive finite values are floored and must not exceed 2,147,483,647.
    */
   readonly inactiveTtlMs?: number;
   /**
@@ -612,6 +1003,14 @@ export interface SpineServicesOptions {
    * Defaults to 100. Non-positive or non-finite values are coerced to 1.
    */
   readonly queueLimit?: number;
+  /**
+   * Maximum subscriptions owned by this `SpineServices` instance.
+   *
+   * The limit includes pending, inactive, active, and recovered work. It defaults
+   * to 100 and must be a positive safe integer. Each instance has an independent
+   * limit; this is neither a process-wide nor a distributed quota.
+   */
+  readonly subscriptionLimit?: number;
 }
 
 interface CommandRoute {
@@ -643,9 +1042,38 @@ interface SubscriptionRecordBase {
   readonly tenantId: string | undefined;
   readonly expiresAtMs: number;
   readonly delivery: SubscriptionDelivery;
-  durableConsumed: boolean;
+  durableState: Any | undefined;
   inactiveTimer: ReturnType<typeof setTimeout> | undefined;
+  reservation: SubscriptionReservation | undefined;
 }
+
+interface SubscriptionReservation {
+  readonly id: string;
+  released: boolean;
+}
+
+interface SubscriptionClaim {
+  canceled: boolean;
+  claimed: boolean;
+  unknown: boolean;
+  readonly owner: string;
+  readonly record: SubscriptionRecord;
+  readonly state: Any;
+}
+
+interface SubscriptionRemoval {
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: () => void;
+  readonly settled: Promise<void>;
+}
+
+type SubscriptionRecoveryOutcome =
+  | { readonly status: "continue" }
+  | { readonly status: "complete"; readonly record: SubscriptionRecord | undefined };
+
+type DurableClaimOutcome = "claimed" | "lost" | "canceled";
+
+type SubscriptionClaimOutcome = "claimed" | "duplicate" | "lost" | "canceled";
 
 type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 
@@ -996,7 +1424,7 @@ function toRecordFilter(filter: Filter): RecordFilter {
 
 function formatQuery(format: Query["format"]): RecordQuery<unknown> {
   if (format === undefined) {
-    return {};
+    return { limit: MAX_QUERY_LIMIT };
   }
 
   const sort = format.orderBy.map(toRecordOrder);
@@ -1004,7 +1432,7 @@ function formatQuery(format: Query["format"]): RecordQuery<unknown> {
   return {
     ...(format.fieldMask === undefined ? {} : { mask: format.fieldMask.paths }),
     ...(sort.length === 0 ? {} : { sort }),
-    ...(format.limit > 0 ? { limit: format.limit } : {}),
+    limit: format.limit > 0 ? format.limit : MAX_QUERY_LIMIT,
   };
 }
 
@@ -1038,7 +1466,13 @@ function invalidCriterionError(): ContractError {
 }
 
 const DEFAULT_INACTIVE_TTL_MS = 30_000;
+const MAX_INACTIVE_TTL_MS = 2_147_483_647;
 const DEFAULT_QUEUE_LIMIT = 100;
+const DEFAULT_SUBSCRIPTION_LIMIT = 100;
+const MAX_CANCEL_RETRIES = 3;
+const FOREIGN_SUBSCRIPTION_MESSAGE = "Subscription is active in another service instance.";
+const CONCURRENT_CANCELLATION_MESSAGE =
+  "Subscription cancellation could not settle concurrent storage changes.";
 const MAX_QUERY_ID_FILTER_IDS = 100;
 const MAX_QUERY_SIMPLE_FILTERS = 16;
 const MAX_QUERY_COMPOSITE_FILTERS = 8;
@@ -1057,6 +1491,22 @@ const MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH = 128;
 
 function positiveInteger(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
+function inactiveTtl(value: number): number {
+  const normalized = positiveInteger(value);
+  if (normalized > MAX_INACTIVE_TTL_MS) {
+    throw new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.");
+  }
+  return normalized;
+}
+
+function subscriptionLimit(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("SpineServices subscriptionLimit must be a positive safe integer.");
+  }
+
+  return value;
 }
 
 function clearInactiveTimer(record: SubscriptionRecord): void {
@@ -1080,10 +1530,71 @@ function createSubscriptionRecord(input: {
     tenantId: input.tenantId,
     expiresAtMs: input.expiresAtMs,
     delivery: new SubscriptionDelivery(input.queueLimit),
-    durableConsumed: false,
+    durableState: undefined,
     inactiveTimer: undefined,
+    reservation: undefined,
     ...input.shape,
   };
+}
+
+function createSubscriptionClaim(record: SubscriptionRecord): SubscriptionClaim {
+  const owner = randomUUID();
+  return {
+    canceled: false,
+    claimed: false,
+    unknown: false,
+    owner,
+    record,
+    state: DurableSubscriptionRecords.claim(record.id, owner),
+  };
+}
+
+function sameAny(left: Any | undefined, right: Any | undefined): boolean {
+  return (
+    left?.typeUrl === right?.typeUrl &&
+    Buffer.from(left?.value ?? []).equals(Buffer.from(right?.value ?? []))
+  );
+}
+
+function foreignSubscriptionError(): ConnectError {
+  return new ConnectError(FOREIGN_SUBSCRIPTION_MESSAGE, Code.Aborted);
+}
+
+function cancellationFailedError(): ConnectError {
+  return new ConnectError("Subscription cancellation failed.", Code.Internal);
+}
+
+function concurrentCancellationError(): ConnectError {
+  return new ConnectError(CONCURRENT_CANCELLATION_MESSAGE, Code.Aborted);
+}
+
+function isCancellationConflict(error: unknown): error is ConnectError {
+  return (
+    error instanceof ConnectError &&
+    error.code === Code.Aborted &&
+    (error.rawMessage === FOREIGN_SUBSCRIPTION_MESSAGE ||
+      error.rawMessage === CONCURRENT_CANCELLATION_MESSAGE)
+  );
+}
+
+function createSubscriptionRemoval(): SubscriptionRemoval {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: () => void;
+  const settled = new Promise<void>((settle, fail) => {
+    reject = fail;
+    resolve = () => {
+      settle();
+    };
+  });
+  return { reject, resolve, settled };
+}
+
+async function observeRemoval(removal: SubscriptionRemoval): Promise<void> {
+  try {
+    await removal.settled;
+  } catch {
+    // The cancellation caller observes deletion failure; recovery remains inert.
+  }
 }
 
 function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {

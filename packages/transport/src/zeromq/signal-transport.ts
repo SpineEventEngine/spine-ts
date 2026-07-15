@@ -1,8 +1,11 @@
-import { mkdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import type { BigIntStats } from "node:fs";
+import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
+import { fromBinary, isMessage, toBinary } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { Publisher, Reply, Request, Subscriber, type Socket, type MessageLike } from "zeromq";
 
 import type {
@@ -21,30 +24,64 @@ import { endpointFileAccess } from "./endpoint-files.js";
 
 /** Optional tuning for the adapter-scoped local IPC transport. */
 export interface ZeroMqTransportOptions {
-  /** Milliseconds used for bounded request/reply sends and receives. */
+  /**
+   * Milliseconds used for bounded request/reply sends and receives.
+   *
+   * Defaults to 2,000. Explicit values must be integers from 1 through
+   * 2,147,483,647.
+   */
   readonly requestTimeoutMs?: number;
   /** Milliseconds used by background worker sockets while waiting for messages. */
   readonly receiveTimeoutMs?: number;
+}
+
+interface InternalTransportOptions extends ZeroMqTransportOptions {
   /** @internal Adapter-private hook for background loop failures. */
   readonly onBackgroundFailure?: (error: Error) => void;
 }
 
 type ActiveHandle = TransportSubscriptionHandle;
+interface InternalTransportOperation {
+  readonly topic: TransportTopic;
+  readonly envelope: unknown;
+}
 interface PublishHandlerEntry {
   readonly subscription: TransportSubscription;
-  readonly handler: PublishTransportHandler;
+  readonly handler: (operation: InternalTransportOperation) => void | Promise<void>;
 }
 interface RequestHandlerEntry {
   readonly subscription: TransportSubscription;
-  readonly handler: RequestTransportHandler;
+  readonly handler: (operation: InternalTransportOperation) => unknown;
 }
 
 const defaultRequestTimeoutMs = 2_000;
 const defaultReceiveTimeoutMs = 250;
 const closeDelayMs = 0;
+const nativeMessageMaxBytes = 8_388_608;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
-const unsafeModeMask = 0o077;
+const privateModeBits = 0o700n;
+const posixModeMask = 0o7777n;
+const posixWriteMask = 0o022n;
+const isPosix = process.platform !== "win32";
+
+interface PreparedIpcDirectory {
+  readonly path: string;
+  readonly identity: {
+    readonly device: bigint;
+    readonly inode: bigint;
+  };
+}
+
+interface IpcPathPlan {
+  readonly anchorPath: string;
+  readonly missingComponents: readonly string[];
+}
+
+interface IpcPathWalk {
+  readonly existingPath: string;
+  readonly missingComponents: readonly string[];
+}
 
 /** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
 export function createZeroMqTransport(
@@ -54,16 +91,34 @@ export function createZeroMqTransport(
   return new ZeroMqSignalTransport(config, options);
 }
 
-/** @internal Package-private native socket boundary used by deterministic cleanup tests. */
+/** @internal Package-private native socket/filesystem seam used by deterministic tests. */
 export const zeroMqSocketAccess = {
+  async bindPublisher(socket: Publisher, address: string): Promise<void> {
+    await socket.bind(address);
+  },
   async bindReply(socket: Reply, address: string): Promise<void> {
     await socket.bind(address);
   },
   close(socket: Socket): void {
     socket.close();
   },
-  async prepareIpcDirectory(ipcDirectory: string): Promise<void> {
-    await ensurePrivateIpcDirectory(ipcDirectory);
+  connect(socket: Subscriber | Request, address: string): void {
+    socket.connect(address);
+  },
+  async createIpcDirectoryComponent(directory: string): Promise<void> {
+    await mkdir(directory, { mode: privateDirectoryMode });
+  },
+  async prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
+    return await prepareIpcDirectory(ipcDirectory);
+  },
+  async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
+    await recheckIpcDirectory(prepared);
+  },
+  async sendPublisher(socket: Publisher, frames: MessageLike[]): Promise<void> {
+    await socket.send(frames);
+  },
+  async sendRequest(socket: Request, frames: MessageLike[]): Promise<void> {
+    await socket.send(frames);
   },
 };
 
@@ -74,15 +129,17 @@ class ZeroMqSignalTransport implements SignalTransport {
   readonly #onBackgroundFailure: ((error: Error) => void) | undefined;
   readonly #publishers = new Map<string, BoundPublisher>();
   readonly #publisherBinds = new Map<string, Promise<BoundPublisher>>();
+  readonly #publishes = new Set<Promise<void>>();
   readonly #responderBinds = new Set<Promise<TransportSubscriptionHandle>>();
   readonly #subscriberOpens = new Set<Promise<TransportSubscriptionHandle>>();
+  readonly #requests = new Set<Promise<unknown>>();
   readonly #activeHandles = new Set<ActiveHandle>();
   #closed = false;
   #close: Promise<void> | undefined;
 
-  constructor(config: ZeroMqAdapterConfig, options: ZeroMqTransportOptions) {
+  constructor(config: ZeroMqAdapterConfig, options: InternalTransportOptions) {
     this.#config = config;
-    this.#requestTimeoutMs = options.requestTimeoutMs ?? defaultRequestTimeoutMs;
+    this.#requestTimeoutMs = requestTimeoutMs(options.requestTimeoutMs);
     this.#receiveTimeoutMs = options.receiveTimeoutMs ?? defaultReceiveTimeoutMs;
     this.#onBackgroundFailure = options.onBackgroundFailure;
   }
@@ -91,10 +148,24 @@ class ZeroMqSignalTransport implements SignalTransport {
     operation: PublishTransportOperation<Envelope, Kind>,
   ): Promise<void> {
     this.#requireOpen();
+    const publish = this.#performPublish(operation);
+    this.#publishes.add(publish);
+
+    try {
+      await publish;
+    } finally {
+      this.#publishes.delete(publish);
+    }
+  }
+
+  async #performPublish<Envelope, Kind extends TransportSignalKind>(
+    operation: PublishTransportOperation<Envelope, Kind>,
+  ): Promise<void> {
     const publisher = await this.#publisherFor(operation.topic);
-    await publisher.socket.send([
+    this.#requireOpen();
+    await zeroMqSocketAccess.sendPublisher(publisher.socket, [
       operation.topic.routing.routingKey,
-      encodeEnvelope(operation.envelope),
+      encodeEnvelope(operation.topic, operation.envelope),
     ]);
   }
 
@@ -117,23 +188,27 @@ class ZeroMqSignalTransport implements SignalTransport {
     subscription: TransportSubscription<Kind>,
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
-    await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const subscriber = new Subscriber({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#receiveTimeoutMs,
     });
-    const endpoint = endpointFor(this.#config, subscription.topic, "publish");
     const entry: PublishHandlerEntry = {
       subscription,
-      handler: handler as PublishTransportHandler,
+      handler: handler as PublishHandlerEntry["handler"],
     };
 
     let handle: ZeroMqSubscriptionHandle<Kind> | undefined;
 
     try {
       subscriber.subscribe(subscription.topic.routing.routingKey);
-      subscriber.connect(endpoint.address);
+      await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
+      const endpoint = endpointFor(this.#config, prepared.path, subscription.topic, "publish");
+      zeroMqSocketAccess.connect(subscriber, endpoint.address);
 
       const openedHandle = new ZeroMqSubscriptionHandle(subscription, subscriber, undefined, () => {
         this.#activeHandles.delete(openedHandle);
@@ -169,19 +244,38 @@ class ZeroMqSignalTransport implements SignalTransport {
     operation: RequestTransportOperation<RequestEnvelope, Kind>,
   ): Promise<ResponseEnvelope> {
     this.#requireOpen();
-    await ensurePrivateIpcDirectory(this.#config.ipcDirectory);
+    const request = this.#performRequest<RequestEnvelope, ResponseEnvelope, Kind>(operation);
+    this.#requests.add(request);
+
+    try {
+      return await request;
+    } finally {
+      this.#requests.delete(request);
+    }
+  }
+
+  async #performRequest<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
+    operation: RequestTransportOperation<RequestEnvelope, Kind>,
+  ): Promise<ResponseEnvelope> {
+    const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const requester = new Request({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#requestTimeoutMs,
       sendTimeout: this.#requestTimeoutMs,
     });
+    let responseEnvelope!: ResponseEnvelope;
 
     try {
-      requester.connect(endpointFor(this.#config, operation.topic, "request").address);
-      await requester.send([
+      await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
+      const endpoint = endpointFor(this.#config, prepared.path, operation.topic, "request");
+      zeroMqSocketAccess.connect(requester, endpoint.address);
+      await zeroMqSocketAccess.sendRequest(requester, [
         operation.topic.routing.routingKey,
-        encodeEnvelope(operation.envelope),
+        encodeEnvelope(operation.topic, operation.envelope),
       ]);
       const [response] = await requester.receive();
       const decoded = decodeReply(response);
@@ -190,10 +284,18 @@ class ZeroMqSignalTransport implements SignalTransport {
         throw new Error(decoded.message);
       }
 
-      return decoded.envelope as ResponseEnvelope;
-    } finally {
-      requester.close();
+      responseEnvelope = decoded.envelope as ResponseEnvelope;
+    } catch (error) {
+      try {
+        zeroMqSocketAccess.close(requester);
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], "ZeroMQ request and cleanup failed.");
+      }
+      throw error;
     }
+
+    zeroMqSocketAccess.close(requester);
+    return responseEnvelope;
   }
 
   async respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
@@ -215,24 +317,52 @@ class ZeroMqSignalTransport implements SignalTransport {
     subscription: TransportSubscription<Kind>,
     handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
-    await ensurePrivateIpcDirectory(this.#config.ipcDirectory);
+    const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const replier = new Reply({
       linger: closeDelayMs,
+      maxMessageSize: nativeMessageMaxBytes,
       receiveTimeout: this.#receiveTimeoutMs,
       sendTimeout: this.#requestTimeoutMs,
     });
     const entry: RequestHandlerEntry = {
       subscription,
-      handler: handler as RequestTransportHandler,
+      handler: handler as RequestHandlerEntry["handler"],
     };
+    let handle: ZeroMqSubscriptionHandle<Kind> | undefined;
 
-    const endpoint = endpointFor(this.#config, subscription.topic, "request");
     try {
+      await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
+      const endpoint = endpointFor(this.#config, prepared.path, subscription.topic, "request");
       await zeroMqSocketAccess.bindReply(replier, endpoint.address);
+
+      const openedHandle = new ZeroMqSubscriptionHandle(
+        subscription,
+        replier,
+        endpoint.filePath,
+        () => {
+          this.#activeHandles.delete(openedHandle);
+        },
+      );
+      handle = openedHandle;
+      this.#activeHandles.add(openedHandle);
+
+      if (this.#closed) {
+        throw new Error("ZeroMQ signal transport is closed.");
+      }
+
+      void this.#runReplier(replier, entry, openedHandle);
+
+      return openedHandle;
     } catch (error) {
       try {
-        zeroMqSocketAccess.close(replier);
+        if (handle === undefined) {
+          zeroMqSocketAccess.close(replier);
+        } else {
+          await handle.close();
+        }
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
@@ -241,19 +371,6 @@ class ZeroMqSignalTransport implements SignalTransport {
       }
       throw error;
     }
-
-    const handle = new ZeroMqSubscriptionHandle(subscription, replier, endpoint.filePath, () => {
-      this.#activeHandles.delete(handle);
-    });
-    this.#activeHandles.add(handle);
-
-    if (this.#closed) {
-      throw new Error("ZeroMQ signal transport is closed.");
-    }
-
-    void this.#runReplier(replier, entry, handle);
-
-    return handle;
   }
 
   close(): Promise<void> {
@@ -292,18 +409,20 @@ class ZeroMqSignalTransport implements SignalTransport {
   }
 
   async #bindPublisher(topic: TransportTopic, key: string): Promise<BoundPublisher> {
-    await ensurePrivateIpcDirectory(this.#config.ipcDirectory);
+    const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const publisher = new Publisher({
       linger: closeDelayMs,
-      sendTimeout: this.#requestTimeoutMs,
     });
 
     let bound: BoundPublisher | undefined;
 
     try {
-      const endpoint = endpointFor(this.#config, topic, "publish");
-      await publisher.bind(endpoint.address);
+      await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
+      const endpoint = endpointFor(this.#config, prepared.path, topic, "publish");
+      await zeroMqSocketAccess.bindPublisher(publisher, endpoint.address);
 
       const cleanup = new ZeroMqSocketCleanup(publisher, endpoint.filePath, () => {
         this.#publishers.delete(key);
@@ -322,7 +441,14 @@ class ZeroMqSignalTransport implements SignalTransport {
       return bound;
     } catch (error) {
       if (bound === undefined) {
-        publisher.close();
+        try {
+          zeroMqSocketAccess.close(publisher);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            "ZeroMQ publisher bind and cleanup failed.",
+          );
+        }
         throw error;
       }
 
@@ -362,7 +488,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
         await entry.handler({
           topic: entry.subscription.topic,
-          envelope: decodeEnvelope(envelopeFrame),
+          envelope: decodeEnvelope(entry.subscription.topic, envelopeFrame),
         });
       } catch (error) {
         this.#recordBackgroundFailure(error);
@@ -395,8 +521,9 @@ class ZeroMqSignalTransport implements SignalTransport {
 
         const response = await entry.handler({
           topic: entry.subscription.topic,
-          envelope: decodeEnvelope(envelopeFrame),
+          envelope: decodeEnvelope(entry.subscription.topic, envelopeFrame),
         });
+        rejectGeneratedProtoReply(response);
         await replier.send(encodeReplySuccess(response));
       } catch (error) {
         this.#recordBackgroundFailure(error);
@@ -413,6 +540,7 @@ class ZeroMqSignalTransport implements SignalTransport {
       ...this.#publisherBinds.values(),
       ...this.#responderBinds,
       ...this.#subscriberOpens,
+      ...this.#requests,
     ]);
 
     for (const handle of [...this.#activeHandles]) {
@@ -421,6 +549,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     for (const publisher of this.#publishers.values()) {
       await captureCleanupFailure(() => publisher.cleanup.close(), failures);
     }
+    await Promise.allSettled(this.#publishes);
 
     if (failures.length > 0) {
       throw cleanupFailure(failures, "ZeroMQ signal transport close failed.");
@@ -450,6 +579,18 @@ class ZeroMqSignalTransport implements SignalTransport {
       // Background diagnostics must not terminate transport receive loops.
     }
   }
+}
+
+function requestTimeoutMs(value: number | undefined): number {
+  if (value === undefined) {
+    return defaultRequestTimeoutMs;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) {
+    throw new TypeError(
+      "ZeroMQ transport requestTimeoutMs must be an integer from 1 through 2147483647.",
+    );
+  }
+  return value;
 }
 
 interface BoundPublisher {
@@ -555,6 +696,7 @@ type ReplyEnvelope =
 
 function endpointFor(
   config: ZeroMqAdapterConfig,
+  canonicalDirectory: string,
   topic: TransportTopic,
   channel: "publish" | "request",
 ): IpcEndpoint {
@@ -570,36 +712,233 @@ function endpointFor(
   const channelPrefix = channel[0] ?? "c";
   const fileName = `s${signalKindPrefix}-${channelPrefix}-${digest}.sock`;
 
-  const filePath = path.join(config.ipcDirectory, fileName);
+  const filePath = path.join(canonicalDirectory, fileName);
   return Object.freeze({
     address: `ipc://${filePath}`,
     filePath,
   });
 }
 
-function encodeEnvelope(envelope: unknown): Buffer {
-  return serialize(envelope);
+function encodeEnvelope(topic: TransportTopic, envelope: unknown): Buffer {
+  switch (topic.signalKind) {
+    case "command":
+      return Buffer.from(
+        toBinary(CommandSchema, envelope as Command, { writeUnknownFields: false }),
+      );
+    case "event":
+      return Buffer.from(toBinary(EventSchema, envelope as Event, { writeUnknownFields: false }));
+    case "query":
+    case "subscription":
+    case "system":
+      return serialize(envelope);
+  }
 }
 
-function decodeEnvelope(frame: Buffer | undefined): unknown {
+function decodeEnvelope(topic: TransportTopic, frame: Buffer | undefined): unknown {
   if (frame === undefined) {
     throw new Error("ZeroMQ transport received an incomplete envelope.");
   }
 
-  return deserialize(frame);
+  switch (topic.signalKind) {
+    case "command":
+      return fromBinary(CommandSchema, frame, { readUnknownFields: false });
+    case "event":
+      return fromBinary(EventSchema, frame, { readUnknownFields: false });
+    case "query":
+    case "subscription":
+    case "system":
+      return deserialize(frame);
+  }
 }
 
-async function ensurePrivateIpcDirectory(ipcDirectory: string): Promise<void> {
-  await mkdir(ipcDirectory, { recursive: true, mode: privateDirectoryMode });
-  const directory = await stat(ipcDirectory);
+function rejectGeneratedProtoReply(envelope: unknown): void {
+  if (isMessage(envelope)) {
+    throw new Error("ZeroMQ transport cannot encode generated Protobuf replies.");
+  }
+}
 
-  if (!directory.isDirectory()) {
-    throw new Error("ZeroMQ adapter ipcDirectory must be a directory.");
+async function prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
+  const plan = await inspectIpcPath(ipcDirectory);
+  const completedPath = await createIpcSuffix(plan.anchorPath, plan.missingComponents);
+  return await finalizeIpcDirectory(completedPath);
+}
+
+async function inspectIpcPath(ipcDirectory: string): Promise<IpcPathPlan> {
+  const parsed = path.parse(ipcDirectory);
+  const components = ipcDirectory
+    .slice(parsed.root.length)
+    .split(path.sep)
+    .filter((component) => component.length > 0);
+  const walk = await walkLexicalPath(parsed.root, components);
+  const followedAnchor = await stat(walk.existingPath, { bigint: true });
+  const anchorPath = await realpath(walk.existingPath);
+  const anchorEntry = await lstat(anchorPath, { bigint: true });
+  requireMatchingIdentity(anchorEntry, followedAnchor, "canonical anchor");
+
+  return {
+    anchorPath,
+    missingComponents: walk.missingComponents,
+  };
+}
+
+async function walkLexicalPath(root: string, components: readonly string[]): Promise<IpcPathWalk> {
+  let existingPath = root;
+
+  for (let index = 0; index < components.length; index += 1) {
+    const component = components[index];
+    if (component === undefined) {
+      continue;
+    }
+    const candidate = path.join(existingPath, component);
+    let lexicalEntry;
+
+    try {
+      lexicalEntry = await lstat(candidate, { bigint: true });
+    } catch (error) {
+      if (!hasErrorCode(error, "ENOENT")) {
+        throw error;
+      }
+      return { existingPath, missingComponents: components.slice(index) };
+    }
+
+    await validatePathEntry(candidate, index === components.length - 1, lexicalEntry);
+    existingPath = candidate;
   }
 
-  if ((directory.mode & unsafeModeMask) !== 0) {
-    throw new Error("ZeroMQ adapter ipcDirectory must be private to the current user.");
+  return { existingPath, missingComponents: [] };
+}
+
+async function validatePathEntry(
+  candidate: string,
+  isFinal: boolean,
+  lexicalEntry: BigIntStats,
+): Promise<void> {
+  if (lexicalEntry.isSymbolicLink()) {
+    if (isFinal) {
+      throw new Error("ZeroMQ adapter ipcDirectory final component must not be a symlink.");
+    }
+    if (isPosix) {
+      await validatePosixAlias(candidate, lexicalEntry.uid);
+    }
   }
+
+  const followed = await stat(candidate, { bigint: true });
+  if (!followed.isDirectory()) {
+    throw new Error("ZeroMQ adapter ipcDirectory path components must be directories.");
+  }
+}
+
+async function createIpcSuffix(
+  anchorPath: string,
+  missingComponents: readonly string[],
+): Promise<string> {
+  let completedPath = anchorPath;
+  for (const component of missingComponents) {
+    const next = path.join(completedPath, component);
+    try {
+      await zeroMqSocketAccess.createIpcDirectoryComponent(next);
+    } catch (error) {
+      if (!hasErrorCode(error, "EEXIST")) {
+        throw error;
+      }
+    }
+    const existing = await lstat(next, { bigint: true });
+    if (existing.isSymbolicLink() || !existing.isDirectory()) {
+      throw new Error("ZeroMQ adapter ipcDirectory creation encountered an unsafe path.");
+    }
+    completedPath = next;
+  }
+  return completedPath;
+}
+
+async function finalizeIpcDirectory(completedPath: string): Promise<PreparedIpcDirectory> {
+  const canonicalCompletedPath = await realpath(completedPath);
+  if (canonicalCompletedPath !== completedPath) {
+    throw new Error("ZeroMQ adapter ipcDirectory must resolve to its canonical path.");
+  }
+  const finalEntry = await lstat(completedPath, { bigint: true });
+  requirePrivateFinalDirectory(finalEntry);
+
+  return Object.freeze({
+    path: completedPath,
+    identity: Object.freeze({
+      device: finalEntry.dev,
+      inode: finalEntry.ino,
+    }),
+  });
+}
+
+async function recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
+  const canonicalPath = await realpath(prepared.path);
+  if (canonicalPath !== prepared.path) {
+    throw new Error("ZeroMQ adapter ipcDirectory changed after preparation.");
+  }
+  const finalEntry = await lstat(prepared.path, { bigint: true });
+  requirePrivateFinalDirectory(finalEntry);
+
+  const identityIsStable =
+    isPosix ||
+    (prepared.identity.device !== 0n &&
+      prepared.identity.inode !== 0n &&
+      finalEntry.dev !== 0n &&
+      finalEntry.ino !== 0n);
+  if (
+    identityIsStable &&
+    (finalEntry.dev !== prepared.identity.device || finalEntry.ino !== prepared.identity.inode)
+  ) {
+    throw new Error("ZeroMQ adapter ipcDirectory identity changed after preparation.");
+  }
+}
+
+async function validatePosixAlias(aliasPath: string, aliasUid: bigint): Promise<void> {
+  const parent = await stat(path.dirname(aliasPath), { bigint: true });
+  if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixWriteMask) !== 0n) {
+    throw new Error(
+      "ZeroMQ adapter ipcDirectory ancestor symlink must be an immutable root-owned alias.",
+    );
+  }
+}
+
+function requirePrivateFinalDirectory(entry: {
+  readonly dev: bigint;
+  readonly ino: bigint;
+  readonly mode: bigint;
+  readonly uid: bigint;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+}): void {
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    throw new Error("ZeroMQ adapter ipcDirectory must be a non-symlink directory.");
+  }
+  if (!isPosix) {
+    return;
+  }
+
+  const effectiveUserId = process.geteuid?.();
+  if (effectiveUserId === undefined || entry.uid !== BigInt(effectiveUserId)) {
+    throw new Error("ZeroMQ adapter ipcDirectory must be owned by the effective user.");
+  }
+  if ((entry.mode & posixModeMask) !== privateModeBits) {
+    throw new Error("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
+  }
+}
+
+function requireMatchingIdentity(
+  actual: { readonly dev: bigint; readonly ino: bigint },
+  expected: { readonly dev: bigint; readonly ino: bigint },
+  label: string,
+): void {
+  if (actual.dev !== expected.dev || actual.ino !== expected.ino) {
+    throw new Error(`ZeroMQ adapter ipcDirectory ${label} identity changed.`);
+  }
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as Error & { readonly code?: unknown }).code === code
+  );
 }
 
 async function receiveFrames(
@@ -636,7 +975,11 @@ function encodeReplyFailure(message: string): MessageLike {
 }
 
 function decodeReply(frame: Buffer | undefined): ReplyEnvelope {
-  const decoded = decodeEnvelope(frame);
+  if (frame === undefined) {
+    throw new Error("ZeroMQ transport received an incomplete envelope.");
+  }
+
+  const decoded: unknown = deserialize(frame);
 
   if (isReplyEnvelope(decoded)) {
     return decoded;

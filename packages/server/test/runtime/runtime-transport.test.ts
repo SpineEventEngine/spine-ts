@@ -15,15 +15,15 @@ import {
   type Command,
   type Event,
 } from "@spine-ts/proto";
-import type {
-  PublishTransportHandler,
-  PublishTransportOperation,
-  RequestTransportHandler,
-  RequestTransportOperation,
-  SignalTransport,
-  TransportSignalKind,
-  TransportSubscription,
-  TransportSubscriptionHandle,
+import {
+  type PublishTransportHandler,
+  type PublishTransportOperation,
+  type RequestTransportHandler,
+  type RequestTransportOperation,
+  type SignalTransport,
+  type TransportSignalKind,
+  type TransportSubscription,
+  type TransportSubscriptionHandle,
 } from "@spine-ts/transport";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -68,6 +68,7 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 describe("RuntimeTransportBinding", () => {
   it("registers command responders and event subscribers from the routing plan", async () => {
@@ -117,10 +118,9 @@ describe("RuntimeTransportBinding", () => {
 
     const result = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: CommandSchema.typeName,
-        message: { typeUrl: deriveTypeUrl(EventSchema) },
-      },
+      envelope: create(CommandSchema, {
+        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+      }),
     });
 
     expect(result).toEqual({
@@ -160,20 +160,17 @@ describe("RuntimeTransportBinding", () => {
 
     const nonObject = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: undefined,
+      envelope: undefined as unknown as Command,
     });
     const wrongEnvelope = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: EventSchema.typeName,
-        message: { typeUrl: deriveTypeUrl(EventSchema) },
-      },
+      envelope: create(EventSchema, {
+        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+      }) as unknown as Command,
     });
     const missingMessage = await transport.request({
       topic: requireFirst(plan.commands.topics),
-      envelope: {
-        $typeName: CommandSchema.typeName,
-      },
+      envelope: create(CommandSchema),
     });
 
     expect(nonObject).toMatchObject({
@@ -223,7 +220,7 @@ describe("RuntimeTransportBinding", () => {
           typeUrl: deriveTypeUrl(CommandSchema),
           value: "not bytes",
         },
-      },
+      } as unknown as Command,
     });
 
     expect(result).toMatchObject({
@@ -261,10 +258,9 @@ describe("RuntimeTransportBinding", () => {
     await expect(
       transport.publish({
         topic: requireFirst(plan.events.topics),
-        envelope: {
-          $typeName: EventSchema.typeName,
-          message: { typeUrl: "" },
-        },
+        envelope: create(EventSchema, {
+          message: create(AnySchema, { typeUrl: "" }),
+        }),
       }),
     ).rejects.toSatisfy((error: unknown) => {
       expect(error).toBeInstanceOf(RuntimeTransportEnvelopeError);
@@ -510,7 +506,7 @@ describe("RuntimeTransportBinding", () => {
   });
 
   it("runs command and event callbacks over the ZeroMQ-backed transport", async () => {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-runtime-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-runtime-"));
     const transport = createZeroMqTransport(
       createZeroMqAdapterConfig({
         ipcDirectory,

@@ -339,7 +339,7 @@ describe("Server lifecycle integration", () => {
       await once(session, "remoteSettings");
       releaseActive = worker.holdNextStart("PAUSED");
       const transportTopic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
       });
       posting = fixture.postEvent(context, "active-last-close");

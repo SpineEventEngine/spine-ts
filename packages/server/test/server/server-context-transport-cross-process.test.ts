@@ -20,7 +20,11 @@ import {
 } from "@spine-ts/proto";
 import { SignalMetadata } from "@spine-ts/server";
 import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+import {
+  createZeroMqAdapterConfig,
+  createZeroMqTransport,
+  type ZeroMqTransportOptions,
+} from "@spine-ts/transport/zeromq";
 import { describe, expect, it } from "vitest";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -30,6 +34,7 @@ const phaseTimeoutMs = 5_000;
 const shutdownGraceMs = 1_000;
 const observationQuietMs = 200;
 const adapterIdentity = "t0038b-parent-context-transport";
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 const commandEntityId = "cross-process-command";
 const inboundEventEntityId = "cross-process-inbound-event";
 const childPath = fileURLToPath(new URL("./server-context-transport-child.mjs", import.meta.url));
@@ -38,6 +43,10 @@ type AggregateState = Message<"AggregateState"> & {
   readonly id: string;
   readonly name: string;
   readonly archived: boolean;
+};
+
+type TestTransportOptions = ZeroMqTransportOptions & {
+  readonly onBackgroundFailure?: (error: Error) => void;
 };
 type ProjectionState = Message<"ProjectionState"> & {
   readonly id: string;
@@ -313,7 +322,7 @@ describe("Server context transport across Node processes", () => {
   }, 10_000);
 
   it("reports retained IPC entries before removing the directory", async () => {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "spine-t0038b-leak-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "spine-t0038b-leak-"));
     await writeFile(path.join(ipcDirectory, "retained.sock"), "retained");
     const failures: Error[] = [];
 
@@ -348,7 +357,7 @@ class CrossProcessFixture {
   #trackedChild: TrackedChild;
 
   static async create(options: FixtureCreateOptions = {}): Promise<CrossProcessFixture> {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "spine-t0038b-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "spine-t0038b-"));
     let parentTransport: SignalTransport | undefined;
     let child: ChildProcess | undefined;
     let trackedChild: TrackedChild | undefined;
@@ -361,11 +370,12 @@ class CrossProcessFixture {
 
       const config = createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity });
       const backgroundFailures: string[] = [];
-      parentTransport = createZeroMqTransport(config, {
+      const transportOptions: TestTransportOptions = {
         requestTimeoutMs: transportTimeoutMs,
         receiveTimeoutMs: 100,
         onBackgroundFailure: (error) => backgroundFailures.push(safeMessage(error, ipcDirectory)),
-      });
+      };
+      parentTransport = createZeroMqTransport(config, transportOptions);
       child = fork(childPath, [], {
         cwd: process.cwd(),
         env: {
@@ -797,7 +807,7 @@ async function withinPhase<Value>(
 async function runChildBoundary(
   environment: Readonly<Record<string, string>>,
 ): Promise<ChildBoundaryResult> {
-  const ipcDirectory = await mkdtemp(path.join(tmpdir(), "szb-"));
+  const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "szb-"));
   await chmod(ipcDirectory, 0o700);
   const child = fork(childPath, [], {
     cwd: process.cwd(),

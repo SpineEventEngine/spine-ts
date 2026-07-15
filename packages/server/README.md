@@ -84,7 +84,9 @@ Current slice exposes:
 - `Server`, `ServerOptions`, and `RunningServer` for a small framework-owned
   HTTP/2 listener lifecycle over `SpineServices`. The default host is
   local-only `127.0.0.1`; broad binding such as `0.0.0.0` is an explicit
-  caller choice. `RunningServer.close()` stops network intake, closes active
+  caller choice. Request and response messages each default to a 4,194,304-byte
+  uncompressed limit; set top-level `readMaxBytes` and `writeMaxBytes` only to
+  integer values from 1 through 4,294,967,295. `RunningServer.close()` stops network intake, closes active
   HTTP/2 sessions, waits until active work can no longer use its dependencies,
   then closes contexts, resources, and any server-owned environment;
   and
@@ -831,11 +833,14 @@ ID filters on any registered state route and projection-state
 `EQUAL` filters over declared projection `(column)` proto field names,
 `ResponseFormat.field_mask`, repeated `ResponseFormat.order_by` over declared
 proto column names, and positive `limit` values when at least one ordering
-directive is present. Use proto column names such as `open_task_count`, not
+directive is present. A missing format or wire limit of zero applies a
+framework-to-storage safety cap of 1,000 rows without requiring ordering;
+explicit limits from 1 through 1,000 retain their ordering requirement. Use
+proto column names such as `open_task_count`, not
 generated TS local names such as `openTaskCount`. Undeclared columns,
-unsupported operators, nested/disjunctive composites, limits without ordering,
-missing criteria, and `include_all = false` return `INVALID_QUERY` before
-reading Stand storage.
+unsupported operators, nested/disjunctive composites, positive limits without
+ordering, missing criteria, and `include_all = false` return `INVALID_QUERY`
+before reading Stand storage.
 
 `SubscriptionService.Subscribe` accepts known registered state targets and
 known event targets exposed by built-context event dispatchers. Unknown or
@@ -845,8 +850,9 @@ with `INVALID_ARGUMENT` before creating a subscription or attaching delivery.
 Accepted subscriptions are inactive, opaque records stored through the owning
 bounded context storage factory; a new `SpineServices` instance over the same
 storage factory can recover and activate a previously returned ID. Activation
-consumes the durable row before live attachment, so durable storage contains
-inactive records only. Updates recorded before `Activate` are not replayed.
+atomically replaces the exact inactive row with a unique-owner claim before
+live attachment and retains that claim for the active stream. Updates recorded
+before `Activate` are not replayed.
 `Activate` attaches state subscriptions to the context `Stand` and event
 subscriptions to a framework-internal `EventBus` listener by subscription ID. State
 `Target.include_all = true` delivers every activated update.
@@ -866,18 +872,44 @@ multitenant subscriptions require `tenantId`; state and event delivery are scope
 tenant slice. Missing, unknown, canceled, or expired activation IDs complete
 without updates, and duplicate activation for an already-active ID completes
 without updates while leaving the active stream attached. `Cancel` returns OK
-for unknown, missing, canceled, or already-cleaned IDs and removes matching
-durable inactive records. Cleanup is idempotent when a client cancels, an
-activation iterator closes, an inactive record expires, or the active queue
-limit is exceeded. Malformed and inconsistent durable rows are deleted instead
-of failing repeatedly. The inactive TTL defaults to 30 seconds and the active
-queue limit defaults to 100 queued updates. Active service streams, queued updates,
-direct Stand subscriptions, Stand version metadata, and the in-memory storage
-adapter's backing data remain process-local development/test state, not durable
-delivery or catch-up storage. Cross-context fallback, client query DSLs,
-comparison subscription operators, retained update replay, active-stream
-persistence, and durable cross-process delivery/subscription recovery catch-up
-remain outside this slice.
+for unknown, missing, canceled, or already-cleaned IDs only after admission to
+the bounded unknown-ID cancellation pool; overflow returns `RESOURCE_EXHAUSTED`
+before storage access. It transitions an exact
+inactive row or same-instance owner claim through a cancellation marker to
+absence. A claim owned by another `SpineServices` instance fails with
+`ABORTED` and message `Subscription is active in another service instance.`
+Cleanup is idempotent when a client cancels, an activation iterator closes, an
+inactive record expires, or the active queue limit is exceeded. Malformed rows
+remain inert. The inactive TTL defaults to 30 seconds; non-positive or
+non-finite values become 1, positive finite values are floored, and an
+effective value above 2,147,483,647 milliseconds throws synchronously before
+storage or timer work. The active queue limit defaults to 100 queued updates.
+`SpineServicesOptions.subscriptionLimit`
+is a positive safe integer that defaults to 100 and bounds pending, inactive,
+active, and recovered subscriptions owned by one `SpineServices` instance.
+Each instance has an independent limit; it is neither a process-wide nor a
+distributed tenant quota. Known local subscription capacity is retained until
+durable cancellation settles. If known-local durable cancellation persistence
+fails, `Cancel` returns Connect `INTERNAL` with message
+`Subscription cancellation failed.`, retains that instance's capacity, and the
+client should retry `Cancel` with the same returned `Subscription` message
+containing its ID. This
+retry guidance applies only when `Subscribe` returned the ID; cleanup after an
+initial failed `Subscribe` remains internal and uses the inactive TTL when its
+timer can be retained. If a normal inactive-expiry timer fires and durable
+cleanup fails, the timer stays cleared, the local record and capacity remain,
+and no automatic retry or new timer appears; `Cancel` with that same returned
+`Subscription` message containing its ID retries cleanup and releases capacity
+after it succeeds. The unknown-ID cancellation
+pool is separate from normal subscription capacity and has the same size. A process crash can
+leave an owner claim stale; this release provides no claim lease, heartbeat,
+routing, supervision, or automatic reclamation.
+Active service streams, queued updates, direct Stand subscriptions, Stand
+version metadata, and the in-memory storage adapter's backing data remain
+process-local development/test state, not durable delivery or catch-up storage.
+Cross-context fallback, client query DSLs, comparison subscription operators,
+retained update replay, active-stream persistence, and durable cross-process
+delivery/subscription recovery catch-up remain outside this slice.
 
 ## Local Server Lifecycle
 
@@ -909,6 +941,9 @@ adapters, supervision, and retry policy out of the public API.
 `Server.atPort(port)` binds to `127.0.0.1`; pass `{ host: "0.0.0.0" }` only
 when this process should accept non-local clients. The returned `RunningServer`
 exposes `host`, `port`, `baseUrl`, and an idempotent `close()`.
+`ServerOptions.readMaxBytes` and `writeMaxBytes` are forwarded directly to
+Connect and default to 4,194,304 uncompressed bytes per request or response
+message. They bound decompressed messages as well as uncompressed traffic.
 
 The server uses a small explicit `ServerEnvironment`. Omitting it creates a
 server-owned local environment with `InMemoryStorageFactory` and same-process

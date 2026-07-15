@@ -1,5 +1,13 @@
+import type { Command, Event } from "@spine-ts/proto";
+
 /** Transport-owned signal kinds for local routing contracts. */
 export type TransportSignalKind = "command" | "event" | "query" | "subscription" | "system";
+
+/** Envelope carried by a signal kind, with caller-owned shapes for non-Proto kinds. */
+export type TransportSignalEnvelope<
+  Kind extends TransportSignalKind,
+  OtherEnvelope = unknown,
+> = Kind extends "command" ? Command : Kind extends "event" ? Event : OtherEnvelope;
 
 const transportSignalKinds = ["command", "event", "query", "subscription", "system"] as const;
 const transportSignalKindSet = new Set<string>(transportSignalKinds);
@@ -72,26 +80,30 @@ export interface TransportSubscription<Kind extends TransportSignalKind = Transp
 }
 
 /** Publish-style transport operation contract. */
-export interface PublishTransportOperation<
+export type PublishTransportOperation<
   Envelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
-> {
-  /** Transport-owned topic/routing contract. */
-  readonly topic: TransportTopic<Kind>;
-  /** Caller-owned envelope already shaped by an upstream package. */
-  readonly envelope: Envelope;
-}
+> = Kind extends TransportSignalKind
+  ? {
+      /** Transport-owned topic/routing contract. */
+      readonly topic: TransportTopic<Kind>;
+      /** Caller-owned envelope already shaped by an upstream package. */
+      readonly envelope: TransportSignalEnvelope<Kind, Envelope>;
+    }
+  : never;
 
 /** Request-style transport operation contract. */
-export interface RequestTransportOperation<
+export type RequestTransportOperation<
   RequestEnvelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
-> {
-  /** Transport-owned topic/routing contract. */
-  readonly topic: TransportTopic<Kind>;
-  /** Caller-owned request envelope already shaped by an upstream package. */
-  readonly envelope: RequestEnvelope;
-}
+> = Kind extends TransportSignalKind
+  ? {
+      /** Transport-owned topic/routing contract. */
+      readonly topic: TransportTopic<Kind>;
+      /** Caller-owned request envelope already shaped by an upstream package. */
+      readonly envelope: TransportSignalEnvelope<Kind, RequestEnvelope>;
+    }
+  : never;
 
 /** Handler for one publish-style operation. */
 export type PublishTransportHandler<
@@ -180,6 +192,32 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
     topic,
     descriptorKey: `${topic.routing.routingKey}#${encodeRoutingSegment(mode)}#${encodeRoutingSegment(subscriberId)}`,
   });
+}
+
+/** Narrow a transport operation through its canonical nested topic kind. */
+export function isTransportOperationKind<
+  Operation extends PublishTransportOperation | RequestTransportOperation,
+  Kind extends Operation["topic"]["signalKind"],
+>(
+  operation: Operation,
+  signalKind: Kind & NoInfer<Operation["topic"]["signalKind"]>,
+): operation is Extract<Operation, { readonly topic: TransportTopic<Kind> }> {
+  return operation.topic.signalKind === signalKind;
+}
+
+/**
+ * Narrow a transport topic through its top-level `topic.signalKind`.
+ *
+ * This does not validate or narrow `topic.routing.signalKind`.
+ */
+export function isTransportTopicKind<
+  Topic extends TransportTopic,
+  Kind extends Topic["signalKind"],
+>(
+  topic: Topic,
+  signalKind: Kind & NoInfer<Topic["signalKind"]>,
+): topic is Topic & { readonly signalKind: Kind } {
+  return topic.signalKind === signalKind;
 }
 
 function normalizeRequiredText(value: string, name: string): string {
