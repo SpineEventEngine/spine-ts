@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 18 findings fixed; correction verification current; Canonical Wave
-19 and dedicated security re-review pending
+Status: Canonical Wave 19 assigned; dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2312,3 +2311,15 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   D-0090/IPC evidence, and separated canonical/security provenance. Commit this
   correction and run all four Canonical Wave 19 lanes before dedicated security
   review.
+
+## Wave 18 Immutable Endpoint And Canonical Wave 19 Assignment
+
+- Substantive implementation evidence is commit `cbad2d78`; this follow-up is
+  provenance/status only.
+- Canonical Wave 19 assigns the existing style/maintainability Terra High,
+  documentation Luna Medium, TypeScript/API Terra High, and performance/
+  reliability Terra High roles. Each receives the fresh literal package,
+  complete human ledger, D-0087-D-0090, current security artifacts, affected
+  execution paths, no-child/Git-read-only rules, and superseded-history
+  exclusion. Aggregate the complete wave before action; dedicated security
+  re-review remains pending.

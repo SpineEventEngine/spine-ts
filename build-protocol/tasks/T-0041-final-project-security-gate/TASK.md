@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Wave 18 findings fixed; correction verification current;
-Canonical Wave 19 and dedicated security re-review pending
+Status: In progress - Canonical Wave 19 assigned; dedicated security re-review
+pending
 
 Started: `2026-07-14`
 
@@ -2310,3 +2310,14 @@ Subscription cancellation failed.` instead of `AggregateError`.
   package boundary inspection, exact changed-path proof, and `git diff --check`
   all passed. Accept the Wave 18 correction for commit; Canonical Wave 19 and
   dedicated security re-review remain pending.
+
+## Wave 18 Immutable Endpoint And Wave 19 Status
+
+- Commit `cbad2d78` is the substantive coordinator-verified Wave 18 reliability,
+  regression, security-evidence, and status correction. Later provenance and
+  review records are not implementation evidence.
+- Canonical Wave 19 is assigned before package generation. Run all four
+  immutable canonical roles with the full ledger, D-0087-D-0090, current
+  security artifacts, changed execution paths, and superseded-history
+  exclusion; aggregate the complete wave before action. Dedicated final
+  security re-review remains pending.
