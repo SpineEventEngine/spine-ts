@@ -4050,3 +4050,25 @@ Subscription cancellation failed.` instead of `AggregateError`.
   whether the two-observed-branch coverage margin is acceptable for this final
   gate. Documentation, TypeScript/API, and security remain N/A for the exact
   no-production/no-contract/no-docs package.
+
+## Full Gate Branch-Coverage Review Result And Fix Assignment
+
+- Style/maintainability reviewer `019f66d4-a211-7ee3-9d88-8fbc34723e23`,
+  explicit/tool-enforced immutable Terra High, accepted Important finding: the
+  query/subscription integration round trip proves symmetry but not the binding
+  private V8 wire, because a coordinated encode/decode codec change could still
+  pass. Add an exact raw emitted-frame comparison with `serialize(envelope)`
+  for both kinds while retaining integration coverage.
+- Performance/reliability reviewer `019f66d4-d433-76b2-981e-a89381d2b46f`,
+  explicit/tool-enforced immutable Terra High, accepted P2: the malformed-reply
+  test awaits `addressReady.promise` without the established local harness
+  deadline, so a setup regression can wait until runner timeout before native
+  socket cleanup. Wrap it with `withHarnessDeadline`.
+- Both reviewers found no other concrete defect, remained read-only, childless,
+  and Git-read-only, exposed no contradictory runtime profile, and are closed.
+  Reliability accepts the two-branch coverage margin as sufficient for this
+  package under the authoritative full-gate rerun.
+- Resume the existing implementer under its original immutable Terra Medium as
+  sole writer. Fix both findings in the ZeroMQ test plus active logs, run the
+  focused ZeroMQ suite/coverage and quality checks, and do not change production
+  behavior. Re-review both lanes against a compact correction package.

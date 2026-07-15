@@ -3974,3 +3974,18 @@ verify` remains reserved.
   fidelity, and the two-branch margin. Historical superseded text is not active.
   Documentation, TypeScript/API, and security remain N/A for this test-only
   package.
+
+## Full Gate Branch-Coverage Review Wave Result
+
+- Style/maintainability `019f66d4-a211-7ee3-9d88-8fbc34723e23`, immutable Terra
+  High: accepted Important finding that symmetric query/subscription round trips
+  do not pin the required V8 wire. Add exact raw-frame equality with
+  `serialize(envelope)` for both private kinds.
+- Performance/reliability `019f66d4-d433-76b2-981e-a89381d2b46f`, immutable
+  Terra High: accepted P2 that the malformed-reply setup awaits an unbounded
+  `addressReady.promise`; use the existing harness deadline to guarantee timely
+  unwind and native socket cleanup.
+- Both reviewers are closed after read-only, childless, Git-read-only work and
+  found no other defect. The two-branch coverage margin is accepted pending the
+  authoritative full gate. Return both findings as one test-only fix to the
+  existing Terra Medium implementer, then re-review both concerns.
