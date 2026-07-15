@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security Round 1 fixes in canonical review wave
+Status: Security Round 1 fixes pending canonical review corrections
 
 Baseline: `39f2c6f7`
 
@@ -328,3 +328,24 @@ Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
 - SF-010 is restored to implemented pending dedicated security re-review.
   Canonical review, full verification, integration, and task closure remain
   pending.
+
+## Canonical Review Wave Result
+
+- TypeScript/API docs: CLEAN, agent
+  `019f6326-9fae-7561-b033-cb126e2a8b3f`, actual immutable Terra High.
+- Documentation: profile-valid redispatch agent
+  `019f6329-25b0-7242-85da-177f5e01deca`, actual immutable Luna Medium, CLEAN.
+  Coordinator confirmed two valid low findings from the rejected first result:
+  stale threat-model provenance/status and ambiguous positive-limit wording.
+- Style/maintainability: agent `019f6329-fbff-7fe3-be34-825e15f837f4`, actual
+  immutable Terra High, three findings: split the 81-line IPC preparation,
+  cover request/publisher replacement rechecks, and shorten overlong local
+  identifiers.
+- Performance/reliability: agent `019f6328-bdca-7a00-9ce0-9c7151aee82d`,
+  actual immutable Terra High, two findings: same-ID concurrent recovery may
+  release another activation's reservation, and close may finish before a
+  paused request resumes and connects.
+- The complete seven-item batch returns to existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable
+  `gpt-5.6-terra` / medium. No partial-wave fixes, subagents, or Git mutation;
+  dedicated security re-review waits for the corrected canonical endpoint.

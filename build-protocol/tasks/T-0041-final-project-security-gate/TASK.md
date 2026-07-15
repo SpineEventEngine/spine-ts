@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave assigned
+Status: In progress - canonical review findings assigned
 
 Started: `2026-07-14`
 
@@ -451,3 +451,24 @@ directory replaced immediately after successful creation'` exited 1 with 1
   native `signal-transport.test.ts` exited 0 with 1 file/28 tests. Security
   fixes are implemented; dedicated security re-review and task closure remain
   pending.
+
+## Canonical Review Wave Result
+
+- TypeScript/API docs is CLEAN: agent
+  `019f6326-9fae-7561-b033-cb126e2a8b3f`, actual immutable
+  `gpt-5.6-terra` / high.
+- Documentation redispatch is profile-valid and CLEAN: agent
+  `019f6329-25b0-7242-85da-177f5e01deca`, actual immutable
+  `gpt-5.6-luna` / medium. Coordinator nevertheless confirmed two concrete
+  findings from the rejected first attempt: stale threat-model provenance and
+  ambiguous zero-vs-positive query-limit wording.
+- Style/maintainability agent `019f6329-fbff-7fe3-be34-825e15f837f4`, actual
+  immutable `gpt-5.6-terra` / high, found oversized IPC preparation, missing
+  request/publisher recheck regressions, and overlong local names.
+- Performance/reliability agent `019f6328-bdca-7a00-9ce0-9c7151aee82d`, actual
+  immutable `gpt-5.6-terra` / high, found same-ID recovery reservation ownership
+  and in-flight request shutdown defects.
+- Resume the existing implementer, expected explicit immutable
+  `gpt-5.6-terra` / medium, for the complete seven-item TDD fix batch. All
+  reviewers are closed and dedicated security re-review waits for a corrected
+  canonical endpoint.
