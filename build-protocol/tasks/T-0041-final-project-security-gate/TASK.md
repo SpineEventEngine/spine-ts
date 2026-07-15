@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 19 assigned; dedicated security re-review
-pending
+Status: In progress - Canonical Wave 19 reliability finding accepted;
+correction assigned; dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2333,3 +2333,26 @@ Subscription cancellation failed.` instead of `AggregateError`.
   the full ledger, D-0087-D-0090, affected execution paths, current security
   artifacts, and superseded-history exclusion. Aggregate before action;
   dedicated final security review remains pending.
+
+## Canonical Review Wave 19 Result And Fix Assignment
+
+- Complete result: style, documentation, and TypeScript/API are clean.
+  Performance/reliability found one P2: subscriber, responder, and publisher
+  setup can resume after asynchronous IPC preparation/recheck and initiate
+  native `connect`/`bind` after `close()` has set the transport closed. The
+  request path already applies the required open-state gates.
+- Immutable role evidence: style agent
+  `019f6507-f1f6-7a31-891a-fe7fdc49606f`, Terra High; docs agent
+  `019f6507-f939-7540-a3ad-a65a29b7953d`, Luna Medium; API agent
+  `019f6507-f637-7eb1-82f1-ca077c76e0c1`, Terra High; reliability agent
+  `019f650a-1ab9-7092-869a-f414b04fcde9`, Terra High. Every explicit dispatch
+  used its tool-enforced immutable actual profile, no child or Git mutation,
+  and all four are closed.
+- Resume the existing implementer context, expected original explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. TDD paused-preparation shutdown for
+  subscriber connect, responder bind, and publisher bind; add the open-state
+  gate immediately after each final asynchronous recheck and before native
+  work. Preserve cleanup, close waiting, request behavior, public API, IPC path
+  policy, and error wording. Run focused native transport tests, generated
+  typecheck, docs, lint/format/status/boundary/diff checks. All four Canonical
+  Wave 20 lanes follow before dedicated final security review.

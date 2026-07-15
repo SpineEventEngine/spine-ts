@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 19 assigned; dedicated security re-review pending
+Status: Canonical Wave 19 reliability finding accepted; correction assigned;
+dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2385,3 +2386,36 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   high role, made no child/Git mutation, and is closed. It accepted the ordered
   failure composition, regression ownership, private/public naming, active
   anchors, and chronology; acceptance waits for complete-wave aggregation.
+
+## Canonical Review Wave 19 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f6507-f1f6-7a31-891a-fe7fdc49606f`: clean.
+- Documentation, immutable Luna Medium,
+  `019f6507-f939-7540-a3ad-a65a29b7953d`: clean.
+- TypeScript/API, immutable Terra High,
+  `019f6507-f637-7eb1-82f1-ca077c76e0c1`: clean; the activation
+  `AggregateError` remains private runtime behavior, not an exported promise.
+- Performance/reliability, immutable Terra High,
+  `019f650a-1ab9-7092-869a-f414b04fcde9`: P2 because subscriber, responder,
+  and publisher setup can finish asynchronous IPC preparation/recheck after
+  close begins and invoke native connect/bind. Request setup already gates both
+  async boundaries. Add paused-preparation regressions that prove all three
+  native calls remain untouched.
+- Every role used the explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator inspection accepts
+  the one-finding complete batch.
+
+## Canonical Wave 19 Fix Assignment
+
+- Resume existing implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad`, expected
+  its original explicit immutable `gpt-5.6-terra` / medium dispatch, as sole
+  writer for the three-path RED/GREEN close-race correction in
+  `signal-transport.ts` and its test plus synchronized current status.
+- Add the open-state check after each final asynchronous directory recheck and
+  immediately before subscriber connect, responder bind, and publisher bind.
+  Preserve close waiting/cleanup, request behavior, path hardening, public API,
+  package/dependency/Proto/generated boundaries, and error wording. Require
+  focused native transport tests, generated typecheck, docs, lint/format/
+  status/boundary/diff checks; all four Canonical Wave 20 lanes follow before
+  dedicated security review.
