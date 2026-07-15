@@ -5374,7 +5374,9 @@ describe("SpineServices", () => {
     expect(activeStandSubscriptions).toEqual([]);
   });
 
-  it("retains an inactive subscription without retrying expiry cleanup until same-ID cancellation succeeds", async () => {
+  const inactiveCleanupName =
+    "retains an inactive subscription without retrying expiry cleanup until same-ID cancellation succeeds";
+  it(inactiveCleanupName, async () => {
     vi.useFakeTimers();
     try {
       const contextName = "InactiveExpiryCleanupFailure";

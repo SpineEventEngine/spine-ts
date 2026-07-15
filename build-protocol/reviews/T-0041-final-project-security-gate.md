@@ -3852,6 +3852,16 @@ verify` remains reserved.
   execution path, or trust boundary changes. Full verify restarts after the
   compact fix is accepted.
 
+## Full-Gate Cleanup-Line Fix Implementer Evidence
+
+- The assigned long `it(...)` declaration is reflowed without changing its
+  name, callback, assertion body, or behavior. Focused ESLint and the complete
+  cleanup-rule script exit 0.
+- Exact-name Vitest selection passes 1/1 with 148 unrelated tests skipped.
+  Exact formatting and final diff/status/generated/scope evidence are in the
+  work log. The mechanical fix is implementation-complete; compact style
+  re-review and coordinator full-gate restart remain pending.
+
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 
 - Resolved the accepted style/maintainability P2 by documenting directly above
@@ -3867,3 +3877,12 @@ verify` remains reserved.
   log. The bounded correction is implementation-complete; affected D-0096
   re-review remains pending. Reliability remains N/A because no execution path
   changed.
+
+## Full Gate Cleanup-Line Coordinator Acceptance
+
+- Replaced only the overlong `it(...)` declaration with a short local test-name
+  reference to the exact unchanged string; callback and assertions are intact.
+- Coordinator passed focused lint, cleanup rule, exact-name test at 1/149,
+  formatting, and diff integrity. Implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra Medium, is
+  closed. Freeze for style-only re-review; all other lanes remain N/A.

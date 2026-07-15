@@ -3899,6 +3899,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   reliability, and security are N/A because semantics/contracts/runtime are
   unchanged. Restart the complete full gate afterward.
 
+## Full-Gate Cleanup-Line Fix Implementation
+
+- Reflowed only the 122-character `it(...)` declaration at the assigned server
+  service test. Its exact test name, callback, assertions, and semantics are
+  unchanged.
+- Focused ESLint and `check-cleanup-rules.mjs` exit 0. Exact Vitest name
+  selection passes 1 test with 148 skipped in the 149-test file. Formatting and
+  final diff/status/generated/scope evidence are recorded in the work log.
+- This mechanical fix is implementation-complete. Compact style re-review and
+  the coordinator's restarted full gate remain pending; no other canonical lane
+  is reopened.
+
 ## D-0096 Source TypeDoc P2 Implementation
 
 - Expanded only `isTransportTopicKind()` source TypeDoc to preserve the
@@ -3912,3 +3924,14 @@ Subscription cancellation failed.` instead of `AggregateError`.
   `100/28/205/19/20/6/3`, and Proto cleanliness passed. Exact formatting and
   final scope evidence are recorded in the work log. This bounded P2 is
   implementation-complete; affected D-0096 re-review remains pending.
+
+## Full Gate Cleanup-Line Coordinator Acceptance
+
+- The exact unchanged test-name literal now has one short local name so
+  Prettier preserves a compliant `it(...)` declaration; callback and assertions
+  are untouched. Coordinator passed focused ESLint, cleanup enforcement, the
+  exact named test at 1 passed / 148 skipped, exact formatting, and diff
+  integrity.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra
+  Medium, remained childless and Git-read-only and is closed. Freeze this
+  four-path correction for one style review; all other lanes retain N/A.
