@@ -3951,3 +3951,36 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - The local name is well-scoped, exact text/callback/assertions are preserved,
   formatting is stable, and no unrelated churn exists. Restart full verify from
   the beginning; all other lanes remain closed/N/A.
+
+## Full Gate Branch-Coverage Finding And Fix Assignment
+
+- The restarted native full gate passed cleanup, formatting, and the complete
+  73-file / 1,767-test suite. Coverage then failed only the global branch gate:
+  statements `95.29%` (`9,539/10,010`), branches `89.81%` (`4,726/5,262`),
+  functions `98.27%` (`2,452/2,495`), and lines `95.30%` (`9,356/9,817`). The
+  90% branch threshold needs approximately ten additional observed branches.
+  The gate stopped at coverage, so later docs/Proto stages did not run.
+- Treat the coverage metric as the RED evidence. Add behavior-focused tests for
+  existing T-0041 durable-subscription validation and ZeroMQ private reserved-
+  kind/prefix handling; do not lower or exclude the threshold and do not change
+  production behavior merely to satisfy instrumentation. Candidate uncovered
+  branches include durable state expected-ID mismatch, cancel-state decoding,
+  surrounding-whitespace rejection, query/subscription private V8 round trips,
+  incomplete envelope handling, and route rejection.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original
+  immutable Terra Medium, as sole writer, childless, and Git-state-read-only.
+  Require focused tests and focused coverage evidence before coordinator
+  acceptance; no full `verify` inside the fix context.
+- Review style/maintainability and performance/reliability after the test-only
+  batch. Documentation and TypeScript/API are N/A because no source docs,
+  declarations, exports, or public contract should change. Security is N/A
+  because the final security review is already clean and these tests only
+  observe existing accepted behavior; any production security-boundary change
+  would invalidate this N/A and require focused security re-review.
+- Human decisions remain binding and unchanged: Buf serialization for Proto
+  command/event signals; V8 only for private reserved kinds/results; an
+  8,388,608-byte hard per-frame ceiling; first-two request/publish frames and
+  first meaningful reply frame consumed with later frames ignored; and SF-013
+  aggregate multipart allocation accepted for the initial release. The
+  post-project ZeroMQ issue/workaround Internet research remains due after
+  release closure and is not this coverage fix.

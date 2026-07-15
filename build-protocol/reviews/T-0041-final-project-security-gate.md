@@ -3901,3 +3901,21 @@ verify` remains reserved.
   Terra High: clean, childless, read-only, Git-read-only, and closed.
 - Exact name/semantics, local scope, Prettier stability, and package scope are
   accepted. No canonical or security review is reopened. Restart full verify.
+
+## Full Gate Branch-Coverage Finding And Review Plan
+
+- Full native verification passed cleanup, formatting, and 73 files / 1,767
+  tests, then failed only global branch coverage at `89.81%`
+  (`4,726/5,262`) versus 90%. Other dimensions remain comfortably above the
+  gate: statements `95.29%`, functions `98.27%`, and lines `95.30%`.
+- Assign one test-only Terra Medium coverage batch over existing durable-
+  subscription state validation and ZeroMQ private reserved-kind/prefix error
+  behavior. The metric is the RED evidence. Threshold reductions, coverage
+  exclusions, production-only instrumentation branches, and unrelated tests are
+  out of scope.
+- Re-review style/maintainability and performance/reliability because the new
+  tests must remain readable, deterministic, bounded, and faithful to lifecycle
+  and IPC behavior. Documentation and TypeScript/API are N/A absent source or
+  public-contract changes. Security remains N/A absent production boundary
+  changes because the focused final security review is already clean; otherwise
+  it must be reopened. Historical superseded text is not active state.
