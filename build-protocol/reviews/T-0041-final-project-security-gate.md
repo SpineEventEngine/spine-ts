@@ -3482,6 +3482,16 @@ verify` remains reserved.
 - Style, docs, and TypeScript/API must review; reliability is N/A under D-0095's
   stateless equality/no-execution-path rationale.
 
+## D-0095 Canonical Re-Review Package And Assignment
+
+- Exact package `.superpowers/sdd/review-255c26c1..836ff533.diff`; baseline
+  `255c26c1`; endpoint `836ff533`; 2 commits; 32,487 bytes.
+- Style/maintainability: existing role, expected explicit immutable Terra High.
+- Documentation: existing role, expected explicit immutable Luna Medium.
+- TypeScript/API: existing role, expected explicit immutable Terra High.
+- Every lane is read-only, childless, Git-read-only, helper-scoped, and subject
+  to the historical-text rule. Reliability remains N/A under D-0095.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,

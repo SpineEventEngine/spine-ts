@@ -3479,6 +3479,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   reliability remains N/A because the helper is stateless equality with no I/O,
   lifecycle, allocation, timing, or adapter execution-path effect.
 
+## D-0095 Canonical Re-Review Assignment
+
+- Frozen endpoint `836ff533`; baseline `255c26c1`; exact package
+  `.superpowers/sdd/review-255c26c1..836ff533.diff`; 2 commits; 32,487 bytes.
+- Dispatch existing style/maintainability and TypeScript/API roles as explicit
+  immutable Terra High and documentation as explicit immutable Luna Medium.
+  All are read-only, childless, Git-read-only, helper-scoped, and subject to the
+  historical-text rule.
+- Reliability remains N/A under the recorded stateless equality/no-I/O/no-
+  execution-path rationale. Aggregate all three affected results before final
+  canonical closure or another correction.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
