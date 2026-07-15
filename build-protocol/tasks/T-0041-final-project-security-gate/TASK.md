@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 21 findings fixed; correction verification
-current; Canonical Wave 22 and dedicated security re-review pending
+Status: In progress - Canonical Wave 22 finding fixed; correction verification
+current; focused style re-review and dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2683,3 +2683,40 @@ Subscription cancellation failed.` instead of `AggregateError`.
   public/package/Proto/generated boundaries unchanged. Rerun focused and full
   native transport checks plus narrow lint/format/diff. Only style re-review is
   required unless the correction changes another concern.
+
+## Canonical Wave 22 Correction
+
+- The existing implementer resumed under its original explicit immutable
+  `gpt-5.6-terra` / medium profile as sole writer, with no child or Git-state
+  mutation. The mandatory skill check selected `implement`,
+  `javascript-testing-patterns`, and `verification-before-completion`; TDD was
+  not applicable because this is an equivalent test-fixture refactor with no
+  new behavior or production seam. The skill defaults for child review and
+  commit are superseded by the explicit assignment.
+- Refactored only `signal-transport.test.ts`: the eight-case parameterized
+  matrix is unchanged, operation-specific topic/open/native-seam behavior is
+  declarative, and short boundary and close/drain helpers retain the closed
+  rejection, close-wait ordering, and native-not-called assertions. No
+  production, public/package, dependency, Proto, or generated path changed.
+- The unrestricted focused matrix passed 8/8 with 41 skipped, and the fresh
+  unrestricted complete native transport file passed 49/49. Focused ESLint
+  initially exposed four shorthand-void style errors; after block-body-only
+  correction it exited 0. Canonical Wave 22's finding is fixed and correction
+  verification is current; focused style re-review and dedicated security
+  re-review remain pending. No acceptance is claimed.
+
+## Canonical Wave 22 Correction Coordinator Verification
+
+- The existing implementer returned under its original explicit,
+  tool-enforced immutable actual Terra Medium profile, made no Git mutation,
+  spawned no child, and is closed.
+- Fresh unrestricted coordinator verification passed the exact eight-case
+  close-boundary matrix with 41 skipped and the complete native ZeroMQ
+  transport file 49/49. Focused test ESLint, `docs:check`, generated-clean,
+  exact six-path Prettier, status/anchor scans, production/public-boundary scan,
+  exact changed paths, and diff integrity passed.
+- Direct inspection accepts the declarative four-operation table, 25-line
+  dispatcher, separate boundary fixture, separate lifecycle harness, and four
+  small native guards. All prior cases/assertions remain, and no production
+  source changed. Commit and run only the focused style re-review unless later
+  edits expand scope.

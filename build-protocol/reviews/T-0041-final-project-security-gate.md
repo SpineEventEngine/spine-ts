@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 21 findings fixed; correction verification current;
-Canonical Wave 22 and dedicated security re-review pending
+Status: Canonical Wave 22 finding fixed; correction verification current;
+focused style re-review and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2828,3 +2828,35 @@ verify` remains reserved.
   mutation, spawned no child, and is closed. The accepted complete batch is one
   test-maintainability P2. Return it to the existing Terra Medium implementer;
   rerun only style unless correction scope expands.
+
+## Canonical Wave 22 Correction
+
+- Existing implementer resumed under the original explicit immutable Terra
+  Medium profile, remained sole writer, spawned no child, and made no Git-state
+  mutation. Its mandatory skill applicability check selected `implement`,
+  `javascript-testing-patterns`, and `verification-before-completion`; TDD was
+  inapplicable to the behavior-preserving test-fixture refactor.
+- The mixed 112-line helper is replaced by declarative operation cases plus
+  short boundary and close/drain lifecycle helpers. All eight preparation/
+  recheck cases retain their exact operation-specific native-seam and lifecycle
+  assertions at `signal-transport.test.ts:770-781,1602-1785`; no production or
+  public/package/dependency/Proto/generated path changed.
+- Unrestricted focused verification passed 8/8 with 41 skipped; fresh
+  unrestricted native file verification passed 49/49. Focused ESLint passed
+  after correcting four initial shorthand-void style errors. The Wave 22
+  finding is fixed and correction verification is current; focused style
+  re-review and dedicated security re-review remain pending. No acceptance is
+  claimed.
+
+## Canonical Wave 22 Correction Coordinator Verification
+
+- The implementer returned with matching original explicit dispatch and
+  tool-enforced immutable actual Terra Medium metadata, no child or Git
+  mutation, and is closed.
+- Fresh coordinator-native matrix verification passed 8/8 with 41 skipped;
+  fresh complete native transport verification passed 49/49. Focused ESLint,
+  docs/API, generated-clean, exact formatting, active/stale anchors, production/
+  public boundaries, exact paths, and diff integrity passed.
+- Inspection accepts the short declarative helper decomposition without a
+  production or behavior change. Commit and rerun only style/maintainability;
+  the three clean Wave 22 lanes remain accepted.

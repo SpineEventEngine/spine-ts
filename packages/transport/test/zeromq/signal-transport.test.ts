@@ -1599,10 +1599,90 @@ async function expectNativeOperationBlocked(
   }
 }
 
+type CloseBlockedOperation =
+  "publisher-bind" | "request-connect" | "responder-bind" | "subscriber-connect";
+type CloseBoundary = "preparation" | "recheck";
+
+interface NativeCallGuard {
+  expectNotCalled(): void;
+  restore(): void;
+}
+
+interface PausedBoundary {
+  readonly started: Promise<undefined>;
+  release(): void;
+  restore(): void;
+}
+
+interface CloseBlockedOperationCase {
+  readonly signalKind: "command" | "event";
+  readonly nativeGuards: readonly (() => NativeCallGuard)[];
+  open(
+    transport: ReturnType<typeof createZeroMqTransport>,
+    topic: ReturnType<typeof createTransportTopic>,
+    subscriberId: string,
+  ): Promise<unknown>;
+}
+
+const closeBlockedOperations: Record<CloseBlockedOperation, CloseBlockedOperationCase> = {
+  "subscriber-connect": {
+    signalKind: "event",
+    nativeGuards: [guardNativeConnect],
+    open: (transport, topic, subscriberId) =>
+      transport.subscribe(createTransportSubscription({ subscriberId, topic }), () => undefined),
+  },
+  "responder-bind": {
+    signalKind: "command",
+    nativeGuards: [guardNativeReplyBind],
+    open: (transport, topic, subscriberId) =>
+      transport.respond(
+        createTransportSubscription({
+          subscriberId,
+          topic,
+          mode: "competing-consumer",
+        }),
+        () => ({ accepted: true }),
+      ),
+  },
+  "publisher-bind": {
+    signalKind: "event",
+    nativeGuards: [guardNativePublisherBind],
+    open: (transport, topic) => transport.publish({ topic, envelope: { published: true } }),
+  },
+  "request-connect": {
+    signalKind: "command",
+    nativeGuards: [guardNativeConnect, guardNativeRequestSend],
+    open: (transport, topic) => transport.request({ topic, envelope: { requested: true } }),
+  },
+};
+
 async function expectCloseBlocksNative(
-  operation: "publisher-bind" | "request-connect" | "responder-bind" | "subscriber-connect",
-  boundary: "preparation" | "recheck",
+  operation: CloseBlockedOperation,
+  boundary: CloseBoundary,
 ): Promise<void> {
+  const operationCase = closeBlockedOperations[operation];
+  const pausedBoundary = pauseBoundary(boundary);
+  const nativeGuards = operationCase.nativeGuards.map((guard) => guard());
+
+  try {
+    await withZeroMqTransport(async (transport) => {
+      const topic = createTransportTopic({
+        signalKind: operationCase.signalKind,
+        messageTypeUrl: `type.spine.io/example.Closing${operation}${boundary}`,
+      });
+      const opening = operationCase.open(transport, topic, `closing-${operation}-${boundary}`);
+
+      await expectCloseDrainsOpening(transport, opening, pausedBoundary, nativeGuards);
+    });
+  } finally {
+    for (const guard of nativeGuards.toReversed()) {
+      guard.restore();
+    }
+    pausedBoundary.restore();
+  }
+}
+
+function pauseBoundary(boundary: CloseBoundary): PausedBoundary {
   const preparation = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
   const recheck = zeroMqSocketAccess.recheckIpcDirectory.bind(zeroMqSocketAccess);
   const boundaryStarted = deferred<undefined>();
@@ -1623,94 +1703,85 @@ async function expectCloseBlocksNative(
             await boundaryReleased.promise;
             await recheck(prepared);
           });
-  const connect = operation.endsWith("connect")
-    ? vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
-        throw new Error("native connect reached");
-      })
-    : undefined;
-  const send =
-    operation === "request-connect"
-      ? vi
-          .spyOn(zeroMqSocketAccess, "sendRequest")
-          .mockRejectedValue(new Error("native send reached"))
-      : undefined;
-  const bindPublisher =
-    operation === "publisher-bind"
-      ? vi
-          .spyOn(zeroMqSocketAccess, "bindPublisher")
-          .mockRejectedValue(new Error("native publisher bind reached"))
-      : undefined;
-  const bindReply =
-    operation === "responder-bind"
-      ? vi
-          .spyOn(zeroMqSocketAccess, "bindReply")
-          .mockRejectedValue(new Error("native responder bind reached"))
-      : undefined;
+
+  return {
+    started: boundaryStarted.promise,
+    release: () => {
+      boundaryReleased.resolve(undefined);
+    },
+    restore: () => {
+      boundarySpy.mockRestore();
+    },
+  };
+}
+
+async function expectCloseDrainsOpening(
+  transport: ReturnType<typeof createZeroMqTransport>,
+  opening: Promise<unknown>,
+  boundary: PausedBoundary,
+  nativeGuards: readonly NativeCallGuard[],
+): Promise<void> {
+  await boundary.started;
+  let closeSettled = false;
+  const close = transport.close().finally(() => {
+    closeSettled = true;
+  });
 
   try {
-    await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
-        signalKind:
-          operation === "responder-bind" || operation === "request-connect" ? "command" : "event",
-        messageTypeUrl: `type.spine.io/example.Closing${operation}${boundary}`,
-      });
-      let opening: Promise<unknown>;
-      if (operation === "subscriber-connect") {
-        const subscription = createTransportSubscription({
-          subscriberId: `closing-${operation}-${boundary}`,
-          topic,
-        });
-        opening = transport.subscribe(subscription, () => undefined);
-      } else if (operation === "responder-bind") {
-        const subscription = createTransportSubscription({
-          subscriberId: `closing-${operation}-${boundary}`,
-          topic,
-          mode: "competing-consumer",
-        });
-        opening = transport.respond(subscription, () => ({ accepted: true }));
-      } else if (operation === "publisher-bind") {
-        opening = transport.publish({ topic, envelope: { published: true } });
-      } else {
-        opening = transport.request({ topic, envelope: { requested: true } });
-      }
-      await boundaryStarted.promise;
+    await waitFor(0);
+    expect(closeSettled).toBe(false);
 
-      let closeSettled = false;
-      const close = transport.close().finally(() => {
-        closeSettled = true;
-      });
-
-      try {
-        await waitFor(0);
-        expect(closeSettled).toBe(false);
-
-        boundaryReleased.resolve(undefined);
-        await expect(opening).rejects.toThrow("ZeroMQ signal transport is closed.");
-        await close;
-        if (connect !== undefined) {
-          expect(connect).not.toHaveBeenCalled();
-        }
-        if (send !== undefined) {
-          expect(send).not.toHaveBeenCalled();
-        }
-        if (bindPublisher !== undefined) {
-          expect(bindPublisher).not.toHaveBeenCalled();
-        }
-        if (bindReply !== undefined) {
-          expect(bindReply).not.toHaveBeenCalled();
-        }
-      } finally {
-        boundaryReleased.resolve(undefined);
-        await Promise.allSettled([opening, close]);
-      }
-    });
+    boundary.release();
+    await expect(opening).rejects.toThrow("ZeroMQ signal transport is closed.");
+    await close;
+    for (const guard of nativeGuards) {
+      guard.expectNotCalled();
+    }
   } finally {
-    bindReply?.mockRestore();
-    bindPublisher?.mockRestore();
-    send?.mockRestore();
-    connect?.mockRestore();
-    boundarySpy.mockRestore();
+    boundary.release();
+    await Promise.allSettled([opening, close]);
   }
+}
+
+function guardNativeConnect(): NativeCallGuard {
+  return nativeCallGuard(
+    vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
+      throw new Error("native connect reached");
+    }),
+  );
+}
+
+function guardNativeRequestSend(): NativeCallGuard {
+  return nativeCallGuard(
+    vi.spyOn(zeroMqSocketAccess, "sendRequest").mockRejectedValue(new Error("native send reached")),
+  );
+}
+
+function guardNativePublisherBind(): NativeCallGuard {
+  return nativeCallGuard(
+    vi
+      .spyOn(zeroMqSocketAccess, "bindPublisher")
+      .mockRejectedValue(new Error("native publisher bind reached")),
+  );
+}
+
+function guardNativeReplyBind(): NativeCallGuard {
+  return nativeCallGuard(
+    vi
+      .spyOn(zeroMqSocketAccess, "bindReply")
+      .mockRejectedValue(new Error("native responder bind reached")),
+  );
+}
+
+function nativeCallGuard(spy: { mockRestore(): void }): NativeCallGuard {
+  return {
+    expectNotCalled: () => {
+      expect(spy).not.toHaveBeenCalled();
+    },
+    restore: () => {
+      spy.mockRestore();
+    },
+  };
 }
 
 async function publishUntil(publish: () => Promise<void>, received: () => boolean): Promise<void> {
