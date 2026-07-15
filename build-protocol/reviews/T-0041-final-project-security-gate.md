@@ -1926,3 +1926,18 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   subagents or Git mutation, concrete findings or clean, and superseded-history
   exclusion. Aggregate before action; dedicated final security review remains
   pending.
+
+## Canonical Review Wave 16 Dispatch
+
+- Style/maintainability agent `019f64c3-f5fc-7a03-be07-984bd75e3605` was
+  dispatched explicitly as existing `style_maintainability_reviewer` with
+  immutable `gpt-5.6-terra` / high.
+- Documentation agent `019f64c3-f993-7661-a31d-4c5a466508b5` was dispatched
+  explicitly as existing `documentation_reviewer` with immutable
+  `gpt-5.6-luna` / medium.
+- TypeScript/API docs agent `019f64c3-fd33-7792-a2bc-adc45de972d1` was
+  dispatched explicitly as existing `typescript_api_docs_reviewer` with
+  immutable `gpt-5.6-terra` / high.
+- All three are read-only, childless, and scoped to their distinct concern.
+  Reliability remains queued for platform capacity; no finding may be acted on
+  until the complete four-lane wave is aggregated.
