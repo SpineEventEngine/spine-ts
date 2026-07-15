@@ -1961,3 +1961,14 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   roles over the literal baseline package with the full ledger, D-0087-D-0090,
   no subagents or Git mutation, and superseded-history exclusion. Dedicated
   security review remains pending.
+
+## Canonical Review Wave 15 Package
+
+- Immutable endpoint `4e78f73f`; package
+  `.superpowers/sdd/review-39f2c6f7..4e78f73f.diff` contains 68 commits and
+  708,663 bytes. Substantive implementation remains `56934655`.
+- Dispatch style Terra High, documentation Luna Medium, TypeScript/API Terra
+  High, and reliability Terra High read-only with the full ledger, D-0087-
+  D-0090, current security artifacts, no subagents/Git mutation, concrete
+  findings or clean, and superseded-history exclusion. Aggregate before action;
+  dedicated security review remains pending.

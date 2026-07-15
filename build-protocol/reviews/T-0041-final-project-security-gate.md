@@ -1810,3 +1810,17 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   assigned/pending before package generation. Run style Terra High, docs Luna
   Medium, API Terra High, and reliability Terra High over the literal package;
   aggregate before action. Dedicated final security review remains pending.
+
+## Canonical Review Wave 15 Package
+
+- Package `.superpowers/sdd/review-39f2c6f7..4e78f73f.diff`, endpoint
+  `4e78f73f`, baseline `39f2c6f7`, 68 commits, 708,663 bytes. Substantive
+  implementation evidence ends at `56934655`.
+- Style Terra High: fixture TSDoc/test, short shared-close helper, security/log
+  status and complete maintainability. Docs Luna Medium: D-0090 fixture mirror,
+  security status/provenance/table, active public docs. API Terra High: testing
+  and ZeroMQ public/internal boundaries, declarations/TypeDoc/package/Proto.
+  Reliability Terra High: symmetric cleanup, fixture forwarding/error, TTL and
+  all T-0041 resource behavior.
+- All are read-only with D-0087-D-0090 and the superseded-history rule.
+  Aggregate before action; dedicated security review remains pending.
