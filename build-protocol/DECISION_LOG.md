@@ -4253,3 +4253,69 @@ Consequences:
   ignoring trailers.
 - The post-completion Internet review is a required follow-up, but it does not
   block initial project completion or T-0041 security acceptance.
+
+## D-0094: Correlate Transport Kinds With Protobuf Envelopes
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: D-0093 made ZeroMQ `command` and `event` frames concrete Buf binary,
+but the adapter-neutral TypeScript contract still allowed callers to choose an
+unrelated generic envelope for either kind. The concrete adapter cast that
+generic to `Command` or `Event`, so the public type promised values the runtime
+would not preserve. Canonical TypeScript/API review correctly rejected that
+false promise. The same review found that manual `$typeName` detection for
+successful replies was undocumented and appeared to reject arbitrary objects.
+
+Decision:
+
+- Add public conditional type `TransportSignalEnvelope<Kind, OtherEnvelope>`.
+  It resolves `command` to generated `Command`, `event` to generated `Event`,
+  and preserves `OtherEnvelope` for `query`, `subscription`, and `system`.
+- Apply that conditional to publish/request operations and their handlers while
+  preserving existing generic parameter order. Correct command/event uses stay
+  source-compatible; incorrect arbitrary command/event envelopes become compile
+  errors.
+- Export `TransportSignalEnvelope` from the transport root. This is one
+  intentional public type correction; the root export count becomes 18 and the
+  ZeroMQ subpath remains 6. No codec option, schema registry, or public socket
+  concept is introduced.
+- Replace the manual reply-shape check with Buf's official `isMessage(value)`
+  predicate without a schema argument. The ZeroMQ private reply wrapper rejects
+  every generated-message-shaped successful reply instead of V8-serializing it.
+  Do not introduce or special-case `Ack`.
+- For this ZeroMQ reply seam, an object with a string `$typeName` is reserved as
+  a Buf generated-message shape. Document that adapter behavior. A caller that
+  needs a plain private result must not use the reserved generated-message
+  discriminator.
+
+Reasoning:
+
+- Correlating kinds and envelopes makes TypeScript describe the actual wire and
+  handler values; moving tests to another kind cannot substitute for an honest
+  public contract.
+- The conditional type preserves caller-selected values for kinds that have no
+  Proto contract and avoids a larger codec-registration abstraction.
+- Buf 2.12.1 implements `isMessage(value)` using the generated-message
+  `$typeName` convention. Schema-specific checks for only `Command` and `Event`
+  would permit another Proto message such as `Ack` to fall through to V8,
+  contradicting D-0093 and the human's explicit no-V8-for-Proto rule.
+- Reserving the discriminator on this private reply seam is smaller and more
+  honest than inventing a public reply Proto or pretending arbitrary generated
+  schemas can be encoded without their descriptors.
+
+Consequences:
+
+- Add compile-time coverage for command/event correlation, non-Proto generic
+  preservation, generated-message acceptance, and plain-object rejection.
+- Correct stale test generic kinds, assert the exact malformed-command failure,
+  and prove the responder continues after rejected Proto reply values.
+- Public wire docs state exact frame positions, per-frame ceiling versus actual
+  allocation, private non-`Ack` replies, the reserved `$typeName` reply shape,
+  mixed-version incompatibility, and the accepted aggregate residual.
+- All four canonical lanes re-review the correction before focused final
+  security review. D-0093's wire, cap, framing, and risk acceptance remain
+  unchanged.

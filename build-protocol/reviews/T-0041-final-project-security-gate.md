@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: In progress - D-0093 canonical findings accepted; public-contract
-correction architecture pending
+Status: In progress - D-0094 public-contract correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -3254,3 +3253,20 @@ verify` remains reserved.
 - The complete wave is aggregated. Resume the same Sol High requirements
   splitter for only the architecture-significant P1/P2 correction, then return
   one deduplicated batch to the existing Terra Medium implementation context.
+
+## D-0094 Architecture Result And Correction Assignment
+
+- Resumed splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit/actual
+  immutable Sol High, returned the conditional kind/envelope contract, made no
+  mutation, spawned no child, and is closed.
+- Add/export `TransportSignalEnvelope`; root API count intentionally changes to
+  18 while ZeroMQ stays 6. Preserve method generic order and correlate only
+  command/event with generated envelopes.
+- Use Buf `isMessage(value)` without a schema and reserve generated-message-
+  shaped replies, including string `$typeName`, on the private ZeroMQ reply
+  seam. This differs intentionally from the splitter's narrower predicate so no
+  other Proto reply can be V8-serialized contrary to D-0093.
+- Return the complete aggregated finding batch to resumed implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original explicit/actual
+  immutable Terra Medium, for one RED/GREEN correction. All four lanes re-review
+  the correction; focused final security review follows only after closure.

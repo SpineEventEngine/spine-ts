@@ -1,7 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0093 canonical findings accepted; public-contract
-correction architecture pending
+Status: In progress - D-0094 public-contract correction assigned
 
 Started: `2026-07-14`
 
@@ -3213,3 +3212,27 @@ Subscription cancellation failed.` instead of `AggregateError`.
   smallest honest kind-to-envelope type correlation, exact compatibility/docs/
   tests, and narrow generated-Proto reply detection without reopening the human
   wire/risk decisions or adding a codec-option abstraction.
+
+## D-0094 Architecture Result And Fix Assignment
+
+- Resumed splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056` retained matching
+  explicit/tool-enforced immutable actual Sol High, used the applicable
+  `codebase-design` and `typescript-advanced-types` skills, made no Git or file
+  mutation, spawned no child, and is closed.
+- Accept public `TransportSignalEnvelope<Kind, OtherEnvelope>`: command resolves
+  to generated `Command`, event to generated `Event`, and other kinds retain
+  their caller-selected envelope. Apply it without changing existing generic
+  argument order. Root exports intentionally become 18; ZeroMQ stays 6.
+- Adjust the splitter's reply predicate to preserve the binding human rule:
+  use Buf `isMessage(value)` without a schema and reject every generated-
+  message-shaped successful reply. Schema-specific Command/Event checks would
+  let another Proto such as `Ack` fall through to V8. Document string
+  `$typeName` as reserved on the ZeroMQ private reply seam.
+- Resume the same implementer context
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, expected its original explicit/
+  tool-enforced immutable `gpt-5.6-terra` / medium profile, as sole writer,
+  childless and without Git-state mutation. Implement D-0094 plus the complete
+  accepted canonical batch under RED/GREEN; update exact API export checks and
+  all active records/docs; run focused root/ZeroMQ/runtime/cross-process,
+  generated typecheck, lint, formatting, docs/API, generated-clean, and diff
+  checks. No full verify before re-review closure.
