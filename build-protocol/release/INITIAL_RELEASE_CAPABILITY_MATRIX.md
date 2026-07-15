@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Reconciled for the T-0042 release candidate; final review and closure pending
+Status: Reconciled and review-clean; integration and post-merge closure pending
 
 Task: T-0038 Accepted Capability Audit
 
@@ -135,9 +135,10 @@ integrated, post-merge verified, and pushed; T-0042 owns final release proof.
 
 ## Pending Closure Evidence (Not Classified)
 
-- T-0042 local release proof and tracked-state confirmation are clean. Final
-  specialist review, integration, post-merge verification, remote
-  synchronization, and project closure remain.
+- T-0042 local release proof, tracked-state confirmation, all final specialist
+  dispositions, and the native 74-file / 1,780-test branch gate are clean.
+  Integration, post-merge verification, remote synchronization, clean T-0042
+  worktree removal, and the final main closure record remain.
 - The generated wildcard exports are inventoried at the manifest-entry level;
   this audit does not claim an exhaustive TypeDoc list for every generated
   module, which is explicitly excluded from TypeDoc.

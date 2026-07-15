@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - final specialist review clean; final branch gate pending
+Status: In progress - final branch gate clean; integration pending
 
 Started: `2026-07-15`
 
@@ -104,16 +104,17 @@ is justified only if one of these commands cannot prove an acceptance criterion.
 
 - Real black-box acceptance: 1 file / 27 tests passed natively.
 - Real local multi-process acceptance: 1 file / 19 tests passed natively.
-- Full native `verify`: ordinary and coverage runs each passed 74 files / 1,775
+- Full native `verify`: ordinary and coverage runs each passed 74 files / 1,780
   tests. Coverage is 95.38% statements, 90.04% branches, 98.27% functions, and
   95.39% lines.
 - TypeDoc/API counts, all 25 copied Spine checksums, Proto lint,
   generated-clean, package imports, relative links, public example API audit,
   and exact documented client commands passed as recorded in the work log.
 
-These results establish a review candidate, not project completion. The four
-specialist dispositions, closure-state reconciliation, integration,
-post-merge gate, remote synchronization, and cleanup remain required.
+These results establish an integration candidate, not project completion. All
+four specialist dispositions are clean or concretely N/A. Integration,
+post-merge verification, remote synchronization, closure recording, and cleanup
+remain required.
 
 Deep planning is N/A: the detailed completion plan already fixes the release
 scope and this task must not redesign public/domain/serialized behavior. Invoke
@@ -412,3 +413,38 @@ scripts/check-release-readiness.test.mjs` failed as expected with
 - All four canonical T-0042 concerns therefore have clean or concrete N/A
   dispositions. No reviewer or implementer remains open. The native final
   branch `pnpm verify` gate is next.
+
+## 2026-07-15 - Final Native Branch Gate
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exited 0 at
+  endpoint `15b5ef38`.
+- Ordinary and coverage runs each passed 74 files / 1,780 tests. The increase
+  from the earlier corrected 1,775-test gate is the five additional
+  release-checker regressions added through the review loop.
+- Coverage is 95.38% statements (9,548/10,010), 90.04% branches
+  (4,738/5,262), 98.27% functions (2,452/2,495), and 95.39% lines
+  (9,365/9,817).
+- Node version, generated build/tooling typechecks, ESLint/cleanup, formatting,
+  TypeDoc/API counts 100/28/205/19/20/6/3, all 25 copied Proto checksums, Proto
+  lint, generated-clean, and the 58-import/107-link release checker passed.
+- `git diff --check` passed, no generated output is tracked, the T-0042
+  worktree was clean before this closure-record update, and root still exposes
+  only the untouched untracked `human-review-1-jul.md`.
+- Initial-release exclusions remain exactly the four release-matrix
+  `DOCUMENTED_EXCLUSION` rows plus the explicit human-accepted SF-013
+  residual. No stale-doc, example-gap, security-gate, or framework-defect route
+  is open.
+
+## 2026-07-15 - Closure Candidate Pre-Review Lint
+
+- The task/work/review, completion-plan, and capability-matrix statuses agree:
+  final branch evidence is clean and integration/post-merge closure is pending.
+- The current gate is 74 files / 1,780 tests. Earlier 73/1,772 and 74/1,775
+  values occur only in dated historical evidence or resolved findings and are
+  explicitly superseded.
+- The diff is exactly five closure records/docs. It adds no constant, public
+  API, TypeDoc, Protobuf, runtime, generated, example, or security behavior and
+  makes no future production-policy promise.
+- Focused Prettier, `git diff --check`, and the standalone 58-import/107-link
+  checker passed. Run only the documentation reviewer; every other concern
+  carries a clean or concrete unchanged-input disposition.
