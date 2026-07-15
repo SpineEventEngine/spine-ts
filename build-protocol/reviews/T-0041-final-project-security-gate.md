@@ -2038,3 +2038,25 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   before package generation. Run style Terra High, docs Luna Medium, API Terra
   High, and reliability Terra High over the literal package; aggregate before
   action. Dedicated final security review remains pending.
+
+## Canonical Review Wave 17 Package And Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..05ed3109.diff`, endpoint
+  `05ed3109`, baseline `39f2c6f7`, 80 commits, 746,152 bytes. Substantive
+  implementation evidence remains `b70ecb08`.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, focused on the complete package,
+  private naming, log chronology, and correction maintainability.
+- Documentation: existing `documentation_reviewer`, expected explicit immutable
+  `gpt-5.6-luna` / medium, focused on the example D-0090 mirror, status,
+  provenance, active docs, and limitations.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, focused on public declarations,
+  TypeDoc, package/Proto boundaries, and D-0088-D-0090 runtime/type agreement.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit immutable `gpt-5.6-terra` / high, focused on complete T-0041
+  bounds, concurrency, cleanup, and the behavior-neutral Wave 16 correction.
+- All assignments are read-only with the full ledger, D-0087-D-0090, no
+  subagents or Git mutation, concrete findings or clean, and superseded-history
+  exclusion. Aggregate before action; dedicated final security review remains
+  pending.
