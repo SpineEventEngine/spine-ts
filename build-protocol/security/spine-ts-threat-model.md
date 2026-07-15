@@ -1,10 +1,9 @@
 # Spine TS Threat Model
 
-Status: T-0041 final threat model, integrated and post-merge verified. SF-013 is
-the human-accepted Medium same-UID local IPC availability residual under D-0093.
-D-0094 remains accepted; D-0096 is coordinator-verified and canonically clean.
-Final focused security review and full verification pass; remote synchronization
-is pending.
+Status: T-0041 final threat model, integrated, post-merge verified, and remotely
+synchronized. SF-013 is the human-accepted Medium same-UID local IPC availability
+residual under D-0093. D-0094 remains accepted; D-0096 is coordinator-verified
+and canonically clean. Final focused security review and full verification pass.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.

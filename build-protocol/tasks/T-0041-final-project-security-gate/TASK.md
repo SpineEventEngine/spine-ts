@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: Complete - integrated and post-merge verified; remote synchronization pending
+Status: Complete - integrated, post-merge verified, remotely synchronized, and cleaned up
 
 Started: `2026-07-14`
 
@@ -4258,3 +4258,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - T-0041 is integrated and post-merge verified. Remote synchronization and clean
   worktree/local-branch removal remain; T-0042 becomes the active product
   frontier after the status commit.
+
+## Remote Synchronization And Cleanup
+
+- `origin/task/T-0041-final-project-security-gate` points exactly to task
+  endpoint `7f042485f71cee9464185c24314dacb9964a7d22`; `origin/main` points to
+  integration record `9bc571cfba47ae818c1eff607926ef73ce816f36` before this final
+  closure commit.
+- Git confirmed the task worktree clean and the branch merged into `main`.
+  Removed the worktree without force and deleted the merged local branch. The
+  remote task branch remains as durable task history.
+- T-0041 is fully closed. The protected root user file remains untouched and
+  untracked. Continue with T-0042 release readiness and project closure.
