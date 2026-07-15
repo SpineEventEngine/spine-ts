@@ -4,12 +4,14 @@ Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 complete four-lane canonical review and focused security re-review are pending.
 
-Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Final
+Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
-maintainability correction is `fdd9da0a`. Later provenance/review/status commits
-are not implementation evidence. Canonical review is clean; dedicated security
-re-review found SF-011 and SF-012; D-0091 architecture is accepted and
-implementation is pending. No security acceptance is claimed.
+maintainability correction is `fdd9da0a`. D-0091 implementation evidence is
+`da730e04`. Later provenance/review/status commits are not implementation
+evidence. The preceding canonical review was clean; dedicated security re-review
+found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
+Canonical Wave 23 and focused security re-review are pending. No security
+acceptance is claimed.
 
 Dedicated final re-review package is
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
@@ -122,7 +124,10 @@ release-blocking and needs focused behavior regression evidence.
 | 6     | Canonical Wave 19                       | Finding fixed; correction verification current.                             |
 | 7     | Canonical Wave 20                       | Findings fixed; correction verification current.                            |
 | 8     | Canonical Wave 21                       | Findings fixed; correction verification current.                            |
-| 9     | Canonical Wave 22                       | Pending.                                                                    |
+| 9     | Canonical Wave 22                       | Test finding corrected; focused style re-review clean.                      |
+| 10    | Dedicated security re-review            | SF-011/SF-012 accepted; reviewer closed.                                    |
+| 11    | D-0091 implementation                   | Coordinator-verified at `da730e04`.                                         |
+| 12    | Canonical Wave 23                       | Assigned; pre-review lint in progress.                                      |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.

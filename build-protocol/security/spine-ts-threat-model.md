@@ -1,17 +1,17 @@
 # Spine TS Threat Model
 
-Status: T-0041 working threat model; D-0091 architecture for SF-011 and SF-012
-is accepted and implementation is pending.
+Status: T-0041 working threat model; D-0091 for SF-011 and SF-012 is implemented
+and coordinator-verified; Canonical Wave 23 is assigned.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
-Committed canonical wave 5 finding basis: `b43cf705`. Final production
+Committed canonical wave 5 finding basis: `b43cf705`. Earlier production
 implementation evidence is `c7f8a901`; the later test-only maintainability
-correction is `fdd9da0a`. Later provenance/review/status commits are not
-implementation evidence. Canonical review is clean; D-0091 architecture for
-SF-011 and SF-012 is accepted and implementation is pending. No security
-acceptance is claimed.
+correction is `fdd9da0a`. D-0091 implementation evidence is `da730e04`. Later
+provenance/review/status commits are not implementation evidence. The preceding
+canonical review was clean; Canonical Wave 23 and focused security re-review of
+SF-011/SF-012 are pending. No security acceptance is claimed.
 
 ## Scope and assumptions
 

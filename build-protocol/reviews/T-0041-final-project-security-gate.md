@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: SF-011/SF-012 architecture accepted; implementation pending
+Status: SF-011/SF-012 implemented and coordinator-verified; Canonical Wave 23
+assigned
 
 Baseline: `39f2c6f7`
 
@@ -2995,3 +2996,30 @@ verify` remains reserved.
 - Implementation is ready to freeze. All four canonical concerns remain
   pending against the new literal endpoint; focused SF-011/SF-012 security
   re-review follows only after canonical closure.
+
+## Canonical Wave 23 Assignment
+
+- Frozen implementation endpoint: `da730e04`.
+- Style/maintainability: existing immutable Terra High role, read-only,
+  childless, Git-read-only; inspect code/test shape and maintainability only.
+- Documentation: existing immutable Luna Medium role, read-only, childless,
+  Git-read-only; inspect current claims, chronology, and D-0091 evidence only.
+- TypeScript/API docs: existing immutable Terra High role, read-only, childless,
+  Git-read-only; inspect public/package/serialized compatibility and TSDoc/API
+  leakage only.
+- Performance/reliability: existing immutable Terra High role, read-only,
+  childless, Git-read-only; inspect resource bounds, continuation, persistence,
+  malformed-input, and native lifecycle behavior only.
+- Every prompt must pass model and reasoning explicitly and apply the human
+  ledger and historical-text rule. Aggregate all four results before fixes.
+
+## Canonical Wave 23 Pre-Review Lint
+
+- Initial stale-status lint found and corrected the active “implementation
+  pending” headers and obsolete Wave 22 pending row across all current mirrors.
+  The repeated active-state scan is clean; older pending statements are
+  timestamped superseded history and are outside current-state review.
+- D-0091 has one private production owner per cap, no new public/package/Proto/
+  serialized surface, no new public-doc claim, no future-policy overclaim, and
+  no generated output. Formatting and diff integrity pass. Generate a literal
+  package and dispatch the complete four-lane wave.

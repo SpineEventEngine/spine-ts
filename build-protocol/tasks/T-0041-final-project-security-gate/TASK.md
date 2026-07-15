@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - SF-011/SF-012 architecture accepted; implementation
-pending
+Status: In progress - SF-011/SF-012 implemented and coordinator-verified;
+Canonical Wave 23 assigned
 
 Started: `2026-07-14`
 
@@ -2897,3 +2897,32 @@ Subscription cancellation failed.` instead of `AggregateError`.
   publish/request cases use an exact route plus the oversized envelope frame.
   Complete four-lane canonical review and focused security re-review remain
   pending.
+
+## Canonical Wave 23 Assignment
+
+- Frozen D-0091 implementation endpoint: `da730e04`.
+- Run all four canonical concerns against the complete T-0041 milestone because
+  the fix changes runtime resource bounds, persistence decoding, behavior tests,
+  and current security documentation.
+- Assign the existing style/maintainability reviewer, expected explicit
+  immutable `gpt-5.6-terra` / high; documentation reviewer, expected explicit
+  immutable `gpt-5.6-luna` / medium; TypeScript/API docs reviewer, expected
+  explicit immutable `gpt-5.6-terra` / high; and performance/reliability
+  reviewer, expected explicit immutable `gpt-5.6-terra` / high. Every reviewer
+  is read-only, childless, and Git-read-only.
+- Reviewers must inspect only their bounded concern, the literal milestone
+  package, affected paths, D-0091, and the human ledger. Historical superseded
+  text is not a finding unless current task/status/security artifacts claim it
+  as active.
+
+## Canonical Wave 23 Pre-Review Lint
+
+- The first status scan found stale top-level “implementation pending” headers
+  and an obsolete Wave 22 pending row. They were corrected across task, work,
+  review, findings, and threat-model active mirrors before packaging; older
+  timestamped pending statements remain historical evidence only.
+- Re-run status/stale scans are clean. Each D-0091 policy value has one private
+  production owner, no D-0091 public-root/package/serialized change exists,
+  changed public docs make no D-0091 claim, security docs retain deployment
+  ownership rather than promising future policy, generated output is absent
+  from Git status, formatting passes, and `git diff --check` passes.
