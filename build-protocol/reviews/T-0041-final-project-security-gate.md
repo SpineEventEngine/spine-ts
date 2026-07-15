@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 9 findings accepted; correction split assigned
+Status: Canonical wave 9 correction contract accepted; implementation assigned
 
 Baseline: `39f2c6f7`
 
@@ -1146,4 +1146,22 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   return the smallest compatibility-safe contract for the public-option seam,
   ZeroMQ subpath TypeDoc/export gate, bounded liveness evidence, stale TSDoc,
   and architecture text. One bounded Terra Medium implementation follows;
+  dedicated security review remains pending.
+
+## Canonical Wave 9 Correction Contract
+
+- Splitter `019f641c-1ec1-7773-a774-e1354130ec56`, explicit immutable Sol High,
+  completed read-only with no subagents or Git mutation and is closed.
+- Accepted D-0089 removes the private background-failure observer from public
+  `ZeroMqTransportOptions` while preserving runtime/test injection through a
+  non-exported structural extension. No public monitoring API is authorized.
+- Gate exactly six direct ZeroMQ subpath symbols and observer absence in
+  TypeDoc/API checks; preserve 17 root transport symbols and package exports.
+  Strengthen liveness order and independently bounded cleanup; align inactive
+  TTL TSDoc and architecture cancellation/capacity text.
+- Assign one fresh existing implementer, explicit immutable Terra Medium, for
+  the complete contract with public-type/API-gate RED/GREEN and focused native
+  evidence. It is the sole writer, cannot mutate Git or spawn subagents, and
+  must preserve D-0087/D-0088, Protobuf, dependencies, generated policy, and
+  excluded public monitoring/scheduling scope. All canonical lanes rerun;
   dedicated security review remains pending.

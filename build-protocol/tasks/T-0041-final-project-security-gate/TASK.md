@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 9 findings accepted; correction split assigned
+Status: In progress - canonical wave 9 correction contract accepted; implementation assigned
 
 Started: `2026-07-14`
 
@@ -1301,4 +1301,28 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   shape, liveness assertions/cleanup bound, docs alignment, affected tests, and
   no-scope-expansion constraints. It is read-only, cannot spawn subagents or
   mutate Git, and must return one bounded implementation contract. Dedicated
+  security review remains pending.
+
+## Canonical Wave 9 Correction Contract And Implementation Assignment
+
+- Requirements splitter `019f641c-1ec1-7773-a774-e1354130ec56`, explicit
+  immutable Sol High, returned one bounded contract without subagents, file
+  mutation, or Git mutation and is closed. D-0089 records the accepted public
+  decision: remove `onBackgroundFailure` from `ZeroMqTransportOptions`, retain
+  behavior through a non-exported internal/test structural option, and do not
+  create a public monitoring subsystem.
+- Add `packages/transport/src/zeromq/index.ts` as a distinct TypeDoc entry point
+  and gate exactly six subpath symbols plus absence of the private observer.
+  Root transport remains 17; docs reporting becomes
+  `100/28/205/19/17/6/3`. Package exports remain unchanged.
+- Strengthen the native liveness test to record exact `request-settled` then
+  `close-complete` order, retain the 275 ms bound, independently bound fixture
+  cleanup, and always attempt directory removal. Correct `inactiveTtlMs` TSDoc
+  and architecture capacity/cancellation wording exactly to current behavior.
+- Assign one fresh existing `implementer`, explicit immutable Terra Medium, as
+  sole writer. It owns only affected transport/server source/tests, TypeDoc/API
+  checker/docs, D-0089 and these logs. It must preserve all runtime contracts,
+  package/Proto/dependency/generated boundaries, use RED/GREEN for public type
+  and API gates, run focused native evidence where possible, and avoid Git
+  mutation and subagents. All four canonical lanes rerun afterward; dedicated
   security review remains pending.

@@ -4019,3 +4019,44 @@ is unchanged, and no active cancellation of an already-sent request is added.
 Consequences: callers cannot select zero, negative, fractional, non-finite, or
 overflowing request timeouts that could permit an indefinitely blocked request
 or close. The public type remains `number`; runtime validation is the contract.
+
+## D-0089: Keep ZeroMQ Failure Observation Internal
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: Canonical review found that `ZeroMqTransportOptions` emits
+`onBackgroundFailure` publicly even though its TSDoc and design treat it as an
+adapter-private test/failure-observation hook. The initial release has no public
+monitoring subsystem, while repository transport and cross-process tests still
+need deterministic observation of background-loop failures.
+
+Decision:
+
+- The public `ZeroMqTransportOptions` contains exactly `requestTimeoutMs` and
+  `receiveTimeoutMs`. Remove `onBackgroundFailure` from that interface rather
+  than stabilizing or documenting a new public monitoring extension point.
+- Preserve existing runtime failure observation, including swallowed observer
+  exceptions, through a non-exported internal options extension. Repository
+  tests may pass a locally typed structural value; no internal option type or
+  observer is exported from `@spine-ts/transport/zeromq`.
+- Keep the public factory signature and package export map unchanged. Add the
+  existing published ZeroMQ subpath index as a distinct TypeDoc entry point and
+  gate its exact six public names independently from the 17 root transport
+  names. Explicitly reject the private observer from generated API metadata.
+- Test-only liveness deadlines and cleanup bounds may prove request settlement
+  before close completion. They do not introduce production timers,
+  cancellation, monitoring, retry, or scheduler policy.
+
+Consequences:
+
+- This is an intentional pre-release source-contract correction with no runtime
+  behavior removal for repository tests. Consumers receive a smaller truthful
+  public options type and complete docs/export regression coverage for the
+  already-published ZeroMQ subpath.
+- Public logging callbacks, event emitters, health interfaces, and broader
+  monitoring remain excluded. D-0087, D-0088, Protobuf contracts, dependencies,
+  package entrypoints, and generated-output policy remain unchanged.
