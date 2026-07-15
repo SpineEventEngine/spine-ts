@@ -3841,6 +3841,17 @@ verify` remains reserved.
   dev audits have zero advisories and all 235 signatures verify. Full task
   verification is the remaining acceptance gate.
 
+## Full Gate Cleanup-Lint Finding
+
+- Full native verify stopped in cleanup lint before tests because the T-0041
+  test declaration at `spine-services.test.ts:5377` is 122 characters versus
+  the 120-character limit. Assign one semantics-preserving line reflow to the
+  existing Terra Medium implementer.
+- Re-review style/maintainability only. Docs, TypeScript/API, reliability, and
+  security are N/A because no test semantics, production code, public contract,
+  execution path, or trust boundary changes. Full verify restarts after the
+  compact fix is accepted.
+
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 
 - Resolved the accepted style/maintainability P2 by documenting directly above

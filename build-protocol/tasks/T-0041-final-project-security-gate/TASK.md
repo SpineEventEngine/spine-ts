@@ -3886,6 +3886,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
   advisories at 235/7/189 dependencies, and all 235 registry signatures verify.
   Proceed to the full native T-0041 gate; no release blocker remains from review.
 
+## Full Gate Cleanup-Lint Finding And Fix Assignment
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exited 1 during
+  cleanup lint before tests: `spine-services.test.ts:5377` is 122 characters,
+  exceeding the 120-character project limit. The line originated in earlier
+  T-0041 commit `0d8135aa` and is part of this task's test scope.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected immutable
+  Terra Medium, sole writer/childless/Git-read-only. Reflow only that test
+  declaration, update durable evidence, run focused lint/format/test and diff/
+  scope scans. Then run one compact style review; docs, TypeScript/API,
+  reliability, and security are N/A because semantics/contracts/runtime are
+  unchanged. Restart the complete full gate afterward.
+
 ## D-0096 Source TypeDoc P2 Implementation
 
 - Expanded only `isTransportTopicKind()` source TypeDoc to preserve the
