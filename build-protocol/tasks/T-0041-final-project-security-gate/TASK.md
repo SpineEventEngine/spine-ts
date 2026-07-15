@@ -2731,3 +2731,11 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Review only the accepted helper-shape finding, equivalent case/assertion
   preservation, naming/complexity, current anchors/status, and correction
   chronology. Dedicated security re-review remains pending.
+
+## Wave 22 Focused Style Package
+
+- Fresh package `.superpowers/sdd/review-39f2c6f7..a5039140.diff` contains 119
+  commits and 906,249 bytes from literal baseline `39f2c6f7` to literal endpoint
+  `a5039140`. Test-only correction evidence is `fdd9da0a`.
+- The focused pre-review status, production/public-boundary, generated-output,
+  and range-diff checks are clean. Dispatch only the assigned style lane.
