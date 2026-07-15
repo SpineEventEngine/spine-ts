@@ -3523,6 +3523,22 @@ Subscription cancellation failed.` instead of `AggregateError`.
   proof for each accepted non-ambiguous domain. Preserve D-0095 and do not turn
   the helper into runtime validation.
 
+## D-0095 Review-Batch Coordinator Acceptance
+
+- Final overload domains are disjoint: operations require `envelope` and
+  exclude top-level `signalKind`; topics exclude nested `topic`. Subscriptions
+  and both ambiguous intersections are compile-rejected, while ordinary
+  publish/request operations and topics remain narrowable.
+- Runtime forced-collision behavior is deterministic but explicitly outside the
+  typed narrowing domains. The helper remains a narrowing aid, not input
+  validation. The three active release-matrix transport counts are now 19.
+- Fresh coordinator checks passed both typechecks, transport root 9/9, focused
+  ESLint, docs/API counts `100/28/205/19/19/6/3`, Proto cleanliness, exact
+  six-path Prettier, and diff integrity. No ZeroMQ/server path changed.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained sole writer, childless, and Git-clean and is closed.
+  Freeze and re-review style, docs, and TypeScript/API; reliability stays N/A.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
@@ -3563,3 +3579,24 @@ Subscription cancellation failed.` instead of `AggregateError`.
   `100/28/205/19/19/6/3`, Proto/generated scans are clean, and diff/status/scope
   scans contain exactly the six assigned paths with no ZeroMQ/server changes.
   Implementation remains complete; canonical re-review is pending.
+
+## D-0095 Symmetric-Collision Coordinator Correction
+
+- Made the narrowing overload domains statically disjoint without changing
+  public operation shapes: operation inputs require `envelope` and exclude
+  top-level `signalKind`; topic inputs exclude nested `topic`, using symmetric
+  optional-`never` members only at the helper seam.
+- Compile regressions reject both ambiguous intersections while ordinary
+  topics, publish/request operations, restricted kind unions, and subscription
+  rejection retain their intended behavior. The prior top-level runtime
+  precedence regression remains explicitly outside the accepted overload
+  domains, and accepted-domain runtime proof does not claim validation.
+- Strict RED tooling exited 2 with four unused collision markers. GREEN tooling
+  exited 0 and the complete transport-root file passed 9/9. Final focused
+  evidence is recorded in the work log. Implementation is complete; canonical
+  re-review remains pending.
+- Final focused gates are green: both typechecks and focused lint exited 0,
+  root tests passed 9/9, docs reported `100/28/205/19/19/6/3`, and
+  Proto/generated/diff/status/forbidden-scope scans are clean and limited to
+  exactly six assigned paths. Implementation remains complete; canonical
+  re-review is pending.

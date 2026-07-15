@@ -365,14 +365,65 @@ describe("@spine-ts/transport", () => {
       // @ts-expect-error restricted topic kinds reject kinds outside their union.
       hasTransportSignalKind(topic, "event");
     };
+    const rejectSubscription = (): void => {
+      const subscription = createTransportSubscription({
+        subscriberId: "projection-worker",
+        topic: {
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.TaskCreated",
+        },
+      });
+
+      // @ts-expect-error subscriptions are topic-only containers, not transport operations.
+      hasTransportSignalKind(subscription, "event");
+    };
+    const rejectTopicWithNestedTopic = (
+      topic: TransportTopic & { readonly topic: TransportTopic },
+    ): void => {
+      // @ts-expect-error a topic with a nested topic belongs to neither narrowing domain.
+      hasTransportSignalKind(topic, "event");
+    };
+    const rejectOperationWithTopLevelKind = (
+      operation: PublishTransportOperation<PrivateEnvelope> & {
+        readonly signalKind: TransportSignalKind;
+      },
+    ): void => {
+      // @ts-expect-error an operation with top-level signalKind belongs to neither domain.
+      hasTransportSignalKind(operation, "command");
+    };
 
     void narrowPublish;
     void narrowRequest;
     void narrowTopic;
     void rejectUnrelatedTopicKind;
+    void rejectSubscription;
+    void rejectTopicWithNestedTopic;
+    void rejectOperationWithTopLevelKind;
   });
 
-  it("compares only the canonical topic kind without inspecting or mutating envelopes", () => {
+  it("retains top-level precedence for a statically rejected structural collision", () => {
+    const eventTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/spine.core.Event",
+    });
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    const structuralTopic: TransportTopic & { readonly topic: TransportTopic } = Object.freeze({
+      ...eventTopic,
+      topic: commandTopic,
+    });
+
+    // The helper is not a validator; overloads reject this shape while runtime
+    // precedence remains deterministic if TypeScript checking is bypassed.
+    // @ts-expect-error structural collisions are outside both narrowing domains.
+    expect(hasTransportSignalKind(structuralTopic, "event")).toBe(true);
+    // @ts-expect-error structural collisions are outside both narrowing domains.
+    expect(hasTransportSignalKind(structuralTopic, "command")).toBe(false);
+  });
+
+  it("classifies accepted topic and operation domains without inspecting envelopes", () => {
     const widenTopic = (value: TransportTopic) => value;
     const widenOperation = (value: PublishTransportOperation) => value;
     const commandTopic = createTransportTopic({

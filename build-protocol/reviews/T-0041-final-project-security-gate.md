@@ -3515,6 +3515,19 @@ verify` remains reserved.
   rejection of both ambiguous intersections before another package. Preserve
   the helper as typed narrowing rather than runtime input validation.
 
+## D-0095 Review-Batch Coordinator Acceptance
+
+- Final operation/topic overload domains are statically disjoint; subscriptions
+  and both ambiguous intersections are rejected while valid widened operations
+  and topics narrow. Forced runtime precedence remains deterministic without a
+  validation claim.
+- Coordinator passed both typechecks, root 9/9, focused lint, docs/API counts
+  `100/28/205/19/19/6/3`, Proto cleanliness, exact formatting, and diff
+  integrity. Three active matrix counts are 19; no ZeroMQ/server path changed.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained childless and Git-clean and is closed. Re-review style,
+  docs, and TypeScript/API; reliability remains N/A.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,
@@ -3548,5 +3561,23 @@ verify` remains reserved.
   canonical re-review remains pending.
 - Final focused evidence is green: tooling/build typechecks and focused lint
   exited 0, root tests passed 9/9, docs reported `100/28/205/19/19/6/3`, and
+  Proto/generated/diff/status/forbidden-scope scans are clean and exact.
+  Canonical re-review has not begun.
+
+## D-0095 Symmetric-Collision Correction Evidence
+
+- RED tooling exited 2 with four unused expected-error markers, proving both
+  ambiguous structural intersections and the two forced-runtime calls were
+  still accepted by the intermediate overloads.
+- GREEN uses symmetric optional-`never` exclusions: envelope-bearing operations
+  exclude top-level `signalKind`, and topics exclude nested `topic`. Tooling
+  exits 0 and root tests pass 9/9 while ordinary topic/publish/request narrowing,
+  subscription rejection, and deterministic forced-runtime precedence remain.
+- This is overload-domain soundness, not input validation. D-0095, docs
+  semantics, operation shapes/generic order, 19/6 counts, and every runtime
+  transport path are unchanged. Final focused evidence is in the work log;
+  implementation is complete and canonical re-review remains pending.
+- Final gates are green: both typechecks and focused lint exited 0, root tests
+  passed 9/9, docs reported `100/28/205/19/19/6/3`, and
   Proto/generated/diff/status/forbidden-scope scans are clean and exact.
   Canonical re-review has not begun.

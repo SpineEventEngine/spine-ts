@@ -196,7 +196,11 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
 
 /** Narrow a transport operation to the selected canonical topic kind. */
 export function hasTransportSignalKind<
-  Operation extends { readonly topic: TransportTopic },
+  Operation extends {
+    readonly topic: TransportTopic;
+    readonly envelope: unknown;
+    readonly signalKind?: never;
+  },
   Kind extends Operation["topic"]["signalKind"],
 >(
   value: Operation,
@@ -208,15 +212,20 @@ export function hasTransportSignalKind<
   TopicKind extends TransportSignalKind,
   Kind extends TopicKind,
 >(
-  value: TransportTopic<TopicKind>,
+  value: TransportTopic<TopicKind> & { readonly topic?: never },
   signalKind: Kind & NoInfer<TopicKind>,
-): value is TransportTopic<Kind>;
+): value is TransportTopic<Kind> & { readonly topic?: never };
 
 export function hasTransportSignalKind(
-  value: TransportTopic | { readonly topic: TransportTopic },
+  value:
+    | TransportTopic
+    | {
+        readonly topic: TransportTopic;
+        readonly envelope: unknown;
+      },
   signalKind: TransportSignalKind,
 ): boolean {
-  const topic = "topic" in value ? value.topic : value;
+  const topic = "signalKind" in value ? value : value.topic;
   return topic.signalKind === signalKind;
 }
 
