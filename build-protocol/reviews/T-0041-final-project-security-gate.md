@@ -3989,3 +3989,47 @@ verify` remains reserved.
   found no other defect. The two-branch coverage margin is accepted pending the
   authoritative full gate. Return both findings as one test-only fix to the
   existing Terra Medium implementer, then re-review both concerns.
+
+## Full Gate Branch-Coverage Review Fix Implementer Evidence
+
+- Style Important is addressed without removing the integration round trip: a
+  separate public-publish characterization observes the established native
+  `sendPublisher` boundary and compares both query and subscription payload
+  frames directly with Node V8 `serialize(envelope)`, alongside exact route
+  frames. It neither calls nor replaces a private codec helper.
+- Reliability P2 is addressed by bounding the malformed-reply deferred address
+  with `withHarnessDeadline(..., 1_000)` inside the existing raw-socket cleanup
+  structure. Malformed rejection, later valid continuation, and socket/spied-
+  access restoration remain intact.
+- The review findings are the accepted test-only RED; a tooling typecheck RED
+  on the first operation-union draft was corrected with the existing explicit
+  distributive operation type. Final tooling typecheck and focused ESLint pass.
+  Focused native tests pass 2/2, and the complete ZeroMQ file passes 64/64.
+- Fresh coverage-stage evidence passes 73 files / 1,772 tests with global
+  branches `90.04%` (`4,738/5,262`), statements `95.38%`, functions `98.27%`,
+  and lines `95.39%`. The two-branch threshold margin remains accepted; full
+  `verify` remains a coordinator gate.
+- Changed scope is the assigned ZeroMQ test plus task/work/review records only.
+  No production, public-contract, docs, security, threshold, generated output,
+  or Git state changed. Implementer actual metadata is immutable
+  `gpt-5.6-terra` / `medium`, childless and Git-state-read-only. All binding
+  wire/frame/allocation decisions remain frozen. Compact style/maintainability
+  and performance/reliability re-review are pending.
+- Final `typecheck:tooling`, focused ESLint, `proto:check-generated`, exact
+  four-path formatting, and diff integrity pass. Status contains exactly the
+  four owned paths; staged, production/generated, and forbidden-scope scans are
+  empty. The correction is ready for the assigned compact two-lane re-review.
+
+## Full Gate Branch-Coverage Review Fix Coordinator Acceptance
+
+- Coordinator-native complete ZeroMQ rerun passes 64/64; tooling typecheck,
+  focused lint, exact formatting, and diff integrity pass. Raw query and
+  subscription publisher frames now equal Node V8 `serialize(envelope)`, and
+  malformed-reply address setup has the established one-second deadline.
+- Implementer actual metadata is immutable Terra Medium; it remained childless/
+  Git-state-read-only and is closed. Fresh global coverage-stage evidence passes
+  73 files / 1,772 tests at 90.04% branches.
+- Pre-review lint confirms one test plus three records only, synchronized active
+  state, and no production/public/generated/docs/security/policy change. Freeze
+  a compact correction package for style and reliability re-review; all other
+  lanes retain N/A.

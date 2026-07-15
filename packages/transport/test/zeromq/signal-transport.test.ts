@@ -395,7 +395,13 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const malformed = transport.request({ topic, envelope: { value: "malformed" } });
-        await replier.bind(await addressReady.promise);
+        await replier.bind(
+          await withHarnessDeadline(
+            addressReady.promise,
+            "malformed private reply request address",
+            1_000,
+          ),
+        );
         await replier.receive();
         await replier.send(serialize({ unexpected: true }));
         await expect(malformed).rejects.toThrow("ZeroMQ transport received a malformed reply.");
@@ -835,6 +841,51 @@ describe("ZeroMQ SignalTransport", () => {
 
       await handle.close();
     });
+  });
+
+  it("sends query and subscription envelopes as exact private V8 bytes", async () => {
+    interface PrivateEnvelope {
+      readonly signalKind: "query" | "subscription";
+      readonly value: string;
+    }
+    const operations: readonly PublishTransportOperation<
+      PrivateEnvelope,
+      "query" | "subscription"
+    >[] = [
+      {
+        topic: createTransportTopic({
+          signalKind: "query",
+          messageTypeUrl: "type.spine.io/example/PrivateQueryBytes",
+        }),
+        envelope: { signalKind: "query", value: "query-bytes" },
+      },
+      {
+        topic: createTransportTopic({
+          signalKind: "subscription",
+          messageTypeUrl: "type.spine.io/example/PrivateSubscriptionBytes",
+        }),
+        envelope: { signalKind: "subscription", value: "subscription-bytes" },
+      },
+    ];
+    const sendPublisher = vi.spyOn(zeroMqSocketAccess, "sendPublisher");
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        for (const operation of operations) {
+          await transport.publish<PrivateEnvelope, "query" | "subscription">(operation);
+        }
+
+        expect(sendPublisher).toHaveBeenCalledTimes(operations.length);
+        for (const [index, operation] of operations.entries()) {
+          expect(sendPublisher).toHaveBeenNthCalledWith(index + 1, expect.any(Publisher), [
+            operation.topic.routing.routingKey,
+            serialize(operation.envelope),
+          ]);
+        }
+      });
+    } finally {
+      sendPublisher.mockRestore();
+    }
   });
 
   it("round-trips query and subscription envelopes over the private V8 wire", async () => {
