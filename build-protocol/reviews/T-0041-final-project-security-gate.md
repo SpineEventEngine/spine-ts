@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 14 correction verified; wave 15 package pending
+Status: Canonical review wave 15 assigned
 
 Baseline: `39f2c6f7`
 
@@ -1801,3 +1801,12 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   redundant phrase and retain Wave 14 current/pending plus dedicated security
   pending in both headers and TM-005. `git diff --check` passed. Canonical Wave
   15 and dedicated security re-review remain pending.
+
+## Wave 14 Immutable Endpoint And Wave 15 Status
+
+- Commit `56934655` is the substantive Wave 14 endpoint and is now named in both
+  security artifacts. This follow-up is provenance/status evidence only.
+- Every current general and security record identifies Canonical Wave 15 as
+  assigned/pending before package generation. Run style Terra High, docs Luna
+  Medium, API Terra High, and reliability Terra High over the literal package;
+  aggregate before action. Dedicated final security review remains pending.

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 14 correction verified; wave 15 package pending
+Status: In progress - canonical review wave 15 assigned
 
 Started: `2026-07-14`
 
@@ -1949,3 +1949,15 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   TM-005 retain current/pending Wave 14 plus pending dedicated security wording,
   and `git diff --check` passed. Correction remains in progress pending
   Canonical Wave 15 and dedicated security re-review.
+
+## Wave 14 Immutable Endpoint And Wave 15 Status
+
+- Commit `56934655` is the coordinator-verified Wave 14 testing/docs/status/log
+  endpoint. Both security artifacts identify it as substantive implementation
+  evidence; this provenance/status follow-up and later review commits are not
+  implementation evidence.
+- Every current task and security record now identifies Canonical Wave 15 as
+  assigned/pending before package generation. Run all four explicit immutable
+  roles over the literal baseline package with the full ledger, D-0087-D-0090,
+  no subagents or Git mutation, and superseded-history exclusion. Dedicated
+  security review remains pending.
