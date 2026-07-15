@@ -1,11 +1,11 @@
 # T-0041 Security Findings and Evidence
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
-verified. Wave 16 findings are fixed and correction-verified; Canonical Wave 17
-re-review and the dedicated security re-review are pending.
+verified. Wave 16 correction is coordinator-verified; Canonical Wave 17 review
+is current and pending, and the dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
-implementation evidence ends at `68d54fc6`; later provenance/review/status
+implementation evidence ends at `b70ecb08`; later provenance/review/status
 commits are not implementation evidence. No security acceptance is claimed.
 
 ## Command and evidence ledger
@@ -89,7 +89,8 @@ release-blocking and needs focused behavior regression evidence.
 | 2     | Dedicated security reviewer, Terra High | Round 1: four confirmed blockers; reviewer closed.                          |
 | 2a    | Fix implementation                      | SF-007..010 implemented with focused RED/GREEN evidence; re-review pending. |
 | 3     | Canonical Wave 16                       | Findings fixed; correction verification complete.                           |
-| 3a    | Wave 16 correction                      | Wave 17 re-review and dedicated security re-review pending.                 |
+| 3a    | Wave 16 correction                      | Coordinator-verified at `b70ecb08`.                                         |
+| 4     | Canonical Wave 17                       | Current review pending; dedicated security re-review pending.               |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.

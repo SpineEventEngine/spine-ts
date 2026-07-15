@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Wave 16 findings fixed and correction-verified; Wave 17 re-review pending
+Status: In progress - canonical review wave 17 assigned
 
 Started: `2026-07-14`
 
@@ -2125,3 +2125,13 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Prettier corrected the single Markdown wrap immediately. Treat `b70ecb08` as
   the substantive correction commit, not the final verified package endpoint;
   fresh exact formatting and diff checks follow in the format-only commit.
+
+## Wave 16 Immutable Endpoint And Wave 17 Status
+
+- Commit `b70ecb08` is the substantive coordinator-verified Wave 16 docs/name/
+  status correction. Commit `ac74c574` is its verified format/log endpoint;
+  later provenance/status commits are not implementation evidence.
+- Every current general and security record identifies Canonical Wave 17 as
+  assigned/pending before package generation. Run all four immutable canonical
+  roles with the full ledger, D-0087-D-0090, and superseded-history exclusion;
+  aggregate before action. Dedicated final security review remains pending.

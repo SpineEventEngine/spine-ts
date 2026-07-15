@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 16 findings fixed and correction-verified; Wave 17 re-review pending
+Status: Canonical review wave 17 assigned
 
 Baseline: `39f2c6f7`
 
@@ -2028,3 +2028,13 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Prettier corrected the wrap immediately. Use `b70ecb08` as substantive
   implementation evidence, then require a fresh exact format/diff gate on the
   format/log-only follow-up before Wave 17 package generation.
+
+## Wave 16 Immutable Endpoint And Wave 17 Status
+
+- Substantive implementation evidence is `b70ecb08`; verified format/log
+  endpoint `ac74c574` closes the post-commit correction. This provenance/status
+  follow-up is not implementation evidence.
+- Every current general/security record identifies Wave 17 assigned/pending
+  before package generation. Run style Terra High, docs Luna Medium, API Terra
+  High, and reliability Terra High over the literal package; aggregate before
+  action. Dedicated final security review remains pending.
