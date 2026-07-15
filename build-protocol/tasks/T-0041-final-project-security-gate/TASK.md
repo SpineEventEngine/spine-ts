@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 5 fixes coordinator-verified; canonical wave 6 pending
+Status: In progress - canonical review wave 6 assigned
 
 Started: `2026-07-14`
 
@@ -970,3 +970,19 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   public-export, manifest/lock, generated-output, future-policy, and threat
   anchor scans found no changed-surface drift. Canonical wave 6 and the
   dedicated security re-review remain pending; T-0041 is not complete.
+
+## Canonical Review Wave 6 Assignment
+
+- Wave 5 fixes are committed at immutable endpoint `113934d2`; review package
+  `.superpowers/sdd/review-39f2c6f7..113934d2.diff` contains 29 commits and
+  439,772 bytes from baseline `39f2c6f7`.
+- Dispatch all four existing canonical roles read-only with explicit immutable
+  profiles: `style_maintainability_reviewer`, `gpt-5.6-terra` / high;
+  `documentation_reviewer`, `gpt-5.6-luna` / medium;
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high; and
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+- Each reviewer owns only its named concern, must inspect the current task
+  ledger and changed execution paths, must not spawn subagents or mutate Git,
+  and must ignore superseded historical text unless a current status or changed
+  public document claims it as active. Aggregate the complete wave before any
+  fix. Dedicated security review remains pending.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 5 fixes coordinator-verified; canonical wave 6 pending
+Status: Canonical review wave 6 assigned
 
 Baseline: `39f2c6f7`
 
@@ -793,3 +793,26 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
 - Freeze the fix endpoint in one commit, generate a literal-baseline/literal-
   endpoint package, and dispatch canonical wave 6. Dedicated security review
   remains pending; no completion disposition is recorded here.
+
+## Canonical Review Wave 6 Assignment
+
+- Immutable endpoint `113934d2`; package
+  `.superpowers/sdd/review-39f2c6f7..113934d2.diff` from baseline `39f2c6f7`
+  contains 29 commits and 439,772 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  immutable `gpt-5.6-terra` / high; changed-code structure, deterministic test
+  quality, duplication, and current code standards only.
+- Documentation: existing `documentation_reviewer`, explicit immutable
+  `gpt-5.6-luna` / medium; current public behavior, user workflow, exclusions,
+  threat/security claims, and source-anchor accuracy only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  immutable `gpt-5.6-terra` / high; public/export/type/runtime contract,
+  compatibility, Protobuf, TypeDoc, and internal leakage only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit immutable `gpt-5.6-terra` / high; bounds, persistence ambiguity,
+  cancellation/recovery concurrency, cleanup, lifecycle, and deterministic
+  evidence only.
+- All prompts require ledger inspection, read-only/no subagents/no Git
+  mutation, concrete file/line findings, and the superseded-history exclusion.
+  Aggregate the complete wave before fixes; dedicated security review remains
+  pending.
