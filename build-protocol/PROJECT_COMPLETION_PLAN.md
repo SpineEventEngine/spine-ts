@@ -127,8 +127,9 @@ gate. The dated Starting State above is historical plan-creation context.
 - The ZeroMQ multipart-allocation issue research below is being executed as
   post-completion T-0043. Its durable report is
   [`ZEROMQ_MULTIPART_LIMIT_RESEARCH.md`](research/ZEROMQ_MULTIPART_LIMIT_RESEARCH.md).
-  Review, remote synchronization, and cleanup remain before that reporting
-  obligation is closed; it is not unfinished initial-release work.
+  Research and documentation review are complete and clean. Integration,
+  remote synchronization, and cleanup remain before that reporting obligation
+  is durably closed; it is not unfinished initial-release work.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
