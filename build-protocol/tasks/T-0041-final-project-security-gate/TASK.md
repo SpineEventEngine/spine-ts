@@ -4209,3 +4209,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Style is already clean and did not reopen; documentation, TypeScript/API, and
   security retain N/A because no production, contract, docs, or trust-boundary
   code changed.
+
+## Full Gate Branch-Coverage Review Closure
+
+- Final reliability reviewer `019f66ee-e684-70b1-b165-67d365074303`, explicit
+  and tool-enforced immutable Terra High: clean, read-only, childless, Git-read-
+  only, and closed. It confirms the 250 ms request bound is below both 275 ms
+  guards, rejection observation precedes every await, address failure awaits
+  settlement before cleanup, and malformed/later-valid ordering remains sound.
+- The reviewer accepts ordinary native scheduling exposure as visible test
+  failure rather than leak/unhandled work; no actionable P2 remains. Its child-
+  visible output exposed no contradictory exact runtime profile.
+- The branch-coverage batch is review-clean: style and reliability clean;
+  documentation, TypeScript/API, and security retain justified N/A. Global
+  branch coverage remains 90.04% by the latest complete coverage stage. Restart
+  full native T-0041 verification from the beginning.
