@@ -30,8 +30,9 @@
     "proto:lint": "node scripts/proto-workflow.mjs lint",
     "proto:generate": "node scripts/proto-workflow.mjs generate",
     "proto:check-generated": "node scripts/check-generated-clean.mjs",
+    "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "verify": "pnpm check:node && pnpm proto:generate && pnpm verify:generated",
-    "verify:generated": "pnpm typecheck:generated && pnpm lint:generated && pnpm format:check && pnpm test:generated && pnpm test:coverage:generated && pnpm docs:check:generated && pnpm proto:lint && pnpm proto:check-generated"
+    "verify:generated": "pnpm typecheck:generated && pnpm lint:generated && pnpm format:check && pnpm test:generated && pnpm test:coverage:generated && pnpm docs:check:generated && pnpm proto:lint && pnpm proto:check-generated && pnpm check:release-readiness"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.71.0",

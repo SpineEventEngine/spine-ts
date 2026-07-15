@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - local release gates clean; final specialist review pending
+Status: In progress - Wave 1 corrections implemented; final specialist re-review pending
 
 Started: `2026-07-15`
 
@@ -132,3 +132,46 @@ appears.
   generated, and release-gate behavior; Terra High.
 - Security: N/A unless a correction changes a trust boundary; T-0041 is clean
   with human-accepted SF-013.
+
+## 2026-07-15 - Wave 1 Correction Assignment
+
+- Existing role: `implementer`; assignment `019f6718-1df9-77d0-ac05-e83591cba9ca`.
+  Explicit expected profile: `gpt-5.6-terra` / `medium`. Actual runtime model
+  and reasoning metadata must be recorded by the coordinator before acceptance.
+- Bounded behavior: a versioned release-readiness command must import every
+  declared runtime export from valid package self-reference scopes and validate
+  tracked Markdown relative links while excluding non-file references. It must
+  report deterministic counts and actionable failures.
+- TDD plan: add focused behavior tests first and record their expected RED
+  failure before adding the checker; then record GREEN and focused validation.
+- Applicable skills selected and fully read: `test-driven-development`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`, and
+  `verification-before-completion`. The session inventory, readable
+  `/Users/armiol/.agents/skills` entrypoints, `EXPECTED_SKILLS.md`, and
+  `/Users/armiol/.agents/.skill-lock.json` were checked. Skipped:
+  `subagent-driven-development`, `using-git-worktrees`, and
+  `requesting-code-review` (explicitly prohibited/no dispatch authority);
+  `planning-with-files` and `architecture-decision-records` (existing task and
+  durable logs already govern this bounded correction);
+  `typescript-advanced-types` (no TypeScript type design); all other installed
+  skills are unrelated to a Node checker, Markdown links, or this correction.
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+scripts/check-release-readiness.test.mjs` failed as expected with
+  `Cannot find module './check-release-readiness.mjs'`. GREEN: the same focused
+  command passed 1 file / 2 tests after implementation.
+- Focused evidence: generated build and tooling typecheck passed; the direct
+  checker reported `58 package imports; 107 relative Markdown links`; focused
+  ESLint and cleanup passed; focused Prettier initially identified only the new
+  checker, then passed after the repository formatter; `git diff --check` and
+  `proto:check-generated` passed. Full `pnpm verify` remains reserved for the
+  coordinator's final corrected gate.
+- Coordinator review requires one final focused proof before accepting the
+  correction: execute the real checker in a temp repository with a valid
+  package self-import and broken relative Markdown link, and assert the
+  actionable source/target failure. Resume the same implementer context; keep
+  this test-only unless it exposes a necessary checker defect.
+- Follow-up proof added test-only: the temp-repository test executes
+  `runReleaseReadiness()`, confirms its valid package self-reference produces no
+  package-export failure, and asserts the broken-link diagnostic identifies
+  `docs/README.md -> missing.md`. The focused suite passes 1 file / 3 tests; no
+  checker change was required.
