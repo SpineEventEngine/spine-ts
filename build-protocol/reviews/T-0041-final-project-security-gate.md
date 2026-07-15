@@ -3816,6 +3816,18 @@ verify` remains reserved.
   security package from D-0093 human acceptance `4b3c30cd` through the corrected
   endpoint; no canonical lane remains open.
 
+## Focused Final Security Review Package And Assignment
+
+- Exact package `.superpowers/sdd/review-4b3c30cd..a70a9d01.diff`; baseline
+  `4b3c30cd`; endpoint `a70a9d01`; 38 commits; 340,257 bytes.
+- Existing final security reviewer: expected explicit tool-enforced immutable
+  Terra High; read-only, childless, Git-read-only, focused on D-0093 through
+  D-0096, current security artifacts, and preservation of earlier controls.
+- SF-013 is human-accepted, so the gate reviews truthful implementation and
+  residual wording rather than demanding the declined native solution. Exact
+  Buf/frame/cap/trailer/reply/type/predicate boundaries and historical-text rule
+  are binding.
+
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 
 - Resolved the accepted style/maintainability P2 by documenting directly above

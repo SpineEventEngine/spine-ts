@@ -3857,6 +3857,21 @@ Subscription cancellation failed.` instead of `AggregateError`.
   diff integrity, and worktree status are clean. Freeze a replacement focused
   package from D-0093 human acceptance through this correction.
 
+## Focused Final Security Review Assignment
+
+- Baseline `4b3c30cd`; endpoint `a70a9d01`; exact package
+  `.superpowers/sdd/review-4b3c30cd..a70a9d01.diff`; 38 commits; 340,257 bytes.
+- Dispatch the existing final `security_reviewer` under explicit immutable
+  Terra High, read-only, childless, Git-read-only, focused on D-0093 through
+  D-0096 and current security artifacts. The reviewer must preserve the human's
+  accepted SF-013 residual and assess whether implementation/docs honestly match
+  it, not propose the declined native receive replacement.
+- Reconfirm Buf-only Proto command/event wire, private reserved-kind/result V8,
+  per-frame cap versus aggregate allocation, protocol-prefix trailer handling,
+  generated-reply rejection, kind/envelope correlation, predicate non-validation,
+  and no accidental trust/public-policy change. Historical superseded text is
+  not active. Full task verification follows only after a clean security result.
+
 ## D-0096 Source TypeDoc P2 Implementation
 
 - Expanded only `isTransportTopicKind()` source TypeDoc to preserve the
