@@ -722,8 +722,10 @@ tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
-`@spine-ts/transport/zeromq` subpath exposes the local IPC config helper and a
-`SignalTransport` factory. The adapter derives compact deterministic IPC socket
+`@spine-ts/transport/zeromq` subpath exposes exactly
+`createZeroMqAdapterConfig`, `createZeroMqTransport`, `ZeroMqAdapterConfig`,
+`ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket
 paths from `ZeroMqAdapterConfig` plus transport routing descriptors and keeps
 endpoint strings, multipart frames, socket classes, and native module types out
 of framework APIs. Native tests prove publish/subscribe, request/reply, and

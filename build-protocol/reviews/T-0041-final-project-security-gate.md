@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 11 documentation findings accepted; fix assigned
+Status: Canonical wave 11 docs coordinator-verified; commit pending
 
 Baseline: `39f2c6f7`
 
@@ -1376,3 +1376,37 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   generated, or future-policy change. Require docs/format/link/status/diff
   evidence, no Git mutation or subagents, then rerun all canonical lanes before
   dedicated security review.
+
+## Canonical Wave 11 Documentation Correction Evidence
+
+- The sole implementer corrected only the three accepted mirror gaps. The user
+  guide now gives the pre-storage `RESOURCE_EXHAUSTED` unknown-pool outcome,
+  preserves the separate known-local `INTERNAL` `Cancel` retry guidance, and
+  records inactive-expiry cleanup failure after timer clearance as retained
+  local record/capacity with no automatic retry; explicit same-ID `Cancel` can
+  retry persistence cleanup. The later architecture transport section lists
+  exactly the six accepted public names: `createZeroMqAdapterConfig`,
+  `createZeroMqTransport`, `ZeroMqAdapterConfig`,
+  `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+  `ZeroMqTransportOptions`.
+- Fresh documentation validation passed: docs check (25 copied Proto checksums;
+  TypeDoc counts `100/28/205/19/17/6/3`), exact five-path Prettier, local
+  Markdown-link targets, stale-wording scans, generated cleanliness,
+  manifest/lock/package-map integrity, and `git diff --check`.
+- No runtime, test, public/API, package/Proto/dependency, generated, decision,
+  or policy change occurred. Assignment profile evidence is explicit
+  `gpt-5.6-terra` / medium; no subagent or Git mutation was used, and no finer
+  immutable runtime metadata is exposed here. The canonical Wave 12 review and
+  dedicated security review remain pending.
+
+## Canonical Wave 11 Docs Coordinator Verification
+
+- Coordinator inspection accepts all three mirror corrections and confirms the
+  sole immutable Terra Medium implementer is closed. Only the two assigned docs
+  and durable logs changed; no new link was introduced.
+- Fresh docs/API and generated-clean checks, exact formatting, current-status/
+  required-wording scans, manifest/lock/package-map integrity,
+  tracked-generated absence, and diff integrity all exited 0. Docs counts remain
+  `100/28/205/19/17/6/3` after 25 Proto checksum validations.
+- Accept the docs batch for commit. Canonical Wave 12 and dedicated security
+  review remain pending.

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 11 documentation findings accepted; fix assigned
+Status: In progress - canonical wave 11 docs coordinator-verified; commit pending
 
 Started: `2026-07-14`
 
@@ -1522,3 +1522,43 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   package/Proto/dependency/generated, or policy change; no Git mutation or
   subagents. Run docs check, exact formatting, link/status scans, and diff
   integrity. All four canonical lanes rerun; security remains pending.
+
+## Canonical Wave 11 Documentation Correction
+
+- Corrected only the accepted documentation mirrors. The user guide now states
+  that the separate same-sized unknown-ID pool returns `RESOURCE_EXHAUSTED`
+  before storage when exhausted, keeps known-local `INTERNAL` retry guidance
+  distinct, and records inactive-expiry cleanup failure after timer clearance as
+  retained local record/capacity with no automatic retry; explicit same-ID
+  `Cancel` can retry persistence cleanup. The later architecture transport
+  section now lists exactly `createZeroMqAdapterConfig`,
+  `createZeroMqTransport`, `ZeroMqAdapterConfig`,
+  `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+  `ZeroMqTransportOptions`, while retaining the adapter-neutral root and
+  internal/native exclusions.
+- No runtime, test, TypeScript API/public symbol, package/Proto/dependency,
+  generated-output, D-0087/D-0089, or policy change was made. The only changed
+  paths are the two assigned docs and the T-0041 task/work/review logs.
+- Exact validation passed with `--config.verify-deps-before-run=false`:
+  `pnpm docs:check` (25 copied Proto checksums; TypeDoc export counts
+  `100/28/205/19/17/6/3`) and `pnpm proto:check-generated`; exact five-path
+  Prettier, local Markdown-link target check, stale-wording scans,
+  manifest/lock/package-map and generated-tracking cleanliness, and
+  `git diff --check` also passed.
+- Profile evidence is this assignment's explicit `gpt-5.6-terra` / medium
+  existing implementer role. No subagent was dispatched, the surface exposed no
+  finer immutable runtime metadata, and no Git mutation occurred. Canonical
+  Wave 12 and dedicated security review remain pending.
+
+## Canonical Wave 11 Docs Coordinator Verification
+
+- Direct inspection accepts the exact unknown-pool, expiry-failure, explicit
+  retry, and six-name wording; no new Markdown link was introduced and only the
+  two assigned docs plus durable logs changed. The immutable Terra Medium
+  implementer is closed.
+- Fresh `docs:check` and `proto:check-generated` exited 0. Docs verified 25 Proto
+  checksums and counts `100/28/205/19/17/6/3`. Exact five-file Prettier,
+  current-status and required-wording scans, manifest/lock/package-map
+  integrity, tracked-generated absence, and `git diff --check` exited 0.
+- Accept the docs correction for commit. Canonical Wave 12 and dedicated
+  security review remain pending.

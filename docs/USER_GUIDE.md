@@ -354,15 +354,19 @@ to 100 and bounds pending, inactive, active, and recovered subscriptions owned
 by that `SpineServices` instance; configure a positive safe integer for
 instance-local capacity planning. Each instance has an independent limit, so
 this is neither a process-wide nor a distributed quota. Unknown-ID cancellation
-work uses a separate internal pool with the same bound. If known-local durable
+work uses a separate internal pool with the same bound. Pool exhaustion returns
+Connect `RESOURCE_EXHAUSTED` before storage access. If known-local durable
 cancellation persistence fails, `Cancel` returns Connect `INTERNAL` with
 `Subscription cancellation failed.`, retains that instance's capacity, and the
 client should retry `Cancel` with the same returned `Subscription`/ID. This
 retry guidance applies only to an ID returned by `Subscribe`; cleanup after an
 initial failed `Subscribe` stays internal and uses the inactive TTL when its
-timer can be retained. Active streams and their queues are not recovered or
-replayed after disconnection or process restart, so clients must query current
-state when they need a fresh view.
+timer can be retained. If inactive-expiry cleanup fails after its timer is
+cleared, the instance retains its local record and capacity with no automatic
+retry; explicit `Cancel` with that same `Subscription`/ID can retry persistence
+cleanup. Active streams and their queues are not recovered or replayed after
+disconnection or process restart, so clients must query current state when they
+need a fresh view.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
