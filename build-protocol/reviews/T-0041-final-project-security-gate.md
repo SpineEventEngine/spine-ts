@@ -2958,3 +2958,9 @@ verify` remains reserved.
 - Assign one fresh existing implementer, expected explicit immutable Terra
   Medium, as the sole writer for the exact accepted two-slice contract. No
   architecture rediscovery or child agent is permitted.
+
+## D-0091 Fresh Implementer Dispatch
+
+- Implementer `019f658b-c226-78d3-9079-88d275dcd054` was dispatched explicitly
+  under the existing immutable Terra Medium role as sole writer, childless and
+  without Git-state mutation, for the exact accepted D-0091 contract.

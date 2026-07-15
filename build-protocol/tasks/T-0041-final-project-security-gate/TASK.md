@@ -2837,3 +2837,9 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Assign one fresh existing `implementer`, expected explicit immutable
   `gpt-5.6-terra` / medium, as sole writer for the already-decided D-0091 two-
   slice TDD batch. It must not re-plan the architecture or spawn children.
+
+## D-0091 Fresh Implementer Dispatch
+
+- Implementer `019f658b-c226-78d3-9079-88d275dcd054` was dispatched explicitly
+  under the existing immutable `gpt-5.6-terra` / medium role as sole writer,
+  childless and without Git-state mutation, for the exact D-0091 contract.
