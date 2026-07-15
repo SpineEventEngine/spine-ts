@@ -1,7 +1,8 @@
 # Spine TS Threat Model
 
-Status: T-0041 working threat model; focused security re-review found SF-013 in
-the TB-06 multipart receive boundary; architecture assignment is pending.
+Status: T-0041 working threat model; SF-013 cannot be closed while preserving
+multipart receive on zeromq.js 6.5.0; private one-frame architecture follow-up
+is assigned.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.

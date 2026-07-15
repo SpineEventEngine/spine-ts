@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - focused security re-review found SF-013; architecture
-assignment pending
+Status: In progress - SF-013 two-frame native limit blocked; private one-frame
+architecture follow-up assigned
 
 Started: `2026-07-14`
 
@@ -3025,3 +3025,20 @@ Subscription cancellation failed.` instead of `AggregateError`.
   explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
   childless, and Git-read-only, for exact pinned-binding semantics, enforceable
   aggregate/frame controls, wire compatibility, TDD, review, and decision text.
+
+## SF-013 Architecture Result And Private-Wire Follow-Up
+
+- Splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda` completed under its explicit,
+  tool-enforced immutable actual Sol High profile, made no Git mutation, and
+  spawned no child. It established that zeromq.js 6.5.0 materializes the whole
+  multipart `Buffer[]`; no binding option bounds aggregate frames before
+  allocation. JavaScript exact-framing checks are defense in depth only.
+- Preserving two-frame publish/request messages would require a new libzmq-level
+  capability or explicit human acceptance of an unbounded same-host DoS
+  residual. D-0088 does not require multipart framing, D-0091 is private, and
+  the repository has no external users.
+- Return one bounded follow-up to the same Sol High context: design a private
+  single-frame route-plus-envelope format that preserves subscription prefix
+  routing while making native `maxMessageSize` the true aggregate cap. Specify
+  exact bytes/parsing, compatibility correction, tests, and replacement D-0092
+  text; reject the approach if it cannot preserve exact routing safely.

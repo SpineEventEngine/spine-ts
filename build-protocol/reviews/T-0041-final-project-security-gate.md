@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Focused security re-review found SF-013; architecture assignment pending
+Status: SF-013 two-frame native limit blocked; private one-frame architecture
+follow-up assigned
 
 Baseline: `39f2c6f7`
 
@@ -3107,3 +3108,13 @@ verify` remains reserved.
 - Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda`: explicit
   immutable Sol High, read-only, childless, Git-read-only; exact native/binding
   semantics, enforceable control, compatibility, tests, and re-review scope.
+
+## SF-013 Architecture Result And Follow-Up
+
+- Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda`, explicit and
+  actual immutable Sol High: zeromq.js 6.5.0 cannot bound multipart frame count
+  or aggregate bytes before full `Buffer[]` materialization. Post-receive exact
+  framing does not close the allocation finding.
+- A two-frame fix would require new native capability or human risk acceptance.
+  The same architecture context must now evaluate a one-frame private wire
+  correction; no implementation is assigned until that result is accepted.

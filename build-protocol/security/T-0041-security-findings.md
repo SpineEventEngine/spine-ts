@@ -2,7 +2,8 @@
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
-Canonical Wave 23 is clean; focused security re-review found SF-013.
+Canonical Wave 23 is clean; SF-013 one-frame private-wire architecture follow-up
+is assigned.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
