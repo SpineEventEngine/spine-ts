@@ -2598,3 +2598,29 @@ verify` remains reserved.
   security artifacts, no-child/Git-read-only rules, and superseded-history
   exclusion. Aggregate before action; dedicated security re-review remains
   pending.
+
+## Canonical Review Wave 21 Package And Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..05d218db.diff`, endpoint
+  `05d218db`, baseline `39f2c6f7`, 104 commits, 850,893 bytes. Substantive
+  implementation evidence remains `b9f1ea58`.
+- Lightweight pre-review lint is clean for synchronized active status/
+  provenance, duplicate policy sources, accidental public exports, docs
+  overclaiming future policy, and package diff integrity.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, bounded to cleanup clarity, test/
+  helper shape, naming, correction scope, active anchors, and chronology.
+- Documentation: existing `documentation_reviewer`, expected explicit
+  immutable `gpt-5.6-luna` / medium, bounded to exact active source/test/native
+  anchors, status/provenance, workflows, links, limitations, and exclusions.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, bounded to declarations, exports,
+  TypeDoc, package/Proto boundaries, D-0087-D-0090, and runtime/type agreement.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit immutable `gpt-5.6-terra` / high, bounded to all IPC async
+  boundaries, tracked setup, error composition, cleanup/close settlement,
+  native work avoidance, and regression completeness.
+- Every assignment is read-only with the full ledger, current security
+  artifacts, no subagents or Git mutation, concrete findings or clean, and
+  superseded-history exclusion. Aggregate before action; dedicated final
+  security review remains pending.
