@@ -2759,3 +2759,16 @@ verify` remains reserved.
   public/package/Proto/generated boundaries, retry behavior, or error ownership.
   Canonical Wave 22 must review the fresh committed endpoint before dedicated
   security re-review.
+
+## Canonical Wave 22 Assignment
+
+- Substantive implementation endpoint is `c7f8a901` from baseline `39f2c6f7`.
+  Assign all four existing canonical concerns before package generation:
+  style/maintainability `gpt-5.6-terra` / high; documentation
+  `gpt-5.6-luna` / medium; TypeScript/API docs `gpt-5.6-terra` / high; and
+  performance/reliability `gpt-5.6-terra` / high.
+- Every lane is read-only with distinct bounded concern, complete human ledger,
+  D-0087-D-0090, current security artifacts, affected transport lifecycle and
+  error paths, no subagents or Git mutation, and the rule that superseded
+  historical text is inactive unless current task status or changed docs claim
+  it. Aggregate before fixes; dedicated security re-review remains pending.

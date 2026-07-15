@@ -2606,3 +2606,17 @@ Subscription cancellation failed.` instead of `AggregateError`.
   close-owned cleanup errors, unchanged retry order, and unchanged D-0088/native
   publisher timeout. Commit the correction and assign Canonical Wave 22 before
   generating its immutable review package.
+
+## Wave 21 Immutable Endpoint And Canonical Wave 22 Assignment
+
+- Commit `c7f8a901` freezes the substantive Wave 21 correction and fresh
+  coordinator evidence. Later assignment/provenance commits are not
+  implementation evidence.
+- Canonical Wave 22 assigns the existing style/maintainability Terra High,
+  documentation Luna Medium, TypeScript/API Terra High, and performance/
+  reliability Terra High roles over one fresh literal baseline-to-endpoint
+  package. Each role is read-only, childless, and Git-read-only with the full
+  human ledger, D-0087 through D-0090, current security artifacts, corrected
+  transport lifecycle/error paths, and superseded-history exclusion.
+- Aggregate the complete four-lane wave before action. Dedicated final security
+  re-review remains pending until canonical closure.
