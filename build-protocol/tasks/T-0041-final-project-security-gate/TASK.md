@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0093 accepted; Protobuf wire correction architecture
-and implementation pending
+Status: In progress - D-0093 architecture accepted; Protobuf wire implementation
+pending
 
 Started: `2026-07-14`
 
@@ -3114,3 +3114,36 @@ Subscription cancellation failed.` instead of `AggregateError`.
   smallest compatible ownership seam, exact wire/reply treatment, TDD cases,
   docs, and bounded review scope. It must not revisit the accepted risk or add a
   native transport replacement.
+
+## D-0093 Architecture Result And Implementation Assignment
+
+- Requirements splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056` completed with
+  its explicitly dispatched, tool-enforced immutable actual `gpt-5.6-sol` /
+  high profile. It completed the mandatory skill check, made no repository or
+  Git changes, spawned no child, and is closed.
+- Accept one private ZeroMQ codec correction. Dispatch by
+  `TransportTopic.signalKind`: `command` uses `CommandSchema`, `event` uses
+  `EventSchema`, and only `query`, `subscription`, and `system` retain the
+  existing non-Proto V8 behavior until a concrete Proto contract exists.
+- Command/Event send uses Buf `toBinary(..., { writeUnknownFields: false })`;
+  receive uses `fromBinary(..., { readUnknownFields: false })`; a Proto codec
+  error never falls back to V8. Runtime semantic and `Any.typeUrl` validation
+  remains in `RuntimeTransportBinding`.
+- Keep the public `SignalTransport` generics, roots, options, and factory source-
+  compatible. Add only private transport-package dependencies/references on
+  `@bufbuild/protobuf@2.12.1` and `@spine-ts/proto`; no public codec/schema API.
+- Keep private one-frame `SignalIntakeResult`-compatible request replies and
+  their non-Proto encoding. Do not misuse copied `AckSchema`; reject a generated
+  Proto successful reply rather than V8-serializing it.
+- PUB/SUB and REQ/REP requests consume exact route plus Proto payload from
+  frames 1-2 and ignore trailers. Requesters consume only reply frame 1. Invalid
+  Proto bytes do not reach handlers, use existing redacted failure behavior,
+  and do not prevent later valid traffic.
+- Assign one existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer in this worktree. It must perform the
+  recorded skill check, use strict RED/GREEN TDD, preserve D-0088-D-0091 and
+  public exports, update current docs/security records, run focused transport,
+  runtime, cross-process, generated typecheck, lint, formatting, docs/API, and
+  generated-clean checks, and make no commit or child-agent dispatch.
+- Decision checkpoint commit `4b3c30cd` is pushed to
+  `origin/task/T-0041-final-project-security-gate`.

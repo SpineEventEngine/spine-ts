@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: In progress - D-0093 accepted; Protobuf wire correction architecture
-and implementation pending
+Status: In progress - D-0093 architecture accepted; Protobuf wire implementation
+pending
 
 Baseline: `39f2c6f7`
 
@@ -3150,3 +3150,22 @@ verify` remains reserved.
 - After implementation and focused mechanical checks, run all canonical lanes
   affected by the serialized/runtime/doc changes, then a focused final security
   re-review that verifies the Buf wire and records SF-013 as human-accepted.
+
+## D-0093 Architecture Result And Pending Review Scope
+
+- Splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit and actual
+  immutable Sol High, returned the accepted private codec packet with no child,
+  repository mutation, or Git mutation and is closed.
+- Command/Event frames use exact Buf binary with no V8 fallback; generic
+  non-Proto kinds and the private non-Proto request reply retain existing
+  behavior. Public transport signatures, roots, options, routing, and copied
+  schemas remain unchanged.
+- All four canonical concerns are relevant after implementation: private codec
+  maintainability, active wire documentation, API/dependency direction and
+  export stability, and malformed/trailer/cap/continuation reliability.
+- Focused security re-review covers TM-003, TM-007/TB-06, TM-009, TM-010, and
+  TM-011, and must retain SF-013 as Medium, human-accepted, and unbounded in
+  aggregate. SF-012 and unrelated clean findings remain outside the correction
+  unless the implementation regresses them.
+- One implementer is assigned under expected explicit immutable Terra Medium;
+  no review is dispatched before focused mechanical checks pass.
