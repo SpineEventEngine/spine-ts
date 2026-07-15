@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 9 correction coordinator-verified; commit pending
+Status: In progress - wave 9 fixes committed; canonical wave 10 packaging pending
 
 Started: `2026-07-14`
 
@@ -1360,3 +1360,14 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   Docs verified 25 Proto checksums and exact counts `100/28/205/19/17/6/3`.
 - Accept the complete correction for commit. Canonical Wave 10 and dedicated
   security review remain pending.
+
+## Wave 9 Immutable Implementation Endpoint
+
+- Commit `45fd5583` contains the coordinator-verified D-0089 public/internal
+  options correction, direct ZeroMQ API gate, liveness proof, docs corrections,
+  and durable evidence.
+- Security provenance now names `45fd5583` as substantive implementation
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal baseline package after this
+  reconciliation, then run all four canonical Wave 10 lanes. Dedicated security
+  review remains pending.

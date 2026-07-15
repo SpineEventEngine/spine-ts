@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 9 correction coordinator-verified; commit pending
+Status: Wave 9 fixes committed; canonical wave 10 packaging pending
 
 Baseline: `39f2c6f7`
 
@@ -1206,3 +1206,11 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   contain no private observer.
 - Accept the substantive batch for commit. Record the immutable endpoint before
   Canonical Wave 10; dedicated security review remains pending.
+
+## Wave 9 Immutable Implementation Endpoint
+
+- Commit `45fd5583` is the substantive Wave 9 implementation endpoint. Security
+  artifacts identify it directly; this provenance-only follow-up and later
+  review/status commits are not implementation evidence.
+- Generate the literal package after this reconciliation, then run all four
+  Canonical Wave 10 concerns. Dedicated security review remains pending.
