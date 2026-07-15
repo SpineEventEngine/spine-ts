@@ -2810,3 +2810,21 @@ verify` remains reserved.
 - Reliability agent `019f6557-7839-7801-bd4f-4bdf0a09ea79` was dispatched
   explicitly under the existing immutable Terra High role, read-only,
   childless, and Git-read-only. Complete-wave aggregation remains mandatory.
+
+## Canonical Wave 22 Result
+
+- Style/maintainability, agent `019f6555-6e2b-7af0-ba7f-25f04763a446`, actual
+  immutable Terra High: P2 because `expectCloseBlocksNative()` is a 112-line
+  helper mixing shared lifecycle orchestration with four operation-specific
+  setup/assertion branches.
+- Documentation, agent `019f6555-96b6-71b3-838a-abc7e6c7e279`, actual
+  immutable Luna Medium: clean.
+- TypeScript/API, agent `019f6555-b978-73c2-8920-813d44d5fa24`, actual
+  immutable Terra High: clean.
+- Performance/reliability, agent `019f6557-7839-7801-bd4f-4bdf0a09ea79`,
+  actual immutable Terra High: clean. Its sandbox-native IPC attempt was
+  unavailable, while coordinator-native 49/49 package evidence remains valid.
+- Every reviewer performed the required skill applicability check, made no Git
+  mutation, spawned no child, and is closed. The accepted complete batch is one
+  test-maintainability P2. Return it to the existing Terra Medium implementer;
+  rerun only style unless correction scope expands.

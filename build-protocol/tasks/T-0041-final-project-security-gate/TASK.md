@@ -2663,3 +2663,23 @@ Subscription cancellation failed.` instead of `AggregateError`.
   explicitly as the existing immutable `gpt-5.6-terra` / high role, read-only,
   childless, and Git-read-only. Retain the clean docs result and aggregate all
   four lanes before action.
+
+## Canonical Wave 22 Result And Fix Assignment
+
+- Complete wave: documentation, TypeScript/API, and performance/reliability are
+  clean. Style/maintainability reports one accepted P2: test helper
+  `expectCloseBlocksNative()` spans 112 lines and combines the shared pause/
+  close/drain harness with four operation-specific setups and assertions.
+- Explicit tool-enforced immutable actual roles match dispatch: style
+  `019f6555-6e2b-7af0-ba7f-25f04763a446` Terra High; docs
+  `019f6555-96b6-71b3-838a-abc7e6c7e279` Luna Medium; API
+  `019f6555-b978-73c2-8920-813d44d5fa24` Terra High; reliability
+  `019f6557-7839-7801-bd4f-4bdf0a09ea79` Terra High. All made no Git mutation,
+  spawned no child, and are closed.
+- Return the complete one-finding batch to the existing implementer under its
+  original immutable Terra Medium profile. Refactor only the test helper into a
+  short shared lifecycle harness plus operation-specific setup/assertion; keep
+  production behavior, coverage matrix, assertions, security anchors, and all
+  public/package/Proto/generated boundaries unchanged. Rerun focused and full
+  native transport checks plus narrow lint/format/diff. Only style re-review is
+  required unless the correction changes another concern.
