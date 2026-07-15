@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Coordinator retry finding assigned
+Status: Coordinator retry accepted; pre-review lint pending
 
 Baseline: `39f2c6f7`
 
@@ -624,3 +624,35 @@ bytes).
   Require RED/GREEN for local owner/capacity retention through pre-marker
   storage failure, successful same-ID retry cleanup, and exact-once release.
   Canonical review package generation waits for that correction.
+
+## Wave 4 Coordinator Retry Acceptance
+
+- Existing Terra Medium implementer is closed with matching immutable runtime
+  metadata. Coordinator retry tests passed 3/3 and the full native service file
+  passed 133/133; type/docs/lint/format/diff checks are green.
+- The D-0087 owner-retention finding is accepted as fixed. Public and generated
+  surfaces remain unchanged and current docs preserve the stale-claim residual.
+- Pre-review lint has one mechanical fix before packaging: replace duplicated
+  cancellation `Aborted` message literals with shared private constants used by
+  both error factories and conflict classification. Canonical and security
+  review remain pending.
+
+## Wave 4 Coordinator Retry RED
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, reproduced the finding before production
+  edits. The focused command exited 1 with 1 failed/130 skipped because a
+  distinct subscription was admitted after exact `Internal` cancellation
+  failure instead of preserving the owner reservation.
+
+## Wave 4 Coordinator Retry Fix Result
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable `gpt-5.6-terra` / medium, retained known-local owner/reservation
+  state through failed settlement and releases it only after successful exact
+  cancellation. No subagents or Git-state mutation were used.
+- Original focused GREEN passed 1/1 (130 skipped); the three-path invariant set
+  passed 3/3 (130 skipped); the relevant lifecycle set passed 35/35 (98
+  skipped); and full native SpineServices passed 133/133.
+- Coordinator re-verification and canonical/dedicated security review remain
+  pending. This record does not mark T-0041 complete.

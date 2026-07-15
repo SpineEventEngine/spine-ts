@@ -396,8 +396,12 @@ masks, and unknown subscription field paths before creating a service-owned
 inactive record or attaching a listener. The inactive record is stored through
 the owning bounded context storage factory, so a fresh `SpineServices` adapter
 over the same storage factory can recover it by opaque subscription ID.
-Activation consumes the durable row before live attachment, so that storage
-contains inactive records only. State
+Activation atomically replaces the exact inactive row with a unique-owner claim
+before live attachment and retains that claim while active. Cancellation moves
+an exact inactive row or same-instance claim through a marker to absence; a
+foreign active claim returns `ABORTED`. Unknown-ID cancellation work is bounded
+by a separate per-instance pool. A crashed owner can leave a stale claim because
+this release adds no lease, heartbeat, routing, supervision, or reclamation. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state

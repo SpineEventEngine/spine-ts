@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - coordinator retry finding assigned
+Status: In progress - coordinator retry accepted; pre-review lint pending
 
 Started: `2026-07-14`
 
@@ -771,3 +771,50 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   retry to clean it, then release exactly once. Remove dead claim bookkeeping
   only if the focused behavior remains unchanged. Canonical/security re-review
   remains pending.
+
+## Wave 4 Coordinator Retry Acceptance
+
+- Existing implementer returned with actual immutable `gpt-5.6-terra` /
+  medium, no subagents or Git mutation, and is closed.
+- Coordinator source inspection confirmed failed active, inactive, and recovered
+  cleanup retain inert local ownership and capacity until same-ID retry settles
+  persistence. Dead claim settlement fields are removed.
+- Fresh native retry regressions passed 3/3 and full
+  `spine-services.test.ts` passed 133/133. `typecheck:generated`, `docs:check`,
+  focused ESLint, 12-file Prettier, and `git diff --check` exited 0; docs retained
+  25 Proto checksums and API counts `100/28/205/19/17/3`.
+- Lightweight pre-review lint confirmed aligned statuses, unchanged public
+  exports/generated contracts/manifests/locks, and honest no-lease/reclamation
+  docs. One mechanical duplicated-policy item remains: share the two cancellation
+  `Aborted` messages between error construction and conflict classification
+  before packaging. Canonical/security review remains pending.
+
+## Wave 4 Coordinator Retry RED
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
+  immutable runtime `gpt-5.6-terra` / medium, resumed directly with no
+  subagents or Git-state mutation.
+- `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/server/test/services/spine-services.test.ts -t 'retains an active
+owner and capacity after pre-marker cancellation failure'` exited 1 with 1
+  failed/130 skipped. The first cancellation returned the required `Internal`,
+  but a distinct subscribe did not throw `ResourceExhausted`, proving the local
+  reservation was released before persistent cancellation settled.
+
+## Wave 4 Coordinator Retry Fix
+
+- Known local records, owner claims, and normal reservations now release only
+  after persistent cancellation succeeds. Failed settlement restores a closed
+  local record as inert cleanup ownership and retains any exact owner token for
+  same-ID retry. Unknown-removal slots still release on every result.
+- Recovered-registration rollback preserves its originating error. Successful
+  owned-claim cleanup releases locally; failed cleanup retains the claim and
+  reservation so later same-ID cancel can settle it.
+- Focused GREEN for the original active-claim command exited 0 with 1 passed/130
+  skipped. Active, inactive, and recovered-registration failure cases passed
+  together 3/3 (130 skipped); the relevant lifecycle set passed 35/35 (98
+  skipped); full native `spine-services.test.ts` passed 133/133.
+- Dead `SubscriptionClaim` remembered/settled callback state was removed. No
+  public API, storage interface, generated contract, package export, manifest,
+  lockfile, or policy documentation changed. Status is coordinator retry fixed;
+  coordinator re-verification and canonical/security review remain pending.

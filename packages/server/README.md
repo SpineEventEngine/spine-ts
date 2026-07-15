@@ -850,8 +850,9 @@ with `INVALID_ARGUMENT` before creating a subscription or attaching delivery.
 Accepted subscriptions are inactive, opaque records stored through the owning
 bounded context storage factory; a new `SpineServices` instance over the same
 storage factory can recover and activate a previously returned ID. Activation
-consumes the durable row before live attachment, so durable storage contains
-inactive records only. Updates recorded before `Activate` are not replayed.
+atomically replaces the exact inactive row with a unique-owner claim before
+live attachment and retains that claim for the active stream. Updates recorded
+before `Activate` are not replayed.
 `Activate` attaches state subscriptions to the context `Stand` and event
 subscriptions to a framework-internal `EventBus` listener by subscription ID. State
 `Target.include_all = true` delivers every activated update.
@@ -871,17 +872,22 @@ multitenant subscriptions require `tenantId`; state and event delivery are scope
 tenant slice. Missing, unknown, canceled, or expired activation IDs complete
 without updates, and duplicate activation for an already-active ID completes
 without updates while leaving the active stream attached. `Cancel` returns OK
-for unknown, missing, canceled, or already-cleaned IDs and removes matching
-durable inactive records. Cleanup is idempotent when a client cancels, an
-activation iterator closes, an inactive record expires, or the active queue
-limit is exceeded. Malformed and inconsistent durable rows are deleted instead
-of failing repeatedly. The inactive TTL defaults to 30 seconds and the active
-queue limit defaults to 100 queued updates. `SpineServicesOptions.subscriptionLimit`
+for unknown, missing, canceled, or already-cleaned IDs. It transitions an exact
+inactive row or same-instance owner claim through a cancellation marker to
+absence. A claim owned by another `SpineServices` instance fails with
+`ABORTED` and message `Subscription is active in another service instance.`
+Cleanup is idempotent when a client cancels, an activation iterator closes, an
+inactive record expires, or the active queue limit is exceeded. Malformed rows
+remain inert. The inactive TTL defaults to 30 seconds and the active queue
+limit defaults to 100 queued updates. `SpineServicesOptions.subscriptionLimit`
 is a positive safe integer that defaults to 100 and bounds pending, inactive,
 active, and recovered subscriptions owned by one `SpineServices` instance.
 Each instance has an independent limit; it is neither a process-wide nor a
-distributed tenant quota. Capacity is released before ordinary durable cleanup,
-so cleanup failures remain observable without retaining instance capacity.
+distributed tenant quota. Known local subscription capacity is retained until
+durable cancellation settles. Unknown-ID cancellations use a separate internal
+pool of the same size and reject overflow before storage access. A process crash
+can leave an owner claim stale; this release provides no claim lease, heartbeat,
+routing, supervision, or automatic reclamation.
 Active service streams, queued updates, direct Stand subscriptions, Stand
 version metadata, and the in-memory storage adapter's backing data remain
 process-local development/test state, not durable delivery or catch-up storage.

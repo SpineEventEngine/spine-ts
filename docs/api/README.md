@@ -265,20 +265,24 @@ continue to receive generated domain event messages; framework envelopes remain
 service/runtime data. Activation is by opaque ID. Inactive records are stored
 through the owning bounded context storage factory, so a new `SpineServices`
 instance over the same storage factory can activate a previously returned ID.
-Activation consumes the durable row before live attachment, so durable storage
-contains inactive records only. Single-tenant subscriptions reject tenant
+Activation compare-and-sets the exact inactive row to a unique-owner claim and
+retains that claim while the local stream is active. Single-tenant subscriptions reject tenant
 options; multitenant subscriptions require `tenantId`; state and event
 delivery are scoped to that tenant slice. Unknown, canceled, expired,
 malformed, inconsistent, and already active IDs complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
-subscription returns OK. Cleanup is idempotent across cancellation,
-activation-stream finalization, inactive expiry, malformed/inconsistent-row
-rejection, and slow-consumer queue closure. Defaults are 30 seconds for
+subscription returns OK. An exact inactive row or same-instance claim moves
+through a cancel marker to absence; a foreign active claim returns `ABORTED`.
+Cleanup is idempotent across cancellation, activation-stream finalization,
+inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
+inert. Unknown-ID cancellation work is bounded separately by the instance's
+subscription limit. Defaults are 30 seconds for
 inactive expiry and 100 queued updates per active subscription. Active streams
 and queued updates remain process-local and are not replayed after activation
 or restart. This is not a client DSL, broad server lifecycle, projection
 catch-up loop, cross-process stream ownership, or durable retained update
-queue.
+queue. A crashed owner can leave a stale claim because this contract has no
+lease, heartbeat, routing, supervision, or automatic reclamation.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
 `ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select
