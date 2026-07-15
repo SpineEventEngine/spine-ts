@@ -6,14 +6,30 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "../../src/zeromq/index.js";
+import {
+  createZeroMqAdapterConfig,
+  createZeroMqTransport,
+  type ZeroMqTransportOptions,
+} from "../../src/zeromq/index.js";
 import { zeroMqSocketAccess } from "../../src/zeromq/signal-transport.js";
 
 const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
 const unansweredRequestTimeoutMs = 25;
-const nativeSchedulingMarginMs = 250;
+const closeDeadlineMs = 275;
+const finallyCloseDeadlineMs = 275;
 const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
+
+type IsExact<T, Expected> = [T] extends [Expected]
+  ? [Expected] extends [T]
+    ? true
+    : false
+  : false;
+const canonicalZeroMqTransportOptionKeys: IsExact<
+  keyof ZeroMqTransportOptions,
+  "requestTimeoutMs" | "receiveTimeoutMs"
+> = true;
+void canonicalZeroMqTransportOptionKeys;
 
 describe("ZeroMQ SignalTransport", () => {
   it("rejects invalid request timeouts before IPC preparation", async () => {
@@ -143,19 +159,23 @@ describe("ZeroMQ SignalTransport", () => {
           },
         );
 
+        const order: string[] = [];
         const request = transport.request({ topic, envelope: { requested: true } });
-        const observedRequest = request.catch((error: unknown) => error);
+        const observedRequest = request.catch((error: unknown) => {
+          order.push("request-settled");
+          return error;
+        });
         await started.promise;
 
+        const close = transport.close().then(() => {
+          order.push("close-complete");
+        });
         await expect(
-          withHarnessDeadline(
-            transport.close(),
-            "unanswered request close",
-            unansweredRequestTimeoutMs + nativeSchedulingMarginMs,
-          ),
+          withHarnessDeadline(close, "unanswered request close", closeDeadlineMs),
         ).resolves.toBeUndefined();
-        await expect(request).rejects.toThrow();
+        await expect(request).rejects.toBeInstanceOf(Error);
         await expect(observedRequest).resolves.toBeInstanceOf(Error);
+        expect(order).toEqual(["request-settled", "close-complete"]);
       },
       { requestTimeoutMs: unansweredRequestTimeoutMs },
     );
@@ -1031,9 +1051,7 @@ async function withZeroMqTransport<T>(
     transport: ReturnType<typeof createZeroMqTransport>,
     ipcDirectory: string,
   ) => Promise<T>,
-  options: Parameters<typeof createZeroMqTransport>[1] & {
-    readonly onBackgroundFailure?: (error: Error) => void;
-  } = {},
+  options: ZeroMqTransportTestOptions = {},
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
   const transport = createZeroMqTransport(
@@ -1047,10 +1065,21 @@ async function withZeroMqTransport<T>(
   try {
     return await runTest(transport, ipcDirectory);
   } finally {
-    await transport.close();
-    await rm(ipcDirectory, { recursive: true, force: true });
+    try {
+      await withHarnessDeadline(
+        transport.close(),
+        "ZeroMQ test fixture close",
+        finallyCloseDeadlineMs,
+      );
+    } finally {
+      await rm(ipcDirectory, { recursive: true, force: true });
+    }
   }
 }
+
+type ZeroMqTransportTestOptions = Parameters<typeof createZeroMqTransport>[1] & {
+  readonly onBackgroundFailure?: (error: Error) => void;
+};
 
 async function withSharedZeroMqTransports<T>(
   runTest: (

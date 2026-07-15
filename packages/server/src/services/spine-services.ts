@@ -982,7 +982,7 @@ export interface SpineServicesOptions {
   /** Contexts exposed by these service adapters. */
   readonly contexts: readonly BoundedContext[];
   /**
-   * Milliseconds before never-activated process-local subscriptions are discarded.
+   * Milliseconds until a never-activated durable subscription record becomes ineligible for activation.
    *
    * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1.
    */

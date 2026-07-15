@@ -5,6 +5,7 @@
     "packages/core/src/index.ts",
     "packages/server/src/index.ts",
     "packages/transport/src/index.ts",
+    "packages/transport/src/zeromq/index.ts",
     "packages/storage/src/index.ts",
     "packages/testing/src/index.ts",
     "examples/todo/src/index.ts"

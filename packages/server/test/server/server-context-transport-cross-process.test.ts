@@ -20,7 +20,11 @@ import {
 } from "@spine-ts/proto";
 import { SignalMetadata } from "@spine-ts/server";
 import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+import {
+  createZeroMqAdapterConfig,
+  createZeroMqTransport,
+  type ZeroMqTransportOptions,
+} from "@spine-ts/transport/zeromq";
 import { describe, expect, it } from "vitest";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -39,6 +43,10 @@ type AggregateState = Message<"AggregateState"> & {
   readonly id: string;
   readonly name: string;
   readonly archived: boolean;
+};
+
+type ZeroMqTransportTestOptions = ZeroMqTransportOptions & {
+  readonly onBackgroundFailure?: (error: Error) => void;
 };
 type ProjectionState = Message<"ProjectionState"> & {
   readonly id: string;
@@ -362,11 +370,12 @@ class CrossProcessFixture {
 
       const config = createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity });
       const backgroundFailures: string[] = [];
-      parentTransport = createZeroMqTransport(config, {
+      const transportOptions: ZeroMqTransportTestOptions = {
         requestTimeoutMs: transportTimeoutMs,
         receiveTimeoutMs: 100,
         onBackgroundFailure: (error) => backgroundFailures.push(safeMessage(error, ipcDirectory)),
-      });
+      };
+      parentTransport = createZeroMqTransport(config, transportOptions);
       child = fork(childPath, [], {
         cwd: process.cwd(),
         env: {

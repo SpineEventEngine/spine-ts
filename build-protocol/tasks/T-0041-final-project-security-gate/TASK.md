@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 9 correction contract accepted; implementation assigned
+Status: In progress - canonical wave 9 correction coordinator-verified; commit pending
 
 Started: `2026-07-14`
 
@@ -1326,3 +1326,37 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   and API gates, run focused native evidence where possible, and avoid Git
   mutation and subagents. All four canonical lanes rerun afterward; dedicated
   security review remains pending.
+
+## Canonical Wave 9 Implementer Start
+
+- The assigned existing sole implementer has started the bounded D-0089
+  correction under the required explicit `gpt-5.6-terra` / medium runtime
+  profile, with no subagents and no Git mutation. RED coverage now asserts the
+  public two-key options surface and missing direct ZeroMQ TypeDoc/source gate;
+  RED execution and then minimal GREEN evidence are recorded in the work and
+  review logs. Dedicated security review remains pending.
+
+## Canonical Wave 9 GREEN Status
+
+- D-0089 implementation is green under focused evidence: the public ZeroMQ
+  options type has two exact keys, TypeDoc directly gates the six-symbol subpath
+  with counts `100/28/205/19/17/6/3`, native transport/cross-process tests pass,
+  and stale TSDoc/architecture wording is corrected. The native IPC sandbox
+  limitation and approved rerun are recorded in the work log. Final focused
+  hygiene reruns and canonical review dispositions remain pending; dedicated
+  security review remains pending.
+
+## Canonical Wave 9 Coordinator Verification
+
+- Direct inspection accepts the D-0089 public/internal type boundary, exact
+  six-symbol direct ZeroMQ TypeDoc/source gate, ordered and independently
+  bounded liveness cleanup, durable inactive-TTL TSDoc, and architecture
+  capacity/cancellation wording. Generated declarations expose only the two
+  public timeout options and contain no `onBackgroundFailure`.
+- Fresh native affected suites passed 38/38: transport 31 and cross-process
+  server 7. Fresh generated typecheck, docs/API generation, generated-clean
+  check, focused ESLint, exact ten-file Prettier, manifest/lock/package-map
+  integrity, tracked-generated absence, and `git diff --check` all exited 0.
+  Docs verified 25 Proto checksums and exact counts `100/28/205/19/17/6/3`.
+- Accept the complete correction for commit. Canonical Wave 10 and dedicated
+  security review remain pending.

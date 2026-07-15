@@ -31,6 +31,9 @@ export interface ZeroMqTransportOptions {
   readonly requestTimeoutMs?: number;
   /** Milliseconds used by background worker sockets while waiting for messages. */
   readonly receiveTimeoutMs?: number;
+}
+
+interface ZeroMqTransportInternalOptions extends ZeroMqTransportOptions {
   /** @internal Adapter-private hook for background loop failures. */
   readonly onBackgroundFailure?: (error: Error) => void;
 }
@@ -123,7 +126,7 @@ class ZeroMqSignalTransport implements SignalTransport {
   #closed = false;
   #close: Promise<void> | undefined;
 
-  constructor(config: ZeroMqAdapterConfig, options: ZeroMqTransportOptions) {
+  constructor(config: ZeroMqAdapterConfig, options: ZeroMqTransportInternalOptions) {
     this.#config = config;
     this.#requestTimeoutMs = requestTimeoutMs(options.requestTimeoutMs);
     this.#receiveTimeoutMs = options.receiveTimeoutMs ?? defaultReceiveTimeoutMs;

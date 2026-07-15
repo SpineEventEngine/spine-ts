@@ -388,10 +388,13 @@ Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
-subscription ID, abandoned inactive subscriptions expire after a small
-configurable TTL, slow consumers are bounded by a small configurable update
-queue, and stream/cancel cleanup releases the direct Stand or event-bus
-listener handle. `Subscribe` accepts registered state targets and event targets
+subscription ID. Never-activated durable records become ineligible for
+activation after the configurable `inactiveTtlMs` (default 30 seconds;
+non-positive or non-finite values coerce to 1), and slow consumers are bounded
+by the configurable `queueLimit`. Each `SpineServices` instance also has an
+independent `subscriptionLimit` (default 100; positive safe integer) covering
+pending, inactive, active, and recovered records. Stream/cancel cleanup releases
+the direct Stand or event-bus listener handle. `Subscribe` accepts registered state targets and event targets
 exposed by built-context event dispatchers. It rejects unknown/private targets,
 invalid criteria, unsupported comparison operators, event filters, event field
 masks, and unknown subscription field paths before creating a service-owned
@@ -401,8 +404,13 @@ over the same storage factory can recover it by opaque subscription ID.
 Activation atomically replaces the exact inactive row with a unique-owner claim
 before live attachment and retains that claim while active. Cancellation moves
 an exact inactive row or same-instance claim through a marker to absence; a
-foreign active claim returns `ABORTED`. Unknown-ID cancellation work is bounded
-by a separate per-instance pool. A crashed owner can leave a stale claim because
+foreign active claim returns `ABORTED`. Unknown-ID cancellation work uses a
+separate per-instance pool bounded by `subscriptionLimit`; exhaustion returns
+`RESOURCE_EXHAUSTED` before storage access. Known local cleanup retains its
+subscription capacity until persistence settles; marker-cleanup failure returns
+`INTERNAL` and a same-ID retry can settle the retained marker. Confirmed absence
+returns `OK`, while concurrent same-ID cancellation shares one exact outcome.
+A crashed owner can leave a stale claim because
 this release adds no lease, heartbeat, routing, supervision, or reclamation. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
@@ -418,8 +426,9 @@ messages; framework envelopes stay inside service/runtime data. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant slice. Activation
 and cancellation are keyed by subscription ID: unknown, canceled, expired, and
-already-active activations complete without updates, and unknown or duplicate
-cancellations return OK. Cleanup is idempotent across cancel, stream
+already-active activations complete without updates; confirmed absence returns
+`OK`, concurrent same-ID cancellation shares one exact outcome, and foreign
+active ownership returns `ABORTED`. Cleanup is idempotent across cancel, stream
 finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
 sets, active service delivery handles, queued updates, Stand version metadata,
 and in-memory storage adapter backing data are local process state; this slice

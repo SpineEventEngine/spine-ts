@@ -176,6 +176,14 @@ const expectedTransportExports = [
   "createTransportSubscription",
   "createTransportTopic",
 ];
+const expectedZeroMqTransportExports = [
+  "ZeroMqAdapterConfig",
+  "ZeroMqAdapterConfigInput",
+  "ZeroMqTransportOptions",
+  "ZeroMqTransportScope",
+  "createZeroMqAdapterConfig",
+  "createZeroMqTransport",
+];
 const expectedTestingExports = [
   "BoundedContextFixture",
   "BoundedContextFixtureOptions",
@@ -392,6 +400,7 @@ const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
+const zeroMqTransportIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -426,6 +435,10 @@ const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
+const zeroMqTransportModuleNames = collectDirectModuleNames(
+  apiDocs,
+  "packages/transport/src/zeromq",
+);
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -708,6 +721,7 @@ const forbiddenTypeDocNames = [
   "__spineTsBuiltInEntityConstructor",
   "__spineTsEntityConstructorBrand",
   "EntityConstructorBrand",
+  "onBackgroundFailure",
 ];
 const forbiddenTypeDocNamePatterns = [
   /\bEntity\w*Marker\w*\b/u,
@@ -725,6 +739,7 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
+const declaredZeroMqTransportExports = collectNamedExports(zeroMqTransportIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -749,6 +764,15 @@ const missingDeclaredTestingExports = expectedTestingExports.filter(
 );
 const unexpectedTestingExports = declaredTestingExports.filter(
   (name) => !expectedTestingExports.includes(name),
+);
+const missingZeroMqTransportExports = expectedZeroMqTransportExports.filter(
+  (name) => !zeroMqTransportModuleNames.has(name),
+);
+const missingDeclaredZeroMqTransportExports = expectedZeroMqTransportExports.filter(
+  (name) => !declaredZeroMqTransportExports.includes(name),
+);
+const unexpectedZeroMqTransportExports = declaredZeroMqTransportExports.filter(
+  (name) => !expectedZeroMqTransportExports.includes(name),
 );
 
 if (missingExports.length > 0) {
@@ -812,6 +836,27 @@ if (unexpectedStorageExports.length > 0) {
 if (missingTransportExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/transport exports: ${missingTransportExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingZeroMqTransportExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/transport/zeromq exports: ${missingZeroMqTransportExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredZeroMqTransportExports.length > 0) {
+  console.error(
+    `@spine-ts/transport/zeromq root is missing expected exports: ${missingDeclaredZeroMqTransportExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (unexpectedZeroMqTransportExports.length > 0) {
+  console.error(
+    `@spine-ts/transport/zeromq exports changed without updating docs expectations: ${unexpectedZeroMqTransportExports.join(", ")}`,
   );
   process.exit(1);
 }
@@ -894,6 +939,7 @@ console.log(
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
     `${expectedTransportExports.length} expected @spine-ts/transport exports`,
+    `${expectedZeroMqTransportExports.length} expected @spine-ts/transport/zeromq exports`,
     `${expectedTestingExports.length} expected @spine-ts/testing exports.`,
   ].join(", "),
 );

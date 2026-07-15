@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 9 correction contract accepted; implementation assigned
+Status: Canonical wave 9 correction coordinator-verified; commit pending
 
 Baseline: `39f2c6f7`
 
@@ -1165,3 +1165,44 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   must preserve D-0087/D-0088, Protobuf, dependencies, generated policy, and
   excluded public monitoring/scheduling scope. All canonical lanes rerun;
   dedicated security review remains pending.
+
+## Canonical Wave 9 Correction Implementation RED
+
+- The assigned sole implementer (required explicit `gpt-5.6-terra` / medium;
+  no subagents or Git mutation) captured the required pre-correction failures.
+  The direct TypeScript compile of the transport test exited 2 with `TS2322`
+  because `keyof ZeroMqTransportOptions` included the private observer; the new
+  direct-subpath API check exited 1 because TypeDoc had no ZeroMQ module entry.
+  These are expected RED failures for D-0089, not baseline/tooling failures.
+
+## Canonical Wave 9 Correction Implementation GREEN
+
+- The minimal D-0089 change makes the public options interface exactly the two
+  timeout keys and moves the observer to a non-exported internal extension;
+  test-only structural values preserve direct and cross-process observation.
+  Direct `keyof` GREEN and direct-module API GREEN passed; TypeDoc reports the
+  required `100/28/205/19/17/6/3` counts and rejects the private observer.
+- Native focused evidence is green: transport 31/31 and cross-process server
+  7/7. The sandbox transport attempt is intentionally not product evidence: it
+  failed 18 socket cases with `Operation not permitted`, then the approved
+  native rerun passed. Typecheck/generated docs are green; final focused lint,
+  Prettier, generated-clean, manifest/lock, and diff checks are being rerun
+  after the durable records settle. Dedicated security review remains pending.
+- Final focused reruns after lint cleanup reconfirmed native transport 31/31,
+  native cross-process server 7/7, generated typecheck, and docs/API counts.
+  The only hygiene interruption was Prettier on the newly updated work log;
+  no behavior or source defect was reported. The final formatting/integrity
+  rerun follows this durable entry.
+
+## Canonical Wave 9 Correction Coordinator Verification
+
+- Coordinator inspection accepts all six corrections and D-0089 without public
+  monitoring or runtime-policy expansion. The sole immutable Terra Medium
+  implementer is closed.
+- Fresh native transport/cross-process tests passed 38/38. Generated typecheck,
+  docs/API counts `100/28/205/19/17/6/3`, generated-clean validation, focused
+  lint, exact formatting, manifest/lock/export integrity, tracked-generated
+  absence, and diff integrity all exited 0. Emitted declarations and TypeDoc
+  contain no private observer.
+- Accept the substantive batch for commit. Record the immutable endpoint before
+  Canonical Wave 10; dedicated security review remains pending.
