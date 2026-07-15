@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0095 implementation complete; re-review pending
+Status: In progress - D-0096 implementation complete; re-review pending
 
 Started: `2026-07-14`
 
@@ -3593,6 +3593,46 @@ Subscription cancellation failed.` instead of `AggregateError`.
   mutation. Replace the unmerged helper, add the full open/dual-shape RED/GREEN
   matrix, update docs/checker/matrix/logs, and correct the P2 runtime wording.
   No ZeroMQ/server changes or full verify.
+
+## D-0096 Implementation And Coordinator Acceptance
+
+- Removed the unmerged overloaded helper and added separate fixed-path
+  `isTransportOperationKind()` and `isTransportTopicKind()` predicates. Open/
+  index-signature refinements and dual-shaped values remain sound because each
+  function always reads its named canonical path; neither reads envelopes.
+- RED tooling/root tests proved both missing helpers and unresolved narrowing.
+  GREEN covers widened/restricted publish, request, and topic inputs, open and
+  dual-shaped values, invalid pair preservation, truthful path results, and zero
+  envelope access.
+- Coordinator passed both typechecks, transport root 9/9, focused ESLint,
+  docs/API counts `100/28/205/19/20/6/3`, Proto cleanliness, exact nine-path
+  Prettier, and diff integrity. Active matrix counts are 20; no old helper,
+  optional-`never`, ZeroMQ/server path, or generated output remains.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained sole writer, childless, and Git-clean and is closed.
+  Freeze and re-review style, docs, and TypeScript/API; reliability remains N/A.
+
+## D-0096 Fixed-Path Predicate Implementation
+
+- Removed unmerged `hasTransportSignalKind()` without an alias. Added
+  `isTransportOperationKind()` with the operation-union/`NoInfer`/`Extract`
+  contract and fixed nested `operation.topic.signalKind` path, plus
+  `isTransportTopicKind()` with a fixed top-level `topic.signalKind` path and
+  preservation of open caller refinements.
+- RED tooling exited 2 for missing exports and unresolved desired narrowing;
+  runtime failed 2 of 9 because both functions were undefined. GREEN tooling
+  exits 0 and root tests pass 9/9 across widened/restricted/open/dual-shaped
+  inputs, retained invalid pairs, and zero envelope reads.
+- Docs/checker use both names, root/ZeroMQ counts are 20/6, and exactly three
+  active matrix claims are 20. Public helper runtime changed; only adapter,
+  server, wire, frame, allocation, and lifecycle paths remained unchanged. No
+  validation semantics or collision rejection remains.
+- Final focused evidence is recorded in the work log. D-0096 implementation is
+  complete; affected re-review remains pending.
+- Final focused gates are green: both typechecks and focused lint exited 0,
+  root tests passed 9/9, generated docs reported `100/28/205/19/20/6/3`, and
+  Proto/generated/diff/status/old-helper/forbidden-scope scans are clean and
+  limited to exactly nine assigned paths. D-0096 re-review remains pending.
 
 ## D-0095 Narrowing Helper Implementation Progress
 

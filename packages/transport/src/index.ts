@@ -194,38 +194,25 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
   });
 }
 
-/** Narrow a transport operation to the selected canonical topic kind. */
-export function hasTransportSignalKind<
-  Operation extends {
-    readonly topic: TransportTopic;
-    readonly envelope: unknown;
-    readonly signalKind?: never;
-  },
+/** Narrow a transport operation through its canonical nested topic kind. */
+export function isTransportOperationKind<
+  Operation extends PublishTransportOperation | RequestTransportOperation,
   Kind extends Operation["topic"]["signalKind"],
 >(
-  value: Operation,
+  operation: Operation,
   signalKind: Kind & NoInfer<Operation["topic"]["signalKind"]>,
-): value is Extract<Operation, { readonly topic: TransportTopic<Kind> }>;
+): operation is Extract<Operation, { readonly topic: TransportTopic<Kind> }> {
+  return operation.topic.signalKind === signalKind;
+}
 
-/** Narrow a transport topic to the selected canonical kind. */
-export function hasTransportSignalKind<
-  TopicKind extends TransportSignalKind,
-  Kind extends TopicKind,
+/** Narrow a transport topic through its canonical top-level kind. */
+export function isTransportTopicKind<
+  Topic extends TransportTopic,
+  Kind extends Topic["signalKind"],
 >(
-  value: TransportTopic<TopicKind> & { readonly topic?: never },
-  signalKind: Kind & NoInfer<TopicKind>,
-): value is TransportTopic<Kind> & { readonly topic?: never };
-
-export function hasTransportSignalKind(
-  value:
-    | TransportTopic
-    | {
-        readonly topic: TransportTopic;
-        readonly envelope: unknown;
-      },
-  signalKind: TransportSignalKind,
-): boolean {
-  const topic = "signalKind" in value ? value : value.topic;
+  topic: Topic,
+  signalKind: Kind & NoInfer<Topic["signalKind"]>,
+): topic is Topic & TransportTopic<Kind> {
   return topic.signalKind === signalKind;
 }
 

@@ -72,22 +72,34 @@ encoding. `TransportSignalEnvelope` makes the public `command`/`event` envelope
 types the generated `Command`/`Event` types while preserving caller-selected
 types for the other signal kinds.
 
-Use `hasTransportSignalKind()` when consuming an operation whose kind is
-widened or is a union:
+Use the fixed-path kind predicates when consuming an operation or topic whose
+kind is widened or is a union:
 
 ```ts
-import { hasTransportSignalKind, type PublishTransportOperation } from "@spine-ts/transport";
+import {
+  isTransportOperationKind,
+  isTransportTopicKind,
+  type PublishTransportOperation,
+  type TransportTopic,
+} from "@spine-ts/transport";
 
 function onTransportOperation(operation: PublishTransportOperation<{ readonly id: string }>): void {
-  if (hasTransportSignalKind(operation, "event")) {
+  if (isTransportOperationKind(operation, "event")) {
     operation.envelope; // Inferred as the generated Event type.
+  }
+}
+
+function onTransportTopic(topic: TransportTopic): void {
+  if (isTransportTopicKind(topic, "event")) {
+    topic.routing.signalKind; // Inferred as "event".
   }
 }
 ```
 
-The predicate compares only the canonical `topic.signalKind`. It is a type-
-narrowing aid, not validation of untrusted input or envelope content, and it
-does not inspect the envelope.
+`isTransportOperationKind()` always compares `operation.topic.signalKind`;
+`isTransportTopicKind()` always compares `topic.signalKind`. These fixed paths
+are type-narrowing aids, not validation of untrusted input or envelope content,
+and neither predicate inspects the envelope.
 
 Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
 8,388,608-byte rejection ceiling. This is a per-frame maximum, not a fixed

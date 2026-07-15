@@ -14,7 +14,8 @@ import {
   type TransportTopic,
   createTransportSubscription,
   createTransportTopic,
-  hasTransportSignalKind,
+  isTransportOperationKind,
+  isTransportTopicKind,
 } from "../src/index.js";
 
 describe("@spine-ts/transport", () => {
@@ -318,20 +319,33 @@ describe("@spine-ts/transport", () => {
     void assertExplicitGenericCalls;
   });
 
-  it("narrows widened operations and topics through their canonical topic kind", () => {
+  it("narrows widened and open operations and topics through fixed kind paths", () => {
     interface PrivateEnvelope {
       readonly id: string;
     }
+    type OpenPublishOperation = PublishTransportOperation<PrivateEnvelope> & {
+      readonly [key: string]: unknown;
+      readonly operationRefinement: "open-operation";
+    };
+    type OpenTopic = TransportTopic & {
+      readonly [key: string]: unknown;
+      readonly topicRefinement: "open-topic";
+    };
+    type OpenDualValue = PublishTransportOperation<PrivateEnvelope> &
+      TransportTopic & {
+        readonly [key: string]: unknown;
+        readonly dualRefinement: "dual";
+      };
 
     const narrowPublish = (operation: PublishTransportOperation<PrivateEnvelope>): void => {
       if (operation.topic.signalKind === "command") {
         // @ts-expect-error a nested kind check does not narrow the complete operation union.
         expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
       }
-      if (hasTransportSignalKind(operation, "command")) {
+      if (isTransportOperationKind(operation, "command")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
       }
-      if (hasTransportSignalKind(operation, "system")) {
+      if (isTransportOperationKind(operation, "system")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
       }
     };
@@ -342,28 +356,28 @@ describe("@spine-ts/transport", () => {
         // @ts-expect-error a nested kind check does not narrow the complete operation union.
         expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
       }
-      if (hasTransportSignalKind(operation, "event")) {
+      if (isTransportOperationKind(operation, "event")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
       }
-      if (hasTransportSignalKind(operation, "query")) {
+      if (isTransportOperationKind(operation, "query")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
       }
       // @ts-expect-error restricted operation kinds reject kinds outside their union.
-      hasTransportSignalKind(operation, "command");
+      isTransportOperationKind(operation, "command");
     };
     const narrowTopic = (topic: TransportTopic): void => {
       if (topic.signalKind === "command") {
         // @ts-expect-error a nested kind check does not narrow the complete topic contract.
         expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
       }
-      if (hasTransportSignalKind(topic, "command")) {
+      if (isTransportTopicKind(topic, "command")) {
         expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
         expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
       }
     };
     const rejectUnrelatedTopicKind = (topic: TransportTopic<"command" | "system">): void => {
       // @ts-expect-error restricted topic kinds reject kinds outside their union.
-      hasTransportSignalKind(topic, "event");
+      isTransportTopicKind(topic, "event");
     };
     const rejectSubscription = (): void => {
       const subscription = createTransportSubscription({
@@ -375,21 +389,31 @@ describe("@spine-ts/transport", () => {
       });
 
       // @ts-expect-error subscriptions are topic-only containers, not transport operations.
-      hasTransportSignalKind(subscription, "event");
+      isTransportOperationKind(subscription, "event");
     };
-    const rejectTopicWithNestedTopic = (
-      topic: TransportTopic & { readonly topic: TransportTopic },
-    ): void => {
-      // @ts-expect-error a topic with a nested topic belongs to neither narrowing domain.
-      hasTransportSignalKind(topic, "event");
+    const narrowOpenOperation = (operation: OpenPublishOperation): void => {
+      if (isTransportOperationKind(operation, "command")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+        expectTypeOf(operation.operationRefinement).toEqualTypeOf<"open-operation">();
+      }
     };
-    const rejectOperationWithTopLevelKind = (
-      operation: PublishTransportOperation<PrivateEnvelope> & {
-        readonly signalKind: TransportSignalKind;
-      },
-    ): void => {
-      // @ts-expect-error an operation with top-level signalKind belongs to neither domain.
-      hasTransportSignalKind(operation, "command");
+    const narrowOpenTopic = (topic: OpenTopic): void => {
+      if (isTransportTopicKind(topic, "event")) {
+        expectTypeOf(topic.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(topic.topicRefinement).toEqualTypeOf<"open-topic">();
+      }
+    };
+    const narrowDualValue = (value: OpenDualValue): void => {
+      if (isTransportOperationKind(value, "command")) {
+        expectTypeOf(value.envelope).toEqualTypeOf<Command>();
+        expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
+      }
+      if (isTransportTopicKind(value, "event")) {
+        expectTypeOf(value.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(value.routing.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
+      }
     };
 
     void narrowPublish;
@@ -397,11 +421,18 @@ describe("@spine-ts/transport", () => {
     void narrowTopic;
     void rejectUnrelatedTopicKind;
     void rejectSubscription;
-    void rejectTopicWithNestedTopic;
-    void rejectOperationWithTopLevelKind;
+    void narrowOpenOperation;
+    void narrowOpenTopic;
+    void narrowDualValue;
   });
 
-  it("retains top-level precedence for a statically rejected structural collision", () => {
+  it("uses each fixed path for an open dual-shaped value without reading its envelope", () => {
+    type OpenDualValue = PublishTransportOperation &
+      TransportTopic & {
+        readonly [key: string]: unknown;
+        readonly dualRefinement: "dual";
+      };
+    const widenDualValue = (value: OpenDualValue): OpenDualValue => value;
     const eventTopic = createTransportTopic({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/spine.core.Event",
@@ -410,17 +441,24 @@ describe("@spine-ts/transport", () => {
       signalKind: "command",
       messageTypeUrl: "type.spine.io/spine.core.Command",
     });
-    const structuralTopic: TransportTopic & { readonly topic: TransportTopic } = Object.freeze({
-      ...eventTopic,
-      topic: commandTopic,
-    });
+    let envelopeReads = 0;
+    const dualValue = widenDualValue(
+      Object.freeze({
+        ...eventTopic,
+        topic: commandTopic,
+        dualRefinement: "dual",
+        get envelope(): Command {
+          envelopeReads += 1;
+          return create(CommandSchema);
+        },
+      }),
+    );
 
-    // The helper is not a validator; overloads reject this shape while runtime
-    // precedence remains deterministic if TypeScript checking is bypassed.
-    // @ts-expect-error structural collisions are outside both narrowing domains.
-    expect(hasTransportSignalKind(structuralTopic, "event")).toBe(true);
-    // @ts-expect-error structural collisions are outside both narrowing domains.
-    expect(hasTransportSignalKind(structuralTopic, "command")).toBe(false);
+    expect(isTransportOperationKind(dualValue, "command")).toBe(true);
+    expect(isTransportOperationKind(dualValue, "event")).toBe(false);
+    expect(isTransportTopicKind(dualValue, "event")).toBe(true);
+    expect(isTransportTopicKind(dualValue, "command")).toBe(false);
+    expect(envelopeReads).toBe(0);
   });
 
   it("classifies accepted topic and operation domains without inspecting envelopes", () => {
@@ -443,10 +481,10 @@ describe("@spine-ts/transport", () => {
       }),
     );
 
-    expect(hasTransportSignalKind(topic, "command")).toBe(true);
-    expect(hasTransportSignalKind(topic, "event")).toBe(false);
-    expect(hasTransportSignalKind(operation, "command")).toBe(true);
-    expect(hasTransportSignalKind(operation, "event")).toBe(false);
+    expect(isTransportTopicKind(topic, "command")).toBe(true);
+    expect(isTransportTopicKind(topic, "event")).toBe(false);
+    expect(isTransportOperationKind(operation, "command")).toBe(true);
+    expect(isTransportOperationKind(operation, "event")).toBe(false);
     expect(envelopeReads).toBe(0);
     expect(operation.topic).toBe(topic);
     expect(Object.isFrozen(operation)).toBe(true);

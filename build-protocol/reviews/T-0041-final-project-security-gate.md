@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: In progress - D-0095 implementation complete; re-review pending
+Status: In progress - D-0096 implementation complete; re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -3574,6 +3574,40 @@ verify` remains reserved.
 - Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected immutable
   Terra Medium, for exact RED/GREEN, docs/checker/matrix/log updates, and P2
   runtime wording. Preserve all adapter/server/wire/risk behavior.
+
+## D-0096 Implementer Evidence And Coordinator Acceptance
+
+- The overloaded helper is removed. Separate operation/topic predicates always
+  read their named canonical paths and remain sound for open/index-signature and
+  dual-shaped values without envelope inspection or validation claims.
+- Coordinator passed both typechecks, root 9/9, focused lint, docs/API counts
+  `100/28/205/19/20/6/3`, Proto cleanliness, exact formatting, and diff
+  integrity. Active matrix counts are 20; no old helper, optional-negative-key,
+  ZeroMQ/server, or generated scope remains.
+- Public helper runtime changed; adapter/server/wire/frame/allocation/lifecycle
+  paths did not. Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/
+  actual immutable Terra Medium, remained childless and Git-clean and is closed.
+  Re-review style, docs, and TypeScript/API; reliability remains N/A.
+
+## D-0096 Implementer Evidence Pending Re-Review
+
+- RED tooling exited 2 with missing fixed-path exports, unresolved narrowing,
+  and unused restricted-kind markers; runtime failed 2/9 because both functions
+  were undefined. GREEN tooling exits 0 and root tests pass 9/9.
+- The operation predicate always reads nested `operation.topic.signalKind` and
+  narrows through the operation union with `NoInfer`/`Extract`. The topic
+  predicate always reads top-level `topic.signalKind` and preserves open caller
+  refinements. Open/index-signature and conflicting dual-shaped regressions
+  prove neither function can be redirected; neither reads the envelope.
+- The old helper and optional-`never`/shape-classification contract are absent.
+  Docs/checker/matrix state 20/6 and fixed-path narrowing, not validation.
+  Accepted P2 disposition: public helper runtime changed; only adapter/server/
+  wire/frame/allocation/lifecycle paths remained unchanged. Implementation is
+  complete; affected D-0096 re-review has not begun.
+- Final gates are green: both typechecks and focused lint exited 0, root tests
+  passed 9/9, docs reported `100/28/205/19/20/6/3`, and
+  Proto/generated/diff/status/old-helper/forbidden-scope scans are clean and
+  exact. D-0096 re-review has not begun.
 
 ## D-0095 Implementer Evidence Pending Re-Review
 

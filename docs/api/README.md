@@ -712,10 +712,10 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`, and `hasTransportSignalKind()`. This root
-surface is contract-only: it defines immutable topic/subscription value objects,
-deterministic adapter-agnostic routing keys, handler callback signatures, and
-graceful async close behavior.
+`createTransportSubscription()`, `isTransportOperationKind()`, and
+`isTransportTopicKind()`. This root surface is contract-only: it defines
+immutable topic/subscription value objects, deterministic adapter-agnostic
+routing keys, handler callback signatures, and graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
 production endpoint topology, broker processes, child process supervision,
 participant lifecycle values, worker registrations, delivery attempt/result
@@ -740,21 +740,34 @@ the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
 contract and currently retain private V8 encoding. `TransportSignalEnvelope`
 correlates command/event operations and handlers with generated `Command` and
 `Event` while preserving caller-selected types for other kinds. Widened or
-union operations can be narrowed through the canonical topic kind:
+union operations and topics can be narrowed through their fixed canonical kind
+paths:
 
 ```ts
-import { hasTransportSignalKind, type RequestTransportOperation } from "@spine-ts/transport";
+import {
+  isTransportOperationKind,
+  isTransportTopicKind,
+  type RequestTransportOperation,
+  type TransportTopic,
+} from "@spine-ts/transport";
 
 function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
-  if (hasTransportSignalKind(operation, "command")) {
+  if (isTransportOperationKind(operation, "command")) {
     operation.envelope; // Inferred as the generated Command type.
+  }
+}
+
+function onTransportTopic(topic: TransportTopic): void {
+  if (isTransportTopicKind(topic, "event")) {
+    topic.routing.signalKind; // Inferred as "event".
   }
 }
 ```
 
-`hasTransportSignalKind()` compares only `topic.signalKind`. It provides type
-narrowing, not validation of untrusted input or envelope content, and does not
-inspect the envelope. Every inbound
+`isTransportOperationKind()` always compares `operation.topic.signalKind`, and
+`isTransportTopicKind()` always compares `topic.signalKind`. They provide type
+narrowing, not validation of untrusted input or envelope content, and neither
+inspects the envelope. Every inbound
 `Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
 ceiling, not a fixed allocation. Publish and request messages use route frame 1
 and payload frame 2: command/event payloads use Buf, while reserved

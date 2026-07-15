@@ -176,7 +176,8 @@ const expectedTransportExports = [
   "TransportTopicInput",
   "createTransportSubscription",
   "createTransportTopic",
-  "hasTransportSignalKind",
+  "isTransportOperationKind",
+  "isTransportTopicKind",
 ];
 const expectedZeroMqExports = [
   "ZeroMqAdapterConfig",
