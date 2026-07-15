@@ -2801,3 +2801,10 @@ Subscription cancellation failed.` instead of `AggregateError`.
   disposition, smallest TDD cases, canonical review relevance, and security
   re-review scope without changing public options, D-0088, Publisher timeout,
   copied contracts, or deployment ownership.
+
+## SF-011/SF-012 Architecture Dispatch
+
+- Requirements splitter `019f6575-3f28-7410-ae39-3ef51476c44b` was dispatched
+  explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
+  childless, and Git-read-only, for only the exact private limits,
+  compatibility, tests, mapping, and re-review scope.

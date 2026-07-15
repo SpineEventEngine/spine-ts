@@ -2931,3 +2931,9 @@ verify` remains reserved.
   build residual. Assign Sol High architecture for exact private limits,
   persisted compatibility, tests, canonical review relevance, and security
   re-review scope before implementation.
+
+## SF-011/SF-012 Architecture Dispatch
+
+- Requirements splitter `019f6575-3f28-7410-ae39-3ef51476c44b` was dispatched
+  explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
+  childless, and Git-read-only, for the two bounded security contracts.
