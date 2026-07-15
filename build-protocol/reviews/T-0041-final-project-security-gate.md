@@ -3961,3 +3961,16 @@ verify` remains reserved.
   for useful/readable scope and performance/reliability for deterministic,
   bounded IPC/lifecycle behavior and the two-branch coverage margin.
   Documentation, TypeScript/API, and security retain justified N/A.
+
+## Full Gate Branch-Coverage Review Package And Assignment
+
+- Exact package `.superpowers/sdd/review-9a3ce8f8..6771c71e.diff`; baseline
+  `9a3ce8f8`; implementation endpoint `6771c71e`; 1 commit; 33,468 bytes.
+- Existing style/maintainability and performance/reliability roles use expected
+  explicit immutable Terra High, read-only, childless, Git-read-only, and
+  concern-scoped. Aggregate both results before fixes or closure.
+- Style checks useful behavior coverage and maintainable structure. Reliability
+  checks native IPC determinism, cleanup, continuation, bounded waits, semantic
+  fidelity, and the two-branch margin. Historical superseded text is not active.
+  Documentation, TypeScript/API, and security remain N/A for this test-only
+  package.
