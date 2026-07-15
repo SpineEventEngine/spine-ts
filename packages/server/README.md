@@ -880,8 +880,11 @@ absence. A claim owned by another `SpineServices` instance fails with
 `ABORTED` and message `Subscription is active in another service instance.`
 Cleanup is idempotent when a client cancels, an activation iterator closes, an
 inactive record expires, or the active queue limit is exceeded. Malformed rows
-remain inert. The inactive TTL defaults to 30 seconds and the active queue
-limit defaults to 100 queued updates. `SpineServicesOptions.subscriptionLimit`
+remain inert. The inactive TTL defaults to 30 seconds; non-positive or
+non-finite values become 1, positive finite values are floored, and an
+effective value above 2,147,483,647 milliseconds throws synchronously before
+storage or timer work. The active queue limit defaults to 100 queued updates.
+`SpineServicesOptions.subscriptionLimit`
 is a positive safe integer that defaults to 100 and bounds pending, inactive,
 active, and recovered subscriptions owned by one `SpineServices` instance.
 Each instance has an independent limit; it is neither a process-wide nor a

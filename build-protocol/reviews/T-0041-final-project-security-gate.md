@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 13 correction assigned
+Status: Canonical wave 13 correction verified; wave 14 package pending
 
 Baseline: `39f2c6f7`
 
@@ -1598,3 +1598,81 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   export, package/dependency/Proto/generated, D-0087/D-0088/D-0089, or unrelated
   runtime change is authorized. All four Canonical Wave 14 lanes rerun before
   dedicated final security review.
+
+## Canonical Wave 13 Implementer Correction Evidence (In Progress)
+
+- The sole existing implementer used no subagents or Git-state mutation. The
+  assignment explicitly specifies `gpt-5.6-terra` / medium; no separate
+  immutable actual-profile metadata is exposed here. TDD and completion-
+  verification skills were fully read after inventory, expected-manifest,
+  installed-entrypoint, and skill-lock checks; fixed-worktree/planning/subagent/
+  Git skills are N/A. JVM subscription notes were inspected.
+- TTL RED exited 1 with 1 failed/141 skipped because oversized effective values
+  were accepted. Identical GREEN exited 0 with 2 passed/141 skipped: max TTL
+  has exactly one timer and exact durable absolute expiry; max+1,
+  `Number.MAX_SAFE_INTEGER`, and larger finite values synchronously throw the
+  assigned TypeError before timer/subscription-storage work.
+- The publisher regression asserts native/default `sendTimeout: -1`. Temporary
+  removal of only the second fixture deadline failed 1/33 skipped with the outer
+  deadline; restoring the independent deadline passed 2/32 skipped. Directory
+  removal remains attempted in `finally`.
+- D-0090, TSDoc, docs/status/architecture/API verification corrections and
+  durable logs are present; D-0089's runtime structural observer remains local,
+  non-exported, and undocumented. Changed paths are the service source/test,
+  transport test, four public docs, D-0090, both security artifacts, and the
+  T-0041 task/work/review logs named in the task record. Focused final checks
+  remain pending. Status remains Canonical Wave 13 correction/current review in
+  progress; dedicated security review remains pending.
+
+- Focused validation: sandbox failures were only expected 19 loopback and 18
+  native IPC `EPERM` cases; approved native rerun exited 0 with 177 tests across
+  2 files. Generated build typecheck, docs/API check (25 Proto checksums and
+  `100/28/205/19/17/6/3` counts), generated-clean, focused ESLint, and exact
+  13-path Prettier exited 0. Current-status/constant/public-boundary/future-
+  policy scans, manifest/lock/package-map/generated checks, and `git diff
+--check` are clean. Canonical Wave 13 correction/current review and dedicated
+  security review remain pending.
+
+## Wave 13 Coordinator Evidence Correction
+
+- Coordinator inspection accepts the Wave 13 behavior and docs but requires the
+  oversized-TTL regression to match the exact `TypeError`, the API verification
+  sentence to avoid repeated “checks,” and the current security-findings status
+  to include D-0090.
+- Resume the same immutable Terra Medium implementer for this evidence/status-
+  only correction and focused validation. Canonical Wave 14 and dedicated final
+  security review remain pending.
+
+## Canonical Wave 13 Correction Coordinator Verification
+
+- Implementer `019f647d-2466-7f00-b8f6-14ad056f5489` has matching explicit and
+  actual immutable `gpt-5.6-terra` / medium evidence, used no child or Git
+  mutation, and is closed.
+- Coordinator source/test/doc inspection accepts every Wave 13 correction and
+  exact evidence refinement. No public export, dependency, package, Proto,
+  generated-output, D-0087/D-0088/D-0089, or unrelated behavior changed.
+- Fresh native affected verification passed 177/177. Generated typecheck,
+  docs/API counts `100/28/205/19/17/6/3`, generated cleanliness, focused lint
+  and format, common-finding scans, manifest/lock/package-map integrity,
+  tracked-generated absence, and diff integrity passed.
+- Commit the substantive correction and reconcile its immutable security
+  provenance before Canonical Wave 14. Dedicated final security review remains
+  pending.
+
+## Wave 13 Coordinator Evidence Correction Result
+
+- The exact `TypeError` object matcher, clean API verification sentence, and
+  D-0087-through-D-0090 status range are present. No other runtime, API,
+  documentation, or security-artifact behavior changed.
+- Focused TTL verification exited 0 with 2 passed/141 skipped. Fresh
+  `docs:check` exited 0 after 25 Proto checksum validations with exact API
+  counts `100/28/205/19/17/6/3`.
+- Correction paths are the TTL test, API README, security findings status, and
+  these three durable logs. Formatting, current-status, and diff checks remain
+  to be recorded; correction/current review and dedicated security review are
+  pending.
+
+- Exact six-path Prettier passed after formatting the TypeError assertion.
+  Current-status scan confirms D-0090 and the pending correction/review state;
+  `git diff --check` exited 0. This correction is ready for coordinator
+  inspection without claiming canonical or dedicated security completion.

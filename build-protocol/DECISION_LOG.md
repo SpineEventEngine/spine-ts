@@ -4060,3 +4060,24 @@ Consequences:
 - Public logging callbacks, event emitters, health interfaces, and broader
   monitoring remain excluded. D-0087, D-0088, Protobuf contracts, dependencies,
   package entrypoints, and generated-output policy remain unchanged.
+
+## D-0090: Bound Inactive Subscription TTLs
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision: `SpineServicesOptions.inactiveTtlMs` defaults to 30,000 milliseconds.
+It preserves existing normalization: non-positive or non-finite values become
+1; positive finite values are floored. After normalization, an effective value
+above 2,147,483,647 throws synchronously before storage or timer work with
+`TypeError: SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.`
+
+Consequences: an accepted subscription has one absolute durable `expiresAtMs`
+and one unref'ed expiry timer. Activation and cancellation still clear that
+timer; recovery and expiry-cleanup failure retention remain unchanged. Expiry
+cleanup failure has no automatic retry, and same-ID `Cancel` remains the
+explicit retry path. No value capping, timer chunking, re-arming policy,
+`queueLimit` behavior, or shared `positiveInteger()` behavior is introduced.

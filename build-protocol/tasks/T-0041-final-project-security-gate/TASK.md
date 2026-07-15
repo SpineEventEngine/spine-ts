@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 13 correction assigned
+Status: In progress - canonical wave 13 correction verified; wave 14 package pending
 
 Started: `2026-07-14`
 
@@ -1732,3 +1732,102 @@ succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
   dependency, Proto, generated-output, D-0087/D-0088/D-0089, or unrelated
   behavior change. Use test-first evidence and focused verification; all four
   canonical lanes rerun before dedicated security review.
+
+## Canonical Wave 13 Implementer Correction In Progress
+
+- The existing implementer is sole writer; no subagents or Git-state mutation
+  are used. The assignment specifies `gpt-5.6-terra` / medium; this surface
+  exposes no separate immutable runtime-profile metadata. No child work is
+  dispatched or accepted.
+- Skill applicability: session inventory and `EXPECTED_SKILLS.md`, the full
+  installed entrypoint scan, and readable skill lock were checked. Fully read
+  selected skills: `test-driven-development` and
+  `verification-before-completion`. Worktree/planning/subagent/Git skills are
+  N/A because this assigned worktree and scope already exist and this assignment
+  forbids subagents and Git mutation. JVM notes inspected:
+  `spine-jvm-docs/spine-server-runtime-and-bounded-context.md`.
+- TTL RED command exited 1 with 1 failed/141 skipped because oversized effective
+  TTL construction did not throw. Identical GREEN exited 0 with 2 passed/141
+  skipped: max TTL has one timer and exact durable absolute expiry; max+1,
+  `Number.MAX_SAFE_INTEGER`, and larger finite values throw the exact TypeError
+  before timer or subscription-storage creation.
+- Publisher coverage now asserts native/default `sendTimeout: -1`. The
+  second-close test passed against the established bound; temporary test-fixture
+  removal of that bound produced RED (1 failed/33 skipped, outer instead of
+  second-close deadline), and restoration produced GREEN (2 passed/32 skipped).
+  Directory removal remains in `finally`; production timeout behavior is
+  unchanged.
+- D-0090, TSDoc, four TTL mirrors, API TypeDoc wording, security statuses, and
+  initial-release same-host exclusion wording are updated. D-0089's runtime
+  structural observer remains unexported and undocumented. Changed paths:
+  `packages/server/src/services/spine-services.ts`,
+  `packages/server/test/services/spine-services.test.ts`,
+  `packages/transport/test/zeromq/signal-transport.test.ts`,
+  `packages/server/README.md`, `docs/api/README.md`, `docs/USER_GUIDE.md`,
+  `docs/architecture/README.md`, `build-protocol/DECISION_LOG.md`, both
+  security artifacts, and these T-0041 task/work/review logs. Focused final
+  validation is pending. Status remains Canonical Wave 13 correction/current
+  review in progress; dedicated security review is pending.
+
+- Focused native validation: sandbox failures were only 19 loopback `listen
+EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
+  with 2 files/177 tests. `typecheck:build:generated`, `docs:check` (25 copied
+  Proto checksums; TypeDoc counts `100/28/205/19/17/6/3`),
+  `proto:check-generated`, focused ESLint, and exact 13-path Prettier exited 0.
+  Status/constant/public-boundary/future-policy scans preserve the dedicated TTL
+  constant and D-0089 private observer with no stale active wording. Manifest,
+  lockfile, package-map, and generated tracking are unchanged; `git diff
+--check` exited 0.
+
+## Wave 13 Coordinator Evidence Correction
+
+- Coordinator source inspection accepts D-0090, normalization order, timer and
+  storage bounds, symmetric cleanup, D-0089 preservation, and the active docs.
+  Three evidence/status details remain before commit: assert the oversized TTL
+  as the exact `TypeError` object rather than a message-only matcher; replace
+  API README's repeated “also checks” wording; and include D-0090 in the current
+  security-findings status range.
+- Resume the same immutable Terra Medium implementer for only those three edits
+  and the focused TTL test, docs check, exact formatting, status scan, and diff
+  integrity. No other source, behavior, contract, or Git change is authorized.
+
+## Canonical Wave 13 Correction Coordinator Verification
+
+- Existing implementer `019f647d-2466-7f00-b8f6-14ad056f5489` was dispatched
+  explicitly and resumed with immutable `gpt-5.6-terra` / medium; the role
+  confirms the same actual runtime profile. It spawned no children, made no Git
+  mutation, and is closed.
+- Coordinator inspection accepts D-0090, exact normalization and TypeError,
+  one-timer/absolute-expiry semantics, TTL tests/docs, exact publisher default,
+  symmetric fixture deadlines, API verification text, security statuses, and
+  initial-release architecture exclusion. D-0089's internal runtime structural
+  observer remains absent from declarations and TypeDoc.
+- Fresh native affected suites passed 177/177. Generated build typecheck,
+  docs/API generation with 25 Proto checksums and export counts
+  `100/28/205/19/17/6/3`, generated-clean validation, focused ESLint, exact
+  Prettier, current-status/constant/public-boundary/future-policy scans,
+  manifest/lock/package-map integrity, tracked-generated absence, and
+  `git diff --check` all exited 0.
+- Accept this correction for commit. Update immutable security provenance to
+  the substantive commit, then generate Canonical Wave 14. Dedicated security
+  review remains pending.
+
+## Wave 13 Coordinator Evidence Correction Result
+
+- The oversized-TTL table now matches the exact assigned `TypeError` object;
+  API verification prose says `It also checks`; and the current security status
+  includes D-0090 in `D-0087 through D-0090`. No runtime implementation,
+  contract, or other documentation changed.
+- Focused TTL command exited 0 with 2 passed/141 skipped. Fresh `docs:check`
+  exited 0 after 25 copied Proto checksum validations and exact TypeDoc counts
+  `100/28/205/19/17/6/3`.
+- Changed paths for this correction are the server TTL test, API README,
+  security-findings artifact, and these T-0041 task/work/review records. Exact
+  formatting, current-status scan, and diff integrity remain to be recorded;
+  status stays correction/current review in progress with dedicated security
+  review pending.
+
+- Exact six-path Prettier passed after formatting the TypeError assertion.
+  Current-status scan confirms task in progress, D-0087 through D-0090, and
+  Canonical Wave 13 correction/current review plus dedicated security re-review
+  pending. `git diff --check` exited 0.

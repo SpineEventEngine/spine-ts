@@ -390,7 +390,9 @@ multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
 subscription ID. Never-activated durable records become ineligible for
 activation after the configurable `inactiveTtlMs` (default 30 seconds;
-non-positive or non-finite values coerce to 1), and slow consumers are bounded
+non-positive or non-finite values coerce to 1, positive finite values are
+floored, and an effective value above 2,147,483,647 milliseconds throws
+synchronously before storage or timer work), and slow consumers are bounded
 by the configurable `queueLimit`. Each `SpineServices` instance also has an
 independent `subscriptionLimit` (default 100; positive safe integer) covering
 pending, inactive, active, and recovered records. Stream/cancel cleanup releases
@@ -745,9 +747,10 @@ checks. The workspace explicitly approves the `zeromq` install script in pnpm
 configuration, so dependency restoration must run in an environment that
 permits native package build/install scripts. Managed sandboxes may reject
 ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
-IPC filesystem/socket permissions outside the sandbox. Per D-0007, this adapter
-path is for same-host IPC only; scaling beyond one host remains the job of a
-different transport behind the same public contract.
+IPC filesystem/socket permissions outside the sandbox. Per D-0007, this
+initial-release adapter path is limited to same-host IPC; remote and multi-host
+transport are excluded. That exclusion makes no commitment about a future
+transport or contract.
 
 The ZeroMQ adapter serializes envelopes with Node's V8 serializer. Its `ipc://`
 frames are trusted same-host runtime traffic only, and `ipcDirectory` must be a

@@ -2435,6 +2435,65 @@ describe("SpineServices", () => {
     expect(() => handlers.subscribe(createTopic())).not.toThrow();
   });
 
+  it("keeps the maximum inactive subscription TTL as one absolute durable expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-15T00:00:00.000Z"));
+      const contextName = "MaximumInactiveSubscriptionTtl";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 2_147_483_647 },
+      );
+      const startedAtMs = Date.now();
+      const subscription = await handlers.subscribe(createTopic());
+      const subscriptionId = subscription.id?.value ?? "missing";
+      const durable = await readDurableSubscriptionRecord(
+        storageFactory,
+        contextName,
+        subscriptionId,
+      );
+
+      expect(vi.getTimerCount()).toBe(1);
+      expect(DurableSubscriptionRecords.read(durable ?? create(AnySchema)).expiresAtMs).toBe(
+        startedAtMs + 2_147_483_647,
+      );
+
+      await handlers.cancel(subscription);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects oversized effective inactive subscription TTLs before timer or storage work", () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "OversizedInactiveSubscriptionTtl";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const context = createSubscriptionContext(contextName, storageFactory);
+      const timer = vi.spyOn(globalThis, "setTimeout");
+
+      try {
+        for (const inactiveTtlMs of [
+          2_147_483_648,
+          Number.MAX_SAFE_INTEGER,
+          Number.MAX_SAFE_INTEGER + 1,
+        ]) {
+          expect(() => new SpineServices({ contexts: [context], inactiveTtlMs })).toThrow(
+            new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds."),
+          );
+        }
+
+        expect(timer).not.toHaveBeenCalled();
+        expect(storageFactory.subscriptionStorageCalls).toBe(0);
+      } finally {
+        timer.mockRestore();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("validates the per-instance subscription capacity", () => {
     const context = createFakeContext({
       stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
@@ -5847,6 +5906,7 @@ class FaultingSubscriptionStorageFactory extends StorageFactory {
     | ((id: string, readRecord: () => Promise<Any | undefined>) => Promise<Any | undefined>)
     | undefined;
   readCalls = 0;
+  subscriptionStorageCalls = 0;
   writeError: Error | undefined;
   writeCommitError: Error | undefined;
 
@@ -5867,6 +5927,8 @@ class FaultingSubscriptionStorageFactory extends StorageFactory {
     ) {
       return delegate;
     }
+
+    this.subscriptionStorageCalls += 1;
 
     return new FaultingSubscriptionRecordStorage(
       context,

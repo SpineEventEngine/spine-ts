@@ -139,7 +139,7 @@ export class SpineServices {
   /** Create service adapters over the passed built bounded contexts. */
   constructor(options: SpineServicesOptions) {
     this.#contexts = Object.freeze([...options.contexts]);
-    this.#inactiveTtlMs = positiveInteger(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
+    this.#inactiveTtlMs = inactiveTtl(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
     this.#queueLimit = positiveInteger(options.queueLimit ?? DEFAULT_QUEUE_LIMIT);
     this.#subscriptionLimit = subscriptionLimit(
       options.subscriptionLimit ?? DEFAULT_SUBSCRIPTION_LIMIT,
@@ -986,7 +986,8 @@ export interface SpineServicesOptions {
   /**
    * Milliseconds until a never-activated durable subscription record becomes ineligible for activation.
    *
-   * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1.
+   * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1;
+   * positive finite values are floored and must not exceed 2,147,483,647.
    */
   readonly inactiveTtlMs?: number;
   /**
@@ -1458,6 +1459,7 @@ function invalidCriterionError(): ContractError {
 }
 
 const DEFAULT_INACTIVE_TTL_MS = 30_000;
+const MAX_INACTIVE_TTL_MS = 2_147_483_647;
 const DEFAULT_QUEUE_LIMIT = 100;
 const DEFAULT_SUBSCRIPTION_LIMIT = 100;
 const MAX_CANCEL_RETRIES = 3;
@@ -1482,6 +1484,14 @@ const MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH = 128;
 
 function positiveInteger(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
+function inactiveTtl(value: number): number {
+  const normalized = positiveInteger(value);
+  if (normalized > MAX_INACTIVE_TTL_MS) {
+    throw new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.");
+  }
+  return normalized;
 }
 
 function subscriptionLimit(value: number): number {

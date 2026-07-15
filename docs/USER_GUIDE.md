@@ -341,7 +341,10 @@ Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
 returned `Subscription` message, not its opaque ID alone; pass that message
 when the client is finished. State topics support ID and equality filters;
 event topics currently support `include_all`. Inactive subscription records
-are storage-backed and have a default TTL of 30 seconds. Activation atomically
+are storage-backed and have a default TTL of 30 seconds. Non-positive or
+non-finite values become 1, positive finite values are floored, and an effective
+TTL above 2,147,483,647 milliseconds throws synchronously before storage or
+timer work. Activation atomically
 replaces the inactive row with an owner claim before attaching delivery and
 retains the claim while active; updates from before activation are not replayed.
 Cancel removes an inactive row or same-instance claim through a marker. A claim

@@ -249,7 +249,10 @@ with a positive value but without ordering, missing criteria, and `include_all =
 `Subscribe` allocates opaque IDs, validates subscription criteria,
 `Activate` attaches delivery, and `Cancel`/stream finalization release
 in-process handles. Never-activated subscriptions have a configurable inactive
-TTL, and active delivery uses a configurable queue limit for slow consumers.
+TTL: it defaults to 30 seconds; non-positive or non-finite values become 1;
+positive finite values are floored; and an effective value above 2,147,483,647
+milliseconds throws synchronously before storage or timer work. Active delivery
+uses a configurable queue limit for slow consumers.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters, event field masks,
@@ -754,10 +757,12 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
-`@spine-ts/storage`, `@spine-ts/transport`, and `@spine-ts/testing`
-entry-point exports are present in the API model, checks
+`docs:check` also emits temporary TypeDoc JSON and verifies seven expected
+entry points in the API model: `@spine-ts/proto`, `@spine-ts/core`,
+`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/transport`,
+`@spine-ts/transport/zeromq`, and `@spine-ts/testing`. The
+`@spine-ts/transport/zeromq` entry point has its own exact-six-public-export
+gate. It also checks
 `@spine-ts/server` and `@spine-ts/storage` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.
