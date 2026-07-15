@@ -3548,6 +3548,20 @@ verify` remains reserved.
 - Every lane is read-only, childless, Git-read-only, correction-scoped, and
   subject to the historical-text rule. Reliability remains N/A.
 
+## D-0095 Soundness Re-Review Wave Result
+
+- Documentation `019f6677-9a9e-7a23-8db4-8f2098259dc1`, explicit/actual
+  immutable Luna Medium: clean; closed.
+- Style `019f6677-a17f-76c2-b8a9-9216cc3a1325`, explicit/actual immutable Terra
+  High: accepted P2 helper-runtime log wording; closed.
+- TypeScript/API `019f6677-9e5b-7381-a639-143d3b9d4295`, explicit/actual
+  immutable Terra High: accepted P1 open/index-signature bypass of
+  optional-`never` collision exclusions; closed.
+- D-0095's return-to-architecture condition is met. Resume the existing Sol
+  High splitter for a sound contract, explicitly comparing separate operation/
+  topic predicates against mechanically proven key exclusion. Preserve all
+  runtime wire/risk decisions and method generic order.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,

@@ -3562,6 +3562,23 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Reliability remains N/A. Aggregate all three affected results before closure
   or another complete fix batch.
 
+## D-0095 Soundness Re-Review Result And Architecture Escalation
+
+- Documentation `019f6677-9a9e-7a23-8db4-8f2098259dc1`, explicit/actual
+  immutable Luna Medium: clean; closed.
+- Style `019f6677-a17f-76c2-b8a9-9216cc3a1325`, explicit/actual immutable Terra
+  High: accepted P2 inaccurate claim that runtime implementation was unchanged;
+  only helper collision classification changed, not wire/adapter/server paths;
+  closed.
+- TypeScript/API `019f6677-9e5b-7381-a639-143d3b9d4295`, explicit/actual
+  immutable Terra High: accepted P1 that open/index-signature structural types
+  bypass optional-`never` and restore a false predicate guarantee; closed.
+- D-0095's explicit return-to-architecture condition is met. Resume splitter
+  `019f65eb-1eff-78d2-9bc7-cada7d23c056`, expected original explicit immutable
+  Sol High, read-only/childless/Git-read-only. Reconsider the single overloaded
+  helper versus separate operation/topic predicates or a mechanically sound
+  key-exclusion design. Preserve generic order and all wire decisions.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
