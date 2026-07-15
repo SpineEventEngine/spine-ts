@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - SF-013 two-frame native limit blocked; private one-frame
-architecture follow-up assigned
+Status: Blocked - SF-013 requires native receive replacement or explicit human
+risk acceptance
 
 Started: `2026-07-14`
 
@@ -3042,3 +3042,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
   routing while making native `maxMessageSize` the true aggregate cap. Specify
   exact bytes/parsing, compatibility correction, tests, and replacement D-0092
   text; reject the approach if it cannot preserve exact routing safely.
+
+## SF-013 Final Architecture Result And Blocking Question
+
+- The same splitter context confirmed that one-frame conforming traffic still
+  cannot close SF-013: a peer may append arbitrary multipart trailers, and
+  zeromq.js materializes all parts before JavaScript can enforce exact-one-frame
+  input. A NUL route delimiter would remove route-prefix ambiguity but not the
+  allocation bypass. The splitter is closed.
+- T-0041 is release-blocked pending one human choice: authorize replacement or
+  native extension of the ZeroMQ receive path with pre-allocation frame-count
+  and 8,388,608-byte aggregate enforcement, or explicitly accept the Medium/
+  high-confidence same-UID local DoS residual. Risk acceptance would still
+  require JavaScript exact-frame/aggregate defense in depth, raw-peer
+  continuation regressions, canonical review, and focused security closure.
+- D-0092 and the blocking question are recorded durably. No full verify,
+  integration, push, or T-0042 work may claim progress until the choice is made.

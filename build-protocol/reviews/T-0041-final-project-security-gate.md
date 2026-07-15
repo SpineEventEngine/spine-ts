@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: SF-013 two-frame native limit blocked; private one-frame architecture
-follow-up assigned
+Status: Blocked - SF-013 requires native receive replacement or explicit human
+risk acceptance
 
 Baseline: `39f2c6f7`
 
@@ -3118,3 +3118,15 @@ verify` remains reserved.
 - A two-frame fix would require new native capability or human risk acceptance.
   The same architecture context must now evaluate a one-frame private wire
   correction; no implementation is assigned until that result is accepted.
+
+## SF-013 Final Architecture Result And Blocker
+
+- The single-frame follow-up is not a closure: zeromq.js materializes arbitrary
+  appended multipart frames before JavaScript sees the count. A route delimiter
+  can fix prefix ambiguity only, not unbounded allocation.
+- Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda`, explicit and
+  actual immutable Sol High, is closed. No implementation/reviewer remains
+  active.
+- Review is blocked pending human authorization of native/replacement transport
+  work or explicit SF-013 residual-risk acceptance. Full verification and
+  integration remain pending.

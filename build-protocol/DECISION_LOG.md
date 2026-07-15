@@ -4121,3 +4121,51 @@ Consequences:
   and fail closed while unrelated valid work continues.
 - D-0087 through D-0090 remain unchanged. Deployment continues to own ingress,
   rate limits, same-host process isolation, and persistence-adapter integrity.
+
+Clarification (2026-07-15): `maxMessageSize` is a per-ZeroMQ-frame limit. It
+rejects an oversized individual frame before that frame's payload allocation,
+but does not limit multipart frame count or aggregate multipart bytes and must
+not be cited as an aggregate bound.
+
+## D-0092: Reject Single-Frame Encoding As A Native Multipart Bound
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: SF-013 established that zeromq.js 6.5.0 materializes every part of an
+inbound multipart ZeroMQ message as `Buffer[]` before returning from
+`receive()`. Consolidating valid publish and request traffic into one frame
+would bound each conforming message, but a peer could still append arbitrarily
+many individually bounded or empty frames. JavaScript exact-one-frame
+validation would run only after the complete multipart message had been
+allocated. Delimiter-free route concatenation is also unsafe because canonical
+routing keys are not prefix-free; a NUL delimiter removes that ambiguity but
+does not remove the allocation bypass.
+
+Decision:
+
+- Do not adopt single-frame encoding as the SF-013 correction and do not
+  describe `maxMessageSize` as an aggregate inbound-message bound.
+- Preserve D-0088 and D-0091, including Publisher `sendTimeout = -1`, while
+  applying D-0091's native limit only as a per-frame control.
+- T-0041 remains release-blocked until the receiving implementation rejects an
+  inbound part before allocation when either the permitted frame count or
+  aggregate byte count would be exceeded. Subscriber and Reply require at most
+  two parts and Request at most one; every inbound application message has an
+  8,388,608-byte aggregate maximum.
+- JavaScript exact-frame validation may be added as defense in depth, but is not
+  native/V8 allocation prevention and cannot close SF-013.
+- Without a native or replacement-binding control, the unbounded same-host DoS
+  residual requires explicit human risk acceptance.
+
+Consequences:
+
+- No public/package/Proto/storage contract changes are accepted by this
+  decision. Existing valid wire traffic and deployment responsibilities remain
+  unchanged.
+- Native dependency selection must account for cross-platform prebuilds,
+  lockfile/install-script provenance, continuation after peer rejection, and
+  focused SF-013 security review.
