@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 13 findings accepted; timer architecture split assigned
+Status: Canonical wave 13 correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1575,3 +1575,26 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
 - One Terra Medium implementer will receive the accepted architecture plus every
   other Wave 13 finding as a single bounded batch. All four canonical concerns
   rerun afterward; dedicated final security review remains pending.
+
+## Accepted Long-TTL Architecture
+
+- Requirements splitter `019f6473-737d-7c33-abe6-998ef9bdd43a` has matching
+  explicit and actual immutable `gpt-5.6-sol` / high evidence, used no child or
+  Git mutation, and is closed.
+- D-0090 will preserve current default/coercion/flooring but reject effective
+  `inactiveTtlMs` values above 2,147,483,647 synchronously with the exact
+  assigned TypeError. One absolute expiry and one unref'ed timer remain; no
+  silent cap, chunked timer, re-arm failure policy, durable codec change, or
+  queue/subscription-limit change is accepted.
+
+## Canonical Wave 13 Fix Assignment
+
+- One fresh existing `implementer`, expected explicit immutable Terra Medium,
+  owns the complete deduplicated batch: D-0090 plus service source/TSDoc/tests
+  and four TTL docs; exact publisher omission/default test; symmetric second
+  shared-close test; API README TypeDoc/ZeroMQ-gate text; security status; and
+  architecture future-policy text.
+- D-0089's runtime structural observer is explicitly preserved. No public
+  export, package/dependency/Proto/generated, D-0087/D-0088/D-0089, or unrelated
+  runtime change is authorized. All four Canonical Wave 14 lanes rerun before
+  dedicated final security review.

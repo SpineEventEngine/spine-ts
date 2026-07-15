@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 13 findings accepted; timer architecture split assigned
+Status: In progress - canonical wave 13 correction assigned
 
 Started: `2026-07-14`
 
@@ -1708,3 +1708,27 @@ succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
   subagents or Git mutation. One Terra Medium implementer receives the complete
   deduplicated batch after the split; all four canonical lanes rerun before the
   dedicated security review.
+
+## Accepted Long-TTL Architecture And Wave 13 Fix Assignment
+
+- Requirements splitter `019f6473-737d-7c33-abe6-998ef9bdd43a` was dispatched
+  explicitly as `gpt-5.6-sol` / high; the immutable role confirms the same
+  actual runtime profile. It spawned no children, made no Git mutation, and is
+  closed.
+- Accept a pre-release public-contract narrowing: preserve the 30,000 ms default
+  and existing normalization (non-positive/non-finite to 1; positive finite
+  values floored), then synchronously reject an effective TTL above
+  2,147,483,647 with `TypeError: SpineServices inactiveTtlMs must not exceed
+2147483647 milliseconds.` before storage or timer work. Preserve one absolute
+  durable expiry, one unref'ed timer, existing clear/failure/cancel/recovery
+  semantics, and all queue/subscription-limit behavior. Do not silently cap or
+  introduce timer chunking/re-arm policy. Record D-0090.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer for the complete Wave 13 batch:
+  D-0090/source/TSDoc/tests/four public TTL mirrors; exact publisher native-
+  default assertion; symmetric second-close regression; API README seventh
+  TypeDoc/exact-six gate wording; current security statuses; and architecture
+  future-policy exclusion wording. No runtime observer, public export, package,
+  dependency, Proto, generated-output, D-0087/D-0088/D-0089, or unrelated
+  behavior change. Use test-first evidence and focused verification; all four
+  canonical lanes rerun before dedicated security review.
