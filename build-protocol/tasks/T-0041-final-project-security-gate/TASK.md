@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 3 assigned
+Status: In progress - canonical wave 3 findings assigned
 
 Started: `2026-07-14`
 
@@ -532,6 +532,23 @@ directory replaced immediately after successful creation'` exited 1 with 1
   High, and reliability Terra High with immutable profile attestation. Read-only,
   no subagents/Git mutation, complete-wave aggregation, and superseded-history
   exclusion remain binding.
+
+## Canonical Review Wave 3 Result
+
+- Documentation agent `019f6354-2428-7b11-af1d-46180b16e05c`, actual immutable
+  Luna Medium, found missing explicit `ffd8549e` package provenance and one
+  findings-table path missing the `packages/` prefix.
+- TypeScript/API agent `019f6354-1c3f-7201-ae11-aced62f14e6d`, actual immutable
+  Terra High, found the public class TSDoc omits absent/zero query cap behavior.
+- Style agent `019f6354-2086-7c13-8614-6967eba71850`, actual immutable Terra
+  High, found a high resident-cancel/delayed-delete recovery revival race and an
+  oversized recovery method.
+- Reliability agent `019f6356-685b-7ab1-913d-3166033fdea6`, actual immutable
+  Terra High, independently confirmed the same high revival race.
+- All reviewers are closed. Resume the existing Terra Medium implementer for
+  the deduplicated four-item batch: per-ID removal coordination held through
+  durable deletion, recovery exclusion/await, deterministic race regression,
+  recovery method split, query-cap TSDoc, and security provenance/path fixes.
 
 ## Canonical Review Fix Batch Implementation
 

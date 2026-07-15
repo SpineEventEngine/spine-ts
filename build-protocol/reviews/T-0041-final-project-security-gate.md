@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 3 assigned
+Status: Canonical wave 3 findings assigned
 
 Baseline: `39f2c6f7`
 
@@ -425,6 +425,24 @@ bytes).
   request-close, IPC, and cleanup.
 - Read-only, no subagents/Git mutation, explicit profile attestation, historical
   superseded-text exclusion, and complete-wave aggregation are required.
+
+## Canonical Review Wave 3 Result
+
+- Documentation: two low provenance/path findings; agent
+  `019f6354-2428-7b11-af1d-46180b16e05c`, actual immutable Luna Medium.
+- TypeScript/API docs: one low missing query-cap class TSDoc finding; agent
+  `019f6354-1c3f-7201-ae11-aced62f14e6d`, actual immutable Terra High.
+- Style/maintainability: one high resident-cancel recovery-revival race and one
+  low oversized recovery-method finding; agent
+  `019f6354-2086-7c13-8614-6967eba71850`, actual immutable Terra High.
+- Performance/reliability: independently confirmed the same high race; agent
+  `019f6356-685b-7ab1-913d-3166033fdea6`, actual immutable Terra High.
+- Return the deduplicated four-item batch to existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable Terra
+  Medium: removal tombstone before release/removal, held through delete;
+  recovery waits/refuses; deterministic delayed-delete race; per-store method
+  extraction; class TSDoc and security provenance/path fixes. All reviewers are
+  closed; dedicated security re-review remains pending.
 
 ## Canonical Review Fix Batch Evidence
 
