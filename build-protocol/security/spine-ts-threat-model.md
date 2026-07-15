@@ -1,9 +1,10 @@
 # Spine TS Threat Model
 
 Status: T-0041 working threat model; SF-013 is a human-accepted Medium same-UID
-local IPC availability residual under D-0093. D-0094 implementation and focused
-mechanical verification are complete; final focused security re-review is
-pending.
+local IPC availability residual under D-0093. D-0094 remains accepted;
+D-0096's top-level-only predicate correction is coordinator-verified and
+affected canonical re-review is pending. Final focused security re-review
+follows canonical closure.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
@@ -185,3 +186,14 @@ public contract/export and stale private-object command/event fixtures; GREEN
 passed the required 87 native transport/runtime/cross-process regressions, 63
 additionally affected server regressions, both typechecks, focused ESLint, and
 the intentional 18/6 export boundary.
+
+## D-0096 Predicate Boundary Progress
+
+Separate public predicates fix the operation and topic paths without inspecting
+envelopes or validating untrusted input. The operation helper observes
+`operation.topic.signalKind` and narrows the correlated operation union. The
+topic helper observes only top-level `topic.signalKind`, narrows only that
+member, and leaves the unobserved routing descriptor widened. This correction
+changes no trust boundary, wire codec, frame handling, allocation behavior, or
+SF-013 disposition. Affected canonical re-review precedes the focused final
+security review.

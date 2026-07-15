@@ -3771,3 +3771,16 @@ Subscription cancellation failed.` instead of `AggregateError`.
   childless and Git-read-only, and is closed. Freeze and commit this correction,
   then run pre-review lint and the three affected canonical lanes; reliability
   remains N/A because no execution path changed.
+
+## D-0096 Top-Level-Only Pre-Review Lint
+
+- The lightweight status scan found one active-state defect: the security
+  findings and threat-model headers still named D-0094 as the latest pending
+  correction. Corrected those active mirrors to D-0096 and added the exact
+  top-level-only predicate boundary before packaging; historical chronology is
+  unchanged.
+- Source, tests, docs, checker, release matrix, task/work/review headers, and
+  D-0096 now agree on two fixed paths, top-level-only topic narrowing, and 20/6
+  exports. No duplicated production policy constant, unintentional public
+  adapter/schema/frame leakage, generated output, routing-validation claim, or
+  future-policy overclaim was found. Reliability remains N/A.

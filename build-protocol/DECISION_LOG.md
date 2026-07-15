@@ -4400,6 +4400,10 @@ Decision:
 - Add `isTransportOperationKind()`, which always compares
   `operation.topic.signalKind`, and `isTransportTopicKind()`, which always
   compares `topic.signalKind`.
+- Each predicate narrows only what its fixed path establishes. The operation
+  predicate narrows the correlated operation union; the topic predicate narrows
+  only top-level `topic.signalKind` and does not validate or narrow
+  `topic.routing.signalKind`.
 - Preserve every operation/topic shape and `SignalTransport` generic order.
   Both names satisfy the four-component public-name limit.
 - Keep the predicates as typed narrowing aids, not validators of untrusted
@@ -4421,7 +4425,8 @@ Consequences:
 
 - Compile and runtime tests cover widened/restricted publish, request, and topic
   inputs; open/index-signature types; dual-shaped values; invalid pair
-  preservation; fixed runtime paths; and zero envelope access.
+  preservation; fixed runtime paths; zero envelope access; and an intentionally
+  inconsistent widened topic proving unobserved routing remains widened.
 - Remove optional-`never`, shape classification, collision precedence, and
   collision rejection from the D-0095 implementation. Update active API and
   release inventory counts from 19 to 20.

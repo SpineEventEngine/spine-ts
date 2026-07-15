@@ -3,9 +3,9 @@
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
-UID local availability residual. The D-0094 canonical union-correlation
-correction implementation is complete and affected canonical re-review is
-pending. Focused final security re-review has not yet been dispatched.
+UID local availability residual. D-0096's top-level-only topic-narrowing
+correction is coordinator-verified and affected canonical re-review is pending.
+Focused final security re-review has not yet been dispatched.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -20,7 +20,7 @@ dispatch.
 
 Historical dedicated re-review package was
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
-bytes). That package predates the current D-0094 correction and is not the
+bytes). That package predates the current D-0096 correction and is not the
 active final-security package.
 
 Historical dedicated reviewer dispatch:
@@ -41,10 +41,11 @@ Proto generation. The duplicate server-runtime adapter proof is removed, and
 the public docs now distinguish Buf command/event frame 2 from private V8
 reserved-kind frame 2.
 
-This implementation awaits affected canonical re-review. The prior final
-security package and reviewer are historical; no replacement final-security
-package or dispatch exists yet. SF-013 remains accepted and unbounded in
-aggregate.
+The later D-0094 union-correlation and D-0096 fixed-path predicate corrections
+are coordinator-verified; affected D-0096 canonical re-review is pending. The
+prior final-security package and reviewer are historical; no replacement
+final-security package or dispatch exists yet. SF-013 remains accepted and
+unbounded in aggregate.
 
 ## Command and evidence ledger
 
@@ -198,3 +199,15 @@ private-object command/event fixtures; GREEN passed 87/87 required native tests,
 63/63 additionally affected server tests, both typechecks, focused ESLint, and
 the intentional 18/6 transport export checks. Focused final security re-review
 remains pending.
+
+## D-0096 Fixed-Path Predicate Evidence
+
+The public transport root exposes separate operation and topic predicates so
+function identity fixes the compared path even for open or dual-shaped values.
+The operation predicate narrows the correlated operation union from
+`operation.topic.signalKind`. The topic predicate compares only top-level
+`topic.signalKind` and promises only that observed fact; it does not validate or
+narrow `routing.signalKind`. A cast-free widened topic with top-level command
+and routing event proves the distinction at compile time and runtime. These
+typed narrowing aids do not alter ZeroMQ parsing, framing, allocation, or trust
+boundaries, and they do not reduce or expand accepted SF-013.

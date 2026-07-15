@@ -3730,3 +3730,16 @@ verify` remains reserved.
 - Freeze this seven-path correction for pre-review lint and affected style,
   documentation, and TypeScript/API re-review. Reliability remains N/A: the
   runtime predicate body and every adapter/server execution path are unchanged.
+
+## D-0096 Top-Level-Only Pre-Review Lint Result
+
+- Initial status lint found the security findings and threat-model headers
+  stale at D-0094. Their current mirrors and D-0096 evidence are corrected;
+  historical superseded text remains chronology only.
+- Current source/tests/docs/checker/matrix/decision/task records agree on the
+  two fixed paths, the topic helper's top-level-only guarantee, and 20/6
+  exports. Duplicate production policy, public leakage, generated output,
+  routing-validation language, and future-policy scans are clean.
+- Re-review style/maintainability, documentation, and TypeScript/API against a
+  compact correction package. Performance/reliability remains N/A because no
+  runtime predicate or adapter/server execution path changed.
