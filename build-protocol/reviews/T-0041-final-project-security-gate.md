@@ -3317,3 +3317,17 @@ verify` remains reserved.
   distinguish current wire behavior, exclusions, coordinated upgrade, and the
   accepted/unbounded SF-013 residual. The correction package is eligible for
   all four canonical reviewer lanes.
+
+## D-0094 Canonical Re-Review Package And Assignment
+
+- Frozen endpoint `cfd8658a`; baseline `f37c3801`; exact package
+  `.superpowers/sdd/review-f37c3801..cfd8658a.diff`; 2 commits; 73,613 bytes.
+- Style/maintainability: existing role, expected explicit immutable Terra High.
+- Documentation: existing role, expected explicit immutable Luna Medium.
+- TypeScript/API: existing role, expected explicit immutable Terra High.
+- Performance/reliability: existing role, expected explicit immutable Terra
+  High.
+- All lanes are read-only, childless, Git-read-only, correction-scoped, and
+  instructed to ignore superseded historical text unless current records or
+  changed docs claim it as active. Results are not accepted until the entire
+  wave is complete and deduplicated.

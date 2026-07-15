@@ -3284,3 +3284,16 @@ Subscription cancellation failed.` instead of `AggregateError`.
   explicit exclusions, and accepted SF-013 risk without promising a future
   codec, topology, scheduler, monitor, backoff, catch-up, or remote adapter.
   The compact correction is ready for all four canonical lanes.
+
+## D-0094 Canonical Re-Review Assignment
+
+- Frozen endpoint `cfd8658a`; correction baseline `f37c3801`; package
+  `.superpowers/sdd/review-f37c3801..cfd8658a.diff`; 2 commits; 73,613 bytes.
+- Dispatch the existing style/maintainability reviewer as explicit immutable
+  Terra High, documentation reviewer as explicit immutable Luna Medium,
+  TypeScript/API reviewer as explicit immutable Terra High, and performance/
+  reliability reviewer as explicit immutable Terra High.
+- Every reviewer is read-only, childless, Git-read-only, limited to this
+  correction and affected paths, and must ignore superseded historical text
+  unless current task records or changed docs claim it as active. Aggregate the
+  entire wave before accepting findings or assigning a correction.
