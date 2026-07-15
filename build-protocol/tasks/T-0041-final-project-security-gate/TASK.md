@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical fixes coordinator-verified; re-review pending
+Status: In progress - canonical review wave 2 assigned
 
 Started: `2026-07-14`
 
@@ -484,6 +484,15 @@ directory replaced immediately after successful creation'` exited 1 with 1
   `git diff --check` passed.
 - The corrected endpoint is ready to commit and package for the next four-lane
   canonical wave. Dedicated security re-review and task closure remain pending.
+
+## Canonical Review Wave 2 Assignment
+
+- Committed canonical fixes at `19728018` and generated immutable package
+  `.superpowers/sdd/review-39f2c6f7..19728018.diff` (12 commits, 236,186 bytes).
+- Repeat all four existing concerns with explicit immutable role attestation:
+  style Terra High, documentation Luna Medium, TypeScript/API Terra High, and
+  performance/reliability Terra High. Read-only, no subagents or Git mutation;
+  aggregate the complete wave before fixes.
 
 ## Canonical Review Fix Batch Implementation
 

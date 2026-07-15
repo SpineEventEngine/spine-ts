@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical fixes coordinator-verified; re-review pending
+Status: Canonical review wave 2 assigned
 
 Baseline: `39f2c6f7`
 
@@ -360,6 +360,26 @@ Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
   targeted wording/naming scans, generated tracking, and diff integrity passed.
 - Commit and package this endpoint, then repeat all four canonical concerns as
   one complete wave before dedicated project security re-review.
+
+## Canonical Review Wave 2 Assignment
+
+Package: `.superpowers/sdd/review-39f2c6f7..19728018.diff` (12 commits, 236,186
+bytes).
+
+- `style_maintainability_reviewer`: explicit immutable Terra High; verify the
+  prior method-size, naming, coverage, and maintainability corrections plus the
+  complete changed surface.
+- `documentation_reviewer`: explicit immutable Luna Medium; verify provenance,
+  zero/positive-limit wording, current status, and all changed public/security
+  claims.
+- `typescript_api_docs_reviewer`: explicit immutable Terra High; verify public
+  declarations/runtime agreement, exports, TSDoc, and internal seam isolation.
+- `performance_reliability_reviewer`: explicit immutable Terra High; verify
+  reservation ownership, request-close coordination, finite bounds, IPC races,
+  persistence, and cleanup.
+- Every lane is read-only, has no subagents or Git mutation, ignores historical
+  superseded text unless current records/docs claim it active, and must attest
+  its immutable role profile. Aggregate the full wave before fixes.
 
 ## Canonical Review Fix Batch Evidence
 
