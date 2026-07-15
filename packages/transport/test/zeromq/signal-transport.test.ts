@@ -11,6 +11,7 @@ import { Publisher, Reply, Request, Subscriber } from "zeromq";
 import {
   createTransportSubscription,
   createTransportTopic,
+  type PublishTransportOperation,
   type TransportTopic,
 } from "../../src/index.js";
 import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
@@ -365,6 +366,48 @@ describe("ZeroMQ SignalTransport", () => {
           "another ignored trailer",
         ]);
         await expect(request).resolves.toEqual({ accepted: true });
+      });
+    } finally {
+      replier.close();
+      connect.mockRestore();
+    }
+  });
+
+  it("rejects a malformed private reply and accepts a later valid reply", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    const addressReady = deferred<string>();
+    let captured = false;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        connectSocket(socket, address);
+        if (socket instanceof Request && !captured) {
+          captured = true;
+          addressReady.resolve(address);
+        }
+      });
+    const replier = new Reply({ linger: 0, receiveTimeout: 1_000, sendTimeout: 1_000 });
+    const topic = createTransportTopic({
+      signalKind: "system",
+      messageTypeUrl: "type.spine.io/example.MalformedPrivateReply",
+    });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const malformed = transport.request({ topic, envelope: { value: "malformed" } });
+        await replier.bind(await addressReady.promise);
+        await replier.receive();
+        await replier.send(serialize({ unexpected: true }));
+        await expect(malformed).rejects.toThrow("ZeroMQ transport received a malformed reply.");
+
+        const valid = transport.request<
+          { readonly value: string },
+          { readonly accepted: boolean },
+          "system"
+        >({ topic, envelope: { value: "valid" } });
+        await replier.receive();
+        await replier.send(serialize({ status: "accepted", envelope: { accepted: true } }));
+        await expect(valid).resolves.toEqual({ accepted: true });
       });
     } finally {
       replier.close();
@@ -792,6 +835,208 @@ describe("ZeroMQ SignalTransport", () => {
 
       await handle.close();
     });
+  });
+
+  it("round-trips query and subscription envelopes over the private V8 wire", async () => {
+    interface PrivateEnvelope {
+      readonly signalKind: "query" | "subscription";
+      readonly value: string;
+    }
+    const operations: readonly PublishTransportOperation<
+      PrivateEnvelope,
+      "query" | "subscription"
+    >[] = [
+      {
+        topic: createTransportTopic({
+          signalKind: "query",
+          messageTypeUrl: "type.spine.io/example/PrivateQuery",
+        }),
+        envelope: { signalKind: "query", value: "query-value" },
+      },
+      {
+        topic: createTransportTopic({
+          signalKind: "subscription",
+          messageTypeUrl: "type.spine.io/example/PrivateSubscription",
+        }),
+        envelope: { signalKind: "subscription", value: "subscription-value" },
+      },
+    ];
+
+    for (const operation of operations) {
+      await withZeroMqTransport(async (transport) => {
+        const subscription = createTransportSubscription({
+          subscriberId: `private-${operation.topic.signalKind}-worker`,
+          topic: operation.topic,
+        });
+        const received: PrivateEnvelope[] = [];
+        const handle = await transport.subscribe<PrivateEnvelope, "query" | "subscription">(
+          subscription,
+          ({ envelope }) => {
+            received.push(envelope);
+          },
+        );
+
+        await publishUntil(
+          () => transport.publish<PrivateEnvelope, "query" | "subscription">(operation),
+          () => received.length > 0,
+        );
+
+        expect(received).toEqual([operation.envelope]);
+        await handle.close();
+      });
+    }
+  });
+
+  it("rejects a prefixed unexpected publish route and recovers from a missing envelope", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    let subscriberAddress: string | undefined;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        subscriberAddress = address;
+        connectSocket(socket, address);
+      });
+    const failures: Error[] = [];
+
+    try {
+      await withZeroMqTransport(
+        async (transport) => {
+          const topic = createTransportTopic({
+            signalKind: "system",
+            messageTypeUrl: "type.spine.io/example/PublishRouteValidation",
+          });
+          const received: string[] = [];
+          const handle = await transport.subscribe<{ readonly value: string }, "system">(
+            createTransportSubscription({ subscriberId: "publish-route-validation", topic }),
+            ({ envelope }) => {
+              received.push(envelope.value);
+            },
+          );
+          if (subscriberAddress === undefined) {
+            throw new Error("Expected subscriber endpoint address.");
+          }
+          const publisher = new Publisher({ linger: 0 });
+
+          try {
+            await publisher.bind(subscriberAddress);
+            await waitFor(25);
+            await publishUntil(
+              () =>
+                publisher.send([
+                  topic.routing.routingKey,
+                  serialize({ value: "subscriber-ready" }),
+                ]),
+              () => received.length === 1,
+            );
+            await waitFor(25);
+            received.length = 0;
+            await publisher.send([
+              `${topic.routing.routingKey}:unexpected`,
+              serialize({ value: "wrong-route" }),
+            ]);
+            await publishUntil(
+              () => publisher.send([topic.routing.routingKey]),
+              () => failures.some((error) => error.message.includes("incomplete envelope")),
+            );
+            expect(received).toEqual([]);
+
+            await publishUntil(
+              () => publisher.send([topic.routing.routingKey, serialize({ value: "valid-route" })]),
+              () => received.length === 1,
+            );
+            expect(received).toEqual(["valid-route"]);
+          } finally {
+            publisher.close();
+            await handle.close();
+          }
+        },
+        { onBackgroundFailure: (error) => failures.push(error) },
+      );
+    } finally {
+      connect.mockRestore();
+    }
+  });
+
+  it("rejects unexpected and incomplete request frames before serving a valid request", async () => {
+    const bindSocket = zeroMqSocketAccess.bindReply.bind(zeroMqSocketAccess);
+    let replyAddress: string | undefined;
+    const bind = vi.spyOn(zeroMqSocketAccess, "bindReply").mockImplementation((socket, address) => {
+      replyAddress = address;
+      return bindSocket(socket, address);
+    });
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const topic = createTransportTopic({
+          signalKind: "system",
+          messageTypeUrl: "type.spine.io/example/RequestRouteValidation",
+        });
+        const received: string[] = [];
+        const handle = await transport.respond<
+          { readonly value: string },
+          { readonly accepted: boolean },
+          "system"
+        >(
+          createTransportSubscription({
+            subscriberId: "request-route-validation",
+            topic,
+            mode: "competing-consumer",
+          }),
+          ({ envelope }) => {
+            received.push(envelope.value);
+            return { accepted: true };
+          },
+        );
+        if (replyAddress === undefined) {
+          throw new Error("Expected replier endpoint address.");
+        }
+        const requester = new Request({ linger: 0, receiveTimeout: 500, sendTimeout: 500 });
+
+        try {
+          requester.connect(replyAddress);
+          await requester.send([
+            `${topic.routing.routingKey}:unexpected`,
+            serialize({ value: "wrong-route" }),
+          ]);
+          const [unexpectedRouteReply] = await requester.receive();
+          if (unexpectedRouteReply === undefined) {
+            throw new Error("Expected unexpected-route failure reply.");
+          }
+          expect(deserialize(unexpectedRouteReply)).toEqual({
+            status: "failed",
+            message: "ZeroMQ transport received an unexpected route.",
+          });
+          expect(received).toEqual([]);
+
+          await requester.send([topic.routing.routingKey]);
+          const [incompleteReply] = await requester.receive();
+          if (incompleteReply === undefined) {
+            throw new Error("Expected incomplete-envelope failure reply.");
+          }
+          expect(deserialize(incompleteReply)).toEqual({
+            status: "failed",
+            message: "ZeroMQ request handler failed.",
+          });
+          expect(received).toEqual([]);
+
+          await requester.send([topic.routing.routingKey, serialize({ value: "valid-route" })]);
+          const [validReply] = await requester.receive();
+          if (validReply === undefined) {
+            throw new Error("Expected valid request reply.");
+          }
+          expect(deserialize(validReply)).toEqual({
+            status: "accepted",
+            envelope: { accepted: true },
+          });
+          expect(received).toEqual(["valid-route"]);
+        } finally {
+          requester.close();
+          await handle.close();
+        }
+      });
+    } finally {
+      bind.mockRestore();
+    }
   });
 
   it("round-trips request and response envelopes through the SignalTransport contract", async () => {

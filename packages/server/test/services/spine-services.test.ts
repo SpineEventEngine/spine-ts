@@ -4915,6 +4915,24 @@ describe("SpineServices", () => {
         durableStateAny("DurableSubscriptionCancel", { id, extra: true }),
       ),
     ).toThrow("Durable subscription cancel must contain exactly id.");
+    expect(() => DurableSubscriptionRecords.readState(cancel, "s-other-storage-key")).toThrow(
+      "Durable subscription record ID does not match storage key.",
+    );
+    expect(() =>
+      DurableSubscriptionRecords.readState(
+        durableStateAny("UnknownDurableSubscriptionState", { id }),
+      ),
+    ).toThrow("Durable subscription record type URL is invalid.");
+
+    for (const state of [
+      durableStateAny("DurableSubscriptionClaim", { id: ` ${id}`, owner: "owner-1" }),
+      durableStateAny("DurableSubscriptionClaim", { id, owner: "owner-1 " }),
+      durableStateAny("DurableSubscriptionCancel", { id: `${id} ` }),
+    ]) {
+      expect(() => DurableSubscriptionRecords.readState(state)).toThrow(
+        /must not have surrounding whitespace/u,
+      );
+    }
   });
 
   it("deletes recovered durable subscriptions whose stored target type disagrees with the topic", async () => {

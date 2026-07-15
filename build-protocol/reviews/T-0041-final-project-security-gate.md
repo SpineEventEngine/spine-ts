@@ -3919,3 +3919,45 @@ verify` remains reserved.
   public-contract changes. Security remains N/A absent production boundary
   changes because the focused final security review is already clean; otherwise
   it must be reopened. Historical superseded text is not active state.
+
+## Full Gate Branch-Coverage Test Batch Implementer Evidence
+
+- The accepted RED remains the native global branch result `89.81%`
+  (`4,726/5,262`) after 73 files / 1,767 tests passed. The implementation adds
+  useful existing-behavior coverage only: durable-state ID/type/whitespace
+  validation and real ZeroMQ public adapter/socket query/subscription V8,
+  malformed private reply, route rejection, incomplete-frame, and continuation
+  paths. No production path or public contract changed.
+- Complete native changed suites passed: server 149/149 and ZeroMQ transport
+  63/63. The final exact five-test command passed 5 with 207 skipped. GREEN
+  `pnpm --config.verify-deps-before-run=false test:coverage:generated` exited 0
+  with 73 files / 1,771 tests and branches `90.04%` (`4,738/5,262`), alongside
+  statements `95.38%`, functions `98.27%`, and lines `95.39%`. This is +12
+  observed branches with a two-branch threshold margin.
+- Focused typecheck, lint, exact formatting, diff, generated, ownership, and
+  forbidden-scope evidence is recorded in the work log. The only changed paths
+  are the two assigned tests and three active durable records; full `verify`
+  remains a coordinator gate.
+- Human wire/security decisions are untouched: Proto command/event Buf;
+  reserved query/subscription/system and private-result V8; 8,388,608 bytes per
+  inbound frame; first-two request/publish frames and first meaningful reply
+  frame with trailers ignored; accepted SF-013 aggregate allocation. Security
+  and TypeScript/API remain N/A for this test-only batch. Style/maintainability
+  and performance/reliability re-review remain pending after coordinator
+  acceptance. Implementer actual metadata is immutable `gpt-5.6-terra` /
+  `medium`; childless and Git-state-read-only.
+
+## Full Gate Branch-Coverage Coordinator Acceptance And Pre-Review Result
+
+- Coordinator-native verification passed both complete changed suites at 2
+  files / 212 tests, tooling typecheck, focused ESLint, exact five-path
+  formatting, and diff integrity. The implementer actual profile is immutable
+  Terra Medium; it remained childless/Git-state-read-only and is closed.
+- Lightweight review lint confirms exactly two test files plus three records,
+  no production/public/generated/docs/security change, synchronized active
+  status, no duplicate policy source, no API leakage, and no future-policy
+  overclaim. Human wire decisions and accepted SF-013 remain unchanged.
+- Freeze from implementation baseline `9a3ce8f8`. Review style/maintainability
+  for useful/readable scope and performance/reliability for deterministic,
+  bounded IPC/lifecycle behavior and the two-branch coverage margin.
+  Documentation, TypeScript/API, and security retain justified N/A.

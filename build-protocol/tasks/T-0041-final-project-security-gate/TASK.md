@@ -3984,3 +3984,53 @@ Subscription cancellation failed.` instead of `AggregateError`.
   aggregate multipart allocation accepted for the initial release. The
   post-project ZeroMQ issue/workaround Internet research remains due after
   release closure and is not this coverage fix.
+
+## Full Gate Branch-Coverage Test Batch Implementer Result
+
+- Added test-only characterization for durable-state expected-ID mismatch,
+  cancel-state fallthrough to invalid type URL, and surrounding-whitespace
+  rejection, plus real ZeroMQ adapter/socket coverage for malformed private
+  replies, query/subscription private V8 round trips, unexpected routes,
+  incomplete envelopes, continuation, and later valid traffic. No production
+  source or behavior changed.
+- The coordinator's native full-gate result is the strict RED: 73 files / 1,767
+  tests passed, then global branch coverage failed at `89.81%`
+  (`4,726/5,262`) against 90%; statements were `95.29%`
+  (`9,539/10,010`), functions `98.27%` (`2,452/2,495`), and lines `95.30%`
+  (`9,356/9,817`). Characterization assertions were not fabricated to fail.
+- GREEN coverage command
+  `pnpm --config.verify-deps-before-run=false test:coverage:generated` exited 0
+  with 73 files / 1,771 tests and exact totals: statements `95.38%`
+  (`9,548/10,010`), branches `90.04%` (`4,738/5,262`), functions `98.27%`
+  (`2,452/2,495`), and lines `95.39%` (`9,365/9,817`). This adds 12 observed
+  branches and four tests, leaving two observed branches of threshold margin.
+- Focused native validation passed both complete changed suites (server
+  149/149; ZeroMQ transport 63/63) and the final exact five-test selection
+  (5 passed / 207 skipped). Focused tooling typecheck, ESLint, exact formatting,
+  diff integrity, generated visibility, and ownership scans are recorded in the
+  work log. Full `verify` was deliberately reserved for the coordinator.
+- Binding wire/security decisions remain unchanged: Buf for Proto
+  command/event signals; private V8 only for reserved query/subscription/system
+  kinds and private results; the 8,388,608-byte per-frame ceiling; first-two
+  request/publish frames and first meaningful reply frame with trailers ignored;
+  and accepted SF-013 aggregate multipart allocation. The batch is
+  implementation-complete and awaits coordinator review/full-gate restart.
+
+## Full Gate Branch-Coverage Coordinator Acceptance And Pre-Review Lint
+
+- Coordinator-native rerun passed both complete changed suites together: 2
+  files / 212 tests. Fresh tooling typecheck, focused ESLint, exact five-path
+  formatting, and `git diff --check` also pass. Implementer
+  `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra Medium,
+  remained childless and Git-state-read-only and is closed.
+- Diff inspection confirms exactly two test files plus three active records and
+  no production source, declaration, export, generated output, public docs, or
+  security artifact. Current status agrees that coverage is green at 90.04%
+  with style/reliability review and full verification pending. Historical
+  superseded pending text remains chronology only.
+- The lightweight duplicate/public-leakage/docs-overclaim audit is clean: no
+  production constant or policy changed, no internal type became public, and no
+  documentation claim was added. D-0093/D-0094/D-0096 and SF-013 wording remain
+  unchanged. Freeze the bounded batch for style/maintainability and performance/
+  reliability review; documentation, TypeScript/API, and security retain their
+  recorded N/A dispositions.
