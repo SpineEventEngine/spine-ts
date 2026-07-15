@@ -513,3 +513,53 @@ scripts/check-release-readiness.test.mjs` failed as expected with
   avoids an infinite chain of status-only commits.
 - The required public ZeroMQ/libzmq/zeromq.js issue research begins only after
   this initial-release closure and does not reopen T-0042.
+
+## 2026-07-15 - Final Closure Claim Review Assignment
+
+- Candidate endpoint `05e256aa`; compact package
+  `.superpowers/sdd/review-40d48f1b..05e256aa.diff`, 15,803 bytes, one
+  records-only commit.
+- Existing documentation reviewer, explicit immutable
+  `gpt-5.6-luna` / medium. Verify that the completion claim follows from the
+  recorded runtime/docs/example/security/review/gate/remote/cleanup evidence,
+  that preserved historical worktrees are correctly excluded, and that the
+  post-completion research obligation is not mislabeled unfinished release
+  work.
+- Spawned `019f675d-4e93-7e52-8f7d-17aa57499b34`.
+
+## 2026-07-15 - Final Closure Claim Finding
+
+- Accepted P1: candidate `05e256aa` cannot claim its own verification/push
+  contract satisfied while `origin/main` still resolves to `40d48f1b`.
+- Correct sequence: preserve this finding record, make the tracked worktree
+  exactly clean at `05e256aa`, run the full native gate, push that exact
+  commit, confirm `origin/main == 05e256aa`, then restore the review record and
+  request bounded re-review.
+
+## 2026-07-15 - Final Closure Claim Fix
+
+- Temporarily stashed only the five coordinator-owned closure records; protected
+  untracked content was excluded. Confirmed the tracked worktree was exactly
+  clean at `05e256aa`.
+- Native `pnpm --config.verify-deps-before-run=false verify` on that exact
+  commit exited 0: ordinary and coverage 74 files / 1,780 tests; 95.38%
+  statements, 90.04% branches, 98.27% functions, 95.39% lines; all
+  TypeScript/lint/format/TypeDoc/API/Proto/generated/58/107 stages passed.
+- Pushed `05e256aa` to `origin/main`; `git ls-remote origin
+refs/heads/main` returned exact full SHA
+  `05e256aae02d8353b580fc3d31f8c18682a8f500`.
+- Restored the five review records and dropped the temporary stash. The
+  candidate's explicit full-verify/push/remote-confirmation contract is now
+  satisfied; request bounded re-review of the original P1.
+
+## 2026-07-15 - Final Closure Claim Re-Review
+
+- Same Luna Medium reviewer `019f675d-4e93-7e52-8f7d-17aa57499b34` returned
+  clean and was closed.
+- It independently confirmed exact clean `05e256aa` full-gate evidence and
+  equality of local `HEAD`, local `origin/main`, and live
+  `git ls-remote`; it also confirmed the temporary stash is gone and diff
+  integrity is clean.
+- The original premature-completion P1 is closed. Commit `05e256aa` remains
+  the verified and pushed closure commit; this subsequent commit records the
+  clean re-review result and does not redefine the closure gate.
