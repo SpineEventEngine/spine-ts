@@ -1812,6 +1812,17 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   the substantive commit, then generate Canonical Wave 14. Dedicated security
   review remains pending.
 
+## Wave 13 Immutable Implementation Endpoint
+
+- Commit `fe207c7e` contains the coordinator-verified D-0090 TTL contract,
+  service and transport regressions, active documentation/status corrections,
+  and durable evidence.
+- Both security artifacts now identify `fe207c7e` as substantive implementation
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal baseline package after this
+  reconciliation, then run all four Canonical Wave 14 lanes. Dedicated security
+  review remains pending.
+
 ## Wave 13 Coordinator Evidence Correction Result
 
 - The oversized-TTL table now matches the exact assigned `TypeError` object;

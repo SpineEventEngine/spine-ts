@@ -1659,6 +1659,14 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   provenance before Canonical Wave 14. Dedicated final security review remains
   pending.
 
+## Wave 13 Immutable Implementation Endpoint
+
+- Commit `fe207c7e` is the substantive Wave 13 implementation endpoint. Both
+  security artifacts identify it directly; this provenance-only follow-up and
+  later review/status commits are not implementation evidence.
+- Generate the literal package after provenance reconciliation, then run every
+  Canonical Wave 14 concern. Dedicated final security review remains pending.
+
 ## Wave 13 Coordinator Evidence Correction Result
 
 - The exact `TypeError` object matcher, clean API verification sentence, and
