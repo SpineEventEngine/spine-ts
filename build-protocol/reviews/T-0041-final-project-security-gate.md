@@ -3471,6 +3471,17 @@ verify` remains reserved.
   Terra Medium, remained childless and Git-clean and is closed. Freeze and
   re-review style, docs, and TypeScript/API; reliability remains N/A.
 
+## D-0095 Pre-Review Lint Result
+
+- Current statuses are synchronized at implementation complete/re-review
+  pending, with no premature security dispatch.
+- One intentional helper export yields 19/6; no schema, validator, adapter, or
+  server leakage and no duplicated policy constant exists.
+- Docs distinguish narrowing from validation, make no future-policy claim, and
+  received one mechanical line wrap. Generated output is absent.
+- Style, docs, and TypeScript/API must review; reliability is N/A under D-0095's
+  stateless equality/no-execution-path rationale.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,

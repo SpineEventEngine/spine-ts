@@ -712,9 +712,10 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`, and `hasTransportSignalKind()`. This root surface is contract-only: it defines
-immutable topic/subscription value objects, deterministic adapter-agnostic
-routing keys, handler callback signatures, and graceful async close behavior.
+`createTransportSubscription()`, and `hasTransportSignalKind()`. This root
+surface is contract-only: it defines immutable topic/subscription value objects,
+deterministic adapter-agnostic routing keys, handler callback signatures, and
+graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
 production endpoint topology, broker processes, child process supervision,
 participant lifecycle values, worker registrations, delivery attempt/result

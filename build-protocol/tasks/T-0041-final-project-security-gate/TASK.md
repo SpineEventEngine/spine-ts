@@ -3463,6 +3463,22 @@ Subscription cancellation failed.` instead of `AggregateError`.
   closed. Freeze and re-review style, docs, and TypeScript/API; reliability
   remains N/A under D-0095.
 
+## D-0095 Pre-Review Lint
+
+- Current task/work/review statuses agree that D-0095 implementation is
+  complete and affected re-review is pending. D-0095 is accepted and no final
+  security dispatch is claimed.
+- `hasTransportSignalKind()` is the sole intentional public addition, exact
+  root/subpath counts are 19/6, and no schema, validator, ZeroMQ, or server
+  concept leaked. The helper reads one canonical kind and owns no duplicated
+  policy constant.
+- Public docs explicitly distinguish type narrowing from untrusted-input and
+  envelope validation and make no future-policy claim. One mechanical API
+  overview line was wrapped; generated output remains absent from Git.
+- Style, documentation, and TypeScript/API are affected. Performance/
+  reliability remains N/A because the helper is stateless equality with no I/O,
+  lifecycle, allocation, timing, or adapter execution-path effect.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
