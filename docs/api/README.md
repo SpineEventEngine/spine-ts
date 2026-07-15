@@ -289,12 +289,12 @@ bound, not a process-wide or distributed quota. Unknown-ID cancellation uses a
 separate internal pool of the same size. Known-local cancellation retains its
 normal subscription capacity until durable cancellation settles. If that
 persistence fails, `Cancel` returns Connect `INTERNAL` with `Subscription
-cancellation failed.`; retry `Cancel` with the same `Subscription`/ID returned
-by `Subscribe`. That retry contract does not apply to internal cleanup after an
+cancellation failed.`; retry `Cancel` with the same returned `Subscription`
+message containing its ID. That retry contract does not apply to internal cleanup after an
 initial failed `Subscribe`. If a normal inactive-expiry timer fires and durable
 cleanup fails, its timer stays cleared, the local record and its capacity remain,
-and no automatic retry or new timer is scheduled; `Cancel` with that same ID can
-retry the durable cleanup and release the capacity. Defaults are 30 seconds for inactive expiry and 100
+and no automatic retry or new timer is scheduled; `Cancel` with that same
+returned `Subscription` message containing its ID can retry the durable cleanup and release the capacity. Defaults are 30 seconds for inactive expiry and 100
 queued updates per active subscription. Active streams and queued updates remain
 process-local and are not replayed after activation or restart. This is not a
 client DSL, broad server lifecycle, projection catch-up loop, cross-process

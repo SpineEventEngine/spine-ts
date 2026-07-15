@@ -361,13 +361,14 @@ work uses a separate internal pool with the same bound. Pool exhaustion returns
 Connect `RESOURCE_EXHAUSTED` before storage access. If known-local durable
 cancellation persistence fails, `Cancel` returns Connect `INTERNAL` with
 `Subscription cancellation failed.`, retains that instance's capacity, and the
-client should retry `Cancel` with the same returned `Subscription`/ID. This
+client should retry `Cancel` with the same returned `Subscription` message
+containing its ID. This
 retry guidance applies only to an ID returned by `Subscribe`; cleanup after an
 initial failed `Subscribe` stays internal and uses the inactive TTL when its
 timer can be retained. If inactive-expiry cleanup fails after its timer is
 cleared, the instance retains its local record and capacity with no automatic
-retry; explicit `Cancel` with that same `Subscription`/ID can retry persistence
-cleanup. Active streams and their queues are not recovered or replayed after
+retry; explicit `Cancel` with that same returned `Subscription` message
+containing its ID can retry persistence cleanup. Active streams and their queues are not recovered or replayed after
 disconnection or process restart, so clients must query current state when they
 need a fresh view.
 

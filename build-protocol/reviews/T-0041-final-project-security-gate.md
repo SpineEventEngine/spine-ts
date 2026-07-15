@@ -1,6 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 17 findings accepted; correction assigned
+Status: Wave 17 findings fixed; correction verification current; Canonical Wave
+18 re-review and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2121,3 +2122,50 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   or D-0087-D-0090 contract change is authorized. Require `docs:check`, exact
   formatting, anchor/request-shape/status scans, and diff integrity. All four
   Canonical Wave 18 lanes rerun before dedicated final security review.
+
+## Wave 17 Correction Verification
+
+- The accepted documentation P2 is fixed in all three active public documents:
+  a retry sends the same returned `Subscription` message containing its ID, not
+  a bare ID string. The distinct internal initial-`Subscribe` cleanup path is
+  preserved.
+- The accepted style P2 is fixed: restored tenant equality now anchors to
+  `spine-services.ts:793-815`; both redaction references now anchor to
+  `signal-transport.test.ts:817-848`.
+- Only the eight assigned documentation/evidence/log paths changed. Requested
+  focused docs, exact Prettier, targeted wording/anchor/status scans, and diff
+  integrity verification apply. Wave 17 findings are fixed and correction
+  verification is current; Canonical Wave 18 re-review and dedicated security
+  re-review are pending. No canonical or security acceptance is claimed.
+- Evidence: `pnpm --config.verify-deps-before-run=false docs:check` exited 0
+  (25 copied Proto checksums and API counts `100/28/205/19/17/6/3`); exact
+  eight-path Prettier, active wording/anchor/status scans, and `git diff --check`
+  exited 0. No runtime tests or full verification ran.
+
+## Wave 17 Coordinator Status Correction
+
+- The accepted docs/anchor batch is present, but task/work/review top statuses
+  still claim findings accepted/correction assigned. Both security headers and
+  appended entries correctly say correction verification is current.
+- Resume implementer `019f64e1-5753-7bc3-835d-5a62005c7b11` under the original
+  explicit immutable Terra Medium dispatch to synchronize only those three top
+  lines to Wave 17 fixed/correction verification current and Wave 18 pending.
+  Exact formatting, active-status scan, and diff integrity follow.
+
+## Canonical Wave 17 Correction Coordinator Verification
+
+- Implementer `019f64e1-5753-7bc3-835d-5a62005c7b11` has matching original
+  explicit dispatch and tool-enforced immutable actual `gpt-5.6-terra` / medium
+  evidence for both the initial batch and resumed status correction; it used no
+  child or Git mutation and is closed.
+- Direct inspection accepts six corrected retry sentences, three exact active
+  evidence anchors, preserved internal-cleanup distinction, and synchronized
+  general/security status. No runtime, test, public API, package/dependency/
+  Proto, generated output, or D-0087-D-0090 change occurred.
+- Fresh `docs:check` passed with 25 Proto checksum validations and API counts
+  `100/28/205/19/17/6/3`; exact eight-path Prettier,
+  request-shape/anchor/status, generated/package-boundary, and diff-integrity
+  checks all passed.
+- Commit and reconcile the endpoint, then assign all four Canonical Wave 18
+  roles before package generation. Dedicated final security review remains
+  pending.
