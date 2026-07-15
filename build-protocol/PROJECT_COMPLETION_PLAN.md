@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0041 final project security gate
+Status: In execution at T-0042 release readiness and project closure
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0041 final project security gate
+Active implementation frontier: T-0042 release readiness and project closure
 
 ## Purpose
 
@@ -89,10 +89,11 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0040c is complete, integrated, post-merge verified, and
-remotely synchronized. T-0041 final project-wide security review is the active
-implementation frontier. The dated Starting State above is historical
-plan-creation context.
+Current status: T-0041 is complete, integrated, and post-merge verified with a
+clean focused final security review and one explicit human-accepted SF-013
+residual. Remote synchronization/cleanup are the remaining durability steps.
+T-0042 release readiness and project closure is the active implementation
+frontier. The dated Starting State above is historical plan-creation context.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,

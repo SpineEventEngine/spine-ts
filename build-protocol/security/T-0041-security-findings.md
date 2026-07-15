@@ -1,10 +1,10 @@
 # T-0041 Security Findings and Evidence
 
-Status: Final security gate complete. SF-007 through SF-012 controls and all
-accepted corrections are verified; Canonical Wave 23 and the focused final
-security re-review are clean. SF-013 remains the explicit human-accepted Medium
-same-UID local availability residual. Full task verification passes; integration
-is pending.
+Status: Final security gate complete, integrated, and post-merge verified.
+SF-007 through SF-012 controls and all accepted corrections are verified;
+Canonical Wave 23 and the focused final security re-review are clean. SF-013
+remains the explicit human-accepted Medium same-UID local availability residual.
+Remote synchronization is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only

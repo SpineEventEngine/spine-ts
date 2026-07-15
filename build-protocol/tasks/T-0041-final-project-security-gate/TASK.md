@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: Implementation complete - full task verification passed; integration pending
+Status: Complete - integrated and post-merge verified; remote synchronization pending
 
 Started: `2026-07-14`
 
@@ -4240,3 +4240,21 @@ Subscription cancellation failed.` instead of `AggregateError`.
   dependency audits/signatures, accepted SF-013 risk, and full verification are
   complete. Integration, post-merge native verification, remote synchronization,
   and clean worktree removal remain before durable task closure.
+
+## Integration And Post-Merge Verification
+
+- Merged clean task endpoint `7f042485` into root `main` as merge commit
+  `1ba204ef`. The protected root `human-review-1-jul.md` remained untracked,
+  unstaged, unread, and unchanged.
+- The first post-merge full gate stopped in build typecheck because root
+  `node_modules` predated the newly merged transport dependency links.
+  `pnpm install --frozen-lockfile` reused all 199 packages from cache, downloaded
+  none, changed no tracked file, and restored the workspace links.
+- The complete native post-install rerun exits 0: ordinary and coverage tests
+  each pass 73 files / 1,772 tests; coverage remains `95.38/90.04/98.27/95.39`
+  percent for statements/branches/functions/lines. Typechecks, lint/cleanup,
+  format, TypeDoc/API `100/28/205/19/20/6/3`, Proto lint/checksums, and generated
+  cleanliness all pass.
+- T-0041 is integrated and post-merge verified. Remote synchronization and clean
+  worktree/local-branch removal remain; T-0042 becomes the active product
+  frontier after the status commit.
