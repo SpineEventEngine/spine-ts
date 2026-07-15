@@ -3420,3 +3420,23 @@ verify` remains reserved.
 - Every lane is read-only, childless, Git-read-only, correction-scoped, and
   must ignore superseded historical text unless current state claims it active.
   Reliability is N/A under the recorded no-runtime-change rationale.
+
+## D-0094 Union-Correlation Re-Review Wave Result
+
+- Style `019f664b-74bf-76a0-9523-6d3df4e85ea8`, explicit/actual immutable Terra
+  High: clean; closed.
+- Documentation `019f664b-78c8-7e91-ae30-776b9bd58c1e`, explicit/actual
+  immutable Luna Medium: clean; closed.
+- TypeScript/API `019f664b-70fd-7753-94ed-01f285973de3`, explicit/actual
+  immutable Terra High: accepted P1 union consumer narrowing defect; closed.
+- Reliability remains N/A/prior clean. Deep public-contract planning is
+  required only for a minimal discriminable union design. Preserve generic
+  order and all D-0093 runtime/wire/risk decisions.
+
+## D-0094 Discriminable-Union Architecture Assignment
+
+- Resume splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, expected original
+  explicit/actual immutable Sol High, read-only, childless, and Git-read-only.
+- Return one minimal public design that permits valid union construction and
+  narrowing while preventing invalid pairs. Compare compatibility and inference
+  costs; preserve generic order and all runtime wire/risk decisions.

@@ -3400,3 +3400,31 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Performance/reliability retains N/A for this wave because no runtime
   execution path changed. Aggregate all three affected results before any
   further correction; focused final security follows only after clean closure.
+
+## D-0094 Union-Correlation Re-Review Result
+
+- Style `019f664b-74bf-76a0-9523-6d3df4e85ea8`, explicit/tool-enforced actual
+  immutable Terra High: clean; closed.
+- Documentation `019f664b-78c8-7e91-ae30-776b9bd58c1e`, explicit/tool-enforced
+  actual immutable Luna Medium: clean; closed.
+- TypeScript/API `019f664b-70fd-7753-94ed-01f285973de3`, explicit/tool-enforced
+  actual immutable Terra High: accepted P1 that invalid union pairs are
+  rejected but valid union handlers cannot narrow envelope type by the nested
+  `operation.topic.signalKind`; widened topics are similarly hard to consume;
+  closed.
+- Performance/reliability retains its recorded N/A and prior clean result.
+  Resume the existing requirements splitter under Sol High for only the
+  smallest honest discriminable public contract. Preserve method generic order,
+  runtime wire behavior, and D-0093 decisions; do not automatically add a
+  top-level field or helper without comparing compatibility and inference.
+
+## D-0094 Discriminable-Union Architecture Assignment
+
+- Resume requirements splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, expected
+  original explicit/tool-enforced immutable `gpt-5.6-sol` / high, read-only,
+  childless, and Git-read-only.
+- Compare the smallest public designs that make valid widened/union operations
+  constructible and narrowable while rejecting invalid topic/envelope pairs.
+  Include exact compatibility, inference, declaration, docs/export, and compile
+  tests. Preserve public method generic order and every runtime wire/risk
+  decision; return one recommendation, not implementation.
