@@ -3924,3 +3924,70 @@ D-0085's environment-owned bounded delivery lifecycle; integrated T-0038b
 uses that completed lifecycle for same-host context transport composition.
 The child sequence remains historical decomposition, not a public API or a
 commitment to excluded policy.
+
+## D-0087: Fence Subscription Activation With Persisted Ownership
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: T-0041 canonical review wave 4 proved that process-local removal
+coordination cannot fence a second `SpineServices` instance sharing the same
+durable subscription storage. Recovery currently CAS-deletes the inactive row
+before remembering the subscription locally, so another instance can report a
+successful cancellation while the winner retains an active process-local
+stream. The same review also proved that arbitrary distinct unknown cancel IDs
+create unbounded process-local removal operations and storage fan-out.
+
+Decision:
+
+- Keep the existing durable inactive-subscription representation compatible,
+  and add package-private JSON-in-`Any` claim and cancellation-marker states.
+  These are internal storage states, not public or generated Protobuf contracts.
+  The shared record spec extracts the ID from all three states.
+- Activation and recovery atomically CAS the exact inactive record to an exact
+  persisted claim containing a unique owner token. The claim remains persisted
+  for the process-local active stream's lifetime. A local record retains the
+  exact claim value needed for later cleanup.
+- Cancellation and terminal cleanup transition an exact owned claim, or an
+  exact inactive record, to a cancellation marker and then conditionally remove
+  that exact marker. Activation, recovery, and cancellation do not use
+  unconditional deletion for lifecycle transitions.
+- A cancellation that wins before activation returns success only after marker
+  cleanup. Same-instance cancellation owns and removes its claim. A cancel that
+  observes another instance's active claim returns `Code.Aborted` with
+  `Subscription is active in another service instance.` because no cross-process
+  channel can close that process-local stream truthfully.
+- Same-ID cancels share one local removal operation. Two instances cancelling
+  one inactive record may both succeed after absence is established. Missing-ID
+  and confirmed-absent cancellation remain idempotent successes.
+- Marker cleanup/storage failure returns `Code.Internal` with `Subscription
+cancellation failed.` and leaves a marker when one was installed, so later
+  activation remains fenced and a later cancellation can retry cleanup.
+  Repeated concurrent changes use at most three state retries before
+  `Code.Aborted` with `Subscription cancellation could not settle concurrent
+storage changes.`
+- Distinct non-local cancellation operations use a separate per-instance set
+  bounded by `subscriptionLimit`. Same-ID work shares one slot. Overflow is
+  rejected before any storage operation with `Code.ResourceExhausted` and
+  `Subscription cancellation capacity is exhausted.` Known local cleanup keeps
+  its normal subscription reservation until persistence settles and does not
+  consume the unknown-cancellation pool.
+- Recovery that observes a claim or cancellation marker never reserves,
+  remembers, or attaches the subscription. It may conditionally clean a marker.
+  Existing inactive records need no migration.
+
+Consequences:
+
+- A successful cancellation cannot coexist with an activation revived from the
+  canceled persistent record. If remote activation already won, cancellation
+  reports conflict instead of false success.
+- Process crashes may leave an active claim without a live stream. Without a
+  lease or cross-process liveness protocol, other instances cannot distinguish
+  that stale claim from a live owner. Recovery remains blocked and remote
+  cancellation remains `Aborted`; lease reclamation is a separate excluded
+  feature.
+- No public service, package export, `RecordStorage`, generated Protobuf,
+  manifest, or lockfile change is introduced.

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 4 findings pending architecture
+Status: In progress - wave 4 fixes assigned
 
 Started: `2026-07-14`
 
@@ -591,6 +591,30 @@ directory replaced immediately after successful creation'` exited 1 with 1
   read-only/no subagents/Git mutation, to define the smallest persistence-scoped
   cancellation/recovery fence and bounded unknown-removal contract before
   implementation.
+
+## Wave 4 Architecture Decision And Fix Assignment
+
+- Existing `requirements_splitter` agent
+  `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4` completed read-only with actual
+  immutable `gpt-5.6-sol` / high, matching the explicit expected profile, and
+  is closed. It spawned no subagents and made no repository changes.
+- Its skill check inspected the project protocol, expected-skill manifest,
+  installed metadata, current storage/service implementation, security
+  artifacts, and relevant JVM evidence. Security threat/mitigation skills were
+  applicable; implementation, TDD, worktree, and review skills were N/A for the
+  read-only architecture role.
+- D-0087 accepts package-private JSON-in-`Any` inactive, owned-claim, and
+  cancel-marker states. Exact CAS transitions make activation ownership
+  persistent across storage handles. Remote cancellation of another instance's
+  claim returns `Aborted`; successful cancellation cannot coexist with revived
+  activation. Existing inactive rows remain compatible.
+- Distinct non-local removals use a separate per-instance pool bounded by
+  `subscriptionLimit`; same-ID work shares one operation and overflow rejects
+  before storage with `ResourceExhausted`.
+- Resume existing `implementer` `019f62d7-31cc-7c13-a0b1-61d25dff9e23`,
+  expected explicit immutable `gpt-5.6-terra` / medium, for one bounded TDD,
+  runtime, docs, security-artifact, and durable-log batch. No subagents or Git
+  mutation. Canonical and dedicated security review remain pending.
 
 ## Canonical Wave 3 Fix Implementation
 

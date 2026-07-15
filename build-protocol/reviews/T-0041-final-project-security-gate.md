@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 4 findings pending architecture
+Status: Canonical wave 4 fixes assigned
 
 Baseline: `39f2c6f7`
 
@@ -488,6 +488,25 @@ bytes).
   `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`, expected explicit immutable Sol High,
   must define the smallest persisted fence/bounded-removal contract before one
   Terra Medium implementation batch. Dedicated security re-review remains
+  pending.
+
+## Wave 4 Architecture And Fix Disposition
+
+- Existing requirements splitter `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`
+  completed with actual immutable Sol High, matching its explicit expected
+  profile, and is closed without writes or subagents.
+- D-0087 accepts an exact persisted inactive-to-claim-to-marker-to-absence CAS
+  lifecycle. Remote-owned claims produce truthful `Aborted` cancellation;
+  existing inactive records remain compatible and no public/generated contract
+  changes.
+- Distinct non-local removals receive a separate per-instance bound equal to
+  `subscriptionLimit`; overflow rejects before storage and same-ID operations
+  remain shared.
+- Return the complete accepted batch to existing implementer
+  `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected explicit immutable Terra
+  Medium. Require deterministic two-instance RED/GREEN plus cleanup, capacity,
+  compatibility, docs, security-artifact, and provenance corrections before a
+  fresh immutable package. Canonical and dedicated security re-review remain
   pending.
 
 ## Canonical Wave 3 Fix Evidence
