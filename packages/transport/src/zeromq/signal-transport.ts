@@ -4,6 +4,8 @@ import { lstat, mkdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
+import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { Publisher, Reply, Request, Subscriber, type Socket, type MessageLike } from "zeromq";
 
 import type {
@@ -159,7 +161,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     this.#requireOpen();
     await zeroMqSocketAccess.sendPublisher(publisher.socket, [
       operation.topic.routing.routingKey,
-      encodeEnvelope(operation.envelope),
+      encodeEnvelope(operation.topic, operation.envelope),
     ]);
   }
 
@@ -269,7 +271,7 @@ class ZeroMqSignalTransport implements SignalTransport {
       zeroMqSocketAccess.connect(requester, endpoint.address);
       await zeroMqSocketAccess.sendRequest(requester, [
         operation.topic.routing.routingKey,
-        encodeEnvelope(operation.envelope),
+        encodeEnvelope(operation.topic, operation.envelope),
       ]);
       const [response] = await requester.receive();
       const decoded = decodeReply(response);
@@ -482,7 +484,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
         await entry.handler({
           topic: entry.subscription.topic,
-          envelope: decodeEnvelope(envelopeFrame),
+          envelope: decodeEnvelope(entry.subscription.topic, envelopeFrame),
         });
       } catch (error) {
         this.#recordBackgroundFailure(error);
@@ -515,8 +517,9 @@ class ZeroMqSignalTransport implements SignalTransport {
 
         const response = await entry.handler({
           topic: entry.subscription.topic,
-          envelope: decodeEnvelope(envelopeFrame),
+          envelope: decodeEnvelope(entry.subscription.topic, envelopeFrame),
         });
+        rejectGeneratedProtoReply(response);
         await replier.send(encodeReplySuccess(response));
       } catch (error) {
         this.#recordBackgroundFailure(error);
@@ -712,16 +715,47 @@ function endpointFor(
   });
 }
 
-function encodeEnvelope(envelope: unknown): Buffer {
-  return serialize(envelope);
+function encodeEnvelope(topic: TransportTopic, envelope: unknown): Buffer {
+  switch (topic.signalKind) {
+    case "command":
+      return Buffer.from(
+        toBinary(CommandSchema, envelope as Command, { writeUnknownFields: false }),
+      );
+    case "event":
+      return Buffer.from(toBinary(EventSchema, envelope as Event, { writeUnknownFields: false }));
+    case "query":
+    case "subscription":
+    case "system":
+      return serialize(envelope);
+  }
 }
 
-function decodeEnvelope(frame: Buffer | undefined): unknown {
+function decodeEnvelope(topic: TransportTopic, frame: Buffer | undefined): unknown {
   if (frame === undefined) {
     throw new Error("ZeroMQ transport received an incomplete envelope.");
   }
 
-  return deserialize(frame);
+  switch (topic.signalKind) {
+    case "command":
+      return fromBinary(CommandSchema, frame, { readUnknownFields: false });
+    case "event":
+      return fromBinary(EventSchema, frame, { readUnknownFields: false });
+    case "query":
+    case "subscription":
+    case "system":
+      return deserialize(frame);
+  }
+}
+
+function rejectGeneratedProtoReply(envelope: unknown): void {
+  if (
+    envelope !== null &&
+    typeof envelope === "object" &&
+    "$typeName" in envelope &&
+    typeof envelope.$typeName === "string"
+  ) {
+    throw new Error("ZeroMQ transport cannot encode generated Protobuf replies.");
+  }
 }
 
 async function prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
@@ -942,7 +976,11 @@ function encodeReplyFailure(message: string): MessageLike {
 }
 
 function decodeReply(frame: Buffer | undefined): ReplyEnvelope {
-  const decoded = decodeEnvelope(frame);
+  if (frame === undefined) {
+    throw new Error("ZeroMQ transport received an incomplete envelope.");
+  }
+
+  const decoded: unknown = deserialize(frame);
 
   if (isReplyEnvelope(decoded)) {
     return decoded;

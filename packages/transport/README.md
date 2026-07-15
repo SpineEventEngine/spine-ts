@@ -64,10 +64,16 @@ descriptor. A directory substitution after the final recheck therefore remains
 possible. Deploy the canonical IPC directory beneath a non-attacker-writable
 parent, and grant access only to trusted same-host peers.
 
-The adapter serializes envelopes with Node's V8 serializer. Treat every
-`ipc://` frame as trusted runtime data, not as an untrusted network protocol:
-only same-host Spine TS runtime peers that already trust each other should share
-the transport, and `ipcDirectory` must be private to those peers.
+For `command` and `event` topics, the private adapter writes and reads the
+generated Spine `Command` and `Event` envelopes as Buf Protobuf binary with
+unknown fields disabled. `query`, `subscription`, and `system` remain private
+V8-serialized reserved seams until they have concrete Protobuf contracts.
+Publish/request receivers consume the route and payload prefix only; a request
+reply consumes its one private V8 result frame. Surplus multipart trailers are
+ignored after native receipt, not bounded in aggregate. Treat every `ipc://`
+frame as trusted runtime data: only same-host Spine TS runtime peers that
+already trust each other should share the transport, and `ipcDirectory` must be
+private to those peers.
 
 `createZeroMqTransport()` bounds request/reply send and receive work with
 `requestTimeoutMs`, which defaults to 2,000 milliseconds. When supplied, it

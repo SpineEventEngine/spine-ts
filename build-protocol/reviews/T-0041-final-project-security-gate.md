@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: In progress - D-0093 architecture accepted; Protobuf wire implementation
-pending
+Status: In progress - D-0093 coordinator-verified; canonical and focused
+security review pending
 
 Baseline: `39f2c6f7`
 
@@ -3169,3 +3169,43 @@ verify` remains reserved.
   unless the implementation regresses them.
 - One implementer is assigned under expected explicit immutable Terra Medium;
   no review is dispatched before focused mechanical checks pass.
+
+## D-0093 Implementer Evidence Pending Review
+
+- The implementation context reports native-IPC RED for V8 outbound bytes, raw
+  Buf command/event non-delivery, and generated Proto reply acceptance, followed
+  by focused Buf behavior GREEN.
+- Review must confirm no public transport signature/export change, schema-kind
+  dispatch without Proto-to-V8 fallback, prefix-only frame consumption, and the
+  explicit SF-013 accepted/unbounded-in-aggregate disposition. This is evidence
+  only, not a reviewer disposition.
+- Coordinator inspection found reply-trailer behavior unproven: the named test
+  receives only the transport responder's single reply frame. Focused
+  correction and coordinator verification are required before packaging.
+
+## D-0093 Reply-Trailer Correction Evidence Pending Review
+
+- A raw native `Reply` peer now verifies that the requester sends route plus Buf
+  `Command` frames and consumes only the first valid private reply frame when
+  two trailers follow. The generated Proto-reply rejection remains separately
+  covered.
+- Regression RED was captured by temporarily selecting the final reply frame:
+  the request rejected on V8 trailer deserialization. The restored first-frame
+  implementation passed the two focused reply tests. This is implementer
+  evidence; final reviewer disposition remains pending.
+
+## D-0093 Coordinator Acceptance And Review Assignment
+
+- The same implementer context, explicit and actual immutable Terra Medium,
+  added the missing raw Reply peer under RED/GREEN, reran the complete transport
+  file 58/58, remained childless/Git-clean, and is closed.
+- Fresh coordinator-native verification passed 3 files/79 tests, generated
+  build typecheck, focused lint, exact changed-path formatting, generated docs
+  with stable API counts, generated-clean, and diff integrity.
+- Freeze the implementation endpoint after commit. Pre-review lint must check
+  current status, duplicated codec/limit constants, public schema leakage,
+  active V8 claims, dependency direction, future-policy overclaim, generated
+  output, and SF-013's explicit accepted/unbounded distinction.
+- All four canonical concerns remain relevant and must review only the compact
+  D-0093 implementation package. Focused security re-review follows complete
+  canonical closure.

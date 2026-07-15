@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0093 architecture accepted; Protobuf wire implementation
-pending
+Status: In progress - D-0093 coordinator-verified; canonical and focused
+security review pending
 
 Started: `2026-07-14`
 
@@ -3147,3 +3147,38 @@ Subscription cancellation failed.` instead of `AggregateError`.
   generated-clean checks, and make no commit or child-agent dispatch.
 - Decision checkpoint commit `4b3c30cd` is pushed to
   `origin/task/T-0041-final-project-security-gate`.
+
+## D-0093 Implementation Progress
+
+- The sole implementation owner added private Buf wire dispatch for generated
+  command/event envelopes, retained V8 for reserved non-Proto kinds and private
+  request replies, and rejects generated Protobuf successful replies.
+- Native IPC RED proved V8 outbound bytes, raw Buf handler non-reachability,
+  and generated Proto reply acceptance before implementation. The focused Buf
+  behavior tests and focused final-state checks are green; focused security
+  re-review remains pending.
+- SF-013 remains accepted and unbounded in aggregate: ignoring protocol
+  trailers occurs only after zeromq.js materializes the multipart message.
+
+## D-0093 Coordinator Acceptance
+
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e` ran under the explicitly
+  dispatched, tool-enforced immutable actual `gpt-5.6-terra` / medium profile,
+  completed the mandatory skill check and strict RED/GREEN cycles, made no Git
+  state mutation, spawned no child, and is closed after correction acceptance.
+- Coordinator inspection returned one missing proof: the initial reply-trailer
+  test never supplied a trailer. The same context added a raw Reply peer; RED
+  selected the final trailer and failed 1/1, while GREEN consumed frame 1,
+  ignored two trailers, and kept Proto-reply rejection separate. The complete
+  transport file passed 58/58.
+- Fresh coordinator-native verification passed the complete transport, runtime
+  transport, and server cross-process files: 3 files, 79 tests. Generated build
+  typecheck, focused three-file ESLint, exact 14-path Prettier, generated docs
+  and API export counts `100/28/205/19/17/6/3`, generated cleanliness, and
+  `git diff --check` passed.
+- Source/dependency/doc inspection accepts exact private Command/Event Buf wire,
+  no Proto-to-V8 fallback, unchanged public roots/signatures, private non-Proto
+  result replies, prefix-only frame use, the 8 MiB per-frame cap, and honest
+  SF-013 accepted-residual wording. Freeze and commit the implementation, then
+  run pre-review lint and all four relevant canonical concerns before focused
+  final security re-review.

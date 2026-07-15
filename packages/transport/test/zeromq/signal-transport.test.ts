@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { serialize } from "node:v8";
 
+import { create, toBinary } from "@bufbuild/protobuf";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import { describe, expect, it, vi } from "vitest";
 import { Publisher, Reply, Request, Subscriber } from "zeromq";
 
@@ -72,7 +74,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("keeps publishers at the native default send timeout", async () => {
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PublisherTimeoutScope",
     });
     const requestTimeoutMs = 123;
@@ -113,7 +115,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const eventTopic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ReceiverCapEvent",
         });
         await expect(
@@ -128,7 +130,7 @@ describe("ZeroMQ SignalTransport", () => {
       });
       await withZeroMqTransport(async (transport) => {
         const commandTopic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ReceiverCapCommand",
         });
         await expect(
@@ -159,6 +161,231 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
+  it("sends command and event envelopes as their exact Buf binary bytes", async () => {
+    const eventTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.BufOutboundEvent",
+    });
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.BufOutboundCommand",
+    });
+    const event = create(EventSchema);
+    const command = create(CommandSchema);
+    const sendPublisher = vi.spyOn(zeroMqSocketAccess, "sendPublisher");
+    const sendRequest = vi
+      .spyOn(zeroMqSocketAccess, "sendRequest")
+      .mockRejectedValue(new Error("stop after observing request bytes"));
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        await transport.publish({ topic: eventTopic, envelope: event });
+        await expect(transport.request({ topic: commandTopic, envelope: command })).rejects.toThrow(
+          "stop after observing request bytes",
+        );
+
+        expect(sendPublisher).toHaveBeenCalledWith(expect.any(Publisher), [
+          eventTopic.routing.routingKey,
+          Buffer.from(toBinary(EventSchema, event, { writeUnknownFields: false })),
+        ]);
+        expect(sendRequest).toHaveBeenCalledWith(expect.any(Request), [
+          commandTopic.routing.routingKey,
+          Buffer.from(toBinary(CommandSchema, command, { writeUnknownFields: false })),
+        ]);
+      });
+    } finally {
+      sendRequest.mockRestore();
+      sendPublisher.mockRestore();
+    }
+  });
+
+  it("decodes raw Buf event frames, ignores publish trailers, and continues after malformed bytes", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    let subscriberAddress: string | undefined;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        subscriberAddress = address;
+        connectSocket(socket, address);
+      });
+    const topic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.BufInboundEvent",
+    });
+    const received: Event[] = [];
+    const failures: Error[] = [];
+
+    try {
+      await withZeroMqTransport(
+        async (transport) => {
+          const handle = await transport.subscribe<Event, "event">(
+            createTransportSubscription({ subscriberId: "buf-inbound-event", topic }),
+            ({ envelope }) => received.push(envelope),
+          );
+          if (subscriberAddress === undefined) {
+            throw new Error("Expected subscriber endpoint address.");
+          }
+          const publisher = new Publisher({ linger: 0 });
+          const event = create(EventSchema);
+
+          try {
+            await publisher.bind(subscriberAddress);
+            await waitFor(25);
+            await publisher.send([
+              topic.routing.routingKey,
+              Buffer.from([0x80]),
+              "ignored trailer",
+            ]);
+            await waitFor(() => failures.length > 0);
+            await publishUntil(
+              () =>
+                publisher.send([
+                  topic.routing.routingKey,
+                  Buffer.from(toBinary(EventSchema, event, { writeUnknownFields: false })),
+                  "ignored trailer",
+                ]),
+              () => received.length === 1,
+            );
+            expect(received).toEqual([event]);
+          } finally {
+            publisher.close();
+            await handle.close();
+          }
+        },
+        { onBackgroundFailure: (error) => failures.push(error) },
+      );
+    } finally {
+      connect.mockRestore();
+    }
+  });
+
+  it("decodes raw Buf command frames, returns generic malformed failures, and ignores request trailers", async () => {
+    const bindSocket = zeroMqSocketAccess.bindReply.bind(zeroMqSocketAccess);
+    let replyAddress: string | undefined;
+    const bind = vi.spyOn(zeroMqSocketAccess, "bindReply").mockImplementation((socket, address) => {
+      replyAddress = address;
+      return bindSocket(socket, address);
+    });
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.BufInboundCommand",
+    });
+    const received: Command[] = [];
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const handle = await transport.respond<Command, { readonly status: string }, "command">(
+          createTransportSubscription({
+            subscriberId: "buf-inbound-command",
+            topic,
+            mode: "competing-consumer",
+          }),
+          ({ envelope }) => {
+            received.push(envelope);
+            return { status: "accepted" };
+          },
+        );
+        if (replyAddress === undefined) {
+          throw new Error("Expected replier endpoint address.");
+        }
+        const requester = new Request({ linger: 0, receiveTimeout: 500, sendTimeout: 500 });
+        const command = create(CommandSchema);
+
+        try {
+          requester.connect(replyAddress);
+          await requester.send([topic.routing.routingKey, Buffer.from([0x80])]);
+          await expect(requester.receive()).resolves.toHaveLength(1);
+          expect(received).toEqual([]);
+
+          await requester.send([
+            topic.routing.routingKey,
+            Buffer.from(toBinary(CommandSchema, command, { writeUnknownFields: false })),
+            "ignored trailer",
+          ]);
+          await expect(requester.receive()).resolves.toHaveLength(1);
+          expect(received).toEqual([command]);
+        } finally {
+          requester.close();
+          await handle.close();
+        }
+      });
+    } finally {
+      bind.mockRestore();
+    }
+  });
+
+  it("consumes only the first raw reply frame when trailers follow a valid private reply", async () => {
+    const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
+    const addressReady = deferred<string>();
+    let captured = false;
+    const connect = vi
+      .spyOn(zeroMqSocketAccess, "connect")
+      .mockImplementation((socket, address) => {
+        connectSocket(socket, address);
+        if (socket instanceof Request && !captured) {
+          captured = true;
+          addressReady.resolve(address);
+        }
+      });
+    const replier = new Reply({ linger: 0, receiveTimeout: 1_000, sendTimeout: 1_000 });
+    const topic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.RawReplyTrailers",
+    });
+    const command = create(CommandSchema);
+
+    try {
+      await withZeroMqTransport(async (transport) => {
+        const request = transport.request<Command, { readonly accepted: boolean }, "command">({
+          topic,
+          envelope: command,
+        });
+        await replier.bind(await addressReady.promise);
+        const requestFrames = await replier.receive();
+
+        expect(requestFrames).toEqual([
+          Buffer.from(topic.routing.routingKey),
+          Buffer.from(toBinary(CommandSchema, command, { writeUnknownFields: false })),
+        ]);
+        await replier.send([
+          serialize({ status: "accepted", envelope: { accepted: true } }),
+          "ignored trailer",
+          "another ignored trailer",
+        ]);
+        await expect(request).resolves.toEqual({ accepted: true });
+      });
+    } finally {
+      replier.close();
+      connect.mockRestore();
+    }
+  });
+
+  it("rejects a generated Proto successful reply", async () => {
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/example.ProtoReplyRejected",
+    });
+    const subscription = createTransportSubscription({
+      subscriberId: "proto-reply-rejected",
+      topic: commandTopic,
+      mode: "competing-consumer",
+    });
+
+    await withZeroMqTransport(async (transport) => {
+      const handle = await transport.respond<Command, Event, "command">(subscription, () =>
+        create(EventSchema),
+      );
+
+      await expect(
+        transport.request<Command, Event, "command">({
+          topic: commandTopic,
+          envelope: create(CommandSchema),
+        }),
+      ).rejects.toThrow("ZeroMQ request handler failed.");
+      await handle.close();
+    });
+  });
+
   it("drops an oversized raw publish frame and receives a later valid delivery", async () => {
     const connectSocket = zeroMqSocketAccess.connect.bind(zeroMqSocketAccess);
     let subscriberAddress: string | undefined;
@@ -172,7 +399,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.OversizedRawPublish",
         });
         const received: string[] = [];
@@ -222,7 +449,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.OversizedRawRequest",
         });
         const received: string[] = [];
@@ -288,7 +515,7 @@ describe("ZeroMQ SignalTransport", () => {
       await withZeroMqTransport(
         async (transport) => {
           const topic = createTransportTopic({
-            signalKind: "command",
+            signalKind: "system",
             messageTypeUrl: "type.spine.io/example.OversizedRawReply",
           });
           const oversized = transport.request({ topic, envelope: { value: "oversized" } });
@@ -322,7 +549,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("blocks a pre-bound publish when close starts after publisher lookup", async () => {
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PreBoundClosingPublish",
     });
     await withZeroMqTransport(async (transport) => {
@@ -344,7 +571,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("closes a publisher before draining its already-started send", async () => {
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PausedClosingPublish",
     });
     const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
@@ -406,7 +633,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("keeps paused publish and cleanup failures with their initiating callers", async () => {
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PausedClosingCleanupFailure",
     });
     const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
@@ -480,7 +707,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.TaskCreated",
       });
       const subscription = createTransportSubscription({
@@ -514,7 +741,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("round-trips request and response envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
-        signalKind: "command",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.LookupTask",
       });
       const subscription = createTransportSubscription({
@@ -549,7 +776,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("closes the successful request socket exactly once before resolving", async () => {
     const topic = createTransportTopic({
-      signalKind: "command",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanup",
     });
     const sendRequest = zeroMqSocketAccess.sendRequest.bind(zeroMqSocketAccess);
@@ -588,7 +815,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("surfaces successful request cleanup failure without aggregation", async () => {
     const topic = createTransportTopic({
-      signalKind: "command",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanupFailure",
     });
     const sendRequest = zeroMqSocketAccess.sendRequest.bind(zeroMqSocketAccess);
@@ -635,7 +862,7 @@ describe("ZeroMQ SignalTransport", () => {
     await withZeroMqTransport(
       async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.UnansweredCloseRequest",
         });
         const started = deferred<undefined>();
@@ -676,7 +903,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("removes a replier IPC pathname when its registration closes", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
       const topic = createTransportTopic({
-        signalKind: "command",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ReplierCleanupTask",
       });
       const subscription = createTransportSubscription({
@@ -696,7 +923,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("closes a replier after bind failure and preserves cleanup failure second", async () => {
     const topic = createTransportTopic({
-      signalKind: "command",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.DuplicateResponderCleanupTask",
     });
     const subscription = createTransportSubscription({
@@ -754,7 +981,7 @@ describe("ZeroMQ SignalTransport", () => {
           throw closeFailure;
         });
         const topic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RequestCleanupFailureTask",
         });
 
@@ -791,7 +1018,7 @@ describe("ZeroMQ SignalTransport", () => {
           throw closeFailure;
         });
         const topic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.PublisherCleanupFailureTask",
         });
 
@@ -819,7 +1046,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("connects subscribers without binding the publish endpoint", async () => {
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SharedPublishedTask",
     });
     const subscriberOne = createTransportSubscription({
@@ -843,7 +1070,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("does not create publish IPC socket files when subscribing", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlySubscriptionTask",
       });
       const subscription = createTransportSubscription({
@@ -880,7 +1107,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withSharedZeroMqTransports(async (publisherTransport, subscriberTransport) => {
         const topic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ClosingSubscriberSetupTask",
         });
         const subscription = createTransportSubscription({
@@ -1005,11 +1232,11 @@ describe("ZeroMQ SignalTransport", () => {
   it("leaves sibling-owned pathnames intact when connect-only sockets close", async () => {
     await withSharedZeroMqTransports(async (ownerTransport, connectorTransport, ipcDirectory) => {
       const eventTopic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlyOwnershipEvent",
       });
       const commandTopic = createTransportTopic({
-        signalKind: "command",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlyOwnershipCommand",
       });
       const eventHandle = await connectorTransport.subscribe(
@@ -1046,7 +1273,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("shares the first publisher bind across concurrent publishes", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConcurrentPublishedTask",
       });
 
@@ -1066,7 +1293,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("removes a publisher IPC pathname when the transport closes", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.PublisherCleanupTask",
       });
 
@@ -1090,11 +1317,11 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport, ipcDirectory) => {
         const commandTopic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RetryCleanupCommand",
         });
         const eventTopic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RetryCleanupEvent",
         });
         await transport.respond(
@@ -1138,11 +1365,11 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport, ipcDirectory) => {
         const commandTopic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.StableCleanupCommand",
         });
         const eventTopic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.StableCleanupEvent",
         });
         await transport.respond(
@@ -1179,7 +1406,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("treats an already absent owned pathname as closed", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.MissingCleanupTask",
       });
       await transport.publish({ topic, envelope: { published: true } });
@@ -1197,7 +1424,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("removes a publisher pathname when close wins the bind race", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
       const topic = createTransportTopic({
-        signalKind: "event",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ClosingPublisherSetupTask",
       });
 
@@ -1216,7 +1443,7 @@ describe("ZeroMQ SignalTransport", () => {
     await withZeroMqTransport(
       async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.FailingSubscriberTask",
         });
         const subscription = createTransportSubscription({
@@ -1277,7 +1504,7 @@ describe("ZeroMQ SignalTransport", () => {
     await withZeroMqTransport(
       async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "event",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.SocketNamedFailureTask",
         });
         const subscription = createTransportSubscription({
@@ -1311,7 +1538,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("sanitizes request handler failures returned to requesters", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
-        signalKind: "command",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.SecretFailingTask",
       });
       const subscription = createTransportSubscription({
@@ -1347,7 +1574,7 @@ describe("ZeroMQ SignalTransport", () => {
     await withZeroMqTransport(
       async (transport) => {
         const topic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.SocketNamedCommandFailure",
         });
         const subscription = createTransportSubscription({
@@ -1383,7 +1610,7 @@ describe("ZeroMQ SignalTransport", () => {
       }),
     );
     const topic = createTransportTopic({
-      signalKind: "event",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.OpenDirectoryTask",
     });
 
@@ -1468,7 +1695,7 @@ describe("ZeroMQ SignalTransport", () => {
 
       try {
         const topic = createTransportTopic({
-          signalKind: "command",
+          signalKind: "system",
           messageTypeUrl: "type.spine.io/example.CanonicalAliasTask",
         });
         const handle = await transport.respond(
@@ -1543,7 +1770,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("prevents all native operations after prepared-directory replacement", async () => {
     const topic = createTransportTopic({
-      signalKind: "command",
+      signalKind: "system",
       messageTypeUrl: "type.spine.io/example.RecheckReplacementTask",
     });
     const subscription = createTransportSubscription({
@@ -1607,7 +1834,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("closes registrations and rejects later operations without exposing adapter details", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
-        signalKind: "command",
+        signalKind: "system",
         messageTypeUrl: "type.spine.io/example.CloseTask",
       });
       const subscription = createTransportSubscription({
@@ -1754,7 +1981,7 @@ async function expectPausedSharedClose({
 
   try {
     const fixture = withSharedZeroMqTransports(async (firstTransport, secondTransport) => {
-      const topic = createTransportTopic({ signalKind: "event", messageTypeUrl });
+      const topic = createTransportTopic({ signalKind: "system", messageTypeUrl });
       const selectedTransport = transport === "first" ? firstTransport : secondTransport;
       opening = selectedTransport.subscribe(
         createTransportSubscription({ subscriberId, topic }),
@@ -1837,7 +2064,7 @@ interface PausedBoundary {
 }
 
 interface CloseBlockedOperationCase {
-  readonly signalKind: "command" | "event";
+  readonly signalKind: "system" | "event";
   readonly nativeGuards: readonly (() => NativeCallGuard)[];
   open(
     transport: ReturnType<typeof createZeroMqTransport>,
@@ -1848,13 +2075,13 @@ interface CloseBlockedOperationCase {
 
 const closeBlockedOperations: Record<CloseBlockedOperation, CloseBlockedOperationCase> = {
   "subscriber-connect": {
-    signalKind: "event",
+    signalKind: "system",
     nativeGuards: [guardNativeConnect],
     open: (transport, topic, subscriberId) =>
       transport.subscribe(createTransportSubscription({ subscriberId, topic }), () => undefined),
   },
   "responder-bind": {
-    signalKind: "command",
+    signalKind: "system",
     nativeGuards: [guardNativeReplyBind],
     open: (transport, topic, subscriberId) =>
       transport.respond(
@@ -1867,12 +2094,12 @@ const closeBlockedOperations: Record<CloseBlockedOperation, CloseBlockedOperatio
       ),
   },
   "publisher-bind": {
-    signalKind: "event",
+    signalKind: "system",
     nativeGuards: [guardNativePublisherBind],
     open: (transport, topic) => transport.publish({ topic, envelope: { published: true } }),
   },
   "request-connect": {
-    signalKind: "command",
+    signalKind: "system",
     nativeGuards: [guardNativeConnect, guardNativeRequestSend],
     open: (transport, topic) => transport.request({ topic, envelope: { requested: true } }),
   },

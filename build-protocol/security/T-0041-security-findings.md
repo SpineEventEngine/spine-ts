@@ -3,8 +3,8 @@
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
-UID local availability residual. D-0093 Buf wire implementation and final
-focused security re-review are pending.
+UID local availability residual. D-0093 Buf wire implementation is complete;
+final focused security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -14,7 +14,7 @@ evidence. The preceding canonical review was clean; dedicated security re-review
 found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
 Canonical Wave 23 is clean; SF-012 is clean and D-0093 records the human's
 explicit SF-013 residual-risk acceptance. Final security acceptance still waits
-for the Buf wire implementation and focused re-review.
+for focused re-review.
 
 Dedicated final re-review package is
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
@@ -145,3 +145,13 @@ release-blocking and needs focused behavior regression evidence.
 - [x] Focused documentation checks after artifact write.
 - [ ] Dedicated security review, any focused fix/regression, canonical review
       dispositions, full verification, integration, remote sync, and task closure.
+
+## D-0093 Implementation Evidence
+
+The private ZeroMQ adapter now uses Buf binary for `command` and `event`
+envelopes, retains V8 for reserved non-Proto kinds and the existing private
+request-result wrapper, and rejects generated Protobuf successful replies.
+Native-IPC regressions cover exact bytes, raw decoding, malformed continuation,
+and ignored protocol trailers. SF-013 remains accepted and unbounded in
+aggregate: zeromq.js allocates multipart frames before the adapter ignores
+trailers. Final focused security re-review is still required.

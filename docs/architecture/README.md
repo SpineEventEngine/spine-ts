@@ -752,6 +752,12 @@ initial-release adapter path is limited to same-host IPC; remote and multi-host
 transport are excluded. That exclusion makes no commitment about a future
 transport or contract.
 
-The ZeroMQ adapter serializes envelopes with Node's V8 serializer. Its `ipc://`
-frames are trusted same-host runtime traffic only, and `ipcDirectory` must be a
-private directory shared only by the cooperating runtime peers.
+The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
+envelopes, dispatching by the transport topic's signal kind. Its reserved
+`query`, `subscription`, and `system` kinds retain private V8 encoding until a
+concrete Protobuf schema exists. Publish/request traffic keeps route plus
+payload frames and receivers consume only that prefix; reply consumers read one
+private V8 result frame. Ignored multipart trailers are an accepted D-0093
+same-UID local availability residual, not an aggregate allocation control. Its
+`ipc://` frames are trusted same-host runtime traffic only, and `ipcDirectory`
+must be a private directory shared only by the cooperating runtime peers.

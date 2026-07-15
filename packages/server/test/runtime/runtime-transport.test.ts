@@ -68,6 +68,7 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 describe("RuntimeTransportBinding", () => {
   it("registers command responders and event subscribers from the routing plan", async () => {
@@ -510,7 +511,7 @@ describe("RuntimeTransportBinding", () => {
   });
 
   it("runs command and event callbacks over the ZeroMQ-backed transport", async () => {
-    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-runtime-"));
+    const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-runtime-"));
     const transport = createZeroMqTransport(
       createZeroMqAdapterConfig({
         ipcDirectory,

@@ -1,8 +1,8 @@
 # Spine TS Threat Model
 
 Status: T-0041 working threat model; SF-013 is a human-accepted Medium same-UID
-local IPC availability residual under D-0093. Buf wire implementation and final
-focused security re-review are pending.
+local IPC availability residual under D-0093. Buf wire implementation is
+complete; final focused security re-review is pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
@@ -13,7 +13,7 @@ correction is `fdd9da0a`. D-0091 implementation evidence is `da730e04`. Later
 provenance/review/status commits are not implementation evidence. The preceding
 canonical review and Canonical Wave 23 are clean; SF-012 is clean and D-0093
 records the human's explicit SF-013 residual-risk acceptance. Final security
-acceptance still waits for the Buf wire implementation and focused re-review.
+acceptance still waits for focused re-review.
 
 ## Scope and assumptions
 
@@ -153,3 +153,13 @@ and all three paths retain later valid continuation. Fresh final-state evidence
 is focused transport security 5/5, complete native transport 53/53, and complete
 affected server 149/149. Four-lane canonical review and focused security
 re-review remain pending.
+
+## D-0093 Wire Correction Progress
+
+The private ZeroMQ command/event path now uses generated Buf Protobuf binary;
+reserved non-Proto kinds and the private request-result wrapper remain V8.
+Focused native-IPC tests cover exact Buf bytes, raw decode, malformed traffic
+continuation, generated Proto reply rejection, and prefix-only trailer use.
+This does not reduce SF-013: multipart trailers are ignored only after native
+materialization, so aggregate multipart allocation remains explicitly accepted
+and unbounded for an authorized same-UID peer.

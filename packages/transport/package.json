@@ -19,6 +19,8 @@
     "README.md"
   ],
   "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-ts/proto": "workspace:*",
     "zeromq": "6.5.0"
   }
 }
