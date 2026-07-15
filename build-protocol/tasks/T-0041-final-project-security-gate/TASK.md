@@ -1262,16 +1262,6 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   this reconciliation, then run all four canonical Wave 9 lanes. Dedicated
   security review remains pending.
 
-## Wave 15 Immutable Endpoint And Wave 16 Status
-
-- Commit `68d54fc6` is the coordinator-verified Wave 15 test-fixture/status/log
-  endpoint. Both security artifacts identify it as substantive implementation
-  evidence; this provenance/status follow-up is not implementation evidence.
-- Every current general and security record identifies Canonical Wave 16 as
-  assigned/pending before package generation. Run all four immutable canonical
-  roles with D-0087-D-0090 and superseded-history exclusion; aggregate before
-  action. Dedicated security review remains pending.
-
 ## Canonical Review Wave 9 Assignment
 
 - Immutable review endpoint `173bf3b4`; package
@@ -2044,3 +2034,13 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
 - Accept for commit. Reconcile immutable provenance and advance all general and
   security status records to Wave 16 before its package generation. Dedicated
   security review remains pending.
+
+## Wave 15 Immutable Endpoint And Wave 16 Status
+
+- Commit `68d54fc6` is the coordinator-verified Wave 15 test-fixture/status/log
+  endpoint. Both security artifacts identify it as substantive implementation
+  evidence; this provenance/status follow-up is not implementation evidence.
+- Every current general and security record identifies Canonical Wave 16 as
+  assigned/pending before package generation. Run all four immutable canonical
+  roles with D-0087-D-0090 and superseded-history exclusion; aggregate before
+  action. Dedicated security review remains pending.

@@ -329,15 +329,6 @@ Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
   Canonical review, full verification, integration, and task closure remain
   pending.
 
-## Wave 15 Immutable Endpoint And Wave 16 Status
-
-- Commit `68d54fc6` is the substantive Wave 15 endpoint and is named in both
-  security artifacts. This follow-up is provenance/status evidence only.
-- Every current general and security record identifies Wave 16 as assigned/
-  pending before package generation. Run all four explicit immutable canonical
-  roles and aggregate before action; dedicated final security review remains
-  pending.
-
 ## Canonical Review Wave Result
 
 - TypeScript/API docs: CLEAN, agent
@@ -1902,4 +1893,13 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   passed.
 - Commit and reconcile the endpoint. Advance all general/security status records
   to Wave 16 before package generation; dedicated final security review remains
+  pending.
+
+## Wave 15 Immutable Endpoint And Wave 16 Status
+
+- Commit `68d54fc6` is the substantive Wave 15 endpoint and is named in both
+  security artifacts. This follow-up is provenance/status evidence only.
+- Every current general and security record identifies Wave 16 as assigned/
+  pending before package generation. Run all four explicit immutable canonical
+  roles and aggregate before action; dedicated final security review remains
   pending.
