@@ -2075,3 +2075,16 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - All three assignments are read-only, childless, and Git-read-only with
   distinct concerns. Reliability is queued for platform capacity; aggregate
   the complete four-lane wave before action.
+
+## Canonical Review Wave 17 Dispatch Continuation
+
+- Documentation agent `019f64d9-e9ab-7d11-aacb-6dceb485ebb9` completed under
+  its tool-enforced immutable `gpt-5.6-luna` / medium role and is closed. It
+  reported one provisional P2: three active cancellation-retry passages imply a
+  bare subscription ID is an accepted request even though public `Cancel`
+  accepts the returned `Subscription` message. Acceptance waits for full-wave
+  aggregation.
+- Performance/reliability agent `019f64db-9ae9-7813-8d81-c5e73381b966` was
+  dispatched explicitly as existing `performance_reliability_reviewer` with
+  immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No
+  finding may be acted on until style, API, and reliability also complete.
