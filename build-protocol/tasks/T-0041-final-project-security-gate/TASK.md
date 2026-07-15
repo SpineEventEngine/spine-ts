@@ -4197,3 +4197,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
   active status, no production/public/generated/docs/security/policy change,
   and no human-decision change. Freeze for reliability-only re-review; style is
   already clean and the other lanes retain N/A.
+
+## Full Gate Malformed-Reply Final Re-Review Assignment
+
+- Correction commit `c0bebd10`; baseline `4e8ca551`; exact package
+  `.superpowers/sdd/review-4e8ca551..c0bebd10.diff`; 1 commit; 19,658 bytes.
+- Re-dispatch only the existing performance/reliability reviewer under explicit
+  immutable Terra High, read-only, childless, Git-read-only, and bounded to
+  request/address/fixture deadline ordering, rejection observation, cleanup,
+  and normal continuation. Historical superseded text is not active.
+- Style is already clean and did not reopen; documentation, TypeScript/API, and
+  security retain N/A because no production, contract, docs, or trust-boundary
+  code changed.

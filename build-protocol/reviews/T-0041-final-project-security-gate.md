@@ -4092,3 +4092,14 @@ verify` remains reserved.
   state-read-only, and it is closed. Pre-review lint confirms one test plus
   records only and no production/public/generated/docs/security/policy change.
   Freeze for reliability-only re-review; style remains clean and other lanes N/A.
+
+## Full Gate Malformed-Reply Final Re-Review Package
+
+- Exact package `.superpowers/sdd/review-4e8ca551..c0bebd10.diff`; baseline
+  `4e8ca551`; correction endpoint `c0bebd10`; 1 commit; 19,658 bytes.
+- Re-review only performance/reliability under explicit immutable Terra High,
+  read-only, childless, Git-read-only, and bounded to deadline ordering,
+  rejection observation, cleanup, and continuation. Historical superseded text
+  is not active.
+- Style stays clean; documentation, TypeScript/API, and security retain N/A for
+  the exact test-only package.
