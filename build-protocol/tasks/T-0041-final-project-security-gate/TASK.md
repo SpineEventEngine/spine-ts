@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0096 implementation complete; re-review pending
+Status: In progress - D-0096 canonical review clean; final security review pending
 
 Started: `2026-07-14`
 
@@ -3833,6 +3833,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Terra High and documentation as explicit immutable Luna Medium, all
   read-only, childless, Git-read-only, concern-scoped, and subject to the
   historical-text rule. Aggregate the wave. Reliability remains N/A.
+
+## D-0096 Canonical Closure
+
+- Final style `019f66a7-62df-7e51-b481-3eb1c791bf46`, tool-enforced immutable
+  Terra High; documentation `019f66a7-5e4a-7ae1-b4b5-52bd8b68cbb3`,
+  tool-enforced immutable Luna Medium; and TypeScript/API
+  `019f66a7-661e-7750-9ffe-642a463d17b8`, tool-enforced immutable Terra High,
+  are clean and closed. All remained read-only, childless, and Git-read-only.
+- D-0096 is canonically clean. The two predicates have fixed paths; topic
+  narrowing promises only top-level `topic.signalKind`; names/counts/shapes and
+  all D-0093/D-0094 wire/risk decisions remain intact. Reliability retains its
+  justified N/A. Proceed to the focused final T-0041 security review.
 
 ## D-0096 Source TypeDoc P2 Implementation
 

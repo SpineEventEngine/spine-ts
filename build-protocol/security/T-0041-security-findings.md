@@ -4,8 +4,8 @@ Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
 Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
 UID local availability residual. D-0096's top-level-only topic-narrowing
-correction is coordinator-verified and affected canonical re-review is pending.
-Focused final security re-review has not yet been dispatched.
+correction is coordinator-verified and canonically clean. Focused final security
+re-review has not yet been dispatched.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
