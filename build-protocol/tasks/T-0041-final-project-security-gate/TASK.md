@@ -2400,3 +2400,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   lifecycle paths, current security artifacts, and superseded-history
   exclusion; aggregate before action. Dedicated final security re-review
   remains pending.
+
+## Canonical Review Wave 20 Package And Assignment
+
+- Immutable endpoint `2da01c90`; package
+  `.superpowers/sdd/review-39f2c6f7..2da01c90.diff` contains 98 commits and
+  821,495 bytes. Substantive implementation evidence remains `0b7fa354`.
+- Lightweight pre-review lint confirmed synchronized status/provenance, no
+  duplicate policy constant or public export in the correction, no active
+  future-policy overclaim, and clean package diff integrity.
+- Dispatch existing style/maintainability Terra High, documentation Luna
+  Medium, TypeScript/API Terra High, and performance/reliability Terra High
+  roles explicitly, read-only, childless, Git-read-only, with the full ledger,
+  D-0087-D-0090, affected IPC lifecycle paths, current security artifacts, and
+  superseded-history exclusion. Aggregate before action; dedicated final
+  security review remains pending.
