@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - release preflight pending
+Status: In progress - local release gates clean; final specialist review pending
 
 Started: `2026-07-15`
 
@@ -76,6 +76,44 @@ and repository are ready together for the accepted initial release.
    until clean.
 5. Reconcile closure records, verify/merge/push/clean, then perform the required
    post-completion ZeroMQ Internet research and user report.
+
+## Release Command Map
+
+- Full final and post-merge gate:
+  `pnpm --config.verify-deps-before-run=false verify`.
+- Real single-process to-do lifecycle:
+  `pnpm --config.verify-deps-before-run=false exec vitest run examples/todo/test/black-box.test.ts`.
+  This existing black-box suite owns command post, query, subscription
+  activation/update/cancellation, server close, validation/refusal, routing,
+  registry recovery, and listener/session cleanup evidence on ephemeral
+  loopback resources.
+- Real local multi-process acceptance:
+  `pnpm --config.verify-deps-before-run=false exec vitest run examples/todo/test/local-multi-process.test.ts`.
+- Generated state and public declarations are exercised by the root generation,
+  TypeScript build, TypeDoc, Proto lint, and generated-clean stages. T-0042 also
+  runs an explicit Node import matrix against every package export after build.
+- End-user API, current-status/docs, relative Markdown link, and documented
+  command checks are explicit preflight scans. Historical dated text is evidence
+  rather than active state unless a current status mirror claims it.
+
+The command map reuses accepted behavior-focused suites instead of creating a
+second release harness with different lifecycle semantics. A new script or test
+is justified only if one of these commands cannot prove an acceptance criterion.
+
+## Local Release Gate
+
+- Real black-box acceptance: 1 file / 27 tests passed natively.
+- Real local multi-process acceptance: 1 file / 19 tests passed natively.
+- Full native `verify`: ordinary and coverage runs each passed 73 files / 1,772
+  tests. Coverage is 95.38% statements, 90.04% branches, 98.27% functions, and
+  95.39% lines.
+- TypeDoc/API counts, all 25 copied Spine checksums, Proto lint,
+  generated-clean, package imports, relative links, public example API audit,
+  and exact documented client commands passed as recorded in the work log.
+
+These results establish a review candidate, not project completion. The four
+specialist dispositions, closure-state reconciliation, integration,
+post-merge gate, remote synchronization, and cleanup remain required.
 
 Deep planning is N/A: the detailed completion plan already fixes the release
 scope and this task must not redesign public/domain/serialized behavior. Invoke

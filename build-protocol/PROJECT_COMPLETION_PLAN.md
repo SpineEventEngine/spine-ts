@@ -91,9 +91,12 @@ maintenance task.
 
 Current status: T-0041 is complete, integrated, post-merge verified, remotely
 synchronized, and cleaned up, with a clean focused final security review and one
-explicit human-accepted SF-013 residual. T-0042 release readiness and project
-closure is the active implementation frontier. The dated Starting State above
-is historical plan-creation context.
+explicit human-accepted SF-013 residual. T-0042 release preflight, real
+single-process and multi-process acceptance, package/import/link/command scans,
+and the full native release gate are clean. T-0042 final specialist review,
+closure reconciliation, integration, post-merge verification, remote sync, and
+cleanup remain the active frontier. The dated Starting State above is
+historical plan-creation context.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
