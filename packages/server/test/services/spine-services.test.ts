@@ -5081,6 +5081,48 @@ describe("SpineServices", () => {
     expect(activeStandSubscriptions).toEqual([]);
   });
 
+  it("retains an inactive subscription without retrying expiry cleanup until same-ID cancellation succeeds", async () => {
+    vi.useFakeTimers();
+    try {
+      const contextName = "InactiveExpiryCleanupFailure";
+      const storageFactory = new FaultingSubscriptionStorageFactory(contextName);
+      const handlers = registeredSubscriptionHandlers(
+        createSubscriptionContext(contextName, storageFactory),
+        { inactiveTtlMs: 10, subscriptionLimit: 1 },
+      );
+      const subscription = await handlers.subscribe(createTopic());
+      const subscriptionId = subscription.id?.value ?? "missing";
+      storageFactory.cancelCleanupError = new Error("inactive expiry cleanup failed");
+
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(10);
+      await flushMicrotasks();
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+      ).toBeDefined();
+      expect(() => handlers.subscribe(createTopic())).toThrow(
+        expect.objectContaining({
+          code: Code.ResourceExhausted,
+          rawMessage: "Subscription capacity is exhausted.",
+        } satisfies Partial<ConnectError>),
+      );
+
+      storageFactory.cancelCleanupError = undefined;
+      await handlers.cancel(subscription);
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId),
+      ).toBeUndefined();
+      const replacement = await handlers.subscribe(createTopic());
+      await handlers.cancel(replacement);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
     let deliverUpdate:
       | ((update: {

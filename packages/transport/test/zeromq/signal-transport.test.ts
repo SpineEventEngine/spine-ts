@@ -68,6 +68,35 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
+  it("does not give publishers the request/reply timeout", async () => {
+    const topic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.PublisherTimeoutScope",
+    });
+    const requestTimeoutMs = 123;
+    let publisherSendTimeout: number | undefined;
+    const bindPublisher = vi
+      .spyOn(zeroMqSocketAccess, "bindPublisher")
+      .mockImplementation((publisher) => {
+        publisherSendTimeout = publisher.sendTimeout;
+        return Promise.reject(new Error("stop after observing publisher options"));
+      });
+
+    try {
+      await withZeroMqTransport(
+        async (transport) => {
+          await expect(
+            transport.publish({ topic, envelope: { taskId: "task-timeout" } }),
+          ).rejects.toThrow("stop after observing publisher options");
+          expect(publisherSendTimeout).not.toBe(requestTimeoutMs);
+        },
+        { requestTimeoutMs },
+      );
+    } finally {
+      bindPublisher.mockRestore();
+    }
+  });
+
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
       const topic = createTransportTopic({
@@ -353,6 +382,42 @@ describe("ZeroMQ SignalTransport", () => {
         }
       });
     } finally {
+      prepare.mockRestore();
+    }
+  });
+
+  it("bounds shared fixture cleanup when a transport is paused during preparation", async () => {
+    const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+    const preparationStarted = deferred<undefined>();
+    const preparationReleased = deferred<undefined>();
+    const prepare = vi
+      .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+      .mockImplementationOnce(async (ipcDirectory) => {
+        preparationStarted.resolve(undefined);
+        await preparationReleased.promise;
+        return await prepareIpcDirectory(ipcDirectory);
+      });
+    let opening: Promise<unknown> | undefined;
+
+    try {
+      const fixture = withSharedZeroMqTransports(async (firstTransport) => {
+        const topic = createTransportTopic({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.PausedSharedFixturePreparation",
+        });
+        opening = firstTransport.subscribe(
+          createTransportSubscription({ subscriberId: "paused-shared-fixture", topic }),
+          () => undefined,
+        );
+        await preparationStarted.promise;
+      });
+
+      await expect(
+        withHarnessDeadline(fixture, "outer shared fixture cleanup", closeDeadlineMs * 2),
+      ).rejects.toThrow("Timed out waiting for first ZeroMQ shared test fixture close.");
+    } finally {
+      preparationReleased.resolve(undefined);
+      await opening?.catch(() => undefined);
       prepare.mockRestore();
     }
   });
@@ -1099,8 +1164,22 @@ async function withSharedZeroMqTransports<T>(
   try {
     return await runTest(firstTransport, secondTransport, ipcDirectory);
   } finally {
-    await Promise.all([firstTransport.close(), secondTransport.close()]);
-    await rm(ipcDirectory, { recursive: true, force: true });
+    try {
+      await Promise.all([
+        withHarnessDeadline(
+          firstTransport.close(),
+          "first ZeroMQ shared test fixture close",
+          closeDeadlineMs,
+        ),
+        withHarnessDeadline(
+          secondTransport.close(),
+          "second ZeroMQ shared test fixture close",
+          closeDeadlineMs,
+        ),
+      ]);
+    } finally {
+      await rm(ipcDirectory, { recursive: true, force: true });
+    }
   }
 }
 

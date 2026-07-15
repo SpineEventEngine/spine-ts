@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 12 findings accepted; correction assigned
+Status: In progress - canonical wave 12 correction verified; wave 13 package pending
 
 Started: `2026-07-14`
 
@@ -1611,3 +1611,46 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   API, dependency, package, Proto, generated-output, or broader policy change
   is authorized. Run focused affected checks; all four canonical lanes rerun
   before dedicated security review.
+
+## Canonical Wave 12 Correction TDD Evidence
+
+- Status remains correction in progress. No Canonical Wave 13 or dedicated final
+  security-review outcome is claimed here.
+- RED: `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/transport/test/zeromq/signal-transport.test.ts -t 'does not give
+publishers the request/reply timeout|bounds shared fixture cleanup when a
+transport is paused during preparation'` exited 1: publisher observation saw
+  `sendTimeout: 123`, and shared fixture cleanup reached the outer deadline.
+- GREEN: the identical transport command exited 0 with 2 passed/31 skipped after
+  publisher construction stopped receiving `requestTimeoutMs` and each shared
+  close received the existing 275 ms harness deadline while `rm()` remains in
+  `finally`.
+- The normal inactive-expiry regression initially exposed only a synchronous
+  test assertion mismatch. After correcting it, `pnpm
+--config.verify-deps-before-run=false exec vitest run
+packages/server/test/services/spine-services.test.ts -t 'retains an inactive
+subscription without retrying expiry cleanup until same-ID cancellation
+succeeds'` exited 0 with 1 passed/140 skipped. It proves timer clearance,
+  retained local record/capacity, no automatic retry/new timer, and same-ID
+  `Cancel` cleanup retry/release.
+
+## Canonical Wave 12 Correction Coordinator Verification
+
+- Existing implementer `019f645f-30e8-7170-b0b2-c8c1cc59329b` was dispatched
+  explicitly as `gpt-5.6-terra` / medium; the immutable `implementer` role
+  confirms the same actual runtime profile. It spawned no children, made no Git
+  mutation, and is closed.
+- Coordinator inspection accepts the request/reply-only timeout correction,
+  two independent shared close bounds with nested directory-removal cleanup,
+  the normal inactive-expiry lifecycle regression, and both public doc mirrors.
+  The server test's first matcher failure is recorded only as test-authoring
+  noise, not as a false product RED claim.
+- Fresh native affected suites passed 174/174 (transport 33, server 141).
+  Generated build typecheck, docs/API generation with 25 Proto checksums and
+  export counts `100/28/205/19/17/6/3`, generated-clean validation, focused
+  ESLint, exact Prettier, status/constant/public-boundary/policy scans,
+  manifest/lock/package-map cleanliness, tracked-generated absence, and
+  `git diff --check` all exited 0.
+- Accept this bounded correction for commit. Its immutable implementation
+  endpoint must be reconciled into security provenance before generating the
+  Canonical Wave 13 package; dedicated security review remains pending.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 12 findings accepted; correction assigned
+Status: Canonical wave 12 correction verified; wave 13 package pending
 
 Baseline: `39f2c6f7`
 
@@ -1474,3 +1474,39 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   tests, generated typecheck/docs, focused lint/format, generated and manifest/
   lock cleanliness, and diff integrity. Run all four Canonical Wave 13 lanes
   before the dedicated final security reviewer.
+
+## Canonical Wave 12 Accepted Finding Correction Evidence
+
+- D-0088/fixture RED: focused transport command exited 1 with 2 failures:
+  configured request/reply timeout appeared on publisher `sendTimeout`, and
+  paused shared fixture preparation reached only the outer cleanup deadline.
+- D-0088/fixture GREEN: the same command exited 0 with 2 passed/31 skipped
+  after removing publisher `sendTimeout` and independently wrapping each shared
+  transport close in the existing 275 ms harness deadline; temporary-directory
+  removal remains in `finally`.
+- The fake-timer normal inactive-expiry regression initially failed because the
+  test treated a synchronous capacity rejection as a promise. With that
+  assertion corrected, the focused server command exited 0 with 1 passed/140
+  skipped and confirms established behavior: timer cleared, local record and
+  capacity retained on persistence-cleanup failure, no automatic retry/new
+  timer, and successful same-ID `Cancel` retry releases capacity.
+- `docs/api/README.md` and `packages/server/README.md` now state the same
+  normal inactive-expiry failure contract; server unknown-ID-pool prose is
+  consolidated. This is correction evidence only: Canonical Wave 13 and the
+  dedicated final security review remain pending.
+
+## Canonical Wave 12 Correction Coordinator Verification
+
+- Sole implementer `019f645f-30e8-7170-b0b2-c8c1cc59329b` has matching explicit
+  and actual immutable `gpt-5.6-terra` / medium evidence, used no child or Git
+  mutation, and is closed.
+- Coordinator source/test/doc inspection accepts all four findings as corrected.
+  No public API, package, dependency, Proto, generated-output, or D-0087/D-0089
+  change occurred; D-0088 is restored to its accepted request/reply-only scope.
+- Fresh native affected verification passed 174/174. Generated typecheck,
+  docs/API counts `100/28/205/19/17/6/3`, generated cleanliness, focused lint
+  and format, common-finding scans, manifest/lock/package-map integrity,
+  tracked-generated absence, and diff integrity passed.
+- Commit the substantive correction and update its immutable security
+  provenance before Canonical Wave 13. Every canonical concern reruns; the
+  dedicated final security reviewer remains pending.

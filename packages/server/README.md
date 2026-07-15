@@ -892,8 +892,11 @@ fails, `Cancel` returns Connect `INTERNAL` with message
 client should retry `Cancel` with the same returned `Subscription`/ID. This
 retry guidance applies only when `Subscribe` returned the ID; cleanup after an
 initial failed `Subscribe` remains internal and uses the inactive TTL when its
-timer can be retained. Unknown-ID cancellations use a separate internal pool of
-the same size and reject overflow before storage access. A process crash can
+timer can be retained. If a normal inactive-expiry timer fires and durable
+cleanup fails, the timer stays cleared, the local record and capacity remain,
+and no automatic retry or new timer appears; `Cancel` with the same ID retries
+cleanup and releases capacity after it succeeds. The unknown-ID cancellation
+pool is separate from normal subscription capacity and has the same size. A process crash can
 leave an owner claim stale; this release provides no claim lease, heartbeat,
 routing, supervision, or automatic reclamation.
 Active service streams, queued updates, direct Stand subscriptions, Stand

@@ -372,7 +372,6 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     const publisher = new Publisher({
       linger: closeDelayMs,
-      sendTimeout: this.#requestTimeoutMs,
     });
 
     let bound: BoundPublisher | undefined;
