@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 15 correction verified; wave 16 package pending
+Status: Canonical review wave 16 assigned
 
 Baseline: `39f2c6f7`
 
@@ -327,6 +327,15 @@ Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
   exited 0 with 1 file/28 tests.
 - SF-010 is restored to implemented pending dedicated security re-review.
   Canonical review, full verification, integration, and task closure remain
+  pending.
+
+## Wave 15 Immutable Endpoint And Wave 16 Status
+
+- Commit `68d54fc6` is the substantive Wave 15 endpoint and is named in both
+  security artifacts. This follow-up is provenance/status evidence only.
+- Every current general and security record identifies Wave 16 as assigned/
+  pending before package generation. Run all four explicit immutable canonical
+  roles and aggregate before action; dedicated final security review remains
   pending.
 
 ## Canonical Review Wave Result

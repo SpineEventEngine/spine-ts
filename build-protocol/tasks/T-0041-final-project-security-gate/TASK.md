@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 15 correction verified; wave 16 package pending
+Status: In progress - canonical review wave 16 assigned
 
 Started: `2026-07-14`
 
@@ -1261,6 +1261,16 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   not implementation evidence. Generate a literal package from `39f2c6f7` after
   this reconciliation, then run all four canonical Wave 9 lanes. Dedicated
   security review remains pending.
+
+## Wave 15 Immutable Endpoint And Wave 16 Status
+
+- Commit `68d54fc6` is the coordinator-verified Wave 15 test-fixture/status/log
+  endpoint. Both security artifacts identify it as substantive implementation
+  evidence; this provenance/status follow-up is not implementation evidence.
+- Every current general and security record identifies Canonical Wave 16 as
+  assigned/pending before package generation. Run all four immutable canonical
+  roles with D-0087-D-0090 and superseded-history exclusion; aggregate before
+  action. Dedicated security review remains pending.
 
 ## Canonical Review Wave 9 Assignment
 
