@@ -8,7 +8,7 @@ Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
 Committed canonical wave 5 finding basis: `b43cf705`. The substantive
-implementation-evidence endpoint is `6f45be80`; later review/status commits
+implementation-evidence endpoint is `732409ff`; later review/status commits
 are not implementation evidence. Canonical review and dedicated security
 re-review remain pending; no security acceptance is claimed.
 

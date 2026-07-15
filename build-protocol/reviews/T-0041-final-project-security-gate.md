@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 7 corrections coordinator-verified; canonical wave 8 pending
+Status: Wave 7 committed; canonical wave 8 packaging pending
 
 Baseline: `39f2c6f7`
 
@@ -979,3 +979,11 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
 - Commit the substantive batch, then write one provenance-only follow-up naming
   its immutable hash before canonical Wave 8 packaging. Dedicated security
   review remains pending and no task completion is claimed.
+
+## Wave 7 Immutable Implementation Endpoint
+
+- Commit `732409ff` is the substantive Wave 7 implementation endpoint.
+  Security artifacts identify it directly; this provenance-only follow-up and
+  later review/status commits are not implementation evidence.
+- Generate a literal package after provenance reconciliation, then run all four
+  canonical Wave 8 concerns. Dedicated security review remains pending.

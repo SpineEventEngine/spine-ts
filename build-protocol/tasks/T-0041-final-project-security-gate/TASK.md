@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 7 corrections coordinator-verified; wave 8 pending
+Status: In progress - wave 7 committed; canonical wave 8 packaging pending
 
 Started: `2026-07-14`
 
@@ -1164,3 +1164,13 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
 - Accept the substantive batch for commit. After its hash exists, update only
   durable provenance to name that implementation endpoint, then package and run
   canonical Wave 8. Dedicated security review and T-0041 closure remain pending.
+
+## Wave 7 Immutable Implementation Endpoint
+
+- Commit `732409ff` contains the complete coordinator-verified Wave 7
+  implementation, decisions, tests, public docs, security-state updates, and
+  durable evidence.
+- Security provenance now names `732409ff` as the substantive implementation
+  endpoint. This provenance-only follow-up and later review/status commits are
+  explicitly not implementation evidence. Canonical Wave 8 packaging and
+  dedicated security review remain pending.
