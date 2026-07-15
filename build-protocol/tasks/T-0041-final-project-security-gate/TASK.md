@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 10 corrections coordinator-verified; commit pending
+Status: In progress - wave 10 fixes committed; canonical wave 11 packaging pending
 
 Started: `2026-07-14`
 
@@ -1473,3 +1473,14 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   Docs verified 25 Proto checksums and counts `100/28/205/19/17/6/3`.
 - Accept the complete Wave 10 correction for commit. Canonical Wave 11 and
   dedicated security review remain pending.
+
+## Wave 10 Immutable Implementation Endpoint
+
+- Commit `5f5fbd74` contains the coordinator-verified docs/TSDoc, throwing-
+  observer regression, private naming, shared deadline, API diagnostic, and
+  durable evidence corrections.
+- Security provenance now names `5f5fbd74` as substantive implementation
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal baseline package after this
+  reconciliation, then run all four Canonical Wave 11 lanes. Dedicated security
+  review remains pending.

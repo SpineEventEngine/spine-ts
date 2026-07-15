@@ -1,11 +1,11 @@
 # T-0041 Security Findings and Evidence
 
-Status: SF-007 through SF-010, D-0087 through D-0089, and canonical wave 9
-corrections are coordinator-verified and committed; canonical wave 10 and
+Status: SF-007 through SF-010, D-0087 through D-0089, and canonical wave 10
+corrections are coordinator-verified and committed; canonical wave 11 and
 dedicated security re-review are pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
-implementation evidence ends at `45fd5583`; later provenance/review/status
+implementation evidence ends at `5f5fbd74`; later provenance/review/status
 commits are not implementation evidence. No security acceptance is claimed.
 
 ## Command and evidence ledger
