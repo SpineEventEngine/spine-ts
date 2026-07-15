@@ -2782,3 +2782,11 @@ verify` remains reserved.
   existing testing fixture option for D-0090; it exports no new concept.
   Future-policy matches are explicit exclusions/residuals, and no transport
   internals leak from package roots.
+
+## Canonical Wave 22 Package
+
+- Review `.superpowers/sdd/review-39f2c6f7..1ba74c5c.diff`, 113 commits and
+  886,290 bytes, from literal baseline `39f2c6f7` to literal endpoint
+  `1ba74c5c`. Substantive correction evidence is commit `c7f8a901`.
+- All four previously assigned roles receive this exact package. Complete-wave
+  aggregation remains mandatory before any correction.

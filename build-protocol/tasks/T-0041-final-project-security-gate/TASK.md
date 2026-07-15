@@ -2633,3 +2633,11 @@ Subscription cancellation failed.` instead of `AggregateError`.
   `BoundedContextFixtureOptions.inactiveTtlMs` TSDoc clarification already owned
   by SF-008/D-0090; no internal callback, lifecycle, retry, or IPC primitive is
   exported. Range diff integrity and worktree status are clean.
+
+## Canonical Wave 22 Package
+
+- Immutable package `.superpowers/sdd/review-39f2c6f7..1ba74c5c.diff` contains
+  113 commits and 886,290 bytes from literal baseline `39f2c6f7` to literal
+  endpoint `1ba74c5c`. Substantive Wave 21 implementation remains `c7f8a901`.
+- Dispatch the four assigned canonical roles against this exact package and
+  aggregate all results before action.
