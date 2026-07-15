@@ -2739,3 +2739,9 @@ Subscription cancellation failed.` instead of `AggregateError`.
   `a5039140`. Test-only correction evidence is `fdd9da0a`.
 - The focused pre-review status, production/public-boundary, generated-output,
   and range-diff checks are clean. Dispatch only the assigned style lane.
+
+## Wave 22 Focused Style Dispatch
+
+- Style agent `019f6567-3e79-7733-acf9-f5622771c8d2` was dispatched explicitly
+  under the existing immutable `gpt-5.6-terra` / high role, read-only,
+  childless, and Git-read-only, against the exact focused package.

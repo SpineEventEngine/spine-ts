@@ -2879,3 +2879,9 @@ verify` remains reserved.
   Test-only correction evidence remains `fdd9da0a`.
 - Focused status/boundary/generated/diff lint is clean. Dispatch only the
   assigned style lane; dedicated security re-review remains pending.
+
+## Wave 22 Focused Style Dispatch
+
+- Agent `019f6567-3e79-7733-acf9-f5622771c8d2` was dispatched explicitly as
+  existing `style_maintainability_reviewer` with immutable
+  `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
