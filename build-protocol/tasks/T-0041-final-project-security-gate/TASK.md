@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 14 assigned
+Status: In progress - canonical review wave 14 findings accepted; correction assigned
 
 Started: `2026-07-14`
 
@@ -1836,6 +1836,31 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   locally typed runtime structural observer is accepted and must not be
   relitigated as public leakage absent emitted API evidence. Aggregate before
   action; dedicated security review remains pending.
+
+## Canonical Review Wave 14 Result And Fix Assignment
+
+- Complete result: TypeScript/API and performance/reliability are clean.
+  Documentation found only stale Wave 13 security-artifact review status.
+  Style found the same status plus two bounded maintainability gaps: public
+  `BoundedContextFixtureOptions.inactiveTtlMs` omits D-0090 and fixture-level
+  exact-error coverage, and the two symmetric shared-close regressions duplicate
+  their full setup/cleanup flow.
+- Explicit immutable Desktop profiles: style
+  `019f6491-11da-78a3-9b70-002b3886ef8d` Terra High; documentation
+  `019f6491-1600-7da2-a5c2-a58ad685e7f9` Luna Medium; TypeScript/API
+  `019f6491-1af8-7a92-be40-683315ef695f` Terra High; reliability
+  `019f6492-d056-7302-82a0-4c55c26aa939` Terra High. All four spawned no
+  children, made no Git mutation, and are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. Mirror the exact forwarded D-0090
+  contract in testing-fixture TSDoc and add a fixture-level exact TypeError
+  regression; extract one short parameterized shared-close assertion helper
+  while retaining two explicit named cases; update both security headers,
+  TM-005 current status, and the review-round table to Wave 14 pending without
+  security acceptance. No production runtime, public symbol shape, dependency,
+  package, Proto, generated output, or D-0087-D-0090 behavior change. Run
+  focused checks; all four canonical lanes rerun before dedicated security
+  review.
 
 ## Wave 13 Coordinator Evidence Correction Result
 

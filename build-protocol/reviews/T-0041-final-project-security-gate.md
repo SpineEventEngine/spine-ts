@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 14 assigned
+Status: Canonical review wave 14 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1685,6 +1685,39 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   publisher/requester/replier timeout scope, races and resource bounds.
 - All are read-only and use the full ledger plus superseded-history rule.
   Aggregate before action; dedicated security review remains pending.
+
+## Canonical Review Wave 14 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f6491-11da-78a3-9b70-002b3886ef8d`: P2 because the public testing fixture
+  forwards `inactiveTtlMs` without D-0090 TSDoc or fixture-level exact-error
+  coverage; P2 stale security header/TM-005/review-table status; P3 duplicated
+  first/second shared-close regression setup. D-0089 remains clean.
+- Documentation, immutable Luna Medium,
+  `019f6491-1600-7da2-a5c2-a58ad685e7f9`: P2 only for security artifacts still
+  naming Wave 13 while current logs assign Wave 14. TTL, expiry/cancel, D-0087-
+  D-0090, same-host, TypeDoc/export, links, and observer mirrors are clean.
+- TypeScript/API, immutable Terra High,
+  `019f6491-1af8-7a92-be40-683315ef695f`: clean for D-0087-D-0090 API/runtime,
+  seven entry points, exact-six ZeroMQ exports, declarations, packages, Proto,
+  and generated boundaries.
+- Performance/reliability, immutable Terra High,
+  `019f6492-d056-7302-82a0-4c55c26aa939`: clean for TTL, expiry/recovery/cancel,
+  independent cleanup, timeout scope, races, and resource bounds.
+- All used explicit immutable profiles, spawned no children, made no Git
+  mutation, and are closed. Coordinator inspection confirms the complete batch.
+
+## Canonical Wave 14 Fix Assignment
+
+- One fresh existing `implementer`, expected explicit immutable Terra Medium,
+  owns the complete bounded TSDoc/test/helper/status batch. Add testing-fixture
+  exact-error coverage, consolidate shared-close setup into one short helper
+  while keeping two named cases, and update security top status, TM-005, and
+  review-round table to current Wave 14 pending state without claiming security
+  acceptance.
+- No production behavior, public symbol shape, package/dependency/Proto,
+  generated-output, or D-0087-D-0090 change is authorized. All four Canonical
+  Wave 15 lanes rerun before dedicated final security review.
 
 ## Wave 13 Coordinator Evidence Correction Result
 
