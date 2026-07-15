@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: Blocked - SF-013 requires native receive replacement or explicit human
-risk acceptance
+Status: In progress - D-0093 accepted; Protobuf wire correction architecture
+and implementation pending
 
 Started: `2026-07-14`
 
@@ -58,6 +58,17 @@ example.
 - Push the completed task branch and verified `main` to `origin`, record
   exact remote evidence, and remove only the clean merged worktree.
 - Never read, edit, stage, delete, move, or use `human-review-1-jul.md`.
+- Use Buf's generated Protobuf binary serialization, not Node V8 serialization,
+  for Proto messages crossing the ZeroMQ adapter.
+- Keep 8,388,608 bytes as a hard inbound limit for each ZeroMQ frame; this is a
+  maximum, not a fixed allocation for ordinary small signals.
+- Consume only the protocol-defined prefix of at most two multipart frames and
+  ignore later frames.
+- Accept the same-UID local IPC multipart-allocation denial-of-service residual
+  for the initial release; do not implement a native receive replacement now.
+- After the project is fully complete, research known ZeroMQ/libzmq and
+  zeromq.js issues and discussions for this limitation and report known
+  workarounds or evidence that the limitation was previously undocumented.
 
 ## Context Assumptions
 
@@ -3058,3 +3069,48 @@ Subscription cancellation failed.` instead of `AggregateError`.
   continuation regressions, canonical review, and focused security closure.
 - D-0092 and the blocking question are recorded durably. No full verify,
   integration, push, or T-0042 work may claim progress until the choice is made.
+
+## D-0093 Human Decision And Risk Acceptance
+
+- The human rejected Node V8 serialization for Protobuf signal messages and
+  explicitly required Buf's generated Protobuf binary serialization instead.
+- The human retained 8,388,608 bytes as the hard per-frame inbound ceiling. The
+  ceiling is not a fixed allocation: ordinary small routing and signal frames
+  allocate their actual sizes plus normal native/runtime overhead.
+- Normal traffic remains routing plus serialized signal. Receivers consume only
+  the protocol-defined prefix, never more than the first two frames; later
+  multipart frames are ignored. One-frame replies consume only their first
+  meaningful frame.
+- The human explicitly accepts SF-013 for the initial release and does not want
+  a native receive replacement now. The accepted residual is that an authorized
+  same-UID peer can append unlimited individually bounded frames that zeromq.js
+  materializes before JavaScript ignores them.
+- After full project completion, perform and report an Internet review of known
+  ZeroMQ/libzmq and zeromq.js issues, discussions, and workarounds for this
+  multipart-allocation behavior. This follow-up does not block initial release.
+- D-0093 records the comments, decision, reasoning, and consequences. T-0041 is
+  unblocked and must implement the Buf wire correction before final security
+  re-review and task verification.
+
+## D-0093 Skill Applicability And Architecture Assignment
+
+- Session inventory, the complete bounded `~/.agents/skills` entrypoint scan,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and readable
+  `~/.agents/.skill-lock.json` were checked. Selected and read:
+  `architecture-decision-records`, `subagent-driven-development`,
+  `requesting-code-review`, `verification-before-completion`, and
+  `using-git-worktrees`. `test-driven-development`, `implement`,
+  `javascript-testing-patterns`, and `typescript-advanced-types` apply to the
+  later implementation owner. Security skills remain relevant only to the
+  focused final re-review. No install or network action is authorized by a
+  skill.
+- The existing T-0041 worktree is already isolated and clean; no additional
+  worktree is needed.
+- Because D-0093 changes a serialized signal boundary and may affect a public
+  adapter-neutral interface, assign the existing `requirements_splitter`,
+  expected explicit immutable `gpt-5.6-sol` / high, read-only, childless, and
+  Git-read-only. It must preserve the human decisions verbatim, inspect the
+  current transport/runtime contracts and generated schemas, and return the
+  smallest compatible ownership seam, exact wire/reply treatment, TDD cases,
+  docs, and bounded review scope. It must not revisit the accepted risk or add a
+  native transport replacement.

@@ -4169,3 +4169,87 @@ Consequences:
 - Native dependency selection must account for cross-platform prebuilds,
   lockfile/install-script provenance, continuation after peer rejection, and
   focused SF-013 security review.
+
+## D-0093: Use Protobuf Wire Encoding And Accept Multipart Trailer Risk
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: The SF-013 investigation established two separate facts. First,
+`maxMessageSize = 8_388_608` is a maximum accepted size for each inbound frame;
+it does not reserve or allocate 8 MiB for every ordinary frame. A small routing
+key and small signal therefore retain their actual small buffer sizes. Second,
+zeromq.js 6.5.0 materializes the complete multipart message before JavaScript
+can ignore trailers, so consuming only the protocol prefix does not prevent a
+peer from forcing native allocation with arbitrarily many individually valid
+frames.
+
+The human explicitly challenged the prior design and then selected the release
+policy in these terms:
+
+- "The 8MiB size just to send signals is bullshit. They are typically tiny."
+- "Buf's implementation has Proto-compatible serialization mechanism. I don't
+  understand why we don't use that, but use some generic V8 stuff. This is also
+  not OK to me."
+- "Use Buf's serialization, not V8's when dealing with Proto messages."
+- "Keep 8 MiB as a hard upper limit."
+- "Take only two first frames from the payload. Ignore the rest."
+- "On this stage I don't care if someone breaks into our ZeroMQ server and
+  feeds a lot of junk to it."
+
+Decision:
+
+- Protobuf signal messages crossing the ZeroMQ adapter use the generated Buf
+  Protobuf schemas and binary encoding. Node V8 serialization must not encode
+  or decode those Protobuf messages.
+- Preserve `8_388_608` bytes as the hard inbound limit for each ZeroMQ frame.
+  This is a rejection ceiling, not an expected frame size or a fixed per-send
+  allocation.
+- Preserve routing plus serialized signal as the normal two-frame publish and
+  request wire shape. Receivers consume only the protocol-defined prefix,
+  never more than the first two frames. A reply that defines one meaningful
+  frame consumes that frame. Any later multipart frames are ignored.
+- Accept SF-013 for the initial release: a process able to connect to the
+  private same-host IPC endpoint can append unlimited individually bounded
+  frames, and zeromq.js may allocate them before application code ignores them.
+  Do not build or fork a native receive path for this release.
+- After the framework, documentation, user guide, example, and release closure
+  are complete, perform a separate Internet review of known ZeroMQ/libzmq and
+  zeromq.js multipart-allocation issues and discussions. Report whether SF-013
+  is already known, available workarounds, upstream proposals, and whether the
+  project appears to have found a previously undocumented limitation.
+
+Reasoning:
+
+- Schema-aware Buf binary encoding preserves the actual Protobuf wire contract,
+  avoids a Node/V8-specific object serialization layer, and makes payload size
+  and compatibility reasoning correspond to generated message schemas.
+- Eight MiB remains a conservative hard ceiling while ordinary signals retain
+  their actual typically small allocations. The ceiling does not imply two
+  8 MiB allocations per dispatch.
+- Ignoring trailers gives deterministic application semantics for the accepted
+  two-frame protocol. It does not mitigate native multipart allocation; that
+  distinction remains explicit rather than being claimed as a security control.
+- The remaining attack requires access to the private same-host IPC endpoint.
+  The human accepts that availability risk at this stage and prefers completing
+  the framework over introducing a native dependency fork or replacement.
+
+Consequences:
+
+- D-0092 remains technically accurate about zeromq.js allocation behavior, but
+  its release-blocking disposition is superseded by this explicit human risk
+  acceptance.
+- T-0041 must implement and test Buf encoding for Protobuf signal envelopes,
+  preserve the per-frame cap, and characterize prefix-only trailer handling.
+- Because the change concerns a serialized boundary and may affect the public
+  adapter-neutral transport contract, a bounded architecture split must first
+  select the smallest compatible ownership seam and exact tests. It must not
+  broaden the public API unnecessarily.
+- SF-013 remains documented as an accepted Medium same-UID local availability
+  residual. It is not described as fixed, bounded in aggregate, or prevented by
+  ignoring trailers.
+- The post-completion Internet review is a required follow-up, but it does not
+  block initial project completion or T-0041 security acceptance.

@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Blocked - SF-013 requires native receive replacement or explicit human
-risk acceptance
+Status: In progress - D-0093 accepted; Protobuf wire correction architecture
+and implementation pending
 
 Baseline: `39f2c6f7`
 
@@ -3127,6 +3127,26 @@ verify` remains reserved.
 - Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda`, explicit and
   actual immutable Sol High, is closed. No implementation/reviewer remains
   active.
-- Review is blocked pending human authorization of native/replacement transport
-  work or explicit SF-013 residual-risk acceptance. Full verification and
-  integration remain pending.
+- At this historical checkpoint, review was blocked pending human authorization
+  of native/replacement transport work or explicit SF-013 residual-risk
+  acceptance. D-0093 below resolves that choice; full verification and
+  integration remain pending for the wire correction.
+
+## D-0093 Human Disposition And Architecture Assignment
+
+- The human explicitly accepts SF-013's Medium same-UID local IPC multipart-
+  allocation residual for the initial release. Review must continue to describe
+  it as an accepted risk, not as a fixed aggregate bound.
+- Binding implementation requirements are Buf generated-schema Protobuf binary
+  encoding for Proto signal messages, no V8 serialization for those messages,
+  the existing 8,388,608-byte hard per-frame inbound limit, consumption of only
+  the protocol-defined prefix of at most two frames, and ignored trailers.
+- The post-completion Internet review of known ZeroMQ/libzmq/zeromq.js issues
+  and workarounds is required but outside T-0041 release-blocking review scope.
+- Assign existing requirements splitter, expected explicit immutable Sol High,
+  read-only, childless, and Git-read-only, to define the smallest compatible
+  serialization ownership seam, reply treatment, exact tests, docs, and review
+  relevance. It must not reopen the accepted risk or add native work.
+- After implementation and focused mechanical checks, run all canonical lanes
+  affected by the serialized/runtime/doc changes, then a focused final security
+  re-review that verifies the Buf wire and records SF-013 as human-accepted.
