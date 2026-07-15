@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 7 assigned
+Status: In progress - canonical wave 7 findings; requirements split assigned
 
 Started: `2026-07-14`
 
@@ -1064,3 +1064,26 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   mutation, exact file/line findings, and the superseded-history exclusion.
   Aggregate the complete wave before any fix. Dedicated security review remains
   pending.
+
+## Canonical Review Wave 7 Result And Split Assignment
+
+- Style agent `019f63e2-6f10-7522-b963-afe45db0c852`, actual immutable Terra
+  High, found P1 missing bounded failure/no-spin evidence for the timerless
+  fallback. Documentation agent `019f63e2-6bf0-7b62-9bfb-933f733d1a98`, actual
+  immutable Luna Medium, found Low stale security-artifact endpoint provenance.
+  TypeScript/API agent `019f63e2-723b-76e0-887b-9fbca2ac27d1`, actual immutable
+  Terra High, reported clean. Reliability agent
+  `019f63e4-1ac9-7213-917b-02076c8f6bee`, actual immutable Terra High, found
+  three P1s. Every reviewer is closed and explicit dispatch matched runtime.
+- Deduplicated batch: (1) reconcile commit-then-reject claim CAS without
+  abandoning an exact persisted owner; (2) prevent transient failure of the
+  timerless fallback from permanently consuming an unreturned slot while
+  preserving finite/no-spin policy and add bounded evidence; (3) reject public
+  ZeroMQ request timeouts that permit an indefinitely blocked request/close;
+  and (4) anchor both security artifacts to substantive endpoint `6f45be80`.
+- These findings change persistence/concurrency and a public option contract.
+  Assign the existing `requirements_splitter` with explicit immutable
+  `gpt-5.6-sol` / high to define the smallest compatible TDD contracts and
+  review-lane impact. It is read-only, must not spawn subagents or mutate Git,
+  and must preserve D-0087, finite cleanup, no public scheduler, exact type
+  URLs, and accepted stale-claim residuals.

@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 7 assigned
+Status: Canonical wave 7 findings; requirements split assigned
 
 Baseline: `39f2c6f7`
 
@@ -892,3 +892,26 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   evidence, ignore superseded history unless currently claimed, and report
   concrete findings or clean. Aggregate the complete wave before fixes;
   dedicated security review remains pending.
+
+## Canonical Review Wave 7 Result
+
+- Immutable runtime evidence and explicit dispatch matched for every closed
+  reviewer: style Terra High `019f63e2-6f10-7522-b963-afe45db0c852`, docs Luna
+  Medium `019f63e2-6bf0-7b62-9bfb-933f733d1a98`, API Terra High
+  `019f63e2-723b-76e0-887b-9fbca2ac27d1`, and reliability Terra High
+  `019f63e4-1ac9-7213-917b-02076c8f6bee`.
+- Style: P1 add bounded liveness and failed-fallback/no-repeat coverage.
+- Documentation: Low update both security artifacts from stale endpoint/
+  uncommitted wording to substantive endpoint `6f45be80`; all other current
+  workflow, exclusion, and anchor claims are clean.
+- TypeScript/API: clean across query-limit, public bounds, exports, Protobuf,
+  internal states, and TypeDoc.
+- Performance/reliability: P1 ambiguous claim CAS can persist an owner then
+  discard its only local token; P1 the one-shot timerless fallback has no later
+  path after transient failure; P1 `requestTimeoutMs=-1` can keep a sent request
+  and `close()` pending indefinitely.
+- The fallback style/reliability observations are one accepted contract,
+  yielding four deduplicated items including provenance. Assign the existing
+  requirements splitter, explicit immutable Sol High, for a read-only bounded
+  correction design before one Terra Medium implementation batch. Dedicated
+  security review remains pending.
