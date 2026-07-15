@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 9 assigned
+Status: In progress - canonical wave 9 findings accepted; correction split assigned
 
 Started: `2026-07-14`
 
@@ -1275,3 +1275,30 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   exclusion. Focus re-review on the three Wave 8 corrections while retaining
   project-wide T-0041 scope. Aggregate the complete wave before action;
   dedicated security review remains pending.
+
+## Canonical Review Wave 9 Result And Correction Split
+
+- The complete wave is accepted. Style/maintainability is clean. Documentation
+  found two P2 architecture-guide defects: missing default-100 instance-local
+  `subscriptionLimit` and retained-capacity failure semantics, plus an overbroad
+  claim that duplicate cancellations always return OK. TypeScript/API found
+  three P2 defects: the published `@spine-ts/transport/zeromq` subpath is absent
+  from TypeDoc/export gating; internal `onBackgroundFailure` leaks through the
+  public options declaration; and `inactiveTtlMs` TSDoc incorrectly says durable
+  inactive records are process-local. Performance/reliability found one P2: the
+  liveness test's cleanup can await the same hung close indefinitely and does
+  not prove request settlement precedes close completion.
+- Explicit immutable Desktop profiles are tool-enforced runtime evidence:
+  style `019f6416-2697-75c0-910f-ded1eb50e4a3` Terra High; documentation
+  `019f6416-2da4-7af3-83a6-043968dfeeb3` Luna Medium; TypeScript/API
+  `019f6416-2a30-7d11-bc33-ea36620c6afd` Terra High; reliability
+  `019f6418-0b76-77a2-b4e0-dc3eaaf94c91` Terra High. Child-visible sessions
+  exposed no finer profile metadata. All four reviewers are closed.
+- Because correcting a leaked public option and adding subpath API coverage are
+  public-contract design work, dispatch the existing requirements splitter with
+  explicit immutable Sol High. It must define the smallest compatibility-safe
+  correction, test-only/background-failure observation seam, exact TypeDoc gate
+  shape, liveness assertions/cleanup bound, docs alignment, affected tests, and
+  no-scope-expansion constraints. It is read-only, cannot spawn subagents or
+  mutate Git, and must return one bounded implementation contract. Dedicated
+  security review remains pending.

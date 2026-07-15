@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 9 assigned
+Status: Canonical wave 9 findings accepted; correction split assigned
 
 Baseline: `39f2c6f7`
 
@@ -1113,3 +1113,37 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
 - All are read-only and use the full ledger plus superseded-history rule.
   Aggregate the complete wave before action; dedicated security review remains
   pending.
+
+## Canonical Review Wave 9 Result
+
+- Style/maintainability, immutable Terra High, agent
+  `019f6416-2697-75c0-910f-ded1eb50e4a3`: clean; Wave 8 helper, constants,
+  tests, API text, structure, and names meet current standards.
+- Documentation, immutable Luna Medium, agent
+  `019f6416-2da4-7af3-83a6-043968dfeeb3`: P2 because
+  `docs/architecture/README.md` omits the default-100 instance-local
+  subscription bound and retained capacity on persistence failure; P2 because
+  its duplicate-cancellation-OK claim excludes the current `INTERNAL` retry
+  path.
+- TypeScript/API, immutable Terra High, agent
+  `019f6416-2a30-7d11-bc33-ea36620c6afd`: P2 because published
+  `@spine-ts/transport/zeromq` lacks TypeDoc/export gating; P2 because internal
+  `onBackgroundFailure` remains in public emitted options; P2 because
+  `inactiveTtlMs` TSDoc falsely calls storage-backed inactive rows process-local.
+- Performance/reliability, immutable Terra High, agent
+  `019f6418-0b76-77a2-b4e0-dc3eaaf94c91`: P2 because the tightened liveness
+  assertion can be followed by unbounded fixture cleanup awaiting the same close
+  and does not assert request settlement before successful close completion.
+- Explicit successful immutable role dispatch is actual Desktop runtime profile
+  evidence; child sessions exposed no finer model/reasoning label. All agents
+  are closed. Direct coordinator inspection accepts all six findings.
+
+## Canonical Wave 9 Correction Split Assignment
+
+- Public-contract design requires the existing requirements splitter, explicit
+  immutable Sol High, before implementation. It is read-only, uses the full
+  ledger plus D-0087/D-0088, cannot mutate Git or spawn subagents, and must
+  return the smallest compatibility-safe contract for the public-option seam,
+  ZeroMQ subpath TypeDoc/export gate, bounded liveness evidence, stale TSDoc,
+  and architecture text. One bounded Terra Medium implementation follows;
+  dedicated security review remains pending.
