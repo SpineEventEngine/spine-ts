@@ -2225,3 +2225,14 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   assigned/pending before package generation. Run all four immutable canonical
   roles with the full ledger, D-0087-D-0090, and superseded-history exclusion;
   aggregate before action. Dedicated final security review remains pending.
+
+## Canonical Review Wave 18 Package And Assignment
+
+- Immutable endpoint `44d5a140`; package
+  `.superpowers/sdd/review-39f2c6f7..44d5a140.diff` contains 86 commits and
+  765,320 bytes. Substantive implementation evidence remains `fa5e4b65`.
+- Dispatch existing style/maintainability Terra High, documentation Luna
+  Medium, TypeScript/API Terra High, and performance/reliability Terra High
+  roles with explicit immutable profiles, read-only, childless, Git-read-only,
+  the full ledger, D-0087-D-0090, and superseded-history exclusion. Aggregate
+  before action; dedicated final security review remains pending.
