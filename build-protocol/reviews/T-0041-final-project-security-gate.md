@@ -2683,3 +2683,11 @@ verify` remains reserved.
   safe settlement without silently changing D-0088/public options or inventing
   production policy. State whether a decision amendment is unavoidable and
   provide exact RED/GREEN cases. Implementation remains pending.
+
+## Canonical Wave 21 Architecture Dispatch
+
+- Existing `requirements_splitter` agent
+  `019f653b-6759-7280-b084-f35ad44270d2` was dispatched explicitly with
+  tool-enforced immutable `gpt-5.6-sol` / high, read-only, childless, and
+  Git-read-only. Its bounded remit is publish/close ordering, installed ZeroMQ
+  behavior, D-0088 disposition, error ownership, and exact implementation tests.

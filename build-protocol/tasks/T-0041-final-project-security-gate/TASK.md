@@ -2534,3 +2534,11 @@ Subscription cancellation failed.` instead of `AggregateError`.
   D-0088 or public options. It must decide whether D-0088 must change and give
   exact behavior-focused acceptance tests. Implementation waits for this
   architecture result; dedicated security review remains pending.
+
+## Canonical Wave 21 Architecture Dispatch
+
+- Existing requirements splitter `019f653b-6759-7280-b084-f35ad44270d2` was
+  dispatched explicitly with immutable `gpt-5.6-sol` / high, read-only,
+  childless, and Git-read-only. It must resolve publish/close ordering against
+  installed ZeroMQ semantics and D-0088, then return one smallest implementation
+  contract with exact tests and explicit decision disposition.
