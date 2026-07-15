@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 21 findings accepted; architecture
-assignment pending; dedicated security re-review pending
+Status: In progress - Canonical Wave 21 architecture accepted; correction
+assigned; dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2542,3 +2542,26 @@ Subscription cancellation failed.` instead of `AggregateError`.
   childless, and Git-read-only. It must resolve publish/close ordering against
   installed ZeroMQ semantics and D-0088, then return one smallest implementation
   contract with exact tests and explicit decision disposition.
+
+## Canonical Wave 21 Architecture Result And Fix Assignment
+
+- Requirements splitter `019f653b-6759-7280-b084-f35ad44270d2` completed under
+  its explicit, tool-enforced immutable actual `gpt-5.6-sol` / high role,
+  spawned no child, made no Git mutation, and is closed.
+- Accept “gate, track, close, then drain.” Add package-private publisher send
+  access, track the complete publish promise, gate again immediately after
+  publisher lookup, close publisher sockets before awaiting tracked publishes,
+  then drain publishes. Publish/native-send errors remain with `publish()`;
+  cleanup/unlink errors remain with `close()`; close retry ordering remains.
+- D-0088 is preserved without amendment. Publisher `sendTimeout` remains native
+  `-1`; no public option, timeout/cancellation policy, or delivery guarantee is
+  added. Installed ZeroMQ 6.5.0 closes pending poller operations before native
+  socket disposal, and publisher linger remains zero.
+- Resume the existing implementer context, expected original explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. TDD no-send-after-close, in-flight
+  send close-before-drain ordering, separate publish/close error ownership and
+  retry, successful request cleanup, and cleanup-only failure. Correct the
+  SF-007/SF-008/SF-009/TM-004 exact evidence anchors plus final SF-010/TM-011
+  anchors/status after code settles. Preserve public/package/Proto/generated
+  boundaries and all accepted decisions. Run focused native transport and
+  Canonical Wave 22 before dedicated security review.

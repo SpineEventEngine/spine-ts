@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 21 findings accepted; architecture assignment pending;
-dedicated security re-review pending
+Status: Canonical Wave 21 architecture accepted; correction assigned; dedicated
+security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2691,3 +2691,31 @@ verify` remains reserved.
   tool-enforced immutable `gpt-5.6-sol` / high, read-only, childless, and
   Git-read-only. Its bounded remit is publish/close ordering, installed ZeroMQ
   behavior, D-0088 disposition, error ownership, and exact implementation tests.
+
+## Canonical Wave 21 Architecture Result
+
+- Requirements splitter `019f653b-6759-7280-b084-f35ad44270d2` used the
+  explicit tool-enforced immutable actual `gpt-5.6-sol` / high profile, spawned
+  no child, made no Git mutation, and is closed.
+- Accepted contract is “gate, track, close, then drain”: add a package-private
+  publisher-send seam; track each complete publish; gate after publisher lookup;
+  close publishers before draining tracked sends; then await all publish
+  settlement. Publish errors belong only to callers; cleanup failures only to
+  close; retry and cleanup order stay stable.
+- D-0088 remains unchanged and publisher `sendTimeout` remains native `-1`.
+  Installed ZeroMQ close settles pending poller work, so no new public timeout,
+  cancellation policy, or delivery promise is needed.
+
+## Canonical Wave 21 Fix Assignment
+
+- Resume existing implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad`, expected
+  its original explicit immutable `gpt-5.6-terra` / medium dispatch, as sole
+  writer.
+- RED/GREEN: no post-lookup native send; close-before-drain for paused existing-
+  publisher send; separate publish/close failures plus retry; successful
+  request closes its exact socket; successful request cleanup-only failure is
+  surfaced directly. Preserve native publisher timeout, all public/package/
+  Proto/generated boundaries, and decisions. Add exact current
+  SF-007/SF-008/SF-009/TM-004 and refreshed SF-010/TM-011 evidence anchors and
+  synchronized status. Run focused native gates; all four Canonical Wave 22
+  lanes follow before dedicated security review.

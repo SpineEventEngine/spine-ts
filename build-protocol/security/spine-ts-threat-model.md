@@ -1,16 +1,15 @@
 # Spine TS Threat Model
 
-Status: T-0041 working threat model; Canonical Wave 21 findings are accepted and
-architecture assignment is pending; dedicated security re-review is pending.
+Status: T-0041 working threat model; Canonical Wave 21 architecture is accepted
+and correction is assigned; dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
 Committed canonical wave 5 finding basis: `b43cf705`. The substantive
 implementation-evidence endpoint is `b9f1ea58`; later provenance/review/status
-commits are not implementation evidence. Canonical Wave 21 architecture/
-correction and dedicated security re-review remain pending. No security
-acceptance is claimed.
+commits are not implementation evidence. Canonical Wave 21 correction and
+dedicated security re-review remain pending. No security acceptance is claimed.
 
 ## Scope and assumptions
 
