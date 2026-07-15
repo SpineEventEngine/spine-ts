@@ -2488,3 +2488,18 @@ verify` remains reserved.
   artifacts, no subagents or Git mutation, concrete findings or clean, and
   superseded-history exclusion. Aggregate before action; dedicated final
   security review remains pending.
+
+## Canonical Review Wave 20 Dispatch
+
+- Style/maintainability agent `019f651b-abc5-7792-a719-5d724ed0ff48` was
+  dispatched explicitly as existing `style_maintainability_reviewer` with
+  immutable `gpt-5.6-terra` / high.
+- Documentation agent `019f651b-af0f-7352-9495-182a7340674e` was dispatched
+  explicitly as existing `documentation_reviewer` with immutable
+  `gpt-5.6-luna` / medium.
+- TypeScript/API agent `019f651b-a733-7191-a42e-180ca449e3bd` was dispatched
+  explicitly as existing `typescript_api_docs_reviewer` with immutable
+  `gpt-5.6-terra` / high.
+- All three are read-only, childless, and Git-read-only with distinct bounded
+  concerns. Reliability remains queued for platform capacity; aggregate the
+  complete four-lane wave before action.
