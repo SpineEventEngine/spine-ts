@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: Dedicated security re-review found SF-011 and SF-012; architecture
-assignment pending
+Status: SF-011/SF-012 architecture accepted; implementation pending
 
 Baseline: `39f2c6f7`
 
@@ -2937,3 +2936,16 @@ verify` remains reserved.
 - Requirements splitter `019f6575-3f28-7410-ae39-3ef51476c44b` was dispatched
   explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
   childless, and Git-read-only, for the two bounded security contracts.
+
+## SF-011/SF-012 Architecture Result
+
+- Splitter `019f6575-3f28-7410-ae39-3ef51476c44b` used its explicit,
+  tool-enforced immutable actual Sol High profile and is closed with no child or
+  Git mutation.
+- D-0091 fixes the exact private caps at 8,388,608 native receiving bytes and
+  33,554,432 durable encoded bytes. Cover Subscriber/Request/Reply before native
+  endpoints, no sender preflight/Publisher change, and reject durable values at
+  the first JSON-reader line before UTF-8/JSON/Base64/Protobuf work.
+- Preserve serialized/public boundaries and all earlier decisions. Implement
+  exact threshold/non-reachability/continuation/4 MiB compatibility tests, then
+  run all four canonical lanes and a focused SF-011/SF-012 security re-review.

@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - dedicated security re-review found SF-011 and SF-012;
-architecture assignment pending
+Status: In progress - SF-011/SF-012 architecture accepted; implementation
+pending
 
 Started: `2026-07-14`
 
@@ -2808,3 +2808,22 @@ Subscription cancellation failed.` instead of `AggregateError`.
   explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
   childless, and Git-read-only, for only the exact private limits,
   compatibility, tests, mapping, and re-review scope.
+
+## SF-011/SF-012 Architecture Result And Implementation Assignment
+
+- Splitter `019f6575-3f28-7410-ae39-3ef51476c44b` completed under its explicit,
+  tool-enforced immutable actual Sol High profile, made no Git mutation,
+  spawned no child, and is closed.
+- Accepted D-0091: one private 8,388,608-byte native receive cap on Subscriber,
+  Request, and Reply before endpoints/native work; no Publisher cap or sender
+  preflight. One private 33,554,432-byte durable `Any.value` cap at the first
+  JSON-reader line before UTF-8/JSON/Base64/Protobuf work.
+- Records at or below 32 MiB remain byte-compatible; larger values become inert
+  malformed state outside the 4 MiB service-supported envelope. D-0087-D-0090,
+  public/package/Proto/storage contracts, Publisher `sendTimeout = -1`, cleanup,
+  retry, and deployment ownership remain unchanged.
+- Keep SF-012 under clarified TM-006/TB-04 persisted replay/delivery availability;
+  SF-011 remains TM-007/TB-06. Assign the existing implementer under its original
+  immutable Terra Medium profile for two ordered TDD slices, D-0091/security
+  artifacts, focused native transport/server verification, and no Git mutation.
+  One complete four-lane canonical wave and focused security re-review follow.

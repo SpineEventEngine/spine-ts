@@ -4081,3 +4081,43 @@ timer; recovery and expiry-cleanup failure retention remain unchanged. Expiry
 cleanup failure has no automatic retry, and same-ID `Cancel` remains the
 explicit retry path. No value capping, timer chunking, re-arming policy,
 `queueLimit` behavior, or shared `positiveInteger()` behavior is introduced.
+
+## D-0091: Bound Private Transport And Durable Record Bytes
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Decision:
+
+- Every application-message-receiving ZeroMQ `Subscriber`, `Request`, and
+  `Reply` socket sets the private native `maxMessageSize` option to 8,388,608
+  bytes before any connect, bind, receive, send, or handler work. `Publisher`
+  does not receive application messages and keeps its native
+  `sendTimeout = -1`. No sender preflight or public transport option is added.
+- Durable subscription JSON-in-`Any` state rejects `Any.value.byteLength`
+  above 33,554,432 before UTF-8 decoding, JSON parsing, Base64 validation or
+  expansion, and Protobuf decoding. The one guard applies to inactive, claim,
+  cancellation-marker, and unknown internal stored type URLs because they
+  converge on one JSON reader.
+- The 8 MiB frame cap leaves more than 4 MiB headroom above current V8 envelope
+  and accepted-reply encodings of a 4,194,304-byte Protobuf message. The 32 MiB
+  durable cap covers current worst-case service-supported subscription
+  encoding: 4,194,351 binary bytes, 5,592,468 Base64 bytes, and 30,758,240 JSON
+  bytes with adversarial sixfold escaping, leaving 2,796,192 bytes headroom.
+
+Consequences:
+
+- No type URL, JSON property, Base64 representation, `Any`, Protobuf, storage
+  interface, package export, or public option changes. Existing durable values
+  at or below 32 MiB remain byte-for-byte compatible and need no migration.
+  Values above 32 MiB become inert malformed state because they are outside the
+  supported service-generated envelope.
+- Oversized native frames are rejected by libzmq before V8 deserialization and
+  handler invocation. Oversized durable values fail before parser/decoder work;
+  existing malformed-row recovery/cancellation semantics keep them unchanged
+  and fail closed while unrelated valid work continues.
+- D-0087 through D-0090 remain unchanged. Deployment continues to own ingress,
+  rate limits, same-host process isolation, and persistence-adapter integrity.
