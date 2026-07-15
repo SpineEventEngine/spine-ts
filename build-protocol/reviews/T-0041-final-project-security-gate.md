@@ -2949,3 +2949,12 @@ verify` remains reserved.
 - Preserve serialized/public boundaries and all earlier decisions. Implement
   exact threshold/non-reachability/continuation/4 MiB compatibility tests, then
   run all four canonical lanes and a focused SF-011/SF-012 security re-review.
+
+## D-0091 Implementation Context Handoff
+
+- Prior implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` remained inert after
+  resume, made no Git or file changes, returned no blocker, and is closed as
+  unavailable for this batch.
+- Assign one fresh existing implementer, expected explicit immutable Terra
+  Medium, as the sole writer for the exact accepted two-slice contract. No
+  architecture rediscovery or child agent is permitted.
