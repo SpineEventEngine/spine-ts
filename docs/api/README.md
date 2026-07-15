@@ -734,8 +734,8 @@ registration handshakes, delivery retries, and broad health checks are outside
 the initial release. The adapter provides no exactly-once, durable-redelivery,
 retry, restart, or remote-delivery guarantee. For transport topics marked
 `command` or `event`, the private adapter uses generated Buf Protobuf binary;
-the reserved `query`, `subscription`, and `system` kinds retain private V8
-encoding pending concrete schemas. It reads the route/payload or reply-frame
+the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
+contract and currently retain private V8 encoding. It reads the route/payload or reply-frame
 prefix and ignores trailing multipart frames after native receipt; that does
 not bound aggregate native allocation and remains the accepted D-0093 local
 availability residual. The adapter is for trusted same-host runtime peers only;

@@ -3209,3 +3209,20 @@ verify` remains reserved.
 - All four canonical concerns remain relevant and must review only the compact
   D-0093 implementation package. Focused security re-review follows complete
   canonical closure.
+
+## D-0093 Pre-Review Lint And Canonical Assignment
+
+- Corrected one stale work-log header and removed public wording that implied a
+  future Proto policy for reserved query/subscription/system kinds. Repeated
+  active status and future-policy scans are clean.
+- The 8 MiB cap and topic-kind codec each have one private production owner.
+  The diff changes no root/subpath exports, public options, Proto source, copied
+  schema, or generated artifact. Public docs distinguish current Buf/V8 wire
+  behavior from the accepted unbounded SF-013 residual.
+- Assign existing style/maintainability reviewer, expected explicit immutable
+  Terra High; documentation reviewer, expected explicit immutable Luna Medium;
+  TypeScript/API reviewer, expected explicit immutable Terra High; and
+  performance/reliability reviewer, expected explicit immutable Terra High.
+  Every lane is read-only, childless, Git-read-only, task-scoped, and must ignore
+  superseded history unless current records/docs claim it active. Aggregate the
+  complete wave before correction.

@@ -754,8 +754,8 @@ transport or contract.
 
 The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
 envelopes, dispatching by the transport topic's signal kind. Its reserved
-`query`, `subscription`, and `system` kinds retain private V8 encoding until a
-concrete Protobuf schema exists. Publish/request traffic keeps route plus
+`query`, `subscription`, and `system` kinds have no Protobuf wire contract and
+currently retain private V8 encoding. Publish/request traffic keeps route plus
 payload frames and receivers consume only that prefix; reply consumers read one
 private V8 result frame. Ignored multipart trailers are an accepted D-0093
 same-UID local availability residual, not an aggregate allocation control. Its

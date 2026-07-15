@@ -3123,8 +3123,8 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Git changes, spawned no child, and is closed.
 - Accept one private ZeroMQ codec correction. Dispatch by
   `TransportTopic.signalKind`: `command` uses `CommandSchema`, `event` uses
-  `EventSchema`, and only `query`, `subscription`, and `system` retain the
-  existing non-Proto V8 behavior until a concrete Proto contract exists.
+  `EventSchema`; `query`, `subscription`, and `system` retain their existing
+  non-Proto V8 behavior because no Proto contract is in this task's scope.
 - Command/Event send uses Buf `toBinary(..., { writeUnknownFields: false })`;
   receive uses `fromBinary(..., { readUnknownFields: false })`; a Proto codec
   error never falls back to V8. Runtime semantic and `Any.typeUrl` validation
@@ -3182,3 +3182,4 @@ Subscription cancellation failed.` instead of `AggregateError`.
   SF-013 accepted-residual wording. Freeze and commit the implementation, then
   run pre-review lint and all four relevant canonical concerns before focused
   final security re-review.
+- D-0093 implementation commit: `031f497e`.

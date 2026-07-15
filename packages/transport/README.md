@@ -66,8 +66,9 @@ parent, and grant access only to trusted same-host peers.
 
 For `command` and `event` topics, the private adapter writes and reads the
 generated Spine `Command` and `Event` envelopes as Buf Protobuf binary with
-unknown fields disabled. `query`, `subscription`, and `system` remain private
-V8-serialized reserved seams until they have concrete Protobuf contracts.
+unknown fields disabled. No Protobuf wire contract is defined for `query`,
+`subscription`, or `system`; the current adapter retains their private V8
+encoding.
 Publish/request receivers consume the route and payload prefix only; a request
 reply consumes its one private V8 result frame. Surplus multipart trailers are
 ignored after native receipt, not bounded in aggregate. Treat every `ipc://`

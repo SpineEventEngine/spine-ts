@@ -134,7 +134,7 @@ release-blocking and needs focused behavior regression evidence.
 | 12    | Canonical Wave 23                        | All four concerns clean; reviewers closed.                                  |
 | 13    | Focused SF-011/SF-012 security re-review | SF-013 confirmed; SF-012 clean; reviewer closed.                            |
 | 14    | SF-013 architecture                      | Native multipart limit unavailable; human accepted residual in D-0093.      |
-| 15    | D-0093 wire correction                   | Buf architecture and implementation pending.                                |
+| 15    | D-0093 wire correction                   | Coordinator-verified; canonical and focused security review pending.        |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.
