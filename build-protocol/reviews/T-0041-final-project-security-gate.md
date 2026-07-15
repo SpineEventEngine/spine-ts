@@ -2323,3 +2323,27 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   execution paths, no-child/Git-read-only rules, and superseded-history
   exclusion. Aggregate the complete wave before action; dedicated security
   re-review remains pending.
+
+## Canonical Review Wave 19 Package And Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..6791185d.diff`, endpoint
+  `6791185d`, baseline `39f2c6f7`, 92 commits, 797,200 bytes. Substantive
+  implementation evidence remains `cbad2d78`.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, bounded to maintainability,
+  naming, correction scope, active evidence, and chronology.
+- Documentation: existing `documentation_reviewer`, expected explicit
+  immutable `gpt-5.6-luna` / medium, bounded to active user/docs claims,
+  security artifacts, status/provenance, workflows, limits, and links.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit immutable `gpt-5.6-terra` / high, bounded to public declarations,
+  exports, TypeDoc, package/Proto boundaries, D-0087-D-0090, and runtime/type
+  agreement.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit immutable `gpt-5.6-terra` / high, bounded to T-0041
+  resource limits, concurrency, persistence, lifecycle, failure composition,
+  cleanup, and retry behavior.
+- Every assignment is read-only with the full ledger, affected execution paths,
+  current security artifacts, no subagents or Git mutation, concrete findings
+  or clean, and superseded-history exclusion. Aggregate before action;
+  dedicated final security review remains pending.
