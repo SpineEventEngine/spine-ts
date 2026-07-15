@@ -3784,3 +3784,16 @@ Subscription cancellation failed.` instead of `AggregateError`.
   exports. No duplicated production policy constant, unintentional public
   adapter/schema/frame leakage, generated output, routing-validation claim, or
   future-policy overclaim was found. Reliability remains N/A.
+
+## D-0096 Top-Level-Only Re-Review Assignment
+
+- Frozen correction baseline `93d4dff9`; endpoint `f3006a14`; exact package
+  `.superpowers/sdd/review-93d4dff9..f3006a14.diff`; 2 commits; 42,134 bytes.
+- Dispatch existing style/maintainability and TypeScript/API reviewers under
+  explicit immutable Terra High and documentation under explicit immutable
+  Luna Medium. Each lane is read-only, childless, Git-read-only, restricted to
+  its distinct concern and the compact package, and subject to the
+  historical-supersession rule.
+- Aggregate all three results before any finding disposition or closure.
+  Performance/reliability remains N/A because neither predicate runtime body
+  nor any adapter/server execution path changed.

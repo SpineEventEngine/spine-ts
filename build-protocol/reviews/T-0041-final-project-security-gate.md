@@ -3743,3 +3743,16 @@ verify` remains reserved.
 - Re-review style/maintainability, documentation, and TypeScript/API against a
   compact correction package. Performance/reliability remains N/A because no
   runtime predicate or adapter/server execution path changed.
+
+## D-0096 Top-Level-Only Re-Review Package And Assignment
+
+- Exact immutable package `.superpowers/sdd/review-93d4dff9..f3006a14.diff`;
+  baseline `93d4dff9`; endpoint `f3006a14`; 2 commits; 42,134 bytes.
+- Style/maintainability and TypeScript/API use their existing roles with
+  expected explicit immutable Terra High. Documentation uses its existing role
+  with expected explicit immutable Luna Medium. Every lane is read-only,
+  childless, Git-read-only, concern-scoped, and subject to the current-state
+  over historical-text rule.
+- Aggregate the complete wave. Reliability remains N/A because this package
+  changes a predicate return type, tests, docs, decisions, and active status,
+  but no executable predicate body or adapter/server path.
