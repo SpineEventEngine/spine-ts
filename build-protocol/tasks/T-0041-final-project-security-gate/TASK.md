@@ -3539,6 +3539,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Terra Medium, remained sole writer, childless, and Git-clean and is closed.
   Freeze and re-review style, docs, and TypeScript/API; reliability stays N/A.
 
+## D-0095 Review-Batch Pre-Review Lint
+
+- Current task/work/review statuses agree on implementation complete/re-review
+  pending. Active release-matrix transport counts are 19; older 17-count entries
+  remain historical evidence only.
+- Helper overload domains are disjoint, own no duplicated runtime policy, and
+  expose no schema/validator/adapter/server concept. Root/subpath counts remain
+  intentionally 19/6 and generated output is absent.
+- Docs retain narrowing-not-validation and no-future-policy wording. Style,
+  docs, and TypeScript/API re-review this correction; reliability remains N/A
+  under D-0095's stateless/no-I/O/no-execution-path rationale.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
