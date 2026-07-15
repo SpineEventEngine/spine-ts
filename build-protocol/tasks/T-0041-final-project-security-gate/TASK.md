@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical wave 11 docs coordinator-verified; commit pending
+Status: In progress - wave 11 fixes committed; canonical wave 12 packaging pending
 
 Started: `2026-07-14`
 
@@ -1562,3 +1562,13 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   integrity, tracked-generated absence, and `git diff --check` exited 0.
 - Accept the docs correction for commit. Canonical Wave 12 and dedicated
   security review remain pending.
+
+## Wave 11 Immutable Implementation Endpoint
+
+- Commit `a0f40f04` contains the coordinator-verified user-guide and later
+  architecture mirror corrections plus durable evidence.
+- Security provenance now names `a0f40f04` as substantive implementation/docs
+  evidence. This provenance-only follow-up and later review/status commits are
+  not implementation evidence. Generate a literal baseline package after this
+  reconciliation, then run all four Canonical Wave 12 lanes. Dedicated security
+  review remains pending.

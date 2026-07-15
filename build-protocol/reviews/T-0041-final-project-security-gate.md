@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 11 docs coordinator-verified; commit pending
+Status: Wave 11 fixes committed; canonical wave 12 packaging pending
 
 Baseline: `39f2c6f7`
 
@@ -1410,3 +1410,11 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   `100/28/205/19/17/6/3` after 25 Proto checksum validations.
 - Accept the docs batch for commit. Canonical Wave 12 and dedicated security
   review remain pending.
+
+## Wave 11 Immutable Implementation Endpoint
+
+- Commit `a0f40f04` is the substantive Wave 11 implementation/docs endpoint.
+  Security artifacts identify it directly; this provenance-only follow-up and
+  later review/status commits are not implementation evidence.
+- Generate the literal package after this reconciliation, then run all four
+  Canonical Wave 12 concerns. Dedicated security review remains pending.
