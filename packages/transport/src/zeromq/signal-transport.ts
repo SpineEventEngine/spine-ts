@@ -164,6 +164,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
     const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const subscriber = new Subscriber({
       linger: closeDelayMs,
@@ -179,6 +180,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     try {
       subscriber.subscribe(subscription.topic.routing.routingKey);
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
       const endpoint = endpointFor(this.#config, prepared.path, subscription.topic, "publish");
       zeroMqSocketAccess.connect(subscriber, endpoint.address);
 
@@ -280,6 +282,7 @@ class ZeroMqSignalTransport implements SignalTransport {
     handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
     const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const replier = new Reply({
       linger: closeDelayMs,
@@ -294,6 +297,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     try {
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
       const endpoint = endpointFor(this.#config, prepared.path, subscription.topic, "request");
       await zeroMqSocketAccess.bindReply(replier, endpoint.address);
 
@@ -369,6 +373,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
   async #bindPublisher(topic: TransportTopic, key: string): Promise<BoundPublisher> {
     const prepared = await zeroMqSocketAccess.prepareIpcDirectory(this.#config.ipcDirectory);
+    this.#requireOpen();
 
     const publisher = new Publisher({
       linger: closeDelayMs,
@@ -378,6 +383,7 @@ class ZeroMqSignalTransport implements SignalTransport {
 
     try {
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
+      this.#requireOpen();
       const endpoint = endpointFor(this.#config, prepared.path, topic, "publish");
       await zeroMqSocketAccess.bindPublisher(publisher, endpoint.address);
 

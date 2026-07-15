@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 19 reliability finding accepted;
-correction assigned; dedicated security re-review pending
+Status: In progress - Wave 19 finding fixed; correction verification current;
+Canonical Wave 20 and dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2356,3 +2356,36 @@ Subscription cancellation failed.` instead of `AggregateError`.
   policy, and error wording. Run focused native transport tests, generated
   typecheck, docs, lint/format/status/boundary/diff checks. All four Canonical
   Wave 20 lanes follow before dedicated final security review.
+
+## 2026-07-15 - Wave 19 IPC Shutdown-Gate Correction
+
+- RED: six deterministic preparation/recheck races failed because close still
+  allowed subscriber `connect`, responder `bindReply`, and publisher
+  `bindPublisher`; each operation surfaced its injected native-work error rather
+  than `ZeroMQ signal transport is closed.`
+- GREEN: subscriber, responder, and publisher setup now require an open
+  transport immediately after IPC preparation and again after identity recheck,
+  before native work. Targeted regressions passed `6/6`; the unrestricted native
+  transport file passed `41/41` after the sandbox run was blocked by IPC
+  `EPERM`.
+- Generated build typecheck, `docs:check`, and focused ESLint passed. Wave 19
+  finding fixed and correction verification current; Canonical Wave 20 and
+  dedicated security re-review remain pending. No acceptance is claimed.
+- Final focused verification passed exact changed-path formatting,
+  status/security-anchor/public-boundary/generated-clean scans, and diff
+  integrity. Full `pnpm verify` was not run by assignment.
+
+## Wave 19 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` used its original explicit,
+  tool-enforced immutable actual `gpt-5.6-terra` / medium profile, spawned no
+  child, made no Git mutation, and is closed.
+- Fresh coordinator targeted verification passed all `6/6` preparation/recheck
+  shutdown races. The required unrestricted full ZeroMQ transport file passed
+  `41/41`; each new path prevents native work and preserves close settlement.
+- Generated build typecheck, `docs:check` (25 Proto checksums; API counts
+  `100/28/205/19/17/6/3`), focused ESLint, generated-clean policy, exact
+  seven-path Prettier, current-status/open-gate/public-package-boundary scans,
+  exact changed-path proof, and `git diff --check` passed. Accept the Wave 19
+  correction for commit; Canonical Wave 20 and dedicated security re-review
+  remain pending.

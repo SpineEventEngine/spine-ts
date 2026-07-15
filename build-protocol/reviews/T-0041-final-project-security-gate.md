@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 19 reliability finding accepted; correction assigned;
-dedicated security re-review pending
+Status: Wave 19 finding fixed; correction verification current; Canonical Wave
+20 and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2418,4 +2418,34 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   package/dependency/Proto/generated boundaries, and error wording. Require
   focused native transport tests, generated typecheck, docs, lint/format/
   status/boundary/diff checks; all four Canonical Wave 20 lanes follow before
+  dedicated security review.
+
+## Canonical Wave 19 Correction Implementation Evidence
+
+- RED proved six preparation/recheck shutdown races reached native subscriber,
+  responder, and publisher work after close. GREEN passed `6/6` after the
+  request-path-equivalent open-state gates were applied before native work.
+- The sandboxed full file was blocked only by native IPC `EPERM`; its
+  unrestricted rerun passed `41/41`. Generated build typecheck, `docs:check`,
+  and focused ESLint passed. Exact formatting/status/boundary/generated/diff
+  checks remain the final implementer verification below.
+- Wave 19 finding fixed and correction verification current; Canonical Wave 20
+  and dedicated security re-review remain pending. No acceptance is claimed.
+- Final exact changed-path Prettier, status/security-anchor/public-boundary,
+  generated-clean, changed-path, and diff-integrity checks passed. Full `pnpm
+verify` remains reserved.
+
+## Wave 19 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` has matching original
+  explicit dispatch and tool-enforced immutable actual `gpt-5.6-terra` / medium
+  evidence, no child or Git mutation, and is closed.
+- Fresh coordinator evidence: targeted boundary races `6/6`; unrestricted
+  native transport file `41/41`; generated typecheck; `docs:check` with 25
+  Proto checksums and API counts `100/28/205/19/17/6/3`; focused ESLint;
+  generated-clean policy; exact seven-path Prettier; active status/open-gate/
+  public-package-boundary, changed-path, and diff-integrity checks all passed.
+- Direct inspection accepts two open-state gates per subscriber, responder, and
+  publisher path and one parameterized six-case regression without a public or
+  test-only seam. Commit and run all four Canonical Wave 20 lanes before the
   dedicated security review.

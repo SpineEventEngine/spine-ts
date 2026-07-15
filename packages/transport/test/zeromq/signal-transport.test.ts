@@ -508,6 +508,17 @@ describe("ZeroMQ SignalTransport", () => {
     }
   });
 
+  it.each([
+    ["subscriber-connect", "preparation"],
+    ["subscriber-connect", "recheck"],
+    ["responder-bind", "preparation"],
+    ["responder-bind", "recheck"],
+    ["publisher-bind", "preparation"],
+    ["publisher-bind", "recheck"],
+  ] as const)("blocks %s native work when close starts during %s", async (operation, boundary) => {
+    await expectCloseBlocksNativeOperation(operation, boundary);
+  });
+
   it("leaves sibling-owned pathnames intact when connect-only sockets close", async () => {
     await withSharedZeroMqTransports(async (ownerTransport, connectorTransport, ipcDirectory) => {
       const eventTopic = createTransportTopic({
@@ -1324,6 +1335,86 @@ async function expectNativeOperationBlocked(
     if (replacedPath !== undefined) {
       await rm(replacedPath, { recursive: true, force: true });
     }
+  }
+}
+
+async function expectCloseBlocksNativeOperation(
+  operation: "publisher-bind" | "responder-bind" | "subscriber-connect",
+  boundary: "preparation" | "recheck",
+): Promise<void> {
+  const preparation = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+  const recheck = zeroMqSocketAccess.recheckIpcDirectory.bind(zeroMqSocketAccess);
+  const boundaryStarted = deferred<undefined>();
+  const boundaryReleased = deferred<undefined>();
+  const boundarySpy =
+    boundary === "preparation"
+      ? vi
+          .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+          .mockImplementationOnce(async (ipcDirectory) => {
+            boundaryStarted.resolve(undefined);
+            await boundaryReleased.promise;
+            return await preparation(ipcDirectory);
+          })
+      : vi
+          .spyOn(zeroMqSocketAccess, "recheckIpcDirectory")
+          .mockImplementationOnce(async (prepared) => {
+            boundaryStarted.resolve(undefined);
+            await boundaryReleased.promise;
+            await recheck(prepared);
+          });
+  const nativeOperation =
+    operation === "subscriber-connect"
+      ? vi.spyOn(zeroMqSocketAccess, "connect").mockImplementation(() => {
+          throw new Error("native connect reached");
+        })
+      : operation === "publisher-bind"
+        ? vi
+            .spyOn(zeroMqSocketAccess, "bindPublisher")
+            .mockRejectedValue(new Error("native publisher bind reached"))
+        : vi
+            .spyOn(zeroMqSocketAccess, "bindReply")
+            .mockRejectedValue(new Error("native responder bind reached"));
+
+  try {
+    await withZeroMqTransport(async (transport) => {
+      const topic = createTransportTopic({
+        signalKind: operation === "responder-bind" ? "command" : "event",
+        messageTypeUrl: `type.spine.io/example.Closing${operation}${boundary}`,
+      });
+      const subscription = createTransportSubscription({
+        subscriberId: `closing-${operation}-${boundary}`,
+        topic,
+        ...(operation === "responder-bind" ? { mode: "competing-consumer" as const } : {}),
+      });
+      const opening =
+        operation === "subscriber-connect"
+          ? transport.subscribe(subscription, () => undefined)
+          : operation === "responder-bind"
+            ? transport.respond(subscription, () => ({ accepted: true }))
+            : transport.publish({ topic, envelope: { published: true } });
+      await boundaryStarted.promise;
+
+      let closeSettled = false;
+      const close = transport.close().finally(() => {
+        closeSettled = true;
+      });
+
+      try {
+        await waitFor(0);
+        expect(closeSettled).toBe(false);
+
+        boundaryReleased.resolve(undefined);
+        await expect(opening).rejects.toThrow("ZeroMQ signal transport is closed.");
+        await close;
+        expect(nativeOperation).not.toHaveBeenCalled();
+      } finally {
+        boundaryReleased.resolve(undefined);
+        await Promise.allSettled([opening, close]);
+      }
+    });
+  } finally {
+    nativeOperation.mockRestore();
+    boundarySpy.mockRestore();
   }
 }
 
