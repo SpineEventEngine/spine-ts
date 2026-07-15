@@ -3508,6 +3508,21 @@ Subscription cancellation failed.` instead of `AggregateError`.
   envelope-bearing operation, prioritize top-level `signalKind` for topic
   values, add compile/runtime regressions, and update the three active counts.
 
+## D-0095 Structural-Collision Coordinator Finding
+
+- The first bounded fix correctly excludes subscriptions and fixes a topic with
+  an extra nested `topic` by prioritizing top-level `signalKind`, but coordinator
+  inspection found the symmetric unsound case: an envelope-bearing operation
+  may structurally carry an extra top-level `signalKind` and be misclassified as
+  a topic. A value may otherwise satisfy both overload domains with conflicting
+  canonical kinds.
+- Reject the intermediate fix before commit/re-review. Make overload domains
+  statically disjoint, for example by excluding `signalKind` from operation
+  inputs and excluding `topic` from topic inputs with optional-`never` members.
+  Add compile regressions rejecting both ambiguous intersections and runtime
+  proof for each accepted non-ambiguous domain. Preserve D-0095 and do not turn
+  the helper into runtime validation.
+
 ## D-0095 Narrowing Helper Implementation Progress
 
 - The project TypeScript version accepts the additive overloaded
@@ -3526,3 +3541,25 @@ Subscription cancellation failed.` instead of `AggregateError`.
   passed 8/8, generated docs passed with `100/28/205/19/19/6/3`, and generated
   Proto outputs are clean. D-0095 implementation is complete; affected
   re-review remains pending.
+
+## D-0095 Canonical Re-Review Batch Implementation
+
+- Restricted operation narrowing to envelope-bearing transport operations, so
+  `TransportSubscription` and other topic-only containers are rejected while
+  publish/request unions retain canonical-kind narrowing and restricted-kind
+  rejection.
+- Runtime helper classification now gives a structural `TransportTopic`'s
+  top-level `signalKind` precedence over any extra nested `topic`. Regression
+  coverage proves a canonical event topic with a nested command topic is event
+  only and narrows without `never`.
+- Updated exactly the three active release-matrix transport-root claims from 17
+  to 19. D-0095 name, docs semantics, public shapes/generic order, 19/6 counts,
+  and every runtime transport path remain unchanged.
+- Strict compile/runtime RED and initial GREEN are recorded in the work log;
+  final focused verification evidence follows there. Implementation is complete
+  and canonical re-review remains pending.
+- Final evidence is green: both typechecks and focused lint exited 0,
+  transport-root tests passed 9/9, generated docs reported
+  `100/28/205/19/19/6/3`, Proto/generated scans are clean, and diff/status/scope
+  scans contain exactly the six assigned paths with no ZeroMQ/server changes.
+  Implementation remains complete; canonical re-review is pending.

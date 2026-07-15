@@ -3506,6 +3506,15 @@ verify` remains reserved.
   overload restriction, canonical topic precedence, compile/runtime regressions,
   and active matrix correction only.
 
+## D-0095 Structural-Collision Coordinator Finding
+
+- The intermediate correction excludes subscriptions and prioritizes a topic's
+  top-level kind, but is not accepted: structural operations may also carry a
+  top-level `signalKind`, creating the symmetric wrong-kind result.
+- Require statically disjoint operation/topic overload domains and compile
+  rejection of both ambiguous intersections before another package. Preserve
+  the helper as typed narrowing rather than runtime input validation.
+
 ## D-0095 Implementer Evidence Pending Re-Review
 
 - RED proves nested `topic.signalKind` checks do not narrow widened publish,
@@ -3521,3 +3530,23 @@ verify` remains reserved.
   exited 0, transport-root tests passed 8/8, generated docs reported
   `100/28/205/19/19/6/3`, and generated Proto outputs are clean. Implementation
   is complete; affected re-review has not begun.
+
+## D-0095 Canonical Re-Review Batch Implementer Evidence
+
+- Compile RED rejected neither subscriptions nor structural-topic `never`;
+  tooling exited 2 with one unused expected-error marker and two `TS2339`
+  errors. Runtime RED failed 1 of 9 tests because the event topic was classified
+  through its nested command topic.
+- GREEN restricts the operation overload to envelope-bearing values and gives
+  top-level `signalKind` precedence. Tooling exits 0; the complete transport
+  root passes 9/9, including subscription rejection, retained publish/request
+  narrowing, and sound structural topic event/command results.
+- Exactly three active matrix claims now state 19 transport-root exports;
+  historical evidence, ZeroMQ 6, docs semantics, public operation shapes and
+  generic order, and all runtime transport behavior are preserved. Final
+  focused evidence is recorded in the work log; implementation is complete and
+  canonical re-review remains pending.
+- Final focused evidence is green: tooling/build typechecks and focused lint
+  exited 0, root tests passed 9/9, docs reported `100/28/205/19/19/6/3`, and
+  Proto/generated/diff/status/forbidden-scope scans are clean and exact.
+  Canonical re-review has not begun.
