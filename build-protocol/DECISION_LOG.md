@@ -4254,6 +4254,16 @@ Consequences:
 - The post-completion Internet review is a required follow-up, but it does not
   block initial project completion or T-0041 security acceptance.
 
+Post-completion follow-up (2026-07-15): T-0043 records the public-source
+research in
+[`ZEROMQ_MULTIPART_LIMIT_RESEARCH.md`](research/ZEROMQ_MULTIPART_LIMIT_RESEARCH.md).
+The evidence confirms that whole-multipart atomic/memory behavior is known and
+documented, but the exact combination of a per-frame-only `MAXMSGSIZE`, no
+aggregate frame/byte cap, and zeromq.js pre-JavaScript `Buffer[]`
+materialization appears not to have a dedicated public upstream report in the
+bounded search. That is a calibrated search result, not proof that Spine TS was
+first. D-0093's wire policy and accepted release risk remain unchanged.
+
 ## D-0094: Correlate Transport Kinds With Protobuf Envelopes
 
 Status: Accepted
