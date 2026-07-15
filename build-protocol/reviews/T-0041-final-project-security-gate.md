@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 23 clean; focused SF-011/SF-012 security re-review
-pending
+Status: Focused security re-review found SF-013; architecture assignment pending
 
 Baseline: `39f2c6f7`
 
@@ -3091,3 +3090,14 @@ verify` remains reserved.
 - Security `019f65ae-5b69-7761-8323-d3ddfbc785d7`: explicit immutable Terra
   High, read-only, childless, Git-read-only, exact focused package. Await result
   before full verification or closure.
+
+## Focused Security Re-Review Result
+
+- Security `019f65ae-5b69-7761-8323-d3ddfbc785d7`, explicit and actual
+  immutable Terra High: SF-013 Medium/high confidence; SF-012 clean; childless,
+  Git-read-only, and closed.
+- SF-013: the native cap is per frame, but each receive materializes the whole
+  multipart message and current consumers ignore trailing frames. A same-UID
+  trusted-directory peer can append unbounded cap-sized frames.
+- Assign the existing Sol High requirements role to select an enforceable
+  aggregate/frame-count and exact-framing correction before implementation.

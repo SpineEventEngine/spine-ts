@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 23 clean; focused SF-011/SF-012 security
-re-review pending
+Status: In progress - focused security re-review found SF-013; architecture
+assignment pending
 
 Started: `2026-07-14`
 
@@ -3001,3 +3001,20 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - Security agent `019f65ae-5b69-7761-8323-d3ddfbc785d7` is dispatched
   explicitly under the existing immutable `gpt-5.6-terra` / high role,
   read-only, childless, and Git-read-only, against the exact focused package.
+
+## Focused Security Re-Review Finding And Architecture Assignment
+
+- Security agent `019f65ae-5b69-7761-8323-d3ddfbc785d7` completed under the
+  explicit, tool-enforced immutable actual Terra High profile, made no Git
+  mutation, spawned no child, and is closed.
+- Accepted Medium/high-confidence SF-013: `maxMessageSize` limits each ZeroMQ
+  frame rather than aggregate multipart bytes. The binding materializes all
+  frames while transport handlers consume only the expected prefix, so a
+  trusted-directory peer can append arbitrarily many cap-sized frames before
+  any JavaScript framing rejection. SF-012 is clean.
+- Because native receive semantics, aggregate allocation, and exact wire framing
+  are architecture/security-significant, assign the existing requirements
+  splitter, expected explicit immutable `gpt-5.6-sol` / high, read-only,
+  childless, and Git-read-only. Determine the smallest enforceable aggregate/
+  frame-count control, exact framing contract, compatibility, tests, and review
+  scope without changing public options, Publisher timeout, or D-0088-D-0091.

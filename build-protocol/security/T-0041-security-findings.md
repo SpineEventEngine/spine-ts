@@ -2,7 +2,7 @@
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
 verified. SF-011/SF-012 are implemented with correction verification current;
-Canonical Wave 23 is clean and focused security re-review is pending.
+Canonical Wave 23 is clean; focused security re-review found SF-013.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -10,8 +10,8 @@ maintainability correction is `fdd9da0a`. D-0091 implementation evidence is
 `da730e04`. Later provenance/review/status commits are not implementation
 evidence. The preceding canonical review was clean; dedicated security re-review
 found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
-Canonical Wave 23 is clean; focused security re-review is pending. No security
-acceptance is claimed.
+Canonical Wave 23 is clean; SF-012 is clean and SF-013 remains unresolved. No
+security acceptance is claimed.
 
 Dedicated final re-review package is
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
@@ -85,6 +85,7 @@ disposition and the new release-blocking findings.
 | SF-010 | Implemented / Correction verification current | Same-host attacker can substitute a configured path component before preparation or between asynchronous checks.                              | IPC; TB-06                   | Lexical preparation, canonical identity, ownership/mode, and recheck controls are at `signal-transport.ts:723-897`; setup paths gate before native work at `signal-transport.ts:180-233,249-290,307-364,401-455`. Publish gate/track/send and close-before-drain are at `signal-transport.ts:110-163,524-546`; request and publisher error composition remains at `signal-transport.ts:249-290,432-453`. Wave 21 lifecycle/request regressions are at `signal-transport.test.ts:72-256,328-410`; composition and eight-boundary regressions are at `signal-transport.test.ts:522-590,770-781,1602-1785`. Fresh unrestricted/native 49/49 evidence is recorded in the current Wave 22 correction entry in `work-logs/T-0041.md`. | Canonical review clean; prior security disposition retained. The accepted pathname residual remains unchanged.                                                                                                                                                                                                                                        |
 | SF-011 | Implemented / Correction verification current | Same-UID process can access the private IPC directory and act as a peer.                                                                      | Availability; TB-06          | Private `nativeMessageMaxBytes = 8_388_608` is set on Reply, Subscriber, and Request before endpoint/native work. Raw Publisher→Subscriber, Request→Reply, and Reply→Request +1-byte regressions prove non-reachability and later valid continuation; full native file 53/53 passed.                                                                                                                                                                                                                                                                                                                                                                                                                                            | Complete four-lane canonical review and focused security re-review remain pending.                                                                                                                                                                                                                                                                    |
 | SF-012 | Implemented / Correction verification current | Attacker corrupts/writes a durable subscription row, or a faulty persistence adapter returns one.                                             | Availability; TB-04          | Private `durableRecordMaxBytes = 33_554_432` rejects at the first common JSON-reader line before decode/parse/Base64/Protobuf work. Tests cover decoder/parser non-reachability, boundary, exact 4 MiB arithmetic, inert recovery, valid continuation, and fail-closed cancellation retry; full server file 149/149 passed.                                                                                                                                                                                                                                                                                                                                                                                                     | Complete four-lane canonical review and focused security re-review remain pending.                                                                                                                                                                                                                                                                    |
+| SF-013 | Confirmed / Medium                            | Same-UID process can access the private IPC directory and act as a peer.                                                                      | Availability; TB-06          | Native `maxMessageSize` is per frame; the binding materializes full multipart `Buffer[]` values while publish/request/reply consumers ignore surplus frames. A valid prefix plus arbitrarily many individually bounded frames bypasses aggregate receive accounting.                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Select the smallest enforceable aggregate/frame-count and exact-framing control, then add raw-peer bypass and continuation regressions.                                                                                                                                                                                                               |
 
 Architecture dispatch: requirements splitter
 `019f6575-3f28-7410-ae39-3ef51476c44b`, explicit immutable
@@ -128,7 +129,7 @@ release-blocking and needs focused behavior regression evidence.
 | 10    | Dedicated security re-review             | SF-011/SF-012 accepted; reviewer closed.                                    |
 | 11    | D-0091 implementation                    | Coordinator-verified at `da730e04`.                                         |
 | 12    | Canonical Wave 23                        | All four concerns clean; reviewers closed.                                  |
-| 13    | Focused SF-011/SF-012 security re-review | Terra High agent `019f65ae...` dispatched.                                  |
+| 13    | Focused SF-011/SF-012 security re-review | SF-013 confirmed; SF-012 clean; reviewer closed.                            |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.
