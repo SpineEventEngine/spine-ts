@@ -1,7 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: Wave 17 findings fixed; correction verification current; Canonical Wave
-18 re-review and dedicated security re-review pending
+Status: In progress - canonical review wave 18 assigned
 
 Started: `2026-07-14`
 
@@ -2216,3 +2215,13 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Accept this documentation/evidence correction for commit. Reconcile its
   immutable endpoint and assign Canonical Wave 18 before package generation;
   dedicated final security review remains pending.
+
+## Wave 17 Immutable Endpoint And Wave 18 Status
+
+- Commit `fa5e4b65` is the substantive coordinator-verified Wave 17 public-doc/
+  security-evidence/status correction. Later provenance/status commits are not
+  implementation evidence.
+- Every current general and security record identifies Canonical Wave 18 as
+  assigned/pending before package generation. Run all four immutable canonical
+  roles with the full ledger, D-0087-D-0090, and superseded-history exclusion;
+  aggregate before action. Dedicated final security review remains pending.

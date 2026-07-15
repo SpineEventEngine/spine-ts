@@ -1,11 +1,11 @@
 # T-0041 Security Findings and Evidence
 
 Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
-verified. Wave 17 findings are fixed and correction verification is current;
-Canonical Wave 18 re-review and the dedicated security re-review are pending.
+verified. Wave 17 correction is coordinator-verified; Canonical Wave 18 review
+is current and pending, and the dedicated security re-review is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Substantive
-implementation evidence ends at `b70ecb08`; later provenance/review/status
+implementation evidence ends at `fa5e4b65`; later provenance/review/status
 commits are not implementation evidence. Wave 18 re-review and dedicated
 security re-review remain pending. No security acceptance is claimed.
 
@@ -91,8 +91,9 @@ release-blocking and needs focused behavior regression evidence.
 | 2a    | Fix implementation                      | SF-007..010 implemented with focused RED/GREEN evidence; re-review pending. |
 | 3     | Canonical Wave 16                       | Findings fixed; correction verification complete.                           |
 | 3a    | Wave 16 correction                      | Coordinator-verified at `b70ecb08`.                                         |
-| 4     | Canonical Wave 17                       | Findings fixed; correction verification current.                            |
-| 4a    | Canonical Wave 18                       | Re-review pending; dedicated security re-review pending.                    |
+| 4     | Canonical Wave 17                       | Findings fixed; correction verification complete.                           |
+| 4a    | Wave 17 correction                      | Coordinator-verified at `fa5e4b65`.                                         |
+| 5     | Canonical Wave 18                       | Current review pending; dedicated security re-review pending.               |
 
 - [x] Threat model TB-01..TB-10 / TM-001..TM-012.
 - [x] Coordinator audit, signature, and registry-script evidence.

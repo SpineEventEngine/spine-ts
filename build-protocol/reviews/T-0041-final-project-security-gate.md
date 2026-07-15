@@ -1,7 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 17 findings fixed; correction verification current; Canonical Wave
-18 re-review and dedicated security re-review pending
+Status: Canonical review wave 18 assigned
 
 Baseline: `39f2c6f7`
 
@@ -2169,3 +2168,12 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Commit and reconcile the endpoint, then assign all four Canonical Wave 18
   roles before package generation. Dedicated final security review remains
   pending.
+
+## Wave 17 Immutable Endpoint And Wave 18 Status
+
+- Substantive implementation evidence is `fa5e4b65`; this provenance/status
+  follow-up is not implementation evidence.
+- Every current general/security record identifies Wave 18 assigned/pending
+  before package generation. Run style Terra High, docs Luna Medium, API Terra
+  High, and reliability Terra High over the literal package; aggregate before
+  action. Dedicated final security review remains pending.
