@@ -194,6 +194,32 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
   });
 }
 
+/** Narrow a transport operation to the selected canonical topic kind. */
+export function hasTransportSignalKind<
+  Operation extends { readonly topic: TransportTopic },
+  Kind extends Operation["topic"]["signalKind"],
+>(
+  value: Operation,
+  signalKind: Kind & NoInfer<Operation["topic"]["signalKind"]>,
+): value is Extract<Operation, { readonly topic: TransportTopic<Kind> }>;
+
+/** Narrow a transport topic to the selected canonical kind. */
+export function hasTransportSignalKind<
+  TopicKind extends TransportSignalKind,
+  Kind extends TopicKind,
+>(
+  value: TransportTopic<TopicKind>,
+  signalKind: Kind & NoInfer<TopicKind>,
+): value is TransportTopic<Kind>;
+
+export function hasTransportSignalKind(
+  value: TransportTopic | { readonly topic: TransportTopic },
+  signalKind: TransportSignalKind,
+): boolean {
+  const topic = "topic" in value ? value.topic : value;
+  return topic.signalKind === signalKind;
+}
+
 function normalizeRequiredText(value: string, name: string): string {
   const normalized = value.trim();
 

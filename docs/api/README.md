@@ -712,7 +712,7 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`. This root surface is contract-only: it defines
+`createTransportSubscription()`, and `hasTransportSignalKind()`. This root surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
 routing keys, handler callback signatures, and graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
@@ -738,7 +738,22 @@ retry, restart, or remote-delivery guarantee. For transport topics marked
 the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
 contract and currently retain private V8 encoding. `TransportSignalEnvelope`
 correlates command/event operations and handlers with generated `Command` and
-`Event` while preserving caller-selected types for other kinds. Every inbound
+`Event` while preserving caller-selected types for other kinds. Widened or
+union operations can be narrowed through the canonical topic kind:
+
+```ts
+import { hasTransportSignalKind, type RequestTransportOperation } from "@spine-ts/transport";
+
+function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
+  if (hasTransportSignalKind(operation, "command")) {
+    operation.envelope; // Inferred as the generated Command type.
+  }
+}
+```
+
+`hasTransportSignalKind()` compares only `topic.signalKind`. It provides type
+narrowing, not validation of untrusted input or envelope content, and does not
+inspect the envelope. Every inbound
 `Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
 ceiling, not a fixed allocation. Publish and request messages use route frame 1
 and payload frame 2: command/event payloads use Buf, while reserved

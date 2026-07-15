@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: In progress - D-0094 implementation complete; re-review pending
+Status: In progress - D-0095 implementation complete; re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -3455,3 +3455,34 @@ verify` remains reserved.
   explicit/actual immutable Terra Medium, for exact compile RED/GREEN, helper
   runtime tests, API/docs checks, and durable evidence. Return to architecture
   if the exact predicate cannot narrow all assigned cases.
+
+## D-0095 Implementer Evidence And Coordinator Acceptance
+
+- Compile RED proved missing operation/topic narrowing and restricted-kind
+  enforcement. GREEN adds only overloaded `hasTransportSignalKind()` with
+  `NoInfer`, canonical topic-kind equality, and focused type/runtime tests; it
+  does not inspect envelopes or alter operation shapes, generic order, or wire
+  behavior.
+- Coordinator independently passed both typechecks, transport root 8/8,
+  focused lint, generated docs/API counts `100/28/205/19/19/6/3`, Proto
+  cleanliness, exact formatting, and diff integrity. No ZeroMQ/server path
+  changed.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained childless and Git-clean and is closed. Freeze and
+  re-review style, docs, and TypeScript/API; reliability remains N/A.
+
+## D-0095 Implementer Evidence Pending Re-Review
+
+- RED proves nested `topic.signalKind` checks do not narrow widened publish,
+  request, or complete topic contracts. GREEN proves the exact overloaded
+  helper narrows all three, rejects unrelated restricted kinds, and preserves
+  every invalid-pair regression under the project TypeScript version.
+- The implementation reads only canonical `topic.signalKind`. Frozen runtime
+  fixtures pass true/false comparisons with zero envelope getter reads; no
+  operation/topic/envelope mutation or wire/runtime behavior is introduced.
+- Docs include short widened-handler examples and distinguish type narrowing
+  from untrusted-input/envelope validation. Root/ZeroMQ exports intentionally
+  become 19/6. Final focused evidence is green: both typechecks and focused lint
+  exited 0, transport-root tests passed 8/8, generated docs reported
+  `100/28/205/19/19/6/3`, and generated Proto outputs are clean. Implementation
+  is complete; affected re-review has not begun.

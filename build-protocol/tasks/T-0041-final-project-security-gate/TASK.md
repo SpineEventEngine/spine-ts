@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - D-0094 implementation complete; re-review pending
+Status: In progress - D-0095 implementation complete; re-review pending
 
 Started: `2026-07-14`
 
@@ -3444,3 +3444,40 @@ Subscription cancellation failed.` instead of `AggregateError`.
   without Git mutation. RED/GREEN must prove the exact overload with this
   TypeScript version; if it fails, stop and return to architecture rather than
   adding duplicated discriminants or broader type reshaping.
+
+## D-0095 Implementation And Coordinator Acceptance
+
+- Added overloaded `hasTransportSignalKind()` exactly as the canonical-kind
+  narrowing aid. It reads only `topic.signalKind`, uses `NoInfer` to prevent the
+  requested kind from widening restricted sources, and narrows publish/request
+  operations and topics without changing their object shape or generic order.
+- RED tooling failed on the missing helper, four operation narrowing assertions,
+  two topic/routing narrowing assertions, and two unused restricted-kind
+  rejection markers. GREEN consumes every marker and root runtime tests prove
+  true/false results without envelope access or mutation.
+- Fresh coordinator checks passed both typechecks, transport root 8/8, focused
+  ESLint, docs/API counts `100/28/205/19/19/6/3`, Proto cleanliness, exact
+  eight-path Prettier, and diff integrity. No ZeroMQ/server path changed.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained sole writer, childless, and without Git mutation and is
+  closed. Freeze and re-review style, docs, and TypeScript/API; reliability
+  remains N/A under D-0095.
+
+## D-0095 Narrowing Helper Implementation Progress
+
+- The project TypeScript version accepts the additive overloaded
+  `hasTransportSignalKind()` design. It narrows distributive publish/request
+  operations through `Extract` and widened topics through their generic kind,
+  while rejecting kinds outside a restricted operation/topic union.
+- The implementation compares only canonical `topic.signalKind`; operation and
+  topic shapes, envelopes, method generic order, and every wire/runtime path are
+  unchanged. Runtime tests use frozen values and an observable envelope getter
+  to prove true/false comparison without envelope inspection or mutation.
+- Root/API export expectation is intentionally 19/6. Public docs describe
+  widened-handler use and state explicitly that the helper is type narrowing,
+  not validation of untrusted input or envelope content.
+- Exact RED/GREEN and final verification evidence are recorded in the work log:
+  both required typechecks and focused lint exited 0, transport-root tests
+  passed 8/8, generated docs passed with `100/28/205/19/19/6/3`, and generated
+  Proto outputs are clean. D-0095 implementation is complete; affected
+  re-review remains pending.

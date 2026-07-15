@@ -72,6 +72,23 @@ encoding. `TransportSignalEnvelope` makes the public `command`/`event` envelope
 types the generated `Command`/`Event` types while preserving caller-selected
 types for the other signal kinds.
 
+Use `hasTransportSignalKind()` when consuming an operation whose kind is
+widened or is a union:
+
+```ts
+import { hasTransportSignalKind, type PublishTransportOperation } from "@spine-ts/transport";
+
+function onTransportOperation(operation: PublishTransportOperation<{ readonly id: string }>): void {
+  if (hasTransportSignalKind(operation, "event")) {
+    operation.envelope; // Inferred as the generated Event type.
+  }
+}
+```
+
+The predicate compares only the canonical `topic.signalKind`. It is a type-
+narrowing aid, not validation of untrusted input or envelope content, and it
+does not inspect the envelope.
+
 Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
 8,388,608-byte rejection ceiling. This is a per-frame maximum, not a fixed
 allocation for ordinary traffic. Publish and request messages place the route

@@ -11,8 +11,10 @@ import {
   type SignalTransport,
   type TransportSignalEnvelope,
   type TransportSignalKind,
+  type TransportTopic,
   createTransportSubscription,
   createTransportTopic,
+  hasTransportSignalKind,
 } from "../src/index.js";
 
 describe("@spine-ts/transport", () => {
@@ -314,5 +316,89 @@ describe("@spine-ts/transport", () => {
     void invalidWidenedPublish;
     void invalidUnionRequest;
     void assertExplicitGenericCalls;
+  });
+
+  it("narrows widened operations and topics through their canonical topic kind", () => {
+    interface PrivateEnvelope {
+      readonly id: string;
+    }
+
+    const narrowPublish = (operation: PublishTransportOperation<PrivateEnvelope>): void => {
+      if (operation.topic.signalKind === "command") {
+        // @ts-expect-error a nested kind check does not narrow the complete operation union.
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+      }
+      if (hasTransportSignalKind(operation, "command")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
+      }
+      if (hasTransportSignalKind(operation, "system")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
+      }
+    };
+    const narrowRequest = (
+      operation: RequestTransportOperation<PrivateEnvelope, "event" | "query">,
+    ): void => {
+      if (operation.topic.signalKind === "event") {
+        // @ts-expect-error a nested kind check does not narrow the complete operation union.
+        expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
+      }
+      if (hasTransportSignalKind(operation, "event")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
+      }
+      if (hasTransportSignalKind(operation, "query")) {
+        expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
+      }
+      // @ts-expect-error restricted operation kinds reject kinds outside their union.
+      hasTransportSignalKind(operation, "command");
+    };
+    const narrowTopic = (topic: TransportTopic): void => {
+      if (topic.signalKind === "command") {
+        // @ts-expect-error a nested kind check does not narrow the complete topic contract.
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+      }
+      if (hasTransportSignalKind(topic, "command")) {
+        expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+      }
+    };
+    const rejectUnrelatedTopicKind = (topic: TransportTopic<"command" | "system">): void => {
+      // @ts-expect-error restricted topic kinds reject kinds outside their union.
+      hasTransportSignalKind(topic, "event");
+    };
+
+    void narrowPublish;
+    void narrowRequest;
+    void narrowTopic;
+    void rejectUnrelatedTopicKind;
+  });
+
+  it("compares only the canonical topic kind without inspecting or mutating envelopes", () => {
+    const widenTopic = (value: TransportTopic) => value;
+    const widenOperation = (value: PublishTransportOperation) => value;
+    const commandTopic = createTransportTopic({
+      signalKind: "command",
+      messageTypeUrl: "type.spine.io/spine.core.Command",
+    });
+    const topic = widenTopic(commandTopic);
+    let envelopeReads = 0;
+    const command = create(CommandSchema);
+    const operation = widenOperation(
+      Object.freeze({
+        topic: commandTopic,
+        get envelope(): Command {
+          envelopeReads += 1;
+          return command;
+        },
+      }),
+    );
+
+    expect(hasTransportSignalKind(topic, "command")).toBe(true);
+    expect(hasTransportSignalKind(topic, "event")).toBe(false);
+    expect(hasTransportSignalKind(operation, "command")).toBe(true);
+    expect(hasTransportSignalKind(operation, "event")).toBe(false);
+    expect(envelopeReads).toBe(0);
+    expect(operation.topic).toBe(topic);
+    expect(Object.isFrozen(operation)).toBe(true);
+    expect(Object.isFrozen(topic)).toBe(true);
   });
 });
