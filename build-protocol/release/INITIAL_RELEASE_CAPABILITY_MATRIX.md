@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Reconciled for closure candidate; documentation review pending
+Status: Reconciled and closure-review clean; integration pending
 
 Task: T-0038 Accepted Capability Audit
 
