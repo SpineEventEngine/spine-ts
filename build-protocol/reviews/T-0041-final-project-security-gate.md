@@ -2347,3 +2347,18 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   current security artifacts, no subagents or Git mutation, concrete findings
   or clean, and superseded-history exclusion. Aggregate before action;
   dedicated final security review remains pending.
+
+## Canonical Review Wave 19 Dispatch
+
+- Style/maintainability agent `019f6507-f1f6-7a31-891a-fe7fdc49606f` was
+  dispatched explicitly as existing `style_maintainability_reviewer` with
+  immutable `gpt-5.6-terra` / high.
+- Documentation agent `019f6507-f939-7540-a3ad-a65a29b7953d` was dispatched
+  explicitly as existing `documentation_reviewer` with immutable
+  `gpt-5.6-luna` / medium.
+- TypeScript/API agent `019f6507-f637-7eb1-82f1-ca077c76e0c1` was dispatched
+  explicitly as existing `typescript_api_docs_reviewer` with immutable
+  `gpt-5.6-terra` / high.
+- All three are read-only, childless, and Git-read-only with distinct bounded
+  concerns. Reliability remains queued for platform capacity; aggregate the
+  complete four-lane wave before action.
