@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 16 findings accepted
+Status: In progress - Wave 16 findings fixed and correction-verified; Wave 17 re-review pending
 
 Started: `2026-07-14`
 
@@ -2081,3 +2081,38 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   pending. Run focused docs, lint, format, naming/status, and diff checks; no
   runtime behavior, public API, package, Proto, dependency, or generated change
   is authorized. All four Canonical Wave 17 lanes follow.
+
+## 2026-07-15 - Wave 16 Correction Verification
+
+- Fixed the accepted documentation finding with the exact D-0090 inactive-TTL
+  normalization and synchronous maximum-value `TypeError` sentence in the to-do
+  guide. Renamed only `privateDirectoryModeBigInt` and its one use to
+  `privateModeBits`.
+- `pnpm docs:check` exited 0: 25 copied Spine Proto checksums verified and API
+  counts were `100/28/205/19/17/6/3`. `pnpm exec eslint
+packages/transport/src/zeromq/signal-transport.ts` exited 0.
+- `pnpm exec prettier --check` over all seven changed paths exited 0; the
+  targeted `rg` naming/status/D-0090 scan and `git diff --check` exited 0.
+  No runtime behavior, public API, package, dependency, Proto, or generated-
+  output change occurred. Wave 17 re-review and the dedicated security
+  re-review remain pending.
+- Final focused commands/results: `pnpm exec prettier --check` over the seven
+  paths named by `git diff --name-only` exited 0; `rg -n
+'privateDirectoryModeBigInt|privateModeBits|D-0090|Wave 16 findings are fixed|Wave 17 re-review|dedicated security re-review'`
+  over the changed paths exited 0; `git diff --check` exited 0.
+
+## Canonical Wave 16 Correction Coordinator Verification
+
+- Implementer `019f64cd-5f5f-7b73-b801-908620ad0565` was explicitly dispatched
+  and ran with the tool-enforced immutable actual `gpt-5.6-terra` / medium
+  profile, spawned no child, made no Git mutation, and is closed.
+- Coordinator inspection accepts the exact D-0090 example mirror, private
+  two-occurrence `privateModeBits` rename, and synchronized Wave 17/dedicated-
+  security pending status without runtime or public-contract change.
+- Fresh `docs:check` passed with 25 Proto checksums and API counts
+  `100/28/205/19/17/6/3`. Focused ESLint, exact seven-path Prettier,
+  naming/status/D-0090 scans, generated/package-boundary checks, and `git diff
+  --check` all exited 0.
+- Accept this seven-path correction for commit. After the immutable endpoint is
+  known, reconcile provenance and assign Canonical Wave 17 before package
+  generation. Dedicated final security review remains pending.

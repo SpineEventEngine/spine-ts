@@ -53,7 +53,7 @@ const defaultReceiveTimeoutMs = 250;
 const closeDelayMs = 0;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
-const privateDirectoryModeBigInt = 0o700n;
+const privateModeBits = 0o700n;
 const posixModeMask = 0o7777n;
 const posixWriteMask = 0o022n;
 const isPosix = process.platform !== "win32";
@@ -840,7 +840,7 @@ function requirePrivateFinalDirectory(entry: {
   if (effectiveUserId === undefined || entry.uid !== BigInt(effectiveUserId)) {
     throw new Error("ZeroMQ adapter ipcDirectory must be owned by the effective user.");
   }
-  if ((entry.mode & posixModeMask) !== privateDirectoryModeBigInt) {
+  if ((entry.mode & posixModeMask) !== privateModeBits) {
     throw new Error("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
   }
 }

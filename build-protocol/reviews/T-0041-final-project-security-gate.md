@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 16 findings accepted; correction assigned
+Status: Wave 16 findings fixed and correction-verified; Wave 17 re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -1984,3 +1984,37 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   or D-0087-D-0090 contract change is authorized. Require focused docs, lint,
   exact format, naming/status, and diff integrity. All four Canonical Wave 17
   lanes rerun before dedicated final security review.
+
+## 2026-07-15 - Wave 16 Correction Verification
+
+- The accepted documentation and style findings are fixed: the active to-do
+  guide mirrors D-0090, and only the private bigint mode constant/use became
+  `privateModeBits`.
+- `pnpm docs:check` exited 0 after verifying 25 copied Spine Proto checksums;
+  TypeDoc API counts were `100/28/205/19/17/6/3`. `pnpm exec eslint
+packages/transport/src/zeromq/signal-transport.ts` exited 0.
+- `pnpm exec prettier --check` over all seven changed paths exited 0; the
+  targeted `rg` naming/status/D-0090 scan and `git diff --check` exited 0.
+  No runtime behavior, public API, package, dependency, Proto, or generated-
+  output change occurred. Wave 17 re-review and the dedicated security
+  re-review remain pending.
+- Final focused commands/results: `pnpm exec prettier --check` over the seven
+  paths named by `git diff --name-only` exited 0; `rg -n
+'privateDirectoryModeBigInt|privateModeBits|D-0090|Wave 16 findings are fixed|Wave 17 re-review|dedicated security re-review'`
+  over the changed paths exited 0; `git diff --check` exited 0.
+
+## Canonical Wave 16 Correction Coordinator Verification
+
+- Implementer `019f64cd-5f5f-7b73-b801-908620ad0565` has matching explicit
+  dispatch and tool-enforced immutable actual `gpt-5.6-terra` / medium evidence,
+  used no child or Git mutation, and is closed.
+- Direct inspection accepts the exact D-0090 example mirror, private constant
+  rename/use, and current status without behavior, public contract, package,
+  dependency, Proto, or generated-output change.
+- Fresh `docs:check` passed with 25 Proto checksum validations and API counts
+  `100/28/205/19/17/6/3`; focused ESLint, exact seven-path Prettier,
+  naming/status/D-0090, generated/package-boundary, and diff-integrity checks
+  all passed.
+- Commit, reconcile the immutable correction endpoint, and assign all four
+  Canonical Wave 17 roles before package generation. Dedicated final security
+  review remains pending.
