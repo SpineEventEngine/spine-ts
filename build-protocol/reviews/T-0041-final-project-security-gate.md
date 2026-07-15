@@ -3305,3 +3305,15 @@ verify` remains reserved.
   public leakage, generated output, and future-policy overclaim. Re-review all
   four canonical concerns against the compact correction package and aggregate
   the complete wave before any further fix.
+
+## D-0094 Pre-Review Lint Result
+
+- Frozen correction endpoint `f73bc573`; clean worktree before this durable
+  entry. Current statuses consistently say re-review pending.
+- One private production owner exists for the 8 MiB cap and one for signal-kind
+  codec dispatch. The only intentional public change is
+  `TransportSignalEnvelope`; API counts are 18/6 and generated output is absent.
+- Changed docs make no unsupported future-policy commitment and explicitly
+  distinguish current wire behavior, exclusions, coordinated upgrade, and the
+  accepted/unbounded SF-013 residual. The correction package is eligible for
+  all four canonical reviewer lanes.

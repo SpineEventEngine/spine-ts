@@ -3268,3 +3268,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
 - This is acceptance to freeze and re-review the correction, not task closure.
   All four canonical concerns must re-review it; the focused final security
   review follows only after canonical closure.
+
+## D-0094 Pre-Review Lint
+
+- Current task, work, review, security, and threat-model status consistently
+  says implementation is accepted and re-review is pending. Historical
+  superseded text remains chronology, not active state.
+- `nativeMessageMaxBytes` and the command/event kind-to-schema dispatch each
+  have one private production owner. Repeated test values are assertions, not
+  competing policy sources.
+- `TransportSignalEnvelope` is the sole intentional public addition. Buf
+  schemas, socket/frame mechanics, and reply wrappers remain private; the exact
+  root/subpath API counts are 18/6 and generated outputs remain absent from Git.
+- Changed public docs state current behavior, coordinated-peer incompatibility,
+  explicit exclusions, and accepted SF-013 risk without promising a future
+  codec, topology, scheduler, monitor, backoff, catch-up, or remote adapter.
+  The compact correction is ready for all four canonical lanes.
