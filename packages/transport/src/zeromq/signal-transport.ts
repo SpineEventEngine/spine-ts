@@ -239,6 +239,7 @@ class ZeroMqSignalTransport implements SignalTransport {
       receiveTimeout: this.#requestTimeoutMs,
       sendTimeout: this.#requestTimeoutMs,
     });
+    let responseEnvelope!: ResponseEnvelope;
 
     try {
       await zeroMqSocketAccess.recheckIpcDirectory(prepared);
@@ -256,10 +257,18 @@ class ZeroMqSignalTransport implements SignalTransport {
         throw new Error(decoded.message);
       }
 
-      return decoded.envelope as ResponseEnvelope;
-    } finally {
-      requester.close();
+      responseEnvelope = decoded.envelope as ResponseEnvelope;
+    } catch (error) {
+      try {
+        zeroMqSocketAccess.close(requester);
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], "ZeroMQ request and cleanup failed.");
+      }
+      throw error;
     }
+
+    zeroMqSocketAccess.close(requester);
+    return responseEnvelope;
   }
 
   async respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
@@ -404,7 +413,14 @@ class ZeroMqSignalTransport implements SignalTransport {
       return bound;
     } catch (error) {
       if (bound === undefined) {
-        publisher.close();
+        try {
+          zeroMqSocketAccess.close(publisher);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            "ZeroMQ publisher bind and cleanup failed.",
+          );
+        }
         throw error;
       }
 

@@ -1,7 +1,7 @@
 # T-0041 Review Log
 
-Status: Canonical Wave 20 findings accepted; correction assigned; dedicated
-security re-review pending
+Status: Canonical Wave 20 findings fixed; correction verification current;
+Canonical Wave 21 and dedicated security re-review pending
 
 Baseline: `39f2c6f7`
 
@@ -2552,3 +2552,38 @@ verify` remains reserved.
   hardening, close bounds, and error order. Require focused native transport,
   generated typecheck, docs/lint/format/status/boundary/diff checks; all four
   Canonical Wave 21 lanes follow before dedicated security review.
+
+## Canonical Wave 20 Correction Evidence
+
+- The focused cleanup-composition RED exited 1 with 2 failed and 8 passed:
+  request and pre-bound publisher each lost the initiating error when injected
+  socket close also failed. The same command is GREEN with 10 passed and 34
+  skipped after routing both close paths through the package-private socket
+  seam and preserving ordered `[primary, cleanup]` `AggregateError` values.
+- The operation/boundary matrix covers subscriber, responder, publisher, and
+  request at preparation and recheck. Request recheck is characterization of
+  an already-present source gate; all eight matrix cases passed during RED.
+  Request cases prove no native connect or send, the helper name is within the
+  accepted style limit, and subscriptions are constructed only where used.
+- Final unrestricted/native transport verification passed 44/44. Generated
+  build typecheck and focused ESLint exited 0. The work log holds the exact
+  command evidence; active security claims carry final source/test/native
+  anchors. Canonical Wave 20 findings are fixed and correction verification is
+  current; Canonical Wave 21 and dedicated security re-review remain pending.
+  No acceptance is claimed.
+
+## Wave 20 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` has matching original
+  explicit dispatch and tool-enforced immutable actual `gpt-5.6-terra` / medium
+  evidence, no child or Git mutation, and is closed.
+- Fresh coordinator evidence: focused cases `10/10` with `34` skipped;
+  unrestricted native transport file `44/44`; generated typecheck;
+  `docs:check` with 25 Proto checksums and API counts
+  `100/28/205/19/17/6/3`; focused ESLint; generated-clean policy; exact
+  seven-path Prettier; active source/test/native anchors, status, public-package
+  boundary, changed-path, and diff-integrity checks all passed.
+- Direct inspection accepts the eight-case matrix, four-component helper,
+  operation-specific fixtures, explicit success/error cleanup, and ordered
+  request/publisher dual-failure composition. Commit and run all four Canonical
+  Wave 21 lanes before dedicated security review.

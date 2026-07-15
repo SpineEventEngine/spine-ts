@@ -1,7 +1,7 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - Canonical Wave 20 findings accepted; correction assigned;
-dedicated security re-review pending
+Status: In progress - Canonical Wave 20 findings fixed; correction verification
+current; Canonical Wave 21 and dedicated security re-review pending
 
 Started: `2026-07-14`
 
@@ -2443,3 +2443,40 @@ Subscription cancellation failed.` instead of `AggregateError`.
   cleanup/close bounds, package/Proto/generated boundaries, and error order.
   Focused native transport verification and all Canonical Wave 21 lanes follow
   before dedicated security review.
+
+## Canonical Wave 20 Correction
+
+- The close-versus-asynchronous-boundary matrix now covers subscriber,
+  responder, publisher, and request setup at preparation and recheck. Request
+  preparation/recheck rejects with the existing closed error and reaches
+  neither native connect nor send. This request recheck case characterizes the
+  production gate already present; it was not manufactured as a production
+  RED. The helper is `expectCloseBlocksNative`, and only subscriber/responder
+  cases construct subscriptions.
+- Behavior-first cleanup composition was RED before production correction: the
+  focused command reported 2 failed and 8 passed because request and pre-bound
+  publisher setup returned only their initiating errors when injected socket
+  close also failed. Request and unbound-publisher cleanup now use the existing
+  socket-access close seam and preserve ordered
+  `AggregateError([primaryError, cleanupError])` results with operation-specific
+  messages. Bound-publisher cleanup remains unchanged.
+- Focused GREEN reported 10 passed and 34 skipped. Final unrestricted/native
+  transport verification reported 44/44 passed; generated build typecheck and
+  focused ESLint also exited 0. Exact final documentation, formatting, status,
+  boundary, generated-clean, and diff evidence is appended to the work and
+  review logs. No acceptance is claimed; Canonical Wave 21 and the dedicated
+  security re-review remain pending.
+
+## Wave 20 Correction Coordinator Verification
+
+- Implementer `019f64f8-06cf-7b03-adc9-5792d886d8ad` retained its original
+  explicit, tool-enforced immutable actual `gpt-5.6-terra` / medium profile,
+  spawned no child, made no Git mutation, and is closed.
+- Fresh coordinator focused verification passed `10/10` with `34` skipped; the
+  required unrestricted native ZeroMQ file passed `44/44`. Generated build
+  typecheck, `docs:check` (25 Proto checksums; API counts
+  `100/28/205/19/17/6/3`), focused ESLint, and generated-clean policy passed.
+- Exact active source/test/native-evidence anchors, synchronized status, exact
+  seven-path Prettier, public-package boundaries, changed paths, and `git diff
+--check` passed. Accept the Wave 20 correction for commit; Canonical Wave 21
+  and dedicated security re-review remain pending.
