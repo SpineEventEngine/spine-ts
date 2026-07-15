@@ -2926,3 +2926,11 @@ Subscription cancellation failed.` instead of `AggregateError`.
   changed public docs make no D-0091 claim, security docs retain deployment
   ownership rather than promising future policy, generated output is absent
   from Git status, formatting passes, and `git diff --check` passes.
+
+## Canonical Wave 23 Package
+
+- Literal package `.superpowers/sdd/review-39f2c6f7..ace8b0c3.diff` contains
+  131 commits and 963,324 bytes from baseline `39f2c6f7` through endpoint
+  `ace8b0c3`.
+- Dispatch the four already-assigned immutable reviewer roles against this exact
+  package and aggregate the complete wave before action.

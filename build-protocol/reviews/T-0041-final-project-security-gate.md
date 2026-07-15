@@ -3023,3 +3023,10 @@ verify` remains reserved.
   serialized surface, no new public-doc claim, no future-policy overclaim, and
   no generated output. Formatting and diff integrity pass. Generate a literal
   package and dispatch the complete four-lane wave.
+
+## Canonical Wave 23 Package
+
+- Review package: `.superpowers/sdd/review-39f2c6f7..ace8b0c3.diff`.
+- Literal baseline `39f2c6f7`; literal endpoint `ace8b0c3`; 131 commits;
+  963,324 bytes. Every assigned reviewer receives this exact package and the
+  current task/work/review/security records.
