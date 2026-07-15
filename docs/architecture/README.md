@@ -1,11 +1,10 @@
 # Architecture Notes
 
-Current status: early implementation notes through the first command/event bus,
-runtime-routing, transport-foundation seams, and the real Connect/Node
-`SpineServices` route registrar for the raw Spine command/query/subscription
-services, including durable inactive subscription recovery over the same
-storage factory, plus a small local `Server` lifecycle owner over those
-services.
+Current status: the implemented initial release includes delivery/inbox
+processing, command/query/subscription services, same-host ZeroMQ transport
+for multi-process use, and a `Server` lifecycle owner that starts and closes
+those pieces together. It does not claim production deployment supervision,
+durable transport, authentication, or cross-host topology behavior.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 

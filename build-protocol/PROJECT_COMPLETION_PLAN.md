@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: In execution at T-0042 release readiness and project closure
+Status: T-0042 closure candidate review-clean; integration pending
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0042 release readiness and project closure
+Active implementation frontier: T-0042 integration and post-merge closure
 
 ## Purpose
 
@@ -50,8 +50,8 @@ status mirrors, or changed public documentation claims it as current behavior.
 
 The candidate headers for T-0037b onward on root `main` do not override the
 active T-0037b worktree. The active worktree's T-0037b status is canonical.
-Bootstrap-era T000/T001 statuses are stale records to reconcile at final
-closure, not unimplemented product work.
+Bootstrap-era T000/T001 records are explicitly `Historical/closed`; their
+dated pending body text is chronology, not unimplemented product work.
 
 ## Starting State
 
@@ -91,9 +91,13 @@ maintenance task.
 
 Current status: T-0041 is complete, integrated, post-merge verified, remotely
 synchronized, and cleaned up, with a clean focused final security review and one
-explicit human-accepted SF-013 residual. T-0042 release readiness and project
-closure is the active implementation frontier. The dated Starting State above
-is historical plan-creation context.
+explicit human-accepted SF-013 residual. T-0042 release preflight, real
+single-process and multi-process acceptance, package/import/link/command scans,
+all final specialist dispositions, and the native branch gate are clean. The
+branch gate passed 74 files / 1,780 tests in both ordinary and coverage runs at
+90.04% branches. Closure-record review is clean. Integration, post-merge
+verification, remote sync, and clean T-0042 worktree removal remain. The dated
+Starting State above is historical plan-creation context.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
@@ -873,6 +877,8 @@ TypeDoc/API counts, Proto lint, and generated-clean results.
 
 Also run explicit release smoke checks:
 
+- after generated build output exists, run the standalone versioned package
+  export and Markdown link check: `pnpm check:release-readiness`;
 - start the to-do server on an ephemeral port;
 - post, query, subscribe, cancel, and close through real clients;
 - run the local multi-process example acceptance;
