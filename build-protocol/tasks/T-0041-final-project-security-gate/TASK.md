@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - final security review clean; full task verification pending
+Status: Implementation complete - full task verification passed; integration pending
 
 Started: `2026-07-14`
 
@@ -4224,3 +4224,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
   documentation, TypeScript/API, and security retain justified N/A. Global
   branch coverage remains 90.04% by the latest complete coverage stage. Restart
   full native T-0041 verification from the beginning.
+
+## Full Task Verification
+
+- Native `pnpm --config.verify-deps-before-run=false verify` exits 0 from the
+  clean reviewed endpoint. Ordinary and coverage runs each pass 73 files / 1,772
+  tests. Coverage is statements `95.38%` (`9,548/10,010`), branches `90.04%`
+  (`4,738/5,262`), functions `98.27%` (`2,452/2,495`), and lines `95.39%`
+  (`9,365/9,817`).
+- The same gate passes Node enforcement, copied Spine source/checksum generation,
+  both build/tooling typechecks, ESLint, cleanup enforcement, repository format,
+  TypeDoc/API validation at exact counts `100/28/205/19/20/6/3`, Proto lint,
+  and ignored/untracked freshly regenerated Proto output.
+- Final task implementation, canonical reviews, focused final security review,
+  dependency audits/signatures, accepted SF-013 risk, and full verification are
+  complete. Integration, post-merge native verification, remote synchronization,
+  and clean worktree removal remain before durable task closure.

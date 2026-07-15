@@ -1,10 +1,9 @@
 # Spine TS Threat Model
 
-Status: T-0041 working threat model; SF-013 is a human-accepted Medium same-UID
-local IPC availability residual under D-0093. D-0094 remains accepted;
-D-0096's top-level-only predicate correction is coordinator-verified and
-canonically clean. Final focused security re-review is clean; full task
-verification remains pending.
+Status: T-0041 final threat model. SF-013 is the human-accepted Medium same-UID
+local IPC availability residual under D-0093. D-0094 remains accepted; D-0096
+is coordinator-verified and canonically clean. Final focused security review and
+full task verification pass; integration is pending.
 
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
@@ -14,8 +13,8 @@ implementation evidence is `c7f8a901`; the later test-only maintainability
 correction is `fdd9da0a`. D-0091 implementation evidence is `da730e04`. Later
 provenance/review/status commits are not implementation evidence. The preceding
 canonical review and Canonical Wave 23 are clean; SF-012 is clean and D-0093
-records the human's explicit SF-013 residual-risk acceptance. Final security
-acceptance still waits for focused re-review.
+records the human's explicit SF-013 residual-risk acceptance. The focused final
+security review is clean and the full native task gate passes.
 
 ## Scope and assumptions
 
@@ -105,6 +104,11 @@ and a supply-chain/source-control attacker.
 
 ## Threat register
 
+The table preserves evidence and dispositions at the wave where each threat was
+adjudicated. Pending-review wording in individual rows is historical and is
+superseded by the final status above: canonical review, focused final security
+review, and full task verification are clean; SF-013 remains accepted.
+
 Severity is conditional review priority, not a vulnerability determination.
 
 | ID     | STRIDE | Asset / boundary                                                                    | Realistic prerequisite and abuse path                                                                                                                                                                | Existing controls / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Investigation / status                                                                                                                                                                                                                                                                        | Conditional severity                              |
@@ -154,7 +158,7 @@ for handler non-reachability. Reply-to-Request retains its 8,388,609-byte reply,
 and all three paths retain later valid continuation. Fresh final-state evidence
 is focused transport security 5/5, complete native transport 53/53, and complete
 affected server 149/149. Four-lane canonical review and focused security
-re-review remain pending.
+re-review are now clean.
 
 ## D-0093 Wire Correction Progress
 
@@ -195,5 +199,5 @@ envelopes or validating untrusted input. The operation helper observes
 topic helper observes only top-level `topic.signalKind`, narrows only that
 member, and leaves the unobserved routing descriptor widened. This correction
 changes no trust boundary, wire codec, frame handling, allocation behavior, or
-SF-013 disposition. Affected canonical re-review precedes the focused final
-security review.
+SF-013 disposition. Affected canonical re-review and focused final security
+review are clean.

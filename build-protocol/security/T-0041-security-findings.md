@@ -1,11 +1,10 @@
 # T-0041 Security Findings and Evidence
 
-Status: SF-007 through SF-010 and D-0087 through D-0090 remain coordinator-
-verified. SF-011/SF-012 are implemented with correction verification current;
-Canonical Wave 23 is clean; SF-013 is an explicit human-accepted Medium same-
-UID local availability residual. D-0096's top-level-only topic-narrowing
-correction is coordinator-verified and canonically clean. Focused final security
-re-review is clean. Full task verification remains pending.
+Status: Final security gate complete. SF-007 through SF-012 controls and all
+accepted corrections are verified; Canonical Wave 23 and the focused final
+security re-review are clean. SF-013 remains the explicit human-accepted Medium
+same-UID local availability residual. Full task verification passes; integration
+is pending.
 
 Baseline: `39f2c6f7`. Committed wave 5 finding basis: `b43cf705`. Earlier
 production implementation evidence is `c7f8a901`; the later test-only
@@ -14,9 +13,14 @@ maintainability correction is `fdd9da0a`. D-0091 implementation evidence is
 evidence. The preceding canonical review was clean; dedicated security re-review
 found SF-011 and SF-012; D-0091 is implemented and coordinator-verified.
 Canonical Wave 23 is clean; SF-012 is clean and D-0093 records the human's
-explicit SF-013 residual-risk acceptance. Final security acceptance still waits
-for the current canonical correction/re-review and a later focused security
-dispatch.
+explicit SF-013 residual-risk acceptance. The replacement focused final
+security review and full task verification are complete.
+
+Final native task evidence: `pnpm --config.verify-deps-before-run=false verify`
+passes 73 files / 1,772 tests in ordinary and coverage runs, with 90.04% branch
+coverage; all TypeScript, lint/format, TypeDoc/API, Proto, and generated-clean
+gates pass. Dependency audits remain zero-advisory and all 235 registry
+signatures verify. SF-013 is the sole accepted security residual.
 
 Historical dedicated re-review package was
 `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
@@ -25,10 +29,9 @@ active final-security package.
 
 Historical dedicated reviewer dispatch:
 `019f656c-92bb-75f0-80e7-3f4bb8151057`, explicit immutable
-`gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No current
-final-security package or reviewer dispatch exists; the coordinator will create
-and record them only after the canonical correction and affected re-review
-close.
+`gpt-5.6-terra` / high, read-only, childless, and Git-read-only. The replacement
+focused final reviewer is `019f66ab-ff43-7951-9f7a-7052210d7ff9`; it is clean
+and closed, with its exact package and evidence in the T-0041 logs.
 
 ## D-0094 Union-Correlation Correction State
 
@@ -43,10 +46,14 @@ reserved-kind frame 2.
 
 The later D-0094 union-correlation and D-0096 fixed-path predicate corrections
 are coordinator-verified and canonically clean. The prior final-security package
-and reviewer are historical; a replacement focused package follows this active-
-status correction. SF-013 remains accepted and unbounded in aggregate.
+and reviewer are historical; the replacement focused review is clean. SF-013
+remains accepted and unbounded in aggregate.
 
 ## Command and evidence ledger
+
+Rows below retain the evidence available at their recorded wave. Any row that
+says a later review or verification was pending is historical and is superseded
+by the final status and final native evidence above.
 
 | Source                               | Command/evidence                                                                                                  | Result                                                                                                                                                                                                                                                                                                                     | Attribution                                                              |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -120,8 +127,8 @@ Request-to-Reply tests now send the exact routing key as frame 1 and an
 8,388,609-byte envelope frame as frame 2; Reply-to-Request retains its
 8,388,609-byte reply. Fresh final-state focused transport security passed 5/5,
 complete native transport passed 53/53, and complete affected server passed
-149/149. Four-lane canonical review and focused security re-review remain
-pending.
+149/149. The four-lane canonical review and focused security re-review are now
+clean.
 
 ## Accepted-residual contract
 
@@ -197,7 +204,7 @@ and unbounded. RED rejected the missing public conditional/export and stale
 private-object command/event fixtures; GREEN passed 87/87 required native tests,
 63/63 additionally affected server tests, both typechecks, focused ESLint, and
 the intentional 18/6 transport export checks. Focused final security re-review
-remains pending.
+is clean.
 
 ## D-0096 Fixed-Path Predicate Evidence
 
@@ -218,4 +225,4 @@ found no new release blocker from D-0093 through D-0096 and confirmed prior
 controls remain intact. SF-013 is the sole explicit accepted residual in this
 focused scope. Fresh native full, production-only, and development-only audits
 all report zero advisories; all 235 registry signatures verify. Full task and
-post-merge verification remain pending.
+verification passes; post-merge verification remains pending.
