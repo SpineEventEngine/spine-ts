@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Coordinator retry accepted; pre-review lint pending
+Status: Pre-review lint fix assigned
 
 Baseline: `39f2c6f7`
 
@@ -636,6 +636,13 @@ bytes).
   cancellation `Aborted` message literals with shared private constants used by
   both error factories and conflict classification. Canonical and security
   review remain pending.
+
+## Wave 4 Pre-Review Lint Fix Assignment
+
+- Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, expected
+  explicit immutable Terra Medium, owns the private message-constant cleanup.
+  It must preserve exact errors and rerun focused mechanical evidence before a
+  new package. Canonical/security review remains pending.
 
 ## Wave 4 Coordinator Retry RED
 

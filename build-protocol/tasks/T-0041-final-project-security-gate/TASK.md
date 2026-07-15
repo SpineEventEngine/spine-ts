@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - coordinator retry accepted; pre-review lint pending
+Status: In progress - pre-review lint fix assigned
 
 Started: `2026-07-14`
 
@@ -788,6 +788,15 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   docs. One mechanical duplicated-policy item remains: share the two cancellation
   `Aborted` messages between error construction and conflict classification
   before packaging. Canonical/security review remains pending.
+
+## Wave 4 Pre-Review Lint Assignment
+
+- Resume existing `implementer` `019f62d7-31cc-7c13-a0b1-61d25dff9e23`,
+  expected explicit immutable `gpt-5.6-terra` / medium, for a lint-only private
+  refactor: share the two cancellation `Aborted` messages between error creation
+  and conflict classification. No behavior/docs/public surface/Git mutation or
+  subagents. Focused test, typecheck, ESLint, Prettier, and diff integrity are
+  required before packaging.
 
 ## Wave 4 Coordinator Retry RED
 
