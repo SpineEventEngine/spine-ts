@@ -2214,3 +2214,15 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - All three are read-only, childless, and Git-read-only with distinct concerns.
   Reliability remains queued for platform capacity; aggregate the complete wave
   before action.
+
+## Canonical Review Wave 18 Dispatch Continuation
+
+- Documentation agent `019f64ef-913e-7480-9060-fc966a67fd9c` completed under
+  its tool-enforced immutable `gpt-5.6-luna` / medium role and is closed. It
+  reported one provisional P2: active TM-005/SF-008 controls omit D-0090's
+  normalized, Node-safe maximum inactive TTL and its source/test evidence.
+  Acceptance waits for complete-wave aggregation.
+- Performance/reliability agent `019f64f1-b972-7ee0-b06a-3955be772701` was
+  dispatched explicitly as existing `performance_reliability_reviewer` with
+  immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No
+  finding may be acted on until style, API, and reliability also complete.
