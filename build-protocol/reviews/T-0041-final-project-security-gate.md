@@ -3101,3 +3101,9 @@ verify` remains reserved.
   trusted-directory peer can append unbounded cap-sized frames.
 - Assign the existing Sol High requirements role to select an enforceable
   aggregate/frame-count and exact-framing correction before implementation.
+
+## SF-013 Architecture Dispatch
+
+- Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda`: explicit
+  immutable Sol High, read-only, childless, Git-read-only; exact native/binding
+  semantics, enforceable control, compatibility, tests, and re-review scope.

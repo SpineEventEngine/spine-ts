@@ -3018,3 +3018,10 @@ Subscription cancellation failed.` instead of `AggregateError`.
   childless, and Git-read-only. Determine the smallest enforceable aggregate/
   frame-count control, exact framing contract, compatibility, tests, and review
   scope without changing public options, Publisher timeout, or D-0088-D-0091.
+
+## SF-013 Architecture Dispatch
+
+- Requirements splitter `019f65b3-3f7a-7582-8c6f-a9ede2224dda` is dispatched
+  explicitly under the existing immutable `gpt-5.6-sol` / high role, read-only,
+  childless, and Git-read-only, for exact pinned-binding semantics, enforceable
+  aggregate/frame controls, wire compatibility, TDD, review, and decision text.
