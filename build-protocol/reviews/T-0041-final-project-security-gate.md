@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 9 fixes committed; canonical wave 10 packaging pending
+Status: Canonical review wave 10 assigned
 
 Baseline: `39f2c6f7`
 
@@ -1214,3 +1214,21 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   review/status commits are not implementation evidence.
 - Generate the literal package after this reconciliation, then run all four
   Canonical Wave 10 concerns. Dedicated security review remains pending.
+
+## Canonical Review Wave 10 Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..c91d8bb5.diff`, immutable endpoint
+  `c91d8bb5`, baseline `39f2c6f7`, 46 commits, 577,389 bytes. Substantive
+  implementation evidence ends at `45fd5583`.
+- Style: immutable Terra High; public/internal option structure, test seams,
+  exact API gate, liveness helpers, naming, duplication, logs.
+- Documentation: immutable Luna Medium; D-0089, capacity/cancellation/expiry,
+  current status/provenance, exclusions, and no future-policy overclaim.
+- TypeScript/API: immutable Terra High; two-key public options, non-exported
+  internal seam, exact six-symbol subpath, declarations/TypeDoc, compatibility,
+  Proto/package boundaries.
+- Reliability: immutable Terra High; request settlement-before-close, independent
+  cleanup bound, observer behavior, cross-process failure evidence, D-0087/D-0088
+  bounds and no race/spin/leak regressions.
+- All are read-only and use the full ledger plus superseded-history rule.
+  Aggregate before action; dedicated security review remains pending.
