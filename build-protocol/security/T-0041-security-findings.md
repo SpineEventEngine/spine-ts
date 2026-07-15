@@ -42,10 +42,9 @@ the public docs now distinguish Buf command/event frame 2 from private V8
 reserved-kind frame 2.
 
 The later D-0094 union-correlation and D-0096 fixed-path predicate corrections
-are coordinator-verified; affected D-0096 canonical re-review is pending. The
-prior final-security package and reviewer are historical; no replacement
-final-security package or dispatch exists yet. SF-013 remains accepted and
-unbounded in aggregate.
+are coordinator-verified and canonically clean. The prior final-security package
+and reviewer are historical; a replacement focused package follows this active-
+status correction. SF-013 remains accepted and unbounded in aggregate.
 
 ## Command and evidence ledger
 

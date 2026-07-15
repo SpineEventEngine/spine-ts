@@ -3846,6 +3846,17 @@ Subscription cancellation failed.` instead of `AggregateError`.
   all D-0093/D-0094 wire/risk decisions remain intact. Reliability retains its
   justified N/A. Proceed to the focused final T-0041 security review.
 
+## Focused Final Security Preflight
+
+- Source and regressions confirm Buf command/event encoding, one private
+  8,388,608-byte per-frame cap owner, first-two request/publish and first-reply
+  prefix consumption, generated-message reply rejection, and accepted SF-013.
+- The active-status scan found one undated security-findings paragraph still
+  saying D-0096 re-review was pending. Corrected that current sentence; dated
+  historical pending entries remain chronology only. Generated/tracked output,
+  diff integrity, and worktree status are clean. Freeze a replacement focused
+  package from D-0093 human acceptance through this correction.
+
 ## D-0096 Source TypeDoc P2 Implementation
 
 - Expanded only `isTransportTopicKind()` source TypeDoc to preserve the

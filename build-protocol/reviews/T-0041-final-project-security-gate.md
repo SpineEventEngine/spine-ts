@@ -3806,6 +3806,16 @@ verify` remains reserved.
   Reliability retains N/A. D-0096 canonical review is closed with no remaining
   finding; focused final security review is the next gate.
 
+## Focused Final Security Preflight Result
+
+- Codec, cap ownership, protocol-prefix consumption, generated-reply rejection,
+  active status, SF-013 residual wording, generated output, and diff/status
+  scans are clean after correcting one undated stale D-0096-pending sentence in
+  the security findings artifact.
+- Historical pending text remains chronology. Prepare the replacement focused
+  security package from D-0093 human acceptance `4b3c30cd` through the corrected
+  endpoint; no canonical lane remains open.
+
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 
 - Resolved the accepted style/maintainability P2 by documenting directly above
