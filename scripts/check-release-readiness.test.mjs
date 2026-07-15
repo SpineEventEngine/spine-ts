@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,102 +17,216 @@ function initializeRepository(repoRoot) {
   execFileSync("git", ["init", "--quiet"], { cwd: repoRoot });
 }
 
-describe("check-release-readiness", () => {
-  it("enumerates fixed and both generated Proto wildcard export spellings", () => {
-    const repoRoot = mkdtempSync(join(tmpdir(), "release-readiness-"));
-    const packageRoot = join(repoRoot, "packages", "proto");
-    mkdirSync(join(packageRoot, "dist", "generated", "spine", "core"), {
-      recursive: true,
-    });
-    writeJson(join(packageRoot, "package.json"), {
-      name: "@example/proto",
-      exports: {
-        ".": "./dist/index.js",
-        "./generated/*": "./dist/generated/*.js",
-        "./generated/*.js": "./dist/generated/*.js",
-      },
-    });
-    writeFileSync(join(packageRoot, "dist", "index.js"), "export {};\n");
-    writeFileSync(
-      join(packageRoot, "dist", "generated", "spine", "core", "command_pb.js"),
-      "export {};\n",
-    );
+function withTempRepository(callback) {
+  const repoRoot = mkdtempSync(join(tmpdir(), "release-readiness-"));
 
-    expect(collectRuntimeExportSpecifiers(repoRoot)).toEqual([
-      {
-        packageDirectory: "packages/proto",
-        specifier: "@example/proto",
-      },
-      {
-        packageDirectory: "packages/proto",
-        specifier: "@example/proto/generated/spine/core/command_pb",
-      },
-      {
-        packageDirectory: "packages/proto",
-        specifier: "@example/proto/generated/spine/core/command_pb.js",
-      },
-    ]);
+  try {
+    initializeRepository(repoRoot);
+    return callback(repoRoot);
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+}
+
+function writeRuntimePackage(
+  repoRoot,
+  { exportTarget = "./dist/index.js", source = "export const ready = true;\n" } = {},
+) {
+  const packageRoot = join(repoRoot, "packages", "runtime");
+  mkdirSync(join(packageRoot, "dist"), { recursive: true });
+  writeJson(join(packageRoot, "package.json"), {
+    name: "@example/runtime",
+    type: "module",
+    exports: {
+      ".": exportTarget,
+    },
   });
 
-  it("collects only relative Markdown links outside fenced code and strips suffixes", () => {
-    const repoRoot = mkdtempSync(join(tmpdir(), "release-readiness-"));
-    initializeRepository(repoRoot);
-    mkdirSync(join(repoRoot, "docs"), { recursive: true });
-    writeFileSync(
-      join(repoRoot, "docs", "README.md"),
-      [
-        "[kept](guide.md#section)",
-        "[kept too](../AGENTS.md?raw=1)",
-        "[url](https://example.test/guide.md)",
-        "[anchor](#local)",
-        "[absolute evidence](/private/tmp/old-evidence.md)",
-        "[scheme](mailto:team@example.test)",
-        "```md",
-        "[ignored](missing.md)",
-        "```",
-      ].join("\n"),
-    );
-    execFileSync("git", ["add", "docs/README.md"], { cwd: repoRoot });
+  if (source !== undefined) {
+    writeFileSync(join(packageRoot, "dist", "index.js"), source);
+  }
+}
 
-    expect(collectMarkdownRelativeLinks(repoRoot)).toEqual([
-      {
-        sourcePath: "docs/README.md",
-        targetPath: "../AGENTS.md",
-      },
-      {
-        sourcePath: "docs/README.md",
-        targetPath: "guide.md",
-      },
-    ]);
+function captureFailure(callback) {
+  try {
+    callback();
+  } catch (error) {
+    return error;
+  }
+
+  return undefined;
+}
+
+describe("check-release-readiness", () => {
+  it("removes a temporary repository after successful setup", () => {
+    let repoRoot;
+
+    withTempRepository((path) => {
+      repoRoot = path;
+      expect(existsSync(repoRoot)).toBe(true);
+    });
+
+    expect(existsSync(repoRoot)).toBe(false);
+  });
+
+  it("removes a temporary repository when setup fails", () => {
+    let repoRoot;
+
+    expect(() =>
+      withTempRepository((path) => {
+        repoRoot = path;
+        throw new Error("fixture setup failed");
+      }),
+    ).toThrow("fixture setup failed");
+    expect(existsSync(repoRoot)).toBe(false);
+  });
+
+  it("enumerates fixed and both generated Proto wildcard export spellings", () => {
+    withTempRepository((repoRoot) => {
+      const packageRoot = join(repoRoot, "packages", "proto");
+      mkdirSync(join(packageRoot, "dist", "generated", "spine", "core"), {
+        recursive: true,
+      });
+      writeJson(join(packageRoot, "package.json"), {
+        name: "@example/proto",
+        exports: {
+          ".": "./dist/index.js",
+          "./generated/*": "./dist/generated/*.js",
+          "./generated/*.js": "./dist/generated/*.js",
+        },
+      });
+      writeFileSync(join(packageRoot, "dist", "index.js"), "export {};\n");
+      writeFileSync(
+        join(packageRoot, "dist", "generated", "spine", "core", "command_pb.js"),
+        "export {};\n",
+      );
+
+      expect(collectRuntimeExportSpecifiers(repoRoot)).toEqual([
+        {
+          packageDirectory: "packages/proto",
+          specifier: "@example/proto",
+        },
+        {
+          packageDirectory: "packages/proto",
+          specifier: "@example/proto/generated/spine/core/command_pb",
+        },
+        {
+          packageDirectory: "packages/proto",
+          specifier: "@example/proto/generated/spine/core/command_pb.js",
+        },
+      ]);
+    });
+  });
+
+  it("collects supported inline and reference-definition targets outside code", () => {
+    withTempRepository((repoRoot) => {
+      mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      writeFileSync(
+        join(repoRoot, "docs", "README.md"),
+        [
+          "[inline](guide.md#section)",
+          '[inline with title](title.md "Title")',
+          "[reference use][reference]",
+          '[reference]: reference.md?raw=1 "Title"',
+          "[angled]: <angled.md#section>",
+          "`[ignored inline](missing-inline.md)`",
+          "`[ignored reference]: missing-reference.md`",
+          "[url](https://example.test/guide.md)",
+          "[anchor](#local)",
+          "[absolute evidence](/private/tmp/old-evidence.md)",
+          "[scheme](mailto:team@example.test)",
+          "```md",
+          "[ignored fenced](missing-fenced.md)",
+          "[ignored-fenced-reference]: missing-fenced-reference.md",
+          "```",
+        ].join("\n"),
+      );
+      execFileSync("git", ["add", "docs/README.md"], { cwd: repoRoot });
+
+      expect(collectMarkdownRelativeLinks(repoRoot)).toEqual([
+        {
+          sourcePath: "docs/README.md",
+          targetPath: "angled.md",
+        },
+        {
+          sourcePath: "docs/README.md",
+          targetPath: "guide.md",
+        },
+        {
+          sourcePath: "docs/README.md",
+          targetPath: "reference.md",
+        },
+        {
+          sourcePath: "docs/README.md",
+          targetPath: "title.md",
+        },
+      ]);
+    });
   });
 
   it("reports a tracked broken Markdown source and target after package self-import succeeds", () => {
-    const repoRoot = mkdtempSync(join(tmpdir(), "release-readiness-"));
-    const packageRoot = join(repoRoot, "packages", "runtime");
-    initializeRepository(repoRoot);
-    mkdirSync(join(packageRoot, "dist"), { recursive: true });
-    mkdirSync(join(repoRoot, "docs"), { recursive: true });
-    writeJson(join(packageRoot, "package.json"), {
-      name: "@example/runtime",
-      type: "module",
-      exports: {
-        ".": "./dist/index.js",
-      },
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot);
+      mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      writeFileSync(join(repoRoot, "docs", "README.md"), "[missing](missing.md)\n");
+      execFileSync("git", ["add", "docs/README.md"], { cwd: repoRoot });
+
+      const failure = captureFailure(() => runReleaseReadiness(repoRoot));
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toContain("Broken Markdown link: docs/README.md -> missing.md");
+      expect(failure.message).not.toContain("Broken package export");
     });
-    writeFileSync(join(packageRoot, "dist", "index.js"), "export const ready = true;\n");
-    writeFileSync(join(repoRoot, "docs", "README.md"), "[missing](missing.md)\n");
-    execFileSync("git", ["add", "docs/README.md"], { cwd: repoRoot });
+  });
 
-    let failure;
+  it("rejects a Markdown target that resolves outside the repository", () => {
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot);
+      mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      writeFileSync(join(repoRoot, "docs", "README.md"), "[outside](../../outside.md)\n");
+      execFileSync("git", ["add", "docs/README.md"], { cwd: repoRoot });
 
-    try {
-      runReleaseReadiness(repoRoot);
-    } catch (error) {
-      failure = error;
-    }
+      const failure = captureFailure(() => runReleaseReadiness(repoRoot));
 
-    expect(failure).toBeInstanceOf(Error);
-    expect(failure.message).toContain("Broken Markdown link: docs/README.md -> missing.md");
-    expect(failure.message).not.toContain("Broken package export");
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toContain(
+        "Escaping Markdown link: docs/README.md -> ../../outside.md",
+      );
+    });
+  });
+
+  it("reports package directory and specifier for a broken runtime export", () => {
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot, {
+        exportTarget: "./dist/missing.js",
+        source: undefined,
+      });
+
+      const failure = captureFailure(() => runReleaseReadiness(repoRoot));
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toContain(
+        "Broken package export: packages/runtime: @example/runtime",
+      );
+    });
+  });
+
+  it("times out a non-terminating package export with an actionable diagnostic", () => {
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot, {
+        source: ["setTimeout(() => process.exit(0), 500);", "await new Promise(() => {});"].join(
+          "\n",
+        ),
+      });
+      const startedAt = Date.now();
+
+      const failure = captureFailure(() => runReleaseReadiness(repoRoot, { importTimeoutMs: 50 }));
+
+      expect(Date.now() - startedAt).toBeLessThan(450);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toContain(
+        "Timed out package export after 50 ms: packages/runtime: @example/runtime",
+      );
+    });
   });
 });

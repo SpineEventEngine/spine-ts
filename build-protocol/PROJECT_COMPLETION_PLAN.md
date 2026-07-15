@@ -876,6 +876,8 @@ TypeDoc/API counts, Proto lint, and generated-clean results.
 
 Also run explicit release smoke checks:
 
+- after generated build output exists, run the standalone versioned package
+  export and Markdown link check: `pnpm check:release-readiness`;
 - start the to-do server on an ephemeral port;
 - post, query, subscribe, cancel, and close through real clients;
 - run the local multi-process example acceptance;

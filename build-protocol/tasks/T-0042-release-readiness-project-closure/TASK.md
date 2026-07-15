@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - corrected full gate clean; final specialist re-review pending
+Status: In progress - Wave 2 focused validation clean; final specialist re-review pending
 
 Started: `2026-07-15`
 
@@ -189,3 +189,71 @@ scripts/check-release-readiness.test.mjs` failed as expected with
 - T-0042 still requires a fresh immutable package and all four final specialist
   lanes. Security remains N/A because the correction changes release tooling
   and current documentation only, not a trust boundary.
+
+## 2026-07-15 - Wave 2 Fix Scope
+
+- Add exact standalone release command and new checker/test evidence to the
+  completion plan and capability matrix.
+- Bound every package-import subprocess and prove an actionable timeout for a
+  non-terminating module.
+- Reject relative Markdown targets resolved outside the repository before
+  existence checks, ignore fenced/inline code, and recognize inline plus
+  reference-definition targets used by the repository.
+- Remove every temp test repository on success/failure and prove broken-export
+  diagnostics name package scope and specifier.
+- Keep dependencies/lockfile/runtime/public/generated/example/security behavior
+  unchanged. Focused RED/GREEN precedes fresh all-lane re-review and the
+  coordinator final gate.
+- Resumed existing implementer `019f6718-1df9-77d0-ac05-e83591cba9ca` under
+  the parent-runtime immutable `gpt-5.6-terra` / medium binding. RED criteria:
+  finite import timeout, repository-escape rejection, inline-code exclusion,
+  reference-definition collection, temp-fixture cleanup, and actionable broken
+  export diagnostics must fail against the current checker before implementation.
+- Wave 2 RED: focused Vitest ran 8 tests with 3 expected failures. The current
+  scanner included an inline-code link and omitted reference definitions; an
+  escaping target was reported only as broken; and the requested 50 ms import
+  timeout took 576 ms without a timeout diagnostic. Cleanup and broken-export
+  regression tests were already green.
+- Wave 2 GREEN: the focused suite passed 1 file / 8 tests in 693 ms. The direct
+  checker remained stable at 58 package imports / 107 relative Markdown links.
+  Completion-plan and release-matrix traceability now name the exact standalone
+  command, checker, and focused test. At this intermediate point, final focused
+  validation had not yet run; the following evidence supersedes that state.
+- Final focused validation: 1 file / 8 tests passed in 711 ms; direct checker
+  passed at 58 imports / 107 links; focused ESLint, tooling typecheck, cleanup,
+  generated-clean, focused Prettier, and `git diff --check` all exited 0. Full
+  `pnpm verify` remains coordinator-owned after clean re-review.
+
+## 2026-07-15 - Wave 2 Fix Verification
+
+- The coordinator independently reran the focused checker suite: 1 file / 8
+  tests passed in 1.50 seconds. The standalone release-readiness command passed
+  with 58 package imports and 107 relative Markdown links.
+- Tooling typecheck, focused ESLint, cleanup enforcement, focused Prettier,
+  generated-clean, and `git diff --check` all exited 0.
+- Re-review must rerun style/maintainability, documentation, and
+  performance/reliability because Wave 2 changed checker structure, release
+  claims, subprocess bounds, filesystem bounds, and fixture lifecycle.
+- The clean Wave 2 TypeScript/API result is carried forward with an explicit
+  N/A disposition for this correction: no package manifest, runtime export,
+  declaration, TypeDoc, Protobuf, lockfile, generated API, or public source file
+  changed after that review. Rerunning that lane would inspect no affected API
+  input.
+
+## 2026-07-15 - Wave 3 Pre-Review Lint
+
+- Task, work, and review headers agree that focused validation is clean and
+  final affected re-review is pending. Transitional RED/GREEN statements are
+  explicitly chronological and superseded by the final evidence that follows
+  them.
+- The checker owns one private default import-timeout constant
+  (`10_000` milliseconds); tests inject smaller values and do not duplicate
+  production policy.
+- The diff contains no package manifest, public export, declaration, TypeDoc,
+  Protobuf, lockfile, generated API, or public source change. The completion
+  plan and capability matrix additions name current executable checks and make
+  no future runtime, retry, monitoring, topology, or adapter promise.
+- Focused rerun immediately before freeze passed 1 file / 8 tests in 1.34
+  seconds, the standalone checker at 58 imports / 107 links, tooling typecheck,
+  focused ESLint, cleanup, focused Prettier, generated-clean, and
+  `git diff --check`.
