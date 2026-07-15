@@ -3226,3 +3226,12 @@ verify` remains reserved.
   Every lane is read-only, childless, Git-read-only, task-scoped, and must ignore
   superseded history unless current records/docs claim it active. Aggregate the
   complete wave before correction.
+
+## D-0093 Canonical Review Package
+
+- Frozen endpoint `93316960`; literal package
+  `.superpowers/sdd/review-e37a964a..93316960.diff`; architecture baseline
+  `e37a964a`; 2 commits; 89,752 bytes.
+- Every reviewer receives this exact package plus the D-0093 human ledger,
+  accepted architecture, current security artifacts, focused test evidence,
+  public-boundary rules, and historical-text rule.
