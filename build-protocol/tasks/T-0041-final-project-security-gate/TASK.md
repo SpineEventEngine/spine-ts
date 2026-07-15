@@ -2934,3 +2934,29 @@ Subscription cancellation failed.` instead of `AggregateError`.
   `ace8b0c3`.
 - Dispatch the four already-assigned immutable reviewer roles against this exact
   package and aggregate the complete wave before action.
+
+## Canonical Wave 23 Dispatch Progress
+
+- The initial concurrent dispatch reached shared Desktop thread capacity after
+  launching the documentation and TypeScript/API lanes. This is platform
+  sequencing, not a skipped concern; completed slots are reused for the
+  remaining lanes.
+- Documentation agent `019f65a4-6df3-7022-884d-9fa1c69621ec` completed clean
+  under the explicit, tool-enforced immutable actual `gpt-5.6-luna` / medium
+  profile and is closed.
+- TypeScript/API agent `019f65a4-719e-7b72-95c6-11e419328364` completed clean
+  under the explicit, tool-enforced immutable actual `gpt-5.6-terra` / high
+  profile and is closed.
+- Style agent `019f65a6-a66b-75e1-ae16-8393ee0648bf` is dispatched explicitly
+  under the immutable `gpt-5.6-terra` / high role. Do not aggregate or fix until
+  style and performance/reliability are both collected.
+
+## Canonical Wave 23 Style Dispatch Correction
+
+- The capacity-failed concurrent call had launched original style agent
+  `019f65a4-6a9b-7361-9c09-57e9bb9b8e46` without returning its ID. It completed
+  clean under the explicit, tool-enforced immutable actual Terra High profile
+  and is closed.
+- The later style dispatch `019f65a6-a66b-75e1-ae16-8393ee0648bf` was therefore
+  a duplicate caused by the missing tool result. It was shut down while running;
+  no result from it is accepted. Performance/reliability remains outstanding.

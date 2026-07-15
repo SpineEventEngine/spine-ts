@@ -3030,3 +3030,25 @@ verify` remains reserved.
 - Literal baseline `39f2c6f7`; literal endpoint `ace8b0c3`; 131 commits;
   963,324 bytes. Every assigned reviewer receives this exact package and the
   current task/work/review/security records.
+
+## Canonical Wave 23 Dispatch Progress
+
+- Shared Desktop capacity requires sequencing after two initial launches; no
+  concern is merged or skipped.
+- Documentation `019f65a4-6df3-7022-884d-9fa1c69621ec`: explicit and actual
+  immutable Luna Medium; clean; childless/Git-read-only; closed.
+- TypeScript/API `019f65a4-719e-7b72-95c6-11e419328364`: explicit and actual
+  immutable Terra High; clean; childless/Git-read-only; closed.
+- Style `019f65a6-a66b-75e1-ae16-8393ee0648bf`: explicit immutable Terra High;
+  running. Performance/reliability remains to be collected. No partial-wave
+  action is permitted.
+
+## Canonical Wave 23 Style Dispatch Correction
+
+- Original style agent `019f65a4-6a9b-7361-9c09-57e9bb9b8e46`, launched by
+  the initial call before its capacity error, completed clean with matching
+  explicit/tool-enforced actual Terra High and is closed.
+- Duplicate style agent `019f65a6-a66b-75e1-ae16-8393ee0648bf`, dispatched
+  only because the initial call returned no ID, was shut down while running and
+  contributes no accepted result. Performance/reliability is the only
+  outstanding canonical concern.
