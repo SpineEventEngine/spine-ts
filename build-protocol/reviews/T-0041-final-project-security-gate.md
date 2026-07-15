@@ -2018,3 +2018,13 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Commit, reconcile the immutable correction endpoint, and assign all four
   Canonical Wave 17 roles before package generation. Dedicated final security
   review remains pending.
+
+## Wave 16 Post-Commit Format Correction
+
+- The combined pre-commit shell sequence reported one task-log Prettier warning
+  after the coordinator section was appended, then its later diff check exited
+  0 and commit `b70ecb08` proceeded. The warning concerns one Markdown wrap;
+  production, test, docs behavior, and review conclusions are unchanged.
+- Prettier corrected the wrap immediately. Use `b70ecb08` as substantive
+  implementation evidence, then require a fresh exact format/diff gate on the
+  format/log-only follow-up before Wave 17 package generation.

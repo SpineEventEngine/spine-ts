@@ -2112,7 +2112,16 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
 - Fresh `docs:check` passed with 25 Proto checksums and API counts
   `100/28/205/19/17/6/3`. Focused ESLint, exact seven-path Prettier,
   naming/status/D-0090 scans, generated/package-boundary checks, and `git diff
-  --check` all exited 0.
+--check` all exited 0.
 - Accept this seven-path correction for commit. After the immutable endpoint is
   known, reconcile provenance and assign Canonical Wave 17 before package
   generation. Dedicated final security review remains pending.
+
+## Wave 16 Post-Commit Format Correction
+
+- The combined pre-commit shell sequence reported a Prettier warning in this
+  task log after the coordinator section was appended, but its later
+  `git diff --check` command exited 0 and allowed commit `b70ecb08` to proceed.
+- Prettier corrected the single Markdown wrap immediately. Treat `b70ecb08` as
+  the substantive correction commit, not the final verified package endpoint;
+  fresh exact formatting and diff checks follow in the format-only commit.
