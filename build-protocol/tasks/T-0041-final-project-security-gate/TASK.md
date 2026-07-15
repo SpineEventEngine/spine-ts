@@ -2641,3 +2641,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
   endpoint `1ba74c5c`. Substantive Wave 21 implementation remains `c7f8a901`.
 - Dispatch the four assigned canonical roles against this exact package and
   aggregate all results before action.
+
+## Canonical Wave 22 Dispatch
+
+- Style/maintainability agent `019f6555-6e2b-7af0-ba7f-25f04763a446` was
+  dispatched explicitly as the existing immutable `gpt-5.6-terra` / high role.
+- Documentation agent `019f6555-96b6-71b3-838a-abc7e6c7e279` was dispatched
+  explicitly as the existing immutable `gpt-5.6-luna` / medium role.
+- TypeScript/API agent `019f6555-b978-73c2-8920-813d44d5fa24` was dispatched
+  explicitly as the existing immutable `gpt-5.6-terra` / high role.
+- All are read-only, childless, and Git-read-only with distinct bounded
+  concerns. Reliability waits only for execution-surface capacity; aggregate
+  the complete four-lane wave before action.

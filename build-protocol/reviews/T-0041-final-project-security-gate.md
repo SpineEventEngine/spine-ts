@@ -2790,3 +2790,13 @@ verify` remains reserved.
   `1ba74c5c`. Substantive correction evidence is commit `c7f8a901`.
 - All four previously assigned roles receive this exact package. Complete-wave
   aggregation remains mandatory before any correction.
+
+## Canonical Wave 22 Dispatch
+
+- Explicit immutable dispatches: style
+  `019f6555-6e2b-7af0-ba7f-25f04763a446` Terra High; docs
+  `019f6555-96b6-71b3-838a-abc7e6c7e279` Luna Medium; API
+  `019f6555-b978-73c2-8920-813d44d5fa24` Terra High.
+- Every dispatched role is read-only, childless, and Git-read-only with its
+  distinct concern. Reliability remains queued for platform capacity;
+  complete-wave aggregation remains mandatory.
