@@ -3785,6 +3785,15 @@ verify` remains reserved.
   and TypeScript/API. Reliability remains N/A under the unchanged-runtime
   rationale.
 
+## D-0096 Source TypeDoc Final Re-Review Package
+
+- Immutable package `.superpowers/sdd/review-9694fb86..cbe3bf53.diff`;
+  baseline `9694fb86`; endpoint `cbe3bf53`; 1 commit; 13,283 bytes.
+- Re-review style and TypeScript/API under explicit immutable Terra High and
+  docs under explicit immutable Luna Medium. Each lane is read-only, childless,
+  Git-read-only, bounded to its concern, and subject to the active-state-over-
+  historical-text rule. Aggregate all three. Reliability remains N/A.
+
 ## D-0096 Source TypeDoc P2 Implementer Evidence
 
 - Resolved the accepted style/maintainability P2 by documenting directly above

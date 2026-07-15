@@ -3825,6 +3825,15 @@ Subscription cancellation failed.` instead of `AggregateError`.
   remained childless and Git-read-only and is closed. Freeze for the final
   three-lane D-0096 re-review; reliability remains N/A.
 
+## D-0096 Source TypeDoc Final Re-Review Assignment
+
+- Baseline `9694fb86`; endpoint `cbe3bf53`; exact package
+  `.superpowers/sdd/review-9694fb86..cbe3bf53.diff`; 1 commit; 13,283 bytes.
+- Re-dispatch style/maintainability and TypeScript/API as explicit immutable
+  Terra High and documentation as explicit immutable Luna Medium, all
+  read-only, childless, Git-read-only, concern-scoped, and subject to the
+  historical-text rule. Aggregate the wave. Reliability remains N/A.
+
 ## D-0096 Source TypeDoc P2 Implementation
 
 - Expanded only `isTransportTopicKind()` source TypeDoc to preserve the
