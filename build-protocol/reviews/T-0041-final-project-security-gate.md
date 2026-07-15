@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 14 findings accepted; correction assigned
+Status: Canonical wave 14 correction verified; wave 15 package pending
 
 Baseline: `39f2c6f7`
 
@@ -1736,3 +1736,68 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   Current-status scan confirms D-0090 and the pending correction/review state;
   `git diff --check` exited 0. This correction is ready for coordinator
   inspection without claiming canonical or dedicated security completion.
+
+## Canonical Wave 14 Fix In Progress
+
+- The existing implementer is the sole writer for the accepted bounded batch;
+  no subagents or Git-state mutation. Public fixture TSDoc now mirrors D-0090
+  forwarding without duplicating a production error constant, and construction
+  through the public fixture surface asserts the service's exact synchronous
+  oversized-TTL `TypeError`.
+- TDD evidence: the new regression passed against the pre-existing service
+  behavior; a temporary inverse assertion failed as expected (1 failed, 10
+  passed), after which the exact-error assertion was restored. No runtime
+  forwarding or D-0087 through D-0090 behavior changed.
+- The two explicit paused shared-fixture close cases now use one parameterized
+  helper that preserves first/second inner deadline labels, each exact outer
+  deadline, pending-open settlement, and the existing directory-removal
+  `finally`. Native focused fixture/transport testing passed 45/45 after the
+  sandbox-only IPC `EPERM` run.
+- Both security artifact headers, TM-005, and the findings review-round table
+  now identify the current corrected Canonical Wave 14 review as pending and
+  the dedicated security re-review as pending. No security acceptance is
+  claimed. Focused final checks and Canonical Wave 15 review remain pending.
+- Focused evidence: native fixture/transport Vitest passed 2 files / 45 tests;
+  generated build typecheck, generated-clean, and `docs:check` exited 0. Docs
+  verified 25 copied Proto checksums and API counts `100/28/205/19/17/6/3`.
+  Focused ESLint, eight-path Prettier, current-status/public-boundary/
+  manifest/lock/generated scans, and `git diff --check` are clean. Full
+  verification and all Canonical Wave 15 lanes remain pending.
+
+## Wave 14 Coordinator Naming And Status Correction
+
+- Coordinator inspection accepts the fixture contract/regression, helper
+  behavior, security tables, and validation. Shorten the new five-component
+  private helper and simplify redundant current/correction wording in both
+  security headers and TM-005 before commit.
+- Resume the same immutable Terra Medium implementer for that naming/status-only
+  correction. Canonical Wave 15 and dedicated final security review remain
+  pending.
+
+## Canonical Wave 14 Correction Coordinator Verification
+
+- Implementer `019f6498-cfff-71d1-96a9-2542e1f36431` has matching explicit and
+  actual immutable `gpt-5.6-terra` / medium evidence, used no child or Git
+  mutation, and is closed.
+- Coordinator inspection accepts fixture TSDoc/regression, shared-close helper,
+  security status/table, and naming refinement without runtime/public-contract
+  change or security acceptance.
+- Fresh native affected verification passed 45/45. Generated typecheck,
+  docs/API counts `100/28/205/19/17/6/3`, generated cleanliness, focused lint
+  and format, common-finding scans, manifest/lock/package-map integrity,
+  tracked-generated absence, and diff integrity passed.
+- Commit and reconcile the immutable endpoint. Advance security and general
+  current-status records together when assigning Wave 15, then generate the
+  package. Dedicated final security review remains pending.
+- The private helper and both calls are now `expectPausedSharedClose`, within
+  the four-component limit. Both security headers and TM-005 use plain current/
+  pending Canonical Wave 14 wording and preserve dedicated security review as
+  pending with no acceptance claim. Native transport baseline and post-change
+  runs passed 34/34; exact format, naming/status, and diff checks remain
+  pending.
+- Final evidence: exact six-path Prettier passed after mechanical threat-model
+  table reflow; the source naming scan reports two new-name calls and one
+  declaration with no old-name source occurrence. Status scans find no
+  redundant phrase and retain Wave 14 current/pending plus dedicated security
+  pending in both headers and TM-005. `git diff --check` passed. Canonical Wave
+  15 and dedicated security re-review remain pending.

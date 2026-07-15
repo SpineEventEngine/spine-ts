@@ -387,75 +387,23 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("bounds shared fixture cleanup when a transport is paused during preparation", async () => {
-    const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
-    const preparationStarted = deferred<undefined>();
-    const preparationReleased = deferred<undefined>();
-    const prepare = vi
-      .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
-      .mockImplementationOnce(async (ipcDirectory) => {
-        preparationStarted.resolve(undefined);
-        await preparationReleased.promise;
-        return await prepareIpcDirectory(ipcDirectory);
-      });
-    let opening: Promise<unknown> | undefined;
-
-    try {
-      const fixture = withSharedZeroMqTransports(async (firstTransport) => {
-        const topic = createTransportTopic({
-          signalKind: "event",
-          messageTypeUrl: "type.spine.io/example.PausedSharedFixturePreparation",
-        });
-        opening = firstTransport.subscribe(
-          createTransportSubscription({ subscriberId: "paused-shared-fixture", topic }),
-          () => undefined,
-        );
-        await preparationStarted.promise;
-      });
-
-      await expect(
-        withHarnessDeadline(fixture, "outer shared fixture cleanup", closeDeadlineMs * 2),
-      ).rejects.toThrow("Timed out waiting for first ZeroMQ shared test fixture close.");
-    } finally {
-      preparationReleased.resolve(undefined);
-      await opening?.catch(() => undefined);
-      prepare.mockRestore();
-    }
+    await expectPausedSharedClose({
+      transport: "first",
+      messageTypeUrl: "type.spine.io/example.PausedSharedFixturePreparation",
+      subscriberId: "paused-shared-fixture",
+      outerDeadlineLabel: "outer shared fixture cleanup",
+      expectedCloseTimeout: "Timed out waiting for first ZeroMQ shared test fixture close.",
+    });
   });
 
   it("bounds the second shared fixture close when its transport is paused during preparation", async () => {
-    const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
-    const preparationStarted = deferred<undefined>();
-    const preparationReleased = deferred<undefined>();
-    const prepare = vi
-      .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
-      .mockImplementationOnce(async (ipcDirectory) => {
-        preparationStarted.resolve(undefined);
-        await preparationReleased.promise;
-        return await prepareIpcDirectory(ipcDirectory);
-      });
-    let opening: Promise<unknown> | undefined;
-
-    try {
-      const fixture = withSharedZeroMqTransports(async (_firstTransport, secondTransport) => {
-        const topic = createTransportTopic({
-          signalKind: "event",
-          messageTypeUrl: "type.spine.io/example.PausedSecondSharedFixturePreparation",
-        });
-        opening = secondTransport.subscribe(
-          createTransportSubscription({ subscriberId: "paused-second-shared-fixture", topic }),
-          () => undefined,
-        );
-        await preparationStarted.promise;
-      });
-
-      await expect(
-        withHarnessDeadline(fixture, "outer second shared fixture cleanup", closeDeadlineMs * 2),
-      ).rejects.toThrow("Timed out waiting for second ZeroMQ shared test fixture close.");
-    } finally {
-      preparationReleased.resolve(undefined);
-      await opening?.catch(() => undefined);
-      prepare.mockRestore();
-    }
+    await expectPausedSharedClose({
+      transport: "second",
+      messageTypeUrl: "type.spine.io/example.PausedSecondSharedFixturePreparation",
+      subscriberId: "paused-second-shared-fixture",
+      outerDeadlineLabel: "outer second shared fixture cleanup",
+      expectedCloseTimeout: "Timed out waiting for second ZeroMQ shared test fixture close.",
+    });
   });
 
   it("waits for racing request preparation and blocks native connect and send", async () => {
@@ -1216,6 +1164,52 @@ async function withSharedZeroMqTransports<T>(
     } finally {
       await rm(ipcDirectory, { recursive: true, force: true });
     }
+  }
+}
+
+async function expectPausedSharedClose({
+  transport,
+  messageTypeUrl,
+  subscriberId,
+  outerDeadlineLabel,
+  expectedCloseTimeout,
+}: {
+  readonly transport: "first" | "second";
+  readonly messageTypeUrl: string;
+  readonly subscriberId: string;
+  readonly outerDeadlineLabel: string;
+  readonly expectedCloseTimeout: string;
+}): Promise<void> {
+  const prepareIpcDirectory = zeroMqSocketAccess.prepareIpcDirectory.bind(zeroMqSocketAccess);
+  const preparationStarted = deferred<undefined>();
+  const preparationReleased = deferred<undefined>();
+  const prepare = vi
+    .spyOn(zeroMqSocketAccess, "prepareIpcDirectory")
+    .mockImplementationOnce(async (ipcDirectory) => {
+      preparationStarted.resolve(undefined);
+      await preparationReleased.promise;
+      return await prepareIpcDirectory(ipcDirectory);
+    });
+  let opening: Promise<unknown> | undefined;
+
+  try {
+    const fixture = withSharedZeroMqTransports(async (firstTransport, secondTransport) => {
+      const topic = createTransportTopic({ signalKind: "event", messageTypeUrl });
+      const selectedTransport = transport === "first" ? firstTransport : secondTransport;
+      opening = selectedTransport.subscribe(
+        createTransportSubscription({ subscriberId, topic }),
+        () => undefined,
+      );
+      await preparationStarted.promise;
+    });
+
+    await expect(
+      withHarnessDeadline(fixture, outerDeadlineLabel, closeDeadlineMs * 2),
+    ).rejects.toThrow(expectedCloseTimeout);
+  } finally {
+    preparationReleased.resolve(undefined);
+    await opening?.catch(() => undefined);
+    prepare.mockRestore();
   }
 }
 

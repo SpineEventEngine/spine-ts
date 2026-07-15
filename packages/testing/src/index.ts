@@ -27,7 +27,13 @@ export interface BoundedContextFixtureOptions {
   readonly timeoutMs?: number;
   /** Milliseconds between `readEventually()` attempts. Defaults to 5. */
   readonly intervalMs?: number;
-  /** Milliseconds before never-activated service subscriptions expire. */
+  /**
+   * Milliseconds before never-activated service subscriptions expire. Forwards
+   * the service's D-0090 behavior: omitted uses the service default;
+   * non-positive or non-finite values become 1; positive finite values are
+   * floored; and an effective value above 2,147,483,647 throws the service's
+   * exact synchronous `TypeError` before service storage or timer work.
+   */
   readonly inactiveTtlMs?: number;
   /** Maximum queued service subscription updates before delivery closes. */
   readonly queueLimit?: number;

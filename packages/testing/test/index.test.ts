@@ -95,6 +95,17 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
 }
 
 describe("BoundedContextFixture", () => {
+  it("forwards oversized inactive TTLs as the service's exact synchronous error", () => {
+    expect(
+      () =>
+        new BoundedContextFixture(createTaskContext(), {
+          inactiveTtlMs: 2_147_483_648,
+        }),
+    ).toThrow(
+      new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds."),
+    );
+  });
+
   it("posts commands through CommandService and eventually reads projected state", async () => {
     const fixture = new BoundedContextFixture(createTaskContext(), {
       timeoutMs: 500,
