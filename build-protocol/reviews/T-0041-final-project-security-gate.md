@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 8 assigned
+Status: Canonical review wave 8 findings accepted; fix assigned
 
 Baseline: `39f2c6f7`
 
@@ -1005,3 +1005,41 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
 - All are read-only, use the ledger and superseded-history rule, and report
   concrete findings or clean. Aggregate the complete wave before action;
   dedicated security review remains pending.
+
+## Canonical Review Wave 8 Result
+
+- Style/maintainability, immutable Terra High, agent
+  `019f6407-a559-73d1-be8d-3829fd813fde`: P2 at
+  `packages/server/src/services/spine-services.ts` because 42-line
+  `#claimDurable()` hides D-0087 reconciliation policy; P2 at
+  `packages/transport/test/zeromq/signal-transport.test.ts` because the fixed
+  1,000 ms harness deadline does not prove the configured 25 ms request bound.
+- Documentation, immutable Luna Medium, agent
+  `019f6407-a1e7-7ad3-ad96-1614d780e33f`: medium at `docs/api/README.md`
+  because the public overview omits `subscriptionLimit` default/bounds,
+  separate unknown-ID cancellation capacity, and known-local cancellation
+  persistence failure/capacity retention.
+- TypeScript/API, immutable Terra High, agent
+  `019f6407-a934-76c2-8db9-8f963766b6df`: clean for declaration/runtime
+  alignment, timeout TSDoc/validation, exports, compatibility, and Proto/TypeDoc
+  boundaries.
+- Performance/reliability, immutable Terra High, agent
+  `019f6409-5565-7453-a831-0ad9fa094812`: clean for exact CAS reconciliation,
+  unknown-outcome retention, finite timerless cleanup, capacity, request/close
+  bounds, and no-spin/no-leak behavior.
+- Every dispatch supplied role, model, and reasoning explicitly. The Desktop
+  runtime enforces each role's immutable profile and accepted those fields;
+  child-visible generic model labels exposed no finer metadata. Record the
+  tool-enforced role profile as actual runtime evidence. All agents are closed.
+
+## Canonical Wave 8 Fix Assignment
+
+- One fresh existing implementer is required because the prior writer is
+  closed: explicit immutable Terra Medium, no subagents or Git mutation.
+- Complete batch: extract D-0087 CAS-error reconciliation into a private semantic
+  method without behavior change; make the ZeroMQ liveness test derive a
+  scheduling-tolerant deadline from its 25 ms configured timeout; complete the
+  API overview using current server/user-guide semantics. Keep private names
+  short and focused, update durable evidence, and run focused tests, lint,
+  format, docs check, and diff integrity. Rerun all four canonical lanes before
+  dedicated security review.

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 8 assigned
+Status: In progress - canonical review wave 8 findings accepted; fix assigned
 
 Started: `2026-07-14`
 
@@ -1189,3 +1189,30 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   timeout/close boundedness, public docs, and stable security provenance.
   Aggregate the complete wave before action; dedicated security review remains
   pending.
+
+## Canonical Review Wave 8 Result And Fix Assignment
+
+- The complete wave is accepted. Style/maintainability found two P2 items:
+  isolate the D-0087 claim-CAS error reconciliation from the 42-line
+  `#claimDurable()` method, and make the sent-unanswered-request liveness test
+  prove the configured 25 ms timeout with a materially smaller derived deadline
+  plus native scheduling margin. Documentation found one medium item: complete
+  `docs/api/README.md` with the public `subscriptionLimit` default/bounds,
+  separate unknown-ID cancellation pool, and known-local cancellation
+  persistence failure/capacity-retention contract. TypeScript/API and
+  performance/reliability are clean.
+- Dispatch evidence was explicit and tool-enforced by immutable role profiles:
+  style `019f6407-a559-73d1-be8d-3829fd813fde` Terra High; documentation
+  `019f6407-a1e7-7ad3-ad96-1614d780e33f` Luna Medium; TypeScript/API
+  `019f6407-a934-76c2-8db9-8f963766b6df` Terra High; reliability
+  `019f6409-5565-7453-a831-0ad9fa094812` Terra High. The child-visible generic
+  display label exposed no finer profile, so the Desktop role configuration and
+  successful explicit dispatch are the actual immutable runtime evidence. All
+  four reviewers are closed.
+- Assign one fresh existing `implementer`, explicit immutable Terra Medium,
+  because the prior implementation context is closed. Its bounded write scope
+  is `spine-services.ts`, its focused service test only if needed to preserve
+  behavior, `signal-transport.test.ts`, `docs/api/README.md`, and these durable
+  logs. It must use TDD where behavior changes, run focused tests/lint/format,
+  avoid Git mutation and subagents, and report exact evidence. All four
+  canonical lanes rerun afterward; dedicated security review remains pending.
