@@ -3353,3 +3353,15 @@ verify` remains reserved.
   reserved-kind frame-2 docs, and correct the active security assignment.
   Re-run style, docs, and TypeScript/API; reliability is unaffected unless the
   correction changes runtime code or execution behavior.
+
+## D-0094 Union-Correlation Fix Assignment
+
+- Resume existing implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected
+  explicit/actual immutable Terra Medium, sole writer, childless, and without
+  Git-state mutation.
+- Fix only the distributive operation correlation and widened-kind compile
+  tests, duplicated transport-only server test, exact command/event versus
+  reserved-kind frame-2 wording, and stale active security assignment. Preserve
+  every accepted wire/runtime/risk decision and method generic order.
+- Style, docs, and TypeScript/API re-review the correction. Reliability retains
+  clean unless coordinator inspection finds runtime or execution-path changes.

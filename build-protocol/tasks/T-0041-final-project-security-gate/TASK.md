@@ -3320,3 +3320,18 @@ Subscription cancellation failed.` instead of `AggregateError`.
   and replace the stale active security assignment. Re-review affected lanes;
   reliability may retain its clean disposition because no runtime behavior is
   intended to change.
+
+## D-0094 Union-Correlation Fix Assignment
+
+- Resume existing implementer `019f65f6-4f41-7131-9dea-882113a53f9e` under
+  its original explicit/tool-enforced immutable `gpt-5.6-terra` / medium
+  profile. It remains the sole writer, childless, and without staging, commit,
+  branch, or push operations.
+- Own only the deduplicated wave: distributive publish/request operation shapes
+  with preserved generic order, compile-time union/widened-kind regressions,
+  removal of the duplicated transport-only server test, exact frame-2 wording,
+  and replacement of the superseded active security assignment.
+- Use RED/GREEN for the type hole and run focused transport type/runtime, docs,
+  lint, formatting, generated-clean, and diff checks. Do not alter the runtime
+  codec, frame cap, trailer behavior, accepted SF-013 decision, or run full
+  `pnpm verify` in this inner loop.
