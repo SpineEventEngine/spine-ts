@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 15 assigned
+Status: Canonical review wave 15 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -1824,3 +1824,32 @@ exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
   all T-0041 resource behavior.
 - All are read-only with D-0087-D-0090 and the superseded-history rule.
   Aggregate before action; dedicated security review remains pending.
+
+## Canonical Review Wave 15 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f64ab-13d0-7c63-a36d-1d0a68d054e2`: clean for fixture TSDoc/test, helper
+  naming/duplication, status structure, and complete T-0041 scope.
+- Documentation, immutable Luna Medium,
+  `019f64ab-1053-7142-aa43-29e4f5ec9c17`: P2 only because both security headers
+  still identify Wave 12 as coordinator-verified; replace that lead with Wave 14
+  while retaining Wave 15 current and dedicated security pending. All other
+  active docs are clean.
+- TypeScript/API, immutable Terra High,
+  `019f64ab-1726-7463-b793-9903f64dee03`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f64ad-22c1-7442-9b83-950c6b1b2f7b`: P2 because shared fixture
+  `Promise.all()` can reject before the sibling bounded close settles, racing
+  directory removal. Await both bounded outcomes before removal and rethrow a
+  recorded close failure; add pending-sibling coverage.
+- All explicit immutable profiles used no children or Git mutation and are
+  closed. Coordinator inspection confirms both accepted defects.
+
+## Canonical Wave 15 Fix Assignment
+
+- One fresh existing implementer, expected explicit immutable Terra Medium,
+  owns the test-fixture all-settlement/rethrow regression plus two status leads.
+  No production runtime, public symbol, package/dependency/Proto, generated
+  output, or D-0087-D-0090 behavior changes.
+- Run focused native transport/docs/lint/format/status/diff checks. All four
+  Canonical Wave 16 lanes rerun before dedicated final security review.

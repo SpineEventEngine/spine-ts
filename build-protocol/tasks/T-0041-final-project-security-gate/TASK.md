@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 15 assigned
+Status: In progress - canonical review wave 15 findings accepted; correction assigned
 
 Started: `2026-07-14`
 
@@ -1972,3 +1972,24 @@ EPERM` and 18 ZeroMQ IPC `EPERM` cases; the approved native rerun exited 0
   D-0090, current security artifacts, no subagents/Git mutation, concrete
   findings or clean, and superseded-history exclusion. Aggregate before action;
   dedicated security review remains pending.
+
+## Canonical Review Wave 15 Result And Fix Assignment
+
+- Complete result: style and TypeScript/API are clean. Documentation found the
+  security headers' historical “Wave 12 coordinator-verified” lead stale while
+  Wave 15 is current. Reliability found that `Promise.all()` can reject on one
+  bounded shared close and enter directory removal before its sibling bounded
+  close settles.
+- Explicit immutable profiles: style `019f64ab-13d0-7c63-a36d-1d0a68d054e2`
+  Terra High; docs `019f64ab-1053-7142-aa43-29e4f5ec9c17` Luna Medium; API
+  `019f64ab-1726-7463-b793-9903f64dee03` Terra High; reliability
+  `019f64ad-22c1-7442-9b83-950c6b1b2f7b` Terra High. All used no children or
+  Git mutation and are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable Terra
+  Medium, to await both deadline-wrapped close outcomes, remove the directory
+  afterward, and deterministically rethrow the recorded close failure; add
+  regression coverage with one timeout while the sibling remains pending.
+  Replace both header leads with Wave 14 coordinator-verified while preserving
+  Wave 15 and dedicated security pending. No production runtime/public/package/
+  Proto/dependency/generated change. Focused checks and all four Canonical Wave
+  16 lanes follow.
