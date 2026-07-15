@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - wave 7 committed; canonical wave 8 packaging pending
+Status: In progress - canonical review wave 8 assigned
 
 Started: `2026-07-14`
 
@@ -1174,3 +1174,18 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   endpoint. This provenance-only follow-up and later review/status commits are
   explicitly not implementation evidence. Canonical Wave 8 packaging and
   dedicated security review remain pending.
+
+## Canonical Review Wave 8 Assignment
+
+- Immutable review endpoint `ed1d26c1`; package
+  `.superpowers/sdd/review-39f2c6f7..ed1d26c1.diff` contains 37 commits and
+  517,271 bytes. Substantive implementation endpoint remains `732409ff`.
+- Dispatch all four existing canonical roles read-only with explicit immutable
+  profiles: style/maintainability Terra High, documentation Luna Medium,
+  TypeScript/API Terra High, and performance/reliability Terra High.
+- Require ledger/current-decision inspection, exact affected paths, no
+  subagents or Git mutation, concrete file/line findings, and superseded-history
+  exclusion. Stress claim-CAS ambiguity, finite timerless cleanup, request-
+  timeout/close boundedness, public docs, and stable security provenance.
+  Aggregate the complete wave before action; dedicated security review remains
+  pending.

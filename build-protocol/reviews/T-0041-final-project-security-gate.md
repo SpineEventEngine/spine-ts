@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Wave 7 committed; canonical wave 8 packaging pending
+Status: Canonical review wave 8 assigned
 
 Baseline: `39f2c6f7`
 
@@ -987,3 +987,21 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   later review/status commits are not implementation evidence.
 - Generate a literal package after provenance reconciliation, then run all four
   canonical Wave 8 concerns. Dedicated security review remains pending.
+
+## Canonical Review Wave 8 Assignment
+
+- Package `.superpowers/sdd/review-39f2c6f7..ed1d26c1.diff`, immutable endpoint
+  `ed1d26c1`, baseline `39f2c6f7`, 37 commits, 517,271 bytes. Substantive
+  implementation evidence ends at `732409ff`.
+- Style/maintainability: existing role, explicit immutable Terra High; changed
+  structure, names, deterministic tests, bounded helpers, duplication.
+- Documentation: existing role, explicit immutable Luna Medium; current public
+  behavior, D-0087/D-0088, security provenance/anchors, exclusions.
+- TypeScript/API: existing role, explicit immutable Terra High; public/runtime
+  contract, timeout validation/TSDoc, compatibility, exports, Protobuf/TypeDoc.
+- Performance/reliability: existing role, explicit immutable Terra High; exact
+  claim reconciliation, outcome-unknown cleanup, timerless budget, request/
+  close liveness, bounds, no-spin/no-leak evidence.
+- All are read-only, use the ledger and superseded-history rule, and report
+  concrete findings or clean. Aggregate the complete wave before action;
+  dedicated security review remains pending.
