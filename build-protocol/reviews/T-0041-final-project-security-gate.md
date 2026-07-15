@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 18 assigned
+Status: Canonical review wave 18 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -2226,3 +2226,41 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   dispatched explicitly as existing `performance_reliability_reviewer` with
   immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No
   finding may be acted on until style, API, and reliability also complete.
+
+## Canonical Review Wave 18 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f64ef-983f-7140-a642-db07d66cf461`: P2 because the active IPC asset row
+  cites `signal-transport.ts:592-602`, which is socket cleanup rather than IPC
+  preparation/identity/recheck; use the actual `682-845` control range. P2 also
+  because the threat-model provenance sentence says “dedicated Wave 18
+  re-review,” conflating canonical and dedicated-security gates.
+- Documentation, immutable Luna Medium,
+  `019f64ef-913e-7480-9060-fc966a67fd9c`: P2 because active TM-005/SF-008 omit
+  D-0090 default/coercion/flooring/2,147,483,647-ms ceiling and source/test
+  evidence. No other documentation finding.
+- TypeScript/API, immutable Terra High,
+  `019f64ef-94ba-7a43-bf27-b06708c22450`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f64f1-b972-7ee0-b06a-3955be772701`: P2 because `#activate()` awaits
+  cleanup in its attachment-failure catch, so cleanup failure replaces the
+  root attachment failure. Add an ordered `AggregateError` regression proving
+  attachment first, cleanup second, retained capacity, and successful retry. It
+  independently reported the same D-0090 evidence omission as docs.
+- Every role used the explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator source inspection
+  accepts the complete deduplicated batch.
+
+## Canonical Wave 18 Fix Assignment
+
+- One fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, is sole writer for the activation dual-failure TDD
+  correction in `spine-services.ts`/its service test, TM-005/SF-008 D-0090
+  evidence, IPC evidence range, threat-model status wording, and synchronized
+  task/work/review/security status.
+- Preserve the activation error first and cleanup error second in an
+  `AggregateError`; prove claim/capacity retention and same-ID cleanup/replacement
+  recovery. No public API, package/dependency/Proto, generated-output, or
+  D-0087-D-0090 contract change is authorized. Require focused native tests,
+  generated typecheck, docs, lint/format, status/anchor/boundary/diff checks;
+  all four Canonical Wave 19 lanes rerun before dedicated security review.

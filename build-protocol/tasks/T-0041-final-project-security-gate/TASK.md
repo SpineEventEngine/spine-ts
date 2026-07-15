@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 18 assigned
+Status: In progress - canonical review wave 18 findings accepted
 
 Started: `2026-07-14`
 
@@ -2236,3 +2236,29 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   roles with explicit immutable profiles, read-only, childless, Git-read-only,
   the full ledger, D-0087-D-0090, and superseded-history exclusion. Aggregate
   before action; dedicated final security review remains pending.
+
+## Canonical Review Wave 18 Result And Fix Assignment
+
+- Complete result: TypeScript/API is clean. Documentation/reliability both found
+  a P2 that active TM-005/SF-008 omit D-0090's normalization, maximum
+  2,147,483,647-ms TTL, and source/test evidence. Style found P2s for a stale IPC
+  preparation range and a provenance sentence conflating Canonical Wave 18 with
+  the separate dedicated security re-review. Reliability also found a P2:
+  activation attachment failure is replaced when durable cleanup also fails.
+- Immutable role evidence: style agent
+  `019f64ef-983f-7140-a642-db07d66cf461`, Terra High; docs agent
+  `019f64ef-913e-7480-9060-fc966a67fd9c`, Luna Medium; API agent
+  `019f64ef-94ba-7a43-bf27-b06708c22450`, Terra High; reliability agent
+  `019f64f1-b972-7ee0-b06a-3955be772701`, Terra High. Every explicit dispatch
+  used its tool-enforced immutable actual role profile, no child or Git
+  mutation, and all four are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. TDD the simultaneous activation-
+  attachment/cleanup failure: preserve an `AggregateError` ordered attachment
+  first and cleanup second, retained capacity, and successful same-ID cleanup/
+  replacement retry. Correct TM-005/SF-008 with exact D-0090 behavior and
+  source/test anchors, correct IPC evidence to the actual preparation/recheck
+  range, untangle canonical/security status, and synchronize all current logs.
+  Run focused native service tests, generated typecheck, docs, lint/format,
+  status/anchor/boundary/diff checks. All Canonical Wave 19 lanes follow before
+  dedicated final security review.
