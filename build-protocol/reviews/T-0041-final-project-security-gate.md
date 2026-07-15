@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 4 assigned
+Status: Canonical wave 4 findings pending architecture
 
 Baseline: `39f2c6f7`
 
@@ -471,6 +471,24 @@ bytes).
   persistence/CAS, request-close, IPC and cleanup.
 - Explicit immutable profile attestation, read-only/no subagents/Git mutation,
   superseded-history exclusion, and full-wave aggregation are required.
+
+## Canonical Review Wave 4 Result
+
+- Style/maintainability: CLEAN; agent
+  `019f6367-ae14-7f93-b09c-f8629e98e664`, actual immutable Terra High.
+- TypeScript/API docs: CLEAN; agent
+  `019f6367-b226-7a83-b3b6-1d49c24d0a7e`, actual immutable Terra High.
+- Documentation: two low provenance/status findings; agent
+  `019f6367-b61a-7c52-b67a-af00b5711d4b`, actual immutable Luna Medium.
+- Performance/reliability: two high findings; agent
+  `019f6369-9854-73f2-8bbb-31f3a390de96`, actual immutable Terra High:
+  cross-instance recovery is not fenced by local removal, and unknown-ID
+  removals are unbounded.
+- All reviewers are closed. Existing requirements splitter
+  `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`, expected explicit immutable Sol High,
+  must define the smallest persisted fence/bounded-removal contract before one
+  Terra Medium implementation batch. Dedicated security re-review remains
+  pending.
 
 ## Canonical Wave 3 Fix Evidence
 

@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 4 assigned
+Status: In progress - wave 4 findings pending architecture
 
 Started: `2026-07-14`
 
@@ -572,6 +572,25 @@ directory replaced immediately after successful creation'` exited 1 with 1
   both cancellation orderings, complete current claims, and the full changed
   surface; read-only/no subagents/Git mutation and complete-wave aggregation
   remain binding.
+
+## Canonical Review Wave 4 Result
+
+- Style is CLEAN: agent `019f6367-ae14-7f93-b09c-f8629e98e664`, actual
+  immutable Terra High.
+- TypeScript/API is CLEAN: agent `019f6367-b226-7a83-b3b6-1d49c24d0a7e`,
+  actual immutable Terra High.
+- Documentation agent `019f6367-b61a-7c52-b67a-af00b5711d4b`, actual immutable
+  Luna Medium, found runtime provenance must advance to `5a165d07` and the
+  findings status must name active wave 4.
+- Reliability agent `019f6369-9854-73f2-8bbb-31f3a390de96`, actual immutable
+  Terra High, found two highs: local removal cannot fence recovery in another
+  shared-storage `SpineServices`, and arbitrary unique unknown cancel IDs create
+  unbounded in-flight tombstones/storage deletes.
+- All reviewers are closed. Resume existing `requirements_splitter`
+  `019f62cb-d7fa-72b3-b0e9-d1ba22ff48c4`, expected explicit immutable Sol High,
+  read-only/no subagents/Git mutation, to define the smallest persistence-scoped
+  cancellation/recovery fence and bounded unknown-removal contract before
+  implementation.
 
 ## Canonical Wave 3 Fix Implementation
 
