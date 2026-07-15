@@ -2895,3 +2895,16 @@ verify` remains reserved.
 - The agent made no Git mutation, spawned no child, and is closed. Combined
   with the retained clean docs/API/reliability results, all four canonical
   concerns are clean. Dedicated final security re-review remains pending.
+
+## Dedicated Security Re-Review Package And Assignment
+
+- Review `.superpowers/sdd/review-39f2c6f7..d72e264e.diff`: 122 commits,
+  908,199 bytes, literal baseline `39f2c6f7`, literal endpoint `d72e264e`.
+- Existing `security_reviewer`, expected explicit immutable
+  `gpt-5.6-terra` / high, is assigned read-only, childless, and Git-read-only
+  across TM-001-TM-012, SF-001-SF-010, every task threat check, dependency
+  evidence, accepted deployment residual, and current canonical closure.
+- Require repository-grounded prerequisite/boundary/severity/confidence/
+  evidence/control/smallest-correction for any finding, or a clean result.
+  Superseded history is inactive unless current status/security artifacts claim
+  it. Full task verification waits for a clean security result.

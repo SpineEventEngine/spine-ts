@@ -2756,3 +2756,20 @@ Subscription cancellation failed.` instead of `AggregateError`.
   dispositions. All canonical participants are closed.
 - T-0041 remains in progress only for the dedicated final security re-review,
   clean task gate, integration, remote synchronization, and cleanup.
+
+## Dedicated Security Re-Review Assignment
+
+- Fresh canonical-closure package
+  `.superpowers/sdd/review-39f2c6f7..d72e264e.diff` contains 122 commits and
+  908,199 bytes from literal baseline `39f2c6f7` to literal endpoint
+  `d72e264e`.
+- Assign the existing `security_reviewer`, expected explicit immutable
+  `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. Re-adjudicate
+  every TM-001-TM-012 hypothesis and SF-001-SF-010 disposition across the full
+  public/runtime/build/example/dependency scope, with exact evidence and the
+  human ledger. Canonical review is clean; no historical superseded claim is
+  active unless current status/security artifacts claim it.
+- Report concrete unresolved security findings with prerequisite, boundary/
+  asset, severity/confidence, evidence, current control, and smallest fix, or
+  report the final security gate clean. Full `pnpm verify` follows only after a
+  clean security result.

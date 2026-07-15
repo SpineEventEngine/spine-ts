@@ -9,6 +9,12 @@ maintainability correction is `fdd9da0a`. Later provenance/review/status commits
 are not implementation evidence. Canonical review is clean; dedicated security
 re-review remains pending. No security acceptance is claimed.
 
+Dedicated final re-review package is
+`.superpowers/sdd/review-39f2c6f7..d72e264e.diff` (122 commits, 908,199
+bytes). Existing `security_reviewer`, expected explicit immutable
+`gpt-5.6-terra` / high, is assigned to re-adjudicate all TM/SF entries and the
+full task threat-check ledger before the task gate.
+
 ## Command and evidence ledger
 
 | Source                               | Command/evidence                                                                                                  | Result                                                                                                                                                                                                                                                                                                                     | Attribution                                                              |
