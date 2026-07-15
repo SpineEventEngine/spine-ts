@@ -674,6 +674,15 @@ bytes).
   mandatory skill check, current-state scope, and full-wave aggregation before
   fixes. Dedicated security re-review follows only after canonical closure.
 
+## Canonical Wave 5 Style Redispatch
+
+- Style agent `019f63af-3c54-7b30-b0ba-32123ff926a9` is closed and invalid for
+  acceptance because actual runtime model/reasoning metadata was unavailable.
+  Its timing-based test observation is not yet an accepted wave finding.
+- Redispatch the same role with explicit immutable Terra High and require a
+  fresh independent result plus actual profile attestation. Keep the other
+  three lane results and aggregate all valid lanes before action.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual

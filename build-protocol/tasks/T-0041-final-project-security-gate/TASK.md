@@ -827,6 +827,17 @@ recovery while durable cancellation is pending'`; exit 1, 1 failed/117 skipped.
   compatibility, public/internal boundaries, current docs, and tests. Aggregate
   all four results before fixes. Dedicated security review remains pending.
 
+## Canonical Wave 5 Style Redispatch
+
+- Style agent `019f63af-3c54-7b30-b0ba-32123ff926a9` is closed, but its result
+  is invalid for acceptance because it explicitly could not attest actual model
+  and reasoning metadata. Its 25 ms race-test observation remains advisory, not
+  an accepted finding.
+- Redispatch the same existing `style_maintainability_reviewer` role with
+  explicit immutable `gpt-5.6-terra` / high, the identical package and bounded
+  concern, and require verifiable actual metadata. Other wave 5 lanes continue;
+  aggregate only valid complete results before fixes.
+
 ## Wave 4 Coordinator Retry RED
 
 - Existing implementer `019f62d7-31cc-7c13-a0b1-61d25dff9e23`, actual
