@@ -1,6 +1,6 @@
 # T-0042 Review Log
 
-Status: In progress - Wave 2 focused validation clean; final specialist re-review pending
+Status: In progress - Wave 3 focused validation clean; affected re-review pending
 
 Baseline: `7678d36c`
 
@@ -348,3 +348,121 @@ implementer context, and repeat only affected concerns until clean.
 - Fresh focused evidence passed: 1 file / 8 tests in 1.34 seconds; standalone
   checker 58 imports / 107 links; tooling typecheck, focused ESLint, cleanup,
   focused Prettier, generated-clean, and `git diff --check`.
+
+## Wave 3 Assignment
+
+- Immutable endpoint: `e52183ab` (`Bound release readiness checks`).
+- Package:
+  `.superpowers/sdd/review-7678d36c..e52183ab.diff` (154,515 bytes, five
+  commits from the remotely synchronized T-0041 closure baseline).
+- Style/maintainability: existing
+  `style_maintainability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / high. Bounded concern: checker structure, duplicated
+  policy, scanner/test maintainability, status chronology, and concrete defects
+  introduced by the Wave 2 fix.
+- Documentation: existing `documentation_reviewer`, expected and explicitly
+  dispatched `gpt-5.6-luna` / medium. Bounded concern: current release command,
+  capability-matrix evidence, task/status truth, link-syntax claims, and no
+  future-policy overclaim.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / high. Bounded concern: subprocess timeout behavior,
+  repository-bound path handling, parser determinism, temp-fixture cleanup,
+  diagnostic coverage, and final-gate reliability.
+- The review package, current task/work/review records, completion plan, release
+  matrix, checker, and checker tests are the bounded inputs. Historical or
+  superseded text outside active claims is not a finding unless current task
+  logs, the brief, status mirrors, or changed public docs claim it as active.
+- All three assignments are read-only, Git-read-only, and childless. Each must
+  perform and report the canonical skill-applicability check. Relevant
+  candidates include `code-review-excellence`,
+  `requesting-code-review`, and `verification-before-completion`; reviewers
+  select only those applicable to their read-only concern and record why.
+- TypeScript/API is carried forward clean with the recorded no-affected-input
+  N/A disposition. Security remains N/A because no production trust boundary
+  changed. Aggregate all three Wave 3 results before action.
+
+### Wave 3 Dispatch Evidence
+
+- Style/maintainability: `019f6737-a962-76b3-8b80-3cfb9cd34831`; existing
+  immutable role binding and explicit dispatch both `gpt-5.6-terra` / high.
+- Documentation: `019f6737-ace4-7c22-85a1-160b434de111`; existing immutable
+  role binding and explicit dispatch both `gpt-5.6-luna` / medium.
+- Performance/reliability: `019f6737-b02d-7162-94a4-475534730170`; existing
+  immutable role binding and explicit dispatch both `gpt-5.6-terra` / high.
+- Parent-visible runtime role metadata is the actual-profile evidence because
+  the execution surface makes these bindings immutable. No inherited parent
+  default is used. Results remain pending until the complete wave is collected.
+
+## Wave 3 Results
+
+- Collected the complete affected wave before action and closed all three
+  reviewers. Parent runtime metadata and explicit dispatch fields match:
+  style/reliability `gpt-5.6-terra` / high and documentation
+  `gpt-5.6-luna` / medium.
+- Documentation `019f6737-ace4-7c22-85a1-160b434de111`: one P1. The current
+  `Local Release Gate` summary says 73 files / 1,772 tests, contradicting the
+  corrected current gate of 74 files / 1,775 tests.
+- Style `019f6737-a962-76b3-8b80-3cfb9cd34831` and reliability
+  `019f6737-b02d-7162-94a4-475534730170`: one shared P1.
+  `spawnSync({ timeout })` uses `SIGTERM` by default; a child can handle it
+  without exiting and leave the synchronous caller blocked indefinitely. The
+  existing fixture has no signal handler and misses that behavior.
+- Accepted fix: set `killSignal: "SIGKILL"` for the isolated import probe and
+  add a test module that ignores `SIGTERM`, has a finite emergency exit, and
+  proves bounded return plus the existing timeout diagnostic. This relies on
+  the supported macOS/Unix release environment and adds no public policy.
+- Reviewer skill evidence: each selected `code-review-excellence`; child-
+  spawning `review` was inapplicable under the childless assignment, and
+  implementation/worktree/security/web-performance skills were skipped with
+  bounded reasons. All reviewers remained read-only and spawned no child.
+- The official behavior reference supplied by both independent reviewers is
+  Node's `child_process` documentation:
+  <https://nodejs.org/api/child_process.html>.
+
+## Wave 3 Fix Assignment
+
+- Resume existing implementer `019f6718-1df9-77d0-ac05-e83591cba9ca`;
+  parent-runtime immutable and expected profile `gpt-5.6-terra` / medium.
+- One writer owns `scripts/check-release-readiness.mjs`,
+  `scripts/check-release-readiness.test.mjs`, the current count in
+  `build-protocol/tasks/T-0042-release-readiness-project-closure/TASK.md`, and
+  active T-0042 records. No Git mutation or subagents.
+- TDD must first make the stubborn-`SIGTERM` fixture fail against the current
+  checker, then add the explicit kill signal and run focused tests, direct
+  checker, tooling typecheck, focused ESLint/cleanup/Prettier, generated-clean,
+  and diff integrity.
+
+### Wave 3 Implementation Record
+
+- Existing implementer `019f6718-1df9-77d0-ac05-e83591cba9ca` resumed under
+  parent-runtime immutable `gpt-5.6-terra` / medium. RED will prove a
+  `SIGTERM`-handling import defeats the current wall-clock bound before the
+  isolated probe adopts `SIGKILL`.
+- RED confirmed after rejecting a race-prone 50 ms attempt: the handler-safe
+  fixture ignored the 250 ms `SIGTERM`, reached its 1,000 ms emergency exit,
+  and returned in 1,076 ms, failing the required 600 ms wall-clock bound. Seven
+  other focused tests passed.
+- GREEN confirmed after setting `killSignal: "SIGKILL"`: 1 file / 8 tests
+  passed in 923 ms, the stubborn fixture returned within 600 ms, and its
+  actionable 250 ms timeout diagnostic remained intact. The active release-gate
+  summary now states 74 files / 1,775 tests.
+- Final focused evidence passed: 1 file / 8 tests in 917 ms; standalone checker
+  58 imports / 107 links; tooling typecheck, focused ESLint, cleanup, focused
+  Prettier, generated-clean, and diff checks all clean. Full verify remains
+  coordinator-owned after affected re-review.
+
+## Wave 4 Pre-Review Verification
+
+- Coordinator-focused Vitest passed 1 file / 8 tests in 1.53 seconds;
+  standalone checker 58 imports / 107 links; tooling typecheck, focused ESLint,
+  cleanup, focused Prettier, generated-clean, and diff checks all exited 0.
+- Status/docs lint confirms the three active headers agree, the current count is
+  74 files / 1,775 tests, and historical 73/1,772 references remain only in
+  dated evidence or the resolved finding.
+- One private 10-second timeout and one private `SIGKILL` probe policy own
+  production checker behavior. The injected 250/600/1,000 ms values belong only
+  to the stubborn-child regression.
+- No public/package/declaration/TypeDoc/Protobuf/lockfile/generated API/runtime/
+  example/security input changed. TypeScript/API and security dispositions
+  remain carried forward for the same concrete reasons.

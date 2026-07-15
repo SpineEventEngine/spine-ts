@@ -242,6 +242,7 @@ function validateImports(repoRoot, specifiers, importTimeoutMs) {
       {
         cwd: join(repoRoot, packageDirectory),
         encoding: "utf8",
+        killSignal: "SIGKILL",
         timeout: importTimeoutMs,
       },
     );

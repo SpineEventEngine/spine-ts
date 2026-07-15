@@ -214,18 +214,20 @@ describe("check-release-readiness", () => {
   it("times out a non-terminating package export with an actionable diagnostic", () => {
     withTempRepository((repoRoot) => {
       writeRuntimePackage(repoRoot, {
-        source: ["setTimeout(() => process.exit(0), 500);", "await new Promise(() => {});"].join(
-          "\n",
-        ),
+        source: [
+          'process.on("SIGTERM", () => {});',
+          "setTimeout(() => process.exit(0), 1_000);",
+          "await new Promise(() => {});",
+        ].join("\n"),
       });
       const startedAt = Date.now();
 
-      const failure = captureFailure(() => runReleaseReadiness(repoRoot, { importTimeoutMs: 50 }));
+      const failure = captureFailure(() => runReleaseReadiness(repoRoot, { importTimeoutMs: 250 }));
 
-      expect(Date.now() - startedAt).toBeLessThan(450);
+      expect(Date.now() - startedAt).toBeLessThan(600);
       expect(failure).toBeInstanceOf(Error);
       expect(failure.message).toContain(
-        "Timed out package export after 50 ms: packages/runtime: @example/runtime",
+        "Timed out package export after 250 ms: packages/runtime: @example/runtime",
       );
     });
   });
