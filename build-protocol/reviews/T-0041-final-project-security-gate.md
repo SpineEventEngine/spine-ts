@@ -3440,3 +3440,18 @@ verify` remains reserved.
 - Return one minimal public design that permits valid union construction and
   narrowing while preventing invalid pairs. Compare compatibility and inference
   costs; preserve generic order and all runtime wire/risk decisions.
+
+## D-0095 Architecture Result And Fix Assignment
+
+- Splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit/actual immutable Sol
+  High, selected public overloaded `hasTransportSignalKind()` as the smallest
+  additive narrowing contract, made no mutation, spawned no child, and is
+  closed.
+- D-0095 rejects duplicated operation state and broader type reshaping. The
+  helper checks only canonical topic kind and is not runtime input validation;
+  root exports become 19, ZeroMQ remains 6, and generic order/wire behavior stay
+  unchanged.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected
+  explicit/actual immutable Terra Medium, for exact compile RED/GREEN, helper
+  runtime tests, API/docs checks, and durable evidence. Return to architecture
+  if the exact predicate cannot narrow all assigned cases.

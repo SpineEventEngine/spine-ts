@@ -3428,3 +3428,19 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Include exact compatibility, inference, declaration, docs/export, and compile
   tests. Preserve public method generic order and every runtime wire/risk
   decision; return one recommendation, not implementation.
+
+## D-0095 Discriminable-Union Architecture Result And Fix Assignment
+
+- Splitter `019f65eb-1eff-78d2-9bc7-cada7d23c056`, explicit/actual immutable Sol
+  High, selected additive overloaded `hasTransportSignalKind()` over a duplicated
+  top-level discriminator or public topic/operation reshaping; it remained
+  read-only, childless, Git-read-only, and is closed.
+- D-0095 records the helper as a narrowing predicate over canonical
+  `topic.signalKind`, not runtime input/envelope validation. Existing operation
+  shapes and generic order remain unchanged; root exports become 19 and ZeroMQ
+  remains 6.
+- Resume implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, expected original
+  explicit/tool-enforced immutable Terra Medium, sole writer, childless, and
+  without Git mutation. RED/GREEN must prove the exact overload with this
+  TypeScript version; if it fails, stop and return to architecture rather than
+  adding duplicated discriminants or broader type reshaping.

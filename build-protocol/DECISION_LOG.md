@@ -4319,3 +4319,60 @@ Consequences:
 - All four canonical lanes re-review the correction before focused final
   security review. D-0093's wire, cap, framing, and risk acceptance remain
   unchanged.
+
+## D-0095: Narrow Transport Unions Through The Canonical Topic Kind
+
+Status: Accepted
+
+Date: 2026-07-15
+
+Task: `T-0041`
+
+Context: D-0094's distributive operation aliases reject invalid widened or
+union topic/envelope pairs. TypeScript does not, however, propagate a check of
+the nested `operation.topic.signalKind` discriminator to the outer operation
+union. A valid widened handler therefore cannot recover the promised concrete
+envelope type, and a widened topic is similarly awkward to consume.
+
+Decision:
+
+- Add public overloaded predicate `hasTransportSignalKind()` for transport
+  operations and topics. It compares only the canonical
+  `topic.signalKind` value and narrows the complete operation or topic to the
+  selected kind.
+- Keep operation object shapes, topic shapes, method generic order, and runtime
+  wire behavior unchanged. The helper adds one root export, taking the
+  transport root count from 18 to 19; the ZeroMQ subpath remains 6.
+- Treat the predicate as a typed narrowing aid, not as validation of untrusted
+  input or envelope content. It must not inspect or mutate the envelope.
+- Mechanically prove the proposed generic `Extract` predicate with the project
+  TypeScript version before acceptance. If it cannot narrow publish, request,
+  and widened-topic cases as specified, return to architecture instead of
+  adding duplicated state or reshaping the public contract.
+
+Reasoning:
+
+- A top-level operation `signalKind` would make native switch narrowing easy,
+  but duplicates `topic.signalKind`, makes all existing operation literals
+  source-incompatible, creates mismatch states, and requires runtime consistency
+  validation.
+- Making `TransportTopic` distributive does not solve nested-discriminant
+  narrowing for the outer operation. Flattening the operation would cause
+  broader public and adapter churn.
+- An additive predicate preserves existing construction and inference while
+  giving callers an explicit, standard TypeScript narrowing mechanism backed
+  by the one canonical runtime kind.
+
+Consequences:
+
+- Add compile-time tests for command/event and reserved-kind operation
+  narrowing, restricted-kind rejection, widened-topic/routing narrowing, and
+  preservation of all invalid-pair regressions.
+- Add small runtime tests proving true/false comparison through the canonical
+  topic kind without envelope inspection or mutation.
+- Document the helper and update exact TypeDoc/API export checks to 19/6. Do not
+  commit generated documentation or declarations.
+- Re-review style/maintainability, documentation, and TypeScript/API. Runtime
+  performance/reliability remains unaffected; focused final security confirms
+  the helper is not represented as input validation and that D-0093 remains
+  unchanged.
