@@ -3694,3 +3694,39 @@ verify` remains reserved.
   passed 9/9, docs reported `100/28/205/19/19/6/3`, and
   Proto/generated/diff/status/forbidden-scope scans are clean and exact.
   Canonical re-review has not begun.
+
+## D-0096 Top-Level-Only Topic Narrowing Implementer Evidence
+
+- Accepted finding fixed without a runtime routing check: the topic predicate
+  still reads only top-level `topic.signalKind` and now promises only
+  `Topic & { readonly signalKind: Kind }`. It no longer narrows the unobserved
+  `routing.signalKind`.
+- RED tooling exited 2 with four `TS2344` routing-width failures and one
+  `TS2578` unused rejection marker; unchanged runtime behavior passed 10/10.
+  GREEN tooling exited 0 and the same complete transport-root file passed
+  10/10. The cast-free inconsistent widened topic narrows top-level command,
+  retains routing as `TransportSignalKind`, and retains runtime routing event.
+- Docs now state the exact human-approved fixed paths and distinguish typed
+  narrowing from routing/input validation. Names, 20/6 counts, operation helper
+  and shapes/generic order, and all adapter/server/wire/security behavior are
+  preserved. Final focused evidence is recorded in the work log;
+  implementation is complete and affected D-0096 re-review remains pending.
+- Final focused gates are green: tooling/build typechecks and focused lint
+  exited 0; root tests passed 10/10; docs reported exact counts
+  `100/28/205/19/20/6/3`; Proto generation is clean. Exact final
+  formatting/diff/status/generated/forbidden-scope scans are in the work log.
+  Affected D-0096 re-review remains pending.
+
+## D-0096 Top-Level-Only Coordinator Acceptance
+
+- Coordinator inspection and fresh verification accept the corrected predicate
+  as promising only its observed top-level kind. The compile/runtime regression
+  proves a widened command topic can retain an event routing descriptor without
+  a false narrowing claim; docs now describe that boundary explicitly.
+- Both typechecks, root 10/10, focused lint/formatting, generated docs at exact
+  `100/28/205/19/20/6/3`, Proto cleanliness, and diff integrity are green.
+  Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, explicit/actual immutable
+  Terra Medium, remained childless and Git-read-only and is closed.
+- Freeze this seven-path correction for pre-review lint and affected style,
+  documentation, and TypeScript/API re-review. Reliability remains N/A: the
+  runtime predicate body and every adapter/server execution path are unchanged.

@@ -3734,3 +3734,40 @@ Subscription cancellation failed.` instead of `AggregateError`.
   Proto/generated/diff/status/forbidden-scope scans are clean and limited to
   exactly six assigned paths. Implementation remains complete; canonical
   re-review is pending.
+
+## D-0096 Top-Level-Only Topic Narrowing Correction
+
+- Corrected only the accepted public type-guard finding:
+  `isTransportTopicKind()` still reads exactly `topic.signalKind`, but now
+  narrows only that observed top-level member. It does not inspect, validate, or
+  narrow `routing.signalKind`.
+- Added a cast-free widened `TransportTopic` with top-level `command` and
+  routing `event`. The compile contract proves the top-level member narrows to
+  `command` while routing remains `TransportSignalKind`; runtime proves the
+  helper returns true for command and the routing value remains event.
+- Strict RED/GREEN and final focused evidence are recorded in the work log.
+  Public names and 20/6 exports, operation/topic shapes and method generic
+  order, adapters/server/wire/framing/allocation/lifecycle/generated Proto, and
+  security policy are unchanged. Implementation is complete; affected D-0096
+  re-review remains pending.
+- Final focused gates are green: both requested typechecks and focused lint
+  exited 0, transport-root tests passed 10/10, generated docs reported exact
+  API counts `100/28/205/19/20/6/3`, and Proto generation is clean. Exact
+  formatting/diff/status/generated/forbidden-scope evidence is recorded in the
+  work log; affected D-0096 re-review remains pending.
+
+## D-0096 Top-Level-Only Coordinator Acceptance
+
+- Coordinator inspection accepts the top-level-only predicate guarantee, the
+  cast-free inconsistent-topic regression, and both public documentation
+  corrections. Runtime comparison, operation narrowing, names, 20/6 exports,
+  public shapes/generic order, and every adapter/server/wire/security decision
+  remain unchanged.
+- Fresh coordinator checks passed tooling and generated-build typechecks,
+  transport root 10/10, focused ESLint and exact seven-path formatting,
+  generated docs/API counts `100/28/205/19/20/6/3`, Proto cleanliness, and diff
+  integrity. Implementer `019f65f6-4f41-7131-9dea-882113a53f9e` retained its
+  explicit/tool-enforced actual immutable Terra Medium profile, remained
+  childless and Git-read-only, and is closed. Freeze and commit this correction,
+  then run pre-review lint and the three affected canonical lanes; reliability
+  remains N/A because no execution path changed.

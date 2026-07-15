@@ -372,7 +372,7 @@ describe("@spine-ts/transport", () => {
       }
       if (isTransportTopicKind(topic, "command")) {
         expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
-        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
       }
     };
     const rejectUnrelatedTopicKind = (topic: TransportTopic<"command" | "system">): void => {
@@ -400,7 +400,7 @@ describe("@spine-ts/transport", () => {
     const narrowOpenTopic = (topic: OpenTopic): void => {
       if (isTransportTopicKind(topic, "event")) {
         expectTypeOf(topic.signalKind).toEqualTypeOf<"event">();
-        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
         expectTypeOf(topic.topicRefinement).toEqualTypeOf<"open-topic">();
       }
     };
@@ -411,7 +411,7 @@ describe("@spine-ts/transport", () => {
       }
       if (isTransportTopicKind(value, "event")) {
         expectTypeOf(value.signalKind).toEqualTypeOf<"event">();
-        expectTypeOf(value.routing.signalKind).toEqualTypeOf<"event">();
+        expectTypeOf(value.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
         expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
       }
     };
@@ -424,6 +424,33 @@ describe("@spine-ts/transport", () => {
     void narrowOpenOperation;
     void narrowOpenTopic;
     void narrowDualValue;
+  });
+
+  it("narrows only a widened topic's observed top-level signal kind", () => {
+    const widenTopic = (topic: TransportTopic): TransportTopic => topic;
+    const topic = widenTopic(
+      Object.freeze({
+        signalKind: "command",
+        messageTypeUrl: "type.spine.io/spine.core.Command",
+        semanticTags: Object.freeze([]),
+        routing: Object.freeze({
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/spine.core.Event",
+          semanticTags: Object.freeze([]),
+          routingKey: "event:type.spine.io%2Fspine.core.Event:",
+        }),
+      }),
+    );
+
+    if (isTransportTopicKind(topic, "command")) {
+      expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
+      expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
+      // @ts-expect-error the helper does not observe or narrow the routing descriptor.
+      expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
+    }
+
+    expect(isTransportTopicKind(topic, "command")).toBe(true);
+    expect(topic.routing.signalKind).toBe("event");
   });
 
   it("uses each fixed path for an open dual-shaped value without reading its envelope", () => {

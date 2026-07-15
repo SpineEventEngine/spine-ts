@@ -759,7 +759,7 @@ function onTransportRequest(operation: RequestTransportOperation<{ readonly id: 
 
 function onTransportTopic(topic: TransportTopic): void {
   if (isTransportTopicKind(topic, "event")) {
-    topic.routing.signalKind; // Inferred as "event".
+    topic.signalKind; // Inferred as "event".
   }
 }
 ```
@@ -767,7 +767,9 @@ function onTransportTopic(topic: TransportTopic): void {
 `isTransportOperationKind()` always compares `operation.topic.signalKind`, and
 `isTransportTopicKind()` always compares `topic.signalKind`. They provide type
 narrowing, not validation of untrusted input or envelope content, and neither
-inspects the envelope. Every inbound
+inspects the envelope. The topic helper narrows only the top-level
+`signalKind`; it does not validate or narrow the routing descriptor or
+`routing.signalKind`. Every inbound
 `Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
 ceiling, not a fixed allocation. Publish and request messages use route frame 1
 and payload frame 2: command/event payloads use Buf, while reserved

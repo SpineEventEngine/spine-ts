@@ -212,7 +212,7 @@ export function isTransportTopicKind<
 >(
   topic: Topic,
   signalKind: Kind & NoInfer<Topic["signalKind"]>,
-): topic is Topic & TransportTopic<Kind> {
+): topic is Topic & { readonly signalKind: Kind } {
   return topic.signalKind === signalKind;
 }
 

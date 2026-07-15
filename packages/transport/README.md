@@ -91,7 +91,7 @@ function onTransportOperation(operation: PublishTransportOperation<{ readonly id
 
 function onTransportTopic(topic: TransportTopic): void {
   if (isTransportTopicKind(topic, "event")) {
-    topic.routing.signalKind; // Inferred as "event".
+    topic.signalKind; // Inferred as "event".
   }
 }
 ```
@@ -99,7 +99,9 @@ function onTransportTopic(topic: TransportTopic): void {
 `isTransportOperationKind()` always compares `operation.topic.signalKind`;
 `isTransportTopicKind()` always compares `topic.signalKind`. These fixed paths
 are type-narrowing aids, not validation of untrusted input or envelope content,
-and neither predicate inspects the envelope.
+and neither predicate inspects the envelope. The topic helper narrows only the
+top-level `signalKind`; it does not validate or narrow the routing descriptor or
+`routing.signalKind`.
 
 Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
 8,388,608-byte rejection ceiling. This is a per-frame maximum, not a fixed
