@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: T-0042 closure candidate review-clean; integration pending
+Status: T-0042 integrated and post-merge verified; remote closure pending
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0042 integration and post-merge closure
+Active implementation frontier: T-0042 remote synchronization, cleanup, and final closure
 
 ## Purpose
 
@@ -95,9 +95,11 @@ explicit human-accepted SF-013 residual. T-0042 release preflight, real
 single-process and multi-process acceptance, package/import/link/command scans,
 all final specialist dispositions, and the native branch gate are clean. The
 branch gate passed 74 files / 1,780 tests in both ordinary and coverage runs at
-90.04% branches. Closure-record review is clean. Integration, post-merge
-verification, remote sync, and clean T-0042 worktree removal remain. The dated
-Starting State above is historical plan-creation context.
+90.04% branches. Closure-record review is clean. T-0042 is integrated at
+`b3bb4adb`, and the native post-merge gate passed with the same evidence.
+Remote sync, clean T-0042 worktree removal, and the final verified closure
+record remain. The dated Starting State above is historical plan-creation
+context.
 
 Post-completion obligation: immediately after T-0042 establishes project
 completion, research public ZeroMQ/libzmq and zeromq.js issue trackers,
