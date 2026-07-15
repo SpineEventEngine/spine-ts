@@ -747,30 +747,39 @@ export class SpineServices {
         ? "claimed"
         : "lost";
     } catch (error) {
-      let current: Any | undefined;
-      try {
-        current = await storage.read(record.id);
-      } catch {
-        claim.unknown = true;
-        throw error;
-      }
-      if (sameAny(current, claim.state)) {
-        return "claimed";
-      }
-      if (sameAny(current, record.durableState)) {
-        throw error;
-      }
-      if (current === undefined) {
-        return "lost";
-      }
-      try {
-        return DurableSubscriptionRecords.readState(current, record.id).type === "cancel"
-          ? "canceled"
-          : "lost";
-      } catch {
-        claim.unknown = true;
-        throw error;
-      }
+      return await this.#reconcileClaimError(storage, record, claim, error);
+    }
+  }
+
+  async #reconcileClaimError(
+    storage: RecordStorage<string, Any>,
+    record: SubscriptionRecord,
+    claim: SubscriptionClaim,
+    error: unknown,
+  ): Promise<DurableClaimOutcome> {
+    let current: Any | undefined;
+    try {
+      current = await storage.read(record.id);
+    } catch {
+      claim.unknown = true;
+      throw error;
+    }
+    if (sameAny(current, claim.state)) {
+      return "claimed";
+    }
+    if (sameAny(current, record.durableState)) {
+      throw error;
+    }
+    if (current === undefined) {
+      return "lost";
+    }
+    try {
+      return DurableSubscriptionRecords.readState(current, record.id).type === "cancel"
+        ? "canceled"
+        : "lost";
+    } catch {
+      claim.unknown = true;
+      throw error;
     }
   }
 

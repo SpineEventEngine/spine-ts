@@ -11,6 +11,8 @@ import { zeroMqSocketAccess } from "../../src/zeromq/signal-transport.js";
 
 const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
+const unansweredRequestTimeoutMs = 25;
+const nativeSchedulingMarginMs = 250;
 const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 describe("ZeroMQ SignalTransport", () => {
@@ -146,12 +148,16 @@ describe("ZeroMQ SignalTransport", () => {
         await started.promise;
 
         await expect(
-          withHarnessDeadline(transport.close(), "unanswered request close"),
+          withHarnessDeadline(
+            transport.close(),
+            "unanswered request close",
+            unansweredRequestTimeoutMs + nativeSchedulingMarginMs,
+          ),
         ).resolves.toBeUndefined();
         await expect(request).rejects.toThrow();
         await expect(observedRequest).resolves.toBeInstanceOf(Error);
       },
-      { requestTimeoutMs: 25 },
+      { requestTimeoutMs: unansweredRequestTimeoutMs },
     );
   });
 
@@ -1139,7 +1145,11 @@ async function waitFor(milliseconds: number): Promise<void> {
   });
 }
 
-async function withHarnessDeadline<T>(promise: Promise<T>, label: string): Promise<T> {
+async function withHarnessDeadline<T>(
+  promise: Promise<T>,
+  label: string,
+  timeoutMs: number,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -1147,7 +1157,7 @@ async function withHarnessDeadline<T>(promise: Promise<T>, label: string): Promi
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           reject(new Error(`Timed out waiting for ${label}.`));
-        }, 1_000);
+        }, timeoutMs);
       }),
     ]);
   } finally {

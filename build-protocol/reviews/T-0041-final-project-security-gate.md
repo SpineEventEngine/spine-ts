@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 8 findings accepted; fix assigned
+Status: Canonical wave 8 fixes coordinator-verified; commit pending
 
 Baseline: `39f2c6f7`
 
@@ -1043,3 +1043,45 @@ ambiguous persistence until inactive cleanup settles` exited 1 with 1
   short and focused, update durable evidence, and run focused tests, lint,
   format, docs check, and diff integrity. Rerun all four canonical lanes before
   dedicated security review.
+
+## Canonical Wave 8 Fix Implementation Progress
+
+- Existing senior TypeScript implementer, runtime profile `gpt-5.6-terra` /
+  medium, is the sole writer and made no Git-state mutation or subagent
+  dispatch. It extracted only D-0087 CAS-error reconciliation into private
+  `#reconcileClaimError()`; the original method retains the CAS path and the
+  helper retains every accepted reconciliation branch.
+- Focused reconciliation coverage passed: `pnpm
+--config.verify-deps-before-run=false exec vitest run
+packages/server/test/services/spine-services.test.ts -t 'continues activation
+when ambiguous claim CAS reconciles to its exact claim|retains an unknown
+exact claim for same-instance cancellation'` exited 0 with 2 passed and 138
+  skipped.
+- Expanded D-0087 claim/recovery/cancellation coverage with the six remote/local
+  claim-CAS and reconciliation test names also exited 0: 1 file, 6 passed, 134
+  skipped.
+- The ZeroMQ regression now uses 25 ms configured timeout plus 250 ms native
+  scheduling margin (275 ms), retaining sent-before-close and immediate
+  rejection observation. Focused native IPC cannot run in this managed surface:
+  it exited 1 with `Operation not permitted` before the assertion (1 failed, 30
+  skipped). This is environment-only evidence, not a confirmed behavior defect.
+- `docs/api/README.md` now covers public `subscriptionLimit` default/bounds and
+  instance locality, separate same-sized unknown-ID cancellation capacity, and
+  known-local durable-cancellation `INTERNAL` failure, retained capacity, and
+  same-ID retry. It does not overclaim stale-claim reclamation. Focused ESLint,
+  three-file Prettier, and `docs:check` passed. Final exact six-file Prettier
+  and `git diff --check` also exited 0 before the next canonical review wave.
+
+## Canonical Wave 8 Fix Coordinator Verification
+
+- Coordinator inspection accepts all three fixes without contract expansion.
+  The sole implementer used the explicit immutable Terra Medium profile and is
+  closed.
+- Fresh D-0087 focus passed 6/6; fresh native ZeroMQ liveness focus passed 1/1
+  in 34 ms; full affected native suites passed 171/171. Generated typecheck,
+  docs/API generation, focused lint, exact formatting, and diff integrity all
+  exited 0. Docs retained 25 Proto checksums and TypeDoc counts
+  `100/28/205/19/17/3`.
+- Accept the substantive fix batch for commit. Record the new immutable endpoint
+  before generating canonical Wave 9; dedicated security review remains
+  pending.

@@ -277,14 +277,22 @@ subscription returns OK. An exact inactive row or same-instance claim moves
 through a cancel marker to absence; a foreign active claim returns `ABORTED`.
 Cleanup is idempotent across cancellation, activation-stream finalization,
 inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
-inert. Unknown-ID cancellation work is bounded separately by the instance's
-subscription limit. Defaults are 30 seconds for
-inactive expiry and 100 queued updates per active subscription. Active streams
-and queued updates remain process-local and are not replayed after activation
-or restart. This is not a client DSL, broad server lifecycle, projection
-catch-up loop, cross-process stream ownership, or durable retained update
-queue. A crashed owner can leave a stale claim because this contract has no
-lease, heartbeat, routing, supervision, or automatic reclamation.
+inert. `SpineServicesOptions.subscriptionLimit` defaults to 100 and must be a
+positive safe integer; it bounds pending, inactive, active, and recovered
+subscriptions owned by one `SpineServices` instance. Each instance has its own
+bound, not a process-wide or distributed quota. Unknown-ID cancellation uses a
+separate internal pool of the same size. Known-local cancellation retains its
+normal subscription capacity until durable cancellation settles. If that
+persistence fails, `Cancel` returns Connect `INTERNAL` with `Subscription
+cancellation failed.`; retry `Cancel` with the same `Subscription`/ID returned
+by `Subscribe`. That retry contract does not apply to internal cleanup after an
+initial failed `Subscribe`. Defaults are 30 seconds for inactive expiry and 100
+queued updates per active subscription. Active streams and queued updates remain
+process-local and are not replayed after activation or restart. This is not a
+client DSL, broad server lifecycle, projection catch-up loop, cross-process
+stream ownership, or durable retained update queue. A crashed owner can leave a
+stale claim because this contract has no lease, heartbeat, routing, supervision,
+or automatic reclamation.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
 `ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select

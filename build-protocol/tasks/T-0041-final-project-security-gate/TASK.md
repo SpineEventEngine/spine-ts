@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 8 findings accepted; fix assigned
+Status: In progress - canonical wave 8 fixes coordinator-verified; commit pending
 
 Started: `2026-07-14`
 
@@ -1216,3 +1216,38 @@ owner and capacity after pre-marker cancellation failure'` exited 1 with 1
   logs. It must use TDD where behavior changes, run focused tests/lint/format,
   avoid Git mutation and subagents, and report exact evidence. All four
   canonical lanes rerun afterward; dedicated security review remains pending.
+
+## Wave 8 Fix Implementation Progress
+
+- The existing senior TypeScript implementer, runtime profile `gpt-5.6-terra`
+  / medium, is the sole writer for this batch. No subagents or Git-state
+  mutation were used. The D-0087 source change is behavior-preserving: its
+  focused claim/recovery/cancellation reconciliation regressions passed 6/6.
+- `#claimDurable()` now delegates CAS-error reconciliation to the private
+  `#reconcileClaimError()` semantic method. The method preserves exact proposed
+  claim adoption, original-error propagation for the prior inactive state,
+  lost/canceled outcomes, and unknown-ownership retention on read/decode
+  failure.
+- The sent-unanswered-request test keeps immediate rejection observation and
+  sent-before-close ordering, but its 275 ms close deadline is now the
+  configured 25 ms request timeout plus a 250 ms native scheduling margin.
+  The focused native IPC run is environment-blocked before assertion by
+  `Operation not permitted`; it is not a behavior failure.
+- The API overview now documents the public default-100 positive-safe-integer
+  per-instance subscription bound, separate same-sized unknown-ID cancellation
+  pool, and known-local `INTERNAL` persistence-failure/capacity-retention/
+  same-ID retry contract. It does not promise stale-claim cleanup.
+
+## Wave 8 Fix Coordinator Verification
+
+- Direct diff inspection accepts the behavior-preserving D-0087 helper
+  extraction, the derived 275 ms liveness deadline, and the completed public API
+  capacity/failure text. No unrelated or generated tracked files changed.
+- Fresh focused D-0087 verification passed 6/6. Fresh native verification of the
+  tightened ZeroMQ test passed 1/1 in 34 ms. The complete two affected native
+  suites then passed 171/171 (`spine-services.test.ts` 140 and
+  `signal-transport.test.ts` 31).
+- Fresh `typecheck:build:generated`, `docs:check`, focused ESLint, exact six-file
+  Prettier, and `git diff --check` all exited 0. Docs verified 25 Proto source
+  checksums and TypeDoc export counts `100/28/205/19/17/3`. Accept this bounded
+  batch for commit; canonical Wave 9 and dedicated security review remain.
