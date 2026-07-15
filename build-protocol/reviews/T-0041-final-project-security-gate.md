@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical wave 2 fixes coordinator-verified
+Status: Canonical review wave 3 assigned
 
 Baseline: `39f2c6f7`
 
@@ -408,6 +408,23 @@ bytes).
   and diff integrity passed.
 - Commit and package this endpoint, then repeat all four canonical concerns as
   one wave before dedicated security re-review.
+
+## Canonical Review Wave 3 Assignment
+
+Package: `.superpowers/sdd/review-39f2c6f7..ffd8549e.diff` (15 commits, 260,743
+bytes).
+
+- Style/maintainability: explicit immutable Terra High; complete changed-code
+  ownership, readability, naming, test, and coordination-state review.
+- Documentation: explicit immutable Luna Medium; current provenance, scope,
+  defaults, status, links, and residual-risk claims.
+- TypeScript/API docs: explicit immutable Terra High; declarations/runtime,
+  exports, TSDoc/TypeDoc, and private coordination/test seams.
+- Performance/reliability: explicit immutable Terra High; owner-token
+  reservation, cancel/recovery settlement, finite bounds, persistence/CAS,
+  request-close, IPC, and cleanup.
+- Read-only, no subagents/Git mutation, explicit profile attestation, historical
+  superseded-text exclusion, and complete-wave aggregation are required.
 
 ## Canonical Review Fix Batch Evidence
 
