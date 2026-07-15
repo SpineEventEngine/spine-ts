@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - canonical review wave 17 assigned
+Status: In progress - canonical review wave 17 findings accepted
 
 Started: `2026-07-14`
 
@@ -2147,3 +2147,28 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   Git-read-only with the full ledger, D-0087-D-0090, and superseded-history
   exclusion. Aggregate the complete wave before action; dedicated final
   security review remains pending.
+
+## Canonical Review Wave 17 Result And Fix Assignment
+
+- Complete result: TypeScript/API docs and performance/reliability are clean.
+  Documentation found a P2 because three active retry passages imply a bare
+  subscription ID is an accepted `Cancel` request, while the public service
+  accepts the returned `Subscription` message. Style found a P2 because active
+  security evidence still cites old tenant-restoration and redaction-test line
+  ranges.
+- Immutable role evidence: style agent
+  `019f64d9-e683-7370-997b-a8a80886361b`, Terra High; docs agent
+  `019f64d9-e9ab-7d11-aacb-6dceb485ebb9`, Luna Medium; API agent
+  `019f64d9-e254-7450-83f9-dc73260feb7e`, Terra High; reliability agent
+  `019f64db-9ae9-7813-8d81-c5e73381b966`, Terra High. Every explicit dispatch
+  used its tool-enforced immutable actual role profile, no child or Git
+  mutation, and all four are closed.
+- Assign one fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, as sole writer. In the three public docs, consistently
+  require the same returned `Subscription` message containing its ID for retry.
+  Update only the three security evidence anchors to `spine-services.ts:793-815`
+  and `signal-transport.test.ts:817-848`, then synchronize correction status in
+  task/work/review and both security artifacts. Run focused docs, exact format,
+  anchor/request-shape/status, and diff checks. No runtime/public API/package/
+  Proto/dependency/generated change is authorized; all Canonical Wave 18 lanes
+  follow before dedicated security review.

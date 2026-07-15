@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Canonical review wave 17 assigned
+Status: Canonical review wave 17 findings accepted; correction assigned
 
 Baseline: `39f2c6f7`
 
@@ -2088,3 +2088,36 @@ packages/transport/src/zeromq/signal-transport.ts` exited 0.
   dispatched explicitly as existing `performance_reliability_reviewer` with
   immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only. No
   finding may be acted on until style, API, and reliability also complete.
+
+## Canonical Review Wave 17 Result
+
+- Style/maintainability, immutable Terra High,
+  `019f64d9-e683-7370-997b-a8a80886361b`: P2 because the active threat model
+  cites restored tenant equality at stale `spine-services.ts:733-760`, and the
+  threat model plus findings cite redaction at stale
+  `signal-transport.test.ts:584-593`. Actual evidence is `793-815` and
+  `817-848`; update only those three anchors.
+- Documentation, immutable Luna Medium,
+  `019f64d9-e9ab-7d11-aacb-6dceb485ebb9`: P2 because three active public docs
+  describe retrying `Cancel` with a returned `Subscription`/ID or same ID,
+  although the request is the returned `Subscription` message containing its
+  ID. Correct every affected retry sentence consistently.
+- TypeScript/API docs, immutable Terra High,
+  `019f64d9-e254-7450-83f9-dc73260feb7e`: clean.
+- Performance/reliability, immutable Terra High,
+  `019f64db-9ae9-7813-8d81-c5e73381b966`: clean.
+- Every role used the explicit tool-enforced immutable actual profile, spawned
+  no child, made no Git mutation, and is closed. Coordinator source inspection
+  accepts the complete two-finding batch.
+
+## Canonical Wave 17 Fix Assignment
+
+- One fresh existing `implementer`, expected explicit immutable
+  `gpt-5.6-terra` / medium, is sole writer for request-shape wording in
+  `docs/USER_GUIDE.md`, `packages/server/README.md`, and `docs/api/README.md`;
+  exact evidence anchors in both security artifacts; and synchronized current
+  status in task/work/review plus those security artifacts.
+- No runtime behavior, public API, package/dependency/Proto, generated output,
+  or D-0087-D-0090 contract change is authorized. Require `docs:check`, exact
+  formatting, anchor/request-shape/status scans, and diff integrity. All four
+  Canonical Wave 18 lanes rerun before dedicated final security review.
