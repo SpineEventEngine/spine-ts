@@ -2503,3 +2503,15 @@ verify` remains reserved.
 - All three are read-only, childless, and Git-read-only with distinct bounded
   concerns. Reliability remains queued for platform capacity; aggregate the
   complete four-lane wave before action.
+
+## Canonical Review Wave 20 Dispatch Continuation
+
+- Documentation agent `019f651b-af0f-7352-9495-182a7340674e` completed under
+  its tool-enforced immutable actual `gpt-5.6-luna` / medium role, made no
+  child/Git mutation, and is closed. It provisionally reports one P2: active
+  SF-010/TM-011 shutdown-control claims lack exact current source/test anchors.
+  Acceptance waits for complete-wave aggregation.
+- Performance/reliability agent `019f651d-5895-7b03-b8f7-0aa0b612743a` was
+  dispatched explicitly as existing `performance_reliability_reviewer` with
+  immutable `gpt-5.6-terra` / high, read-only, childless, and Git-read-only.
+  Aggregate style, docs, API, and reliability before action.
