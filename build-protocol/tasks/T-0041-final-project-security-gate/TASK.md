@@ -4157,3 +4157,43 @@ Subscription cancellation failed.` instead of `AggregateError`.
   the failure path cannot produce an unhandled promise. Preserve normal-path
   assertions and all production behavior. Re-review reliability; style reopens
   only if the correction changes structure beyond this bounded timeout handling.
+
+## Full Gate Malformed-Reply Reliability P2 Implementer Result
+
+- The malformed-reply fixture now uses a test-specific 250 ms request timeout,
+  expressed as `closeDeadlineMs - unansweredRequestTimeoutMs`, below both the
+  275 ms address deadline and 275 ms fixture-close bound. The started request
+  receives an immediate rejection observer.
+- Address capture now uses `closeDeadlineMs`; if it misses that bounded deadline,
+  the catch path awaits the observed request outcome before rethrowing, so fixture
+  cleanup cannot begin with the native request still pending. The normal path
+  retains the exact malformed-reply rejection and later valid-request success.
+- Focused RED with a direct 25 ms request timeout failed 1/1 with
+  `Operation was not possible or timed out` because the request expired before
+  the raw Reply bind/receive handshake. The final 250 ms ordering passed the
+  focused native selection at 1 passed / 63 skipped and the complete native
+  ZeroMQ file at 64/64.
+- `typecheck:tooling`, focused ESLint, exact four-path formatting, and final
+  diff/scope/generated scans pass. Coverage was not rerun because production
+  branches are unchanged and the immediately preceding global run remains green
+  at 90.04%; full `verify` was not run.
+- Changed scope is the assigned ZeroMQ test and three active records only.
+  Actual metadata is immutable `gpt-5.6-terra` / `medium`; the role remained
+  sole writer, childless, and Git-state-read-only. The accepted V8-byte test and
+  every production/wire/frame/allocation decision remain unchanged. This P2 is
+  implementation-complete and awaits reliability re-review.
+
+## Full Gate Malformed-Reply P2 Coordinator Acceptance
+
+- Coordinator-native complete ZeroMQ rerun passes 64/64; fresh tooling
+  typecheck, focused ESLint, exact four-path formatting, and diff integrity pass.
+  Direct review confirms the 250 ms request timeout is 25 ms below both 275 ms
+  bounds, rejection observation is attached immediately, and the address-failure
+  catch awaits settlement before fixture cleanup.
+- Implementer `019f65f6-4f41-7131-9dea-882113a53f9e`, actual immutable Terra
+  Medium, remained childless and Git-state-read-only and is closed. No production
+  or V8-byte assertion changed.
+- Lightweight pre-review lint confirms one test plus three records, synchronized
+  active status, no production/public/generated/docs/security/policy change,
+  and no human-decision change. Freeze for reliability-only re-review; style is
+  already clean and the other lanes retain N/A.

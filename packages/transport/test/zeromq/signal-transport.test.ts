@@ -391,30 +391,41 @@ describe("ZeroMQ SignalTransport", () => {
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.MalformedPrivateReply",
     });
+    const requestTimeoutMs = closeDeadlineMs - unansweredRequestTimeoutMs;
 
     try {
-      await withZeroMqTransport(async (transport) => {
-        const malformed = transport.request({ topic, envelope: { value: "malformed" } });
-        await replier.bind(
-          await withHarnessDeadline(
-            addressReady.promise,
-            "malformed private reply request address",
-            1_000,
-          ),
-        );
-        await replier.receive();
-        await replier.send(serialize({ unexpected: true }));
-        await expect(malformed).rejects.toThrow("ZeroMQ transport received a malformed reply.");
+      await withZeroMqTransport(
+        async (transport) => {
+          const malformed = transport.request({ topic, envelope: { value: "malformed" } });
+          const malformedOutcome = malformed.catch((error: unknown) => error);
+          let requestAddress: string;
+          try {
+            requestAddress = await withHarnessDeadline(
+              addressReady.promise,
+              "malformed private reply request address",
+              closeDeadlineMs,
+            );
+          } catch (error) {
+            await malformedOutcome;
+            throw error;
+          }
+          await replier.bind(requestAddress);
+          await replier.receive();
+          await replier.send(serialize({ unexpected: true }));
+          await expect(malformed).rejects.toThrow("ZeroMQ transport received a malformed reply.");
+          await expect(malformedOutcome).resolves.toBeInstanceOf(Error);
 
-        const valid = transport.request<
-          { readonly value: string },
-          { readonly accepted: boolean },
-          "system"
-        >({ topic, envelope: { value: "valid" } });
-        await replier.receive();
-        await replier.send(serialize({ status: "accepted", envelope: { accepted: true } }));
-        await expect(valid).resolves.toEqual({ accepted: true });
-      });
+          const valid = transport.request<
+            { readonly value: string },
+            { readonly accepted: boolean },
+            "system"
+          >({ topic, envelope: { value: "valid" } });
+          await replier.receive();
+          await replier.send(serialize({ status: "accepted", envelope: { accepted: true } }));
+          await expect(valid).resolves.toEqual({ accepted: true });
+        },
+        { requestTimeoutMs },
+      );
     } finally {
       replier.close();
       connect.mockRestore();

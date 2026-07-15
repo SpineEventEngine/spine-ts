@@ -4059,3 +4059,36 @@ verify` remains reserved.
   only the test timeout/early rejection observation under Terra Medium, then
   re-review reliability. Style need not rerun unless the correction expands
   beyond bounded timeout handling; all other lanes retain N/A.
+
+## Full Gate Malformed-Reply Reliability P2 Implementer Evidence
+
+- The test-specific request timeout is now 250 ms
+  (`closeDeadlineMs - unansweredRequestTimeoutMs`), strictly below both the
+  275 ms address and fixture-close bounds. The request receives an immediate
+  rejection observer, and a missed address deadline awaits that observed outcome
+  before throwing into fixture cleanup.
+- A direct 25 ms draft supplied focused RED: the normal raw replier handshake
+  timed out, producing 1 failed / 63 skipped with
+  `Operation was not possible or timed out`. The final 250 ms ordering preserves
+  the 25 ms settlement margin and passes the same native selection at 1 passed /
+  63 skipped, followed by the complete native ZeroMQ file at 64/64.
+- Exact normal-path malformed rejection, observed Error, and later valid request
+  success remain asserted. The accepted V8-byte test is untouched. Tooling
+  typecheck, focused ESLint, exact formatting, diff integrity, and exact scope/
+  generated scans pass; coverage and full `verify` were not rerun as assigned.
+- Changed scope is one test plus task/work/review records. Actual implementer
+  metadata is immutable `gpt-5.6-terra` / `medium`; it remained sole writer,
+  childless, and Git-state-read-only. No production or binding decision changed.
+  The bounded correction is ready for reliability-only re-review.
+
+## Full Gate Malformed-Reply P2 Coordinator Acceptance
+
+- Coordinator-native complete ZeroMQ rerun passes 64/64, followed by clean
+  tooling typecheck, focused lint, exact formatting, and diff integrity.
+- The request settles within 250 ms, below both 275 ms deadlines; rejection is
+  observed immediately and explicitly awaited on address failure before cleanup.
+  Normal malformed rejection and later valid continuation remain asserted.
+- Implementer actual metadata is immutable Terra Medium, childless and Git-
+  state-read-only, and it is closed. Pre-review lint confirms one test plus
+  records only and no production/public/generated/docs/security/policy change.
+  Freeze for reliability-only re-review; style remains clean and other lanes N/A.
