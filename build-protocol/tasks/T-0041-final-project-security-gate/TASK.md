@@ -1,6 +1,6 @@
 # T-0041: Final Project Security Gate
 
-Status: In progress - security fixes coordinator-verified; review pending
+Status: In progress - canonical review wave assigned
 
 Started: `2026-07-14`
 
@@ -419,6 +419,18 @@ long` failures; short `/tmp` aliases now canonicalize to `/private/tmp`, and
 - Security fixes are ready for one immutable package, the four canonical
   concern lanes, and dedicated security re-review. Task closure remains
   pending.
+
+## Canonical Review Wave Assignment
+
+- Immutable package `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` covers 9
+  commits and 208,732 bytes from the task baseline through the verified security
+  fix endpoint.
+- Assign the four existing concerns: style/maintainability
+  `gpt-5.6-terra` / high; documentation `gpt-5.6-luna` / medium;
+  TypeScript/API docs `gpt-5.6-terra` / high; and
+  performance/reliability `gpt-5.6-terra` / high. All are read-only, may not
+  spawn subagents, and must ignore historical superseded text unless current
+  task/status records or changed public docs claim it active.
 
 ## Coordinator IPC Correction Evidence
 

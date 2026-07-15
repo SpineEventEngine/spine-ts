@@ -1,6 +1,6 @@
 # T-0041 Review Log
 
-Status: Security Round 1 fixes coordinator-verified; review pending
+Status: Security Round 1 fixes in canonical review wave
 
 Baseline: `39f2c6f7`
 
@@ -287,6 +287,31 @@ bounds'`; exit 1, exactly 1 failed/21 skipped, expected throw absent. The
 - Review basis may now advance to the committed complete-fix endpoint. Run all
   four canonical concerns as one wave before any fixes, then rerun the dedicated
   project security reviewer against the post-canonical endpoint.
+
+## Canonical Review Wave Assignment
+
+Review package: `.superpowers/sdd/review-39f2c6f7..5714e97c.diff` (9 commits,
+208,732 bytes).
+
+- Existing `style_maintainability_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: changed-code clarity, ownership, duplication,
+  lifecycle readability, and maintainability only.
+- Existing `documentation_reviewer`, expected explicit `gpt-5.6-luna` /
+  medium: current user/package/security documentation completeness, accuracy,
+  residual-risk honesty, links, and status wording only.
+- Existing `typescript_api_docs_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: public TypeScript contract compatibility, declaration
+  shape, TSDoc/API export accuracy, runtime/type agreement, and accidental
+  internal leakage only.
+- Existing `performance_reliability_reviewer`, expected explicit
+  `gpt-5.6-terra` / high: resource caps, reservation lifecycle, concurrency,
+  persistence/CAS cleanup, query limiting, IPC identity races, and shutdown
+  behavior only.
+- Every lane is read-only, may not spawn subagents or mutate Git, reviews the
+  immutable package plus current task/security records, and ignores historical
+  superseded text unless a current status/brief or changed public document
+  claims it as active. Return concrete defects with severity, exact evidence,
+  impact, and smallest correction; do not seek stylistic disagreement.
 
 ## Coordinator IPC Correction Evidence
 
