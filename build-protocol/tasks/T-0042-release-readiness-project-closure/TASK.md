@@ -1,6 +1,6 @@
 # T-0042: Release Readiness And Project Closure
 
-Status: In progress - Wave 1 corrections implemented; final specialist re-review pending
+Status: In progress - corrected full gate clean; final specialist re-review pending
 
 Started: `2026-07-15`
 
@@ -175,3 +175,17 @@ scripts/check-release-readiness.test.mjs` failed as expected with
   package-export failure, and asserts the broken-link diagnostic identifies
   `docs/README.md -> missing.md`. The focused suite passes 1 file / 3 tests; no
   checker change was required.
+
+## 2026-07-15 - Corrected Full Gate
+
+- Native `pnpm --config.verify-deps-before-run=false verify` passed at corrected
+  endpoint `4e5d9c66`.
+- Ordinary and coverage runs each passed 74 files / 1,775 tests. Coverage
+  remains 95.38% statements, 90.04% branches, 98.27% functions, and 95.39%
+  lines.
+- TypeScript/tooling, ESLint/cleanup, format, TypeDoc/API, all 25 copied Proto
+  checksums, Proto lint, generated-clean, and the new final 58-import/107-link
+  release-readiness command passed in the aggregate gate.
+- T-0042 still requires a fresh immutable package and all four final specialist
+  lanes. Security remains N/A because the correction changes release tooling
+  and current documentation only, not a trust boundary.

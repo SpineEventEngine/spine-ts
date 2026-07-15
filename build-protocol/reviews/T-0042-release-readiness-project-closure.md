@@ -1,6 +1,6 @@
 # T-0042 Review Log
 
-Status: In progress - Wave 1 corrections implemented; final specialist re-review pending
+Status: In progress - corrected full gate clean; Wave 2 package freeze pending
 
 Baseline: `7678d36c`
 
@@ -195,3 +195,19 @@ implementer context, and repeat only affected concerns until clean.
 - Direct release-readiness, focused ESLint, focused Prettier, and diff checks
   passed; direct counts remain 58 package imports / 107 relative Markdown
   links.
+
+## Corrected Gate Before Wave 2
+
+- Corrected endpoint `4e5d9c66` passed the full native aggregate gate: ordinary
+  and coverage suites each ran 74 files / 1,775 tests with 90.04% branches.
+- Every static/API/Proto/generated stage passed, and `verify:generated` ended
+  with the new reproducible 58-package-import / 107-relative-link command.
+- Wave 2 must review a fresh baseline-to-corrected-log endpoint package. All
+  four concerns rerun because release tooling, architecture documentation, and
+  frozen status/evidence changed. Security remains N/A with the same bounded
+  no-trust-boundary rationale.
+- For actual-profile evidence, the orchestrator will use parent-visible runtime
+  metadata from the live `spawn_agent` role definitions (each role has an
+  immutable model/reasoning binding) together with the explicit matching spawn
+  fields. Child sessions are not required to guess metadata they cannot
+  introspect; inherited parent defaults remain unacceptable.
