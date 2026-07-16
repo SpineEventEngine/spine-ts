@@ -773,6 +773,44 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
   });
 
+  it("starts no probe after the rejection readiness deadline expires", async () => {
+    let postCount = 0;
+    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+
+    await expect(
+      establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return Promise.resolve();
+          },
+        },
+        { next: () => pendingRead },
+        0,
+      ),
+    ).rejects.toThrow("Rejection subscription readiness deadline expired.");
+    expect(postCount).toBe(0);
+  });
+
+  it("bounds a non-settling probe post by the rejection readiness deadline", async () => {
+    let postCount = 0;
+    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+
+    await expect(
+      establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return new Promise<void>(() => undefined);
+          },
+        },
+        { next: () => pendingRead },
+        100,
+      ),
+    ).rejects.toThrow(/Timed out waiting for rejection readiness probe 1 post/u);
+    expect(postCount).toBe(1);
+  });
+
   it("accepts an already-completed rejection and publishes its typed event", async () => {
     const context = await createTodoContext();
     const fixture = new BoundedContextFixture(context, {
@@ -1403,10 +1441,11 @@ function subscribedEvent(update: SubscriptionUpdate | undefined) {
 }
 
 async function establishRejectionSubscriptionReadiness(
-  fixture: BoundedContextFixture,
-  subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
+  fixture: Pick<BoundedContextFixture, "postEvent">,
+  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
+  timeoutMs = 500,
 ): Promise<void> {
-  const deadline = Date.now() + 500;
+  const deadline = Date.now() + timeoutMs;
   const probes = new Map<string, string>();
   let received = false;
   const firstRead = subscription.next().then((update) => {
@@ -1417,11 +1456,9 @@ async function establishRejectionSubscriptionReadiness(
   for (let attempt = 1; attempt <= 16 && !received; attempt++) {
     const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
     probes.set(probe.eventId, probe.taskId);
-    await withTimeout(
-      fixture.postEvent(probe.event),
-      `rejection readiness probe ${String(attempt)} post`,
-      remainingMs(deadline),
-    );
+    const postBudget = remainingMs(deadline);
+    const post = fixture.postEvent(probe.event);
+    await withTimeout(post, `rejection readiness probe ${String(attempt)} post`, postBudget);
     await Promise.race([firstRead.then(() => undefined), nextEventLoopTurn()]);
   }
 
@@ -1437,11 +1474,9 @@ async function establishRejectionSubscriptionReadiness(
     "rejection subscription readiness fence",
     remainingMs(deadline),
   );
-  await withTimeout(
-    fixture.postEvent(fence.event),
-    "rejection subscription readiness fence post",
-    remainingMs(deadline),
-  );
+  const fencePostBudget = remainingMs(deadline);
+  const fencePost = fixture.postEvent(fence.event);
+  await withTimeout(fencePost, "rejection subscription readiness fence post", fencePostBudget);
 
   for (let remaining = probes.size; remaining > 0; remaining--) {
     const event = subscribedEvent(await nextProbe);
@@ -1509,7 +1544,7 @@ function remainingMs(deadline: number): number {
 }
 
 async function nextSubscriptionUpdate(
-  subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
+  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
   label: string,
   timeoutMs = 250,
 ) {

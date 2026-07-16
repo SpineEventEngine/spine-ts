@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3A clean - Slice 3B Round 4 review pending
+Status: Slices 1-3A clean - Slice 3B Round 5 review pending
 
 Baseline: `1aa345ae`
 
@@ -1013,3 +1013,77 @@ clarify failures`).
   API changed; the one local deadline helper reuses the existing test timeout
   contract; and no current documentation claim changed. Fresh commit/package
   and all four final Slice 3B closure dispositions remain required.
+
+## Slice 3B Round 4 Wave
+
+- Verified test/status commit: `57a8b478` (`Bound rejection subscription
+readiness`).
+- Immutable package:
+  `.superpowers/sdd/review-d79bf3a0..57a8b478.diff`, literal range
+  `d79bf3a0..57a8b478`, one commit, 15,217 bytes. First line verified; no moving
+  ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only; expected N/A beyond current
+  status honesty because no user docs changed.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only; expected N/A beyond status because
+  no public code or docs changed.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only.
+- Review only the single-deadline test/status batch. Ignore superseded history
+  unless current records claim it. Verify the literal package; make no changes;
+  spawn no children. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b86-d10e-71f1-abdb-d80ea469ca91` (Pauli),
+    `gpt-5.6-terra` / high;
+  - documentation: `019f6b86-dbee-7d81-81a3-ed8b748384f8`
+    (Anscombe), `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6b86-d575-7fe3-9ad0-4adec239c34c`
+    (Lovelace), `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6b86-d87f-78d2-a4f9-40ffdbb848fe`
+    (Cicero), `gpt-5.6-terra` / high.
+    Actual metadata and closure remain pending.
+
+## Slice 3B Round 4 Findings
+
+- The complete wave returned and all reviewers were closed. Immutable actual
+  fixed-role profiles matched explicit dispatch: style, TypeScript/API docs,
+  and reliability used `gpt-5.6-terra` / high; documentation used
+  `gpt-5.6-luna` / medium.
+- Style and TypeScript/API docs are clean/N/A. Public surface and behavior are
+  unchanged; the one-deadline structure is otherwise clear and bounded.
+- Rejected documentation status finding: `Round 3 Resolution` and `Round 3 Fix
+Verification` describe the fix for the Round 3 finding and are introduced in
+  the same `57a8b478` commit as that fix. `Round 4` consistently names the
+  review wave over that commit. No record claims the fix existed at parent
+  `d79bf3a0`; this is the established finding/fix/review numbering convention.
+- Accepted P2 reliability defect: JavaScript evaluates
+  `fixture.postEvent(...)` before the later `remainingMs(deadline)` argument to
+  `withTimeout()`. If expiry occurs between loop/fence setup and argument
+  evaluation, an unobserved post starts before the deadline check throws.
+  Compute remaining time before invoking each post, then wrap the returned
+  promise. Add focused expiry/stalled-post proof so both no-start-after-expiry
+  and bounded non-settlement are covered.
+- Return only this test correction to the same implementation context, then run
+  focused verification and all four closure dispositions once more.
+
+## Slice 3B Round 4 Resolution
+
+- The same implementer applied only the test correction with actual
+  `gpt-5.6-terra` / medium and was closed. No children, production/public code,
+  docs, durable-log, commit, or push changes were made.
+- Remaining post budget is computed before each probe/fence `postEvent()` call,
+  so an expired deadline cannot start an unobserved post. The returned promise
+  is then bounded with that precomputed budget.
+- Two focused structural-fake tests prove an expired deadline starts zero posts
+  and a never-settling post rejects within the shared deadline. The coordinator
+  widened the latter test budget to 100 ms and asserted its stable timeout label
+  to avoid CI scheduling sensitivity.
+- Coordinator verification passed the full native to-do suite, 29/29; both
+  generated build/tooling typechecks; repository-wide formatting; and
+  `git diff --check`.
+- Lightweight Round 5 lint is clean: status mirrors agree; only test/status
+  files changed; the injected test timeout defaults to the existing 500 ms;
+  no public or documentation claims changed. Commit/package and final four-lane
+  Slice 3B closure remain.
