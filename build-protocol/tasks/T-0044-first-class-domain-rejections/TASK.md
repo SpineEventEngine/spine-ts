@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final documentation rereview
+Status: In progress - Final verification
 
 Started: `2026-07-16`
 
@@ -70,12 +70,11 @@ to generated `TaskAlreadyDone` and `TaskNotDone` throwables, proves a real typed
 rejection subscription, and aligns current user, architecture, API, and package
 documentation. Focused implementation gates, canonical Slice 3B review,
 client-boundary redaction, and final whole-task security rereview are clean;
-final documentation rereview is active.
+final documentation rereview is also clean.
 
 Slices 1 through 3B are implementation-verified and clean in every canonical
-per-slice reviewer lane. Remaining gap: canonical follow-up documentation
-review, full verification, merge/post-merge verification, remote synchronization,
-and restoration of release-ready status.
+per-slice reviewer lane. Remaining gap: full verification, merge/post-merge
+verification, remote synchronization, and restoration of release-ready status.
 
 ## Resolved Architecture Decision Trace
 

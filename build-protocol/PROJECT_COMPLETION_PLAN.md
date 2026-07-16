@@ -111,7 +111,8 @@ security review found one client-facing rejection context disclosure. The
 subscription-boundary redaction is implemented and verified. Security rereview
 found one deprecated command-payload field bypass; that bounded fix plus generic
 docs/status alignment are now independently verified. Client redaction and final
-security rereview are clean; final documentation rereview is the active frontier.
+security rereview are clean; final documentation rereview is clean and the full
+branch verification gate is the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
