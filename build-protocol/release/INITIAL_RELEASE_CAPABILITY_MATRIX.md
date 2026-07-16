@@ -1,6 +1,6 @@
 # Initial Release Capability Matrix
 
-Status: Complete - initial release accepted and closed
+Status: Complete - accepted release includes T-0044 domain rejections
 
 Task: T-0038 Accepted Capability Audit
 
@@ -15,6 +15,30 @@ classification cell contains exactly one allowed token; routing is separate.
 
 Allowed classifications: `IMPLEMENTED`, `DOCUMENTED_EXCLUSION`,
 `STALE_DOC_STATUS`, `EXAMPLE_GAP`, `SECURITY_GATE`, and `FRAMEWORK_DEFECT`.
+
+## T-0044 Release Addendum
+
+The matrix was originally frozen by T-0038 and closed by T-0042. T-0044 later
+reopened release readiness for one human-identified gap and now adds the
+following `IMPLEMENTED` capability to the accepted release:
+
+- Top-level messages in `*_rejections.proto` receive generated nominal,
+  schema-aware throwable companions. Command handlers may throw them without
+  constructing framework envelopes or transactions. The framework rolls back
+  rejected entity work, publishes a typed rejection `Event` independently with
+  the rejected `Command` in `RejectionEventContext`, supports declared
+  subscriber/reactor handling, preserves asynchronous command acknowledgement
+  semantics, and redacts command payloads and stack data at the client
+  subscription boundary. The to-do example proves this path with generated
+  `TaskAlreadyDone` and `TaskNotDone` rejections.
+
+T-0044's branch and post-merge gates pass 75 files / 1,809 tests in ordinary
+and coverage runs at 90.08% branch coverage. The current API inventory is 100
+Proto, 31 core, 204 server, 19 storage, 20 transport-root, 6
+transport/ZeroMQ, and 3 testing exports; release readiness checks 58 package
+imports and 111 relative Markdown links. Older row-level T-0042 counts below
+remain historical evidence for that audit endpoint and do not override this
+addendum.
 
 ## Source Inventory
 

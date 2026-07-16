@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Reopened - T-0044 first-class domain rejections are release-blocking
+Status: Complete - release ready with first-class domain rejections
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0044 first-class domain rejections
+Active implementation frontier: None - accepted initial release is complete
 
 ## Purpose
 
@@ -43,6 +43,12 @@ docs/example coverage agree with the runtime.
 
 The package manager remains pnpm for this Spine TS version. npm compatibility is
 not part of T-0044 or the reopened completion frontier.
+
+T-0044 is complete at reviewed endpoint `e5147c3a`, integrated as `74491343`,
+post-merge verified, and remotely synchronized. Generated throwable companions,
+rollback-safe rejection event publication, subscriber/reactor handling,
+client-boundary redaction, current documentation, and the to-do proof are now
+part of the accepted release. The temporary readiness reopening is closed.
 
 ## Authority And Reconciliation Rules
 
@@ -102,24 +108,14 @@ maintenance task.
 ## Current Execution Status
 
 Initial release closure through T-0042 and the prior completed tasks is
-historical. T-0044 has reopened readiness; generated rejection companions and
-rejection-event runtime and handler integration are review-clean. Slice 3B
-service/API and to-do example implementation and focused gates are complete;
-its first canonical review's bounded routing, test-readiness, and docs fix batch
-is verified. Slice 3B Round 5 is clean in all canonical per-slice lanes. Final
-security review found one client-facing rejection context disclosure. The
-subscription-boundary redaction is implemented and verified. Security rereview
-found one deprecated command-payload field bypass; that bounded fix plus generic
-docs/status alignment are now independently verified. Client redaction and final
-security rereview are clean; final documentation rereview is clean and the full
-branch verification gate exposed a bounded T-0044 lint batch. That fix and
-focused verification are clean. Reliability rereview found one readiness
-rejection-observation race; that fix and regression are independently verified,
-and bounded rereview found two missing post-settlement race proofs. Their fix is
-independently verified. That rereview found one missing positive
-readiness-ordering proof; the test and final reliability review are clean. The
-full native branch verification gate is clean; merge and post-merge verification
-are the active frontier.
+historical. T-0044 first-class domain rejections are complete, clean in every
+canonical concern, and clean in the refreshed whole-task security review. The
+reviewed endpoint `e5147c3a` is integrated as `74491343`; branch and post-merge
+native gates each pass 75 files / 1,809 tests with 90.08% branch coverage, full
+TypeScript/lint/format/TypeDoc/Proto/generated-clean checks, 204 server exports,
+58 package imports, and 111 Markdown links. The task and merged main refs are
+confirmed on `origin`. No implementation frontier remains; the accepted initial
+release is restored to complete and release-ready.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security

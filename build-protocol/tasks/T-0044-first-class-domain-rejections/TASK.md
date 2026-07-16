@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Merge pending
+Status: Complete - integrated, verified, remotely synchronized, and cleaned
 
 Started: `2026-07-16`
 
@@ -73,8 +73,9 @@ client-boundary redaction, and final whole-task security rereview are clean;
 final documentation rereview is also clean.
 
 Slices 1 through 3B are implementation-verified and clean in every canonical
-per-slice reviewer lane. Remaining gap: full verification, merge/post-merge
-verification, remote synchronization, and restoration of release-ready status.
+per-slice reviewer lane. The full branch and post-merge gates pass, the task is
+integrated and remotely synchronized, and release-ready project status is
+restored. There is no remaining T-0044 implementation gap.
 
 ## Resolved Architecture Decision Trace
 
@@ -222,3 +223,26 @@ Every implementation slice must record concrete dispositions for:
 Security is not a routine per-slice lane. Because first-class rejections alter
 serialized public behavior and error disclosure, the final T-0044 integration
 must run a focused security review before release readiness is re-accepted.
+
+## Closure
+
+- Reviewed task endpoint `e5147c3a0442b5f71c74c5bd3bdaa68947f7ea36`
+  is preserved on
+  `origin/task/T-0044-first-class-domain-rejections`.
+- Merge commit `744913433ccc37332c444e4890935fbdd28fefcd`
+  integrates T-0044 into `main`.
+- Branch and post-merge native `pnpm verify` gates passed 75 files and 1,809
+  tests in both ordinary and coverage runs. Post-merge coverage is 95.39%
+  statements, 90.08% branches, 98.28% functions, and 95.40% lines.
+- TypeScript build/tooling, ESLint/cleanup, formatting, TypeDoc/API inventory,
+  Proto generation/lint/cleanliness, and release-readiness checks pass. The
+  current inventory includes 204 server exports; release readiness checks 58
+  package imports and 111 relative Markdown links.
+- Every canonical review concern is clean or has a concrete final-delta N/A
+  disposition. The refreshed whole-task security review is clean, every
+  subagent is closed, and the clean merged task worktree/local branch are
+  removed after final remote confirmation.
+- The closure-record commit cannot embed its own content-addressed SHA. Its
+  contract is to pass focused status/document verification, be pushed to
+  `origin/main`, and have that remote ref confirmed externally without another
+  status-only commit.
