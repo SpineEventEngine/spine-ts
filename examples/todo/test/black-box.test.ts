@@ -30,6 +30,8 @@ import {
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import {
+  EventUpdatesSchema,
+  SubscriptionUpdateSchema,
   TopicIdSchema,
   TopicSchema,
   type SubscriptionUpdate,
@@ -42,7 +44,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { analyzeBuildHandlers } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
@@ -836,6 +838,71 @@ describe("@spine-ts/example-todo", () => {
     }
   });
 
+  it("waits for the received readiness probe post before starting the fence", async () => {
+    const postFailure = new Error("late rejection readiness post failed");
+    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstPost = Promise.withResolvers<undefined>();
+    let nextCount = 0;
+    let postCount = 0;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: (event) => {
+          postCount++;
+          if (postCount === 1) {
+            firstRead.resolve(createEventSubscriptionUpdate(event));
+            return firstPost.promise;
+          }
+          return Promise.resolve();
+        },
+      },
+      {
+        next: () => {
+          nextCount++;
+          return nextCount === 1
+            ? firstRead.promise
+            : new Promise<SubscriptionUpdate | undefined>(() => undefined);
+        },
+      },
+      100,
+    );
+
+    await nextEventLoopTurn();
+    firstPost.reject(postFailure);
+
+    await expect(readiness).rejects.toBe(postFailure);
+    expect(postCount).toBe(1);
+    expect(nextCount).toBe(1);
+  });
+
+  it("observes a losing non-settling probe-post timeout after an immediate read failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const readFailure = new Error("rejection subscription read failed");
+      let postCount = 0;
+      const readiness = establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return new Promise<void>(() => undefined);
+          },
+        },
+        { next: () => Promise.reject(readFailure) },
+        100,
+      );
+
+      await expect(readiness).rejects.toBe(readFailure);
+      expect(postCount).toBe(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("accepts an already-completed rejection and publishes its typed event", async () => {
     const context = await createTodoContext();
     const fixture = new BoundedContextFixture(context, {
@@ -1469,6 +1536,17 @@ function subscribedEvent(update: SubscriptionUpdate | undefined) {
   return event;
 }
 
+function createEventSubscriptionUpdate(
+  event: Parameters<BoundedContextFixture["postEvent"]>[0],
+): SubscriptionUpdate {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "eventUpdates",
+      value: create(EventUpdatesSchema, { event: [event] }),
+    },
+  });
+}
+
 type RejectionReadOutcome =
   | { readonly case: "received"; readonly update: SubscriptionUpdate | undefined }
   | { readonly case: "readFailed"; readonly error: unknown };
@@ -1510,6 +1588,10 @@ async function establishRejectionSubscriptionReadiness(
         return propagateReadinessFailure(initialOutcome.error);
       }
       if (initialOutcome.case === "received") {
+        const settledPost = await postOutcome;
+        if (settledPost.case === "postFailed") {
+          return propagateReadinessFailure(settledPost.error);
+        }
         expectTaskAlreadyDoneProbe(subscribedEvent(initialOutcome.update), probes);
         return;
       }

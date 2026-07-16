@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: In progress - Final reliability fix review
+Status: In progress - Final reliability follow-up review
 
 Baseline: `1aa345ae`
 
@@ -1564,3 +1564,69 @@ verification lint-fix review`, while the review log used different wording.
   style, TypeScript/API, and performance/reliability lanes. Documentation and
   security retain clean N/A dispositions because no public docs, API, production
   redaction, dependencies, or security boundary changed.
+
+## Readiness Rejection Review Wave
+
+- Verified commit `0ae7ca97` (`Observe rejection readiness failures`) and
+  literal package `.superpowers/sdd/review-59d19168..0ae7ca97.diff`, range
+  `59d19168..0ae7ca97`, one commit, 20,630 bytes. Its first line is exact and
+  uses no moving ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected/fixed `gpt-5.6-terra` / high.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected/fixed `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected/fixed `gpt-5.6-terra` / high.
+- Documentation completeness is N/A: only internal test-helper behavior and
+  exact durable status changed; no public/user/package/architecture/API docs or
+  behavior claim changed. Its prior clean result stands.
+- Security is N/A: production redaction, dependencies, trust boundaries, and
+  client/internal data behavior are unchanged. The refreshed whole-task clean
+  result at `59d19168` stands.
+- Reviewers are read-only, verify the literal header, ignore superseded history
+  unless current records claim it, and spawn no children. Dispatch IDs, actual
+  metadata, and results:
+  - style/maintainability: `019f6bec-394b-74b3-bb66-ba1c68109e71`
+    (Hubble), explicit/fixed `gpt-5.6-terra` / high;
+  - TypeScript/API docs: `019f6bec-3f19-7470-9c66-811b491a34cd`
+    (Raman), explicit/fixed `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6bec-4441-72e1-a135-482b29af5196`
+    (Dewey), explicit/fixed `gpt-5.6-terra` / high.
+    Actual metadata and results pending.
+
+## Readiness Rejection Review Findings
+
+- All three reviewers returned and were closed. Fixed-role actual metadata
+  matched explicit `gpt-5.6-terra` / high dispatches.
+- Style/maintainability is clean. Package scope, outcome types, helper structure,
+  regression cleanup, and exact active statuses are maintainable.
+- Accepted P1 TypeScript/reliability: a `received` first-read outcome can win
+  before its same probe post settles, causing readiness to return while a later
+  post failure/timeout is normalized and silently discarded. Await `postOutcome`
+  before accepting the received event and propagate its failure. Add a focused
+  early-received plus delayed/rejected-post proof.
+- Accepted P2 reliability coverage: the current immediate-read-failure test
+  explicitly rejects the losing post before its timeout, so the losing timer
+  branch is not proven observed. Add a non-settling-post variant, allow the
+  deadline to elapse after the read failure returns, and prove no unhandled
+  rejection.
+- Documentation and security remain clean N/A because the findings touch only
+  internal test-helper sequencing and proofs. Return the complete batch to the
+  existing implementer, explicit/fixed `gpt-5.6-terra` / medium, then repeat the
+  directly relevant lanes.
+
+## Readiness Post-Settlement Fix Resolution
+
+- The existing implementer returned with actual `gpt-5.6-terra` / medium and
+  was closed, with no children, logs, commit, or push.
+- On received-first, the helper awaits the same normalized post outcome before
+  accepting the event; post failure identity is preserved and the fence does
+  not start. Red/green proof covers the former later-fence-timeout defect.
+- A fake-timer regression lets the normalized losing non-settling post timeout
+  after immediate read failure and verifies the timer drains without unhandled
+  rejection. The previous explicit late-rejection proof remains.
+- Coordinator native to-do black-box passed 32/32; generated lint/cleanup,
+  typecheck, formatting, and diff hygiene pass. Status mirrors are exact.
+- Commit/package and repeat style, TypeScript/API, and reliability. Docs and
+  security remain clean N/A because only internal test-helper sequencing and
+  regression coverage changed.

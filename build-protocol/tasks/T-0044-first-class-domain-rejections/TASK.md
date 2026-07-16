@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final reliability fix review
+Status: In progress - Final reliability follow-up review
 
 Started: `2026-07-16`
 
