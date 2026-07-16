@@ -118,7 +118,8 @@ rejection-observation race; that fix and regression are independently verified,
 and bounded rereview found two missing post-settlement race proofs. Their fix is
 independently verified. That rereview found one missing positive
 readiness-ordering proof; the test and final reliability review are clean. The
-full native branch verification gate is the active frontier.
+full native branch verification gate is clean; merge and post-merge verification
+are the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
