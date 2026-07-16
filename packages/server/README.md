@@ -66,8 +66,10 @@ Current slice exposes:
   handled domain rejection. The typed event is independently scheduled; a
   successful post may reach an active `SubscriptionService` stream with queue
   capacity, while inactivity, saturation, or closure can prevent observation.
-  A post failure is recorded internally without changing the `Ack` or promising
-  a retry.
+  The client update keeps the typed payload and ordinary event metadata but
+  redacts the rejected command and throwable stack; internal generated handlers
+  keep their full defensive `EventContext`. A post failure is recorded
+  internally without changing the `Ack` or promising a retry.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
@@ -754,9 +756,11 @@ typed rejection event independently, and resolves command dispatch;
 `CommandService.Post` therefore returns an OK acceptance `Ack`. Rejection-event
 posting is best-effort: an active `SubscriptionService` stream with queue
 capacity may observe a successful post, while inactivity, saturation, or
-closure can prevent observation. Failures are recorded in
-`storedEventDispatchFailures()`, are not reflected in the command `Ack`, and are
-not currently retried.
+closure can prevent observation. Its client envelope contains the typed
+rejection and ordinary event metadata but not the rejected command or throwable
+stack. EventStore, EventBus, and internal generated handlers retain the full
+rejection context. Failures are recorded in `storedEventDispatchFailures()`,
+are not reflected in the command `Ack`, and are not currently retried.
 If an aggregate command handler produces an invalid state transition, command
 execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced

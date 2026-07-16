@@ -114,11 +114,12 @@ import {
  * Filtered state topics deliver matching states, emit `no_longer_matching`
  * when previous state matched and new state does not, and apply topic masks
  * only to delivered states. Event topics stream wire-level `event_updates`
- * containing cloned framework `Event` envelopes; application code remains on
- * generated domain event messages through handler dispatch. Unknown or
- * duplicate activation IDs complete without updates. Cancellation of unknown
- * or already-cleaned IDs returns OK after admission to the bounded
- * unknown-removal pool.
+ * containing cloned framework `Event` envelopes; rejection updates omit the
+ * rejected command and stack trace from their client-facing context.
+ * Application code remains on generated domain event messages through handler
+ * dispatch. Unknown or duplicate activation IDs complete without updates.
+ * Cancellation of unknown or already-cleaned IDs returns OK after admission to
+ * the bounded unknown-removal pool.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -2299,10 +2300,21 @@ function createEventUpdate(record: SubscriptionRecord, event: Event): Subscripti
     update: {
       case: "eventUpdates",
       value: create(EventUpdatesSchema, {
-        event: [clone(EventSchema, event)],
+        event: [cloneClientEvent(event)],
       }),
     },
   });
+}
+
+function cloneClientEvent(event: Event): Event {
+  const clientEvent = clone(EventSchema, event);
+  const rejection = clientEvent.context?.rejection;
+
+  if (rejection !== undefined) {
+    rejection.command = undefined;
+    rejection.stacktrace = "";
+  }
+  return clientEvent;
 }
 
 function maskedState(record: StateSubscriptionRecord, state: MessageShape<MessageSchema>): Message {

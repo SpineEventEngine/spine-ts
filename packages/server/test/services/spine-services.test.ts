@@ -1,6 +1,6 @@
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -15,6 +15,7 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
+  TimestampSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -35,7 +36,9 @@ import {
   EmailAddressSchema,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   InternetDomainSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
@@ -1780,7 +1783,8 @@ describe("SpineServices", () => {
     const nextUpdate = withTimeout(iterator.next(), "event subscription update");
 
     await delay(25);
-    await context.eventBus().post(createAggregateEvent("event-created", "aggregate-1", "Created"));
+    const source = createAggregateEvent("event-created", "aggregate-1", "Created");
+    await context.eventBus().post(source);
 
     const delivered = await nextUpdate;
     const update = delivered.value as SubscriptionUpdate | undefined;
@@ -1796,6 +1800,8 @@ describe("SpineServices", () => {
     if (event?.message === undefined) {
       throw new Error("Expected delivered event envelope.");
     }
+    expect(event).toEqual(source);
+    expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
     expect(unpackAny(event.message, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
@@ -1804,6 +1810,54 @@ describe("SpineServices", () => {
         archived: false,
       }),
     );
+    await iterator.return?.();
+  });
+
+  it("redacts rejection details only from client event subscription updates", async () => {
+    const internallyDispatched: ReturnType<typeof createRejectionEvent>[] = [];
+    const context = BoundedContext.multitenant("RejectionEvents")
+      .addEventDispatcher({
+        messageSchemas: () => [TaskAlreadyDoneSchema],
+        dispatch: (event) => {
+          internallyDispatched.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = withTimeout(iterator.next(), "rejection event subscription update");
+    const command = createAggregateCommand("command-rejected", "task-rejected");
+    const source = createRejectionEvent(command, "rejection stack");
+
+    await delay(25);
+    await context.eventBus().post(source);
+
+    const delivered = await nextUpdate;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected rejection event subscription update.");
+    }
+    const event = update.update.value.event[0];
+    if (event === undefined) {
+      throw new Error("Expected delivered rejection event envelope.");
+    }
+    const expected = clone(EventSchema, source);
+    if (expected.context?.rejection === undefined) {
+      throw new Error("Expected rejection event context.");
+    }
+    expected.context.rejection.command = undefined;
+    expected.context.rejection.stacktrace = "";
+
+    expect(event).toEqual(expected);
+    expect(event.context?.rejection?.command).toBeUndefined();
+    expect(event.context?.rejection?.stacktrace).toBe("");
+    expect(source.context?.rejection?.command).toEqual(command);
+    expect(source.context?.rejection?.stacktrace).toBe("rejection stack");
+    expect(internallyDispatched).toEqual([source]);
     await iterator.return?.();
   });
 
@@ -5818,6 +5872,31 @@ function createAggregateEvent(
   });
 }
 
+function createRejectionEvent(
+  command: ReturnType<typeof createAggregateCommand>,
+  stacktrace: string,
+) {
+  return packEvent({
+    id: create(EventIdSchema, { value: "event-rejected" }),
+    context: create(EventContextSchema, {
+      timestamp: create(TimestampSchema, { seconds: 123n, nanos: 456 }),
+      origin: {
+        case: "importContext",
+        value: createActorContext("tenant-rejected"),
+      },
+      producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "producer-1" })),
+      rejection: create(RejectionEventContextSchema, {
+        command,
+        stacktrace,
+      }),
+    }),
+    schema: TaskAlreadyDoneSchema,
+    message: create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
+    }),
+  });
+}
+
 function createEventContext(tenantId?: TenantInput) {
   const context = create(EventContextSchema);
 
@@ -6332,10 +6411,10 @@ function createTopic(tenantId?: TenantInput) {
   });
 }
 
-function createEventTopic(tenantId?: TenantInput) {
+function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = AggregateStateSchema) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-event" }),
-    target: createEventSubscriptionTarget(),
+    target: createEventSubscriptionTarget(schema),
     context: createActorContext(tenantId),
   });
 }

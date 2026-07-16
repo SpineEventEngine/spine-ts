@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final security and integration verification
+Status: In progress - Final redaction review
 
 Started: `2026-07-16`
 

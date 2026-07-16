@@ -412,9 +412,12 @@ scheduling the typed rejection event independently. `CommandService.Post`
 returns an OK acceptance acknowledgement. If the independently scheduled post
 succeeds, an already-active `SubscriptionService` stream with queue capacity
 may receive the rejection asynchronously; saturation or closure can prevent
-observation. A post failure is recorded internally, is not reflected in the
-`Ack`, and is not currently retried. Do not return rejection or service envelope
-values from handlers.
+observation. Its client event envelope preserves the typed rejection and
+ordinary event metadata, but redacts the rejected command and throwable stack.
+Framework-generated internal subscribers still receive the full defensive
+`EventContext`. A post failure is recorded internally, is not reflected in the
+`Ack`, and is not currently retried. Do not return rejection or service
+envelope values from handlers.
 
 After the consumer project's pnpm Proto generation step, a handler saved as
 `src/handlers/task.ts` can use the generated project-root paths below:

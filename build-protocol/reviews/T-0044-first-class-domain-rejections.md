@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3B clean - Final security review pending
+Status: Slices 1-3B clean - Final redaction review pending
 
 Baseline: `1aa345ae`
 
@@ -1136,3 +1136,75 @@ edges`).
 - Slice 3B is accepted. Slices 1 through 3B are now clean; generate a literal
   baseline-to-current whole-task package and run the mandatory focused security
   reviewer before full verification.
+
+## Final Security Review Assignment
+
+- Whole-task closure commit: `4ed73a7c` (`Close domain rejection consumer
+review`).
+- Immutable package:
+  `.superpowers/sdd/review-1aa345ae..4ed73a7c.diff`, literal task range
+  `1aa345ae..4ed73a7c`, 20 commits, 293,225 bytes. First line verified; no
+  moving ref.
+- Existing role: `security_reviewer`, explicit expected and fixed
+  `gpt-5.6-terra` / high, read-only.
+- Focus: generated throwable construction/branding and payload copying; forged
+  throwable behavior; Proto validation; rejected-command and stack disclosure;
+  tenant/context preservation; event posting/failure diagnostics; subscription
+  visibility/queue behavior; code-generation path/output handling; and any
+  accidental broadening of public trust boundaries.
+- Review the current whole-task behavior against the human ledger and current
+  docs. Historical superseded text is non-actionable unless current records
+  claim it. Verify the literal header, make no file/Git changes, and spawn no
+  children. Dispatch: `019f6b95-2972-7081-b594-5b73befaf9d8`
+  (Nietzsche), explicit/fixed `gpt-5.6-terra` / high. Actual metadata and result
+  remain pending.
+
+## Final Security Finding
+
+- The security reviewer completed and was closed. The fixed-role execution
+  surface establishes actual `gpt-5.6-terra` / high matching explicit dispatch;
+  reviewer-local metadata did not expose a second independent profile field.
+- Accepted High release blocker: framework-produced rejection events correctly
+  retain the cloned rejected `Command` and throwable stack for internal
+  EventBus storage and typed handler `EventContext`, but client-facing
+  `SubscriptionService` currently serializes that same full envelope. A client
+  admitted to the rejection topic therefore receives command payload fields and
+  server stack paths without a separate authorization boundary.
+- Preserve the JVM-aligned full internal `RejectionEventContext`, stored event,
+  and generated handler context. At the client subscription serialization
+  boundary only, clone and redact `EventContext.rejection.command` plus
+  `stacktrace` by default. Keep typed rejection payload, event identity, tenant,
+  actor/origin, and other non-rejection event behavior intact.
+- Add service/black-box proofs that client rejection updates omit command/stack
+  while internal subscribers and stored events retain them. Update current
+  public docs to distinguish full internal handler context from redacted client
+  subscription envelopes. Return the complete fix to the same implementer,
+  rerun focused gates, and repeat the whole-task security review.
+- All other task-specific security concerns were clean: nominal branding,
+  defensive payload copying, Proto validation, generated paths/output, bounded
+  diagnostics, and subscription queue limits.
+
+## Final Security Fix Resolution
+
+- The same implementer completed the bounded client-boundary fix with actual
+  `gpt-5.6-terra` / medium and was closed. It spawned no children and made no
+  durable-log, commit, or push changes.
+- `SubscriptionService` now clones each event update and, only for rejection
+  context, unsets the rejected command and clears the throwable stack. Typed
+  rejection payload, event identity, tenant, origin/actor, producer, timestamp,
+  and ordinary non-rejection events remain unchanged.
+- Internal/stored events remain full and unmutated. Service tests prove the
+  client clone is redacted while the source/internal dispatcher event retains
+  command and stack; existing repository tests continue to prove generated
+  internal handlers receive full defensive context.
+- Current framework/API/architecture/server/to-do docs distinguish the full
+  internal generated-handler contract from redacted client subscription
+  envelopes. The to-do black-box proof now expects typed payload delivery with
+  absent command and empty stack.
+- Coordinator verification passed native service and to-do suites, 179/179;
+  both generated build/tooling typechecks; generated TypeDoc/API inventory;
+  generated cleanliness; repository-wide formatting; and `git diff --check`.
+- Pre-review lint is clean: status mirrors agree; redaction policy has one
+  private service helper; no public export/API was added; and docs claim only
+  the implemented boundary. Commit/package, four canonical fix reviewers, and
+  whole-task security rereview remain required before full verification.

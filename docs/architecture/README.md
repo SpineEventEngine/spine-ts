@@ -455,12 +455,15 @@ through the regular EventBus follow-up path. That event carries the rejection
 payload, a cloned original command, available stack trace, causal origin,
 timestamp, and producer ID. When the best-effort follow-up post succeeds,
 EventBus stores the event independently rather than appending it to aggregate
-history. A handled process-manager rejection completes its inbox row,
-while ordinary and forged errors keep the existing technical failure and retry
-behavior. Build-time analysis accepts descriptor-verified top-level rejection
-inputs for event-consuming handlers, but not assignment inputs or normal
-emitted values. Generated rejection throwables are now the sole domain-rule
-failure model used by services and the to-do example.
+history. EventStore, EventBus, and internal generated handlers retain the full
+context. Client-facing `SubscriptionService` updates clone the envelope and
+redact the rejected command and throwable stack while preserving the typed
+payload and other event metadata. A handled process-manager rejection completes
+its inbox row, while ordinary and forged errors keep the existing technical
+failure and retry behavior. Build-time analysis accepts descriptor-verified
+top-level rejection inputs for event-consuming handlers, but not assignment
+inputs or normal emitted values. Generated rejection throwables are now the
+sole domain-rule failure model used by services and the to-do example.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. A handled domain rejection instead

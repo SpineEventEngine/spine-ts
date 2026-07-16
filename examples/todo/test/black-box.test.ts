@@ -850,7 +850,8 @@ describe("@spine-ts/example-todo", () => {
           id: create(TaskIdSchema, { value: "task-refuse" }),
         }),
       );
-      expect(event.context?.rejection?.command).toEqual(command);
+      expect(event.context?.rejection?.command).toBeUndefined();
+      expect(event.context?.rejection?.stacktrace).toBe("");
       expect(task).toEqual(readTask(completedResponse, "task-refuse"));
       expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
     } finally {

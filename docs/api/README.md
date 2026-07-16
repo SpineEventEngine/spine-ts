@@ -35,7 +35,9 @@ handlers while excluding assignment inputs and normal emitted values. Service
 posting returns an OK acceptance `Ack` for handled domain rejections and
 independently schedules the typed event through EventBus. A successful post can
 be received by an active `SubscriptionService` stream with queue capacity;
-inactive, saturated, or closed streams may not observe it. A failed post is
+inactive, saturated, or closed streams may not observe it. Client event updates
+retain the typed rejection and ordinary event metadata but redact the rejected
+command and throwable stack from `EventContext.rejection`. A failed post is
 recorded in `storedEventDispatchFailures()`, is not reflected in the client
 `Ack`, and has no promised retry.
 Core envelope construction exports include
@@ -554,10 +556,13 @@ and `EventContext`, never the enclosing `Event`; each matching subscriber
 receives defensive payload and context values. For framework-produced rejection
 events, `EventContext.rejection.command` contains a defensive clone of the
 rejected original `Command`, and `EventContext.rejection.stacktrace` carries the
-generated rejection throwable's available stack. Generated producer handlers
-return domain messages; the framework wraps returned commands/events internally
-and dispatches produced signals only after the current storage/transactional
-work succeeds.
+generated rejection throwable's available stack. This full context is an
+internal generated-handler contract. Client-facing `SubscriptionService`
+updates clone the event and redact those two rejection fields while preserving
+the typed payload and other event metadata. Generated producer handlers return
+domain messages; the framework wraps returned commands/events internally and
+dispatches produced signals only after the current storage/transactional work
+succeeds.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an
