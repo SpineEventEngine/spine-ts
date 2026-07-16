@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 Round 2 review pending
+Status: Slice 1 Round 3 review pending
 
 Baseline: `1aa345ae`
 
@@ -205,3 +205,13 @@ against a fresh package after verification.
   `docs:check:generated` with 31 core exports, full formatting, and
   `git diff --check`.
 - A final fresh four-lane Slice 1 wave is required before closure.
+
+## Slice 1 Round 3 Preparation
+
+- Status lint advanced the completion plan and this review log to Round 3
+  before packaging, so reviewers receive no superseded active-round claim.
+- All other current statuses align; no duplicate policy, public API leakage, or
+  future-runtime overclaim was found.
+- The same four relevant fixed reviewer roles and profiles apply. Fresh package
+  endpoint and dispatch IDs remain pending until this status correction is
+  committed.

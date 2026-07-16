@@ -102,7 +102,7 @@ maintenance task.
 ## Current Execution Status
 
 Initial release closure through T-0042 and the prior completed tasks is
-historical. T-0044 has reopened readiness; Slice 1 Round 2 fixes and review are
+historical. T-0044 has reopened readiness; the final Slice 1 Round 3 review is
 the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
