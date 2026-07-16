@@ -24,8 +24,13 @@ and UI language contracts.
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
 validation result/check helpers, `ValidationException`, structured
-`ValidationError` creation, and the initial transition-validation seam. Core
-envelope construction exports include `packAny()`, `unpackAny()`,
+`ValidationError` creation, the initial transition-validation seam,
+`RejectionThrowable`, `createRejectionThrowable()`, and
+`isRejectionThrowable()`. Generated rejection companions create validated
+throwables through this factory contract. T-0044 Slice 2 runtime code will
+recognize them through the guard; server-side rejection-event conversion and
+publication remain Slice 2 work. Core envelope construction exports include
+`packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
 

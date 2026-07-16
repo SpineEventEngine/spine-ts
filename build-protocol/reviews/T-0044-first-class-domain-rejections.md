@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 Round 3 review pending
+Status: Slice 1 Round 4 review pending
 
 Baseline: `1aa345ae`
 
@@ -58,8 +58,8 @@ metadata, results, fixes, and closure evidence remain pending.
 - Style/maintainability: relevant; core public abstraction and generator code.
 - Documentation completeness: relevant; public core README behavior changed.
 - TypeScript/API docs: relevant; two public core exports and generated typing.
-- Performance/reliability: relevant; validation, deep freezing, generator
-  atomicity, and recursive message handling.
+- Performance/reliability: relevant; validation, defensive snapshots, generator
+  staging/rollback, and recursive message handling.
 - Security: N/A for this slice under the protocol's final-only security lane;
   no event/client disclosure exists yet. Final T-0044 security review remains
   mandatory.
@@ -215,3 +215,69 @@ against a fresh package after verification.
 - The same four relevant fixed reviewer roles and profiles apply. Fresh package
   endpoint and dispatch IDs remain pending until this status correction is
   committed.
+
+- Status correction commit: `6df91f81`.
+- Immutable package:
+  `/private/tmp/t0044-slice1-round3b-review.diff`, range
+  `1aa345ae..6df91f81`, four commits, 73,645 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high.
+- All assignments are read-only, bounded to final Slice 1 closure, ignore
+  superseded historical text unless current records claim it, and prohibit
+  child agents. Dispatch IDs/results remain pending.
+
+Round 3 dispatches, all role/model/reasoning fields explicit:
+
+- Style/maintainability: `019f6adc-2ff2-7550-a51f-778387582ad3` (Euler).
+- Documentation: `019f6adc-33e9-7a70-805a-d3ef2b23e3ae` (Hilbert).
+- TypeScript/API docs: `019f6adc-37c6-7e33-b9d8-1da0140165ce` (Avicenna).
+- Performance/reliability: `019f6adc-3bf3-7c61-9d02-ae95b4cd6584` (Noether).
+
+## Slice 1 Round 3 Findings
+
+The complete wave returned and all agents were closed. Actual immutable
+fixed-role metadata matched explicit dispatch: style, TypeScript/API docs, and
+performance/reliability at `gpt-5.6-terra` / high; documentation at
+`gpt-5.6-luna` / medium.
+
+- Style/maintainability: clean.
+- TypeScript/API docs: clean.
+- Documentation: two accepted P2 fixes.
+  - Explain that the generated imports in the core README are relative to a
+    consumer source tree after Proto generation, rather than relative to the
+    package README itself.
+  - Add `RejectionThrowable`, `createRejectionThrowable()`, and
+    `isRejectionThrowable()` to the current API guide, explicitly deferring
+    server event handling to Slice 2.
+- Performance/reliability reported that the pre-existing publication mechanism
+  is not process-interruption/concurrent-reader atomic across two live output
+  directories. The requested cross-directory visibility switch/locking system
+  is rejected as pre-existing broader tooling architecture outside this slice;
+  Slice 1 only changed all matching plugin outputs to target the existing stage.
+  However, current T-0044 records overclaim this as atomic. Correct them to the
+  precise guarantee: generation is staged, published with rollback for caught
+  synchronous failures, and generated output stays ignored. Existing staging
+  tests remain applicable.
+
+After this docs-only batch, all four lanes must receive a final fresh closure
+wave because current claims are part of their review input.
+
+## Slice 1 Round 3 Resolution
+
+- Core README now identifies its import paths as consumer-source-relative after
+  `pnpm proto:generate` and uses the actual to-do source layout.
+- Current API guide lists the three public rejection contracts and explicitly
+  defers runtime recognition/conversion/publication to Slice 2.
+- Active T-0044 records now describe staged generation, all matching plugin
+  outputs targeting staging, rollback of already-published roots after caught
+  synchronous failures, and ignored output. They explicitly do not promise
+  cross-process/concurrent-reader atomicity.
+- Coordinator verification passed: `docs:check:generated`, full formatting,
+  and `git diff --check`.
+- Durable status is advanced to Round 4 before the final closure package.

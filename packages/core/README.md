@@ -99,10 +99,14 @@ files expose a JVM-familiar factory. The factory validates its input before it
 returns a nominal `RejectionThrowable`; its schema and cloned message are then
 available to framework code.
 
+Run `pnpm proto:generate` from the consumer project root before compiling.
+Generated module imports are relative to the consumer source file, not this
+package README. For example, from a source file under `examples/todo/src`:
+
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { TaskIdSchema } from "./generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskAlreadyDone } from "./generated/spine/example/todo/v1/task_rejections.js";
+import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskAlreadyDone } from "../generated/spine/example/todo/v1/task_rejections.js";
 
 const id = create(TaskIdSchema, { value: "task-42" });
 

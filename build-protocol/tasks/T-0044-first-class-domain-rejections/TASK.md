@@ -55,8 +55,11 @@ presenting it as JVM-equivalent rejection behavior.
 ## Current Gap
 
 Slice 1 implements the validated, nominal core throwable contract and generates
-same-named companions for eligible rejection Proto messages through the atomic
-Buf workflow.
+same-named companions for eligible rejection Proto messages through the Buf
+workflow. Outputs are generated in staging, every matching plugin output points
+to that stage, caught synchronous publication failures roll back roots already
+published, and generated outputs remain ignored. This does not claim atomicity
+across concurrent generation or process interruption.
 
 Remaining gaps:
 
@@ -188,7 +191,8 @@ human requirements.
 1. **Generated throwable contract.** Add the nominal core throwable/factory,
    generate same-named throwable values for top-level messages in
    `rejections.proto`, prove the generated typing and suffix convention, and
-   keep generation atomic and ignored.
+   keep all matching plugin outputs staged, restore published roots after caught
+   synchronous publication failures, and keep generated output ignored.
 2. **Rejection event runtime.** Build valid rejection event metadata, recognize
    only nominal rejection throwables after transaction rollback, publish them
    independently through EventBus, and preserve technical-error behavior.
