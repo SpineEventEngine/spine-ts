@@ -39,7 +39,7 @@ import {
   type TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskAlreadyDoneSchema,
 } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskIdSchema as GeneratedTaskIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -68,6 +68,8 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const GeneratedTaskIdSchema = TodoIdSchema;
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -273,9 +275,9 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
   static applierCalls = 0;
-  static failure: unknown;
+  static failure: Error | undefined;
 
-  static reset(failure?: unknown): void {
+  static reset(failure?: Error): void {
     this.assigneeCalls = 0;
     this.applierCalls = 0;
     this.failure = failure;
@@ -323,9 +325,9 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
 
 class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
-  static failure: unknown;
+  static failure: Error | undefined;
 
-  static reset(failure?: unknown): void {
+  static reset(failure?: Error): void {
     this.assigneeCalls = 0;
     this.failure = failure;
   }
@@ -1132,9 +1134,9 @@ class RoutingProcessManager extends ProcessManager<
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
-  static failure: unknown;
+  static failure: Error | undefined;
 
-  static reset(failure?: unknown): void {
+  static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
@@ -1531,10 +1533,9 @@ describe("repository signal routing", () => {
         const rejection = TaskAlreadyDone.create({
           id: create(GeneratedTaskIdSchema, { value: "task-forged" }),
         });
-        return Object.setPrototypeOf(
-          new Error("forged aggregate failure"),
-          Object.getPrototypeOf(rejection),
-        );
+        const forged = new Error("forged aggregate failure");
+        Reflect.setPrototypeOf(forged, Reflect.getPrototypeOf(rejection));
+        return forged;
       },
     },
   ])("keeps $label as technical aggregate failures", async ({ failure }) => {

@@ -2313,6 +2313,8 @@ function cloneClientEvent(event: Event): Event {
 
   if (rejection !== undefined) {
     rejection.command = undefined;
+    // Clear the legacy wire payload as part of client-side security redaction.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     rejection.commandMessage = undefined;
     rejection.stacktrace = "";
   }

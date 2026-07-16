@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: All concerns clean - Final verification pending
+Status: Prior concerns clean - Final verification lint-fix review pending
 
 Baseline: `1aa345ae`
 
@@ -1451,3 +1451,38 @@ review`).
 - Every reviewer and implementation agent is closed. Proceed to full native
   branch verification; no further review is required unless that gate changes
   behavior or current documentation.
+
+## Full Branch Gate Lint Finding
+
+- Native full verification stopped at ESLint with 12 deterministic diagnostics
+  in T-0044 paths before tests. Accepted as one bounded mechanical batch:
+  intentional deprecated legacy-field access needs narrow rationale; three
+  Error/rejection test doubles are typed too broadly; the prototype-spoof helper
+  leaks `any`; and readiness progress uses callback mutation the rule cannot
+  observe.
+- Preserve behavior. Add only line-local deprecated-field rationale, tighten
+  Error-only fixtures, use typed Reflect prototype operations, and express
+  readiness through a Promise-race result. Focused lint/tests plus typecheck,
+  formatting, and diff hygiene are required.
+- Resume the existing implementer with explicit/fixed `gpt-5.6-terra` / medium,
+  no children, logs, commit, push, or unrelated edits. Repeat relevant canonical
+  and security concerns after verified fix because production redaction and
+  readiness test code are touched.
+
+## Full Gate Lint Fix Resolution
+
+- The existing implementer returned with actual `gpt-5.6-terra` / medium and
+  was closed, with no children, logs, commit, or push.
+- The 12 diagnostics are resolved without behavior changes: deliberate legacy
+  redaction/verification has line-local rationale, Error-only fixtures have
+  accurate types, prototype spoofing avoids `any`, and readiness uses an
+  explicit Promise-race outcome while preserving one deadline, at most 16
+  probes, verified receipt, and the later fence.
+- Cleanup enforcement also required local generated-schema aliases and a
+  mechanical analyzer-test line-wrap extraction; no public API or behavior
+  changed.
+- Coordinator verification passed `lint:generated`; 339/339 affected native
+  tests; `typecheck:generated`; `format:check`; and `git diff --check`.
+- Pre-review status/docs/API lint is clean. Commit/package, all four canonical
+  concerns, and refreshed whole-task security remain before rerunning full
+  verification.

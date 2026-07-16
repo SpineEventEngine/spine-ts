@@ -104,12 +104,14 @@ import {
 } from "../../src/index.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskIdSchema as GeneratedTaskIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
 } from "../../src/services/subscription-records.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const GeneratedTaskIdSchema = TodoIdSchema;
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -1850,14 +1852,20 @@ describe("SpineServices", () => {
       throw new Error("Expected rejection event context.");
     }
     expected.context.rejection.command = undefined;
+    // Model the legacy wire field only to verify client-side security redaction.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     expected.context.rejection.commandMessage = undefined;
     expected.context.rejection.stacktrace = "";
 
     expect(event).toEqual(expected);
     expect(event.context?.rejection?.command).toBeUndefined();
+    // Verify that the legacy wire payload is absent from the client clone.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     expect(event.context?.rejection?.commandMessage).toBeUndefined();
     expect(event.context?.rejection?.stacktrace).toBe("");
     expect(source.context?.rejection?.command).toEqual(command);
+    // Verify that security redaction did not mutate the legacy source payload.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     expect(source.context?.rejection?.commandMessage?.value.byteLength).toBeGreaterThan(0);
     expect(source.context?.rejection?.stacktrace).toBe("rejection stack");
     expect(internallyDispatched).toEqual([source]);

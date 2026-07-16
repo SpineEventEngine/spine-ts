@@ -828,11 +828,14 @@ function generatedNestedModule(protoSource: string, parent: string, nested: stri
     name: protoSource,
     messageType: [{ name: parent, nestedType: [{ name: nested }] }],
   });
+  const encodedDescriptor = Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString(
+    "base64",
+  );
 
   return [
     "declare function fileDesc(source: string): unknown;",
     "declare function messageDesc(file: unknown, ...indexes: number[]): unknown;",
-    `export const ${file} = fileDesc("${Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64")}");`,
+    `export const ${file} = fileDesc("${encodedDescriptor}");`,
     `export interface ${parent}_${nested} {}`,
     `export const ${parent}_${nested}Schema = messageDesc(${file}, 0, 0);`,
   ].join("\n");

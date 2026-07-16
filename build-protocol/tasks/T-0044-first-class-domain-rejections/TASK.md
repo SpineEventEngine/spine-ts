@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final verification
+Status: In progress - Final verification lint-fix review
 
 Started: `2026-07-16`
 

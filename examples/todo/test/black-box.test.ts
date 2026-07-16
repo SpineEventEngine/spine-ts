@@ -851,6 +851,8 @@ describe("@spine-ts/example-todo", () => {
         }),
       );
       expect(event.context?.rejection?.command).toBeUndefined();
+      // Verify that the legacy wire payload is absent at the client boundary.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
       expect(event.context?.rejection?.commandMessage).toBeUndefined();
       expect(event.context?.rejection?.stacktrace).toBe("");
       expect(task).toEqual(readTask(completedResponse, "task-refuse"));
@@ -1442,6 +1444,10 @@ function subscribedEvent(update: SubscriptionUpdate | undefined) {
   return event;
 }
 
+type RejectionReadinessOutcome =
+  | { readonly case: "received"; readonly update: SubscriptionUpdate | undefined }
+  | { readonly case: "pending" };
+
 async function establishRejectionSubscriptionReadiness(
   fixture: Pick<BoundedContextFixture, "postEvent">,
   subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
@@ -1449,25 +1455,30 @@ async function establishRejectionSubscriptionReadiness(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const probes = new Map<string, string>();
-  let received = false;
-  const firstRead = subscription.next().then((update) => {
-    received = true;
-    return update;
-  });
+  const firstRead = subscription.next();
+  const receiveProbe = async (): Promise<void> => {
+    for (let attempt = 1; attempt <= 16; attempt++) {
+      const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
+      probes.set(probe.eventId, probe.taskId);
+      const postBudget = remainingMs(deadline);
+      const post = fixture.postEvent(probe.event);
+      await withTimeout(post, `rejection readiness probe ${String(attempt)} post`, postBudget);
+      const outcome = await Promise.race([
+        firstRead.then<RejectionReadinessOutcome>((update) => ({ case: "received", update })),
+        nextEventLoopTurn().then<RejectionReadinessOutcome>(() => ({ case: "pending" })),
+      ]);
+      if (outcome.case === "received") {
+        expectTaskAlreadyDoneProbe(subscribedEvent(outcome.update), probes);
+        return;
+      }
+    }
 
-  for (let attempt = 1; attempt <= 16 && !received; attempt++) {
-    const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
-    probes.set(probe.eventId, probe.taskId);
-    const postBudget = remainingMs(deadline);
-    const post = fixture.postEvent(probe.event);
-    await withTimeout(post, `rejection readiness probe ${String(attempt)} post`, postBudget);
-    await Promise.race([firstRead.then(() => undefined), nextEventLoopTurn()]);
-  }
-
-  const firstProbe = subscribedEvent(
-    await withTimeout(firstRead, "rejection subscription readiness probe", remainingMs(deadline)),
-  );
-  expectTaskAlreadyDoneProbe(firstProbe, probes);
+    const firstProbe = subscribedEvent(
+      await withTimeout(firstRead, "rejection subscription readiness probe", remainingMs(deadline)),
+    );
+    expectTaskAlreadyDoneProbe(firstProbe, probes);
+  };
+  await receiveProbe();
 
   const fence = createTaskAlreadyDoneProbe("readiness-fence");
   probes.set(fence.eventId, fence.taskId);
