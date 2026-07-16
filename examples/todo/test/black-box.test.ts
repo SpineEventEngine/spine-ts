@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, unpackAny, type MessageSchema } from "@spine-ts/core";
 import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -47,6 +47,7 @@ import {
 } from "../generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { TaskAlreadyDoneSchema } from "../generated/spine/example/todo/v1/task_rejections_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
@@ -373,7 +374,7 @@ describe("@spine-ts/example-todo", () => {
     });
   }, 15_000);
 
-  it("returns validation and business refusals without changing remote state", async () => {
+  it("returns validation errors and accepts business rejections without changing remote state", async () => {
     await withRemoteTodo(async ({ commands, queries }) => {
       await postRemoteCommand(
         commands,
@@ -451,8 +452,8 @@ describe("@spine-ts/example-todo", () => {
       expect(taskListSnapshot(afterRefusals, "task-refusal")).toEqual(
         taskListSnapshot(original, "task-refusal"),
       );
-      expect(errorType(reopenOpen.status?.status)).toBe("TASK_NOT_DONE");
-      expect(errorType(completeAgain.status?.status)).toBe("TASK_ALREADY_DONE");
+      expect(reopenOpen.status?.status.case).toBe("ok");
+      expect(completeAgain.status?.status.case).toBe("ok");
       expect(taskListSnapshot(afterCompleteAgain, "task-refusal")).toEqual(
         taskListSnapshot(completed, "task-refusal"),
       );
@@ -765,37 +766,54 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
   });
 
-  it("refuses completing an already completed task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
+  it("accepts an already-completed rejection and publishes its typed event", async () => {
+    const context = await createTodoContext();
+    const fixture = new BoundedContextFixture(context, {
       timeoutMs: 500,
       intervalMs: 5,
     });
+    const subscription = await fixture.subscribe(createEventTopic(TaskAlreadyDoneSchema));
 
-    await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
-    await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
-    const completedResponse = await fixture.readEventually(
-      createTaskListQuery(),
-      (candidate) => taskCompleted(candidate, "task-refuse") === true,
-    );
+    try {
+      await delay(25);
+      await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
+      await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
+      const completedResponse = await fixture.readEventually(
+        createTaskListQuery(),
+        (candidate) => taskCompleted(candidate, "task-refuse") === true,
+      );
+      const command = createCompleteCommand("command-refuse-complete-again", "task-refuse");
 
-    const ack = await fixture.post(
-      createCompleteCommand("command-refuse-complete-again", "task-refuse"),
-    );
-    const response = await expectTaskListEventuallyUnchanged(
-      fixture,
-      completedResponse,
-      "task-refuse",
-    );
-    const task = readTask(response, "task-refuse");
+      const ack = await fixture.post(command);
+      await delay(25);
+      expect(context.storedEventDispatchFailures()).toEqual([]);
+      const update = await nextSubscriptionUpdate(subscription, "task already done");
+      const event = subscribedEvent(update);
+      const response = await expectTaskListEventuallyUnchanged(
+        fixture,
+        completedResponse,
+        "task-refuse",
+      );
+      const task = readTask(response, "task-refuse");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_DONE");
-    expect(errorMessage(ack.status?.status)).toBe("Task is already done.");
-    expect(task).toEqual(readTask(completedResponse, "task-refuse"));
-    expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+      expect(ack.status?.status.case).toBe("ok");
+      expect(event.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+      expect(
+        event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+      ).toEqual(
+        create(TaskAlreadyDoneSchema, {
+          id: create(TaskIdSchema, { value: "task-refuse" }),
+        }),
+      );
+      expect(event.context?.rejection?.command).toEqual(command);
+      expect(task).toEqual(readTask(completedResponse, "task-refuse"));
+      expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+    } finally {
+      await withTimeout(subscription.close(), "rejection subscription cleanup", 250);
+    }
   });
 
-  it("refuses reopening an open task without changing the task list", async () => {
+  it("accepts reopening an open task as a rejection without changing the task list", async () => {
     const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
@@ -810,9 +828,7 @@ describe("@spine-ts/example-todo", () => {
     const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
     const response = await expectTaskListEventuallyUnchanged(fixture, openResponse, "task-open");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_NOT_DONE");
-    expect(errorMessage(ack.status?.status)).toBe("Task is not done.");
+    expect(ack.status?.status.case).toBe("ok");
     expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
     expect(readList(response, "task-open")?.openTaskCount).toBe(1);
   });
@@ -1330,6 +1346,17 @@ function createTaskListTopic(id?: string) {
   });
 }
 
+function createEventTopic(schema: MessageSchema) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(schema),
+      criterion: { case: "includeAll", value: true },
+    }),
+    context: createActorContext(),
+  });
+}
+
 function createActorContext() {
   return signalMetadata.actorContext({
     actor: create(UserIdSchema, { value: "todo-user" }),
@@ -1358,6 +1385,14 @@ function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
     subscription: update.subscription,
     list,
   };
+}
+
+function subscribedEvent(update: SubscriptionUpdate | undefined) {
+  const event = update?.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
+  if (event === undefined) {
+    throw new Error("Expected a subscribed event.");
+  }
+  return event;
 }
 
 async function nextSubscriptionUpdate(

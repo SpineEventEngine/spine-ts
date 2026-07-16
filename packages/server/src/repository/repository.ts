@@ -3142,17 +3142,19 @@ function readEventEntityId(
   targetIdField: DescriptorFieldMetadata,
 ): unknown {
   const producerId = readProducerId(event);
+  const routedProducerId =
+    event.context?.rejection !== undefined && producerId === "Unknown" ? undefined : producerId;
   const fieldId = readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
 
-  if (producerId !== undefined && producerId !== fieldId.value) {
+  if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {
     throw new Error(
       "Repository event routing requires producer ID and first field to identify the same entity.",
     );
   }
 
-  return producerId === undefined || targetIdField.descriptor.fieldKind === "message"
+  return routedProducerId === undefined || targetIdField.descriptor.fieldKind === "message"
     ? fieldId.id
-    : producerId;
+    : routedProducerId;
 }
 
 interface RoutableId {

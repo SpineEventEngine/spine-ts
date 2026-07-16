@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3B service and example integration
+Status: In progress - Slice 3B service and consumer review
 
 Started: `2026-07-16`
 
@@ -64,13 +64,16 @@ across concurrent generation or process interruption.
 Slice 2 converts recognized handler-thrown rejections into typed rejection
 events after rollback and publishes them independently through EventBus.
 
-Remaining gaps:
+Slice 3B removes the string-coded `CommandRefusalError` path, aligns command
+acknowledgements with asynchronous rejection timing, migrates the to-do example
+to generated `TaskAlreadyDone` and `TaskNotDone` throwables, proves a real typed
+rejection subscription, and aligns current user, architecture, API, and package
+documentation. Focused implementation gates are clean; canonical slice review
+is pending.
 
-- Remove or migrate the string-coded `CommandRefusalError` path and align
-  command-service API acknowledgement behavior with handler-produced rejection
-  timing.
-- Migrate the to-do example and align the remaining user, architecture, and API
-  documentation with the completed runtime behavior.
+Remaining gap: final review/fix closure, focused security integration review,
+full verification, merge/post-merge verification, remote synchronization, and
+restoration of release-ready status.
 
 ## Resolved Architecture Decision Trace
 

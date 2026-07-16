@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3A clean - Slice 3B implementation pending
+Status: Slices 1-3A clean - Slice 3B review pending
 
 Baseline: `1aa345ae`
 
@@ -719,3 +719,38 @@ guarantees`).
   - security: deferred to mandatory final T-0044 integration review.
 - Slice 3A is accepted. Slice 3B service/API and example integration is the
   active frontier.
+
+## Slice 3B Pre-Review Lint
+
+- Task, work-log, review-log, and completion-plan mirrors agree that Slice 3B
+  implementation and focused gates are complete and canonical review is
+  pending.
+- The slice removes the duplicate string-coded domain-failure mechanism rather
+  than adding another policy constant. Generated Proto companions remain the
+  sole public domain-rejection construction path.
+- Root exports, API inventory, current docs, and tests intentionally remove
+  `CommandRefusalError`. No current non-historical source or documentation
+  reference remains; historical task/work records are superseded evidence and
+  are not actionable.
+- Changed docs claim only implemented behavior: rollback, OK command acceptance,
+  independently posted typed rejection events, EventBus/subscription delivery,
+  and retained non-OK validation/technical failures. They do not claim future
+  retry, topology, scheduler, adapter, or production-monitor policy.
+- Focused native tests passed 319/319. TypeScript build/tooling checks, Proto
+  lint/source checks, generated cleanliness, TypeDoc/API inventory, formatting,
+  and `git diff --check` passed.
+
+## Slice 3B Review Dispositions
+
+- Style/maintainability: relevant; service cleanup, example consumer code, and
+  the message-valued rejection routing adjustment are executable changes.
+- Documentation completeness: relevant; command acknowledgement and consumer
+  timing changed in all current user-facing guides.
+- TypeScript/API docs: relevant; one public server export is removed and
+  generated rejection use replaces the previous public contract.
+- Performance/reliability: relevant; asynchronous event posting, routing, real
+  subscription delivery, rollback visibility, and acknowledgement timing are
+  affected.
+- Security: deferred under protocol to the mandatory final T-0044 integration
+  review, where serialized rejection payload and stack disclosure will be
+  reviewed across the complete task diff.

@@ -458,13 +458,14 @@ aggregate history. A handled process-manager rejection completes its inbox row,
 while ordinary and forged errors keep the existing technical failure and retry
 behavior. Build-time analysis accepts descriptor-verified top-level rejection
 inputs for event-consuming handlers, but not assignment inputs or normal
-emitted values. Service/`CommandRefusalError` migration, example handlers, and
-client-facing integration remain later T-0044 work.
+emitted values. Generated rejection throwables are now the sole domain-rule
+failure model used by services and the to-do example.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
-`spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
-values are the one immediate business refusal path mapped to stable non-ok
-`Ack` errors. Managed aggregate command handlers use framework-owned
+`spine.validation.ValidationError` details. A handled domain rejection instead
+rolls back state, schedules its typed event independently, and returns an OK
+acceptance `Ack`; EventBus and `SubscriptionService` deliver the rejection
+asynchronously. Managed aggregate command handlers use framework-owned
 `EntityTransaction.commit()` for transition validation. When that transaction is
 rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
@@ -542,7 +543,7 @@ idempotent, stops binding intake before unregistering transport handles, attempt
 every transport registration close even after one rejects, and closes the
 runtime after transport registrations. The package root now exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
-built contexts, command payload validation and refusal/Ack mapping through
+built contexts, command payload validation and rejection/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
 transport binding. The package now also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns

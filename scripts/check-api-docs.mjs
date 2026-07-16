@@ -215,7 +215,6 @@ const expectedServerExports = [
   "CommandEndpoint",
   "CommandDispatcher",
   "CommandAssignmentHandlerMetadata",
-  "CommandRefusalError",
   "CommandRuntimeRoutingPlan",
   "CommandRuntimeTransportHandler",
   "CommandRegistrationAssigneeMetadata",

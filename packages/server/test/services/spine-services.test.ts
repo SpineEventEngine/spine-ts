@@ -76,6 +76,7 @@ import {
 import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import type { Response } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 import {
+  EventStore,
   InMemoryStorageFactory,
   RecordStorage,
   StorageFactory,
@@ -89,7 +90,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   Aggregate,
   BoundedContext,
-  CommandRefusalError,
   Projection,
   Repository,
   Server,
@@ -99,6 +99,9 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
+import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
+import { TaskIdSchema as GeneratedTaskIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
@@ -211,9 +214,11 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 
-class RefusingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class RejectingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(): never {
-    throw new CommandRefusalError("TASK_ALREADY_COMPLETED", "Task is already completed.");
+    throw TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: this.id }),
+    });
   }
 }
 
@@ -1250,15 +1255,29 @@ describe("SpineServices", () => {
     }
   });
 
-  it("returns stable Ack errors for immediate aggregate command refusals", async () => {
-    const context = BoundedContext.singleTenant("Tasks").add(createRefusingRepository()).build();
+  it("accepts a domain rejection and stores its typed event asynchronously", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRejectingRepository())
+      .withStorageFactory(storageFactory)
+      .build();
     const handlers = registeredCommandHandlers(context);
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+    const command = createAggregateCommand("command-rejected", "task-rejected");
 
-    const ack = await handlers.post(createAggregateCommand("command-refused", "task-refused"));
+    const ack = await handlers.post(command);
+    const [event] = await waitForStoredEvents(eventStore, 1);
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_COMPLETED");
-    expect(errorMessage(ack.status?.status)).toBe("Task is already completed.");
+    expect(ack.status?.status.case).toBe("ok");
+    expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(
+      event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+    ).toEqual(
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
+      }),
+    );
+    expect(event?.context?.rejection?.command).toEqual(command);
   });
 
   it("returns stable Ack errors with details for invalid command payloads", async () => {
@@ -5671,13 +5690,13 @@ function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProject
   });
 }
 
-function createRefusingRepository(): Repository<typeof RefusingTaskAggregate> {
-  const handlers = defineEntityHandlers(RefusingTaskAggregate, AggregateStateSchema, (builder) => [
+function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> {
+  const handlers = defineEntityHandlers(RejectingTaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
   ]);
 
   return new Repository({
-    entityType: RefusingTaskAggregate,
+    entityType: RejectingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
   });
@@ -6931,4 +6950,16 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitForStoredEvents(eventStore: EventStore, count: number) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const events = await eventStore.read();
+    if (events.length >= count) {
+      return events;
+    }
+    await delay(5);
+  }
+  return await eventStore.read();
 }

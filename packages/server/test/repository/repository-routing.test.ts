@@ -1556,12 +1556,14 @@ describe("repository signal routing", () => {
   });
 
   it("uses the JVM-compatible Unknown producer for a message-valued entity ID", async () => {
+    RejectionObservingProjection.reset();
     MessageIdRejectingAggregate.failure = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-message-id" }),
     });
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMessageIdRejectingRepository())
+      .add(createRejectionObservingRepository())
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -1571,8 +1573,10 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     const [event] = await waitForStoredEvents(eventStore, 1);
+    await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
     expect(readReadableProducerId(event)).toBe("Unknown");
     expect(event?.context?.version).toBeUndefined();
+    expect(RejectionObservingProjection.messages[0]?.id?.value).toBe("task-message-id");
   });
 
   it("passes CommandContext to generated-registry two-argument command assignees", async () => {

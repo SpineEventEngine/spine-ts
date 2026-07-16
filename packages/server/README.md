@@ -62,8 +62,9 @@ Current slice exposes:
   Build-time analysis treats descriptor-verified top-level messages from
   `*rejections.proto` files as rejection inputs for `@Subscribe`, `@React`, and
   event-to-command `@Command`; they are not assignment inputs or normal emitted
-  values. `CommandRefusalError` service migration, example handlers, and client
-  integration remain later T-0044 work.
+  values. `CommandService.Post` returns an OK acceptance acknowledgement for a
+  handled domain rejection; clients observe the typed rejection event
+  asynchronously through `SubscriptionService`.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
@@ -102,8 +103,10 @@ Current slice exposes:
   HTTP/2 sessions, waits until active work can no longer use its dependencies,
   then closes contexts, resources, and any server-owned environment;
   and
-- `CommandRefusalError` for the current immediate business refusal path from
-  command handlers to non-ok `CommandService.Post` `Ack` errors;
+- generated rejection throwables for domain-rule failures: repository rollback
+  leaves state unchanged, `CommandService.Post` returns an OK acceptance
+  `Ack`, and the independently stored typed rejection event is available
+  asynchronously through `EventBus` and `SubscriptionService`;
   and
 - `COMMAND_VALIDATION_ERROR` `Ack` responses with message
   `Command payload validation failed.` and packed `spine.validation.ValidationError` details
@@ -740,11 +743,13 @@ calculation, latest persisted state load, traceability event-journal append,
 latest-state write, or stored-event dispatch. `CommandService.Post` maps
 command-bus payload validation failures to `COMMAND_VALIDATION_ERROR` with
 message `Command payload validation failed.` and packed
-`spine.validation.ValidationError` details. If a command handler throws
-`CommandRefusalError`, `CommandService.Post`
-returns a non-ok `Ack` with that stable error type and message instead of
-`COMMAND_POST_ERROR`. If an aggregate command handler produces an invalid
-state transition, command execution rejects with
+`spine.validation.ValidationError` details. If a command handler throws a
+generated rejection throwable, repository execution rolls back, schedules its
+typed rejection event independently, and resolves command dispatch;
+`CommandService.Post` therefore returns an OK acceptance `Ack`. Rejection-event
+delivery is asynchronous and can be observed through `SubscriptionService`.
+If an aggregate command handler produces an invalid state transition, command
+execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced
 traceability events or latest state; the validation details remain the
 framework transaction / `validateEntityStateTransition()` result.

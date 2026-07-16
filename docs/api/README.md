@@ -32,7 +32,9 @@ recognizes them only through the guard after rollback and schedules a regular,
 independently stored rejection event through EventBus. Build-time analysis
 accepts descriptor-verified top-level rejection inputs for event-consuming
 handlers while excluding assignment inputs and normal emitted values. Service
-migration, example handlers, and client integration remain later T-0044 work.
+posting returns an OK acceptance `Ack` for handled domain rejections, whose
+typed events are delivered asynchronously through EventBus and
+`SubscriptionService`.
 Core envelope construction exports include
 `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
@@ -47,12 +49,15 @@ read/version/list/update/subscription/clear contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
-`CommandRefusalError` is the current public immediate-refusal error that
-command handlers can throw so `CommandService.Post` returns a stable non-ok
-`Ack` error type/message. `CommandService.Post` also returns
-`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
-and packed `spine.validation.ValidationError` details when `CommandBus`
-rejects an invalid accepted command payload before dispatcher callbacks,
+Generated rejection companions are the public domain-rule failure contract.
+When a repository handler throws one, rollback completes before an independent
+typed rejection event is scheduled, command dispatch resolves, and
+`CommandService.Post` returns an OK acceptance `Ack`. The eventual event is
+observable through EventBus and `SubscriptionService`; OK does not mean a state
+transition succeeded. `CommandService.Post` still returns
+`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.` and
+packed `spine.validation.ValidationError` details when `CommandBus` rejects an
+invalid accepted command payload before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
 latest persisted state load, traceability event-journal append, latest-state

@@ -83,7 +83,6 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandUpdate } from "../stand/stand.js";
-import { CommandRefusalError } from "./command-errors.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
@@ -2218,13 +2217,6 @@ interface ContractError {
 }
 
 function commandPostError(error: unknown): ContractError {
-  if (error instanceof CommandRefusalError) {
-    return {
-      type: error.type,
-      message: error.clientMessage,
-    };
-  }
-
   if (error instanceof TransitionValidationError) {
     return {
       type: error.type,

@@ -398,7 +398,7 @@ try {
 }
 ```
 
-## 9. Handle invalid input and business refusal
+## 9. Handle invalid input and domain rejection
 
 Send domain commands through the command service and inspect the returned
 `Ack`. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
@@ -406,17 +406,25 @@ Send domain commands through the command service and inspect the returned
 Framework-controlled state-transition validation returns
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with validation details.
 
-For a domain rule that refuses a command immediately, throw
-`CommandRefusalError` from the command handler with the domain refusal status
-your generated contract expects. The service returns a non-OK acknowledgement.
-Do not use service/runtime message wrappers in handlers to represent either
-case.
+For a domain rule failure, throw the generated companion for a top-level message
+declared in a `rejections.proto` file. Repository execution rolls back before
+scheduling the typed rejection event independently. `CommandService.Post`
+returns an OK acceptance acknowledgement; consume the rejection asynchronously
+through an event handler or `SubscriptionService`. Do not return rejection or
+service envelope values from handlers.
 
 ```ts
-import { CommandRefusalError } from "@spine-ts/server";
+import { TaskAlreadyDone } from "../generated/task_rejections.js";
+import { TaskIdSchema } from "../generated/task_id_pb.js";
+import { create } from "@bufbuild/protobuf";
 
-throw new CommandRefusalError("TASK_ALREADY_DONE", "The task is already complete.");
+throw TaskAlreadyDone.create({
+  id: create(TaskIdSchema, { value: "task-42" }),
+});
 ```
+
+Invalid payloads, transition-validation failures, and unexpected technical
+errors remain non-OK acknowledgements with their existing error contracts.
 
 ## 10. Test the real paths
 

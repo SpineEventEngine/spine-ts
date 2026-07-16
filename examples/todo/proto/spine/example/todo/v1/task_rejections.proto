@@ -13,3 +13,10 @@ message TaskAlreadyDone {
     (validate) = true
   ];
 }
+
+message TaskNotDone {
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}
