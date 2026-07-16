@@ -92,6 +92,21 @@ transaction validation. Rule-returned violations are sanitized before
 aggregation, and throwing transition rules are isolated into structured
 violations so later rules still run in order.
 
+## Domain Rejections
+
+Generated companions for top-level messages declared in `*rejections.proto`
+files expose a JVM-familiar factory. The factory validates its input before it
+returns a nominal `RejectionThrowable`; its schema and cloned message are then
+available to framework code.
+
+```ts
+throw TaskAlreadyDone.create({ id });
+```
+
+`RejectionThrowable` is an `Error`, so it preserves normal stack and name
+behavior. Rejection handling and event publication remain server-runtime work;
+this package only owns the validated throwable contract.
+
 ## Envelope Packing
 
 Use `packAny()` when a caller needs Spine-aware `google.protobuf.Any` values.

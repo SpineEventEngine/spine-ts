@@ -31,7 +31,9 @@ import {
   type TypeMetadata,
   TypeRegistry,
   ValidationException,
+  RejectionThrowable,
   checkValid,
+  createRejectionThrowable,
   createValidationError,
   createSpineCoreRegistry,
   deriveTypeUrl,
@@ -92,6 +94,46 @@ function fieldPathWithUnknownFields() {
 
   return fromBinary(FieldPathSchema, new Uint8Array([...encoded, ...unknownField]));
 }
+
+describe("RejectionThrowable", () => {
+  it("keeps a nominal, cloned rejection message with Error behavior", () => {
+    const rejection = createRejectionThrowable(RequiredNameSchema, { name: "Task already done" });
+
+    expect(rejection).toBeInstanceOf(Error);
+    expect(rejection).toBeInstanceOf(RejectionThrowable);
+    expect(rejection.name).toBe("RejectionThrowable");
+    expect(rejection.stack).toContain("RejectionThrowable");
+    expect(rejection.schema).toBe(RequiredNameSchema);
+    expect(rejection.messageData).toEqual({
+      $typeName: "example.validation.RequiredName",
+      name: "Task already done",
+    });
+    expect(Object.isFrozen(rejection.messageData)).toBe(true);
+    expect(() => Object.assign(rejection.messageData, { name: "changed" })).toThrow();
+  });
+
+  it("validates the rejection message before creating the throwable", () => {
+    expect(() => createRejectionThrowable(RequiredNameSchema, {})).toThrow(ValidationException);
+  });
+
+  it("rejects direct construction at compile time and runtime", () => {
+    expect(() => {
+      // @ts-expect-error The validated factory is the only construction API.
+      new RejectionThrowable(RequiredNameSchema, create(RequiredNameSchema, {}));
+    }).toThrow(TypeError);
+  });
+
+  it("preserves the schema-specific create input type", () => {
+    const TaskAlreadyDone = {
+      create: (input: Parameters<typeof createRejectionThrowable<typeof RequiredNameSchema>>[1]) =>
+        createRejectionThrowable(RequiredNameSchema, input),
+    };
+
+    expectTypeOf<{ name: string }>().toExtend<Parameters<typeof TaskAlreadyDone.create>[0]>();
+    expectTypeOf<{ name: number }>().not.toExtend<Parameters<typeof TaskAlreadyDone.create>[0]>();
+    expect(TaskAlreadyDone).toBeDefined();
+  });
+});
 
 describe("@spine-ts/core type registry", () => {
   it("derives type URLs from Spine file type_url_prefix options", () => {

@@ -111,11 +111,11 @@ function toTemplatePath(path) {
   return path.split(sep).join("/");
 }
 
-function writeStagedTemplate(target, stagedOutputRoot, stageRoot, root) {
+export function writeStagedTemplate(target, stagedOutputRoot, stageRoot, root) {
   const sourceTemplatePath = join(root, target.templatePath);
   const stagedTemplatePath = join(stageRoot, "buf.gen.yaml");
   const sourceTemplate = readFileSync(sourceTemplatePath, "utf8");
-  const outputPattern = new RegExp(`(^\\s*out:\\s*)${escapeRegExp(target.displayPath)}\\s*$`, "m");
+  const outputPattern = new RegExp(`(^\\s*out:\\s*)${escapeRegExp(target.displayPath)}\\s*$`, "gm");
   const stagedTemplate = sourceTemplate.replace(
     outputPattern,
     `$1${toTemplatePath(stagedOutputRoot)}`,

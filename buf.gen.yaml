@@ -5,5 +5,12 @@ plugins:
     opt:
       - target=ts
       - import_extension=js
+  - local:
+      - node
+      - scripts/generate-rejections.mjs
+    out: packages/proto/generated
+    opt:
+      - target=ts
+      - import_extension=js
 inputs:
   - directory: proto

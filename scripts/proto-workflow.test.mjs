@@ -16,9 +16,33 @@ import {
   prepareGeneratedOutput,
   publishGeneratedTargets,
   stageGeneratedTargets,
+  writeStagedTemplate,
 } from "./proto-workflow.mjs";
 
 describe("proto-workflow", () => {
+  it("stages every plugin output for a generated target", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "generated");
+
+    mkdirSync(stageRoot, { recursive: true });
+    writeFileSync(
+      join(repoRoot, "buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n" +
+        "  - local: protoc-gen-spine-rejections\n    out: packages/proto/generated\n",
+    );
+
+    const stagedTemplate = writeStagedTemplate(
+      { displayPath: "packages/proto/generated", templatePath: "buf.gen.yaml" },
+      stagedOutputRoot,
+      stageRoot,
+      repoRoot,
+    );
+
+    expect(readFileSync(stagedTemplate, "utf8")).not.toContain("packages/proto/generated");
+    expect(readFileSync(stagedTemplate, "utf8").match(/out: .*generated/g)).toHaveLength(2);
+  });
+
   it("refuses to prepare generated output through a symlinked ancestor", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const linkedProtoRoot = mkdtempSync(join(tmpdir(), "spine-linked-proto-"));

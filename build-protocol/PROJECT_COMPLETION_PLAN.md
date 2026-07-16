@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Complete - accepted initial release closed
+Status: Reopened - T-0044 first-class domain rejections are release-blocking
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: None
+Active implementation frontier: T-0044 first-class domain rejections
 
 ## Purpose
 
@@ -31,6 +31,18 @@ true together:
 
 This plan is intentionally more prescriptive than a roadmap. A coordinator
 should be able to execute each packet without first rebuilding project history.
+
+## Post-Release Readiness Correction
+
+On `2026-07-16`, the human identified JVM-style first-class domain rejections
+as a missing release requirement. T-0044 reopens readiness until Proto-declared
+rejections receive generated throwable TypeScript companions, handler-thrown
+rejections become typed rejection events with rejected-command context, entity
+work rolls back, rejection dispatch/client behavior is implemented, and current
+docs/example coverage agree with the runtime.
+
+The package manager remains pnpm for this Spine TS version. npm compatibility is
+not part of T-0044 or the reopened completion frontier.
 
 ## Authority And Reconciliation Rules
 

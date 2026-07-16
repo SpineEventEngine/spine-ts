@@ -1,5 +1,5 @@
 import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
-import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
+import type { DescField, Message, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
@@ -48,6 +48,7 @@ const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
 const REDACTED_VALIDATION_DETAIL = "[redacted]";
 const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
 const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
+const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
 
 /** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
@@ -119,6 +120,56 @@ export class ValidationException extends Error {
   asMessage(): ValidationError {
     return this.#messageData;
   }
+}
+
+let instantiateRejection: <Schema extends MessageSchema>(
+  schema: Schema,
+  messageData: MessageShape<Schema>,
+) => RejectionThrowable<Schema>;
+
+/** A nominal domain rejection carrying its generated Protobuf message. */
+export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> extends Error {
+  /** Generated Protobuf-ES schema for the rejected domain signal. */
+  readonly schema: Schema;
+  /** Immutable cloned rejection message. */
+  readonly messageData: Readonly<MessageShape<Schema>>;
+
+  private constructor(
+    schema: Schema,
+    messageData: MessageShape<Schema>,
+    token: typeof REJECTION_CONSTRUCTOR,
+  ) {
+    super(`Rejected: ${schema.typeName}`);
+    if (token !== REJECTION_CONSTRUCTOR) {
+      throw new TypeError("RejectionThrowable must be created by its validated factory.");
+    }
+    this.name = "RejectionThrowable";
+    this.schema = schema;
+    this.messageData = freezeMessage(messageData);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  static {
+    instantiateRejection = <CreatedSchema extends MessageSchema>(
+      schema: CreatedSchema,
+      messageData: MessageShape<CreatedSchema>,
+    ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
+  }
+
+  /** Return the rejection message, matching Spine JVM's throwable contract. */
+  messageThrown(): Readonly<MessageShape<Schema>> {
+    return this.messageData;
+  }
+}
+
+/** Validate, clone, and wrap a generated rejection message in a nominal throwable. */
+export function createRejectionThrowable<Schema extends MessageSchema>(
+  schema: Schema,
+  input: MessageInitShape<Schema>,
+): RejectionThrowable<Schema> {
+  const messageData = checkValid(schema, create(schema, input));
+
+  return instantiateRejection(schema, clone(schema, messageData));
 }
 
 /** Validate one Protobuf message through the Spine TS validation facade. */
@@ -689,4 +740,23 @@ function redactPlaceholderValues(
   return Object.fromEntries(
     Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
   );
+}
+
+function freezeMessage<Schema extends MessageSchema>(
+  message: MessageShape<Schema>,
+): Readonly<MessageShape<Schema>> {
+  freezeValue(message);
+  return message;
+}
+
+function freezeValue(value: unknown): void {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+    return;
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    freezeValue(nestedValue);
+  }
+
+  Object.freeze(value);
 }
