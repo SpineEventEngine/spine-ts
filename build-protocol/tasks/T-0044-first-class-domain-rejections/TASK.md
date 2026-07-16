@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3 handler and service integration
+Status: In progress - Slice 3A handler integration review
 
 Started: `2026-07-16`
 

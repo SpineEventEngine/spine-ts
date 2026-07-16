@@ -35,7 +35,10 @@ import {
 import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
-import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
+import {
+  type TaskAlreadyDone as TaskAlreadyDoneMessage,
+  TaskAlreadyDoneSchema,
+} from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
 import { TaskIdSchema as GeneratedTaskIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   EventStore,
@@ -976,6 +979,28 @@ class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStat
         priority: event.priority + 1,
       }),
     );
+  }
+}
+
+class RejectionObservingProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  static messages: TaskAlreadyDoneMessage[] = [];
+  static contexts: EventContext[] = [];
+  static argumentCounts: number[] = [];
+
+  static reset(): void {
+    this.messages = [];
+    this.contexts = [];
+    this.argumentCounts = [];
+  }
+
+  observe(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    RejectionObservingProjection.messages.push(rejection);
+    RejectionObservingProjection.contexts.push(context);
+    RejectionObservingProjection.argumentCounts.push(arguments.length);
   }
 }
 
@@ -4781,6 +4806,55 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("delivers a typed rejection and defensive rejection context to event subscribers", async () => {
+    RejectionObservingProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const rejection = TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
+    });
+    const command = createAggregateCommand(
+      "command-observed-rejection",
+      "task-observed-rejection",
+      "Already done",
+    );
+    const originalCommand = clone(CommandSchema, command);
+    ManagedTaskAggregate.reset(rejection);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .add(createRejectionObservingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(context.commandBus().post(command)).resolves.toBeUndefined();
+    await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
+
+    expect(RejectionObservingProjection.argumentCounts).toEqual([2]);
+    expect(RejectionObservingProjection.messages).toEqual([
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
+      }),
+    ]);
+    expect(RejectionObservingProjection.messages[0]?.$typeName).toBe(
+      TaskAlreadyDoneSchema.typeName,
+    );
+    expect(RejectionObservingProjection.messages[0]).not.toHaveProperty("message");
+    const receivedContext = RejectionObservingProjection.contexts[0];
+    expect(receivedContext?.rejection?.command).toEqual(originalCommand);
+    expect(receivedContext?.rejection?.stacktrace).toBe(rejection.stack);
+
+    if (receivedContext?.rejection?.command?.id !== undefined) {
+      receivedContext.rejection.command.id.uuid = "mutated-subscriber-command";
+      receivedContext.rejection.stacktrace = "mutated subscriber stack";
+    }
+    const [stored] = (await eventStore.read()).filter(
+      (event) => event.context?.rejection !== undefined,
+    );
+    expect(stored?.context?.rejection?.command).toEqual(originalCommand);
+    expect(stored?.context?.rejection?.stacktrace).toBe(rejection.stack);
+    ManagedTaskAggregate.reset();
+  });
+
   it("passes empty EventContext to generated two-argument subscribers when the envelope has none", async () => {
     GeneratedTwoArgProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -5516,6 +5590,33 @@ function createGeneratedTwoArgProjectionRepository(): Repository<typeof Generate
 
   return new Repository({
     entityType: GeneratedTwoArgProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createRejectionObservingRepository(): Repository<typeof RejectionObservingProjection> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: RejectionObservingProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "observe",
+            signalSchema: TaskAlreadyDoneSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<RejectionObservingProjection, typeof ProjectionStateSchema>;
+
+  return new Repository({
+    entityType: RejectionObservingProjection,
     schema: ProjectionStateSchema,
     handlers,
   });

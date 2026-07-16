@@ -456,9 +456,10 @@ payload, a cloned original command, available stack trace, causal origin,
 timestamp, and producer ID; it is stored independently rather than appended to
 aggregate history. A handled process-manager rejection completes its inbox row,
 while ordinary and forged errors keep the existing technical failure and retry
-behavior. Build-time handler classification, service/`CommandRefusalError`
-migration, example handlers, and client-facing integration remain later T-0044
-work.
+behavior. Build-time analysis accepts descriptor-verified top-level rejection
+inputs for event-consuming handlers, but not assignment inputs or normal
+emitted values. Service/`CommandRefusalError` migration, example handlers, and
+client-facing integration remain later T-0044 work.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`

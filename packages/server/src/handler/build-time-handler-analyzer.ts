@@ -182,7 +182,7 @@ interface TypeWalk {
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
 type ServerDecorator = HandlerDecorator | "Apply";
-type SignalKind = "command" | "event";
+type SignalKind = "command" | "event" | "rejection";
 
 interface DecoratorUse {
   readonly hasArguments: boolean;
@@ -944,19 +944,24 @@ function handlerKind(decorator: HandlerDecorator): GeneratedHandlerKind {
 
 function acceptsSignalKind(decorator: HandlerDecorator, kind: SignalKind | undefined): boolean {
   if (decorator === "Command") {
-    return kind === "command" || kind === "event";
+    return kind === "command" || kind === "event" || kind === "rejection";
   }
   if (decorator === "Assign") {
     return kind === "command";
   }
 
-  return kind === "event";
+  return kind === "event" || kind === "rejection";
 }
 
 function signalMessage(decorator: HandlerDecorator): string {
-  return decorator === "Command"
-    ? "a generated command or event type"
-    : `a generated ${decorator === "Assign" ? "command" : "event"} type`;
+  if (decorator === "Command") {
+    return "a generated command, event, or rejection type";
+  }
+  if (decorator === "Assign") {
+    return "a generated command type";
+  }
+
+  return "a generated event or rejection type";
 }
 
 function emittedSignalKind(decorator: HandlerDecorator): SignalKind | undefined {
@@ -1245,13 +1250,14 @@ function schemaRoleFromInitializer(
   if (file === undefined) {
     return { found: true, kind: undefined };
   }
-  const messageName = descriptorMessageName(file, messageDescIndexes(call));
+  const indexes = messageDescIndexes(call);
+  const messageName = descriptorMessageName(file, indexes);
   const expectedName = schemaExportName.replace(/Schema$/, "");
   if (messageName === undefined || messageName !== expectedName) {
     return { found: true, kind: undefined };
   }
 
-  return { found: true, kind: signalKindFromProto(file.sourceFile) };
+  return { found: true, kind: signalKindFromProto(file.sourceFile, indexes) };
 }
 
 function messageDescIndexes(call: ts.CallExpression): readonly number[] | undefined {
@@ -1338,7 +1344,13 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
   return expression;
 }
 
-function signalKindFromProto(sourceFile: string): SignalKind | undefined {
+function signalKindFromProto(
+  sourceFile: string,
+  messageIndexes: readonly number[] | undefined,
+): SignalKind | undefined {
+  if (sourceFile.endsWith("rejections.proto")) {
+    return messageIndexes?.length === 1 ? "rejection" : undefined;
+  }
   if (sourceFile.endsWith("commands.proto")) {
     return "command";
   }

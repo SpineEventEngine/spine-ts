@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-2 clean - Slice 3 implementation pending
+Status: Slices 1-2 clean - Slice 3A review pending
 
 Baseline: `1aa345ae`
 
@@ -458,3 +458,23 @@ entities`).
   - security: deferred to mandatory final T-0044 integration review.
 - Slice 2 is accepted. Slice 3 handler and service integration is the active
   frontier.
+
+## Slice 3A Review Preparation
+
+- The existing implementer completed the bounded handler-integration assignment
+  with explicit and actual `gpt-5.6-terra` / medium, spawned no children,
+  preserved coordinator logs, and was closed.
+- Build-time analysis now treats descriptor-verified top-level messages from
+  files ending `rejections.proto` as a distinct rejection kind accepted by
+  event-consuming inputs but rejected for assignment inputs and normal emitted
+  values. Descriptor/name mismatch and nested rejection messages fail closed.
+- Generated-registry tests cover subscriber, reactor, and event-to-command
+  records. Repository runtime coverage proves typed payload delivery and a
+  defensive second-argument `EventContext.rejection`, never an `Event` envelope.
+- Coordinator checks passed: 181 focused analyzer/writer/routing tests, both
+  typecheck layers, generated TypeDoc/API checks, formatting, generated Proto
+  cleanliness, and `git diff --check`.
+- Lightweight status/docs lint finds aligned Slice 3A status, one centralized
+  descriptor classifier, no new public export, and no claim that deferred
+  service, example, or client integration is complete. Four relevant reviewer
+  roles remain required; security stays deferred to final T-0044 integration.

@@ -59,9 +59,11 @@ Current slice exposes:
   draft, produced output, aggregate history, snapshot, state, lifecycle, and
   entity version are not persisted. Rejection-event post failures are retained
   in `storedEventDispatchFailures()` without changing command completion.
-  Build-time rejection handler classification, `CommandRefusalError` service
-  migration, example handlers, and client integration remain later T-0044
-  work.
+  Build-time analysis treats descriptor-verified top-level messages from
+  `*rejections.proto` files as rejection inputs for `@Subscribe`, `@React`, and
+  event-to-command `@Command`; they are not assignment inputs or normal emitted
+  values. `CommandRefusalError` service migration, example handlers, and client
+  integration remain later T-0044 work.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
