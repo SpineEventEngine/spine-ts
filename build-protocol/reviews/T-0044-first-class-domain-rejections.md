@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3A clean - Slice 3B Round 3 review pending
+Status: Slices 1-3A clean - Slice 3B Round 4 review pending
 
 Baseline: `1aa345ae`
 
@@ -944,3 +944,72 @@ docs`).
   delivery policy was introduced; TypeDoc changes describe the existing public
   diagnostic rather than adding surface; and current docs no longer overclaim
   storage or service delivery. Commit/package and all four closure lanes remain.
+
+## Slice 3B Round 3 Wave
+
+- Verified fix/status commit: `d79bf3a0` (`Fence rejection subscriptions and
+clarify failures`).
+- Immutable package:
+  `.superpowers/sdd/review-5e23456d..d79bf3a0.diff`, literal range
+  `5e23456d..d79bf3a0`, one commit, 41,704 bytes. The first line is verified and
+  contains no moving ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only.
+- Review only Round 2 fixes and affected paths. Verify the same-topic probe
+  fence cannot leak into the command assertion, public failure TypeDoc is
+  honest, and changed docs make no storage/service-delivery guarantee.
+  Historical superseded text is ignored unless current records claim it. Every
+  reviewer makes no changes, spawns no children, and verifies the literal
+  header. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b7d-5ade-7643-98f1-34c7c63265fa` (Bohr),
+    `gpt-5.6-terra` / high;
+  - documentation: `019f6b7d-57ab-7611-9b37-2befdccc60f0` (Bacon),
+    `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6b7d-5eb9-7610-a29c-f1c2a2aaca7b`
+    (Boyle), `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6b7d-6277-7363-9ad7-01f8800eb520`
+    (Locke), `gpt-5.6-terra` / high.
+    Actual metadata and results remain pending.
+
+## Slice 3B Round 3 Findings
+
+- The complete wave returned and all four reviewers were closed. Immutable
+  actual fixed-role profiles matched explicit dispatch: style, TypeScript/API
+  docs, and reliability used `gpt-5.6-terra` / high; documentation used
+  `gpt-5.6-luna` / medium.
+- Style and TypeScript/API docs are clean. Routing and public contracts remain
+  clean. Documentation confirmed paths, statuses, best-effort posting, OK Ack,
+  failure recording, active/non-saturated observation, and no retry.
+- Rejected documentation suggestion: repeat conditional EventStore storage in
+  every framework/example summary and user-guide paragraph. Those passages make
+  no storage claim and explicitly say the follow-up post is best-effort and may
+  fail; detailed API/architecture docs already explain that storage requires a
+  successful post. Repetition would add implementation detail without fixing a
+  contradiction or omission needed for the described workflow.
+- Accepted P2 reliability defect: probe and fence `fixture.postEvent()` awaits
+  are outside the existing 500 ms timeout. Runtime queued work may not settle,
+  so a stalled post can hang the test indefinitely before the read timeout
+  starts. Bound every readiness probe/fence post under the same deadline, retain
+  queue draining, and repeat focused plus four-lane closure review.
+
+## Slice 3B Round 3 Resolution
+
+- The same implementer applied only the test correction with actual
+  `gpt-5.6-terra` / medium and was closed. No child, docs, production source,
+  durable-log, commit, or push changes were made.
+- One absolute 500 ms deadline now covers every readiness probe post, the first
+  read, final fence post/read, and all queued-probe drain reads. Deadline expiry
+  fails immediately rather than opening a fresh timeout window.
+- Coordinator verification passed the full native to-do black-box suite, 27/27;
+  both generated build/tooling typechecks; repository-wide formatting; and
+  `git diff --check`.
+- Lightweight Round 4 lint is clean: status mirrors agree; no production/public
+  API changed; the one local deadline helper reuses the existing test timeout
+  contract; and no current documentation claim changed. Fresh commit/package
+  and all four final Slice 3B closure dispositions remain required.

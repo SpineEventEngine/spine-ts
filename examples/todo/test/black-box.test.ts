@@ -1406,6 +1406,7 @@ async function establishRejectionSubscriptionReadiness(
   fixture: BoundedContextFixture,
   subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
 ): Promise<void> {
+  const deadline = Date.now() + 500;
   const probes = new Map<string, string>();
   let received = false;
   const firstRead = subscription.next().then((update) => {
@@ -1416,19 +1417,31 @@ async function establishRejectionSubscriptionReadiness(
   for (let attempt = 1; attempt <= 16 && !received; attempt++) {
     const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
     probes.set(probe.eventId, probe.taskId);
-    await fixture.postEvent(probe.event);
+    await withTimeout(
+      fixture.postEvent(probe.event),
+      `rejection readiness probe ${String(attempt)} post`,
+      remainingMs(deadline),
+    );
     await Promise.race([firstRead.then(() => undefined), nextEventLoopTurn()]);
   }
 
   const firstProbe = subscribedEvent(
-    await withTimeout(firstRead, "rejection subscription readiness probe", 500),
+    await withTimeout(firstRead, "rejection subscription readiness probe", remainingMs(deadline)),
   );
   expectTaskAlreadyDoneProbe(firstProbe, probes);
 
   const fence = createTaskAlreadyDoneProbe("readiness-fence");
   probes.set(fence.eventId, fence.taskId);
-  let nextProbe = nextSubscriptionUpdate(subscription, "rejection subscription readiness fence");
-  await fixture.postEvent(fence.event);
+  let nextProbe = nextSubscriptionUpdate(
+    subscription,
+    "rejection subscription readiness fence",
+    remainingMs(deadline),
+  );
+  await withTimeout(
+    fixture.postEvent(fence.event),
+    "rejection subscription readiness fence post",
+    remainingMs(deadline),
+  );
 
   for (let remaining = probes.size; remaining > 0; remaining--) {
     const event = subscribedEvent(await nextProbe);
@@ -1436,7 +1449,11 @@ async function establishRejectionSubscriptionReadiness(
     if (event.id?.value === fence.eventId) {
       return;
     }
-    nextProbe = nextSubscriptionUpdate(subscription, "queued rejection readiness probe");
+    nextProbe = nextSubscriptionUpdate(
+      subscription,
+      "queued rejection readiness probe",
+      remainingMs(deadline),
+    );
   }
 
   throw new Error("Rejection subscription readiness fence was not delivered.");
@@ -1481,6 +1498,14 @@ function expectTaskAlreadyDoneProbe(
 
 function nextEventLoopTurn(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
+}
+
+function remainingMs(deadline: number): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error("Rejection subscription readiness deadline expired.");
+  }
+  return remaining;
 }
 
 async function nextSubscriptionUpdate(

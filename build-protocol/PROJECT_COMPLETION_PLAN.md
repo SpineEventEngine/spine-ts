@@ -106,8 +106,8 @@ historical. T-0044 has reopened readiness; generated rejection companions and
 rejection-event runtime and handler integration are review-clean. Slice 3B
 service/API and to-do example implementation and focused gates are complete;
 its first canonical review's bounded routing, test-readiness, and docs fix batch
-is verified. Round 2's subscription-readiness and contract-wording fix batch is
-verified; the fresh Round 3 closure review is the active frontier.
+is verified. Round 3's final readiness timeout fix is verified; the tiny Round 4
+closure review is the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
