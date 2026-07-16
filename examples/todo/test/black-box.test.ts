@@ -874,6 +874,68 @@ describe("@spine-ts/example-todo", () => {
     expect(nextCount).toBe(1);
   });
 
+  it("completes received-probe readiness only after its post and fence succeed", async () => {
+    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstPost = Promise.withResolvers<undefined>();
+    const fenceRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const fencePost = Promise.withResolvers<undefined>();
+    let nextCount = 0;
+    let postCount = 0;
+    let readinessSettled = false;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: (event) => {
+          postCount++;
+          if (postCount === 1) {
+            firstRead.resolve(createEventSubscriptionUpdate(event));
+            return firstPost.promise;
+          }
+          if (postCount === 2) {
+            fenceRead.resolve(createEventSubscriptionUpdate(event));
+            return fencePost.promise;
+          }
+          throw new Error("Unexpected rejection readiness post.");
+        },
+      },
+      {
+        next: () => {
+          nextCount++;
+          if (nextCount === 1) {
+            return firstRead.promise;
+          }
+          if (nextCount === 2) {
+            return fenceRead.promise;
+          }
+          throw new Error("Unexpected rejection readiness read.");
+        },
+      },
+      100,
+    );
+    void readiness.then(
+      () => {
+        readinessSettled = true;
+      },
+      () => {
+        readinessSettled = true;
+      },
+    );
+
+    await nextEventLoopTurn();
+    expect(readinessSettled).toBe(false);
+    expect(nextCount).toBe(1);
+    expect(postCount).toBe(1);
+
+    firstPost.resolve(undefined);
+    await nextEventLoopTurn();
+    expect(readinessSettled).toBe(false);
+    expect(nextCount).toBe(2);
+    expect(postCount).toBe(2);
+
+    fencePost.resolve(undefined);
+    await readiness;
+    expect(readinessSettled).toBe(true);
+  });
+
   it("observes a losing non-settling probe-post timeout after an immediate read failure", async () => {
     vi.useFakeTimers();
     try {
