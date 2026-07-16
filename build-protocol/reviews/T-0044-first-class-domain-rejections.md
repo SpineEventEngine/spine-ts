@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-2 clean - Slice 3A Round 3 review pending
+Status: Slices 1-2 clean - Slice 3A Round 4 review pending
 
 Baseline: `1aa345ae`
 
@@ -597,4 +597,54 @@ handlers`).
 - Coordinator generated TypeDoc/API checks, full formatting, and
   `git diff --check` passed. No source or test changed in this batch.
 - Current status/docs lint is aligned at Slice 3A Round 3. Fresh commit/package
+  and all four closure lanes remain required.
+
+## Slice 3A Round 3 Wave
+
+- Verified docs/status commit: `88d5e6f7` (`Clarify rejection subscriber
+context`).
+- Immutable package:
+  `.superpowers/sdd/review-9e113e39..88d5e6f7.diff`, range
+  `9e113e39..88d5e6f7`, one commit, 13,220 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high; expected N/A unless current docs
+  misstate executable reliability behavior.
+- Read-only/no-child closure assignments cover only the docs/status correction
+  and must ignore superseded historical text unless current records claim it.
+  Dispatch metadata/results remain pending. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b2f-8938-72f3-ac51-7df248f187a7` (Gauss);
+  - documentation: `019f6b2f-8f26-7ad0-9ddf-1f99ccb7e15d` (Goodall);
+  - TypeScript/API docs: `019f6b2f-991a-7c33-8eb8-4f2628a46715` (Kuhn);
+  - performance/reliability: `019f6b2f-93e0-78b0-98bd-906da0c9d81e`
+    (McClintock).
+
+## Slice 3A Round 3 Finding
+
+- The complete wave returned and all reviewers were closed. Style,
+  documentation, and performance/reliability are clean/N/A for the docs-only
+  range.
+- Accepted P2 TypeScript/API wording defect: the detailed API paragraph must
+  qualify cloned rejected-command and stack guarantees as properties of
+  framework-produced rejection events. Generic/custom event envelopes may omit
+  `EventContext.rejection` and its optional command.
+- No source/test/export/Proto fix is required. Return the one-sentence docs fix
+  to the same implementer and run a fresh four-role closure wave.
+
+## Slice 3A Round 3 Resolution
+
+- The same implementer qualified only the assigned API paragraph with explicit
+  and actual `gpt-5.6-terra` / medium, spawned no children, preserved
+  coordinator logs, and was closed.
+- The cloned command and stack guarantee is now explicitly limited to
+  framework-produced rejection events, while generic/custom optional context
+  remains unclaimed.
+- Coordinator generated TypeDoc/API checks, full formatting after formatting
+  the coordinator-owned review log, and `git diff --check` passed.
+- Current status/docs lint is aligned at Slice 3A Round 4. Fresh commit/package
   and all four closure lanes remain required.
