@@ -538,11 +538,13 @@ subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the
 envelope omits context, execution supplies an empty generated context message
 of the proper schema. Rejection subscribers receive the typed rejection payload
-and `EventContext`, never the enclosing `Event`; each matching subscriber gets
-defensive payload and context values. Generated producer handlers return domain
-messages; the framework wraps returned commands/events internally and
-dispatches produced signals only after the current storage/transactional work
-succeeds.
+and `EventContext`, never the enclosing `Event`. `EventContext.rejection.command`
+contains a defensive clone of the rejected original `Command`, and
+`EventContext.rejection.stacktrace` carries the generated rejection throwable's
+available stack. Each matching subscriber receives defensive payload and
+context values. Generated producer handlers return domain messages; the
+framework wraps returned commands/events internally and dispatches produced
+signals only after the current storage/transactional work succeeds.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

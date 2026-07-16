@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-2 clean - Slice 3A Round 2 review pending
+Status: Slices 1-2 clean - Slice 3A Round 3 review pending
 
 Baseline: `1aa345ae`
 
@@ -545,3 +545,56 @@ handlers`).
 - Pre-review lint is aligned at Slice 3A Round 2 with no duplicated classifier,
   public export leak, or deferred service/example overclaim. Fresh commit,
   package, and all four relevant lanes remain required.
+
+## Slice 3A Round 2 Wave
+
+- Verified fix commit: `9e113e39` (`Isolate rejection subscribers`).
+- Immutable package:
+  `.superpowers/sdd/review-18d76de7..9e113e39.diff`, range
+  `18d76de7..9e113e39`, one commit, 31,921 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high.
+- Assignments are read-only/no-child, bounded to the accepted Round 1 batch,
+  and ignore superseded history unless a current record claims it. Dispatch
+  metadata/results remain pending. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b28-5d74-7921-a0e4-5f27b33c63be` (Pascal);
+  - documentation: `019f6b28-5986-7240-b2d3-a05b24c100ab` (Zeno);
+  - TypeScript/API docs: `019f6b28-6113-77a3-9084-c6fda4e0c8c4`
+    (Darwin);
+  - performance/reliability: `019f6b28-64ee-7181-89ee-d42af994b500`
+    (Chandrasekhar).
+
+## Slice 3A Round 2 Findings
+
+- The complete wave returned and all reviewers were closed. Immutable fixed-role
+  profiles matched explicit dispatch.
+- Style/maintainability, TypeScript/API docs, and performance/reliability are
+  clean. Reliability passed 133 routing and 26 analyzer tests; TypeScript/API
+  docs passed 159 affected tests and diff check.
+- Accepted P1 current-status defect: the work-log header still named Slice 2.
+  Align it with the current Slice 3A Round 2 docs-fix state.
+- Accepted P2 API documentation omission: the detailed subscriber contract must
+  state that `EventContext.rejection.command` is the cloned rejected command and
+  `EventContext.rejection.stacktrace` carries the throwable stack.
+- No executable fix or additional test is required. Return the complete
+  docs-only batch to the same implementer and repeat all four lanes on a fresh
+  package.
+
+## Slice 3A Round 2 Resolution
+
+- The same implementer completed the docs-only batch with explicit and actual
+  `gpt-5.6-terra` / medium, spawned no children, changed only the assigned API
+  guide paragraph, preserved coordinator logs, and was closed.
+- The work-log header is aligned, and the API contract now names the cloned
+  rejected command, available throwable stack, per-subscriber defensive values,
+  and absence of a framework `Event` envelope.
+- Coordinator generated TypeDoc/API checks, full formatting, and
+  `git diff --check` passed. No source or test changed in this batch.
+- Current status/docs lint is aligned at Slice 3A Round 3. Fresh commit/package
+  and all four closure lanes remain required.

@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3A Round 2 review pending
+Status: In progress - Slice 3A Round 3 review pending
 
 Started: `2026-07-16`
 
