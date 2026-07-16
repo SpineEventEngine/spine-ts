@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 clean - Slice 2 Round 2 review pending
+Status: Slices 1-2 clean - Slice 3 implementation pending
 
 Baseline: `1aa345ae`
 
@@ -416,3 +416,45 @@ rejections`).
 - Pre-review status/docs lint is aligned at Slice 2 Round 2 and finds no
   duplicated constants, public API leakage, or future-policy overclaim. A fresh
   commit/package and all four relevant lanes are required.
+
+## Slice 2 Round 2 Wave
+
+- Verified fix commit: `e422495e` (`Prove rejection rollback for existing
+entities`).
+- Immutable package:
+  `.superpowers/sdd/review-de233a90..e422495e.diff`, range
+  `de233a90..e422495e`, one commit, 20,898 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high.
+- Assignments are read-only, no-child, bounded to the accepted Round 1 fixes,
+  and must ignore superseded history unless current records claim it. Dispatch
+  metadata and results remain pending. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b06-b6b3-7033-b1e3-e3dda0cea5c0` (Kant);
+  - documentation: `019f6b06-ba95-7460-a581-42ca8f27a4ff` (Tesla);
+  - TypeScript/API docs: `019f6b06-b1f2-7d70-b9e7-8911530c388a`
+    (Faraday);
+  - performance/reliability: `019f6b06-be46-7d10-8410-b3e0b524860e`
+    (Heisenberg).
+
+## Slice 2 Round 2 Clean Closure
+
+- All four reviewers returned clean and were closed. Authoritative immutable
+  fixed-role runtime profiles matched explicit dispatch: style,
+  TypeScript/API docs, and performance/reliability at
+  `gpt-5.6-terra` / high; documentation at `gpt-5.6-luna` / medium.
+- TypeScript/API docs reran the two changed tests and `git diff --check`;
+  performance/reliability reran all 132 repository-routing tests.
+- Final Slice 2 dispositions:
+  - style/maintainability: clean;
+  - documentation completeness: clean;
+  - TypeScript/API docs: clean;
+  - performance/reliability: clean;
+  - security: deferred to mandatory final T-0044 integration review.
+- Slice 2 is accepted. Slice 3 handler and service integration is the active
+  frontier.
