@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 1 generated throwable contract
+Status: In progress - Slice 2 rejection-event runtime
 
 Started: `2026-07-16`
 
