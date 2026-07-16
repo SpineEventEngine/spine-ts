@@ -100,12 +100,21 @@ returns a nominal `RejectionThrowable`; its schema and cloned message are then
 available to framework code.
 
 ```ts
+import { create } from "@bufbuild/protobuf";
+import { TaskIdSchema } from "./generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskAlreadyDone } from "./generated/spine/example/todo/v1/task_rejections.js";
+
+const id = create(TaskIdSchema, { value: "task-42" });
+
 throw TaskAlreadyDone.create({ id });
 ```
 
 `RejectionThrowable` is an `Error`, so it preserves normal stack and name
-behavior. Rejection handling and event publication remain server-runtime work;
-this package only owns the validated throwable contract.
+behavior. It privately snapshots the validated payload; `messageData` and
+`messageThrown()` return defensive message clones, so callers cannot alter the
+stored rejection by mutating inputs or returned values. Rejection handling and
+event publication remain server-runtime work; this package only owns the
+validated throwable contract.
 
 ## Envelope Packing
 

@@ -123,6 +123,7 @@ const expectedCoreExports = [
   "RejectionThrowable",
   "ValidationException",
   "createRejectionThrowable",
+  "isRejectionThrowable",
   "validateMessage",
   "checkValid",
   "createValidationError",

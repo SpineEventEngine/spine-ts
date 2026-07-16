@@ -49,6 +49,7 @@ const REDACTED_VALIDATION_DETAIL = "[redacted]";
 const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
 const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
 const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
+const REJECTION_THROWABLES = new WeakSet<object>();
 
 /** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
@@ -129,10 +130,8 @@ let instantiateRejection: <Schema extends MessageSchema>(
 
 /** A nominal domain rejection carrying its generated Protobuf message. */
 export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> extends Error {
-  /** Generated Protobuf-ES schema for the rejected domain signal. */
-  readonly schema: Schema;
-  /** Immutable cloned rejection message. */
-  readonly messageData: Readonly<MessageShape<Schema>>;
+  readonly #schema: Schema;
+  readonly #messageData: MessageShape<Schema>;
 
   private constructor(
     schema: Schema,
@@ -144,9 +143,11 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
       throw new TypeError("RejectionThrowable must be created by its validated factory.");
     }
     this.name = "RejectionThrowable";
-    this.schema = schema;
-    this.messageData = freezeMessage(messageData);
+    this.#schema = schema;
+    this.#messageData = snapshotMessage(schema, messageData);
     Object.setPrototypeOf(this, new.target.prototype);
+    REJECTION_THROWABLES.add(this);
+    Object.preventExtensions(this);
   }
 
   static {
@@ -156,10 +157,25 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
   }
 
-  /** Return the rejection message, matching Spine JVM's throwable contract. */
-  messageThrown(): Readonly<MessageShape<Schema>> {
-    return this.messageData;
+  /** Generated Protobuf-ES schema for the rejected domain signal. */
+  get schema(): Schema {
+    return this.#schema;
   }
+
+  /** Return a defensive clone of the snapshotted rejection message. */
+  get messageData(): MessageShape<Schema> {
+    return snapshotMessage(this.#schema, this.#messageData);
+  }
+
+  /** Return a defensive clone, matching Spine JVM's throwable contract. */
+  messageThrown(): MessageShape<Schema> {
+    return snapshotMessage(this.#schema, this.#messageData);
+  }
+}
+
+/** Check whether a value is a factory-created domain rejection throwable. */
+export function isRejectionThrowable(value: unknown): value is RejectionThrowable {
+  return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
 }
 
 /** Validate, clone, and wrap a generated rejection message in a nominal throwable. */
@@ -167,9 +183,10 @@ export function createRejectionThrowable<Schema extends MessageSchema>(
   schema: Schema,
   input: MessageInitShape<Schema>,
 ): RejectionThrowable<Schema> {
+  assertRejectionSchema(schema);
   const messageData = checkValid(schema, create(schema, input));
 
-  return instantiateRejection(schema, clone(schema, messageData));
+  return instantiateRejection(schema, messageData);
 }
 
 /** Validate one Protobuf message through the Spine TS validation facade. */
@@ -742,21 +759,17 @@ function redactPlaceholderValues(
   );
 }
 
-function freezeMessage<Schema extends MessageSchema>(
-  message: MessageShape<Schema>,
-): Readonly<MessageShape<Schema>> {
-  freezeValue(message);
-  return message;
+function assertRejectionSchema(schema: MessageSchema): void {
+  if (schema.parent !== undefined || !schema.file.proto.name.endsWith("rejections.proto")) {
+    throw new TypeError(
+      `Rejection schema "${schema.typeName}" must be a top-level message declared in a rejections.proto file.`,
+    );
+  }
 }
 
-function freezeValue(value: unknown): void {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
-    return;
-  }
-
-  for (const nestedValue of Object.values(value)) {
-    freezeValue(nestedValue);
-  }
-
-  Object.freeze(value);
+function snapshotMessage<Schema extends MessageSchema>(
+  schema: Schema,
+  message: MessageShape<Schema>,
+): MessageShape<Schema> {
+  return fromBinary(schema, toBinary(schema, message));
 }

@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 review pending - pre-review lint clean
+Status: Slice 1 Round 2 review pending
 
 Baseline: `1aa345ae`
 
@@ -63,3 +63,80 @@ metadata, results, fixes, and closure evidence remain pending.
 - Security: N/A for this slice under the protocol's final-only security lane;
   no event/client disclosure exists yet. Final T-0044 security review remains
   mandatory.
+
+## Slice 1 Review Wave
+
+- Immutable package: `/private/tmp/t0044-slice1-review.diff`, range
+  `1aa345ae..553d837b`, one commit, 51,145 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, expected
+  explicit `gpt-5.6-luna` / medium, read-only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit `gpt-5.6-terra` / high, read-only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit `gpt-5.6-terra` / high, read-only.
+- Every reviewer must scope findings to Slice 1, check the human ledger where
+  visible, ignore historical superseded text unless current records claim it,
+  make no file/Git changes, and spawn no child agents. Dispatch IDs, actual
+  fixed-role metadata, findings, and closure remain pending.
+
+Dispatches, each with role, model, and reasoning fields explicit:
+
+- Style/maintainability: `019f6ac2-1eb4-7de1-b4b4-bbb21156c32d` (Volta).
+- Documentation: `019f6ac2-2322-7b21-b6ff-27d8c4783d21` (Singer).
+- TypeScript/API docs: `019f6ac2-2795-7323-a54f-622c40925eda` (Ampere).
+- Performance/reliability: `019f6ac2-2bf2-7980-9993-9637cb9a148c` (Godel).
+
+## Slice 1 Round 1 Findings
+
+All four reviewers completed and were closed before fixes began. The
+coordinator execution surface's immutable fixed-role metadata establishes the
+actual profiles matching explicit dispatch: style, TypeScript/API docs, and
+performance/reliability were `gpt-5.6-terra` / high; documentation was
+`gpt-5.6-luna` / medium. Reviewer-local prose could not expose a second
+metadata view and is not used to override the fixed-role runtime metadata.
+
+Deduplicated accepted batch:
+
+1. **P1 - binary payload ownership.** Recursive `Object.freeze()` throws on a
+   non-empty `Uint8Array`, so valid rejection messages with `bytes` or unknown
+   wire bytes cannot be created. Replace deep freeze with private snapshotted
+   storage and defensive clones. Cover bytes, unknown fields, maps/nesting, and
+   caller mutation isolation.
+2. **P1 - runtime nominality.** Constructor privacy does not prevent prototype
+   spoofing. Brand factory-created instances in a module-private `WeakSet`,
+   export a core-owned `isRejectionThrowable()` guard for Slice 2, and reject a
+   prototype-spoofed `Error` in tests.
+3. **P1 - source-convention enforcement.** The public factory currently accepts
+   any message schema. Require a top-level schema whose descriptor source file
+   ends `rejections.proto`; reject ordinary and nested schemas in focused
+   tests.
+4. **P2 - usable documentation example.** The core README snippet leaves its
+   generated companion and ID undefined. Show imports and construction of a
+   valid ID so the example is self-contained enough to use.
+
+The style lane additionally identified runtime-writable public fields; private
+snapshotted storage plus getters in finding 1 must prevent field replacement.
+No separate generator staging defect was found. No fix may begin outside this
+complete accepted batch.
+
+## Slice 1 Round 1 Resolution
+
+- Replaced recursive freezing with private binary snapshots produced through
+  the message schema. Every public payload read is a defensive clone; bytes,
+  unknown fields, nested messages, maps, input mutation, returned-value
+  mutation, and runtime property replacement have regression coverage.
+- Added a module-private `WeakSet` brand and public
+  `isRejectionThrowable()` guard. Factory instances pass; ordinary errors,
+  arbitrary objects, and prototype-spoofed errors fail.
+- The public factory now checks descriptor metadata for a top-level message in
+  a source file ending `rejections.proto`; ordinary and nested schemas fail.
+- The core README now imports the generated companion and ID schema and builds
+  a valid ID. It documents defensive snapshots without claiming Slice 2 event
+  publication.
+- Coordinator verification passed: 3 focused files/53 tests, generated and
+  tooling typechecks, TypeDoc/API inventory with 31 core exports, generated
+  cleanliness, full formatting, and `git diff --check`.
+- A fresh commit and Round 2 four-lane package are required; all Slice 1
+  dispositions remain open until that wave is clean.
