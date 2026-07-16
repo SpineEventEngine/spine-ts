@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-2 clean - Slice 3A review pending
+Status: Slices 1-2 clean - Slice 3A Round 2 review pending
 
 Baseline: `1aa345ae`
 
@@ -478,3 +478,70 @@ entities`).
   descriptor classifier, no new public export, and no claim that deferred
   service, example, or client integration is complete. Four relevant reviewer
   roles remain required; security stays deferred to final T-0044 integration.
+
+## Slice 3A Round 1 Wave
+
+- Verified implementation commit: `18d76de7` (`Integrate rejection event
+handlers`).
+- Immutable package:
+  `.superpowers/sdd/review-975a03cf..18d76de7.diff`, range
+  `975a03cf..18d76de7`, one commit, 39,717 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high.
+- Assignments are read-only and no-child, scoped to handler classification,
+  generated metadata, subscriber context delivery, and changed current docs.
+  They must ignore superseded history unless current records claim it. Dispatch
+  metadata and results remain pending. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b1a-a9e7-76d3-b435-1be9c9edb6cd` (Harvey);
+  - documentation: `019f6b1a-a5ec-7f01-ad75-9a174389fc0e` (Huygens);
+  - TypeScript/API docs: `019f6b1a-9e75-7da0-96cf-b0a461a32a5a` (Mill);
+  - performance/reliability: `019f6b1a-add4-7c93-9997-1a8a92bb5c2e`
+    (Euclid).
+
+## Slice 3A Round 1 Findings
+
+- The complete wave returned and all reviewers were closed before fixes.
+  Authoritative immutable role profiles matched explicit dispatch: style,
+  TypeScript/API docs, and performance/reliability at
+  `gpt-5.6-terra` / high; documentation at `gpt-5.6-luna` / medium.
+- Accepted P1 reliability defect: projection event execution unpacks one
+  mutable payload and shares it across matching subscriber methods. Clone the
+  payload for each subscriber schema and add a two-subscriber rejection test
+  proving one subscriber cannot alter the next subscriber's payload.
+- Accepted P2 policy-test gap: add the missing `@Command`-returns-rejection
+  case and require `INVALID_EMITTED_SCHEMA`.
+- Accepted documentation batch: remove implemented handler classification from
+  the current task's remaining gaps; update the detailed API registry contract
+  and exported decorator TypeDoc to describe rejection inputs, forbidden
+  assignment/normal outputs, typed payload plus `EventContext`, and no framework
+  `Event` envelope.
+- Analyzer role policy, descriptor fail-closed behavior, registry output, and
+  existing runtime context isolation are otherwise clean. Reliability passed
+  all 181 focused tests and diff check before reporting the payload defect.
+- Return this complete bounded batch to the same implementer context; all four
+  lanes must repeat against a fresh package.
+
+## Slice 3A Round 1 Resolution
+
+- The same implementer completed the accepted batch with explicit and actual
+  `gpt-5.6-terra` / medium, spawned no children, preserved coordinator logs,
+  and was closed.
+- Projection subscribers now independently decode the packed event with each
+  subscriber's schema. A red-green two-subscriber rejection regression proves
+  payload and context mutations cannot reach the next subscriber or stored
+  event.
+- The analyzer negative matrix now covers `@Command` returning a rejection.
+  Current task gaps, detailed API contract, and exported decorator TypeDoc now
+  state the implemented distinct rejection role and throw-vs-return rules.
+- Coordinator checks passed: 192 focused analyzer/writer/decorator/routing
+  tests, both typecheck layers, generated TypeDoc/API checks, formatting,
+  generated Proto cleanliness, and `git diff --check`.
+- Pre-review lint is aligned at Slice 3A Round 2 with no duplicated classifier,
+  public export leak, or deferred service/example overclaim. Fresh commit,
+  package, and all four relevant lanes remain required.

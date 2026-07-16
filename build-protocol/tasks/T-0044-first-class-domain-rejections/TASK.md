@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3A handler integration review
+Status: In progress - Slice 3A Round 2 review pending
 
 Started: `2026-07-16`
 
@@ -66,10 +66,8 @@ events after rollback and publishes them independently through EventBus.
 
 Remaining gaps:
 
-- Classify `rejections.proto` messages as event-consumable signals in the
-  handler analyzer.
 - Remove or migrate the string-coded `CommandRefusalError` path and align
-  command-service acknowledgement behavior with handler-produced rejection
+  command-service API acknowledgement behavior with handler-produced rejection
   timing.
 - Migrate the to-do example and align the remaining user, architecture, and API
   documentation with the completed runtime behavior.

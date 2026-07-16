@@ -513,12 +513,15 @@ decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
 schemas inferred from explicit return types. Build-time analysis derives and
-validates command/event roles from generated descriptors before writing those
-registry records. Generated `@Assign` and
-`@Command` producer records must declare at least one emitted schema; `@React`
-records may return generated event messages or explicit `void` with no emitted
-schemas. `@Subscribe` records return explicit `void` and declare no emitted
-schemas. They are generated build
+validates command, event, and distinct rejection roles from generated
+descriptors before writing those registry records. A rejection role requires a
+top-level message declared in a source file ending `rejections.proto`.
+Rejections are accepted as inputs by `@Subscribe`, `@React`, and
+event-to-command `@Command`, but not by `@Assign`; they cannot be normal emitted
+values. Generated `@Assign` and `@Command` producer records must declare at
+least one emitted schema; `@React` records may return generated event messages
+or explicit `void` with no emitted schemas. `@Subscribe` records return
+explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 The exported `@spine-ts/server/internal/generated-handler-registry` subpath
 exists only to give that generated registry source its required type-only
@@ -534,9 +537,12 @@ Repository execution calls generated two-argument command assignees, event
 subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the
 envelope omits context, execution supplies an empty generated context message
-of the proper schema. Generated producer handlers return domain messages; the
-framework wraps returned commands/events internally and dispatches produced
-signals only after the current storage/transactional work succeeds.
+of the proper schema. Rejection subscribers receive the typed rejection payload
+and `EventContext`, never the enclosing `Event`; each matching subscriber gets
+defensive payload and context values. Generated producer handlers return domain
+messages; the framework wraps returned commands/events internally and
+dispatches produced signals only after the current storage/transactional work
+succeeds.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

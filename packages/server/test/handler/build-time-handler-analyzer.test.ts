@@ -165,6 +165,7 @@ describe("build-time handler analyzer", () => {
       ["Assign", "assignRejection", "TaskAlreadyDone", "TaskCreated", "INVALID_SIGNAL_TYPE"],
       ["Assign", "returnFromAssign", "CreateTask", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
       ["React", "returnFromReact", "TaskCreated", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
+      ["Command", "returnFromCommand", "TaskCreated", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
     ] as const;
     const methods = roles
       .map(

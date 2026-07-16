@@ -997,10 +997,21 @@ class RejectionObservingProjection extends Projection<
     this.argumentCounts = [];
   }
 
+  mutate(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    RejectionObservingProjection.argumentCounts.push(arguments.length);
+    if (rejection.id !== undefined) {
+      rejection.id.value = "mutated-subscriber-rejection";
+    }
+    if (context.rejection?.command?.id !== undefined) {
+      context.rejection.command.id.uuid = "mutated-subscriber-command";
+      context.rejection.stacktrace = "mutated subscriber stack";
+    }
+  }
+
   observe(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    RejectionObservingProjection.argumentCounts.push(arguments.length);
     RejectionObservingProjection.messages.push(rejection);
     RejectionObservingProjection.contexts.push(context);
-    RejectionObservingProjection.argumentCounts.push(arguments.length);
   }
 }
 
@@ -4812,6 +4823,9 @@ describe("repository signal routing", () => {
     const rejection = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
     });
+    const expectedPayload = create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
+    });
     const command = createAggregateCommand(
       "command-observed-rejection",
       "task-observed-rejection",
@@ -4829,12 +4843,8 @@ describe("repository signal routing", () => {
     await expect(context.commandBus().post(command)).resolves.toBeUndefined();
     await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
 
-    expect(RejectionObservingProjection.argumentCounts).toEqual([2]);
-    expect(RejectionObservingProjection.messages).toEqual([
-      create(TaskAlreadyDoneSchema, {
-        id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
-      }),
-    ]);
+    expect(RejectionObservingProjection.argumentCounts).toEqual([2, 2]);
+    expect(RejectionObservingProjection.messages).toEqual([expectedPayload]);
     expect(RejectionObservingProjection.messages[0]?.$typeName).toBe(
       TaskAlreadyDoneSchema.typeName,
     );
@@ -4843,13 +4853,12 @@ describe("repository signal routing", () => {
     expect(receivedContext?.rejection?.command).toEqual(originalCommand);
     expect(receivedContext?.rejection?.stacktrace).toBe(rejection.stack);
 
-    if (receivedContext?.rejection?.command?.id !== undefined) {
-      receivedContext.rejection.command.id.uuid = "mutated-subscriber-command";
-      receivedContext.rejection.stacktrace = "mutated subscriber stack";
-    }
     const [stored] = (await eventStore.read()).filter(
       (event) => event.context?.rejection !== undefined,
     );
+    expect(
+      stored?.message === undefined ? undefined : unpackAny(stored.message, TaskAlreadyDoneSchema),
+    ).toEqual(expectedPayload);
     expect(stored?.context?.rejection?.command).toEqual(originalCommand);
     expect(stored?.context?.rejection?.stacktrace).toBe(rejection.stack);
     ManagedTaskAggregate.reset();
@@ -5603,6 +5612,13 @@ function createRejectionObservingRepository(): Repository<typeof RejectionObserv
         entityType: RejectionObservingProjection,
         stateSchema: ProjectionStateSchema,
         handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "mutate",
+            signalSchema: TaskAlreadyDoneSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
           {
             kind: "event-subscription",
             methodName: "observe",

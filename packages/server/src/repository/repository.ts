@@ -1727,15 +1727,11 @@ class ProjectionEventExecution {
   }
 
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
-    const message = unpackRequired(
-      requireSignalMessage(this.#event.message, "event"),
-      subscribers[0]?.handler.schema ?? this.#repository.stateSchema,
-      "event",
-    );
+    const packedMessage = requireSignalMessage(this.#event.message, "event");
     const tenantOptions = standTenantOptions(this.#runtime.context, this.#event);
     const entity = await this.#loadProjection(entityId, tenantOptions);
 
-    await this.#invokeSubscribers(entity, subscribers, message);
+    await this.#invokeSubscribers(entity, subscribers, packedMessage);
     await this.#storeIfChanged(entity, tenantOptions);
   }
 
@@ -1772,16 +1768,17 @@ class ProjectionEventExecution {
   async #invokeSubscribers(
     entity: object,
     subscribers: RepositoryEventSubscribers,
-    message: unknown,
+    packedMessage: NonNullable<Event["message"]>,
   ): Promise<void> {
     transactionalEntityAccess.start(entity);
     try {
       for (const subscriber of subscribers) {
+        const subscriberMessage = unpackRequired(packedMessage, subscriber.handler.schema, "event");
         const eventContext = eventHandlerContext(this.#event);
         await invokeEntityMethod(
           entity,
           subscriber.handler.methodName,
-          message,
+          subscriberMessage,
           subscriber.handler.parameterCount,
           eventContext,
         );
