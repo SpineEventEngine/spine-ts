@@ -108,8 +108,10 @@ service/API and to-do example implementation and focused gates are complete;
 its first canonical review's bounded routing, test-readiness, and docs fix batch
 is verified. Slice 3B Round 5 is clean in all canonical per-slice lanes. Final
 security review found one client-facing rejection context disclosure. The
-subscription-boundary redaction is implemented and verified; canonical fix
-review plus whole-task security rereview are the active frontier.
+subscription-boundary redaction is implemented and verified. Security rereview
+found one deprecated command-payload field bypass; that bounded fix plus generic
+docs/status alignment are now independently verified, and rereview is the active
+frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security

@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3B clean - Final redaction review pending
+Status: Slices 1-3B clean - Final redaction follow-up review pending
 
 Baseline: `1aa345ae`
 
@@ -1208,3 +1208,91 @@ review`).
   private service helper; no public export/API was added; and docs claim only
   the implemented boundary. Commit/package, four canonical fix reviewers, and
   whole-task security rereview remain required before full verification.
+
+## Final Redaction Review Wave
+
+- Verified fix/status commit: `a5784827` (`Redact client rejection internals`).
+- Canonical fix package:
+  `.superpowers/sdd/review-4ed73a7c..a5784827.diff`, literal range
+  `4ed73a7c..a5784827`, one commit, 42,690 bytes.
+- Refreshed security package:
+  `.superpowers/sdd/review-1aa345ae..a5784827.diff`, literal task range
+  `1aa345ae..a5784827`, 21 commits, 313,268 bytes. Both first lines were
+  verified; neither uses a moving ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only, fix package.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only, fix package.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only, fix package.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only, fix package.
+- Final security: existing `security_reviewer`, explicit expected
+  `gpt-5.6-terra` / high, read-only, refreshed whole-task package.
+- Every lane verifies its literal package, checks the human ledger where
+  visible, ignores historical superseded text unless current records/docs claim
+  it, makes no changes, and spawns no children. Dispatch IDs, actual metadata,
+  and results:
+  - style/maintainability: `019f6baa-47b3-7db0-99d6-836a0de4f1da`
+    (Erdos), `gpt-5.6-terra` / high;
+  - documentation: `019f6baa-4b6f-7151-9d97-dc78ecbf6264` (Carson),
+    `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6baa-5321-73b1-a2f6-440e215e7683`
+    (Aristotle), `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6baa-4f10-7740-a8fd-da9996a92005`
+    (Arendt), `gpt-5.6-terra` / high;
+  - final security: `019f6baa-57db-7be0-83db-915d890e82b7`
+    (Ptolemy), `gpt-5.6-terra` / high.
+    Actual metadata and results remain pending.
+
+## Final Redaction Review Findings
+
+- The complete five-lane wave returned and all reviewers were closed. Immutable
+  fixed-role metadata matched every explicit dispatch: documentation used
+  `gpt-5.6-luna` / medium; all other lanes used `gpt-5.6-terra` / high.
+- TypeScript/API docs and performance/reliability are clean. The private helper
+  is the sole client event path, clones before mutation, preserves ordinary
+  events/metadata, and adds no clone or queue overhead beyond prior behavior.
+- Accepted P2 status defect: the task's Current Gap paragraph still says Slice
+  3B canonical review is pending despite clean closure and the final-redaction
+  frontier. Align that sentence with all other mirrors.
+- Accepted P2 docs completeness defect: generic subscription workflow sections
+  still describe cloned `Event` envelopes without the rejection redaction
+  exception. Add a concise cross-boundary sentence in the identified current
+  generic sections and state in the to-do README that internal generated
+  subscribers retain full context. Avoid duplicating the detailed security
+  explanation.
+- Accepted High security blocker: deprecated
+  `RejectionEventContext.command_message` (`commandMessage` in TS) can carry the
+  rejected payload in legacy/forged events and currently bypasses client
+  redaction. Clear it on the client clone alongside modern `command` and
+  `stacktrace`; leave source/internal context intact. Extend service proof with
+  a populated deprecated field, assert client removal/source retention, and
+  assert black-box client absence. Update docs to cover both command forms
+  without exposing the deprecated field as a supported application API.
+- Security was otherwise clean, including branding, validation, copies, tenant
+  filtering, typed payload/origin preservation, queues/diagnostics, generated
+  path confinement, dependencies, and local IPC. Return the full bounded batch
+  to the same implementer, then rerun canonical fix lanes plus whole-task
+  security review.
+
+## Legacy Redaction Follow-up Resolution
+
+- The same implementation context completed the accepted batch with actual
+  `gpt-5.6-terra` / medium and was closed. It spawned no children and made no
+  commit or push.
+- `cloneClientEvent()` now clears modern `command`, deprecated
+  `commandMessage`, and `stacktrace` only on the client-facing clone. The
+  stored/source event and internal dispatcher retain all populated fields.
+- Service and to-do tests prove the deprecated payload cannot cross the client
+  boundary. Current generic subscription docs describe the redaction exception
+  without promoting the deprecated field as a supported public contract, and
+  task/status mirrors identify rereview as the remaining frontier.
+- Coordinator verification passed the native service and to-do suites, 179/179;
+  generated TypeScript/tooling checks; TypeDoc and API inventory with 204
+  expected server exports; generated-output cleanliness; repository formatting;
+  and `git diff --check`.
+- Pre-review lint found no stale status, duplicated redaction policy, public API
+  leakage, or future-policy overclaim. Commit/package and all four canonical
+  follow-up reviewers plus refreshed whole-task security remain before full
+  verification.

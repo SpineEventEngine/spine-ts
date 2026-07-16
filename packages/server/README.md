@@ -67,8 +67,8 @@ Current slice exposes:
   successful post may reach an active `SubscriptionService` stream with queue
   capacity, while inactivity, saturation, or closure can prevent observation.
   The client update keeps the typed payload and ordinary event metadata but
-  redacts the rejected command and throwable stack; internal generated handlers
-  keep their full defensive `EventContext`. A post failure is recorded
+  redacts rejected-command payload forms and throwable stack; internal generated
+  handlers keep their full defensive `EventContext`. A post failure is recorded
   internally without changing the `Ack` or promising a retry.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
@@ -757,9 +757,10 @@ typed rejection event independently, and resolves command dispatch;
 posting is best-effort: an active `SubscriptionService` stream with queue
 capacity may observe a successful post, while inactivity, saturation, or
 closure can prevent observation. Its client envelope contains the typed
-rejection and ordinary event metadata but not the rejected command or throwable
-stack. EventStore, EventBus, and internal generated handlers retain the full
-rejection context. Failures are recorded in `storedEventDispatchFailures()`,
+rejection and ordinary event metadata but redacts rejected-command payload forms
+and throwable stack. EventStore, EventBus, and internal generated handlers
+retain the full rejection context. Failures are recorded in
+`storedEventDispatchFailures()`,
 are not reflected in the command `Ack`, and are not currently retried.
 If an aggregate command handler produces an invalid state transition, command
 execution rejects with
@@ -897,7 +898,9 @@ support `include_all = true` in this runtime slice and stream wire-level
 `event_updates` containing cloned framework `Event` envelopes for matching
 event message type URLs. Application handlers continue to receive generated
 domain event messages through handler dispatch; framework `Event` envelopes are
-service/runtime data. Single-tenant subscriptions reject tenant options;
+service/runtime data. Client rejection updates redact rejected-command payload
+forms and throwable stack; internal generated handlers retain full defensive
+context. Single-tenant subscriptions reject tenant options;
 multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
 tenant slice. Missing, unknown, canceled, or expired activation IDs complete
 without updates, and duplicate activation for an already-active ID completes

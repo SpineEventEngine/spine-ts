@@ -36,8 +36,9 @@ posting returns an OK acceptance `Ack` for handled domain rejections and
 independently schedules the typed event through EventBus. A successful post can
 be received by an active `SubscriptionService` stream with queue capacity;
 inactive, saturated, or closed streams may not observe it. Client event updates
-retain the typed rejection and ordinary event metadata but redact the rejected
-command and throwable stack from `EventContext.rejection`. A failed post is
+retain the typed rejection and ordinary event metadata but redact
+rejected-command payload forms and throwable stack from
+`EventContext.rejection`. A failed post is
 recorded in `storedEventDispatchFailures()`, is not reflected in the client
 `Ack`, and has no promised retry.
 Core envelope construction exports include
@@ -290,7 +291,9 @@ applied to delivered states, not to `no_longer_matching` updates. Event topics
 support `include_all = true` in this runtime slice and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
-service/runtime data. Activation is by opaque ID. Inactive records are stored
+service/runtime data. Client rejection updates redact rejected-command payload
+forms and throwable stack; internal generated handlers retain full defensive
+context. Activation is by opaque ID. Inactive records are stored
 through the owning bounded context storage factory, so a new `SpineServices`
 instance over the same storage factory can activate a previously returned ID.
 Activation compare-and-sets the exact inactive row to a unique-owner claim and
@@ -558,8 +561,9 @@ events, `EventContext.rejection.command` contains a defensive clone of the
 rejected original `Command`, and `EventContext.rejection.stacktrace` carries the
 generated rejection throwable's available stack. This full context is an
 internal generated-handler contract. Client-facing `SubscriptionService`
-updates clone the event and redact those two rejection fields while preserving
-the typed payload and other event metadata. Generated producer handlers return
+updates clone the event and redact rejected-command payload forms and throwable
+stack while preserving the typed payload and other event metadata. Generated
+producer handlers return
 domain messages; the framework wraps returned commands/events internally and
 dispatches produced signals only after the current storage/transactional work
 succeeds.

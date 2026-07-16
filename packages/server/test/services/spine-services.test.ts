@@ -1850,14 +1850,18 @@ describe("SpineServices", () => {
       throw new Error("Expected rejection event context.");
     }
     expected.context.rejection.command = undefined;
+    expected.context.rejection.commandMessage = undefined;
     expected.context.rejection.stacktrace = "";
 
     expect(event).toEqual(expected);
     expect(event.context?.rejection?.command).toBeUndefined();
+    expect(event.context?.rejection?.commandMessage).toBeUndefined();
     expect(event.context?.rejection?.stacktrace).toBe("");
     expect(source.context?.rejection?.command).toEqual(command);
+    expect(source.context?.rejection?.commandMessage?.value.byteLength).toBeGreaterThan(0);
     expect(source.context?.rejection?.stacktrace).toBe("rejection stack");
     expect(internallyDispatched).toEqual([source]);
+    expect(internallyDispatched[0]?.context?.rejection).toEqual(source.context?.rejection);
     await iterator.return?.();
   });
 
@@ -5887,6 +5891,10 @@ function createRejectionEvent(
       producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "producer-1" })),
       rejection: create(RejectionEventContextSchema, {
         command,
+        commandMessage: packAny(
+          StringValueSchema,
+          create(StringValueSchema, { value: "legacy rejected command payload" }),
+        ),
         stacktrace,
       }),
     }),

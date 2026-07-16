@@ -54,7 +54,8 @@ available.
 - Non-OK validation errors and OK-acknowledged domain rejections whose
   best-effort follow-up posts may reach active, non-saturated subscriptions.
 - Rejection subscription updates retain the typed payload but redact the
-  rejected command and throwable stack at the client boundary.
+  rejected-command payload forms and throwable stack at the client boundary;
+  internal generated subscribers retain full defensive context.
 - Generated `TaskAlreadyDone` and `TaskNotDone` throwable companions with
   ordinary bare `@Subscribe` consumers.
 - Generated registry loading for bare `@Assign` and `@Subscribe` handlers.

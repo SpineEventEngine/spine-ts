@@ -51,8 +51,8 @@ throws generated `TaskNotDone`. Both return an OK acceptance acknowledgement,
 leave task-list state unchanged after rollback, and schedule a best-effort typed
 rejection event post. When that post succeeds, an already-active rejection
 subscription with queue capacity may receive the typed payload and ordinary
-event metadata; the client envelope redacts the rejected command and throwable
-stack. Internal generated subscribers still receive the full defensive
+event metadata; the client envelope redacts rejected-command payload forms and
+throwable stack. Internal generated subscribers still receive the full defensive
 rejection context. Saturation or closure can prevent client observation. A post
 failure is recorded internally, does not change the OK `Ack`, and has no current
 retry guarantee. Invalid payloads and technical failures remain non-OK

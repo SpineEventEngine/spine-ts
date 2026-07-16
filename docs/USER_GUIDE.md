@@ -344,7 +344,9 @@ event topics currently support `include_all`. Inactive subscription records
 are storage-backed and have a default TTL of 30 seconds. Non-positive or
 non-finite values become 1, positive finite values are floored, and an effective
 TTL above 2,147,483,647 milliseconds throws synchronously before storage or
-timer work. Activation atomically
+timer work. Client rejection updates redact rejected-command payload forms and
+throwable stack; internal generated subscribers retain full defensive context.
+Activation atomically
 replaces the inactive row with an owner claim before attaching delivery and
 retains the claim while active; updates from before activation are not replayed.
 Cancel removes an inactive row or same-instance claim through a marker. A claim
@@ -413,7 +415,8 @@ returns an OK acceptance acknowledgement. If the independently scheduled post
 succeeds, an already-active `SubscriptionService` stream with queue capacity
 may receive the rejection asynchronously; saturation or closure can prevent
 observation. Its client event envelope preserves the typed rejection and
-ordinary event metadata, but redacts the rejected command and throwable stack.
+ordinary event metadata, but redacts rejected-command payload forms and
+throwable stack.
 Framework-generated internal subscribers still receive the full defensive
 `EventContext`. A post failure is recorded internally, is not reflected in the
 `Ack`, and is not currently retried. Do not return rejection or service

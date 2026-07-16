@@ -427,7 +427,9 @@ Topic masks are applied only to delivered states. Event topics support
 `include_all = true` in this runtime slice and stream wire-level
 `event_updates` with cloned framework `Event` envelopes for matching event
 message type URLs. Application handlers remain on generated domain event
-messages; framework envelopes stay inside service/runtime data. Single-tenant
+messages; framework envelopes stay inside service/runtime data. Client
+rejection updates redact rejected-command payload forms and throwable stack;
+internal generated handlers retain full defensive context. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant slice. Activation
 and cancellation are keyed by subscription ID: unknown, canceled, expired, and
@@ -457,7 +459,7 @@ timestamp, and producer ID. When the best-effort follow-up post succeeds,
 EventBus stores the event independently rather than appending it to aggregate
 history. EventStore, EventBus, and internal generated handlers retain the full
 context. Client-facing `SubscriptionService` updates clone the envelope and
-redact the rejected command and throwable stack while preserving the typed
+redact rejected-command payload forms and throwable stack while preserving the typed
 payload and other event metadata. A handled process-manager rejection completes
 its inbox row, while ordinary and forged errors keep the existing technical
 failure and retry behavior. Build-time analysis accepts descriptor-verified

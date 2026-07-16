@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final redaction review
+Status: In progress - Final redaction follow-up review
 
 Started: `2026-07-16`
 
@@ -68,8 +68,8 @@ Slice 3B removes the string-coded `CommandRefusalError` path, aligns command
 acknowledgements with asynchronous rejection timing, migrates the to-do example
 to generated `TaskAlreadyDone` and `TaskNotDone` throwables, proves a real typed
 rejection subscription, and aligns current user, architecture, API, and package
-documentation. Focused implementation gates are clean; canonical slice review
-is pending.
+documentation. Focused implementation gates and canonical Slice 3B review are
+clean; the final client-boundary redaction follow-up is active.
 
 Slices 1 through 3B are implementation-verified and clean in every canonical
 per-slice reviewer lane. Remaining gap: focused whole-task security integration

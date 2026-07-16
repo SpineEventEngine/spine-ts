@@ -114,8 +114,9 @@ import {
  * Filtered state topics deliver matching states, emit `no_longer_matching`
  * when previous state matched and new state does not, and apply topic masks
  * only to delivered states. Event topics stream wire-level `event_updates`
- * containing cloned framework `Event` envelopes; rejection updates omit the
- * rejected command and stack trace from their client-facing context.
+ * containing cloned framework `Event` envelopes; rejection updates omit
+ * rejected-command payload forms and stack trace from their client-facing
+ * context.
  * Application code remains on generated domain event messages through handler
  * dispatch. Unknown or duplicate activation IDs complete without updates.
  * Cancellation of unknown or already-cleaned IDs returns OK after admission to
@@ -2312,6 +2313,7 @@ function cloneClientEvent(event: Event): Event {
 
   if (rejection !== undefined) {
     rejection.command = undefined;
+    rejection.commandMessage = undefined;
     rejection.stacktrace = "";
   }
   return clientEvent;

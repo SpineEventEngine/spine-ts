@@ -851,6 +851,7 @@ describe("@spine-ts/example-todo", () => {
         }),
       );
       expect(event.context?.rejection?.command).toBeUndefined();
+      expect(event.context?.rejection?.commandMessage).toBeUndefined();
       expect(event.context?.rejection?.stacktrace).toBe("");
       expect(task).toEqual(readTask(completedResponse, "task-refuse"));
       expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
