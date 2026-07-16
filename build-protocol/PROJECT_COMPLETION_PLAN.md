@@ -103,8 +103,8 @@ maintenance task.
 
 Initial release closure through T-0042 and the prior completed tasks is
 historical. T-0044 has reopened readiness; generated rejection companions and
-rejection-event runtime are review-clean. Slice 3A handler integration awaits
-Round 4 closure review before service/API integration.
+rejection-event runtime and handler integration are review-clean. Slice 3B
+service/API and to-do example integration is the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
