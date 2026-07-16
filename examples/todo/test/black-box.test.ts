@@ -775,7 +775,6 @@ describe("@spine-ts/example-todo", () => {
     const subscription = await fixture.subscribe(createEventTopic(TaskAlreadyDoneSchema));
 
     try {
-      await delay(25);
       await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
       await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
       const completedResponse = await fixture.readEventually(
@@ -783,12 +782,12 @@ describe("@spine-ts/example-todo", () => {
         (candidate) => taskCompleted(candidate, "task-refuse") === true,
       );
       const command = createCompleteCommand("command-refuse-complete-again", "task-refuse");
+      const nextRejection = nextSubscriptionUpdate(subscription, "task already done");
 
       const ack = await fixture.post(command);
-      await delay(25);
-      expect(context.storedEventDispatchFailures()).toEqual([]);
-      const update = await nextSubscriptionUpdate(subscription, "task already done");
+      const update = await nextRejection;
       const event = subscribedEvent(update);
+      expect(context.storedEventDispatchFailures()).toEqual([]);
       const response = await expectTaskListEventuallyUnchanged(
         fixture,
         completedResponse,

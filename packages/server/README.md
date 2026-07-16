@@ -54,8 +54,8 @@ Current slice exposes:
   routed target ID.
   Repository command execution recognizes factory-created domain rejections
   only through core `isRejectionThrowable()`. It handles them after aggregate
-  or process-manager rollback, schedules one independently stored EventBus
-  rejection event, and completes process-manager inbox delivery. The rejected
+  or process-manager rollback, schedules one rejection event for independent
+  EventBus posting, and completes process-manager inbox delivery. The rejected
   draft, produced output, aggregate history, snapshot, state, lifecycle, and
   entity version are not persisted. Rejection-event post failures are retained
   in `storedEventDispatchFailures()` without changing command completion.
@@ -63,8 +63,10 @@ Current slice exposes:
   `*rejections.proto` files as rejection inputs for `@Subscribe`, `@React`, and
   event-to-command `@Command`; they are not assignment inputs or normal emitted
   values. `CommandService.Post` returns an OK acceptance acknowledgement for a
-  handled domain rejection; clients observe the typed rejection event
-  asynchronously through `SubscriptionService`.
+  handled domain rejection. The typed event is independently scheduled; a
+  successful post can be observed through `SubscriptionService`, while a post
+  failure is recorded internally without changing the `Ack` or promising a
+  retry.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
@@ -105,8 +107,9 @@ Current slice exposes:
   and
 - generated rejection throwables for domain-rule failures: repository rollback
   leaves state unchanged, `CommandService.Post` returns an OK acceptance
-  `Ack`, and the independently stored typed rejection event is available
-  asynchronously through `EventBus` and `SubscriptionService`;
+  `Ack`, and a successful independent EventBus post makes the typed rejection
+  event available asynchronously through `SubscriptionService`; post failure
+  remains an internal diagnostic with no current retry guarantee;
   and
 - `COMMAND_VALIDATION_ERROR` `Ack` responses with message
   `Command payload validation failed.` and packed `spine.validation.ValidationError` details
@@ -747,7 +750,9 @@ message `Command payload validation failed.` and packed
 generated rejection throwable, repository execution rolls back, schedules its
 typed rejection event independently, and resolves command dispatch;
 `CommandService.Post` therefore returns an OK acceptance `Ack`. Rejection-event
-delivery is asynchronous and can be observed through `SubscriptionService`.
+posting is best-effort: successful posts can be observed through
+`SubscriptionService`; failures are recorded in `storedEventDispatchFailures()`,
+are not reflected in the command `Ack`, and are not currently retried.
 If an aggregate command handler produces an invalid state transition, command
 execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced

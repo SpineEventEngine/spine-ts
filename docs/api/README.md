@@ -28,13 +28,15 @@ validation result/check helpers, `ValidationException`, structured
 `RejectionThrowable`, `createRejectionThrowable()`, and
 `isRejectionThrowable()`. Generated rejection companions create validated
 throwables through this factory contract. Repository command execution now
-recognizes them only through the guard after rollback and schedules a regular,
-independently stored rejection event through EventBus. Build-time analysis
+recognizes them only through the guard after rollback and schedules a regular
+rejection event for independent EventBus posting. Build-time analysis
 accepts descriptor-verified top-level rejection inputs for event-consuming
 handlers while excluding assignment inputs and normal emitted values. Service
-posting returns an OK acceptance `Ack` for handled domain rejections, whose
-typed events are delivered asynchronously through EventBus and
-`SubscriptionService`.
+posting returns an OK acceptance `Ack` for handled domain rejections and
+independently schedules the typed event through EventBus. A successful post can
+reach `SubscriptionService`; a failed post is recorded in
+`storedEventDispatchFailures()`, is not reflected in the client `Ack`, and has
+no promised retry.
 Core envelope construction exports include
 `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
@@ -52,9 +54,11 @@ without dispatch-probing unrelated contexts.
 Generated rejection companions are the public domain-rule failure contract.
 When a repository handler throws one, rollback completes before an independent
 typed rejection event is scheduled, command dispatch resolves, and
-`CommandService.Post` returns an OK acceptance `Ack`. The eventual event is
-observable through EventBus and `SubscriptionService`; OK does not mean a state
-transition succeeded. `CommandService.Post` still returns
+`CommandService.Post` returns an OK acceptance `Ack`. A successful follow-up
+post makes the event observable through EventBus and `SubscriptionService`;
+post failure is recorded in `storedEventDispatchFailures()`, is not visible to
+the command client, and is not currently retried. OK does not mean a state
+transition or rejection-event delivery succeeded. `CommandService.Post` still returns
 `COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.` and
 packed `spine.validation.ValidationError` details when `CommandBus` rejects an
 invalid accepted command payload before dispatcher callbacks,

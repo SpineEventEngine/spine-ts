@@ -2798,6 +2798,25 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("keeps a primitive Unknown producer subject to first-field equality", () => {
+    const repository = createRoutingRepository();
+    const event = packEvent({
+      id: create(EventIdSchema, { value: "event-primitive-unknown" }),
+      context: create(EventContextSchema, {
+        producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "Unknown" })),
+        rejection: {},
+      }),
+      schema: ProjectionStateSchema,
+      message: create(ProjectionStateSchema, {
+        id: "mismatched-task",
+      }),
+    });
+
+    expect(() => repository.routeEvent(event)).toThrow(
+      "Repository event routing requires producer ID and first field to identify the same entity.",
+    );
+  });
+
   it("routes message-valued event IDs by their primitive value field", () => {
     const repository = createUserIdProjectionRepository();
     const route = repository.routeEvent(

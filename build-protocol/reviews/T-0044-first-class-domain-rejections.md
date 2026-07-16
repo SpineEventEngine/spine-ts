@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3A clean - Slice 3B review pending
+Status: Slices 1-3A clean - Slice 3B Round 2 review pending
 
 Baseline: `1aa345ae`
 
@@ -754,3 +754,109 @@ guarantees`).
 - Security: deferred under protocol to the mandatory final T-0044 integration
   review, where serialized rejection payload and stack disclosure will be
   reviewed across the complete task diff.
+
+## Slice 3B Round 1 Wave
+
+- Verified implementation/status commit: `f3ebd21e` (`Complete domain
+rejection service integration`).
+- Immutable package:
+  `.superpowers/sdd/review-353efdd7..f3ebd21e.diff`, literal range
+  `353efdd7..f3ebd21e`, one commit, 68,074 bytes. Its first line was verified
+  against the literal endpoints; no moving ref is present.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only.
+- Every reviewer is bounded to Slice 3B and affected paths, must check the human
+  ledger where visible, ignore historical/superseded text unless current task
+  records or changed docs claim it as active, make no file/Git changes, and
+  spawn no child agents. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b4d-5a38-72d3-8099-df1655b3f6ec`
+    (Russell), `gpt-5.6-terra` / high;
+  - documentation: `019f6b4d-6484-7a63-b5cb-a015699b07d1` (Hypatia),
+    `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6b4d-6018-7c51-a026-0227be51dded`
+    (Wegener), `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6b4d-68b7-79a3-a357-5606207b4c42`
+    (Confucius), `gpt-5.6-terra` / high.
+    Actual fixed-role metadata, findings, and closure remain pending.
+
+## Slice 3B Round 1 Findings
+
+- The complete four-lane wave returned and every reviewer was closed before
+  fixes. Immutable fixed-role runtime metadata matched every explicit dispatch:
+  style, TypeScript/API docs, and performance/reliability used
+  `gpt-5.6-terra` / high; documentation used `gpt-5.6-luna` / medium.
+- Accepted P1 reliability defect: the rejection-routing bypass treats every
+  rejection producer string `"Unknown"` as the message-ID sentinel. A primitive
+  string entity ID may legitimately equal `"Unknown"`, allowing a contradictory
+  rejection payload ID to bypass the producer/first-field invariant. Restrict
+  the sentinel bypass to message-valued target IDs and prove primitive
+  `"Unknown"` mismatches still fail closed.
+- Accepted P1 API-doc honesty defect: current API and architecture docs say
+  typed rejection events are delivered unconditionally. The runtime schedules
+  posting independently and records post failure without retry while the Ack
+  remains OK. Qualify delivery as best-effort/scheduled and state that a post
+  failure prevents client observation.
+- Deduplicated accepted P2 reliability/maintainability defect: the real
+  subscription proof uses fixed 25 ms sleeps around asynchronous activation and
+  dispatch. Replace them with deterministic readiness/delivery fences and check
+  dispatch failures only after delivery has completed.
+- Accepted P2 documentation defect: the framework user-guide snippet presents
+  generated imports relative to `docs/`, where they do not exist, without
+  saying they are illustrative. Use an explicitly consumer-project-relative,
+  reproducible form or identify the snippet as illustrative.
+- No other actionable findings were reported. A single fix batch must return to
+  the existing implementation context, followed by focused checks, a fresh
+  literal review package, and all four closure lanes.
+
+## Slice 3B Round 1 Fix Investigation
+
+- The same implementer returned with actual `gpt-5.6-terra` / medium and was
+  closed. It added the primitive collision regression, deterministic pending
+  subscription read, and documentation fixes; routing and static checks pass,
+  but the rebuilt to-do black-box rejection subscription exposed an incomplete
+  interpretation of the routing fix.
+- The destination repository field kind cannot classify the producer sentinel:
+  `TaskAggregate` has message-valued `TaskId`, while its rejection is also
+  consumed by `TaskListProjection` with primitive string ID. The rejection
+  producer remains the JVM-compatible `"Unknown"` sentinel in both routes.
+- The source rejection schema supplies the non-colliding classification already
+  required by routing conventions: a message-valued rejecting entity has a
+  message-valued first rejection field, while a primitive string entity has a
+  primitive first field. Restrict the sentinel bypass by the source schema's
+  first-field kind, not the destination repository field kind. This preserves
+  the primitive collision guard and cross-ID-shape rejection subscribers
+  without new runtime identity state.
+- Resume the same implementation context for this bounded correction and rerun
+  routing plus native to-do subscription verification before packaging.
+
+## Slice 3B Round 1 Resolution
+
+- The same implementer completed the source-schema discriminator with actual
+  `gpt-5.6-terra` / medium and was closed. No child, log, commit, or push work
+  was delegated.
+- `"Unknown"` bypass now requires rejection context plus a message-valued first
+  field in the source rejection schema. Primitive-first-field rejections retain
+  producer equality; message-ID aggregate rejections remain routable to
+  primitive-ID subscribers.
+- The black-box proof starts a pending subscription read before posting the
+  rejecting command and awaits that delivery before checking recorded dispatch
+  failures. Fixed sleeps are removed.
+- All changed current docs qualify EventBus follow-up posting as best-effort,
+  explain that failed posts are recorded without changing the OK `Ack` or
+  promising retry, and use reproducible consumer-project generated import
+  paths.
+- Coordinator verification passed: repository routing plus native to-do
+  black-box tests, 161/161; both generated build and tooling typechecks;
+  generated TypeDoc/API inventory; generated cleanliness; repository-wide
+  formatting; and `git diff --check`.
+- Lightweight docs/status lint is aligned for Round 2: status mirrors agree;
+  no duplicate policy or accidental public API was introduced; the source
+  schema discriminator is local to routing; and current docs no longer
+  overclaim storage, delivery, retry, or future production behavior. A fresh
+  literal package and all four closure lanes remain required.

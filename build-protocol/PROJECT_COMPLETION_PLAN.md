@@ -105,7 +105,8 @@ Initial release closure through T-0042 and the prior completed tasks is
 historical. T-0044 has reopened readiness; generated rejection companions and
 rejection-event runtime and handler integration are review-clean. Slice 3B
 service/API and to-do example implementation and focused gates are complete;
-its canonical review wave is the active frontier.
+its first canonical review's bounded routing, test-readiness, and docs fix batch
+is verified. The fresh Round 2 closure review is the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security

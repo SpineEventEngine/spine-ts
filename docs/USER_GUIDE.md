@@ -409,14 +409,20 @@ Framework-controlled state-transition validation returns
 For a domain rule failure, throw the generated companion for a top-level message
 declared in a `rejections.proto` file. Repository execution rolls back before
 scheduling the typed rejection event independently. `CommandService.Post`
-returns an OK acceptance acknowledgement; consume the rejection asynchronously
-through an event handler or `SubscriptionService`. Do not return rejection or
-service envelope values from handlers.
+returns an OK acceptance acknowledgement. If the independently scheduled post
+succeeds, consume the rejection asynchronously through an event handler or
+`SubscriptionService`. A post failure is recorded internally, is not reflected
+in the `Ack`, and is not currently retried. Do not return rejection or service
+envelope values from handlers.
+
+After the consumer project's pnpm Proto generation step, a handler saved as
+`src/handlers/task.ts` can use the generated project-root paths below:
 
 ```ts
-import { TaskAlreadyDone } from "../generated/task_rejections.js";
-import { TaskIdSchema } from "../generated/task_id_pb.js";
 import { create } from "@bufbuild/protobuf";
+
+import { TaskAlreadyDone } from "../../generated/spine/example/todo/v1/task_rejections.js";
+import { TaskIdSchema } from "../../generated/spine/example/todo/v1/task_id_pb.js";
 
 throw TaskAlreadyDone.create({
   id: create(TaskIdSchema, { value: "task-42" }),

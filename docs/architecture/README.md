@@ -464,8 +464,10 @@ failure model used by services and the to-do example.
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. A handled domain rejection instead
 rolls back state, schedules its typed event independently, and returns an OK
-acceptance `Ack`; EventBus and `SubscriptionService` deliver the rejection
-asynchronously. Managed aggregate command handlers use framework-owned
+acceptance `Ack`. The EventBus follow-up post is best-effort: when it succeeds,
+`SubscriptionService` can deliver the rejection asynchronously; when it fails,
+the context records the failure in `storedEventDispatchFailures()`, the command
+client is not notified, and no retry is currently promised. Managed aggregate command handlers use framework-owned
 `EntityTransaction.commit()` for transition validation. When that transaction is
 rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`

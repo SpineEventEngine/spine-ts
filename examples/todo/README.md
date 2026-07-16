@@ -51,8 +51,8 @@ available.
 
 - `CreateTask`, `RenameTask`, `CompleteTask`, and `ReopenTask` command paths.
 - Asynchronous projection reads and live `TaskList` subscriptions.
-- Non-OK validation errors and OK-acknowledged domain rejections delivered as
-  asynchronous typed events.
+- Non-OK validation errors and OK-acknowledged domain rejections whose
+  best-effort follow-up posts can deliver asynchronous typed events.
 - Generated `TaskAlreadyDone` and `TaskNotDone` throwable companions with
   ordinary bare `@Subscribe` consumers.
 - Generated registry loading for bare `@Assign` and `@Subscribe` handlers.

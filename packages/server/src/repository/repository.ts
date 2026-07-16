@@ -3143,7 +3143,11 @@ function readEventEntityId(
 ): unknown {
   const producerId = readProducerId(event);
   const routedProducerId =
-    event.context?.rejection !== undefined && producerId === "Unknown" ? undefined : producerId;
+    event.context?.rejection !== undefined &&
+    schema.fields[0]?.fieldKind === "message" &&
+    producerId === "Unknown"
+      ? undefined
+      : producerId;
   const fieldId = readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
 
   if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {

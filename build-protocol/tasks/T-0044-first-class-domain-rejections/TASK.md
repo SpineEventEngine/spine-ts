@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3B service and consumer review
+Status: In progress - Slice 3B Round 2 review
 
 Started: `2026-07-16`
 
