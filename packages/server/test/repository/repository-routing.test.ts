@@ -1360,7 +1360,7 @@ describe("repository signal routing", () => {
     });
   });
 
-  it("rolls back a managed aggregate rejection and posts its exact rejection event", async () => {
+  it("preserves a pre-existing managed aggregate when a command is rejected", async () => {
     const factory = new InMemoryStorageFactory();
     const repository = createManagedRepository();
     const context = BoundedContext.singleTenant("Tasks")
@@ -1378,6 +1378,29 @@ describe("repository signal routing", () => {
       eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    ManagedTaskAggregate.reset();
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-existing", "task-rejected", "Persisted"));
+    const historyBeforeRejection = await storage.readHistory("task-rejected");
+    const eventsBeforeRejection = await eventStore.read();
+
+    expect(historyBeforeRejection).toEqual({
+      snapshot: {
+        aggregateId: "task-rejected",
+        state: create(AggregateStateSchema, {
+          id: "task-rejected",
+          name: "Persisted (assigned)",
+          archived: false,
+        }),
+        version: 1n,
+        lifecycle: { archived: false, deleted: false },
+      },
+      events: [],
+    });
+    expect(eventsBeforeRejection).toHaveLength(1);
+
     const taskId = create(GeneratedTaskIdSchema, { value: "task-rejected" });
     const rejection = TaskAlreadyDone.create({ id: taskId });
     const command = createAggregateCommand("command-rejected", "task-rejected", "Already done");
@@ -1389,8 +1412,12 @@ describe("repository signal routing", () => {
     if (command.id !== undefined) {
       command.id.uuid = "mutated-command";
     }
-    const [event] = await waitForStoredEvents(eventStore, 1);
+    const storedEvents = await waitForStoredEvents(eventStore, 2);
+    const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
+    const [event] = rejectionEvents;
 
+    expect(storedEvents.slice(0, eventsBeforeRejection.length)).toEqual(eventsBeforeRejection);
+    expect(rejectionEvents).toHaveLength(1);
     expect(event?.id?.value).toBe("command-rejected-1");
     expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
     expect(
@@ -1413,10 +1440,7 @@ describe("repository signal routing", () => {
     });
     expect(readReadableProducerId(event)).toBe("task-rejected");
     expect(event?.context?.version).toBeUndefined();
-    await expect(storage.readHistory("task-rejected")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
+    await expect(storage.readHistory("task-rejected")).resolves.toEqual(historyBeforeRejection);
     const [failure] = await waitForFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "command-rejected-1" } },
@@ -3436,11 +3460,8 @@ describe("repository signal routing", () => {
     });
   });
 
-  it("rolls back a process-manager rejection, posts it, and completes inbox delivery", async () => {
-    const rejection = TaskAlreadyDone.create({
-      id: create(GeneratedTaskIdSchema, { value: "pm-rejected" }),
-    });
-    RoutingProcessManager.reset(rejection);
+  it("preserves a pre-existing process manager when a command is rejected", async () => {
+    RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
@@ -3452,6 +3473,29 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
 
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-pm-existing", "pm-rejected", "Persisted"));
+    const stateBeforeRejection = await context
+      .stand()
+      .readVersioned(ProcessManagerStateSchema, "pm-rejected");
+    const eventsBeforeRejection = await eventStore.read();
+
+    expect(stateBeforeRejection).toEqual({
+      state: create(ProcessManagerStateSchema, {
+        id: "pm-rejected",
+        queue: "Persisted assigned",
+      }),
+      version: create(VersionSchema, { number: 1 }),
+    });
+    expect(eventsBeforeRejection).toHaveLength(1);
+
+    RoutingProcessManager.reset(
+      TaskAlreadyDone.create({
+        id: create(GeneratedTaskIdSchema, { value: "pm-rejected" }),
+      }),
+    );
+
     await expect(
       context
         .commandBus()
@@ -3459,9 +3503,14 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-rejected"),
-    ).resolves.toBeUndefined();
-    const [event] = await waitForStoredEvents(eventStore, 1);
+      context.stand().readVersioned(ProcessManagerStateSchema, "pm-rejected"),
+    ).resolves.toEqual(stateBeforeRejection);
+    const storedEvents = await waitForStoredEvents(eventStore, 2);
+    const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
+    const [event] = rejectionEvents;
+
+    expect(storedEvents.slice(0, eventsBeforeRejection.length)).toEqual(eventsBeforeRejection);
+    expect(rejectionEvents).toHaveLength(1);
     expect(event).toMatchObject({
       id: { value: "command-pm-rejected-1" },
       context: {

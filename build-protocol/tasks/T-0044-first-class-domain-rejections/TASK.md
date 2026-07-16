@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 2 rejection-event runtime review
+Status: In progress - Slice 2 Round 2 review pending
 
 Started: `2026-07-16`
 
@@ -61,10 +61,11 @@ to that stage, caught synchronous publication failures roll back roots already
 published, and generated outputs remain ignored. This does not claim atomicity
 across concurrent generation or process interruption.
 
+Slice 2 converts recognized handler-thrown rejections into typed rejection
+events after rollback and publishes them independently through EventBus.
+
 Remaining gaps:
 
-- Convert handler-thrown rejections into typed rejection events after rollback
-  and publish them independently through EventBus.
 - Classify `rejections.proto` messages as event-consumable signals in the
   handler analyzer.
 - Remove or migrate the string-coded `CommandRefusalError` path and align

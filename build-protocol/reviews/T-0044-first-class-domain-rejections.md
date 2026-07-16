@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 clean - Slice 2 Round 1 review pending
+Status: Slice 1 clean - Slice 2 Round 2 review pending
 
 Baseline: `1aa345ae`
 
@@ -348,3 +348,71 @@ Round 4 dispatches, all fields explicit:
   `gpt-5.6-terra` / high; and performance/reliability at explicit
   `gpt-5.6-terra` / high. Security remains deferred to final T-0044
   integration.
+
+## Slice 2 Round 1 Wave
+
+- Verified implementation commit: `de233a90` (`Publish rollback-safe domain
+rejections`).
+- Immutable package:
+  `.superpowers/sdd/review-83f6ce24..de233a90.diff`, range
+  `83f6ce24..de233a90`, one commit, 43,626 bytes.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high.
+- Every assignment is read-only, forbids child agents and Git changes, scopes
+  review to Slice 2 and affected execution paths, and ignores superseded
+  historical text unless a current T-0044 record or changed current document
+  claims it as active. Dispatches, all fields explicit:
+  - style/maintainability: `019f6afc-8005-76c0-a00a-b455b29f5057`
+    (Ramanujan);
+  - documentation: `019f6afc-834b-7740-95c4-8f80873a4433`
+    (Epicurus);
+  - TypeScript/API docs: `019f6afc-86cb-78a2-9be6-cdc56ed8abf6`
+    (Kepler);
+  - performance/reliability: `019f6afc-8a10-70a2-be4e-695f3059e990`
+    (Popper).
+    Results remain pending.
+
+## Slice 2 Round 1 Findings
+
+- The complete wave returned and every reviewer was closed before fixes.
+  Immutable fixed-role runtime configuration matched every explicit dispatch:
+  style, TypeScript/API docs, and performance/reliability at
+  `gpt-5.6-terra` / high; documentation at `gpt-5.6-luna` / medium.
+- Style/maintainability: clean.
+- TypeScript/API docs: clean.
+- Documentation accepted P1 status defect: the current task's remaining-gap
+  list still names rejection conversion/publication although Slice 2 implements
+  it. Remove only that stale current-gap claim and retain deferred Slice 3+
+  work.
+- Performance/reliability accepted P2 test gap: rejection rollback is currently
+  proved only for new aggregate/process-manager entities. Add focused existing-
+  entity regressions that persist successful prior state, reject after draft
+  mutation, and prove prior state/version/history/lifecycle remain unchanged;
+  also prove one independently stored versionless rejection event and completed
+  process-manager delivery.
+- Reliability independently passed all 132 tests in
+  `repository-routing.test.ts`; no executable defect was found. The two accepted
+  findings form one bounded fix batch for the same implementer context.
+
+## Slice 2 Round 1 Resolution
+
+- Resumed the same implementer with explicit and actual
+  `gpt-5.6-terra` / medium; it spawned no children, changed no production code,
+  preserved coordinator logs, and was closed.
+- The current task now records rejection conversion/publication as implemented
+  and leaves only Slice 3+ gaps active.
+- Existing-entity tests now establish successful persisted aggregate and
+  process-manager state, reject after draft mutation, and prove unchanged prior
+  state/version/history/lifecycle, one independently stored versionless
+  rejection event, and completed handled process-manager delivery.
+- Coordinator checks passed: 169 focused repository/storage tests,
+  test/tooling typecheck, full formatting, and `git diff --check`.
+- Pre-review status/docs lint is aligned at Slice 2 Round 2 and finds no
+  duplicated constants, public API leakage, or future-policy overclaim. A fresh
+  commit/package and all four relevant lanes are required.
