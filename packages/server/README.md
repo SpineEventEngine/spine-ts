@@ -52,6 +52,16 @@ Current slice exposes:
   `Stand` update. Before handler code runs, replay validates the row label,
   pending `TO_DELIVER` status, the tenant, payload/schema, target type URL, and
   routed target ID.
+  Repository command execution recognizes factory-created domain rejections
+  only through core `isRejectionThrowable()`. It handles them after aggregate
+  or process-manager rollback, schedules one independently stored EventBus
+  rejection event, and completes process-manager inbox delivery. The rejected
+  draft, produced output, aggregate history, snapshot, state, lifecycle, and
+  entity version are not persisted. Rejection-event post failures are retained
+  in `storedEventDispatchFailures()` without changing command completion.
+  Build-time rejection handler classification, `CommandRefusalError` service
+  migration, example handlers, and client integration remain later T-0044
+  work.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain

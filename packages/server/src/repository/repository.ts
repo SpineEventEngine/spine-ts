@@ -4,15 +4,18 @@ import {
   ValidationException,
   checkValid,
   deriveTypeUrl,
+  isRejectionThrowable,
   packAny,
   unpackAny,
   type MessageSchema,
+  type RejectionThrowable,
 } from "@spine-ts/core";
 import {
   CommandContextSchema,
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  RejectionEventContextSchema,
   type Command,
   type Event,
   type TenantId,
@@ -1212,21 +1215,30 @@ class AggregateCommandExecution {
     const usesAppliers = this.#usesAppliers();
     const loaded = await this.#support.loadAggregate(route.entityId, usesAppliers);
     const commandContext = commandHandlerContext(this.#command);
-    const produced = usesAppliers
-      ? await invokeEntityMethod(
-          loaded.entity,
-          assignee.handler.methodName,
-          message,
-          assignee.handler.parameterCount,
-          commandContext,
-        )
-      : await this.#invokeAssignee(
-          loaded.entity,
-          assignee.handler.methodName,
-          message,
-          assignee.handler.parameterCount,
-          commandContext,
-        );
+    let produced: unknown;
+    try {
+      produced = usesAppliers
+        ? await invokeEntityMethod(
+            loaded.entity,
+            assignee.handler.methodName,
+            message,
+            assignee.handler.parameterCount,
+            commandContext,
+          )
+        : await this.#invokeAssignee(
+            loaded.entity,
+            assignee.handler.methodName,
+            message,
+            assignee.handler.parameterCount,
+            commandContext,
+          );
+    } catch (error) {
+      if (!isRejectionThrowable(error)) {
+        throw error;
+      }
+      postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      return;
+    }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
       route.entityId,
@@ -1921,7 +1933,16 @@ class ProcessManagerCommandExecution {
 
     const tenantOptions = commandStandOptions(this.#runtime.context, this.#command);
     const entity = await this.#support.load(route.entityId, tenantOptions);
-    const eventSignals = await this.#invoke(entity, assignee, message);
+    let eventSignals: readonly unknown[];
+    try {
+      eventSignals = await this.#invoke(entity, assignee, message);
+    } catch (error) {
+      if (!isRejectionThrowable(error)) {
+        throw error;
+      }
+      postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      return;
+    }
 
     await this.#support.storeIfChanged(entity, tenantOptions);
     this.#postEvents(this.#bindProducedEvents(eventSignals, route.entityId));
@@ -2346,6 +2367,36 @@ function eventVersionNumber(version: bigint): number {
 
 function runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
   return PrimitiveIds.readFinite(entityId);
+}
+
+function postRejectionEvent(
+  runtime: RepositoryRuntime,
+  command: Command,
+  entityId: unknown,
+  rejection: RejectionThrowable,
+): void {
+  const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {
+    producerId: runtimeProducerId(entityId) ?? "Unknown",
+  });
+  const event = create(EventSchema, {
+    id: metadata.id,
+    message: packAny(rejection.schema, rejection.messageThrown()),
+    context: create(EventContextSchema, {
+      ...metadata.context,
+      rejection: create(RejectionEventContextSchema, {
+        command: clone(CommandSchema, command),
+        stacktrace: rejection.stack ?? "",
+      }),
+    }),
+  });
+
+  try {
+    void runtime.postEventFollowUp(event).catch((error: unknown) => {
+      runtime.recordDispatchFailure(event, error);
+    });
+  } catch (error) {
+    runtime.recordDispatchFailure(event, error);
+  }
 }
 
 function requireCommandId(command: Command): NonNullable<Command["id"]> {

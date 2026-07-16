@@ -27,9 +27,11 @@ validation result/check helpers, `ValidationException`, structured
 `ValidationError` creation, the initial transition-validation seam,
 `RejectionThrowable`, `createRejectionThrowable()`, and
 `isRejectionThrowable()`. Generated rejection companions create validated
-throwables through this factory contract. T-0044 Slice 2 runtime code will
-recognize them through the guard; server-side rejection-event conversion and
-publication remain Slice 2 work. Core envelope construction exports include
+throwables through this factory contract. Repository command execution now
+recognizes them only through the guard after rollback and schedules a regular,
+independently stored rejection event through EventBus. Build-time handler
+classification, service migration, example handlers, and client integration
+remain T-0044 Slice 3 or later work. Core envelope construction exports include
 `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.

@@ -448,6 +448,17 @@ facade before dispatcher callbacks run, including custom
 that still means validation happens before route calculation, latest persisted
 state load, traceability event-journal append, latest-state write, or
 stored-event dispatch.
+Repository command execution now recognizes only core-branded domain rejection
+throwables. Aggregate direct-state transactions and process-manager command
+transactions roll back before one versionless rejection event is scheduled
+through the regular EventBus follow-up path. That event carries the rejection
+payload, a cloned original command, available stack trace, causal origin,
+timestamp, and producer ID; it is stored independently rather than appended to
+aggregate history. A handled process-manager rejection completes its inbox row,
+while ordinary and forged errors keep the existing technical failure and retry
+behavior. Build-time handler classification, service/`CommandRefusalError`
+migration, example handlers, and client-facing integration remain later T-0044
+work.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`

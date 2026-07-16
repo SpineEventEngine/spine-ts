@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slice 1 clean - Slice 2 implementation pending
+Status: Slice 1 clean - Slice 2 Round 1 review pending
 
 Baseline: `1aa345ae`
 
@@ -325,3 +325,26 @@ Round 4 dispatches, all fields explicit:
   - security: deferred to mandatory final T-0044 integration review.
 - Slice 1 is accepted. Slice 2 runtime implementation and its own complete
   relevant review wave are next.
+
+## Slice 2 Round 1 Preparation
+
+- The existing implementer ran with explicit and actual
+  `gpt-5.6-terra` / medium, changed only the assigned runtime, focused tests,
+  and narrow current documentation, spawned no children, and was closed.
+- Repository aggregate and process-manager command execution recognizes only
+  core-branded rejections after rollback, schedules one versionless rejection
+  event through EventBus, excludes it from aggregate history, and preserves
+  technical-error retry behavior.
+- Independent coordinator checks passed: 182 focused repository/storage/runtime
+  tests, build and tooling typechecks, generated TypeDoc/API checks, formatting,
+  Proto lint and generated cleanliness, and `git diff --check`.
+- Lightweight status/docs lint found one stale review-log implementation status
+  and corrected all current mirrors to Slice 2 Round 1. It found no duplicated
+  rejection policy constants, public API leakage, or documentation claim that
+  later analyzer, service, example, or client work is already complete.
+- Relevant reviewer roles for the forthcoming immutable package are:
+  style/maintainability at explicit `gpt-5.6-terra` / high; documentation at
+  explicit `gpt-5.6-luna` / medium; TypeScript/API docs at explicit
+  `gpt-5.6-terra` / high; and performance/reliability at explicit
+  `gpt-5.6-terra` / high. Security remains deferred to final T-0044
+  integration.

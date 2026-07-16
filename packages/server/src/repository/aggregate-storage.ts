@@ -292,6 +292,9 @@ export class AggregateStorage<
 
     try {
       for (const event of await eventStore.read()) {
+        if (event.context?.rejection !== undefined) {
+          continue;
+        }
         const eventAggregateId = this.#eventAggregateId(event);
         if (eventAggregateId === undefined || !sameAggregateId(eventAggregateId, expectedId)) {
           continue;

@@ -102,8 +102,8 @@ maintenance task.
 ## Current Execution Status
 
 Initial release closure through T-0042 and the prior completed tasks is
-historical. T-0044 has reopened readiness; Slice 1 is review-clean and Slice 2
-rejection-event runtime is the active frontier.
+historical. T-0044 has reopened readiness; Slice 1 is review-clean and verified
+Slice 2 rejection-event runtime is awaiting its Round 1 review wave.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
