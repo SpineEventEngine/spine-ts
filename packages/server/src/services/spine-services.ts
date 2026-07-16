@@ -83,7 +83,6 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandUpdate } from "../stand/stand.js";
-import { CommandRefusalError } from "./command-errors.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
@@ -115,11 +114,13 @@ import {
  * Filtered state topics deliver matching states, emit `no_longer_matching`
  * when previous state matched and new state does not, and apply topic masks
  * only to delivered states. Event topics stream wire-level `event_updates`
- * containing cloned framework `Event` envelopes; application code remains on
- * generated domain event messages through handler dispatch. Unknown or
- * duplicate activation IDs complete without updates. Cancellation of unknown
- * or already-cleaned IDs returns OK after admission to the bounded
- * unknown-removal pool.
+ * containing cloned framework `Event` envelopes; rejection updates omit
+ * rejected-command payload forms and stack trace from their client-facing
+ * context.
+ * Application code remains on generated domain event messages through handler
+ * dispatch. Unknown or duplicate activation IDs complete without updates.
+ * Cancellation of unknown or already-cleaned IDs returns OK after admission to
+ * the bounded unknown-removal pool.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -2218,13 +2219,6 @@ interface ContractError {
 }
 
 function commandPostError(error: unknown): ContractError {
-  if (error instanceof CommandRefusalError) {
-    return {
-      type: error.type,
-      message: error.clientMessage,
-    };
-  }
-
   if (error instanceof TransitionValidationError) {
     return {
       type: error.type,
@@ -2307,10 +2301,24 @@ function createEventUpdate(record: SubscriptionRecord, event: Event): Subscripti
     update: {
       case: "eventUpdates",
       value: create(EventUpdatesSchema, {
-        event: [clone(EventSchema, event)],
+        event: [cloneClientEvent(event)],
       }),
     },
   });
+}
+
+function cloneClientEvent(event: Event): Event {
+  const clientEvent = clone(EventSchema, event);
+  const rejection = clientEvent.context?.rejection;
+
+  if (rejection !== undefined) {
+    rejection.command = undefined;
+    // Clear the legacy wire payload as part of client-side security redaction.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    rejection.commandMessage = undefined;
+    rejection.stacktrace = "";
+  }
+  return clientEvent;
 }
 
 function maskedState(record: StateSubscriptionRecord, state: MessageShape<MessageSchema>): Message {

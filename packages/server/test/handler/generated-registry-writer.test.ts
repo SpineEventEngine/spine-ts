@@ -88,6 +88,53 @@ describe("generated registry writer", () => {
     );
   });
 
+  it("renders rejection schemas for all accepted event-consuming handler records", () => {
+    const repoRoot = "/workspace/repo";
+    const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
+    const rejectionSchema = schema("../generated/task_rejections_pb.js", "TaskAlreadyDoneSchema");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        entities: [
+          {
+            className: "RejectionConsumers",
+            sourceFile: join(repoRoot, "src/rejection-consumers.ts"),
+            stateSchema: schema("../generated/task_list_pb.js", "TaskListSchema"),
+            handlers: [
+              {
+                kind: "event-subscription",
+                methodName: "observe",
+                signalSchema: rejectionSchema,
+                emittedSchemas: [],
+                parameterCount: 2,
+              },
+              {
+                kind: "event-reaction",
+                methodName: "react",
+                signalSchema: rejectionSchema,
+                emittedSchemas: [schema("../generated/task_events_pb.js", "TaskCreatedSchema")],
+                parameterCount: 1,
+              },
+              {
+                kind: "command-reaction",
+                methodName: "compensate",
+                signalSchema: rejectionSchema,
+                emittedSchemas: [schema("../generated/task_commands_pb.js", "RenameTaskSchema")],
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      },
+      { outputFile },
+    );
+
+    expect(source.match(/signalSchema: TaskAlreadyDoneSchema,/g)).toHaveLength(3);
+    expect(source).toContain('kind: "event-subscription"');
+    expect(source).toContain('kind: "event-reaction"');
+    expect(source).toContain('kind: "command-reaction"');
+  });
+
   it("renders safe string literals for module specifiers and method names", () => {
     const repoRoot = "/workspace/repo";
     const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");

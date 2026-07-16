@@ -132,7 +132,7 @@ interface RepositoryRegistration {
   readonly postEventFollowUp: (event: Event) => Promise<void>;
   /** Command posting callback into the owning context command bus. */
   readonly onPostCommand: (command: Command) => Promise<void>;
-  /** Records post-commit stored-event dispatch failures for diagnostics. */
+  /** Records asynchronous event follow-up failures for diagnostics. */
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -223,15 +223,20 @@ export interface ReadCatchUpResult {
 
 type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
 
-/** Observable failure from asynchronous already-stored event dispatch. */
+/**
+ * Observable failure from asynchronous event follow-up processing.
+ *
+ * This covers dispatch of already-stored events and independent follow-up
+ * posts whose acceptance, storage, or dispatch failed.
+ */
 export interface StoredEventDispatchFailure {
-  /** Stored event whose post-commit dispatch failed. */
+  /** Event snapshot associated with the failure; it may not have reached storage. */
   readonly event: Event;
   /** Frozen scalar snapshot of the thrown failure. */
   readonly error: DispatchErrorSnapshot;
 }
 
-/** Copy-safe stored-event dispatch error diagnostic. */
+/** Copy-safe event follow-up error diagnostic. */
 export interface DispatchErrorSnapshot {
   /** Error class/name, or a stable label for non-Error throws. */
   readonly name: string;
@@ -548,7 +553,12 @@ export class BoundedContext {
     return this.#registeredRepositories.map((snapshot) => createRepositoryView(snapshot));
   }
 
-  /** Copy-safe diagnostics for asynchronous already-stored event dispatch failures. */
+  /**
+   * Copy-safe diagnostics for asynchronous event follow-up failures.
+   *
+   * Entries can describe already-stored event dispatch or an independent
+   * follow-up post that failed before storage.
+   */
   storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
     return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
   }

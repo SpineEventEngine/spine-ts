@@ -46,9 +46,17 @@ An OK acknowledgement confirms the immediate command path, not that an
 asynchronous projection is visible. Query or subscribe for that observable
 effect. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
 `spine.validation.ValidationError` details. Completing an already completed
-task returns `TASK_ALREADY_DONE`; reopening an open task returns
-`TASK_NOT_DONE`. Those non-OK acknowledgements leave the task-list state
-unchanged.
+task throws the generated `TaskAlreadyDone` rejection; reopening an open task
+throws generated `TaskNotDone`. Both return an OK acceptance acknowledgement,
+leave task-list state unchanged after rollback, and schedule a best-effort typed
+rejection event post. When that post succeeds, an already-active rejection
+subscription with queue capacity may receive the typed payload and ordinary
+event metadata; the client envelope redacts rejected-command payload forms and
+throwable stack. Internal generated subscribers still receive the full defensive
+rejection context. Saturation or closure can prevent client observation. A post
+failure is recorded internally, does not change the OK `Ack`, and has no current
+retry guarantee. Invalid payloads and technical failures remain non-OK
+acknowledgements.
 
 ## Query task lists
 
@@ -489,7 +497,7 @@ pnpm vitest run examples/todo/test/local-multi-process.test.ts
 
 The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
-validation/refusals, generated-registry recovery, and listener/session cleanup.
+validation/rejections, generated-registry recovery, and listener/session cleanup.
 
 The local multi-process test starts a separate child process and same-host
 ZeroMQ IPC fixture, sends one generated command from the parent, and reads the

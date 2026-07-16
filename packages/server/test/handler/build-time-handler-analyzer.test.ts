@@ -121,6 +121,120 @@ describe("build-time handler analyzer", () => {
     });
   });
 
+  it("accepts top-level rejection inputs for every event-consuming handler kind", () => {
+    const roles = [
+      ["Subscribe", "observe", "void", "event-subscription", [], 2],
+      ["React", "react", "TaskCreated", "event-reaction", ["TaskCreatedSchema"], 1],
+      ["Command", "compensate", "RenameTask", "command-reaction", ["RenameTaskSchema"], 1],
+    ] as const;
+    const methods = roles
+      .map(
+        ([decorator, methodName, returnType, , , parameterCount]) => `
+          @${decorator}
+          ${methodName}(rejection: TaskAlreadyDone${parameterCount === 2 ? ", context: unknown" : ""}): ${returnType} {
+            throw new Error(String(rejection));
+          }`,
+      )
+      .join("\n");
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/rejection-consumers.ts",
+        handlerFixtureSource("Projection", "TaskListSchema", methods, rejectionRoleImports),
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers).toEqual(
+      roles.map(([, methodName, , kind, emittedSchemas, parameterCount]) => ({
+        kind,
+        methodName,
+        signalSchema: schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema"),
+        emittedSchemas: emittedSchemas.map((exportName) =>
+          schema(
+            `../generated/${exportName === "RenameTaskSchema" ? "commands" : "events"}_pb.js`,
+            exportName,
+          ),
+        ),
+        parameterCount,
+      })),
+    );
+  });
+
+  it("rejects rejection messages as assignment inputs and normal handler outputs", () => {
+    const roles = [
+      ["Assign", "assignRejection", "TaskAlreadyDone", "TaskCreated", "INVALID_SIGNAL_TYPE"],
+      ["Assign", "returnFromAssign", "CreateTask", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
+      ["React", "returnFromReact", "TaskCreated", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
+      ["Command", "returnFromCommand", "TaskCreated", "TaskAlreadyDone", "INVALID_EMITTED_SCHEMA"],
+    ] as const;
+    const methods = roles
+      .map(
+        ([decorator, methodName, input, output]) => `
+          @${decorator}
+          ${methodName}(signal: ${input}): ${output} {
+            throw new Error(String(signal));
+          }`,
+      )
+      .join("\n");
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/rejection-roles.ts",
+        handlerFixtureSource("Aggregate", "TaskSchema", methods, rejectionRoleImports),
+      ),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
+      roles.map(([, methodName, , , code]) => [code, methodName]),
+    );
+  });
+
+  it("fails closed for nested and descriptor-mismatched rejection schemas", () => {
+    const roles = [
+      ["nested", "Container_TaskAlreadyDone"],
+      ["mismatched", "ForgedRejection"],
+    ] as const;
+    const methods = roles
+      .map(
+        ([methodName, input]) => `
+          @Subscribe
+          ${methodName}(signal: ${input}): void {
+            void signal;
+          }`,
+      )
+      .join("\n");
+    const result = analyzeBuildHandlers(
+      programWithSources("src/rejection-fail-closed.ts", {
+        "src/rejection-fail-closed.ts": handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          methods,
+          `
+            import { type Container_TaskAlreadyDone } from "../generated/nested_rejections_pb.js";
+            import { type ForgedRejection } from "../generated/mismatched_rejections_pb.js";`,
+        ),
+        "generated/nested_rejections_pb.ts": generatedNestedModule(
+          "spine/example/todo/v1/nested_rejections.proto",
+          "Container",
+          "TaskAlreadyDone",
+        ),
+        "generated/mismatched_rejections_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/example/todo/v1/mismatched_rejections.proto",
+          [{ exportName: "ForgedRejection", descriptorName: "DifferentRejection" }],
+        ),
+        "generated/task_list_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_list.proto",
+          "TaskList",
+        ),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
+      roles.map(([methodName]) => ["INVALID_SIGNAL_TYPE", methodName]),
+    );
+  });
+
   it("does not classify neutral descriptors from misleading command module paths", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/misleading.ts", {
@@ -578,6 +692,10 @@ function programWithSource(fileName: string, source: string): ts.Program {
       "TaskCreated",
       "TaskRenamed",
     ),
+    "generated/rejections_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_rejections.proto",
+      "TaskAlreadyDone",
+    ),
     "generated/task_list_pb.ts": generatedModule(
       "spine/example/todo/v1/task_list.proto",
       "TaskList",
@@ -622,6 +740,30 @@ function programWithSources(rootFileName: string, sources: Record<string, string
 
 function schema(moduleSpecifier: string, exportName: string) {
   return { moduleSpecifier, exportName };
+}
+
+const rejectionRoleImports = `
+  import { type TaskAlreadyDone } from "../generated/rejections_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+  import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";`;
+
+function handlerFixtureSource(
+  entityBase: string,
+  stateSchema: string,
+  methods: string,
+  imports: string,
+): string {
+  const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
+  const versionType = entityBase === "Aggregate" ? "bigint" : "number";
+  return `
+    import { Aggregate, Assign, Command, Projection, React, Subscribe } from "@spine-ts/server";
+    import { ${stateSchema} } from "../generated/${stateModule}.js";
+    ${imports}
+
+    export class RejectionFixture extends ${entityBase}<string, typeof ${stateSchema}, ${versionType}> {
+      ${methods}
+    }
+  `;
 }
 
 function generatedModule(protoSource: string, ...names: string[]): string {
@@ -677,6 +819,25 @@ function generatedModuleWithMalformedDescriptor(...names: string[]): string {
     "declare function messageDesc(file: unknown, index: number): unknown;",
     `export const ${file} = fileDesc("not-a-file-descriptor");`,
     schemas,
+  ].join("\n");
+}
+
+function generatedNestedModule(protoSource: string, parent: string, nested: string): string {
+  const file = "file_spine_example_todo_v1_nested";
+  const descriptor = create(FileDescriptorProtoSchema, {
+    name: protoSource,
+    messageType: [{ name: parent, nestedType: [{ name: nested }] }],
+  });
+  const encodedDescriptor = Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString(
+    "base64",
+  );
+
+  return [
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, ...indexes: number[]): unknown;",
+    `export const ${file} = fileDesc("${encodedDescriptor}");`,
+    `export interface ${parent}_${nested} {}`,
+    `export const ${parent}_${nested}Schema = messageDesc(${file}, 0, 0);`,
   ].join("\n");
 }
 

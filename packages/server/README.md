@@ -52,6 +52,24 @@ Current slice exposes:
   `Stand` update. Before handler code runs, replay validates the row label,
   pending `TO_DELIVER` status, the tenant, payload/schema, target type URL, and
   routed target ID.
+  Repository command execution recognizes factory-created domain rejections
+  only through core `isRejectionThrowable()`. It handles them after aggregate
+  or process-manager rollback, schedules one rejection event for independent
+  EventBus posting, and completes process-manager inbox delivery. The rejected
+  draft, produced output, aggregate history, snapshot, state, lifecycle, and
+  entity version are not persisted. Rejection-event post failures are retained
+  in `storedEventDispatchFailures()` without changing command completion.
+  Build-time analysis treats descriptor-verified top-level messages from
+  `*rejections.proto` files as rejection inputs for `@Subscribe`, `@React`, and
+  event-to-command `@Command`; they are not assignment inputs or normal emitted
+  values. `CommandService.Post` returns an OK acceptance acknowledgement for a
+  handled domain rejection. The typed event is independently scheduled; a
+  successful post may reach an active `SubscriptionService` stream with queue
+  capacity, while inactivity, saturation, or closure can prevent observation.
+  The client update keeps the typed payload and ordinary event metadata but
+  redacts rejected-command payload forms and throwable stack; internal generated
+  handlers keep their full defensive `EventContext`. A post failure is recorded
+  internally without changing the `Ack` or promising a retry.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
@@ -90,8 +108,12 @@ Current slice exposes:
   HTTP/2 sessions, waits until active work can no longer use its dependencies,
   then closes contexts, resources, and any server-owned environment;
   and
-- `CommandRefusalError` for the current immediate business refusal path from
-  command handlers to non-ok `CommandService.Post` `Ack` errors;
+- generated rejection throwables for domain-rule failures: repository rollback
+  leaves state unchanged, `CommandService.Post` returns an OK acceptance
+  `Ack`, and an active `SubscriptionService` stream with queue capacity may
+  receive the typed rejection after a successful independent EventBus post;
+  inactive, saturated, or closed streams may not, while post failure remains an
+  internal diagnostic with no current retry guarantee;
   and
 - `COMMAND_VALIDATION_ERROR` `Ack` responses with message
   `Command payload validation failed.` and packed `spine.validation.ValidationError` details
@@ -728,11 +750,20 @@ calculation, latest persisted state load, traceability event-journal append,
 latest-state write, or stored-event dispatch. `CommandService.Post` maps
 command-bus payload validation failures to `COMMAND_VALIDATION_ERROR` with
 message `Command payload validation failed.` and packed
-`spine.validation.ValidationError` details. If a command handler throws
-`CommandRefusalError`, `CommandService.Post`
-returns a non-ok `Ack` with that stable error type and message instead of
-`COMMAND_POST_ERROR`. If an aggregate command handler produces an invalid
-state transition, command execution rejects with
+`spine.validation.ValidationError` details. If a command handler throws a
+generated rejection throwable, repository execution rolls back, schedules its
+typed rejection event independently, and resolves command dispatch;
+`CommandService.Post` therefore returns an OK acceptance `Ack`. Rejection-event
+posting is best-effort: an active `SubscriptionService` stream with queue
+capacity may observe a successful post, while inactivity, saturation, or
+closure can prevent observation. Its client envelope contains the typed
+rejection and ordinary event metadata but redacts rejected-command payload forms
+and throwable stack. EventStore, EventBus, and internal generated handlers
+retain the full rejection context. Failures are recorded in
+`storedEventDispatchFailures()`,
+are not reflected in the command `Ack`, and are not currently retried.
+If an aggregate command handler produces an invalid state transition, command
+execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced
 traceability events or latest state; the validation details remain the
 framework transaction / `validateEntityStateTransition()` result.
@@ -867,7 +898,9 @@ support `include_all = true` in this runtime slice and stream wire-level
 `event_updates` containing cloned framework `Event` envelopes for matching
 event message type URLs. Application handlers continue to receive generated
 domain event messages through handler dispatch; framework `Event` envelopes are
-service/runtime data. Single-tenant subscriptions reject tenant options;
+service/runtime data. Client rejection updates redact rejected-command payload
+forms and throwable stack; internal generated handlers retain full defensive
+context. Single-tenant subscriptions reject tenant options;
 multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
 tenant slice. Missing, unknown, canceled, or expired activation IDs complete
 without updates, and duplicate activation for an already-active ID completes

@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -34,6 +34,12 @@ import {
 } from "@spine-ts/proto";
 import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
+import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
+import {
+  type TaskAlreadyDone as TaskAlreadyDoneMessage,
+  TaskAlreadyDoneSchema,
+} from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -62,6 +68,8 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const GeneratedTaskIdSchema = TodoIdSchema;
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -267,14 +275,20 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
   static applierCalls = 0;
+  static failure: Error | undefined;
 
-  static reset(): void {
+  static reset(failure?: Error): void {
     this.assigneeCalls = 0;
     this.applierCalls = 0;
+    this.failure = failure;
   }
 
   assignTask(command: AggregateState) {
     ExecutingTaskAggregate.assigneeCalls++;
+
+    if (ExecutingTaskAggregate.failure !== undefined) {
+      throw ExecutingTaskAggregate.failure;
+    }
 
     if (command.name === "Multi") {
       return [
@@ -311,9 +325,11 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
 
 class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
+  static failure: Error | undefined;
 
-  static reset(): void {
+  static reset(failure?: Error): void {
     this.assigneeCalls = 0;
+    this.failure = failure;
   }
 
   assignTask(command: AggregateState): AggregateState {
@@ -325,11 +341,22 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
         archived: false,
       }),
     );
+    if (ManagedTaskAggregate.failure !== undefined) {
+      throw ManagedTaskAggregate.failure;
+    }
     return create(AggregateStateSchema, {
       id: command.id,
       name: `${command.name} event`,
       archived: false,
     });
+  }
+}
+
+class MessageIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+  static failure: unknown;
+
+  assignTask(): never {
+    throw MessageIdRejectingAggregate.failure;
   }
 }
 
@@ -957,6 +984,39 @@ class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStat
   }
 }
 
+class RejectionObservingProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  static messages: TaskAlreadyDoneMessage[] = [];
+  static contexts: EventContext[] = [];
+  static argumentCounts: number[] = [];
+
+  static reset(): void {
+    this.messages = [];
+    this.contexts = [];
+    this.argumentCounts = [];
+  }
+
+  mutate(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    RejectionObservingProjection.argumentCounts.push(arguments.length);
+    if (rejection.id !== undefined) {
+      rejection.id.value = "mutated-subscriber-rejection";
+    }
+    if (context.rejection?.command?.id !== undefined) {
+      context.rejection.command.id.uuid = "mutated-subscriber-command";
+      context.rejection.stacktrace = "mutated subscriber stack";
+    }
+  }
+
+  observe(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    RejectionObservingProjection.argumentCounts.push(arguments.length);
+    RejectionObservingProjection.messages.push(rejection);
+    RejectionObservingProjection.contexts.push(context);
+  }
+}
+
 class ContextMutatingGeneratedProjection extends Projection<
   string,
   typeof ProjectionStateSchema,
@@ -1074,11 +1134,13 @@ class RoutingProcessManager extends ProcessManager<
   static commandCalls = 0;
   static eventCalls = 0;
   static commandReactionCalls = 0;
+  static failure: Error | undefined;
 
-  static reset(): void {
+  static reset(failure?: Error): void {
     this.commandCalls = 0;
     this.eventCalls = 0;
     this.commandReactionCalls = 0;
+    this.failure = failure;
   }
 
   assignTask(command: AggregateState): ProjectionState {
@@ -1089,6 +1151,9 @@ class RoutingProcessManager extends ProcessManager<
         queue: `${command.name} assigned`,
       }),
     );
+    if (RoutingProcessManager.failure !== undefined) {
+      throw RoutingProcessManager.failure;
+    }
     return create(ProjectionStateSchema, {
       id: command.id,
       name: `${command.name} event`,
@@ -1331,6 +1396,188 @@ describe("repository signal routing", () => {
       },
       events: [],
     });
+  });
+
+  it("preserves a pre-existing managed aggregate when a command is rejected", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createManagedRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher({
+        messageSchemas: () => [TaskAlreadyDoneSchema],
+        dispatch: () => Promise.reject(new Error("rejection event dispatch failed")),
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    ManagedTaskAggregate.reset();
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-existing", "task-rejected", "Persisted"));
+    const historyBeforeRejection = await storage.readHistory("task-rejected");
+    const eventsBeforeRejection = await eventStore.read();
+
+    expect(historyBeforeRejection).toEqual({
+      snapshot: {
+        aggregateId: "task-rejected",
+        state: create(AggregateStateSchema, {
+          id: "task-rejected",
+          name: "Persisted (assigned)",
+          archived: false,
+        }),
+        version: 1n,
+        lifecycle: { archived: false, deleted: false },
+      },
+      events: [],
+    });
+    expect(eventsBeforeRejection).toHaveLength(1);
+
+    const taskId = create(GeneratedTaskIdSchema, { value: "task-rejected" });
+    const rejection = TaskAlreadyDone.create({ id: taskId });
+    const command = createAggregateCommand("command-rejected", "task-rejected", "Already done");
+    const originalCommand = clone(CommandSchema, command);
+    ManagedTaskAggregate.reset(rejection);
+
+    await expect(context.commandBus().post(command)).resolves.toBeUndefined();
+
+    if (command.id !== undefined) {
+      command.id.uuid = "mutated-command";
+    }
+    const storedEvents = await waitForStoredEvents(eventStore, 2);
+    const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
+    const [event] = rejectionEvents;
+
+    expect(storedEvents.slice(0, eventsBeforeRejection.length)).toEqual(eventsBeforeRejection);
+    expect(rejectionEvents).toHaveLength(1);
+    expect(event?.id?.value).toBe("command-rejected-1");
+    expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(
+      event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+    ).toEqual(create(TaskAlreadyDoneSchema, { id: taskId }));
+    expect(event?.context?.rejection?.command).toEqual(originalCommand);
+    expect(event?.context?.rejection?.stacktrace).toBe(rejection.stack);
+    expect(event?.context?.timestamp).toBeDefined();
+    expect(event?.context?.origin).toEqual({
+      case: "pastMessage",
+      value: create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-rejected" })),
+          typeUrl: deriveTypeUrl(AggregateStateSchema),
+        }),
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "user-1" }),
+        }),
+      }),
+    });
+    expect(readReadableProducerId(event)).toBe("task-rejected");
+    expect(event?.context?.version).toBeUndefined();
+    await expect(storage.readHistory("task-rejected")).resolves.toEqual(historyBeforeRejection);
+    const [failure] = await waitForFailures(context, 1);
+    expect(failure).toMatchObject({
+      event: { id: { value: "command-rejected-1" } },
+      error: { name: "Error", message: "rejection event dispatch failed" },
+    });
+    ManagedTaskAggregate.reset();
+  });
+
+  it("posts an applier-based aggregate rejection without applying or persisting output", async () => {
+    const rejection = TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: "task-applier-rejected" }),
+    });
+    ExecutingTaskAggregate.reset(rejection);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-applier-rejected", "task-applier-rejected")),
+    ).resolves.toBeUndefined();
+
+    expect(ExecutingTaskAggregate.applierCalls).toBe(0);
+    await expect(waitForStoredEvents(eventStore, 1)).resolves.toMatchObject([
+      { id: { value: "command-applier-rejected-1" } },
+    ]);
+    await expect(storage.readHistory("task-applier-rejected")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+    ExecutingTaskAggregate.reset();
+  });
+
+  it.each([
+    {
+      label: "ordinary errors",
+      failure: () => new Error("ordinary aggregate failure"),
+    },
+    {
+      label: "prototype-spoofed rejection errors",
+      failure: () => {
+        const rejection = TaskAlreadyDone.create({
+          id: create(GeneratedTaskIdSchema, { value: "task-forged" }),
+        });
+        const forged = new Error("forged aggregate failure");
+        Reflect.setPrototypeOf(forged, Reflect.getPrototypeOf(rejection));
+        return forged;
+      },
+    },
+  ])("keeps $label as technical aggregate failures", async ({ failure }) => {
+    const thrown = failure();
+    ManagedTaskAggregate.reset(thrown);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-technical", "task-technical")),
+    ).rejects.toBe(thrown);
+
+    await expect(eventStore.read()).resolves.toEqual([]);
+    ManagedTaskAggregate.reset();
+  });
+
+  it("uses the JVM-compatible Unknown producer for a message-valued entity ID", async () => {
+    RejectionObservingProjection.reset();
+    MessageIdRejectingAggregate.failure = TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: "task-message-id" }),
+    });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMessageIdRejectingRepository())
+      .add(createRejectionObservingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createTaskCommand("command-message-id", "task-message-id")),
+    ).resolves.toBeUndefined();
+
+    const [event] = await waitForStoredEvents(eventStore, 1);
+    await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
+    expect(readReadableProducerId(event)).toBe("Unknown");
+    expect(event?.context?.version).toBeUndefined();
+    expect(RejectionObservingProjection.messages[0]?.id?.value).toBe("task-message-id");
   });
 
   it("passes CommandContext to generated-registry two-argument command assignees", async () => {
@@ -2552,6 +2799,25 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("keeps a primitive Unknown producer subject to first-field equality", () => {
+    const repository = createRoutingRepository();
+    const event = packEvent({
+      id: create(EventIdSchema, { value: "event-primitive-unknown" }),
+      context: create(EventContextSchema, {
+        producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "Unknown" })),
+        rejection: {},
+      }),
+      schema: ProjectionStateSchema,
+      message: create(ProjectionStateSchema, {
+        id: "mismatched-task",
+      }),
+    });
+
+    expect(() => repository.routeEvent(event)).toThrow(
+      "Repository event routing requires producer ID and first field to identify the same entity.",
+    );
+  });
+
   it("routes message-valued event IDs by their primitive value field", () => {
     const repository = createUserIdProjectionRepository();
     const route = repository.routeEvent(
@@ -3252,6 +3518,114 @@ describe("repository signal routing", () => {
       event: { id: { value: "command-pm-dispatch-1" } },
       error: { name: "Error", message: "process-manager command event dispatch failed" },
     });
+  });
+
+  it("preserves a pre-existing process manager when a command is rejected", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-pm-existing", "pm-rejected", "Persisted"));
+    const stateBeforeRejection = await context
+      .stand()
+      .readVersioned(ProcessManagerStateSchema, "pm-rejected");
+    const eventsBeforeRejection = await eventStore.read();
+
+    expect(stateBeforeRejection).toEqual({
+      state: create(ProcessManagerStateSchema, {
+        id: "pm-rejected",
+        queue: "Persisted assigned",
+      }),
+      version: create(VersionSchema, { number: 1 }),
+    });
+    expect(eventsBeforeRejection).toHaveLength(1);
+
+    RoutingProcessManager.reset(
+      TaskAlreadyDone.create({
+        id: create(GeneratedTaskIdSchema, { value: "pm-rejected" }),
+      }),
+    );
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-pm-rejected", "pm-rejected", "Already done")),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      context.stand().readVersioned(ProcessManagerStateSchema, "pm-rejected"),
+    ).resolves.toEqual(stateBeforeRejection);
+    const storedEvents = await waitForStoredEvents(eventStore, 2);
+    const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
+    const [event] = rejectionEvents;
+
+    expect(storedEvents.slice(0, eventsBeforeRejection.length)).toEqual(eventsBeforeRejection);
+    expect(rejectionEvents).toHaveLength(1);
+    expect(event).toMatchObject({
+      id: { value: "command-pm-rejected-1" },
+      context: {
+        rejection: {
+          command: { id: { uuid: "command-pm-rejected" } },
+        },
+      },
+    });
+    expect(readReadableProducerId(event)).toBe("pm-rejected");
+    expect(event?.context?.version).toBeUndefined();
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.not.toContainEqual(expect.objectContaining({ signalId: "command-pm-rejected" }));
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        signalId: "command-pm-rejected",
+        label: "HANDLE_COMMAND",
+        status: "DELIVERED",
+      }),
+    );
+  });
+
+  it("keeps technical process-manager failures pending for retry", async () => {
+    RoutingProcessManager.reset(new Error("technical process-manager failure"));
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-pm-technical", "pm-technical")),
+    ).rejects.toThrow("technical process-manager failure");
+
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-technical"),
+    ).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        signalId: "command-pm-technical",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      }),
+    );
+    RoutingProcessManager.reset();
   });
 
   it("stores process-manager event inbox rows before invoking event reactors", async () => {
@@ -4467,6 +4841,53 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("delivers a typed rejection and defensive rejection context to event subscribers", async () => {
+    RejectionObservingProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const rejection = TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
+    });
+    const expectedPayload = create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "task-observed-rejection" }),
+    });
+    const command = createAggregateCommand(
+      "command-observed-rejection",
+      "task-observed-rejection",
+      "Already done",
+    );
+    const originalCommand = clone(CommandSchema, command);
+    ManagedTaskAggregate.reset(rejection);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .add(createRejectionObservingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(context.commandBus().post(command)).resolves.toBeUndefined();
+    await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
+
+    expect(RejectionObservingProjection.argumentCounts).toEqual([2, 2]);
+    expect(RejectionObservingProjection.messages).toEqual([expectedPayload]);
+    expect(RejectionObservingProjection.messages[0]?.$typeName).toBe(
+      TaskAlreadyDoneSchema.typeName,
+    );
+    expect(RejectionObservingProjection.messages[0]).not.toHaveProperty("message");
+    const receivedContext = RejectionObservingProjection.contexts[0];
+    expect(receivedContext?.rejection?.command).toEqual(originalCommand);
+    expect(receivedContext?.rejection?.stacktrace).toBe(rejection.stack);
+
+    const [stored] = (await eventStore.read()).filter(
+      (event) => event.context?.rejection !== undefined,
+    );
+    expect(
+      stored?.message === undefined ? undefined : unpackAny(stored.message, TaskAlreadyDoneSchema),
+    ).toEqual(expectedPayload);
+    expect(stored?.context?.rejection?.command).toEqual(originalCommand);
+    expect(stored?.context?.rejection?.stacktrace).toBe(rejection.stack);
+    ManagedTaskAggregate.reset();
+  });
+
   it("passes empty EventContext to generated two-argument subscribers when the envelope has none", async () => {
     GeneratedTwoArgProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -5207,6 +5628,40 @@ function createGeneratedTwoArgProjectionRepository(): Repository<typeof Generate
   });
 }
 
+function createRejectionObservingRepository(): Repository<typeof RejectionObservingProjection> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: RejectionObservingProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "mutate",
+            signalSchema: TaskAlreadyDoneSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+          {
+            kind: "event-subscription",
+            methodName: "observe",
+            signalSchema: TaskAlreadyDoneSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<RejectionObservingProjection, typeof ProjectionStateSchema>;
+
+  return new Repository({
+    entityType: RejectionObservingProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createContextMutatingGeneratedProjectionRepository(): Repository<
   typeof ContextMutatingGeneratedProjection
 > {
@@ -5345,6 +5800,19 @@ function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
     schema: AggregateStateSchema,
     handlers,
     events: [AggregateStateSchema],
+  });
+}
+
+function createMessageIdRejectingRepository(): Repository<typeof MessageIdRejectingAggregate> {
+  const handlers = defineEntityHandlers(MessageIdRejectingAggregate, TaskSchema, (builder) => [
+    builder.assign(TaskSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: MessageIdRejectingAggregate,
+    schema: TaskSchema,
+    handlers,
+    events: [TaskCreatedSchema],
   });
 }
 
@@ -5975,6 +6443,25 @@ function createContextlessAggregateCommand(id: string, aggregateId: string, name
   });
 }
 
+function createTaskCommand(id: string, taskId: string, title = "Task") {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    message: packAny(
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: taskId }),
+        title,
+        completed: false,
+      }),
+    ),
+  });
+}
+
 function createValidatedCommand(id: string, aggregateId: string, name: string, tenantId?: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
@@ -6353,6 +6840,21 @@ async function waitForFailures(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   return context.storedEventDispatchFailures();
+}
+
+async function waitForStoredEvents(
+  eventStore: EventStore,
+  count: number,
+): Promise<readonly SpineEvent[]> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const events = await eventStore.read();
+    if (events.length >= count) {
+      return events;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return await eventStore.read();
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {

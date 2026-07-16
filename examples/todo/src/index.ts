@@ -3,12 +3,12 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
-  CommandRefusalError,
   Projection,
   Server,
   Subscribe,
   type RunningServer,
 } from "@spine-ts/server";
+import type { EventContext } from "@spine-ts/proto";
 
 import {
   type CompleteTask,
@@ -28,6 +28,14 @@ import {
 } from "../generated/spine/example/todo/v1/task_events_pb.js";
 import { TaskIdSchema, type TaskId } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import {
+  TaskAlreadyDone,
+  TaskNotDone,
+} from "../generated/spine/example/todo/v1/task_rejections.js";
+import type {
+  TaskAlreadyDone as TaskAlreadyDoneMessage,
+  TaskNotDone as TaskNotDoneMessage,
+} from "../generated/spine/example/todo/v1/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 /** Task aggregate for the create-task example flow. */
@@ -74,7 +82,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     void command;
     const id = clone(TaskIdSchema, this.id);
     if (this.state.completed) {
-      throw new CommandRefusalError("TASK_ALREADY_DONE", "Task is already done.");
+      throw TaskAlreadyDone.create({ id });
     }
 
     this.updateDraftState((state) =>
@@ -93,7 +101,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     void command;
     const id = clone(TaskIdSchema, this.id);
     if (!this.state.completed) {
-      throw new CommandRefusalError("TASK_NOT_DONE", "Task is not done.");
+      throw TaskNotDone.create({ id });
     }
 
     this.updateDraftState((state) =>
@@ -109,6 +117,19 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
 
 /** Read-side task list projection for visible task queries. */
 export class TaskListProjection extends Projection<string, typeof TaskListSchema, number> {
+  /** Observe attempts to complete a task that is already complete. */
+  @Subscribe
+  onTaskAlreadyDone(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
+    void taskId(rejection.id);
+    void context.rejection;
+  }
+
+  /** Observe attempts to reopen a task that is still open. */
+  @Subscribe
+  onTaskNotDone(rejection: TaskNotDoneMessage): void {
+    void taskId(rejection.id);
+  }
+
   /** Add newly created tasks to the read-side list. */
   @Subscribe
   onTaskCreated(event: TaskCreated): void {

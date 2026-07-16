@@ -2,7 +2,14 @@ import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
+import {
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+  type MessageSchema,
+} from "@spine-ts/core";
 import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -23,6 +30,8 @@ import {
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import {
+  EventUpdatesSchema,
+  SubscriptionUpdateSchema,
   TopicIdSchema,
   TopicSchema,
   type SubscriptionUpdate,
@@ -35,7 +44,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { analyzeBuildHandlers } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
@@ -47,6 +56,7 @@ import {
 } from "../generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { TaskAlreadyDoneSchema } from "../generated/spine/example/todo/v1/task_rejections_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
@@ -373,7 +383,7 @@ describe("@spine-ts/example-todo", () => {
     });
   }, 15_000);
 
-  it("returns validation and business refusals without changing remote state", async () => {
+  it("returns validation errors and accepts business rejections without changing remote state", async () => {
     await withRemoteTodo(async ({ commands, queries }) => {
       await postRemoteCommand(
         commands,
@@ -451,8 +461,8 @@ describe("@spine-ts/example-todo", () => {
       expect(taskListSnapshot(afterRefusals, "task-refusal")).toEqual(
         taskListSnapshot(original, "task-refusal"),
       );
-      expect(errorType(reopenOpen.status?.status)).toBe("TASK_NOT_DONE");
-      expect(errorType(completeAgain.status?.status)).toBe("TASK_ALREADY_DONE");
+      expect(reopenOpen.status?.status.case).toBe("ok");
+      expect(completeAgain.status?.status.case).toBe("ok");
       expect(taskListSnapshot(afterCompleteAgain, "task-refusal")).toEqual(
         taskListSnapshot(completed, "task-refusal"),
       );
@@ -765,37 +775,248 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
   });
 
-  it("refuses completing an already completed task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
+  it("starts no probe after the rejection readiness deadline expires", async () => {
+    let postCount = 0;
+    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+
+    await expect(
+      establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return Promise.resolve();
+          },
+        },
+        { next: () => pendingRead },
+        0,
+      ),
+    ).rejects.toThrow("Rejection subscription readiness deadline expired.");
+    expect(postCount).toBe(0);
+  });
+
+  it("bounds a non-settling probe post by the rejection readiness deadline", async () => {
+    let postCount = 0;
+    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+
+    await expect(
+      establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return new Promise<void>(() => undefined);
+          },
+        },
+        { next: () => pendingRead },
+        100,
+      ),
+    ).rejects.toThrow(/Timed out waiting for rejection readiness probe 1 post/u);
+    expect(postCount).toBe(1);
+  });
+
+  it("propagates an immediate readiness read failure while a probe post is pending", async () => {
+    const readFailure = new Error("rejection subscription read failed");
+    const latePostFailure = new Error("late rejection readiness post failed");
+    const delayedPost = Promise.withResolvers<undefined>();
+    let postCount = 0;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: () => {
+          postCount++;
+          return delayedPost.promise;
+        },
+      },
+      { next: () => Promise.reject(readFailure) },
+      100,
+    );
+
+    try {
+      await expect(readiness).rejects.toBe(readFailure);
+      expect(postCount).toBe(1);
+    } finally {
+      delayedPost.reject(latePostFailure);
+      await nextEventLoopTurn();
+    }
+  });
+
+  it("waits for the received readiness probe post before starting the fence", async () => {
+    const postFailure = new Error("late rejection readiness post failed");
+    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstPost = Promise.withResolvers<undefined>();
+    let nextCount = 0;
+    let postCount = 0;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: (event) => {
+          postCount++;
+          if (postCount === 1) {
+            firstRead.resolve(createEventSubscriptionUpdate(event));
+            return firstPost.promise;
+          }
+          return Promise.resolve();
+        },
+      },
+      {
+        next: () => {
+          nextCount++;
+          return nextCount === 1
+            ? firstRead.promise
+            : new Promise<SubscriptionUpdate | undefined>(() => undefined);
+        },
+      },
+      100,
+    );
+
+    await nextEventLoopTurn();
+    firstPost.reject(postFailure);
+
+    await expect(readiness).rejects.toBe(postFailure);
+    expect(postCount).toBe(1);
+    expect(nextCount).toBe(1);
+  });
+
+  it("completes received-probe readiness only after its post and fence succeed", async () => {
+    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstPost = Promise.withResolvers<undefined>();
+    const fenceRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const fencePost = Promise.withResolvers<undefined>();
+    let nextCount = 0;
+    let postCount = 0;
+    let readinessSettled = false;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: (event) => {
+          postCount++;
+          if (postCount === 1) {
+            firstRead.resolve(createEventSubscriptionUpdate(event));
+            return firstPost.promise;
+          }
+          if (postCount === 2) {
+            fenceRead.resolve(createEventSubscriptionUpdate(event));
+            return fencePost.promise;
+          }
+          throw new Error("Unexpected rejection readiness post.");
+        },
+      },
+      {
+        next: () => {
+          nextCount++;
+          if (nextCount === 1) {
+            return firstRead.promise;
+          }
+          if (nextCount === 2) {
+            return fenceRead.promise;
+          }
+          throw new Error("Unexpected rejection readiness read.");
+        },
+      },
+      100,
+    );
+    void readiness.then(
+      () => {
+        readinessSettled = true;
+      },
+      () => {
+        readinessSettled = true;
+      },
+    );
+
+    await nextEventLoopTurn();
+    expect(readinessSettled).toBe(false);
+    expect(nextCount).toBe(1);
+    expect(postCount).toBe(1);
+
+    firstPost.resolve(undefined);
+    await nextEventLoopTurn();
+    expect(readinessSettled).toBe(false);
+    expect(nextCount).toBe(2);
+    expect(postCount).toBe(2);
+
+    fencePost.resolve(undefined);
+    await readiness;
+    expect(readinessSettled).toBe(true);
+  });
+
+  it("observes a losing non-settling probe-post timeout after an immediate read failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const readFailure = new Error("rejection subscription read failed");
+      let postCount = 0;
+      const readiness = establishRejectionSubscriptionReadiness(
+        {
+          postEvent: () => {
+            postCount++;
+            return new Promise<void>(() => undefined);
+          },
+        },
+        { next: () => Promise.reject(readFailure) },
+        100,
+      );
+
+      await expect(readiness).rejects.toBe(readFailure);
+      expect(postCount).toBe(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts an already-completed rejection and publishes its typed event", async () => {
+    const context = await createTodoContext();
+    const fixture = new BoundedContextFixture(context, {
       timeoutMs: 500,
       intervalMs: 5,
     });
+    const subscription = await fixture.subscribe(createEventTopic(TaskAlreadyDoneSchema));
 
-    await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
-    await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
-    const completedResponse = await fixture.readEventually(
-      createTaskListQuery(),
-      (candidate) => taskCompleted(candidate, "task-refuse") === true,
-    );
+    try {
+      await establishRejectionSubscriptionReadiness(fixture, subscription);
+      await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
+      await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
+      const completedResponse = await fixture.readEventually(
+        createTaskListQuery(),
+        (candidate) => taskCompleted(candidate, "task-refuse") === true,
+      );
+      const command = createCompleteCommand("command-refuse-complete-again", "task-refuse");
+      const nextRejection = nextSubscriptionUpdate(subscription, "task already done");
 
-    const ack = await fixture.post(
-      createCompleteCommand("command-refuse-complete-again", "task-refuse"),
-    );
-    const response = await expectTaskListEventuallyUnchanged(
-      fixture,
-      completedResponse,
-      "task-refuse",
-    );
-    const task = readTask(response, "task-refuse");
+      const ack = await fixture.post(command);
+      const update = await nextRejection;
+      const event = subscribedEvent(update);
+      expect(context.storedEventDispatchFailures()).toEqual([]);
+      const response = await expectTaskListEventuallyUnchanged(
+        fixture,
+        completedResponse,
+        "task-refuse",
+      );
+      const task = readTask(response, "task-refuse");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_DONE");
-    expect(errorMessage(ack.status?.status)).toBe("Task is already done.");
-    expect(task).toEqual(readTask(completedResponse, "task-refuse"));
-    expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+      expect(ack.status?.status.case).toBe("ok");
+      expect(event.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+      expect(
+        event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+      ).toEqual(
+        create(TaskAlreadyDoneSchema, {
+          id: create(TaskIdSchema, { value: "task-refuse" }),
+        }),
+      );
+      expect(event.context?.rejection?.command).toBeUndefined();
+      // Verify that the legacy wire payload is absent at the client boundary.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      expect(event.context?.rejection?.commandMessage).toBeUndefined();
+      expect(event.context?.rejection?.stacktrace).toBe("");
+      expect(task).toEqual(readTask(completedResponse, "task-refuse"));
+      expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+    } finally {
+      await withTimeout(subscription.close(), "rejection subscription cleanup", 250);
+    }
   });
 
-  it("refuses reopening an open task without changing the task list", async () => {
+  it("accepts reopening an open task as a rejection without changing the task list", async () => {
     const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
@@ -810,9 +1031,7 @@ describe("@spine-ts/example-todo", () => {
     const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
     const response = await expectTaskListEventuallyUnchanged(fixture, openResponse, "task-open");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_NOT_DONE");
-    expect(errorMessage(ack.status?.status)).toBe("Task is not done.");
+    expect(ack.status?.status.case).toBe("ok");
     expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
     expect(readList(response, "task-open")?.openTaskCount).toBe(1);
   });
@@ -1330,6 +1549,17 @@ function createTaskListTopic(id?: string) {
   });
 }
 
+function createEventTopic(schema: MessageSchema) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(schema),
+      criterion: { case: "includeAll", value: true },
+    }),
+    context: createActorContext(),
+  });
+}
+
 function createActorContext() {
   return signalMetadata.actorContext({
     actor: create(UserIdSchema, { value: "todo-user" }),
@@ -1360,8 +1590,186 @@ function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
   };
 }
 
+function subscribedEvent(update: SubscriptionUpdate | undefined) {
+  const event = update?.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
+  if (event === undefined) {
+    throw new Error("Expected a subscribed event.");
+  }
+  return event;
+}
+
+function createEventSubscriptionUpdate(
+  event: Parameters<BoundedContextFixture["postEvent"]>[0],
+): SubscriptionUpdate {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "eventUpdates",
+      value: create(EventUpdatesSchema, { event: [event] }),
+    },
+  });
+}
+
+type RejectionReadOutcome =
+  | { readonly case: "received"; readonly update: SubscriptionUpdate | undefined }
+  | { readonly case: "readFailed"; readonly error: unknown };
+
+type RejectionPostOutcome =
+  { readonly case: "posted" } | { readonly case: "postFailed"; readonly error: unknown };
+
+interface RejectionPendingOutcome {
+  readonly case: "pending";
+}
+
+async function establishRejectionSubscriptionReadiness(
+  fixture: Pick<BoundedContextFixture, "postEvent">,
+  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
+  timeoutMs = 500,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const probes = new Map<string, string>();
+  const firstRead = subscription.next().then<RejectionReadOutcome, RejectionReadOutcome>(
+    (update) => ({ case: "received", update }),
+    (error: unknown) => ({ case: "readFailed", error }),
+  );
+  const receiveProbe = async (): Promise<void> => {
+    for (let attempt = 1; attempt <= 16; attempt++) {
+      const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
+      probes.set(probe.eventId, probe.taskId);
+      const postBudget = remainingMs(deadline);
+      const post = fixture.postEvent(probe.event);
+      const postOutcome = withTimeout(
+        post,
+        `rejection readiness probe ${String(attempt)} post`,
+        postBudget,
+      ).then<RejectionPostOutcome, RejectionPostOutcome>(
+        () => ({ case: "posted" }),
+        (error: unknown) => ({ case: "postFailed", error }),
+      );
+      const initialOutcome = await Promise.race([firstRead, postOutcome]);
+      if (initialOutcome.case === "readFailed") {
+        return propagateReadinessFailure(initialOutcome.error);
+      }
+      if (initialOutcome.case === "received") {
+        const settledPost = await postOutcome;
+        if (settledPost.case === "postFailed") {
+          return propagateReadinessFailure(settledPost.error);
+        }
+        expectTaskAlreadyDoneProbe(subscribedEvent(initialOutcome.update), probes);
+        return;
+      }
+      if (initialOutcome.case === "postFailed") {
+        return propagateReadinessFailure(initialOutcome.error);
+      }
+
+      const readOutcome = await Promise.race([
+        firstRead,
+        nextEventLoopTurn().then<RejectionPendingOutcome>(() => ({ case: "pending" })),
+      ]);
+      if (readOutcome.case === "readFailed") {
+        return propagateReadinessFailure(readOutcome.error);
+      }
+      if (readOutcome.case === "received") {
+        expectTaskAlreadyDoneProbe(subscribedEvent(readOutcome.update), probes);
+        return;
+      }
+    }
+
+    const finalOutcome = await withTimeout(
+      firstRead,
+      "rejection subscription readiness probe",
+      remainingMs(deadline),
+    );
+    if (finalOutcome.case === "readFailed") {
+      return propagateReadinessFailure(finalOutcome.error);
+    }
+    expectTaskAlreadyDoneProbe(subscribedEvent(finalOutcome.update), probes);
+  };
+  await receiveProbe();
+
+  const fence = createTaskAlreadyDoneProbe("readiness-fence");
+  probes.set(fence.eventId, fence.taskId);
+  let nextProbe = nextSubscriptionUpdate(
+    subscription,
+    "rejection subscription readiness fence",
+    remainingMs(deadline),
+  );
+  const fencePostBudget = remainingMs(deadline);
+  const fencePost = fixture.postEvent(fence.event);
+  await withTimeout(fencePost, "rejection subscription readiness fence post", fencePostBudget);
+
+  for (let remaining = probes.size; remaining > 0; remaining--) {
+    const event = subscribedEvent(await nextProbe);
+    expectTaskAlreadyDoneProbe(event, probes);
+    if (event.id?.value === fence.eventId) {
+      return;
+    }
+    nextProbe = nextSubscriptionUpdate(
+      subscription,
+      "queued rejection readiness probe",
+      remainingMs(deadline),
+    );
+  }
+
+  throw new Error("Rejection subscription readiness fence was not delivered.");
+}
+
+function propagateReadinessFailure(error: unknown): Promise<never> {
+  // Preserve the original asynchronous failure instead of replacing its identity.
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+  return Promise.reject(error);
+}
+
+function createTaskAlreadyDoneProbe(suffix: string) {
+  const taskId = `task-rejection-${suffix}`;
+  const eventId = `event-rejection-${suffix}`;
+
+  return {
+    eventId,
+    taskId,
+    event: packEvent({
+      id: signalMetadata.eventId(eventId),
+      context: signalMetadata.eventContext({ producerId: taskId }),
+      schema: TaskAlreadyDoneSchema,
+      message: create(TaskAlreadyDoneSchema, {
+        id: create(TaskIdSchema, { value: taskId }),
+      }),
+    }),
+  };
+}
+
+function expectTaskAlreadyDoneProbe(
+  event: ReturnType<typeof subscribedEvent>,
+  probes: ReadonlyMap<string, string>,
+): void {
+  const eventId = event.id?.value ?? "";
+  const taskId = probes.get(eventId);
+  if (taskId === undefined) {
+    throw new Error(`Received unexpected rejection readiness event "${eventId}".`);
+  }
+
+  expect(
+    event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+  ).toEqual(
+    create(TaskAlreadyDoneSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
+    }),
+  );
+}
+
+function nextEventLoopTurn(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function remainingMs(deadline: number): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error("Rejection subscription readiness deadline expired.");
+  }
+  return remaining;
+}
+
 async function nextSubscriptionUpdate(
-  subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
+  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
   label: string,
   timeoutMs = 250,
 ) {

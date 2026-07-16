@@ -1,6 +1,6 @@
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -15,6 +15,7 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
+  TimestampSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -35,7 +36,9 @@ import {
   EmailAddressSchema,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   InternetDomainSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
@@ -76,6 +79,7 @@ import {
 import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import type { Response } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 import {
+  EventStore,
   InMemoryStorageFactory,
   RecordStorage,
   StorageFactory,
@@ -89,7 +93,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   Aggregate,
   BoundedContext,
-  CommandRefusalError,
   Projection,
   Repository,
   Server,
@@ -99,11 +102,16 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
+import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
 } from "../../src/services/subscription-records.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const GeneratedTaskIdSchema = TodoIdSchema;
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -211,9 +219,11 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 
-class RefusingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+class RejectingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(): never {
-    throw new CommandRefusalError("TASK_ALREADY_COMPLETED", "Task is already completed.");
+    throw TaskAlreadyDone.create({
+      id: create(GeneratedTaskIdSchema, { value: this.id }),
+    });
   }
 }
 
@@ -1250,15 +1260,29 @@ describe("SpineServices", () => {
     }
   });
 
-  it("returns stable Ack errors for immediate aggregate command refusals", async () => {
-    const context = BoundedContext.singleTenant("Tasks").add(createRefusingRepository()).build();
+  it("accepts a domain rejection and stores its typed event asynchronously", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRejectingRepository())
+      .withStorageFactory(storageFactory)
+      .build();
     const handlers = registeredCommandHandlers(context);
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+    const command = createAggregateCommand("command-rejected", "task-rejected");
 
-    const ack = await handlers.post(createAggregateCommand("command-refused", "task-refused"));
+    const ack = await handlers.post(command);
+    const [event] = await waitForStoredEvents(eventStore, 1);
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_COMPLETED");
-    expect(errorMessage(ack.status?.status)).toBe("Task is already completed.");
+    expect(ack.status?.status.case).toBe("ok");
+    expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(
+      event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+    ).toEqual(
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
+      }),
+    );
+    expect(event?.context?.rejection?.command).toEqual(command);
   });
 
   it("returns stable Ack errors with details for invalid command payloads", async () => {
@@ -1761,7 +1785,8 @@ describe("SpineServices", () => {
     const nextUpdate = withTimeout(iterator.next(), "event subscription update");
 
     await delay(25);
-    await context.eventBus().post(createAggregateEvent("event-created", "aggregate-1", "Created"));
+    const source = createAggregateEvent("event-created", "aggregate-1", "Created");
+    await context.eventBus().post(source);
 
     const delivered = await nextUpdate;
     const update = delivered.value as SubscriptionUpdate | undefined;
@@ -1777,6 +1802,8 @@ describe("SpineServices", () => {
     if (event?.message === undefined) {
       throw new Error("Expected delivered event envelope.");
     }
+    expect(event).toEqual(source);
+    expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
     expect(unpackAny(event.message, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
@@ -1785,6 +1812,64 @@ describe("SpineServices", () => {
         archived: false,
       }),
     );
+    await iterator.return?.();
+  });
+
+  it("redacts rejection details only from client event subscription updates", async () => {
+    const internallyDispatched: ReturnType<typeof createRejectionEvent>[] = [];
+    const context = BoundedContext.multitenant("RejectionEvents")
+      .addEventDispatcher({
+        messageSchemas: () => [TaskAlreadyDoneSchema],
+        dispatch: (event) => {
+          internallyDispatched.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = withTimeout(iterator.next(), "rejection event subscription update");
+    const command = createAggregateCommand("command-rejected", "task-rejected");
+    const source = createRejectionEvent(command, "rejection stack");
+
+    await delay(25);
+    await context.eventBus().post(source);
+
+    const delivered = await nextUpdate;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected rejection event subscription update.");
+    }
+    const event = update.update.value.event[0];
+    if (event === undefined) {
+      throw new Error("Expected delivered rejection event envelope.");
+    }
+    const expected = clone(EventSchema, source);
+    if (expected.context?.rejection === undefined) {
+      throw new Error("Expected rejection event context.");
+    }
+    expected.context.rejection.command = undefined;
+    // Model the legacy wire field only to verify client-side security redaction.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    expected.context.rejection.commandMessage = undefined;
+    expected.context.rejection.stacktrace = "";
+
+    expect(event).toEqual(expected);
+    expect(event.context?.rejection?.command).toBeUndefined();
+    // Verify that the legacy wire payload is absent from the client clone.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    expect(event.context?.rejection?.commandMessage).toBeUndefined();
+    expect(event.context?.rejection?.stacktrace).toBe("");
+    expect(source.context?.rejection?.command).toEqual(command);
+    // Verify that security redaction did not mutate the legacy source payload.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    expect(source.context?.rejection?.commandMessage?.value.byteLength).toBeGreaterThan(0);
+    expect(source.context?.rejection?.stacktrace).toBe("rejection stack");
+    expect(internallyDispatched).toEqual([source]);
+    expect(internallyDispatched[0]?.context?.rejection).toEqual(source.context?.rejection);
     await iterator.return?.();
   });
 
@@ -5671,13 +5756,13 @@ function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProject
   });
 }
 
-function createRefusingRepository(): Repository<typeof RefusingTaskAggregate> {
-  const handlers = defineEntityHandlers(RefusingTaskAggregate, AggregateStateSchema, (builder) => [
+function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> {
+  const handlers = defineEntityHandlers(RejectingTaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
   ]);
 
   return new Repository({
-    entityType: RefusingTaskAggregate,
+    entityType: RejectingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
   });
@@ -5795,6 +5880,35 @@ function createAggregateEvent(
       id: aggregateId,
       name,
       archived: false,
+    }),
+  });
+}
+
+function createRejectionEvent(
+  command: ReturnType<typeof createAggregateCommand>,
+  stacktrace: string,
+) {
+  return packEvent({
+    id: create(EventIdSchema, { value: "event-rejected" }),
+    context: create(EventContextSchema, {
+      timestamp: create(TimestampSchema, { seconds: 123n, nanos: 456 }),
+      origin: {
+        case: "importContext",
+        value: createActorContext("tenant-rejected"),
+      },
+      producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "producer-1" })),
+      rejection: create(RejectionEventContextSchema, {
+        command,
+        commandMessage: packAny(
+          StringValueSchema,
+          create(StringValueSchema, { value: "legacy rejected command payload" }),
+        ),
+        stacktrace,
+      }),
+    }),
+    schema: TaskAlreadyDoneSchema,
+    message: create(TaskAlreadyDoneSchema, {
+      id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
     }),
   });
 }
@@ -6313,10 +6427,10 @@ function createTopic(tenantId?: TenantInput) {
   });
 }
 
-function createEventTopic(tenantId?: TenantInput) {
+function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = AggregateStateSchema) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-event" }),
-    target: createEventSubscriptionTarget(),
+    target: createEventSubscriptionTarget(schema),
     context: createActorContext(tenantId),
   });
 }
@@ -6931,4 +7045,16 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitForStoredEvents(eventStore: EventStore, count: number) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const events = await eventStore.read();
+    if (events.length >= count) {
+      return events;
+    }
+    await delay(5);
+  }
+  return await eventStore.read();
 }

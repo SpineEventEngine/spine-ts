@@ -4,15 +4,18 @@ import {
   ValidationException,
   checkValid,
   deriveTypeUrl,
+  isRejectionThrowable,
   packAny,
   unpackAny,
   type MessageSchema,
+  type RejectionThrowable,
 } from "@spine-ts/core";
 import {
   CommandContextSchema,
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  RejectionEventContextSchema,
   type Command,
   type Event,
   type TenantId,
@@ -1212,21 +1215,30 @@ class AggregateCommandExecution {
     const usesAppliers = this.#usesAppliers();
     const loaded = await this.#support.loadAggregate(route.entityId, usesAppliers);
     const commandContext = commandHandlerContext(this.#command);
-    const produced = usesAppliers
-      ? await invokeEntityMethod(
-          loaded.entity,
-          assignee.handler.methodName,
-          message,
-          assignee.handler.parameterCount,
-          commandContext,
-        )
-      : await this.#invokeAssignee(
-          loaded.entity,
-          assignee.handler.methodName,
-          message,
-          assignee.handler.parameterCount,
-          commandContext,
-        );
+    let produced: unknown;
+    try {
+      produced = usesAppliers
+        ? await invokeEntityMethod(
+            loaded.entity,
+            assignee.handler.methodName,
+            message,
+            assignee.handler.parameterCount,
+            commandContext,
+          )
+        : await this.#invokeAssignee(
+            loaded.entity,
+            assignee.handler.methodName,
+            message,
+            assignee.handler.parameterCount,
+            commandContext,
+          );
+    } catch (error) {
+      if (!isRejectionThrowable(error)) {
+        throw error;
+      }
+      postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      return;
+    }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
       route.entityId,
@@ -1715,15 +1727,11 @@ class ProjectionEventExecution {
   }
 
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
-    const message = unpackRequired(
-      requireSignalMessage(this.#event.message, "event"),
-      subscribers[0]?.handler.schema ?? this.#repository.stateSchema,
-      "event",
-    );
+    const packedMessage = requireSignalMessage(this.#event.message, "event");
     const tenantOptions = standTenantOptions(this.#runtime.context, this.#event);
     const entity = await this.#loadProjection(entityId, tenantOptions);
 
-    await this.#invokeSubscribers(entity, subscribers, message);
+    await this.#invokeSubscribers(entity, subscribers, packedMessage);
     await this.#storeIfChanged(entity, tenantOptions);
   }
 
@@ -1760,16 +1768,17 @@ class ProjectionEventExecution {
   async #invokeSubscribers(
     entity: object,
     subscribers: RepositoryEventSubscribers,
-    message: unknown,
+    packedMessage: NonNullable<Event["message"]>,
   ): Promise<void> {
     transactionalEntityAccess.start(entity);
     try {
       for (const subscriber of subscribers) {
+        const subscriberMessage = unpackRequired(packedMessage, subscriber.handler.schema, "event");
         const eventContext = eventHandlerContext(this.#event);
         await invokeEntityMethod(
           entity,
           subscriber.handler.methodName,
-          message,
+          subscriberMessage,
           subscriber.handler.parameterCount,
           eventContext,
         );
@@ -1921,7 +1930,16 @@ class ProcessManagerCommandExecution {
 
     const tenantOptions = commandStandOptions(this.#runtime.context, this.#command);
     const entity = await this.#support.load(route.entityId, tenantOptions);
-    const eventSignals = await this.#invoke(entity, assignee, message);
+    let eventSignals: readonly unknown[];
+    try {
+      eventSignals = await this.#invoke(entity, assignee, message);
+    } catch (error) {
+      if (!isRejectionThrowable(error)) {
+        throw error;
+      }
+      postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      return;
+    }
 
     await this.#support.storeIfChanged(entity, tenantOptions);
     this.#postEvents(this.#bindProducedEvents(eventSignals, route.entityId));
@@ -2346,6 +2364,36 @@ function eventVersionNumber(version: bigint): number {
 
 function runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
   return PrimitiveIds.readFinite(entityId);
+}
+
+function postRejectionEvent(
+  runtime: RepositoryRuntime,
+  command: Command,
+  entityId: unknown,
+  rejection: RejectionThrowable,
+): void {
+  const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {
+    producerId: runtimeProducerId(entityId) ?? "Unknown",
+  });
+  const event = create(EventSchema, {
+    id: metadata.id,
+    message: packAny(rejection.schema, rejection.messageThrown()),
+    context: create(EventContextSchema, {
+      ...metadata.context,
+      rejection: create(RejectionEventContextSchema, {
+        command: clone(CommandSchema, command),
+        stacktrace: rejection.stack ?? "",
+      }),
+    }),
+  });
+
+  try {
+    void runtime.postEventFollowUp(event).catch((error: unknown) => {
+      runtime.recordDispatchFailure(event, error);
+    });
+  } catch (error) {
+    runtime.recordDispatchFailure(event, error);
+  }
 }
 
 function requireCommandId(command: Command): NonNullable<Command["id"]> {
@@ -3094,17 +3142,23 @@ function readEventEntityId(
   targetIdField: DescriptorFieldMetadata,
 ): unknown {
   const producerId = readProducerId(event);
+  const routedProducerId =
+    event.context?.rejection !== undefined &&
+    schema.fields[0]?.fieldKind === "message" &&
+    producerId === "Unknown"
+      ? undefined
+      : producerId;
   const fieldId = readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
 
-  if (producerId !== undefined && producerId !== fieldId.value) {
+  if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {
     throw new Error(
       "Repository event routing requires producer ID and first field to identify the same entity.",
     );
   }
 
-  return producerId === undefined || targetIdField.descriptor.fieldKind === "message"
+  return routedProducerId === undefined || targetIdField.descriptor.fieldKind === "message"
     ? fieldId.id
-    : producerId;
+    : routedProducerId;
 }
 
 interface RoutableId {

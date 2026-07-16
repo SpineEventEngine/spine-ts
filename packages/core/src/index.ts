@@ -1,5 +1,5 @@
 import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
-import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
+import type { DescField, Message, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
@@ -48,6 +48,8 @@ const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
 const REDACTED_VALIDATION_DETAIL = "[redacted]";
 const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
 const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
+const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
+const REJECTION_THROWABLES = new WeakSet<object>();
 
 /** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
@@ -119,6 +121,80 @@ export class ValidationException extends Error {
   asMessage(): ValidationError {
     return this.#messageData;
   }
+}
+
+let instantiateRejection: <Schema extends MessageSchema>(
+  schema: Schema,
+  messageData: MessageShape<Schema>,
+) => RejectionThrowable<Schema>;
+
+/** A nominal domain rejection carrying its generated Protobuf message. */
+export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> extends Error {
+  readonly #schema: Schema;
+  readonly #messageData: MessageShape<Schema>;
+
+  private constructor(
+    schema: Schema,
+    messageData: MessageShape<Schema>,
+    token: typeof REJECTION_CONSTRUCTOR,
+  ) {
+    super(`Rejected: ${schema.typeName}`);
+    if (token !== REJECTION_CONSTRUCTOR) {
+      throw new TypeError("RejectionThrowable must be created by its validated factory.");
+    }
+    this.name = "RejectionThrowable";
+    this.#schema = schema;
+    this.#messageData = snapshotMessage(schema, messageData);
+    Object.setPrototypeOf(this, new.target.prototype);
+    REJECTION_THROWABLES.add(this);
+    Object.preventExtensions(this);
+  }
+
+  static {
+    instantiateRejection = <CreatedSchema extends MessageSchema>(
+      schema: CreatedSchema,
+      messageData: MessageShape<CreatedSchema>,
+    ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
+  }
+
+  /** Generated Protobuf-ES schema for the rejected domain signal. */
+  get schema(): Schema {
+    return this.#schema;
+  }
+
+  /** Return a defensive clone of the snapshotted rejection message. */
+  get messageData(): MessageShape<Schema> {
+    return snapshotMessage(this.#schema, this.#messageData);
+  }
+
+  /** Return a defensive clone, matching Spine JVM's throwable contract. */
+  messageThrown(): MessageShape<Schema> {
+    return snapshotMessage(this.#schema, this.#messageData);
+  }
+}
+
+/** Check whether a value is a factory-created domain rejection throwable. */
+export function isRejectionThrowable(value: unknown): value is RejectionThrowable {
+  return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
+}
+
+/**
+ * Validate, snapshot, and wrap a generated rejection message in a nominal throwable.
+ *
+ * The schema must describe a top-level message declared in a source file whose
+ * name ends in `rejections.proto`.
+ *
+ * @throws `TypeError` if the schema is not an eligible rejection message.
+ * @throws {@link ValidationException} if the rejection payload is invalid.
+ */
+export function createRejectionThrowable<Schema extends MessageSchema>(
+  schema: Schema,
+  input: MessageInitShape<Schema>,
+): RejectionThrowable<Schema> {
+  assertRejectionSchema(schema);
+  const messageData = checkValid(schema, create(schema, input));
+
+  return instantiateRejection(schema, messageData);
 }
 
 /** Validate one Protobuf message through the Spine TS validation facade. */
@@ -689,4 +765,19 @@ function redactPlaceholderValues(
   return Object.fromEntries(
     Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
   );
+}
+
+function assertRejectionSchema(schema: MessageSchema): void {
+  if (schema.parent !== undefined || !schema.file.proto.name.endsWith("rejections.proto")) {
+    throw new TypeError(
+      `Rejection schema "${schema.typeName}" must be a top-level message declared in a rejections.proto file.`,
+    );
+  }
+}
+
+function snapshotMessage<Schema extends MessageSchema>(
+  schema: Schema,
+  message: MessageShape<Schema>,
+): MessageShape<Schema> {
+  return fromBinary(schema, toBinary(schema, message));
 }

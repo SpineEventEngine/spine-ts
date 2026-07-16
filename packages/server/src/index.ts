@@ -29,7 +29,6 @@ export {
 } from "./stand/stand.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
-export { CommandRefusalError } from "./services/command-errors.js";
 export { Server, type RunningServer, type ServerOptions } from "./server/server.js";
 export {
   ServerEnvironment,

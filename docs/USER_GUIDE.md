@@ -344,7 +344,9 @@ event topics currently support `include_all`. Inactive subscription records
 are storage-backed and have a default TTL of 30 seconds. Non-positive or
 non-finite values become 1, positive finite values are floored, and an effective
 TTL above 2,147,483,647 milliseconds throws synchronously before storage or
-timer work. Activation atomically
+timer work. Client rejection updates redact rejected-command payload forms and
+throwable stack; internal generated subscribers retain full defensive context.
+Activation atomically
 replaces the inactive row with an owner claim before attaching delivery and
 retains the claim while active; updates from before activation are not replayed.
 Cancel removes an inactive row or same-instance claim through a marker. A claim
@@ -398,7 +400,7 @@ try {
 }
 ```
 
-## 9. Handle invalid input and business refusal
+## 9. Handle invalid input and domain rejection
 
 Send domain commands through the command service and inspect the returned
 `Ack`. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
@@ -406,17 +408,36 @@ Send domain commands through the command service and inspect the returned
 Framework-controlled state-transition validation returns
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with validation details.
 
-For a domain rule that refuses a command immediately, throw
-`CommandRefusalError` from the command handler with the domain refusal status
-your generated contract expects. The service returns a non-OK acknowledgement.
-Do not use service/runtime message wrappers in handlers to represent either
-case.
+For a domain rule failure, throw the generated companion for a top-level message
+declared in a `rejections.proto` file. Repository execution rolls back before
+scheduling the typed rejection event independently. `CommandService.Post`
+returns an OK acceptance acknowledgement. If the independently scheduled post
+succeeds, an already-active `SubscriptionService` stream with queue capacity
+may receive the rejection asynchronously; saturation or closure can prevent
+observation. Its client event envelope preserves the typed rejection and
+ordinary event metadata, but redacts rejected-command payload forms and
+throwable stack.
+Framework-generated internal subscribers still receive the full defensive
+`EventContext`. A post failure is recorded internally, is not reflected in the
+`Ack`, and is not currently retried. Do not return rejection or service
+envelope values from handlers.
+
+After the consumer project's pnpm Proto generation step, a handler saved as
+`src/handlers/task.ts` can use the generated project-root paths below:
 
 ```ts
-import { CommandRefusalError } from "@spine-ts/server";
+import { create } from "@bufbuild/protobuf";
 
-throw new CommandRefusalError("TASK_ALREADY_DONE", "The task is already complete.");
+import { TaskAlreadyDone } from "../../generated/spine/example/todo/v1/task_rejections.js";
+import { TaskIdSchema } from "../../generated/spine/example/todo/v1/task_id_pb.js";
+
+throw TaskAlreadyDone.create({
+  id: create(TaskIdSchema, { value: "task-42" }),
+});
 ```
+
+Invalid payloads, transition-validation failures, and unexpected technical
+errors remain non-OK acknowledgements with their existing error contracts.
 
 ## 10. Test the real paths
 

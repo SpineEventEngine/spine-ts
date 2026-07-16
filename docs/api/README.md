@@ -24,8 +24,25 @@ and UI language contracts.
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
 validation result/check helpers, `ValidationException`, structured
-`ValidationError` creation, and the initial transition-validation seam. Core
-envelope construction exports include `packAny()`, `unpackAny()`,
+`ValidationError` creation, the initial transition-validation seam,
+`RejectionThrowable`, `createRejectionThrowable()`, and
+`isRejectionThrowable()`. Generated rejection companions create validated
+throwables through this factory contract. Repository command execution now
+recognizes them only through the guard after rollback and schedules a regular
+rejection event for independent EventBus posting. Build-time analysis
+accepts descriptor-verified top-level rejection inputs for event-consuming
+handlers while excluding assignment inputs and normal emitted values. Service
+posting returns an OK acceptance `Ack` for handled domain rejections and
+independently schedules the typed event through EventBus. A successful post can
+be received by an active `SubscriptionService` stream with queue capacity;
+inactive, saturated, or closed streams may not observe it. Client event updates
+retain the typed rejection and ordinary event metadata but redact
+rejected-command payload forms and throwable stack from
+`EventContext.rejection`. A failed post is
+recorded in `storedEventDispatchFailures()`, is not reflected in the client
+`Ack`, and has no promised retry.
+Core envelope construction exports include
+`packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
@@ -38,12 +55,19 @@ read/version/list/update/subscription/clear contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
-`CommandRefusalError` is the current public immediate-refusal error that
-command handlers can throw so `CommandService.Post` returns a stable non-ok
-`Ack` error type/message. `CommandService.Post` also returns
-`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
-and packed `spine.validation.ValidationError` details when `CommandBus`
-rejects an invalid accepted command payload before dispatcher callbacks,
+Generated rejection companions are the public domain-rule failure contract.
+When a repository handler throws one, rollback completes before an independent
+typed rejection event is scheduled, command dispatch resolves, and
+`CommandService.Post` returns an OK acceptance `Ack`. A successful follow-up
+post stores the event through EventBus; an active `SubscriptionService` stream
+with queue capacity may receive it, while inactivity, saturation, or closure
+may prevent observation. Post failure is recorded in
+`storedEventDispatchFailures()`, is not visible to the command client, and is
+not currently retried. OK does not mean a state transition or rejection-event
+delivery succeeded. `CommandService.Post` still returns
+`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.` and
+packed `spine.validation.ValidationError` details when `CommandBus` rejects an
+invalid accepted command payload before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
 latest persisted state load, traceability event-journal append, latest-state
@@ -267,7 +291,9 @@ applied to delivered states, not to `no_longer_matching` updates. Event topics
 support `include_all = true` in this runtime slice and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
-service/runtime data. Activation is by opaque ID. Inactive records are stored
+service/runtime data. Client rejection updates redact rejected-command payload
+forms and throwable stack; internal generated handlers retain full defensive
+context. Activation is by opaque ID. Inactive records are stored
 through the owning bounded context storage factory, so a new `SpineServices`
 instance over the same storage factory can activate a previously returned ID.
 Activation compare-and-sets the exact inactive row to a unique-owner claim and
@@ -504,12 +530,15 @@ decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
 schemas inferred from explicit return types. Build-time analysis derives and
-validates command/event roles from generated descriptors before writing those
-registry records. Generated `@Assign` and
-`@Command` producer records must declare at least one emitted schema; `@React`
-records may return generated event messages or explicit `void` with no emitted
-schemas. `@Subscribe` records return explicit `void` and declare no emitted
-schemas. They are generated build
+validates command, event, and distinct rejection roles from generated
+descriptors before writing those registry records. A rejection role requires a
+top-level message declared in a source file ending `rejections.proto`.
+Rejections are accepted as inputs by `@Subscribe`, `@React`, and
+event-to-command `@Command`, but not by `@Assign`; they cannot be normal emitted
+values. Generated `@Assign` and `@Command` producer records must declare at
+least one emitted schema; `@React` records may return generated event messages
+or explicit `void` with no emitted schemas. `@Subscribe` records return
+explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 The exported `@spine-ts/server/internal/generated-handler-registry` subpath
 exists only to give that generated registry source its required type-only
@@ -525,9 +554,19 @@ Repository execution calls generated two-argument command assignees, event
 subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the
 envelope omits context, execution supplies an empty generated context message
-of the proper schema. Generated producer handlers return domain messages; the
-framework wraps returned commands/events internally and dispatches produced
-signals only after the current storage/transactional work succeeds.
+of the proper schema. Rejection subscribers receive the typed rejection payload
+and `EventContext`, never the enclosing `Event`; each matching subscriber
+receives defensive payload and context values. For framework-produced rejection
+events, `EventContext.rejection.command` contains a defensive clone of the
+rejected original `Command`, and `EventContext.rejection.stacktrace` carries the
+generated rejection throwable's available stack. This full context is an
+internal generated-handler contract. Client-facing `SubscriptionService`
+updates clone the event and redact rejected-command payload forms and throwable
+stack while preserving the typed payload and other event metadata. Generated
+producer handlers return
+domain messages; the framework wraps returned commands/events internally and
+dispatches produced signals only after the current storage/transactional work
+succeeds.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

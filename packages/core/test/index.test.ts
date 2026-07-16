@@ -31,11 +31,14 @@ import {
   type TypeMetadata,
   TypeRegistry,
   ValidationException,
+  RejectionThrowable,
   checkValid,
+  createRejectionThrowable,
   createValidationError,
   createSpineCoreRegistry,
   deriveTypeUrl,
   getTypeUrlPrefix,
+  isRejectionThrowable,
   packAny,
   packCommand,
   packEvent,
@@ -58,6 +61,49 @@ const fileExampleValidationFixture = fileDesc(
   [file_spine_options],
 );
 const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMessage<RequiredName>;
+
+const fileRequiredRejectionsFixture = fileDesc(
+  "CiFleGFtcGxlL3JlcXVpcmVkX3JlamVjdGlvbnMucHJvdG8SEmV4YW1wbGUudmFsaWRhdGlvbiIi" +
+    "CgxSZXF1aXJlZE5hbWUSEgoEbmFtZRgBIAEoCUIEoIUkAWIGcHJvdG8z",
+  [file_spine_options],
+);
+const RequiredRejectionSchema = messageDesc(
+  fileRequiredRejectionsFixture,
+  0,
+) as GenMessage<RequiredName>;
+
+type RejectionDetail = Message<"example.rejection.PayloadRejected.Detail"> & {
+  note: string;
+};
+
+type PayloadRejected = Message<"example.rejection.PayloadRejected"> & {
+  data: Uint8Array;
+  detail?: RejectionDetail;
+  labels: Record<string, string>;
+};
+
+type NestedRejection = Message<"example.rejection.PayloadRejected.NestedRejection"> & {
+  reason: string;
+};
+
+const filePayloadRejectionsFixture = fileDesc(
+  "CiBleGFtcGxlL3BheWxvYWRfcmVqZWN0aW9ucy5wcm90bxIRZXhhbXBsZS5yZWplY3Rpb24itAIK" +
+    "D1BheWxvYWRSZWplY3RlZBISCgRkYXRhGAEgASgMUgRkYXRhEkEKBmRldGFpbBgCIAEoCzIpLmV4" +
+    "YW1wbGUucmVqZWN0aW9uLlBheWxvYWRSZWplY3RlZC5EZXRhaWxSBmRldGFpbBJGCgZsYWJlbHMY" +
+    "AyADKAsyLi5leGFtcGxlLnJlamVjdGlvbi5QYXlsb2FkUmVqZWN0ZWQuTGFiZWxzRW50cnlSBmxh" +
+    "YmVscxocCgZEZXRhaWwSEgoEbm90ZRgBIAEoCVIEbm90ZRo5CgtMYWJlbHNFbnRyeRIQCgNrZXkY" +
+    "ASABKAlSA2tleRIUCgV2YWx1ZRgCIAEoCVIFdmFsdWU6AjgBGikKD05lc3RlZFJlamVjdGlvbhIW" +
+    "CgZyZWFzb24YASABKAlSBnJlYXNvbmIGcHJvdG8z",
+);
+const PayloadRejectedSchema = messageDesc(
+  filePayloadRejectionsFixture,
+  0,
+) as GenMessage<PayloadRejected>;
+const NestedRejectionSchema = messageDesc(
+  filePayloadRejectionsFixture,
+  0,
+  2,
+) as GenMessage<NestedRejection>;
 
 function transitionViolation(message: string): ConstraintViolation {
   return create(ConstraintViolationSchema, {
@@ -92,6 +138,128 @@ function fieldPathWithUnknownFields() {
 
   return fromBinary(FieldPathSchema, new Uint8Array([...encoded, ...unknownField]));
 }
+
+describe("RejectionThrowable", () => {
+  it("keeps a nominal, cloned rejection message with Error behavior", () => {
+    const rejection = createRejectionThrowable(RequiredRejectionSchema, {
+      name: "Task already done",
+    });
+
+    expect(rejection).toBeInstanceOf(Error);
+    expect(rejection).toBeInstanceOf(RejectionThrowable);
+    expect(rejection.name).toBe("RejectionThrowable");
+    expect(rejection.stack).toContain("RejectionThrowable");
+    expect(rejection.schema).toBe(RequiredRejectionSchema);
+    expect(rejection.messageData).toEqual({
+      $typeName: "example.validation.RequiredName",
+      name: "Task already done",
+    });
+  });
+
+  it("validates the rejection message before creating the throwable", () => {
+    expect(() => createRejectionThrowable(RequiredRejectionSchema, {})).toThrow(
+      ValidationException,
+    );
+  });
+
+  it("owns a private payload snapshot and returns defensive clones", () => {
+    const encoded = toBinary(
+      PayloadRejectedSchema,
+      create(PayloadRejectedSchema, {
+        data: new Uint8Array([1, 2, 3]),
+        detail: { note: "original" },
+        labels: { priority: "high" },
+      }),
+    );
+    const input = fromBinary(PayloadRejectedSchema, new Uint8Array([...encoded, 0x98, 0x06, 0x7b]));
+    const rejection = createRejectionThrowable(PayloadRejectedSchema, input);
+    const inputDetail = input.detail;
+    const inputUnknown = input.$unknown?.[0];
+
+    if (inputDetail === undefined || inputUnknown === undefined) {
+      throw new Error("Payload rejection fixture is incomplete.");
+    }
+
+    input.data[0] = 9;
+    inputDetail.note = "input changed";
+    input.labels.priority = "low";
+    inputUnknown.data[0] = 0;
+
+    const firstRead = rejection.messageData;
+    expect(firstRead.data).toEqual(new Uint8Array([1, 2, 3]));
+    expect(firstRead.detail?.note).toBe("original");
+    expect(firstRead.labels).toEqual({ priority: "high" });
+    expect(firstRead.$unknown?.[0]?.data).toEqual(new Uint8Array([0x7b]));
+    const firstDetail = firstRead.detail;
+    const firstUnknown = firstRead.$unknown?.[0];
+
+    if (firstDetail === undefined || firstUnknown === undefined) {
+      throw new Error("Snapshotted rejection payload is incomplete.");
+    }
+
+    firstRead.data[1] = 8;
+    firstDetail.note = "read changed";
+    firstRead.labels.priority = "urgent";
+    firstUnknown.data[0] = 1;
+
+    const secondRead = rejection.messageThrown();
+    expect(secondRead.data).toEqual(new Uint8Array([1, 2, 3]));
+    expect(secondRead.detail?.note).toBe("original");
+    expect(secondRead.labels).toEqual({ priority: "high" });
+    expect(secondRead.$unknown?.[0]?.data).toEqual(new Uint8Array([0x7b]));
+    expect(() => Object.defineProperty(rejection, "schema", { value: AnySchema })).toThrow();
+    expect(() => Object.defineProperty(rejection, "messageData", { value: secondRead })).toThrow();
+  });
+
+  it("recognizes only factory-created rejection throwables", () => {
+    const rejection = createRejectionThrowable(RequiredRejectionSchema, {
+      name: "Task already done",
+    });
+    const spoofedError = new Error("spoofed");
+
+    Object.setPrototypeOf(spoofedError, RejectionThrowable.prototype);
+
+    expect(isRejectionThrowable(rejection)).toBe(true);
+    expect(isRejectionThrowable(new Error("ordinary"))).toBe(false);
+    expect(spoofedError).toBeInstanceOf(RejectionThrowable);
+    expect(isRejectionThrowable(spoofedError)).toBe(false);
+    expect(isRejectionThrowable({ schema: RequiredRejectionSchema })).toBe(false);
+  });
+
+  it("accepts only top-level messages declared in rejections.proto files", () => {
+    expect(() =>
+      createRejectionThrowable(RequiredRejectionSchema, { name: "valid" }),
+    ).not.toThrow();
+    expect(() => createRejectionThrowable(RequiredNameSchema, { name: "ordinary" })).toThrow(
+      TypeError,
+    );
+    expect(() => createRejectionThrowable(NestedRejectionSchema, { reason: "nested" })).toThrow(
+      TypeError,
+    );
+  });
+
+  it("rejects direct construction at compile time and runtime", () => {
+    expect(() => {
+      // @ts-expect-error The validated factory is the only construction API.
+      new RejectionThrowable(
+        RequiredRejectionSchema,
+        create(RequiredRejectionSchema, { name: "invalid construction" }),
+      );
+    }).toThrow(TypeError);
+  });
+
+  it("preserves the schema-specific create input type", () => {
+    const TaskAlreadyDone = {
+      create: (
+        input: Parameters<typeof createRejectionThrowable<typeof RequiredRejectionSchema>>[1],
+      ) => createRejectionThrowable(RequiredRejectionSchema, input),
+    };
+
+    expectTypeOf<{ name: string }>().toExtend<Parameters<typeof TaskAlreadyDone.create>[0]>();
+    expectTypeOf<{ name: number }>().not.toExtend<Parameters<typeof TaskAlreadyDone.create>[0]>();
+    expect(TaskAlreadyDone).toBeDefined();
+  });
+});
 
 describe("@spine-ts/core type registry", () => {
   it("derives type URLs from Spine file type_url_prefix options", () => {

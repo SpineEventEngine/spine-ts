@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Complete - accepted initial release closed
+Status: Reopened - T-0044 first-class domain rejections are release-blocking
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: None
+Active implementation frontier: T-0044 first-class domain rejections
 
 ## Purpose
 
@@ -31,6 +31,18 @@ true together:
 
 This plan is intentionally more prescriptive than a roadmap. A coordinator
 should be able to execute each packet without first rebuilding project history.
+
+## Post-Release Readiness Correction
+
+On `2026-07-16`, the human identified JVM-style first-class domain rejections
+as a missing release requirement. T-0044 reopens readiness until Proto-declared
+rejections receive generated throwable TypeScript companions, handler-thrown
+rejections become typed rejection events with rejected-command context, entity
+work rolls back, rejection dispatch/client behavior is implemented, and current
+docs/example coverage agree with the runtime.
+
+The package manager remains pnpm for this Spine TS version. npm compatibility is
+not part of T-0044 or the reopened completion frontier.
 
 ## Authority And Reconciliation Rules
 
@@ -89,10 +101,30 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0041 is complete, integrated, post-merge verified, remotely
-synchronized, and cleaned up, with a clean focused final security review and one
-explicit human-accepted SF-013 residual. T-0042 release preflight, real
-single-process and multi-process acceptance, package/import/link/command scans,
+Initial release closure through T-0042 and the prior completed tasks is
+historical. T-0044 has reopened readiness; generated rejection companions and
+rejection-event runtime and handler integration are review-clean. Slice 3B
+service/API and to-do example implementation and focused gates are complete;
+its first canonical review's bounded routing, test-readiness, and docs fix batch
+is verified. Slice 3B Round 5 is clean in all canonical per-slice lanes. Final
+security review found one client-facing rejection context disclosure. The
+subscription-boundary redaction is implemented and verified. Security rereview
+found one deprecated command-payload field bypass; that bounded fix plus generic
+docs/status alignment are now independently verified. Client redaction and final
+security rereview are clean; final documentation rereview is clean and the full
+branch verification gate exposed a bounded T-0044 lint batch. That fix and
+focused verification are clean. Reliability rereview found one readiness
+rejection-observation race; that fix and regression are independently verified,
+and bounded rereview found two missing post-settlement race proofs. Their fix is
+independently verified. That rereview found one missing positive
+readiness-ordering proof; the test and final reliability review are clean. The
+full native branch verification gate is clean; merge and post-merge verification
+are the active frontier.
+
+In the prior closure, T-0041 was complete, integrated, post-merge verified,
+remotely synchronized, and cleaned up, with a clean focused final security
+review and one explicit human-accepted SF-013 residual. T-0042 release preflight,
+real single-process and multi-process acceptance, package/import/link/command scans,
 all final specialist dispositions, and the native branch gate are clean. The
 branch gate passed 74 files / 1,780 tests in both ordinary and coverage runs at
 90.04% branches. Closure-record review is clean. T-0042 is integrated at

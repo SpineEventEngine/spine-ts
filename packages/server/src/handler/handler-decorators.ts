@@ -42,9 +42,10 @@ const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
  * Declare a command assignee method.
  *
  * Bare `@Assign` is the ordinary application form. Generated handler
- * registries own ordinary schema discovery. The decorator records metadata
- * only; it does not register the handler, instantiate the entity, or invoke the
- * method.
+ * registries require a command input and normal event output; a rejection is
+ * valid in neither role, but the handler may throw a generated rejection
+ * throwable. The decorator records metadata only; it does not register the
+ * handler, instantiate the entity, or invoke the method.
  */
 export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
@@ -60,9 +61,11 @@ export function Assign(
 /**
  * Declare a command-reacting method.
  *
- * Bare `@Command` is the ordinary application form. Command reactors may fan
- * out in `HandlerMetadataRegistry`; this decorator only records the
- * declaration.
+ * Bare `@Command` is the ordinary application form. Generated registries accept
+ * command inputs; event-to-command handlers also accept event or rejection
+ * inputs. Normal outputs are commands, while rejections are thrown, not
+ * returned. Command reactors may fan out in `HandlerMetadataRegistry`; this
+ * decorator only records the declaration.
  */
 export function Command<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
@@ -78,7 +81,8 @@ export function Command(
 /**
  * Declare an event subscriber method.
  *
- * Bare `@Subscribe` is the ordinary application form. Subscribers are
+ * Bare `@Subscribe` accepts generated event or rejection inputs and returns
+ * `void`; rejections are not returned as normal signals. Subscribers are
  * metadata-only declarations bridged by generated registry and runtime
  * metadata.
  */
@@ -96,9 +100,10 @@ export function Subscribe(
 /**
  * Declare an event reactor method.
  *
- * Bare `@React` is the ordinary application form. Reactors are collected as
- * class-owned metadata and may fan out through the caller-owned handler
- * registry.
+ * Bare `@React` accepts generated event or rejection inputs and returns normal
+ * events or explicit `void`; rejections are thrown, not returned. Reactors are
+ * collected as class-owned metadata and may fan out through the caller-owned
+ * handler registry.
  */
 export function React<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,

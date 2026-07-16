@@ -6,5 +6,12 @@ plugins:
     opt:
       - target=ts
       - import_extension=js
+  - local:
+      - node
+      - scripts/generate-rejections.mjs
+    out: examples/todo/generated
+    opt:
+      - target=ts
+      - import_extension=js
 inputs:
   - directory: examples/todo/proto

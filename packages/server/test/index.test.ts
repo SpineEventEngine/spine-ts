@@ -216,7 +216,6 @@ describe("@spine-ts/server", () => {
         "BoundedContextBuilder",
         "BoundedContextNameError",
         "CommandBus",
-        "CommandRefusalError",
         "CommandRegistrationReadiness",
         "DeliveryStorageCorruptionError",
         "EntityTransactionDraftStateError",
