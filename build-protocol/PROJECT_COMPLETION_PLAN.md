@@ -113,7 +113,9 @@ found one deprecated command-payload field bypass; that bounded fix plus generic
 docs/status alignment are now independently verified. Client redaction and final
 security rereview are clean; final documentation rereview is clean and the full
 branch verification gate exposed a bounded T-0044 lint batch. That fix and
-focused verification are clean; bounded rereview is the active frontier.
+focused verification are clean. Reliability rereview found one readiness
+rejection-observation race; that fix and regression are independently verified,
+and bounded rereview is the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security

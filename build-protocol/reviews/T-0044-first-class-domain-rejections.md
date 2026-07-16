@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Prior concerns clean - Final verification lint-fix review pending
+Status: In progress - Final reliability fix review
 
 Baseline: `1aa345ae`
 
@@ -1486,3 +1486,81 @@ review`).
 - Pre-review status/docs/API lint is clean. Commit/package, all four canonical
   concerns, and refreshed whole-task security remain before rerunning full
   verification.
+
+## Full Gate Lint Fix Review Wave
+
+- Verified commit `59d19168` (`Fix rejection full-gate lint`).
+- Canonical package `.superpowers/sdd/review-1a7dd42c..59d19168.diff`, literal
+  range `1a7dd42c..59d19168`, one commit, 26,485 bytes.
+- Security package `.superpowers/sdd/review-1aa345ae..59d19168.diff`, literal
+  range `1aa345ae..59d19168`, 26 commits, 349,868 bytes. Both first lines are
+  exact and use no moving ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected/fixed `gpt-5.6-terra` / high, canonical package.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected/fixed `gpt-5.6-luna` / medium, canonical package.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected/fixed `gpt-5.6-terra` / high, canonical package.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected/fixed `gpt-5.6-terra` / high, canonical package.
+- Final security: existing `security_reviewer`, explicit expected/fixed
+  `gpt-5.6-terra` / high, whole-task package.
+- Every lane is read-only, verifies its literal header, ignores historical
+  superseded text unless current records claim it, makes no changes, and spawns
+  no children. Dispatches:
+  - style/maintainability: `019f6bd8-7f2b-7773-a9c8-ab9b2eb8275b`
+    (Banach), explicit/fixed `gpt-5.6-terra` / high;
+  - documentation: `019f6bd8-82e1-70f2-85c2-3f6f551ac49f` (Halley),
+    explicit/fixed `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6bd8-86b7-7230-a543-1be992ac8d6e`
+    (Meitner), explicit/fixed `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6bd8-8ac4-7443-ad6c-c86322a2b1b4`
+    (Averroes), explicit/fixed `gpt-5.6-terra` / high;
+  - final security: `019f6bd8-904d-7ba1-a641-17f15852cff6` (Pasteur),
+    explicit/fixed `gpt-5.6-terra` / high.
+    Actual metadata and results pending.
+
+## Full Gate Lint Fix Review Findings
+
+- Every reviewer returned and was closed. Actual fixed-role profiles matched
+  explicit dispatch: docs `gpt-5.6-luna` / medium; all others
+  `gpt-5.6-terra` / high.
+- Documentation is clean: current mirrors accurately describe the review
+  frontier and comments do not promote the legacy API.
+- TypeScript/API docs is clean: fixture assignments are Error-compatible,
+  Reflect operations and readiness outcomes are sound, and no export/API/Proto
+  changed.
+- Final security is clean: the sole client clone still removes both command
+  forms and stack; suppressions are confined to one production assignment and
+  four boundary assertions; all other whole-task security concerns remain clean.
+- Accepted P1 reliability: `subscription.next()` can reject before the first
+  delayed/non-settling probe post finishes, but no observer is attached until
+  after that await. Observe the read rejection immediately without swallowing
+  it, and prove no unhandled rejection with a helper-level immediate-read-failure
+  plus delayed/non-settling-post regression. Preserve deadline/probe/fence rules.
+- Accepted P2 style/status: task and work logs say `In progress - Final
+verification lint-fix review`, while the review log used different wording.
+  Keep all three top statuses exactly equal and retain prior-clean detail below.
+- Return both findings to the existing implementer, explicit/fixed
+  `gpt-5.6-terra` / medium, with no children, logs, commit, push, or unrelated
+  changes. Repeat relevant review lanes after focused verification.
+
+## Readiness Rejection Fix Resolution
+
+- The existing implementer returned with actual `gpt-5.6-terra` / medium and
+  was closed, with no children, logs, commit, or push.
+- Red proof reproduced both wrong probe-post timeout precedence and one
+  unhandled read rejection. Green proof observes the read immediately,
+  propagates its original identity, and keeps the losing post/timer outcome
+  observed through later settlement.
+- The absolute deadline, no-post-after-expiry rule, 16-probe cap, prompt verified
+  receipt, final bounded wait, and later fence remain unchanged. A helper-level
+  regression plus all 30 native to-do black-box tests pass without unhandled
+  errors.
+- Coordinator `lint:generated`, cleanup enforcement, `typecheck:generated`,
+  `format:check`, and `git diff --check` pass. Task/work/review top statuses are
+  exactly equal.
+- Pre-review lint is clean. Commit/package and repeat the directly relevant
+  style, TypeScript/API, and performance/reliability lanes. Documentation and
+  security retain clean N/A dispositions because no public docs, API, production
+  redaction, dependencies, or security boundary changed.

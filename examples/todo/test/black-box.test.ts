@@ -811,6 +811,31 @@ describe("@spine-ts/example-todo", () => {
     expect(postCount).toBe(1);
   });
 
+  it("propagates an immediate readiness read failure while a probe post is pending", async () => {
+    const readFailure = new Error("rejection subscription read failed");
+    const latePostFailure = new Error("late rejection readiness post failed");
+    const delayedPost = Promise.withResolvers<undefined>();
+    let postCount = 0;
+    const readiness = establishRejectionSubscriptionReadiness(
+      {
+        postEvent: () => {
+          postCount++;
+          return delayedPost.promise;
+        },
+      },
+      { next: () => Promise.reject(readFailure) },
+      100,
+    );
+
+    try {
+      await expect(readiness).rejects.toBe(readFailure);
+      expect(postCount).toBe(1);
+    } finally {
+      delayedPost.reject(latePostFailure);
+      await nextEventLoopTurn();
+    }
+  });
+
   it("accepts an already-completed rejection and publishes its typed event", async () => {
     const context = await createTodoContext();
     const fixture = new BoundedContextFixture(context, {
@@ -1444,9 +1469,16 @@ function subscribedEvent(update: SubscriptionUpdate | undefined) {
   return event;
 }
 
-type RejectionReadinessOutcome =
+type RejectionReadOutcome =
   | { readonly case: "received"; readonly update: SubscriptionUpdate | undefined }
-  | { readonly case: "pending" };
+  | { readonly case: "readFailed"; readonly error: unknown };
+
+type RejectionPostOutcome =
+  { readonly case: "posted" } | { readonly case: "postFailed"; readonly error: unknown };
+
+interface RejectionPendingOutcome {
+  readonly case: "pending";
+}
 
 async function establishRejectionSubscriptionReadiness(
   fixture: Pick<BoundedContextFixture, "postEvent">,
@@ -1455,28 +1487,58 @@ async function establishRejectionSubscriptionReadiness(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const probes = new Map<string, string>();
-  const firstRead = subscription.next();
+  const firstRead = subscription.next().then<RejectionReadOutcome, RejectionReadOutcome>(
+    (update) => ({ case: "received", update }),
+    (error: unknown) => ({ case: "readFailed", error }),
+  );
   const receiveProbe = async (): Promise<void> => {
     for (let attempt = 1; attempt <= 16; attempt++) {
       const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
       probes.set(probe.eventId, probe.taskId);
       const postBudget = remainingMs(deadline);
       const post = fixture.postEvent(probe.event);
-      await withTimeout(post, `rejection readiness probe ${String(attempt)} post`, postBudget);
-      const outcome = await Promise.race([
-        firstRead.then<RejectionReadinessOutcome>((update) => ({ case: "received", update })),
-        nextEventLoopTurn().then<RejectionReadinessOutcome>(() => ({ case: "pending" })),
+      const postOutcome = withTimeout(
+        post,
+        `rejection readiness probe ${String(attempt)} post`,
+        postBudget,
+      ).then<RejectionPostOutcome, RejectionPostOutcome>(
+        () => ({ case: "posted" }),
+        (error: unknown) => ({ case: "postFailed", error }),
+      );
+      const initialOutcome = await Promise.race([firstRead, postOutcome]);
+      if (initialOutcome.case === "readFailed") {
+        return propagateReadinessFailure(initialOutcome.error);
+      }
+      if (initialOutcome.case === "received") {
+        expectTaskAlreadyDoneProbe(subscribedEvent(initialOutcome.update), probes);
+        return;
+      }
+      if (initialOutcome.case === "postFailed") {
+        return propagateReadinessFailure(initialOutcome.error);
+      }
+
+      const readOutcome = await Promise.race([
+        firstRead,
+        nextEventLoopTurn().then<RejectionPendingOutcome>(() => ({ case: "pending" })),
       ]);
-      if (outcome.case === "received") {
-        expectTaskAlreadyDoneProbe(subscribedEvent(outcome.update), probes);
+      if (readOutcome.case === "readFailed") {
+        return propagateReadinessFailure(readOutcome.error);
+      }
+      if (readOutcome.case === "received") {
+        expectTaskAlreadyDoneProbe(subscribedEvent(readOutcome.update), probes);
         return;
       }
     }
 
-    const firstProbe = subscribedEvent(
-      await withTimeout(firstRead, "rejection subscription readiness probe", remainingMs(deadline)),
+    const finalOutcome = await withTimeout(
+      firstRead,
+      "rejection subscription readiness probe",
+      remainingMs(deadline),
     );
-    expectTaskAlreadyDoneProbe(firstProbe, probes);
+    if (finalOutcome.case === "readFailed") {
+      return propagateReadinessFailure(finalOutcome.error);
+    }
+    expectTaskAlreadyDoneProbe(subscribedEvent(finalOutcome.update), probes);
   };
   await receiveProbe();
 
@@ -1505,6 +1567,12 @@ async function establishRejectionSubscriptionReadiness(
   }
 
   throw new Error("Rejection subscription readiness fence was not delivered.");
+}
+
+function propagateReadinessFailure(error: unknown): Promise<never> {
+  // Preserve the original asynchronous failure instead of replacing its identity.
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+  return Promise.reject(error);
 }
 
 function createTaskAlreadyDoneProbe(suffix: string) {
