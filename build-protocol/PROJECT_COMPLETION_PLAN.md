@@ -101,10 +101,14 @@ maintenance task.
 
 ## Current Execution Status
 
-Current status: T-0041 is complete, integrated, post-merge verified, remotely
-synchronized, and cleaned up, with a clean focused final security review and one
-explicit human-accepted SF-013 residual. T-0042 release preflight, real
-single-process and multi-process acceptance, package/import/link/command scans,
+Initial release closure through T-0042 and the prior completed tasks is
+historical. T-0044 has reopened readiness; Slice 1 Round 2 fixes and review are
+the active frontier.
+
+In the prior closure, T-0041 was complete, integrated, post-merge verified,
+remotely synchronized, and cleaned up, with a clean focused final security
+review and one explicit human-accepted SF-013 residual. T-0042 release preflight,
+real single-process and multi-process acceptance, package/import/link/command scans,
 all final specialist dispositions, and the native branch gate are clean. The
 branch gate passed 74 files / 1,780 tests in both ordinary and coverage runs at
 90.04% branches. Closure-record review is clean. T-0042 is integrated at

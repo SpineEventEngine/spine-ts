@@ -54,19 +54,27 @@ presenting it as JVM-equivalent rejection behavior.
 
 ## Current Gap
 
-- Copied Spine contracts already include `Status.rejection`, rejection events,
-  and `RejectionEventContext`.
-- `CommandRefusalError` carries only a string type and client message.
-- `CommandService.Post` currently converts that error into `Status.error`, not
-  `Status.rejection`.
-- Generated handler metadata records returned signal schemas but no declared
-  rejection schemas.
-- No TypeScript generation step emits throwable companions for rejection Proto
-  messages.
-- No current handler-thrown path constructs and dispatches a typed rejection
-  event.
+Slice 1 implements the validated, nominal core throwable contract and generates
+same-named companions for eligible rejection Proto messages through the atomic
+Buf workflow.
 
-## Architecture Questions To Resolve
+Remaining gaps:
+
+- Convert handler-thrown rejections into typed rejection events after rollback
+  and publish them independently through EventBus.
+- Classify `rejections.proto` messages as event-consumable signals in the
+  handler analyzer.
+- Remove or migrate the string-coded `CommandRefusalError` path and align
+  command-service acknowledgement behavior with handler-produced rejection
+  timing.
+- Migrate the to-do example and align the remaining user, architecture, and API
+  documentation with the completed runtime behavior.
+
+## Resolved Architecture Decision Trace
+
+The following questions drove the verified JVM comparison, provisional TS
+contract, and implementation slices below. They are retained as historical
+decision trace, not as open work.
 
 1. What exact source convention identifies a rejection Proto in current Spine
    JVM and what TypeScript convention can preserve compatibility without a

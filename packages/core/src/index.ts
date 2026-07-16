@@ -178,7 +178,15 @@ export function isRejectionThrowable(value: unknown): value is RejectionThrowabl
   return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
 }
 
-/** Validate, clone, and wrap a generated rejection message in a nominal throwable. */
+/**
+ * Validate, snapshot, and wrap a generated rejection message in a nominal throwable.
+ *
+ * The schema must describe a top-level message declared in a source file whose
+ * name ends in `rejections.proto`.
+ *
+ * @throws `TypeError` if the schema is not an eligible rejection message.
+ * @throws {@link ValidationException} if the rejection payload is invalid.
+ */
 export function createRejectionThrowable<Schema extends MessageSchema>(
   schema: Schema,
   input: MessageInitShape<Schema>,

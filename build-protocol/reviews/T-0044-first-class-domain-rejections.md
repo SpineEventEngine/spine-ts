@@ -140,3 +140,68 @@ complete accepted batch.
   cleanliness, full formatting, and `git diff --check`.
 - A fresh commit and Round 2 four-lane package are required; all Slice 1
   dispositions remain open until that wave is clean.
+
+## Slice 1 Round 2 Wave
+
+- Fix commit: `ab8ac5f2` (`Harden generated rejection throwables`).
+- Fresh immutable package: `/private/tmp/t0044-slice1-round2-review.diff`, range
+  `1aa345ae..ab8ac5f2`, two commits, 64,736 bytes.
+- Repeated lightweight lint confirms aligned active statuses, one private
+  recognition/construction policy, intentional public type guard/API inventory,
+  and no docs claim that server event publication already exists.
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, expected
+  explicit `gpt-5.6-luna` / medium, read-only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  explicit `gpt-5.6-terra` / high, read-only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit `gpt-5.6-terra` / high, read-only.
+- Prompts are bounded to the accepted Round 1 fixes, require regression checks,
+  ignore superseded historical text unless current records claim it, and
+  prohibit edits/Git/children. Dispatch IDs and results remain pending.
+
+Round 2 dispatches, all fields explicit:
+
+- Style/maintainability: `019f6ad2-5db8-7c20-9722-61703d686d1d` (Aquinas).
+- Documentation: `019f6ad2-662b-7312-a653-463a5a997db2` (Maxwell).
+- TypeScript/API docs: `019f6ad2-6212-7e51-91ee-c7c635b67c00` (Carver).
+- Performance/reliability: `019f6ad2-5917-7221-b122-cddcc099b3a1` (Parfit).
+
+## Slice 1 Round 2 Findings
+
+The complete wave returned and all reviewers were closed before fixes. Actual
+immutable fixed-role metadata matched every explicit dispatch: style,
+TypeScript/API docs, and performance/reliability at `gpt-5.6-terra` / high;
+documentation at `gpt-5.6-luna` / medium. Reviewer-local metadata was not
+separately exposed.
+
+- Style/maintainability: clean.
+- Performance/reliability: clean; reviewer reran the 53 focused tests.
+- Documentation: two accepted stale-current-state findings.
+  - The completion plan still labels the earlier T-0041 closure as current;
+    mark initial closure historical and identify active T-0044 Slice 1/Round 2.
+  - T-0044 `Current Gap` still says rejection generation does not exist; record
+    Slice 1 as implemented and list only remaining runtime/analyzer/service
+    gaps.
+- TypeScript/API docs: one accepted P2. Document
+  `createRejectionThrowable()`'s top-level `rejections.proto` precondition and
+  its `TypeError`/`ValidationException` outcomes with TypeDoc `@throws` entries.
+
+This is one docs/status/API-comment fix batch. All four lanes must be repeated
+against a fresh package after verification.
+
+## Slice 1 Round 2 Resolution
+
+- Completion-plan current status now treats the prior release closure as
+  historical and identifies T-0044 as the reopened frontier.
+- T-0044's current gap now records Slice 1 as implemented and lists only
+  runtime, analyzer, migration, example, and docs work that remains. The former
+  open architecture-question heading is explicitly resolved decision trace.
+- `createRejectionThrowable()` TypeDoc states the top-level
+  `rejections.proto` precondition and documents `TypeError` and
+  `ValidationException` outcomes.
+- Coordinator verification passed: 43 focused core tests,
+  `docs:check:generated` with 31 core exports, full formatting, and
+  `git diff --check`.
+- A final fresh four-lane Slice 1 wave is required before closure.
