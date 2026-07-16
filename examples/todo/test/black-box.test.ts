@@ -2,7 +2,14 @@ import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny, type MessageSchema } from "@spine-ts/core";
+import {
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+  type MessageSchema,
+} from "@spine-ts/core";
 import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -775,6 +782,7 @@ describe("@spine-ts/example-todo", () => {
     const subscription = await fixture.subscribe(createEventTopic(TaskAlreadyDoneSchema));
 
     try {
+      await establishRejectionSubscriptionReadiness(fixture, subscription);
       await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
       await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
       const completedResponse = await fixture.readEventually(
@@ -1392,6 +1400,87 @@ function subscribedEvent(update: SubscriptionUpdate | undefined) {
     throw new Error("Expected a subscribed event.");
   }
   return event;
+}
+
+async function establishRejectionSubscriptionReadiness(
+  fixture: BoundedContextFixture,
+  subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
+): Promise<void> {
+  const probes = new Map<string, string>();
+  let received = false;
+  const firstRead = subscription.next().then((update) => {
+    received = true;
+    return update;
+  });
+
+  for (let attempt = 1; attempt <= 16 && !received; attempt++) {
+    const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
+    probes.set(probe.eventId, probe.taskId);
+    await fixture.postEvent(probe.event);
+    await Promise.race([firstRead.then(() => undefined), nextEventLoopTurn()]);
+  }
+
+  const firstProbe = subscribedEvent(
+    await withTimeout(firstRead, "rejection subscription readiness probe", 500),
+  );
+  expectTaskAlreadyDoneProbe(firstProbe, probes);
+
+  const fence = createTaskAlreadyDoneProbe("readiness-fence");
+  probes.set(fence.eventId, fence.taskId);
+  let nextProbe = nextSubscriptionUpdate(subscription, "rejection subscription readiness fence");
+  await fixture.postEvent(fence.event);
+
+  for (let remaining = probes.size; remaining > 0; remaining--) {
+    const event = subscribedEvent(await nextProbe);
+    expectTaskAlreadyDoneProbe(event, probes);
+    if (event.id?.value === fence.eventId) {
+      return;
+    }
+    nextProbe = nextSubscriptionUpdate(subscription, "queued rejection readiness probe");
+  }
+
+  throw new Error("Rejection subscription readiness fence was not delivered.");
+}
+
+function createTaskAlreadyDoneProbe(suffix: string) {
+  const taskId = `task-rejection-${suffix}`;
+  const eventId = `event-rejection-${suffix}`;
+
+  return {
+    eventId,
+    taskId,
+    event: packEvent({
+      id: signalMetadata.eventId(eventId),
+      context: signalMetadata.eventContext({ producerId: taskId }),
+      schema: TaskAlreadyDoneSchema,
+      message: create(TaskAlreadyDoneSchema, {
+        id: create(TaskIdSchema, { value: taskId }),
+      }),
+    }),
+  };
+}
+
+function expectTaskAlreadyDoneProbe(
+  event: ReturnType<typeof subscribedEvent>,
+  probes: ReadonlyMap<string, string>,
+): void {
+  const eventId = event.id?.value ?? "";
+  const taskId = probes.get(eventId);
+  if (taskId === undefined) {
+    throw new Error(`Received unexpected rejection readiness event "${eventId}".`);
+  }
+
+  expect(
+    event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+  ).toEqual(
+    create(TaskAlreadyDoneSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
+    }),
+  );
+}
+
+function nextEventLoopTurn(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 async function nextSubscriptionUpdate(

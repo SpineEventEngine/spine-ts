@@ -34,9 +34,10 @@ accepts descriptor-verified top-level rejection inputs for event-consuming
 handlers while excluding assignment inputs and normal emitted values. Service
 posting returns an OK acceptance `Ack` for handled domain rejections and
 independently schedules the typed event through EventBus. A successful post can
-reach `SubscriptionService`; a failed post is recorded in
-`storedEventDispatchFailures()`, is not reflected in the client `Ack`, and has
-no promised retry.
+be received by an active `SubscriptionService` stream with queue capacity;
+inactive, saturated, or closed streams may not observe it. A failed post is
+recorded in `storedEventDispatchFailures()`, is not reflected in the client
+`Ack`, and has no promised retry.
 Core envelope construction exports include
 `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
@@ -55,10 +56,12 @@ Generated rejection companions are the public domain-rule failure contract.
 When a repository handler throws one, rollback completes before an independent
 typed rejection event is scheduled, command dispatch resolves, and
 `CommandService.Post` returns an OK acceptance `Ack`. A successful follow-up
-post makes the event observable through EventBus and `SubscriptionService`;
-post failure is recorded in `storedEventDispatchFailures()`, is not visible to
-the command client, and is not currently retried. OK does not mean a state
-transition or rejection-event delivery succeeded. `CommandService.Post` still returns
+post stores the event through EventBus; an active `SubscriptionService` stream
+with queue capacity may receive it, while inactivity, saturation, or closure
+may prevent observation. Post failure is recorded in
+`storedEventDispatchFailures()`, is not visible to the command client, and is
+not currently retried. OK does not mean a state transition or rejection-event
+delivery succeeded. `CommandService.Post` still returns
 `COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.` and
 packed `spine.validation.ValidationError` details when `CommandBus` rejects an
 invalid accepted command payload before dispatcher callbacks,

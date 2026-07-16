@@ -64,9 +64,10 @@ Current slice exposes:
   event-to-command `@Command`; they are not assignment inputs or normal emitted
   values. `CommandService.Post` returns an OK acceptance acknowledgement for a
   handled domain rejection. The typed event is independently scheduled; a
-  successful post can be observed through `SubscriptionService`, while a post
-  failure is recorded internally without changing the `Ack` or promising a
-  retry.
+  successful post may reach an active `SubscriptionService` stream with queue
+  capacity, while inactivity, saturation, or closure can prevent observation.
+  A post failure is recorded internally without changing the `Ack` or promising
+  a retry.
   Transport topology, broker/process supervision, production delivery policy,
   retry monitors/workers, durable catch-up storage/projection catch-up through
   inbox storage, production storage adapters, and deployment hardening remain
@@ -107,9 +108,10 @@ Current slice exposes:
   and
 - generated rejection throwables for domain-rule failures: repository rollback
   leaves state unchanged, `CommandService.Post` returns an OK acceptance
-  `Ack`, and a successful independent EventBus post makes the typed rejection
-  event available asynchronously through `SubscriptionService`; post failure
-  remains an internal diagnostic with no current retry guarantee;
+  `Ack`, and an active `SubscriptionService` stream with queue capacity may
+  receive the typed rejection after a successful independent EventBus post;
+  inactive, saturated, or closed streams may not, while post failure remains an
+  internal diagnostic with no current retry guarantee;
   and
 - `COMMAND_VALIDATION_ERROR` `Ack` responses with message
   `Command payload validation failed.` and packed `spine.validation.ValidationError` details
@@ -750,9 +752,11 @@ message `Command payload validation failed.` and packed
 generated rejection throwable, repository execution rolls back, schedules its
 typed rejection event independently, and resolves command dispatch;
 `CommandService.Post` therefore returns an OK acceptance `Ack`. Rejection-event
-posting is best-effort: successful posts can be observed through
-`SubscriptionService`; failures are recorded in `storedEventDispatchFailures()`,
-are not reflected in the command `Ack`, and are not currently retried.
+posting is best-effort: an active `SubscriptionService` stream with queue
+capacity may observe a successful post, while inactivity, saturation, or
+closure can prevent observation. Failures are recorded in
+`storedEventDispatchFailures()`, are not reflected in the command `Ack`, and are
+not currently retried.
 If an aggregate command handler produces an invalid state transition, command
 execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced

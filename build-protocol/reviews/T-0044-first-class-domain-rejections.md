@@ -1,6 +1,6 @@
 # T-0044 Review Log
 
-Status: Slices 1-3A clean - Slice 3B Round 2 review pending
+Status: Slices 1-3A clean - Slice 3B Round 3 review pending
 
 Baseline: `1aa345ae`
 
@@ -860,3 +860,87 @@ rejection service integration`).
   schema discriminator is local to routing; and current docs no longer
   overclaim storage, delivery, retry, or future production behavior. A fresh
   literal package and all four closure lanes remain required.
+
+## Slice 3B Round 2 Wave
+
+- Verified fix/status commit: `5e23456d` (`Harden rejection routing and delivery
+docs`).
+- Immutable package:
+  `.superpowers/sdd/review-f3ebd21e..5e23456d.diff`, literal range
+  `f3ebd21e..5e23456d`, one commit, 40,212 bytes. Its first line was verified;
+  no moving ref is present.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only.
+- Review only the accepted Round 1 fixes and their affected paths. Historical
+  superseded text remains non-actionable unless current records/changed docs
+  claim it. Every reviewer is read-only, must spawn no children, and must verify
+  the literal package header. Dispatches, all fields explicit:
+  - style/maintainability: `019f6b6b-02e3-7132-869c-033972d64be6`
+    (Sagan), `gpt-5.6-terra` / high;
+  - documentation: `019f6b6b-077d-7f01-88a5-fd73ec5cdb4d` (Einstein),
+    `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6b6b-0b14-7ff3-8e15-9c8ce194924f`
+    (Jason), `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6b6b-0fce-77e0-9941-b8ec94cef426`
+    (Sartre), `gpt-5.6-terra` / high.
+    Actual fixed-role metadata and closure results remain pending.
+
+## Slice 3B Round 2 Findings
+
+- The complete four-lane wave returned and every reviewer was closed before
+  fixes. Immutable actual fixed-role profiles matched explicit dispatch: style,
+  TypeScript/API docs, and performance/reliability used `gpt-5.6-terra` / high;
+  documentation used `gpt-5.6-luna` / medium.
+- Deduplicated accepted P1 documentation defect: architecture text still says
+  the rejection event `is stored independently`. Storage is contingent on the
+  best-effort follow-up post reaching EventStore; qualify that sentence.
+- Accepted P2 public TypeDoc defect: `StoredEventDispatchFailure`, its event
+  field, and `storedEventDispatchFailures()` describe only already-stored or
+  post-commit failures. Rejection follow-up can fail before storage. Describe
+  asynchronous event follow-up failure honestly while retaining the established
+  public type name.
+- Accepted P2 docs/API precision defect: successful EventBus posting does not
+  guarantee SubscriptionService delivery. Only an active event subscription
+  with available queue capacity may receive the update; a saturated queue may
+  close/discard. Align current changed docs without overloading the user guide
+  with unrelated implementation detail.
+- Accepted P2 reliability defect: starting a pending fixture `next()` drives
+  activation but does not prove `#activateRecord()` has attached the EventBus
+  listener before command posting. Add a deterministic observable readiness
+  handshake with existing fixture primitives, such as bounded same-topic probe
+  posting until the pending read receives a probe, then start the real pending
+  read and post the rejection. Do not add a public readiness API solely for the
+  test.
+- Routing, generated import paths, public export removal, and the source-schema
+  discriminator are otherwise clean. Return this complete batch to the same
+  implementation context and repeat focused gates plus all four closure lanes.
+
+## Slice 3B Round 2 Resolution
+
+- The same implementer completed the batch with actual `gpt-5.6-terra` /
+  medium and was closed. It spawned no children and made no durable-log, commit,
+  or push changes.
+- Public failure TypeDoc now covers asynchronous follow-up acceptance, storage,
+  and dispatch failures and states that the event snapshot may not have reached
+  storage. The established public type name is retained without false promises.
+- Architecture text makes independent storage contingent on successful EventBus
+  posting. Current docs say only an already-active subscription with available
+  queue capacity may observe a successful post; inactivity, saturation, or
+  closure may prevent delivery.
+- The to-do black-box proof establishes observable activation with uniquely
+  identified same-topic probe events, posts a final fence, drains every queued
+  probe through the fence, then starts a fresh read before posting the actual
+  rejecting command. No fixed sleep or new public readiness API remains.
+- Coordinator verification passed the full native to-do black-box suite, 27/27;
+  both generated build/tooling typechecks; generated TypeDoc/API inventory;
+  generated cleanliness; repository-wide formatting; and `git diff --check`.
+- Lightweight Round 3 lint is clean: mirrors agree; no duplicated readiness or
+  delivery policy was introduced; TypeDoc changes describe the existing public
+  diagnostic rather than adding surface; and current docs no longer overclaim
+  storage or service delivery. Commit/package and all four closure lanes remain.

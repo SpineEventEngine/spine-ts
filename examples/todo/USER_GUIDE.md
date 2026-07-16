@@ -49,8 +49,9 @@ effect. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
 task throws the generated `TaskAlreadyDone` rejection; reopening an open task
 throws generated `TaskNotDone`. Both return an OK acceptance acknowledgement,
 leave task-list state unchanged after rollback, and schedule a best-effort typed
-rejection event post. When that post succeeds, subscribe to the rejection type
-to inspect its original command and available stack context. A post failure is
+rejection event post. When that post succeeds, an already-active rejection
+subscription with queue capacity may receive the original command and available
+stack context; saturation or closure can prevent observation. A post failure is
 recorded internally, does not change the OK `Ack`, and has no current retry
 guarantee. Invalid payloads and technical failures remain non-OK acknowledgements.
 

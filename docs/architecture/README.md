@@ -453,8 +453,9 @@ throwables. Aggregate direct-state transactions and process-manager command
 transactions roll back before one versionless rejection event is scheduled
 through the regular EventBus follow-up path. That event carries the rejection
 payload, a cloned original command, available stack trace, causal origin,
-timestamp, and producer ID; it is stored independently rather than appended to
-aggregate history. A handled process-manager rejection completes its inbox row,
+timestamp, and producer ID. When the best-effort follow-up post succeeds,
+EventBus stores the event independently rather than appending it to aggregate
+history. A handled process-manager rejection completes its inbox row,
 while ordinary and forged errors keep the existing technical failure and retry
 behavior. Build-time analysis accepts descriptor-verified top-level rejection
 inputs for event-consuming handlers, but not assignment inputs or normal
@@ -465,11 +466,13 @@ message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. A handled domain rejection instead
 rolls back state, schedules its typed event independently, and returns an OK
 acceptance `Ack`. The EventBus follow-up post is best-effort: when it succeeds,
-`SubscriptionService` can deliver the rejection asynchronously; when it fails,
-the context records the failure in `storedEventDispatchFailures()`, the command
-client is not notified, and no retry is currently promised. Managed aggregate command handlers use framework-owned
-`EntityTransaction.commit()` for transition validation. When that transaction is
-rejected, repository execution raises
+an active `SubscriptionService` stream with queue capacity may receive the
+rejection asynchronously; an inactive, saturated, or closed stream may not
+observe it. When posting fails, the context records the failure in
+`storedEventDispatchFailures()`, the command client is not notified, and no
+retry is currently promised. Managed aggregate command handlers use
+framework-owned `EntityTransaction.commit()` for transition validation. When
+that transaction is rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
 details before traceability events or latest state are stored. Legacy/internal
 aggregate-history replay or validation failures remain internal and are

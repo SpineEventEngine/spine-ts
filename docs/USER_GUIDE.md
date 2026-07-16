@@ -410,10 +410,11 @@ For a domain rule failure, throw the generated companion for a top-level message
 declared in a `rejections.proto` file. Repository execution rolls back before
 scheduling the typed rejection event independently. `CommandService.Post`
 returns an OK acceptance acknowledgement. If the independently scheduled post
-succeeds, consume the rejection asynchronously through an event handler or
-`SubscriptionService`. A post failure is recorded internally, is not reflected
-in the `Ack`, and is not currently retried. Do not return rejection or service
-envelope values from handlers.
+succeeds, an already-active `SubscriptionService` stream with queue capacity
+may receive the rejection asynchronously; saturation or closure can prevent
+observation. A post failure is recorded internally, is not reflected in the
+`Ack`, and is not currently retried. Do not return rejection or service envelope
+values from handlers.
 
 After the consumer project's pnpm Proto generation step, a handler saved as
 `src/handlers/task.ts` can use the generated project-root paths below:
