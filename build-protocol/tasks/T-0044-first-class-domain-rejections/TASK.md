@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Final redaction follow-up review
+Status: In progress - Final documentation rereview
 
 Started: `2026-07-16`
 
@@ -72,9 +72,9 @@ documentation. Focused implementation gates and canonical Slice 3B review are
 clean; the final client-boundary redaction follow-up is active.
 
 Slices 1 through 3B are implementation-verified and clean in every canonical
-per-slice reviewer lane. Remaining gap: focused whole-task security integration
-review, full verification, merge/post-merge verification, remote
-synchronization, and restoration of release-ready status.
+per-slice reviewer lane. Remaining gap: canonical follow-up documentation
+review, final whole-task security rereview, full verification, merge/post-merge
+verification, remote synchronization, and restoration of release-ready status.
 
 ## Resolved Architecture Decision Trace
 

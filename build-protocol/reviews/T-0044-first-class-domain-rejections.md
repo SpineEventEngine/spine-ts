@@ -1296,3 +1296,77 @@ review`).
   leakage, or future-policy overclaim. Commit/package and all four canonical
   follow-up reviewers plus refreshed whole-task security remain before full
   verification.
+
+## Legacy Redaction Follow-up Review Wave
+
+- Verified fix commit: `bad7f9f9` (`Redact legacy rejection command payloads`).
+- Canonical package:
+  `.superpowers/sdd/review-a5784827..bad7f9f9.diff`, literal range
+  `a5784827..bad7f9f9`, one commit, 43,904 bytes.
+- Security package:
+  `.superpowers/sdd/review-1aa345ae..bad7f9f9.diff`, literal task range
+  `1aa345ae..bad7f9f9`, 22 commits, 329,534 bytes. Both first lines were
+  verified and neither package uses a moving ref.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only, canonical package.
+- Documentation completeness: existing `documentation_reviewer`, explicit
+  expected `gpt-5.6-luna` / medium, read-only, canonical package.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, explicit
+  expected `gpt-5.6-terra` / high, read-only, canonical package.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicit expected `gpt-5.6-terra` / high, read-only, canonical package.
+- Final security: existing `security_reviewer`, explicit expected
+  `gpt-5.6-terra` / high, read-only, whole-task package.
+- Each reviewer must verify the literal header, inspect only its bounded
+  concern, ignore historical superseded text unless current records claim it,
+  make no changes, and spawn no children. Dispatch IDs, actual metadata, and
+  results:
+  - style/maintainability: `019f6bba-54f6-7b22-90b3-3e579070d83a`
+    (Bernoulli), explicit/fixed `gpt-5.6-terra` / high;
+  - documentation: `019f6bba-596d-7ba3-ae0c-2e064d39c677` (Hegel),
+    explicit/fixed `gpt-5.6-luna` / medium;
+  - TypeScript/API docs: `019f6bba-5e26-7401-9de5-241f76d547d6`
+    (Copernicus), explicit/fixed `gpt-5.6-terra` / high;
+  - performance/reliability: `019f6bba-61da-76f1-99e8-7c707677ae57`
+    (Gibbs), explicit/fixed `gpt-5.6-terra` / high;
+  - final security: `019f6bba-65af-7f53-9efe-6cb75812f31e`
+    (Archimedes), explicit/fixed `gpt-5.6-terra` / high.
+    All actual metadata and results are recorded below.
+
+## Legacy Redaction Follow-up Review Results
+
+- Every reviewer returned and was closed. The immutable fixed-role execution
+  metadata matched every explicit dispatch: documentation was
+  `gpt-5.6-luna` / medium; style, TypeScript/API docs, reliability, and security
+  were `gpt-5.6-terra` / high.
+- Style/maintainability is clean: redaction is localized and current active
+  status is otherwise clear.
+- TypeScript/API docs is clean: generated `commandMessage` is handled correctly,
+  no export/declaration/package entry point changed, and boundary tests cover
+  the field.
+- Performance/reliability is clean: the sole client path clones before mutation,
+  preserves source/internal and ordinary events, and adds no material resource
+  cost.
+- Final whole-task security is clean: modern command, deprecated command payload,
+  and stack are absent from client updates; branding, validation, copies,
+  tenant/origin metadata, diagnostics, generated paths, dependencies, and local
+  IPC are clean within T-0044's current remit.
+- Accepted documentation P2: `TASK.md` says the remaining gap is only focused
+  whole-task security integration even though the current canonical follow-up
+  review is also pending. Correct only that mirror sentence, run formatting and
+  diff hygiene, then repeat documentation review on the literal tiny fix.
+- Return the finding to the existing implementer, explicit/fixed
+  `gpt-5.6-terra` / medium, read/write only for the task/status and required
+  durable result records; no children, commit, push, or unrelated edits.
+
+## Follow-up Status Fix Resolution
+
+- The existing implementer returned with actual `gpt-5.6-terra` / medium and
+  was closed. It changed only the task Current Gap sentence and spawned no
+  children.
+- The task mirror now accurately lists canonical documentation rereview, final
+  security rereview, full verification, integration, remote synchronization,
+  and release-ready restoration. No behavioral or public documentation claim
+  changed.
+- Coordinator `format:check` and `git diff --check` passed. Commit/package and a
+  repeated documentation review remain before full verification.
