@@ -1,6 +1,6 @@
 # T-0044: First-Class Domain Rejections
 
-Status: In progress - Slice 3B Round 5 review
+Status: In progress - Final security and integration verification
 
 Started: `2026-07-16`
 
@@ -71,9 +71,10 @@ rejection subscription, and aligns current user, architecture, API, and package
 documentation. Focused implementation gates are clean; canonical slice review
 is pending.
 
-Remaining gap: final review/fix closure, focused security integration review,
-full verification, merge/post-merge verification, remote synchronization, and
-restoration of release-ready status.
+Slices 1 through 3B are implementation-verified and clean in every canonical
+per-slice reviewer lane. Remaining gap: focused whole-task security integration
+review, full verification, merge/post-merge verification, remote
+synchronization, and restoration of release-ready status.
 
 ## Resolved Architecture Decision Trace
 

@@ -106,8 +106,8 @@ historical. T-0044 has reopened readiness; generated rejection companions and
 rejection-event runtime and handler integration are review-clean. Slice 3B
 service/API and to-do example implementation and focused gates are complete;
 its first canonical review's bounded routing, test-readiness, and docs fix batch
-is verified. Round 4's JavaScript evaluation-order edge is fixed with expiry and
-stalled-post proofs; the tiny Round 5 closure review is the active frontier.
+is verified. Slice 3B Round 5 is clean in all canonical per-slice lanes. The
+whole-task security review and final integration gates are the active frontier.
 
 In the prior closure, T-0041 was complete, integrated, post-merge verified,
 remotely synchronized, and cleaned up, with a clean focused final security
