@@ -23,6 +23,11 @@ export class RecordSpec<I, R extends Message> {
     this.#record = input.schema;
   }
 
+  /** Protobuf schema used to clone, encode, and decode this record type. */
+  get schema(): GenMessage<R> {
+    return this.#record;
+  }
+
   /** Clone an ID value according to this spec. */
   cloneId(id: I): I {
     const idSchema = this.#idSchema;

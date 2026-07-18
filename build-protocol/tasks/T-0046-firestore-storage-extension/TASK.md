@@ -1,6 +1,6 @@
 # T-0046: Firestore-compatible storage extension
 
-Status: Implementation in progress
+Status: Adapter closure verification in progress; follow-on load-test example pending
 
 ## Objective
 
@@ -26,6 +26,12 @@ and the pinned JVM `gcloud-jvm/datastore` source as the compatibility authority.
 - Determine emulator testing and production credential/configuration patterns
   from the JVM module first.
 - Do not modify the protected `human-review-1-jul.md`.
+- The human approved a minimal provider-neutral `RecordSpec` read-only schema
+  accessor, because external storage adapters need the existing Protobuf schema
+  to encode and decode records. It must expose no Datastore types or behavior.
+- After the adapter is ready, add a separate test-oriented orders/SKUs/sales
+  example with exactly 2 aggregates, 2 process managers, 10 projections, and
+  independent gRPC performance scenarios at 10, 100, and 1,000 users.
 
 ## Planning assignment
 
@@ -54,6 +60,20 @@ written from the pinned JVM source after the architect-planner child did not
 return a usable result. Implementation must follow its package boundary,
 configuration, namespace, codec, query, CAS, batch, emulator, credential, and
 documentation decisions without widening the generic storage port.
+
+## Current implementation boundary
+
+- The human-approved `RecordSpec.schema` accessor is available in the current
+  worktree. It is the only generic-storage change authorized for this adapter;
+  preserve the existing edit and make no further generic storage or server
+  changes without explicit human approval.
+- The current owner writes only `packages/storage-datastore/**`,
+  `docs/USER_GUIDE.md`, and T-0046 durable task/work/review records. The
+  orders/SKUs/sales example begins only after adapter readiness evidence is
+  recorded.
+- Runtime changes follow behavior-focused TDD: each adapter behavior requires
+  focused RED evidence before its minimal implementation and focused GREEN
+  evidence after it.
 
 ## Non-goals
 
