@@ -2,6 +2,7 @@ version: v2
 modules:
   - path: proto
   - path: examples/todo/proto
+  - path: examples/project-management/proto
 lint:
   use:
     - STANDARD

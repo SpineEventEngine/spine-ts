@@ -62,6 +62,7 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const projectGenerated = join(repoRoot, "examples/project-management/generated");
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
@@ -148,11 +149,14 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const projectGenerated = join(repoRoot, "examples/project-management/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
+    mkdirSync(projectGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -160,6 +164,10 @@ describe("proto-workflow", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/todo/generated\n",
+    );
+    writeFileSync(
+      join(repoRoot, "examples/project-management/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
@@ -190,7 +198,8 @@ describe("proto-workflow", () => {
     expect(commands).toEqual([
       "buf generate packages/proto/generated",
       "buf generate examples/todo/generated",
-      "to-do handler registry generation",
+      "buf generate examples/project-management/generated",
+      "todo handler registry generation",
     ]);
     expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
       "previous package output\n",
@@ -202,11 +211,14 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const projectGenerated = join(repoRoot, "examples/project-management/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
+    mkdirSync(projectGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -214,6 +226,10 @@ describe("proto-workflow", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/todo/generated\n",
+    );
+    writeFileSync(
+      join(repoRoot, "examples/project-management/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
@@ -253,7 +269,9 @@ describe("proto-workflow", () => {
       expect(commands).toEqual([
         "buf generate packages/proto/generated",
         "buf generate examples/todo/generated",
-        "to-do handler registry generation",
+        "buf generate examples/project-management/generated",
+        "todo handler registry generation",
+        "project-management handler registry generation",
       ]);
       expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
         "previous package output\n",
@@ -267,6 +285,11 @@ describe("proto-workflow", () => {
       expect(
         existsSync(
           join(staged.stagedTargets[1].stagedOutputRoot, "handler/generated-handler-registry.ts"),
+        ),
+      ).toBe(true);
+      expect(
+        existsSync(
+          join(staged.stagedTargets[2].stagedOutputRoot, "handler/generated-handler-registry.ts"),
         ),
       ).toBe(true);
     } finally {

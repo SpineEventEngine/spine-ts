@@ -1,0 +1,7 @@
+syntax = "proto3";
+package spine.example.project_management.v1;
+import "spine/options.proto";
+option (type_url_prefix) = "type.spine.example.project-management";
+message CreateProject { string id = 1 [(required) = true]; string name = 2 [(required) = true]; }
+message CreateTask { string id = 1 [(required) = true]; string project_id = 2 [(required) = true]; }
+message EnrollPerson { string id = 1 [(required) = true]; string display_name = 2 [(required) = true]; }
