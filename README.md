@@ -61,4 +61,6 @@ exclusions, not commitments to a future policy or implementation.
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide,
 [examples/todo/README.md](examples/todo/README.md) for the local runnable flow,
+and [examples/project-management/README.md](examples/project-management/README.md)
+for the project-management load specimen,
 and [build-protocol](build-protocol/README.md) for the implementation protocol.

@@ -1,0 +1,7 @@
+syntax = "proto3";
+package spine.example.project_management.v1;
+import "spine/options.proto";
+option (type_url_prefix) = "type.spine.example.project-management";
+message Project { option (entity).kind = AGGREGATE; string id = 1 [(required) = true, (set_once) = true]; string name = 2 [(required) = true]; }
+message Task { option (entity).kind = AGGREGATE; string id = 1 [(required) = true, (set_once) = true]; string project_id = 2 [(required) = true]; }
+message Person { option (entity).kind = AGGREGATE; string id = 1 [(required) = true, (set_once) = true]; string display_name = 2 [(required) = true]; }

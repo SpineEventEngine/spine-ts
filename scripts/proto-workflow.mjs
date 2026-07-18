@@ -15,15 +15,30 @@ import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.
 
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
 const todoProtoRoot = fileURLToPath(new URL("../examples/todo/proto", import.meta.url));
+const projectManagementProtoRoot = fileURLToPath(
+  new URL("../examples/project-management/proto", import.meta.url),
+);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const generatedTargets = [
   {
     displayPath: "packages/proto/generated",
     templatePath: "buf.gen.yaml",
+    protoRoot,
   },
   {
     displayPath: "examples/todo/generated",
     templatePath: "examples/todo/buf.gen.yaml",
+    protoRoot: todoProtoRoot,
+    handlerRegistry: { name: "todo", projectPath: "examples/todo/tsconfig.json" },
+  },
+  {
+    displayPath: "examples/project-management/generated",
+    templatePath: "examples/project-management/buf.gen.yaml",
+    protoRoot: projectManagementProtoRoot,
+    handlerRegistry: {
+      name: "project-management",
+      projectPath: "examples/project-management/tsconfig.json",
+    },
   },
 ];
 
@@ -35,7 +50,7 @@ export function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  const protoFiles = [...findProtoFiles(protoRoot), ...findProtoFiles(todoProtoRoot)];
+  const protoFiles = generatedTargets.flatMap((target) => findProtoFiles(target.protoRoot));
 
   if (protoFiles.length === 0) {
     console.log(
@@ -364,7 +379,7 @@ export function stageGeneratedTargets(options = {}) {
       }
     }
 
-    const registryStatus = generateTodoHandlerRegistry(stagedTargets, root, run);
+    const registryStatus = generateHandlerRegistries(stagedTargets, root, run);
 
     if (registryStatus !== 0) {
       removeStagedTargets(stagedTargets);
@@ -417,38 +432,39 @@ export function generateTargets(options = {}) {
   }
 }
 
-function generateTodoHandlerRegistry(stagedTargets, root = repoRoot, run = runCommand) {
-  const stagedTodoTarget = stagedTargets.find(
-    (stagedTarget) => stagedTarget.target.displayPath === "examples/todo/generated",
-  );
-
-  if (stagedTodoTarget === undefined) {
-    console.error("Missing staged to-do generated target for handler registry generation.");
-    return 1;
+function generateHandlerRegistries(stagedTargets, root = repoRoot, run = runCommand) {
+  for (const target of generatedTargets.filter(
+    (candidate) => candidate.handlerRegistry !== undefined,
+  )) {
+    const registry = target.handlerRegistry;
+    const displayPath = target.displayPath;
+    const stagedTarget = stagedTargets.find(
+      (candidate) => candidate.target.displayPath === displayPath,
+    );
+    if (stagedTarget === undefined) {
+      console.error(`Missing staged ${displayPath} target for handler registry generation.`);
+      return 1;
+    }
+    const publishedOutputFile = join(
+      stagedTarget.generatedRoot,
+      "handler/generated-handler-registry.ts",
+    );
+    const status = run(`${registry.name} handler registry generation`, process.execPath, [
+      join(root, "scripts/generate-handler-registry.mjs"),
+      "--project",
+      join(root, registry.projectPath),
+      "--generated-root",
+      stagedTarget.stagedOutputRoot,
+      "--source-generated-root",
+      stagedTarget.generatedRoot,
+      "--out",
+      join(stagedTarget.stagedOutputRoot, "handler/generated-handler-registry.ts"),
+      "--published-out",
+      publishedOutputFile,
+    ]);
+    if (status !== 0) return status;
   }
-
-  const publishedOutputFile = join(
-    stagedTodoTarget.generatedRoot,
-    "handler/generated-handler-registry.ts",
-  );
-  const stagedOutputFile = join(
-    stagedTodoTarget.stagedOutputRoot,
-    "handler/generated-handler-registry.ts",
-  );
-
-  return run("to-do handler registry generation", process.execPath, [
-    join(root, "scripts/generate-handler-registry.mjs"),
-    "--project",
-    join(root, "examples/todo/tsconfig.json"),
-    "--generated-root",
-    stagedTodoTarget.stagedOutputRoot,
-    "--source-generated-root",
-    stagedTodoTarget.generatedRoot,
-    "--out",
-    stagedOutputFile,
-    "--published-out",
-    publishedOutputFile,
-  ]);
+  return 0;
 }
 
 const isMain =

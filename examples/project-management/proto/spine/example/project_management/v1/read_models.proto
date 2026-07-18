@@ -1,0 +1,34 @@
+syntax = "proto3";
+package spine.example.project_management.v1;
+import "spine/options.proto";
+option (type_url_prefix) = "type.spine.example.project-management";
+message ProjectSummary { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message TaskList { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message StatusCounters { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message PriorityCounters { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message AssigneeWorkload { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message ActivityFeed { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message TenantView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message UserView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message DueDateView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message AssignmentView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message ProjectLifecycleView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message TaskDependencyView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message AuditView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message SubscriptionFanoutView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message CleanupView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message ProjectIndex { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message TaskIndex { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message PersonIndex { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message CapacityView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message ProgressView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string name = 2; }
+message AssignmentManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message DueDateManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message StatusManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message NotificationManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message WorkloadManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message ProjectLifecycleManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message TaskDependencyManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message AuditManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message SubscriptionFanoutManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message CleanupManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
