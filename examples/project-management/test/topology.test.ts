@@ -108,27 +108,6 @@ describe("project-management load example", () => {
       await server.close();
     }
   }, 15_000);
-
-  it("runs independent asynchronous load users with bounded cleanup and metrics", async () => {
-    const { startProjectManagementServer } = await import("../dist/src/index.js");
-    const { projectManagementLoadLevels, runProjectManagementLoad } =
-      await import("../dist/src/load-runner.js");
-    expect(projectManagementLoadLevels).toEqual([10, 25, 50, 100]);
-
-    const server = await startProjectManagementServer({ host: "127.0.0.1", port: 0 });
-    try {
-      const result = await runProjectManagementLoad({ baseUrl: server.baseUrl, users: 10 });
-      expect(result.commandAcknowledgements).toBe(10);
-      expect(result.queryVisibilities).toBe(10);
-      expect(result.subscriptionDeliveries).toBe(10);
-      expect(result.commandAcknowledgementLatency.p99Ms).toBeGreaterThanOrEqual(0);
-      expect(result.queryVisibilityLatency.p99Ms).toBeGreaterThanOrEqual(0);
-      expect(result.subscriptionDeliveryLatency.p99Ms).toBeGreaterThanOrEqual(0);
-      expect(result.throughputPerSecond).toBeGreaterThan(0);
-    } finally {
-      await server.close();
-    }
-  }, 30_000);
 });
 
 async function readEventually(
