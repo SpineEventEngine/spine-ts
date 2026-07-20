@@ -1,6 +1,6 @@
 # T-0048: Project-management example coverage closure
 
-Status: In progress; prerequisite to T-0046 datastore-storage remediation
+Status: Accepted on task branch; integration and post-merge verification pending
 
 ## Objective
 
@@ -128,3 +128,13 @@ examples/project-management/test/load-runner.test.ts` completed `2` files /
   alter any other T-0046 proto-workflow work in this task.
 - Acceptance: the focused proto-workflow test, focused ESLint/Prettier, and
   `git diff --check` pass before rerunning the full branch gate.
+
+## Branch acceptance
+
+- Full native `pnpm --config.verify-deps-before-run=false verify` passed after
+  the reviewed lint fix: `77` test files / `1,816` tests; branch coverage
+  `90.01%` (`4,788 / 5,319`).
+- All canonical review concerns are clean, generated output is ignored and
+  freshly regenerated, and the branch is accepted for integration.
+- T-0046 remains blocked until merge, post-merge verification, and remote
+  synchronization of both the task branch and `main` complete.
