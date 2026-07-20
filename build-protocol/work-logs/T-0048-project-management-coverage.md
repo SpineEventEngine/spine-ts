@@ -260,6 +260,22 @@ build-protocol/work-logs/T-0048-project-management-coverage.md` completed
   merge into `main`, run post-merge verification, record/push main evidence,
   then unblock T-0046.
 
+## 2026-07-20 — Integration and remote closure
+
+- Branch acceptance endpoint `6262fe93` was pushed to
+  `origin/task/T-0048-project-management-coverage`.
+- Merged into `main` as `2aca4dc1`; the merge commit was immediately pushed to
+  `origin/main`.
+- Native post-merge `pnpm --config.verify-deps-before-run=false verify` passed:
+  `77 / 77` test files, `1,816 / 1,816` tests, branch coverage `90.01%`
+  (`4,788 / 5,319`), statements `94.63%`, functions `95.61%`, and lines
+  `94.93%`.
+- Typechecks, ESLint/cleanup, Prettier, TypeDoc/API export checks, Proto lint,
+  generated cleanliness, and release readiness (`58` package imports,
+  `113` relative Markdown links) passed post-merge.
+- T-0048 is durably complete. Its prerequisite gate for T-0046 is released;
+  the next action is to resume the preserved T-0046 worktree.
+
 ## 2026-07-20 — Final-gate verification fix
 
 - Existing role retained: `implementer`, explicitly `gpt-5.6-terra` / `medium`;
