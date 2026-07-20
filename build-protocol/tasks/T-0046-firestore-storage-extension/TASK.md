@@ -1,6 +1,6 @@
 # T-0046: Firestore-compatible storage extension
 
-Status: Accepted after full verification; commit and integration in progress
+Status: Completed, merged, post-merge verified, and pushed
 
 ## Objective
 
@@ -237,3 +237,22 @@ cross-adapter transaction semantics until proven by tests.
   generated typecheck and lint/cleanup pass.
 - No public API/export, threshold/exclusion, docs/example, or unrelated behavior
   changed. Closure acceptance remains with the root review flow.
+
+## Integration closure — 2026-07-20
+
+- Task commit `cca9978e` was pushed to
+  `origin/task/T-0046-storage-datastore` immediately after commit.
+- Merge commit `12ed11e8` was pushed to `origin/main` immediately after merge.
+- Fresh post-merge `pnpm --config.verify-deps-before-run=false verify` passed on
+  `main`: 80 test files / 1,855 tests, with 2 files / 8 tests intentionally
+  skipped. Coverage remained 94.41% statements, 90.09% branches, 94.68%
+  functions, and 94.85% lines; every generated, type, lint, cleanup, format,
+  documentation/API, proto, and release-readiness gate passed.
+- The explicit post-merge Datastore emulator run passed 2 files / 36 live
+  tests. Cloud smoke remains intentionally unclaimed because no explicit cloud
+  credentials were authorized.
+- Main's pre-existing dependency virtual store did not materialize the locked
+  `async-mutex` to `tslib` link after incremental and forced installs. The
+  existing generated dependency tree was preserved, a clean frozen-lockfile
+  install rebuilt the virtual store from the local package cache, and the full
+  post-merge gates then passed.

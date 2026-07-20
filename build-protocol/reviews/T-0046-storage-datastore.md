@@ -347,8 +347,20 @@ are read-only and must not commit, push, stash, or spawn subagents.
   `019f8081-a325-7ac3-b6a2-dae2d61832db`, role
   `documentation_reviewer`, `gpt-5.6-luna` / medium.
 - Every review finding is resolved. Per-task security review remains N/A for
-  the previously recorded concrete reason. Full task verification is the only
-  remaining pre-commit gate.
+  the previously recorded concrete reason. Full task verification passed before
+  commit, and the same canonical gates passed again after merge.
+
+### Integration disposition — 2026-07-20
+
+- Accepted task commit: `cca9978e`, pushed to
+  `origin/task/T-0046-storage-datastore` immediately after commit.
+- Accepted merge commit: `12ed11e8`, pushed to `origin/main` immediately after
+  merge.
+- Post-merge `pnpm --config.verify-deps-before-run=false verify`: PASS with 80
+  files / 1,855 tests, 90.09% branch coverage, and every generated, type, lint,
+  cleanup, format, documentation/API, proto, and release-readiness gate clean.
+- Post-merge live Datastore emulator verification: PASS with 2 files / 36
+  tests. All canonical review dispositions remain CLEAN; no finding reopened.
 
 ### Unsafe-number residual implementation handoff
 
