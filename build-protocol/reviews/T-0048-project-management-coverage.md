@@ -49,7 +49,7 @@ review is accepted.
 ## Replacement round assignments
 
 Prepared at `2026-07-20T15:34:08Z`. Scope is the immutable T-0048 diff from
-baseline `62ca8fe4` through the implementation endpoint recorded below, plus
+baseline `62ca8fe4` through implementation endpoint `457c9fde`, plus
 the affected project-management execution paths and task records. Reviewers
 must not modify production code and must not spawn subagents.
 
@@ -63,3 +63,77 @@ must not modify production code and must not spawn subagents.
 Acceptance requires explicit dispatch fields, matching actual runtime metadata,
 the reviewer's recorded skill-applicability check, and a clean result or a
 fully resolved finding batch.
+
+## Replacement round results
+
+All four reviewers completed the canonical skill-applicability check and were
+closed after handback. The orchestrator verified actual runtime metadata from
+each Codex Desktop rollout `turn_context`, rather than relying on reviewer
+self-report:
+
+| Concern                      | Actual role / model / reasoning                              | Result                                                                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Style and maintainability    | `style_maintainability_reviewer`; `gpt-5.6-terra` / `high`   | One P2: remove the duplicated real-gRPC ten-user happy path from `examples/project-management/test/topology.test.ts`; retain the direct-source coverage test. |
+| Documentation                | `documentation_reviewer`; `gpt-5.6-luna` / `medium`          | One Minor: cite the `vitest.config.ts` source/coverage globs and absence of a project-management exclusion in durable evidence.                               |
+| TypeScript/API documentation | `typescript_api_docs_reviewer`; `gpt-5.6-terra` / `high`     | Clean; generated envelope construction and public package-boundary use are correct, with no public/API-doc change.                                            |
+| Performance/reliability      | `performance_reliability_reviewer`; `gpt-5.6-terra` / `high` | Clean; bounded loopback work, timeouts, cleanup, and zero-elapsed-time behavior are covered.                                                                  |
+
+Runtime evidence:
+
+- style: rollout `019f802b-a77c-7713-8e80-589b6fc4b6ec`;
+- API: rollout `019f802c-7b0f-7d21-a8fb-551fb1d09f82`;
+- documentation: rollout `019f802c-ac91-7791-8734-716f4a33514d`;
+- reliability: rollout `019f8031-9d37-7e32-9dd2-1adea811ab54`.
+
+The complete accepted finding batch contains the style P2 and documentation
+Minor above. No fix was assigned before all four lanes completed.
+
+## Fix assignment
+
+- Existing role: `implementer`.
+- Bounded ownership: remove only the duplicate happy-path load-runner test from
+  `examples/project-management/test/topology.test.ts`; add exact coverage-glob
+  evidence to the T-0048 records; run the two affected example test files and
+  focused formatting/diff checks; do not change production code or T-0046.
+- Expected model/reasoning explicitly dispatched: `gpt-5.6-terra` / `medium`.
+- Acceptance requires matching rollout metadata plus a report containing the
+  exact commands, test counts, and results.
+
+## Implementer fix disposition
+
+- The complete accepted batch is addressed in the existing implementation
+  context: the duplicate topology happy-path test is removed, while the direct
+  source `load-runner.test.ts` case remains the coverage owner.
+- Durable configuration evidence: `vitest.config.ts` has
+  `coverage.include: ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts"]`
+  and test discovery includes `"examples/*/test/**/*.test.ts"`. Its exclusions
+  do not name `examples/project-management/src/**/*.ts` or any other
+  project-management source path.
+- The implementer performed the canonical skill applicability check against the
+  Codex Desktop session inventory, expected-skill manifest, installed-skill
+  entrypoints, and skill lock. `verification-before-completion` was selected
+  and fully read. `test-driven-development` was fully read but is N/A because
+  no behavior or runtime code changes; it removes a duplicate test only.
+- Fresh native loopback verification, focused Prettier, and `git diff --check`
+  completed after the fix. Native command
+  `pnpm --config.verify-deps-before-run=false exec vitest run examples/project-management/test/topology.test.ts examples/project-management/test/load-runner.test.ts`
+  passed `2` files / `7` tests. The focused Prettier check and `git diff --check`
+  both exited `0`; no production, Vitest configuration, or T-0046 file changed.
+  A final post-format native rerun of the same command also passed `2` files /
+  `7` tests in `3.00s`.
+- Actual runtime metadata matched the explicit dispatch: existing role
+  `implementer`, `gpt-5.6-terra` / `medium`, rollout
+  `019f8036-1d7c-7370-b3cd-4fdedce8b797`.
+- Independent orchestrator verification passed the same two test files with
+  `2` files / `7` tests, focused Prettier, and `git diff --check`.
+
+## Affected-lane re-review assignments
+
+- Style/maintainability: existing role `style_maintainability_reviewer`,
+  expected `gpt-5.6-terra` / `high`; verify the duplicate test removal retains
+  the direct-source behavior owner.
+- Documentation: existing role `documentation_reviewer`, expected
+  `gpt-5.6-luna` / `medium`; verify the exact Vitest glob/exclusion evidence.
+- TypeScript/API and performance/reliability are not rerun because the fix
+  changes no production code, public/type contract, runtime behavior, or
+  resource path. Their clean replacement-round dispositions remain valid.

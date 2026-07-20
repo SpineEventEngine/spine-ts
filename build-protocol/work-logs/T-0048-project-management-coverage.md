@@ -113,3 +113,67 @@
 - Earlier clean reviewer notifications lack actual runtime-profile metadata and
   are rejected under the protocol. A complete four-lane replacement wave will
   run against a frozen implementation endpoint before final task verification.
+- Immutable implementation endpoint: `457c9fde` (`Cover project management load runner`).
+  It includes the prerequisite communication-rule commit `61223847`; the
+  separate equivalent branch commit `384dd719` remains preserved on its pushed
+  branch and must not be merged again as duplicate content.
+
+## Replacement review wave
+
+- Actual rollout metadata matched every required profile: style, API, and
+  reliability used `gpt-5.6-terra` / `high`; documentation used
+  `gpt-5.6-luna` / `medium`.
+- API and reliability were clean.
+- Accepted batch: remove the duplicated ten-user real-gRPC happy path from
+  `topology.test.ts`, retaining the direct-source test; cite
+  `vitest.config.ts` evidence for reusable example source coverage and the
+  absence of a project-management exclusion.
+- One Terra Medium implementer receives the complete batch. T-0046 remains
+  untouched until this prerequisite is integrated, verified, and pushed.
+
+## 2026-07-20 — Accepted review-fix implementation
+
+- Existing role: `implementer`; bounded ownership is the duplicate topology
+  test and T-0048 records only. The orchestrator explicitly dispatched
+  `gpt-5.6-terra` / `medium`; no subagents were used.
+- Canonical skill applicability check: session inventory was the Codex Desktop
+  inventory; `build-protocol/skills/EXPECTED_SKILLS.md`,
+  `/Users/armiol/.agents/.skill-lock.json`, and
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+  were checked. `verification-before-completion` was selected and read in full.
+  `test-driven-development` was also read in full but is N/A because this batch
+  only removes duplicate test coverage and does not change runtime behavior.
+  The remaining expected skills are N/A: no child dispatch, worktree creation,
+  review dispatch, planning, architecture, public type, or backend-runtime work
+  occurs in this pass.
+- Removed the duplicated ten-user real-gRPC happy-path test from
+  `examples/project-management/test/topology.test.ts`. The direct-source test
+  in `examples/project-management/test/load-runner.test.ts` remains the sole
+  owner for that behavior and source coverage.
+- Exact configuration evidence from `vitest.config.ts`: `test.include` contains
+  `examples/*/test/**/*.test.ts` for example test discovery; `coverage.include`
+  contains `examples/*/src/**/*.ts` for example source coverage. Its
+  `coverage.exclude` entries are `**/*.test.ts`, generated output, the server
+  build-time analyzer, and `examples/todo/src/index.ts`; none excludes
+  project-management source.
+- Initial sandboxed combined test run was blocked only by
+  `listen EPERM: operation not permitted 127.0.0.1`; native loopback execution
+  is required for these real-gRPC tests. Post-fix command results are recorded
+  after fresh verification.
+- Fresh native test command:
+  `pnpm --config.verify-deps-before-run=false exec vitest run examples/project-management/test/topology.test.ts examples/project-management/test/load-runner.test.ts`.
+  Result: exit `0`; `2` test files passed and `7` tests passed in `2.03s`.
+- Focused formatting command:
+  `pnpm --config.verify-deps-before-run=false exec prettier --check examples/project-management/test/topology.test.ts build-protocol/tasks/T-0048-project-management-coverage/TASK.md build-protocol/work-logs/T-0048-project-management-coverage.md build-protocol/reviews/T-0048-project-management-coverage.md`.
+  Result: exit `0`; all matched files use Prettier code style. The preceding
+  focused `prettier --write` normalized only `topology.test.ts` and the review
+  log; the task and work log were unchanged.
+- `git diff --check` completed with exit `0` and no output. No commit was made;
+  endpoint and closure commits remain orchestrator-owned.
+- Final post-format native rerun used the same focused Vitest command and
+  completed with exit `0`: `2` test files / `7` tests passed in `3.00s`.
+- Actual implementer rollout metadata matched the dispatch: existing role
+  `implementer`, `gpt-5.6-terra` / `medium`, rollout
+  `019f8036-1d7c-7370-b3cd-4fdedce8b797`.
+- Independent orchestrator verification passed the same focused native suite
+  with `2` files / `7` tests, focused Prettier, and `git diff --check`.

@@ -76,3 +76,45 @@ broad coverage exclusions. This task must complete before T-0046 resumes.
    selected.
 3. Run focused verification and all relevant review lanes.
 4. Merge, post-merge verify, push branch and main, then unblock T-0046.
+
+## 2026-07-20 review-fix skill applicability
+
+- Session inventory source: the Codex Desktop skill inventory supplied to the
+  implementer. The task-relevant installed skills were confirmed with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`;
+  the expected-skill source and paths were checked in
+  `build-protocol/skills/EXPECTED_SKILLS.md`, and installation metadata in
+  `/Users/armiol/.agents/.skill-lock.json`.
+- Selected and read in full: `verification-before-completion`; its fresh-evidence
+  gate governs the focused post-fix test, formatting, and diff checks.
+- `test-driven-development` was read in full and is N/A for this batch: it
+  deletes a duplicate test and changes no runtime or production behavior. The
+  retained direct-source `load-runner.test.ts` test remains the behavior owner.
+- `subagent-driven-development`, `using-git-worktrees`, and
+  `requesting-code-review` are N/A to this implementer pass: the orchestrator
+  supplied the existing worktree, completed the review wave, and expressly
+  prohibited subagent dispatch. `planning-with-files`,
+  `architecture-decision-records`, `typescript-advanced-types`, and
+  `nodejs-backend-patterns` are N/A because this batch has no planning,
+  architecture, public-type, or backend-runtime change.
+
+## 2026-07-20 review-fix acceptance criteria
+
+- Remove only the duplicate ten-user real-gRPC load-runner happy path from
+  `topology.test.ts`; `load-runner.test.ts` remains its direct-source behavior
+  and coverage owner.
+- Preserve the reusable Vitest policy: test discovery includes exactly
+  `examples/*/test/**/*.test.ts`; coverage includes exactly
+  `examples/*/src/**/*.ts`; the coverage exclusion list contains no
+  project-management source exclusion.
+
+## 2026-07-20 review-fix evidence
+
+- Native focused verification was required because the sandbox rejects loopback
+  binding with `listen EPERM`. `pnpm --config.verify-deps-before-run=false exec
+vitest run examples/project-management/test/topology.test.ts
+examples/project-management/test/load-runner.test.ts` completed `2` files /
+  `7` tests with no failures.
+- Focused Prettier and `git diff --check` were run after the change. Their final
+  results are recorded in the work and review logs; no production or T-0046
+  file is part of this fix batch.
