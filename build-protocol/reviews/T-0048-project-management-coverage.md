@@ -1,6 +1,6 @@
 # T-0048 Review Log
 
-Status: Round 1 results rejected for missing runtime-profile metadata; replacement round pending
+Status: Record-only re-review fix in progress; documentation re-review pending
 
 ## Skill applicability and execution-surface check
 
@@ -129,6 +129,9 @@ Minor above. No fix was assigned before all four lanes completed.
 
 ## Affected-lane re-review assignments
 
+Fix endpoint: `db712307` (`Resolve T-0048 review findings`). Re-review package
+covers literal range `457c9fde..db712307`.
+
 - Style/maintainability: existing role `style_maintainability_reviewer`,
   expected `gpt-5.6-terra` / `high`; verify the duplicate test removal retains
   the direct-source behavior owner.
@@ -137,3 +140,29 @@ Minor above. No fix was assigned before all four lanes completed.
 - TypeScript/API and performance/reliability are not rerun because the fix
   changes no production code, public/type contract, runtime behavior, or
   resource path. Their clean replacement-round dispositions remain valid.
+
+## Affected-lane re-review results
+
+- Style/maintainability: clean. Actual runtime metadata matched the dispatch:
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / `high`, rollout
+  `019f803b-ed2f-7252-a33f-320a7dd6c402`.
+- Documentation: the requested Vitest glob/exclusion evidence is clean. Actual
+  runtime metadata matched the configured role: `documentation_reviewer`,
+  `gpt-5.6-luna` / `medium`, rollout
+  `019f803c-06e9-7dc1-8c72-90e7e603de5a`.
+- Remaining documentation finding: this log's status header still says the
+  replacement round is pending. Also soften the task record's "includes exactly"
+  phrasing so it names the exact reusable project-management glob without
+  implying the complete Vitest include list has one entry.
+- The existing Terra Medium implementation context receives this complete
+  record-only batch. No code, test, public API, or T-0046 file may change.
+
+## Record-only re-review fix disposition
+
+- Updated this status to reflect the current record-only fix and the remaining
+  documentation re-review, rather than the superseded replacement-round state.
+- The task record now says each reusable Vitest glob is included, without
+  implying either `test.include` or `coverage.include` contains no other entry.
+- No code, test, Vitest configuration, public API, or T-0046 file changed.
+- Focused Prettier and `git diff --check` completed with exit `0`; the latter
+  produced no output.

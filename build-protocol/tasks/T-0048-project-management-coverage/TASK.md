@@ -103,9 +103,9 @@ broad coverage exclusions. This task must complete before T-0046 resumes.
 - Remove only the duplicate ten-user real-gRPC load-runner happy path from
   `topology.test.ts`; `load-runner.test.ts` remains its direct-source behavior
   and coverage owner.
-- Preserve the reusable Vitest policy: test discovery includes exactly
-  `examples/*/test/**/*.test.ts`; coverage includes exactly
-  `examples/*/src/**/*.ts`; the coverage exclusion list contains no
+- Preserve the reusable Vitest policy: test discovery includes the exact
+  reusable glob `examples/*/test/**/*.test.ts`; coverage includes the exact
+  reusable glob `examples/*/src/**/*.ts`; the coverage exclusion list contains no
   project-management source exclusion.
 
 ## 2026-07-20 review-fix evidence
