@@ -118,3 +118,13 @@ examples/project-management/test/load-runner.test.ts` completed `2` files /
 - Focused Prettier and `git diff --check` were run after the change. Their final
   results are recorded in the work and review logs; no production or T-0046
   file is part of this fix batch.
+
+## Final-gate verification fix
+
+- The full branch gate exposed a pre-existing repository lint defect at
+  `scripts/proto-workflow.test.mjs:65`: the `projectGenerated` local is unused.
+- The smallest accepted fix removes only that dead local. T-0046 already carries
+  the identical deletion inside its preserved staged changes; do not copy or
+  alter any other T-0046 proto-workflow work in this task.
+- Acceptance: the focused proto-workflow test, focused ESLint/Prettier, and
+  `git diff --check` pass before rerunning the full branch gate.
