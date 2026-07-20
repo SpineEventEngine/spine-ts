@@ -149,13 +149,16 @@ describe("proto-workflow", () => {
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
     const projectGenerated = join(repoRoot, "examples/project-management/generated");
+    const datastoreOrdersGenerated = join(repoRoot, "examples/datastore-orders/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
     mkdirSync(projectGenerated, { recursive: true });
+    mkdirSync(datastoreOrdersGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
     mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/datastore-orders"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -167,6 +170,10 @@ describe("proto-workflow", () => {
     writeFileSync(
       join(repoRoot, "examples/project-management/buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
+    );
+    writeFileSync(
+      join(repoRoot, "examples/datastore-orders/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/datastore-orders/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
@@ -198,6 +205,7 @@ describe("proto-workflow", () => {
       "buf generate packages/proto/generated",
       "buf generate examples/todo/generated",
       "buf generate examples/project-management/generated",
+      "buf generate examples/datastore-orders/generated",
       "todo handler registry generation",
     ]);
     expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
@@ -211,13 +219,16 @@ describe("proto-workflow", () => {
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
     const projectGenerated = join(repoRoot, "examples/project-management/generated");
+    const datastoreOrdersGenerated = join(repoRoot, "examples/datastore-orders/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
     mkdirSync(projectGenerated, { recursive: true });
+    mkdirSync(datastoreOrdersGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
     mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/datastore-orders"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -229,6 +240,10 @@ describe("proto-workflow", () => {
     writeFileSync(
       join(repoRoot, "examples/project-management/buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
+    );
+    writeFileSync(
+      join(repoRoot, "examples/datastore-orders/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/datastore-orders/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
@@ -269,8 +284,10 @@ describe("proto-workflow", () => {
         "buf generate packages/proto/generated",
         "buf generate examples/todo/generated",
         "buf generate examples/project-management/generated",
+        "buf generate examples/datastore-orders/generated",
         "todo handler registry generation",
         "project-management handler registry generation",
+        "datastore-orders handler registry generation",
       ]);
       expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
         "previous package output\n",
@@ -289,6 +306,11 @@ describe("proto-workflow", () => {
       expect(
         existsSync(
           join(staged.stagedTargets[2].stagedOutputRoot, "handler/generated-handler-registry.ts"),
+        ),
+      ).toBe(true);
+      expect(
+        existsSync(
+          join(staged.stagedTargets[3].stagedOutputRoot, "handler/generated-handler-registry.ts"),
         ),
       ).toBe(true);
     } finally {

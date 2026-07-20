@@ -1,0 +1,18 @@
+syntax = "proto3";
+package spine.example.datastore_orders.v1;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.datastore-orders";
+
+message Order {
+  option (entity).kind = AGGREGATE;
+  string id = 1 [(required) = true, (set_once) = true];
+  string sku_id = 2 [(required) = true];
+}
+
+message Sku {
+  option (entity).kind = AGGREGATE;
+  string id = 1 [(required) = true, (set_once) = true];
+  string display_name = 2 [(required) = true];
+}

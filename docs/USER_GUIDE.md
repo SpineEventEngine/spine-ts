@@ -507,10 +507,68 @@ provides no retry or restart guarantee. It also does not provide remote
 transport, durable redelivery, exactly-once delivery, process supervision,
 broad health checks, or production topology.
 
-Initial-release exclusions also include durable production storage adapters,
-deployment/authentication/tracing hardening, retained update replay policy,
-and broad production verification. The runnable to-do example is local and
-single-process; it does not demonstrate a multi-process mode.
+Initial-release exclusions include deployment/authentication/tracing hardening,
+retained update replay policy, and broad production verification. The runnable
+to-do example is local and single-process; it does not demonstrate a
+multi-process mode.
+
+### Optional Google Cloud Datastore storage
+
+`@spine-ts/storage-datastore` is an optional adapter for Google Cloud
+Datastore, including Firestore in Datastore mode. Select it at application
+composition time through the existing `StorageFactory` seam; application
+aggregates, process managers, projections, and server APIs do not import a
+Datastore-specific contract.
+
+```ts
+import { Datastore } from "@google-cloud/datastore";
+import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+
+const storageFactory = new DatastoreStorageFactory({
+  client: new Datastore({ projectId: "orders-test" }),
+});
+```
+
+The application owns client configuration and credentials. An injected client
+is never closed by the adapter; `DatastoreStorageFactory.create(options)` is a
+convenience for explicit Google client options. Application Default Credentials
+remain a Google-client behavior, rather than adapter policy. Do not include
+credentials or stored payloads in application logs.
+
+For multitenant `StorageContext`s, the tenant ID selects the Datastore
+namespace. The adapter writes private flat entities containing canonical
+Protobuf bytes and declared indexed record columns. `writeAll()` uses groups of
+at most 500 mutations and may leave earlier groups written if a later group
+fails. `compareAndSet()` is transactional for one storage slot. Applications
+must deploy the Datastore composite indexes needed by their equality-filter and
+sort combinations.
+
+Storage-slot IDs are canonically encoded for provider keys, metadata, ID
+filters, continuations, and returned rows, including copied object IDs with
+`undefined` and `bigint` values. ID constraints, supported column equality
+filters, and ordering are translated to Datastore. Every provider query uses a
+fixed `maxClientSideScan + 1` sentinel limit (default scan budget `1000`). Typed
+continuations, deterministic ID tie-breaking, offsets, and requested limits are
+then applied once locally. Receiving the sentinel row throws
+`DatastoreQueryLimitError` without returning partial results. Indexed `bigint`
+values must be exact signed 64-bit integers and are rejected before RPC
+otherwise. Transaction errors redact credential-like and payload-like provider
+messages.
+
+The unit suite uses an injected client fake. Emulator verification is opt-in:
+
+```sh
+gcloud emulators firestore start --database-mode=datastore-mode
+DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
+  pnpm --filter @spine-ts/storage-datastore test:emulator
+```
+
+Set `DATASTORE_PROJECT_ID` to select a disposable emulator project. Emulator
+scenarios use unique kinds and targeted cleanup rather than resetting shared
+emulator data. The credential-gated cloud smoke test additionally requires
+`DATASTORE_CLOUD_TEST=1` and `DATASTORE_PROJECT_ID`; see the package README for
+its cleanup and limitations. Emulator evidence does not prove production index
+deployment, transaction limits, or all cloud consistency behavior.
 
 ## Further reading
 

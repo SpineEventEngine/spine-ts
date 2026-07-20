@@ -9,6 +9,16 @@ import { describe, expect, it } from "vitest";
 import { RecordColumn, RecordSpec } from "../../src/index.js";
 
 describe("RecordSpec", () => {
+  it("exposes its read-only protobuf schema to storage adapters", () => {
+    const spec = new RecordSpec({
+      schema: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => event.id ?? create(EventIdSchema),
+    });
+
+    expect(spec.schema).toBe(EventSchema);
+  });
+
   it("uses clone methods for ids, records, and column values when they exist", () => {
     const recordClone = {
       id: "record-1",
