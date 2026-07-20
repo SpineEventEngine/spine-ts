@@ -1,5 +1,13 @@
 # Spine TS Agent Instructions
 
+## Progress Communication
+
+Immediately send a concise user-facing progress update after every subagent
+completion, verification result, review result, merge, push, or real blocker.
+Each update must state the outcome, the next action, and whether work continues.
+Treat subagent notifications as user-visible milestones, not internal-only
+events. Do not end a turn or wait silently while an active task remains.
+
 `build-protocol/BUILD_PROTOCOL.md` is the canonical autonomous-development
 workflow. `build-protocol/PROJECT_COMPLETION_PLAN.md` is the current completion
 sequence. Preserve all accepted DDD, Protobuf, public API, testing,

@@ -62,7 +62,6 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
-    const projectGenerated = join(repoRoot, "examples/project-management/generated");
 
     mkdirSync(packageGenerated, { recursive: true });
     mkdirSync(todoGenerated, { recursive: true });
