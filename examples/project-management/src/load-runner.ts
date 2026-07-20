@@ -4,8 +4,8 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
+import { CommandSchema, UserIdSchema } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import {
   TargetFiltersSchema,
@@ -127,11 +127,13 @@ async function runUser(
     const submittedAt = performance.now();
     const acknowledgement = await withTimeout(
       commands.post(
-        packCommand({
+        create(CommandSchema, {
           id: metadata.commandId(`load-command-${id}`),
+          message: packAny(
+            CreateProjectSchema,
+            create(CreateProjectSchema, { id, name: `Load project ${String(index)}` }),
+          ),
           context: metadata.commandContext({ actorContext }),
-          schema: CreateProjectSchema,
-          message: create(CreateProjectSchema, { id, name: `Load project ${String(index)}` }),
         }),
       ),
       "command acknowledgement",
@@ -175,11 +177,11 @@ async function runUser(
   } finally {
     controller.abort();
     session.abort();
-    await withTimeout(
-      Promise.resolve(iterator?.return?.()).then(() => undefined),
-      "subscription cleanup",
-      500,
-    ).catch(() => undefined);
+    try {
+      await withTimeout(Promise.resolve(iterator?.return?.()), "subscription cleanup", 500);
+    } catch {
+      // Subscription cleanup is intentionally best effort.
+    }
   }
 }
 
