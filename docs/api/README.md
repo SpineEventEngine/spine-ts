@@ -842,12 +842,12 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON and verifies seven expected
+`docs:check` also emits temporary TypeDoc JSON and verifies eight expected
 entry points in the API model: `@spine-ts/proto`, `@spine-ts/core`,
-`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/transport`,
+`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`, `@spine-ts/transport`,
 `@spine-ts/transport/zeromq`, and `@spine-ts/testing`. The
 `@spine-ts/transport/zeromq` entry point has its own exact-six-public-export
 gate. It also checks
-`@spine-ts/server` and `@spine-ts/storage` root exports against source
+`@spine-ts/server`, `@spine-ts/storage`, and `@spine-ts/storage-datastore` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

@@ -1,0 +1,16 @@
+syntax = "proto3";
+package spine.example.datastore_orders.v1;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.datastore-orders";
+
+message CreateOrder {
+  string id = 1 [(required) = true];
+  string sku_id = 2 [(required) = true];
+}
+
+message RegisterSku {
+  string id = 1 [(required) = true];
+  string display_name = 2 [(required) = true];
+}

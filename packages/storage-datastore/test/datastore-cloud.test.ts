@@ -10,7 +10,9 @@ const cloudTestEnabled =
 
 describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
   it("uses an explicitly configured project and removes its disposable record", async () => {
-    const factory = DatastoreStorageFactory.create({ projectId: process.env.DATASTORE_PROJECT_ID });
+    const projectId = process.env.DATASTORE_PROJECT_ID;
+    if (projectId === undefined) throw new Error("DATASTORE_PROJECT_ID is required.");
+    const factory = DatastoreStorageFactory.create({ projectId });
     const id = `cloud-smoke-${String(Date.now())}`;
     const storage = factory.createRecordStorage(
       { name: `T0046Cloud${String(Date.now())}`, multitenant: false },

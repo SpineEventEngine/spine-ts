@@ -7,18 +7,30 @@ import {
   type StorageContext,
 } from "@spine-ts/storage";
 
-import { DatastoreRecordStorage } from "./datastore-record-storage.js";
+import { DatastoreRecordStorage } from "./record-storage.js";
 
 /** Explicit Google Cloud client settings used to construct a Datastore adapter. */
 export type DatastoreStorageOptions = DatastoreOptions;
 
+/** Adapter-local query bound for query paths requiring client-side reconciliation. */
+export interface DatastoreStorageFactoryInput {
+  readonly client: Datastore;
+  /** Maximum entities reconciled locally by one query; must be a positive finite integer. */
+  readonly maxClientSideScan?: number;
+}
+
 /** A Google Cloud Datastore-backed implementation of the Spine TS storage port. */
 export class DatastoreStorageFactory extends StorageFactory {
   readonly #client: Datastore;
+  readonly #maxClientSideScan: number;
 
-  constructor(input: { readonly client: Datastore }) {
+  constructor(input: DatastoreStorageFactoryInput) {
     super();
     this.#client = input.client;
+    this.#maxClientSideScan = input.maxClientSideScan ?? 1_000;
+    if (!Number.isInteger(this.#maxClientSideScan) || this.#maxClientSideScan <= 0) {
+      throw new Error("Datastore maxClientSideScan must be a positive finite integer.");
+    }
   }
 
   /** Creates an adapter with caller-supplied Google Cloud client configuration. */
@@ -30,6 +42,6 @@ export class DatastoreStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    return new DatastoreRecordStorage(context, recordSpec, this.#client);
+    return new DatastoreRecordStorage(context, recordSpec, this.#client, this.#maxClientSideScan);
   }
 }

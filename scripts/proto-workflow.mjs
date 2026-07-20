@@ -18,6 +18,9 @@ const todoProtoRoot = fileURLToPath(new URL("../examples/todo/proto", import.met
 const projectManagementProtoRoot = fileURLToPath(
   new URL("../examples/project-management/proto", import.meta.url),
 );
+const datastoreOrdersProtoRoot = fileURLToPath(
+  new URL("../examples/datastore-orders/proto", import.meta.url),
+);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const generatedTargets = [
   {
@@ -38,6 +41,15 @@ export const generatedTargets = [
     handlerRegistry: {
       name: "project-management",
       projectPath: "examples/project-management/tsconfig.json",
+    },
+  },
+  {
+    displayPath: "examples/datastore-orders/generated",
+    templatePath: "examples/datastore-orders/buf.gen.yaml",
+    protoRoot: datastoreOrdersProtoRoot,
+    handlerRegistry: {
+      name: "datastore-orders",
+      projectPath: "examples/datastore-orders/tsconfig.json",
     },
   },
 ];

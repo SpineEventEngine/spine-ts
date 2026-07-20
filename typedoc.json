@@ -7,6 +7,7 @@
     "packages/transport/src/index.ts",
     "packages/transport/src/zeromq/index.ts",
     "packages/storage/src/index.ts",
+    "packages/storage-datastore/src/index.ts",
     "packages/testing/src/index.ts",
     "examples/todo/src/index.ts"
   ],

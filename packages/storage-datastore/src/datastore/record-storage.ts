@@ -1,5 +1,5 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { Datastore } from "@google-cloud/datastore";
+import { Datastore } from "@google-cloud/datastore";
 import {
   RecordStorage,
   type RecordEntry,
@@ -8,10 +8,16 @@ import {
   type StorageContext,
 } from "@spine-ts/storage";
 
+import { CanonicalValue } from "./value-codec.js";
+
 const payloadProperty = "$spine.payload";
 const idProperty = "$spine.id";
 const columnPrefix = "$spine.column.";
+const columnTypePrefix = "$spine.columnType.";
 const maxMutationsPerBatch = 500;
+const maxCasAttempts = 3;
+const casRetryDelayMs = 100;
+const wrappedReadOptions = { wrapNumbers: true } as const;
 
 /** Private flat Datastore-entity codec for one record storage handle. */
 class FlatEntityCodec<I, R extends Message> {
@@ -20,30 +26,29 @@ class FlatEntityCodec<I, R extends Message> {
   constructor(
     private readonly context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
+    private readonly maxClientSideScan: number,
   ) {
     this.#kind = `${context.name}:${recordSpec.schema.typeName}`;
   }
 
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
     return client.key({
-      path: [this.#kind, JSON.stringify(id)],
+      path: [this.#kind, CanonicalValue.encode(id)],
       ...(this.context.multitenant ? { namespace: this.requiredTenantId() } : {}),
     });
   }
 
   encode(record: R, columns: ReadonlyMap<string, unknown>, id: I): Record<string, unknown> {
     const data: Record<string, unknown> = {
-      [idProperty]: JSON.stringify(id),
+      [idProperty]: CanonicalValue.encode(id),
       [payloadProperty]: Buffer.from(
         toBinary(this.recordSpec.schema, record, { writeUnknownFields: false }),
       ),
     };
 
     for (const [name, value] of columns) {
-      if (!isQueryableValue(value)) {
-        throw new Error(`Datastore record column "${name}" has an unsupported value.`);
-      }
-      data[`${columnPrefix}${name}`] = value;
+      data[`${columnPrefix}${name}`] = providerValue(value, `Datastore record column "${name}"`);
+      if (typeof value === "bigint") data[`${columnTypePrefix}${name}`] = "bigint";
     }
 
     return data;
@@ -56,19 +61,22 @@ class FlatEntityCodec<I, R extends Message> {
       throw new Error("Datastore entity has no valid Spine record identifier.");
     }
 
-    try {
-      return JSON.parse(encodedId) as I;
-    } catch {
-      throw new Error("Datastore entity has no valid Spine record identifier.");
-    }
+    return CanonicalValue.decode(encodedId) as I;
   }
 
   columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
     return new Map(
       Object.entries(entity)
         .filter(([name]) => name.startsWith(columnPrefix))
-        .map(([name, value]) => [name.slice(columnPrefix.length), value]),
+        .map(([name, value]) => {
+          const column = name.slice(columnPrefix.length);
+          return [column, localValue(value, entity[`${columnTypePrefix}${column}`])];
+        }),
     );
+  }
+
+  unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
+    return Object.keys(data).filter((name) => name.startsWith(columnTypePrefix));
   }
 
   createQuery(client: Datastore): ReturnType<Datastore["createQuery"]> {
@@ -79,6 +87,10 @@ class FlatEntityCodec<I, R extends Message> {
 
   columnProperty(column: string): string {
     return `${columnPrefix}${column}`;
+  }
+
+  queryLimit(): number {
+    return this.maxClientSideScan + 1;
   }
 
   decode(entity: Record<string | symbol, unknown>): R {
@@ -114,14 +126,15 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     readonly client: Datastore,
+    maxClientSideScan: number,
   ) {
     super(context, recordSpec);
-    this.#codec = new FlatEntityCodec(context, recordSpec);
+    this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan);
   }
 
   protected async deleteRecord(id: I): Promise<boolean> {
     const key = this.#codec.key(this.client, id);
-    const entity = firstEntity(await this.client.get(key));
+    const entity = firstEntity(await this.client.get(key, wrappedReadOptions));
 
     if (entity === undefined) {
       return false;
@@ -135,13 +148,18 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const query = this.#codec.createQuery(this.client);
+    const providerLimit = this.#codec.queryLimit();
     translateQuery(
       query,
       _query,
       (id) => this.#codec.key(this.client, id),
       (column) => this.#codec.columnProperty(column),
     );
-    const entities = queryEntities(await this.client.runQuery(query));
+    query.limit(providerLimit);
+    const entities = queryEntities(await this.client.runQuery(query, wrappedReadOptions));
+    if (entities.length >= providerLimit) {
+      throw new DatastoreQueryLimitError(providerLimit - 1);
+    }
     const entries = entities.map((entity) => ({
       id: this.#codec.id(entity),
       record: this.#codec.decode(entity),
@@ -152,7 +170,9 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   protected async readRecord(id: I): Promise<R | undefined> {
-    const entity = firstEntity(await this.client.get(this.#codec.key(this.client, id)));
+    const entity = firstEntity(
+      await this.client.get(this.#codec.key(this.client, id), wrappedReadOptions),
+    );
 
     return entity === undefined ? undefined : this.#codec.decode(entity);
   }
@@ -162,33 +182,47 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    for (let attempt = 0; attempt < maxCasAttempts; attempt += 1) {
+      try {
+        return await this.attemptCompareAndSet(id, expected, next);
+      } catch (error) {
+        if (attempt + 1 < maxCasAttempts && isRetriableTransactionConflict(error)) {
+          await waitBeforeCasRetry(attempt);
+          continue;
+        }
+        throw redactTransactionError(error);
+      }
+    }
+
+    throw new Error("Datastore compare-and-set retry limit was reached.");
+  }
+
+  private async attemptCompareAndSet(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
     const key = this.#codec.key(this.client, id);
     const transaction = this.client.transaction();
-    await transaction.run();
-
     try {
-      const entity = firstEntity(await transaction.get(key));
-      const matches =
+      await transaction.run();
+      const entity = firstEntity(await transaction.get(key, wrappedReadOptions));
+      const expectedPayload =
+        expected === undefined
+          ? undefined
+          : this.#codec.encode(expected.record, expected.columns, expected.id)[payloadProperty];
+      if (
         entity === undefined
-          ? expected === undefined
-          : expected !== undefined &&
-            payloadsEqual(
-              entity[payloadProperty],
-              this.#codec.encode(expected.record, expected.columns, expected.id)[payloadProperty],
-            );
-
-      if (!matches) {
+          ? expected !== undefined
+          : !payloadsEqual(entity[payloadProperty], expectedPayload)
+      ) {
         await transaction.rollback();
         return false;
       }
-
-      if (next === undefined) {
-        transaction.delete(key);
-      } else {
-        transaction.save({
-          key,
-          data: this.#codec.encode(next.record, next.columns, next.id),
-        });
+      if (next === undefined) transaction.delete(key);
+      else {
+        const data = this.#codec.encode(next.record, next.columns, next.id);
+        transaction.save({ key, data, excludeFromIndexes: this.#codec.unindexedProperties(data) });
       }
       await transaction.commit();
       return true;
@@ -203,26 +237,75 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   ): Promise<void> {
     for (let offset = 0; offset < records.length; offset += maxMutationsPerBatch) {
       await this.client.save(
-        records.slice(offset, offset + maxMutationsPerBatch).map((record) => ({
-          key: this.#codec.key(this.client, record.id),
-          data: this.#codec.encode(record.record, record.columns, record.id),
-        })),
+        records.slice(offset, offset + maxMutationsPerBatch).map((record) => {
+          const data = this.#codec.encode(record.record, record.columns, record.id);
+          return {
+            key: this.#codec.key(this.client, record.id),
+            data,
+            excludeFromIndexes: this.#codec.unindexedProperties(data),
+          };
+        }),
       );
     }
   }
 
   protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    const data = this.#codec.encode(record.record, record.columns, record.id);
     await this.client.save({
       key: this.#codec.key(this.client, record.id),
-      data: this.#codec.encode(record.record, record.columns, record.id),
+      data,
+      excludeFromIndexes: this.#codec.unindexedProperties(data),
     });
   }
 }
 
 type QueryableValue = string | number | boolean | bigint | null;
 
+/** Raised when a query would exceed the adapter's configured finite client-side scan budget. */
+export class DatastoreQueryLimitError extends Error {
+  constructor(readonly maxClientSideScan: number) {
+    super(`Datastore query exceeded the client-side scan limit of ${String(maxClientSideScan)}.`);
+    this.name = "DatastoreQueryLimitError";
+  }
+}
+
 function isQueryableValue(value: unknown): value is QueryableValue {
-  return value === null || ["string", "number", "boolean", "bigint"].includes(typeof value);
+  if (typeof value === "bigint") {
+    return value >= -(1n << 63n) && value <= (1n << 63n) - 1n;
+  }
+  if (typeof value === "number") return Number.isFinite(value);
+  return value === null || ["string", "boolean"].includes(typeof value);
+}
+
+function providerValue(value: unknown, label: string): unknown {
+  if (typeof value === "bigint") {
+    if (!isQueryableValue(value)) {
+      throw new Error(`${label} must be an exact signed 64-bit integer.`);
+    }
+    return Datastore.int(value.toString());
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error(`${label} must be finite.`);
+    return Datastore.double(value);
+  }
+  if (!isQueryableValue(value)) throw new Error(`${label} has an unsupported value.`);
+  return value;
+}
+
+function localValue(value: unknown, type: unknown): unknown {
+  if (type === "bigint") {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+    if (typeof value === "object" && value !== null && Datastore.isInt(value)) {
+      return BigInt(value.value);
+    }
+    throw new Error("Datastore entity has an invalid bigint record column.");
+  }
+  if (typeof value === "object" && value !== null && Datastore.isInt(value)) {
+    const integer = Number(value.value);
+    return Number.isSafeInteger(integer) ? integer : BigInt(value.value);
+  }
+  return value;
 }
 
 interface QueriedEntry<I, R extends Message> extends RecordEntry<I, R> {
@@ -244,13 +327,14 @@ function translateQuery<I>(
   }
   for (const filter of recordQuery.filters ?? []) {
     const values = Array.isArray(filter.value) ? filter.value : [filter.value];
-    if (!values.every(isQueryableValue)) {
-      throw new Error(`Datastore query filter "${filter.column}" has an unsupported value.`);
-    }
+    const providerValues =
+      filter.column === "id"
+        ? values.map((value) => keyFor(value as I))
+        : values.map((value) => providerValue(value, `Datastore query filter "${filter.column}"`));
     query.filter(
       filter.column === "id" ? "__key__" : columnProperty(filter.column),
       values.length === 1 ? "=" : "IN",
-      values.length === 1 ? values[0] : values,
+      values.length === 1 ? providerValues[0] : providerValues,
     );
   }
   for (const order of recordQuery.sort ?? []) {
@@ -323,11 +407,11 @@ function valueFor<I, R extends Message>(entry: QueriedEntry<I, R>, field: string
 }
 
 function equalValues(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return CanonicalValue.equal(left, right);
 }
 
 function compareValues(left: unknown, right: unknown): number {
-  return String(left).localeCompare(String(right));
+  return CanonicalValue.compare(left, right);
 }
 
 function payloadsEqual(left: unknown, right: unknown): boolean {
@@ -339,6 +423,29 @@ function payloadsEqual(left: unknown, right: unknown): boolean {
     return false;
   }
   return left.every((value, index) => value === right[index]);
+}
+
+function redactTransactionError(error: unknown): Error {
+  if (error instanceof Error && !/(credential|payload|secret)/i.test(error.message)) {
+    return error;
+  }
+
+  return new Error("Datastore transaction failed.");
+}
+
+function isRetriableTransactionConflict(error: unknown): boolean {
+  if (!(error instanceof Error) || /(credential|payload|secret)/i.test(error.message)) {
+    return false;
+  }
+
+  return Reflect.get(error, "code") === 10;
+}
+
+async function waitBeforeCasRetry(attempt: number): Promise<void> {
+  const exponentialDelay = casRetryDelayMs * 2 ** attempt;
+  const jitter = Math.floor(Math.random() * exponentialDelay);
+
+  await new Promise<void>((resolve) => setTimeout(resolve, exponentialDelay + jitter));
 }
 
 function firstEntity(response: unknown): Record<string | symbol, unknown> | undefined {

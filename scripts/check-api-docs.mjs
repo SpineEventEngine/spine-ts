@@ -160,6 +160,12 @@ const expectedStorageExports = [
   "StorageContext",
   "StorageFactory",
 ];
+const expectedDatastoreStorageExports = [
+  "DatastoreQueryLimitError",
+  "DatastoreStorageFactory",
+  "DatastoreStorageFactoryInput",
+  "DatastoreStorageOptions",
+];
 const expectedTransportExports = [
   "AsyncCloseable",
   "PublishTransportHandler",
@@ -403,6 +409,7 @@ const expectedServerExports = [
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
+const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const zeroMqIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
@@ -439,6 +446,10 @@ const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
+const datastoreStorageModuleNames = collectDirectModuleNames(
+  apiDocs,
+  "packages/storage-datastore/src",
+);
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const zeroMqModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src/zeromq");
 
@@ -740,6 +751,7 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
+const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
@@ -757,6 +769,15 @@ const unexpectedServerExports = declaredServerExports.filter(
 );
 const unexpectedStorageExports = declaredStorageExports.filter(
   (name) => !expectedStorageExports.includes(name),
+);
+const missingDatastoreStorageExports = expectedDatastoreStorageExports.filter(
+  (name) => !datastoreStorageModuleNames.has(name),
+);
+const missingDeclaredDatastoreStorageExports = expectedDatastoreStorageExports.filter(
+  (name) => !declaredDatastoreStorageExports.includes(name),
+);
+const unexpectedDatastoreStorageExports = declaredDatastoreStorageExports.filter(
+  (name) => !expectedDatastoreStorageExports.includes(name),
 );
 const missingTestingExports = expectedTestingExports.filter(
   (name) => !testingModuleNames.has(name),
@@ -829,6 +850,30 @@ if (missingDeclaredStorageExports.length > 0) {
 if (unexpectedStorageExports.length > 0) {
   console.error(
     `@spine-ts/storage root exports changed without updating docs expectations: ${unexpectedStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDatastoreStorageExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-ts/storage-datastore exports: " +
+      missingDatastoreStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredDatastoreStorageExports.length > 0) {
+  console.error(
+    "@spine-ts/storage-datastore root is missing expected exports: " +
+      missingDeclaredDatastoreStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDatastoreStorageExports.length > 0) {
+  console.error(
+    "@spine-ts/storage-datastore root exports changed without updating docs expectations: " +
+      unexpectedDatastoreStorageExports.join(", "),
   );
   process.exit(1);
 }

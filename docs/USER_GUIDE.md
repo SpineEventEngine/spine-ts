@@ -543,6 +543,18 @@ fails. `compareAndSet()` is transactional for one storage slot. Applications
 must deploy the Datastore composite indexes needed by their equality-filter and
 sort combinations.
 
+Storage-slot IDs are canonically encoded for provider keys, metadata, ID
+filters, continuations, and returned rows, including copied object IDs with
+`undefined` and `bigint` values. ID constraints, supported column equality
+filters, and ordering are translated to Datastore. Every provider query uses a
+fixed `maxClientSideScan + 1` sentinel limit (default scan budget `1000`). Typed
+continuations, deterministic ID tie-breaking, offsets, and requested limits are
+then applied once locally. Receiving the sentinel row throws
+`DatastoreQueryLimitError` without returning partial results. Indexed `bigint`
+values must be exact signed 64-bit integers and are rejected before RPC
+otherwise. Transaction errors redact credential-like and payload-like provider
+messages.
+
 The unit suite uses an injected client fake. Emulator verification is opt-in:
 
 ```sh
@@ -551,8 +563,9 @@ DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
   pnpm --filter @spine-ts/storage-datastore test:emulator
 ```
 
-Set `DATASTORE_PROJECT_ID` to select a disposable emulator project. The
-credential-gated cloud smoke test additionally requires
+Set `DATASTORE_PROJECT_ID` to select a disposable emulator project. Emulator
+scenarios use unique kinds and targeted cleanup rather than resetting shared
+emulator data. The credential-gated cloud smoke test additionally requires
 `DATASTORE_CLOUD_TEST=1` and `DATASTORE_PROJECT_ID`; see the package README for
 its cleanup and limitations. Emulator evidence does not prove production index
 deployment, transaction limits, or all cloud consistency behavior.

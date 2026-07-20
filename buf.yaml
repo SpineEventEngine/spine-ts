@@ -3,6 +3,7 @@ modules:
   - path: proto
   - path: examples/todo/proto
   - path: examples/project-management/proto
+  - path: examples/datastore-orders/proto
 lint:
   use:
     - STANDARD

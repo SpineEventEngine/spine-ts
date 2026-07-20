@@ -1,0 +1,19 @@
+syntax = "proto3";
+package spine.example.datastore_orders.v1;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.datastore-orders";
+
+message OrderSummary { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SalesSummary { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message OrderSkuView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message OrderAuditView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SalesFeed { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SkuCatalog { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SkuSalesView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SkuAuditView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message InventoryView { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message SalesSkuIndex { option (entity).kind = PROJECTION; option (entity).visibility = FULL; string id = 1 [(required) = true, (set_once) = true]; string value = 2; }
+message OrderSalesManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }
+message SkuSalesManager { option (entity).kind = PROCESS_MANAGER; string id = 1 [(required) = true, (set_once) = true]; int32 updates = 2; }

@@ -14,5 +14,5 @@ onlyBuiltDependencies:
   - zeromq
 allowBuilds:
   "@bufbuild/buf": true
-  protobufjs: set this to true or false
+  protobufjs: false
   zeromq: true

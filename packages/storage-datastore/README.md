@@ -34,6 +34,23 @@ required by your actual combinations of equality filters and sort order before
 using those queries in production. `writeAll()` groups at most 500 mutations;
 a later group failure can leave earlier groups persisted.
 
+Storage-slot IDs use one private reversible canonical encoding for Datastore
+keys, stored metadata, ID filters, continuations, and returned entries. It
+preserves `undefined`, `bigint`, arrays, and object IDs independent of object
+property insertion order. Indexed column values support strings, finite
+Datastore-compatible numbers, booleans, `null`, and exact signed 64-bit
+`bigint` values only; out-of-range bigint input is rejected before a provider
+call.
+
+ID constraints become Datastore key filters, while supported column equality
+filters and requested ordering become provider filters and orders. Every query
+uses a fixed provider sentinel limit of `maxClientSideScan + 1`; the default
+scan budget is `1000`, and callers may configure another positive finite
+integer. Typed continuation comparison, deterministic ID tie-breaking, offset,
+and the requested result limit are applied once locally. If the sentinel row is
+returned, the adapter throws `DatastoreQueryLimitError` and returns no partial
+result. There is no unlimited option or adapter-specific generic cursor API.
+
 ## Verification commands
 
 Unit tests use an injected narrow client fake and run by default with the
@@ -47,9 +64,11 @@ DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
 ```
 
 Set `DATASTORE_PROJECT_ID` to override the disposable emulator project ID.
-The emulator test creates and removes a uniquely named entity. It does not
-prove production composite-index deployment, transaction limits, or all cloud
-consistency behavior.
+Each emulator scenario uses a unique kind and removes only the records it
+created. The suite covers multiple CRUD, query, transaction, batch, lifecycle,
+namespace, and malformed-data scenarios; it does not globally reset the
+emulator. It does not prove production composite-index deployment, transaction
+limits, or all cloud consistency behavior.
 
 The cloud smoke test is deliberately credential-gated and never runs by
 default:

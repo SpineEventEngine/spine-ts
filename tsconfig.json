@@ -9,6 +9,7 @@
     { "path": "./packages/storage-datastore" },
     { "path": "./packages/testing" },
     { "path": "./examples/todo" },
-    { "path": "./examples/project-management" }
+    { "path": "./examples/project-management" },
+    { "path": "./examples/datastore-orders" }
   ]
 }
