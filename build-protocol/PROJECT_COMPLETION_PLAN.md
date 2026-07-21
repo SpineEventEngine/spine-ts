@@ -249,9 +249,10 @@ The project is complete only when every item below has evidence on final
 
 ### Quality And Release
 
-- Every per-task review concern has a recorded clean result when relevant, or a
-  concrete justified N/A disposition: style/maintainability, documentation,
-  TypeScript/API docs, and performance/reliability.
+- Every per-task review concern has a recorded clean or accepted disposition
+  when relevant, or a concrete justified N/A disposition:
+  style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability.
 - One final project-wide security review is clean or every exception is
   explicit, narrow, durable, and human-accepted.
 - `pnpm --config.verify-deps-before-run=false verify` passes natively.
@@ -301,26 +302,33 @@ Apply this packet to every implementation or docs task.
    surface.
 3. Inspect actual repository state, frame one coherent milestone, and record its
    functional acceptance criteria and genuinely high-risk assumptions.
-4. Read the task brief, current accepted decisions, affected public docs, and
+4. Classify the milestone as micro, standard, or high-risk under
+   `BUILD_PROTOCOL.md`; promote it if implementation exposes a higher-risk
+   boundary.
+5. Read the task brief, current accepted decisions, affected public docs, and
    relevant Spine JVM server evidence for server-module work.
-5. Invoke the requirements splitter on Sol High only for the selective planning
+6. Invoke the requirements splitter on Sol High only for the selective planning
    triggers in `BUILD_PROTOCOL.md`; use a short orchestrator outline otherwise.
-6. Perform and record the canonical skill-applicability check.
-7. Create one branch/worktree for the task when write isolation is useful.
-8. Create/update the task, work log, and review log before code/doc edits.
-9. Record baseline SHA, branch, worktree, author agent, and start timestamp.
-10. For every child, record its existing role or dispatched function, scope,
+7. Perform and record the canonical skill-applicability check once; reuse it
+   while scope, roles, and inventory stay stable.
+8. Create one branch/worktree for the task when write isolation is useful.
+9. Create one concise record for a micro task, or task/work/review records for
+   standard and high-risk work, before code/doc edits.
+10. Record baseline SHA, branch, worktree, author agent, and start timestamp.
+11. For every child, record its existing role or dispatched function, scope,
     expected model, and reasoning before dispatch; confirm both were explicit
-    dispatch fields and record actual runtime metadata before accepting its
-    work.
+    dispatch fields. Record exposed runtime metadata, or the immutable role
+    profile plus an honest self-introspection limitation, before acceptance.
 
 ### 2. Implement
 
-1. Use one Terra Medium author at a time for overlapping production files.
+1. A micro task may be implemented directly by the orchestrator. Otherwise use
+   one Terra Medium author at a time for overlapping production files.
 2. For runtime changes, write deterministic RED tests first, then GREEN code,
    then a small refactor only when needed.
 3. Keep public exports unchanged unless the task explicitly owns a public API.
-4. Update durable logs with each material decision and verification result.
+4. Update durable records only at the meaningful resumability boundaries in
+   `BUILD_PROTOCOL.md`.
 5. Commit generated Protobuf and handler-registry output never.
 6. Stop the slice if it begins owning behavior assigned to a later task.
 
@@ -373,23 +381,36 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 5. Prompts must state exact task scope, accepted exclusions, public boundary,
    review package, and the historical-text rule.
 6. Close every reviewer immediately after collecting its result.
-7. If there are findings, record the complete accepted batch first and return
+7. Classify findings as P0, P1, P2, or P3. If there are blocking or accepted
+   task-scope findings, record the complete batch first and return
    it to the existing implementation context when available. Use one fresh fix
    worker only when that context cannot continue. Verify locally, commit,
-   regenerate the package, and rerun the affected lanes; rerun another lane only
-   when the fix changed its concern.
-8. Do not run a per-task security lane.
+   regenerate the package, and rerun only substantively affected lanes.
+   Mechanical and record-only corrections receive deterministic checks, not a
+   specialist re-review.
+8. Run no more than two complete review waves. Beyond that, continue only for
+   unresolved P0/P1 risk or explicit human direction; use one final targeted
+   batch for accepted P2 findings.
+9. Do not run a per-task security lane.
 
 ### 6. Accept And Integrate
 
-1. Run the task's focused suite plus final task `pnpm verify` only after all
-   relevant lanes are clean and every concern has a recorded disposition.
-2. Record exact verification evidence and mark task/log/review mirrors complete.
-3. Commit closure records.
+1. After convergence, run focused checks plus the change-sensitive final gate
+   from `BUILD_PROTOCOL.md`. Full `pnpm verify` is required once for runtime,
+   test, contract, generated, dependency, or shared-build changes; micro and
+   documentation-only tasks use their relevant deterministic gates.
+2. Record exact verification evidence and reconcile every applicable task,
+   work, review, or combined-micro record.
+3. Commit the reconciled task records with the accepted task endpoint. Do not
+   create a separate record-only commit merely to name that commit.
 4. Merge into root `main` without staging unrelated files.
-5. Run post-merge focused verification and full `pnpm verify` where required by
-   the task protocol.
-6. Record post-merge evidence on `main`.
+5. Prove whether the merged tree equals the verified task tree. Run post-merge
+   focused checks; repeat full `pnpm verify` only when mainline movement,
+   conflict resolution, shared infrastructure, tree differences, or high-risk
+   integration requires it.
+6. Record post-merge evidence in one mainline closure update when durable
+   project state must change. Never create a second follow-up solely to name
+   the closure commit itself.
 7. Push the completed task branch, updated `main`, and task tags to `origin`;
    record the remote refs.
 8. Remove the completed worktree only when Git reports it clean.
@@ -980,7 +1001,7 @@ Use parallelism only where outputs do not block or overwrite each other:
 - Relevant reviewer lanes run concurrently after local pre-review lint when
   genuinely independent and capacity allows. Sequence only for dependencies or
   capacity, aggregate the complete wave before fixes, and give every canonical
-  concern a durable clean or justified N/A disposition.
+  concern a durable clean, accepted, or justified N/A disposition.
 - After T-0037f, docs inventory, example acceptance inventory, and security
   threat-model preparation may run concurrently as read-only work.
 - T-0039 and T-0040 edits do not run concurrently because example documentation

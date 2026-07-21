@@ -12,6 +12,9 @@ Reviewer sub-agents: Pending
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
 
+Task classification: Standard | High-risk
+Classification reason: `<why this class applies; use MICRO_TASK_RECORD_TEMPLATE.md for micro work>`
+
 ## Objective
 
 State the outcome this task must produce.
@@ -98,7 +101,8 @@ Out of scope:
 ## Coverage Result
 
 - `<coverage result>`.
-- If N/A, explain why coverage cannot be generated and identify the reviewer or decision that must accept the exception.
+- For documentation-only or record-only tasks, cite recent verified `main`
+  coverage and explain why the diff cannot affect it.
 
 ## Documentation And Public API Impact
 
@@ -137,9 +141,11 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 | --- | --- | --- | --- | --- |
 | `<risk or deferral>` | `<owner>` | `<task or decision>` | `<accepted, deferred, N/A, blocked>` | `<review point>` |
 
-## Review Rounds
+## Review Waves And Dispositions
 
-- Pending.
+- Record P0-P3 findings, accepted/rejected reasons, the aggregated correction
+  batch, affected-lane re-review, and every canonical clean, accepted, or N/A
+  disposition.
 
 ## Integration Result
 

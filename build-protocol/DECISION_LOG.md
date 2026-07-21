@@ -4444,3 +4444,64 @@ Consequences:
   allocation, concurrency, lifecycle, and accepted SF-013 behavior do not.
 - Re-review style/maintainability, documentation, and TypeScript/API.
   Performance/reliability remains N/A for stateless equality predicates.
+
+## D-0097: Use Risk-Tiered Convergent Task Review
+
+Status: Accepted
+
+Date: 2026-07-21
+
+Task: `T-0050`
+
+Context: Recent tasks showed that mandatory four-lane review, comment-free
+re-review, repeated skill discovery, strict child self-introspection metadata,
+record-only corrections, and duplicate branch/post-merge full gates consumed
+substantial time after substantive behavior had stabilized. The build protocol
+already called for relevant lanes, but `CODE_QUALITY.md` contradicted it by
+requiring all four reviewers for every task.
+
+Decision:
+
+- Classify tasks as micro, standard, or high-risk before selecting planning,
+  ownership, review, logging, and verification depth.
+- Preserve every existing project role. Invoke only specialist concerns
+  affected by changed behavior or public claims; deterministic rules remain an
+  orchestrator-dispatched mechanical function.
+- Collect complete review waves, classify findings P0 through P3, apply one
+  aggregated correction batch, and reopen only substantively affected lanes.
+  Run at most two complete waves without waiving unresolved P0/P1 risk.
+- Require explicit model/reasoning dispatch. Accept immutable configured role
+  metadata when child self-introspection is unavailable; redispatch only an
+  omitted field, wrong role, visible mismatch, or actual inherited fallback.
+- Perform skill discovery once per stable task/role context while still
+  requiring each role to read every selected governing skill.
+- Run full verification once for runtime, test, contract, generated,
+  dependency, or shared-build changes. Use focused deterministic gates for
+  micro/documentation-only work and avoid duplicate post-merge full gates when
+  the verified and merged trees are identical and no integration risk applies.
+- Update records only at meaningful resumability boundaries. Micro tasks use a
+  single concise record; record-only corrections do not trigger specialist
+  review or self-referential closure commits.
+
+Reasoning:
+
+- Review depth should follow failure impact rather than file category alone.
+- Existing specialist roles retain stronger domain judgment where it matters,
+  while deterministic tools provide faster and more reproducible mechanical
+  evidence.
+- Reusing implementation context and aggregating findings avoids rediscovery
+  and prevents one review cycle per isolated comment.
+- Tree equality is stronger evidence than repeating a full coverage run solely
+  because integration added a merge parent.
+
+Consequences:
+
+- Micro and documentation-only tasks complete substantially faster.
+- Persistence, concurrency, lifecycle, contract, security, and other high-risk
+  work retains deep planning, focused regressions, relevant Terra High review,
+  and full verification.
+- Every canonical concern still has a durable clean, accepted, or concrete N/A
+  disposition. P0/P1 findings always block acceptance, and accepted P2 findings
+  must be resolved.
+- Final release-wide security review, worktree safety, and remote
+  synchronization remain unchanged.
