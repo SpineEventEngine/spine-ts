@@ -37,3 +37,28 @@ is not a finding unless the changed guide presents it as current behavior.
   TypeDoc/API documentation, release-readiness Markdown links (59 package
   imports; 119 relative links), cleanup enforcement, and targeted end-user
   API/internal-import scans. No runtime or public-API change is present.
+
+## Round 1 assignments — endpoint `0cd8e9c9`
+
+- Baseline: `f421b7e3c4f0cca9b72b0a5db7352ccc019e1d06`.
+- Style/maintainability: existing role `style_maintainability_reviewer`;
+  expected and explicitly dispatched as `gpt-5.6-terra` / high. Scope is guide
+  organization, readability, duplication, snippet presentation, terminology,
+  and maintainability against the human ledger.
+- Documentation: existing role `documentation_reviewer`; expected and
+  explicitly dispatched as `gpt-5.6-luna` / medium. Scope is sentence-level
+  factual completeness, end-user journey, Datastore comprehensiveness, links,
+  setup distinction, and limitations against source evidence and the ledger.
+- TypeScript/API docs: existing role `typescript_api_docs_reviewer`; expected
+  and explicitly dispatched as `gpt-5.6-terra` / high. Scope is every public
+  import, type, method, option, handler signature, generated service path, and
+  inline TypeScript snippet against the current declarations and ledger.
+- Performance/reliability: existing role
+  `performance_reliability_reviewer`; expected and explicitly dispatched as
+  `gpt-5.6-terra` / high. Scope is Datastore query bounds/pushdown, batching,
+  CAS/retry behavior, error/redaction behavior, namespace/client lifecycle,
+  emulator/cloud claims, production limitations, and the ledger.
+- Each reviewer must perform and report the canonical skill-applicability check
+  before review action, must not edit or mutate Git state, and must not spawn
+  subagents. Actual role/model/reasoning runtime metadata must match before a
+  result is accepted.
