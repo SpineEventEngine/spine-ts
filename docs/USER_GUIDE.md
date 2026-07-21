@@ -5,10 +5,18 @@ server. It uses one `Tasks` bounded context and generated domain messages.
 `@example/tasks-proto` is a consumer substitution: replace it with the package
 name that publishes your generated Protobuf-ES output.
 
-## 1. Install and generate
+## 1. Set up repository sources and generate
 
-Spine TS is ESM-first and targets Node 24 LTS or newer. Install dependencies,
-then generate the Protobuf-ES files before TypeScript builds your application.
+Spine TS is ESM-first and targets Node 24 LTS or newer. This repository is the
+current supported setup: its workspace packages are private at version `0.0.0`,
+so they are not packages to install from a registry. Clone the repository, run
+the workspace commands below, and use workspace dependencies while developing
+alongside the sources. A future published consumer distribution will document
+its own registry installation instructions; do not infer `pnpm add` commands
+from this source-repository guide.
+
+Install the repository dependencies, then generate the Protobuf-ES files before
+TypeScript builds an application in the workspace:
 
 ```bash
 pnpm install
@@ -508,67 +516,195 @@ transport, durable redelivery, exactly-once delivery, process supervision,
 broad health checks, or production topology.
 
 Initial-release exclusions include deployment/authentication/tracing hardening,
-retained update replay policy, and broad production verification. The runnable
-to-do example is local and single-process; it does not demonstrate a
-multi-process mode.
+retained update replay policy, and broad production verification. Local IPC has
+child-process test coverage, but the runnable to-do application is not a public
+production multi-process topology.
 
-### Optional Google Cloud Datastore storage
+## 12. Develop with Google Cloud Datastore
 
-`@spine-ts/storage-datastore` is an optional adapter for Google Cloud
-Datastore, including Firestore in Datastore mode. Select it at application
-composition time through the existing `StorageFactory` seam; application
-aggregates, process managers, projections, and server APIs do not import a
-Datastore-specific contract.
+`@spine-ts/storage-datastore` is an optional implementation of the public
+`@spine-ts/storage` port. It uses the official Google Cloud Datastore client
+against Google Cloud Datastore or Firestore in Datastore mode; it does not use
+Firestore Native APIs. The adapter belongs at server/context composition. Keep
+domain handlers, aggregates, process managers, and projections dependent on
+the provider-neutral `StorageFactory` boundary.
+
+The package is a private workspace package in this repository, not a registry
+installation target. Build the workspace first, then use the current package
+roots in a workspace application:
+
+```bash
+pnpm install
+pnpm typecheck:build
+```
+
+### Configure the factory and credentials
+
+Inject a configured Google client when the application owns its creation and
+lifecycle. This is appropriate when you need explicit project, emulator,
+credential, or transport configuration. The factory and storage handles never
+invoke teardown or close on an injected client; the caller retains any
+applicable client/resource lifecycle in its own shutdown path.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
 
-const storageFactory = new DatastoreStorageFactory({
-  client: new Datastore({ projectId: "orders-test" }),
+const client = new Datastore({ projectId: "orders-development" });
+const storageFactory = new DatastoreStorageFactory({ client });
+```
+
+For ordinary caller-chosen Google client options, `create()` owns only the act
+of constructing the client; it does not establish an adapter credential policy
+or invoke client teardown:
+
+```ts
+import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+
+const storageFactory = DatastoreStorageFactory.create({
+  projectId: "orders-development",
+  // credentials or keyFilename may be supplied here when the Google client needs them.
 });
 ```
 
-The application owns client configuration and credentials. An injected client
-is never closed by the adapter; `DatastoreStorageFactory.create(options)` is a
-convenience for explicit Google client options. Application Default Credentials
-remain a Google-client behavior, rather than adapter policy. Do not include
-credentials or stored payloads in application logs.
+Application Default Credentials are supported only to the extent supported by
+the Google client. Pass `credentials` or `keyFilename` as Google client options
+when that is the selected deployment configuration. Never log credentials,
+private keys, or stored payload bytes. Transaction failures that contain
+credential-, payload-, or secret-like provider messages are exposed as the
+redacted `Datastore transaction failed.` error; do not treat that redaction as
+a complete logging policy.
 
-For multitenant `StorageContext`s, the tenant ID selects the Datastore
-namespace. The adapter writes private flat entities containing canonical
-Protobuf bytes and declared indexed record columns. `writeAll()` uses groups of
-at most 500 mutations and may leave earlier groups written if a later group
-fails. `compareAndSet()` is transactional for one storage slot. Applications
-must deploy the Datastore composite indexes needed by their equality-filter and
-sort combinations.
+Compose the factory through `withStorageFactory()` or an environment, not in a
+handler. The runnable [Datastore orders example](../examples/datastore-orders/)
+keeps its domain topology provider-neutral and creates the adapter only at this
+composition boundary.
 
-Storage-slot IDs are canonically encoded for provider keys, metadata, ID
-filters, continuations, and returned rows, including copied object IDs with
-`undefined` and `bigint` values. ID constraints, supported column equality
-filters, and ordering are translated to Datastore. Every provider query uses a
-fixed `maxClientSideScan + 1` sentinel limit (default scan budget `1000`). Typed
-continuations, deterministic ID tie-breaking, offsets, and requested limits are
-then applied once locally. Receiving the sentinel row throws
-`DatastoreQueryLimitError` without returning partial results. Indexed `bigint`
-values must be exact signed 64-bit integers and are rejected before RPC
-otherwise. Transaction errors redact credential-like and payload-like provider
-messages.
+```ts
+import { BoundedContext } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import { TaskAggregate, TaskListProjection, TaskWorkflowProcess } from "@example/tasks-domain";
 
-The unit suite uses an injected client fake. Emulator verification is opt-in:
+export function tasksBuilder(storageFactory: StorageFactory) {
+  return BoundedContext.singleTenant("Tasks")
+    .withStorageFactory(storageFactory)
+    .add(TaskAggregate)
+    .add(TaskWorkflowProcess)
+    .add(TaskListProjection)
+    .withGeneratedRegistryRoot(new URL("..", import.meta.url));
+}
+```
+
+This uses the consumer substitution introduced at the start of the guide and
+the entity classes from section 3. Do not call storage-provider APIs from a
+domain handler.
+
+### Tenant slices, IDs, records, and indexes
+
+For a multitenant `StorageContext`, a non-blank `tenantId` becomes the Datastore
+namespace. A missing or blank tenant ID fails before provider work. Single-
+tenant contexts add no per-tenant namespace; any default namespace configured
+on the Google client remains provider behavior. Treat tenant identity as part
+of the application's context construction and test isolation boundary.
+
+The adapter stores a private flat entity for each record: canonical Protobuf
+binary payload plus the record's declared indexed columns. Storage-slot IDs are
+reversibly and canonically encoded for keys, stored metadata, ID filters,
+continuations, and returned entries. The encoding preserves `undefined`,
+`bigint`, arrays, and object IDs regardless of object-property insertion order.
+It is an adapter implementation detail, not an identifier format for clients
+or other Datastore users.
+
+Indexed record-column values support strings, finite Datastore-compatible
+numbers, booleans, `null`, and exact signed 64-bit `bigint`. Other column value
+types, non-finite numbers, and out-of-range `bigint` values fail before a
+provider RPC. Define only the columns your queries need, and deploy Datastore
+composite indexes for each production combination of equality filters and sort
+orders. The adapter does not create or deploy those indexes.
+
+### Queries have pushdown and a finite reconciliation bound
+
+`RecordQuery` ID constraints become Datastore key filters; supported equality
+filters and requested sorts become provider filters and orders. The adapter
+always adds a deterministic key tie-breaker. It fetches the complete provider
+candidate set within the finite scan bound before it applies canonical
+equality, typed continuations, offset, and requested limit locally once.
+
+Every provider query is limited to `maxClientSideScan + 1`: the default scan
+budget is `1000`, and a custom positive finite integer is configured through
+the constructor with an injected client (not through `create()`). The extra row
+is a sentinel. If it is returned, `DatastoreQueryLimitError` is thrown before
+local continuation processing and no partial result is returned. A
+continuation therefore cannot page around candidate-set overflow: provider
+filters must keep the complete candidate set within the configured bound.
+There is no unlimited setting and no adapter-specific generic cursor API.
+
+```ts
+import { Datastore } from "@google-cloud/datastore";
+import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+
+const boundedStorageFactory = new DatastoreStorageFactory({
+  client: new Datastore({ projectId: "orders-development" }),
+  maxClientSideScan: 500,
+});
+```
+
+### Writes, batches, compare-and-set, and closure
+
+Normal `write()` replaces one record. `writeAll()` materializes all records
+before persistence and sends them in order in groups of at most 500 mutations.
+It is not an all-or-nothing multi-group transaction: if a later group fails,
+earlier groups can already be stored, and the application must use an explicit
+recovery strategy appropriate to its workflow.
+
+`compareAndSet(id, expected, next)` is transactional for one storage slot
+across independently opened handles sharing the backing store. It returns
+`false` when the current payload does not match `expected`; `next: undefined`
+performs a conditional delete.
+
+Retriable Datastore transaction conflicts (code 10) receive at most three total
+attempts. That is the initial attempt plus at most two retries with bounded
+exponential delay and jitter. Other errors propagate, except sensitive-looking
+transaction messages are redacted as described above. This is a single-slot
+primitive, not a general multi-record transaction API.
+
+Closing a `StorageFactory` prevents new storage creation; it does not close
+existing storage handles. Closing a storage handle prevents future operations
+on that handle, while independently opened handles remain separately closeable.
+Neither operation invokes teardown or close on an injected Google client, and
+the adapter does not invoke client teardown for a client made by `create()`
+either. Arrange application shutdown so servers/contexts finish their own
+closure before the caller tears down any shared client/resource.
+
+### Emulator-first verification and limited cloud smoke
+
+Use the emulator for adapter development. Start Firestore in Datastore mode,
+then point the official client at it:
 
 ```sh
-gcloud emulators firestore start --database-mode=datastore-mode
+gcloud emulators firestore start --database-mode=datastore-mode --host-port=127.0.0.1:8081
 DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
+  DATASTORE_PROJECT_ID=orders-emulator \
   pnpm --filter @spine-ts/storage-datastore test:emulator
 ```
 
-Set `DATASTORE_PROJECT_ID` to select a disposable emulator project. Emulator
-scenarios use unique kinds and targeted cleanup rather than resetting shared
-emulator data. The credential-gated cloud smoke test additionally requires
-`DATASTORE_CLOUD_TEST=1` and `DATASTORE_PROJECT_ID`; see the package README for
-its cleanup and limitations. Emulator evidence does not prove production index
-deployment, transaction limits, or all cloud consistency behavior.
+The adapter's emulator suite uses unique kinds and removes only its own data;
+it does not reset a shared emulator. The package's ordinary tests use an
+injected narrow client fake, so emulator tests are opt-in. For a deliberately
+credential-gated cloud smoke check, select a disposable configured project:
+
+```sh
+DATASTORE_CLOUD_TEST=1 DATASTORE_PROJECT_ID=orders-smoke \
+  pnpm --filter @spine-ts/storage-datastore test:cloud
+```
+
+The smoke test creates one unique kind and removes its record in `finally`.
+It is evidence for that credential/project combination only. Emulator and cloud
+smoke execution do not prove production composite-index deployment, all
+transaction limits, all cloud consistency behavior, resilience under provider
+outages, or a Firestore Native integration. See the
+[`@spine-ts/storage-datastore` README](../packages/storage-datastore/README.md)
+for the adapter contract and its current verification commands.
 
 ## Further reading
 
@@ -578,4 +714,10 @@ deployment, transaction limits, or all cloud consistency behavior.
 - [Testing package README](../packages/testing/README.md) for fixture details.
 - [Transport package README](../packages/transport/README.md) for local IPC
   constraints.
+- [Datastore adapter README](../packages/storage-datastore/README.md) for
+  provider configuration, query bounds, and emulator/cloud test limits.
+- [Datastore orders example](../examples/datastore-orders/README.md) for a
+  provider-neutral application composition and loopback load specimen.
+- [To-do application guide](../examples/todo/USER_GUIDE.md) for the runnable
+  local application workflow and its distinct topology limits.
 - [API documentation](api/README.md) for public API semantics.
