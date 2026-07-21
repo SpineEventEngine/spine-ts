@@ -1,6 +1,6 @@
 # T-0049 User Guide and Datastore Review Log
 
-Status: Implementation verified; canonical review pending
+Status: Round 1 corrections verified; accepting re-review pending
 
 ## Human requirements
 
@@ -62,3 +62,91 @@ is not a finding unless the changed guide presents it as current behavior.
   before review action, must not edit or mutate Git state, and must not spawn
   subagents. Actual role/model/reasoning runtime metadata must match before a
   result is accepted.
+
+### Documentation dispatch surface note
+
+- The first documentation dispatch attempted an explicit free-model override
+  of `gpt-5.6-luna` / medium and was rejected by the collaboration API because
+  that API only accepts Sol and Terra as free overrides. No child was created
+  by the rejected call.
+- The redispatch explicitly selected the existing `documentation_reviewer`
+  role, whose runtime configuration is immutably `gpt-5.6-luna` / medium, and
+  explicitly passed medium reasoning. The prompt also named the required Luna
+  model. Acceptance still requires actual role runtime metadata; this records
+  the API limitation honestly rather than claiming a free override succeeded.
+
+## Round 1 complete wave
+
+### Runtime acceptance
+
+- Style/maintainability ran as the existing
+  `style_maintainability_reviewer`, whose immutable runtime profile is
+  `gpt-5.6-terra` / high; the explicit model and reasoning fields matched.
+- Documentation ran as the existing `documentation_reviewer`, whose immutable
+  runtime profile is `gpt-5.6-luna` / medium. Medium reasoning and the role were
+  explicit; the API limitation on a redundant free Luna override is recorded
+  above. Actual runtime role metadata matches the expected profile.
+- TypeScript/API ran as the existing `typescript_api_docs_reviewer`, whose
+  immutable runtime profile is `gpt-5.6-terra` / high; the explicit model and
+  reasoning fields matched.
+- Performance/reliability ran as the existing
+  `performance_reliability_reviewer`, whose immutable runtime profile is
+  `gpt-5.6-terra` / high; the explicit model and reasoning fields matched.
+- Reviewer contexts could not introspect their own runtime metadata. The
+  orchestrator accepts the collaboration runtime's immutable role metadata,
+  not the reviewers' expected-profile statements, as actual evidence.
+
+### Accepted combined finding batch
+
+1. Make the custom scan-budget snippet self-contained; it currently relies on
+   an undeclared `client` and conflicts with the earlier `storageFactory` name
+   if blocks are combined.
+2. Correct the Datastore composition cross-reference: the consumer
+   substitution is introduced at the start and entity classes are in section
+   3, not sections 3 and 4.
+3. Reflow the two new lines over the repository's 120-character maximum.
+4. Correct the linked Datastore package README emulator command so the gcloud
+   bind port matches `DATASTORE_EMULATOR_HOST=127.0.0.1:8081`.
+5. State that continuation is applied only after the provider candidate set is
+   fetched within the finite bound. It cannot page around sentinel overflow;
+   filters must keep the complete provider candidate set within the bound.
+6. State CAS as at most three total attempts: the initial attempt plus at most
+   two retries.
+
+### Reliability test-request disposition
+
+- The request to add a repeated-code-10 exhaustion test is outside this
+  documentation-only task. The accepted production loop directly bounds total
+  attempts with `maxCasAttempts = 3`; T-0049 corrects the prose and changes no
+  runtime behavior. A new adapter regression is neither needed to establish
+  the current source fact nor authorized by the task's no-runtime scope.
+- The request to add a whitespace-only tenant regression is likewise outside
+  scope. The guide accurately reflects `requiredTenantId()`, which trims and
+  rejects missing, empty, or whitespace-only IDs before key/query construction.
+  T-0049 changes no tenant behavior. These test suggestions are not unresolved
+  guide findings and are not accepted as scope expansions.
+
+### Fix assignment
+
+- Return the complete accepted documentation batch to original author
+  `/root/t0049_guide_author`, existing `implementer`, expected and explicitly
+  dispatched as `gpt-5.6-terra` / medium. Ownership expands only to the linked
+  `packages/storage-datastore/README.md` plus the original T-0049 files. No
+  runtime/test/API edit, Git mutation, or subagent action is authorized.
+
+## Round 1 correction disposition
+
+- Accepted findings 1–6 were applied by the original implementer under the
+  unchanged expected `gpt-5.6-terra` / `medium` profile.
+- Findings 1–3: the bounded-factory snippet now declares its Google client and
+  uses a distinct factory name; the cross-reference points to the introduction
+  and section 3; reviewed overlong lines are reflowed.
+- Findings 4–6: the linked package README explicitly binds emulator port 8081;
+  guide and README state that sentinel overflow precedes local continuation;
+  CAS is documented as three total attempts, including at most two retries.
+- Focused correction verification passed: assigned-file Prettier, diff
+  whitespace, release-readiness links/imports (59/119), TypeDoc/API expected
+  exports, cleanup enforcement, 120-character line scanning, guide prohibition
+  and internal-import scans, and targeted corrected-claim presence scans. The
+  rejected runtime-test scope expansions remain rejected for the recorded
+  reasons.

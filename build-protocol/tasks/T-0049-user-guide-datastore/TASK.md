@@ -1,6 +1,6 @@
 # T-0049: User guide correctness and Datastore development guide
 
-Status: Implementation verified; canonical review pending
+Status: Round 1 corrections verified; accepting re-review pending
 
 ## Objective
 
@@ -151,6 +151,28 @@ the optional Google Cloud Datastore adapter.
   rejects future handle creation and leaves existing handles usable. Neither
   injected nor `create()`-constructed clients are explicitly closed by adapter
   code.
+
+## 2026-07-21 — Round 1 accepted corrections
+
+- The original implementer applied the complete accepted documentation batch
+  without runtime, test, public-API, dependency, generated-output, or Git-state
+  changes. Expected dispatch remains the originally explicit immutable
+  `gpt-5.6-terra` / `medium` profile.
+- The scan-budget snippet is self-contained and uses distinct client/factory
+  declarations. The composition cross-reference now points to the guide
+  introduction and section 3, and the two reviewed overlong lines are reflowed.
+- Guide and adapter README now state the actual query order: provider candidate
+  overflow is detected before local continuation, so a continuation cannot
+  bypass the finite scan bound. Provider filters must bound the full candidate
+  set.
+- CAS wording now states three total attempts: one initial attempt and at most
+  two retries. The adapter README's emulator start command explicitly binds
+  `127.0.0.1:8081`, matching `DATASTORE_EMULATOR_HOST`.
+- Focused correction verification passed: assigned-file Prettier; `git diff
+--check`; release-readiness link/import checking; TypeDoc/API checking;
+  cleanup enforcement; an explicit 120-character scan; guide forbidden
+  end-user API/internal-import scans; and targeted presence scans for all six
+  corrected claims.
 
 ## 2026-07-21 — Orchestrator implementation acceptance
 

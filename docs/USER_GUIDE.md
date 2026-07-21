@@ -595,7 +595,9 @@ export function tasksBuilder(storageFactory: StorageFactory) {
 }
 ```
 
-This uses the same consumer substitution and entity classes as sections 3 and 4. Do not call storage-provider APIs from a domain handler.
+This uses the consumer substitution introduced at the start of the guide and
+the entity classes from section 3. Do not call storage-provider APIs from a
+domain handler.
 
 ### Tenant slices, IDs, records, and indexes
 
@@ -624,24 +626,25 @@ orders. The adapter does not create or deploy those indexes.
 
 `RecordQuery` ID constraints become Datastore key filters; supported equality
 filters and requested sorts become provider filters and orders. The adapter
-always adds a deterministic key tie-breaker. It then applies canonical equality,
-typed continuations, offset, and requested limit locally once, so returned rows
-remain deterministic even where provider values need reconciliation.
+always adds a deterministic key tie-breaker. It fetches the complete provider
+candidate set within the finite scan bound before it applies canonical
+equality, typed continuations, offset, and requested limit locally once.
 
 Every provider query is limited to `maxClientSideScan + 1`: the default scan
 budget is `1000`, and a custom positive finite integer is configured through
 the constructor with an injected client (not through `create()`). The extra row
-is a sentinel. If it is returned,
-`DatastoreQueryLimitError` is thrown and no partial result is returned; there
-is no unlimited setting and no adapter-specific generic cursor API. Choose a
-bounded query shape and page it with the public `RecordQuery` continuation
-contract rather than increasing this value without a capacity decision.
+is a sentinel. If it is returned, `DatastoreQueryLimitError` is thrown before
+local continuation processing and no partial result is returned. A
+continuation therefore cannot page around candidate-set overflow: provider
+filters must keep the complete candidate set within the configured bound.
+There is no unlimited setting and no adapter-specific generic cursor API.
 
 ```ts
+import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
 
-const storageFactory = new DatastoreStorageFactory({
-  client,
+const boundedStorageFactory = new DatastoreStorageFactory({
+  client: new Datastore({ projectId: "orders-development" }),
   maxClientSideScan: 500,
 });
 ```
@@ -657,10 +660,13 @@ recovery strategy appropriate to its workflow.
 `compareAndSet(id, expected, next)` is transactional for one storage slot
 across independently opened handles sharing the backing store. It returns
 `false` when the current payload does not match `expected`; `next: undefined`
-performs a conditional delete. Retriable Datastore transaction conflicts (code 10) are retried at most three times with bounded exponential delay and jitter.
-Other errors propagate, except sensitive-looking transaction messages are
-redacted as described above. This is a single-slot primitive, not a general
-multi-record transaction API.
+performs a conditional delete.
+
+Retriable Datastore transaction conflicts (code 10) receive at most three total
+attempts. That is the initial attempt plus at most two retries with bounded
+exponential delay and jitter. Other errors propagate, except sensitive-looking
+transaction messages are redacted as described above. This is a single-slot
+primitive, not a general multi-record transaction API.
 
 Closing a `StorageFactory` prevents new storage creation; it does not close
 existing storage handles. Closing a storage handle prevents future operations

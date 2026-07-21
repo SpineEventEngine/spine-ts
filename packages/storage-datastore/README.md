@@ -46,10 +46,12 @@ ID constraints become Datastore key filters, while supported column equality
 filters and requested ordering become provider filters and orders. Every query
 uses a fixed provider sentinel limit of `maxClientSideScan + 1`; the default
 scan budget is `1000`, and callers may configure another positive finite
-integer. Typed continuation comparison, deterministic ID tie-breaking, offset,
-and the requested result limit are applied once locally. If the sentinel row is
-returned, the adapter throws `DatastoreQueryLimitError` and returns no partial
-result. There is no unlimited option or adapter-specific generic cursor API.
+integer. The complete provider candidate set must remain within that bound. If
+the sentinel row is returned, the adapter throws `DatastoreQueryLimitError`
+before applying the typed continuation, deterministic ID tie-breaking, offset,
+and requested result limit locally; a continuation cannot page around provider
+candidate-set overflow. No partial result is returned. There is no unlimited
+option or adapter-specific generic cursor API.
 
 ## Verification commands
 
@@ -58,7 +60,7 @@ repository test command. The emulator test is opt-in and requires an already
 running Firestore emulator in Datastore mode:
 
 ```sh
-gcloud emulators firestore start --database-mode=datastore-mode
+gcloud emulators firestore start --database-mode=datastore-mode --host-port=127.0.0.1:8081
 DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
   pnpm --filter @spine-ts/storage-datastore test:emulator
 ```
