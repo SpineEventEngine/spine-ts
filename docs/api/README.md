@@ -14,7 +14,8 @@ command/query/subscription services with durable inactive subscription recovery
 over the same storage factory, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, the first `@spine-ts/transport`
 contracts, the first `@spine-ts/storage` contracts, and the minimal
-`@spine-ts/testing` bounded-context fixture.
+`@spine-ts/testing` bounded-context fixture, optional Datastore storage, and
+the MySQL-first RDBMS storage factory/errors/options.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -734,6 +735,8 @@ those slot IDs beside each record for callers that need slot-addressed
 validation or repair. `RecordStorage.index()` is the deliberate exception: it
 returns logical record IDs derived from each record body through the
 `RecordSpec`.
+`RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
+before a factory or adapter receives the specification.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was

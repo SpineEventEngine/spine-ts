@@ -11,6 +11,11 @@ export class RecordSpec<I, R extends Message> {
   readonly #idSchema: (I extends Message ? GenMessage<I> : undefined) | undefined;
   readonly #record: GenMessage<R>;
 
+  /**
+   * Creates a record specification.
+   *
+   * @throws Error if two declared columns have the same name.
+   */
   constructor(input: {
     readonly schema: GenMessage<R>;
     readonly idSchema?: I extends Message ? GenMessage<I> : undefined;

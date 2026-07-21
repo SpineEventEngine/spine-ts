@@ -706,6 +706,140 @@ outages, or a Firestore Native integration. See the
 [`@spine-ts/storage-datastore` README](../packages/storage-datastore/README.md)
 for the adapter contract and its current verification commands.
 
+## 13. Develop with MySQL RDBMS storage
+
+`@spine-ts/storage-rdbms` is the workspace's MySQL-first durable
+`StorageFactory` adapter (tested with MySQL 8.4.10/mysql2 3.23.1). PostgreSQL
+is not supported.
+
+### Configuration and TLS
+
+The URL names a MySQL database and rejects unsupported URL options. The public
+options are `url`, `connectionLimit`, `connectTimeoutMs`, and TLS `ca`, `cert`,
+`key`, and `rejectUnauthorized`. Create and always close its owned pool:
+
+```ts
+import { MysqlStorageFactory } from "@spine-ts/storage-rdbms";
+
+const url = process.env.MYSQL_URL;
+if (url === undefined || url.trim().length === 0) throw new Error("MYSQL_URL is required.");
+const factory = await MysqlStorageFactory.create({
+  url,
+  connectionLimit: 8,
+  connectTimeoutMs: 5_000,
+  tls: { rejectUnauthorized: true },
+});
+try {
+  // Supply factory to the provider-neutral context composition below.
+} finally {
+  await factory.close();
+}
+```
+
+It is composed through the provider-neutral factory/`ServerEnvironment` seam,
+not mysql2. Single-tenant contexts share one scope; multitenant operations need
+a non-blank current `tenantId` and are isolated. It stores Protobuf payloads in
+fixed `spine_ts_records`/`spine_ts_columns` tables, creates/verifies them at
+startup, and executes `CREATE TABLE IF NOT EXISTS` on every factory creation.
+The account therefore always needs that DDL permission plus normal DML
+privileges. Use a dedicated database/account.
+
+CRUD, ordered all-or-nothing `writeAll`, and slot-addressed payload CAS are
+transactional. Supported canonical IDs are nullish values, booleans, finite
+numbers, bigint, strings, bytes, arrays, and plain objects. Their canonical
+scope, tenant, and slot encodings are limited to 512, 255, and 768 bytes; a
+materialized column name's canonical encoding is limited to 255 bytes. Indexed
+columns accept null, boolean, finite number, signed-64
+bigint, and strings up to 256 JavaScript UTF-16 code units (encoded into fixed
+768-byte sortable data). Queries push IDs,
+AND filters (value arrays are OR), materialized-column sorting/keysets, offset,
+and limit into MySQL; missing columns match nothing and dotted payload paths
+are rejected. The lookup index helps equality/order, while filesort and large
+offsets can still be costly. Provider errors are sanitized; closing a factory
+blocks new operations, closes live handles, then drains its pool; an operation
+already admitted may finish and release before the shared close promise drains
+the pool. The account needs `CREATE TABLE IF NOT EXISTS` with its FK/index,
+information-schema reads, and transactional `SELECT`/`INSERT`/`UPDATE`/`DELETE`;
+precreating tables does not remove schema verification.
+
+One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
+sort fields, and 2,048 total bound values. The adapter rejects these fixed,
+non-configurable structure limits before it acquires a pool connection.
+
+### Composition, tenancy, schema, and privileges
+
+The domain stays provider-neutral. Supply the factory at context/environment
+assembly, never from a handler:
+
+```ts
+import { BoundedContext } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+
+function orders(storage: StorageFactory) {
+  return BoundedContext.singleTenant("Orders").withStorageFactory(storage);
+}
+```
+
+`ServerEnvironment` can supply this factory to server/context assembly. Scope
+includes context name, tenant mode, and record type; single tenant uses the
+canonical null tenant key, while multitenant requires a nonblank current
+`tenantId`. Startup creates/verifies
+fixed tables and fails closed on incompatible metadata; it has no migrations.
+A dedicated account needs CREATE TABLE IF NOT EXISTS (FK/index), information-
+schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
+
+### IDs, columns, transactions, and errors
+
+Only materialized column names and `id` are queryable. A name not materialized
+for a record matches no rows. `writeAll` is one transaction and later duplicate
+slots win; CAS compares deterministic Protobuf payload bytes and addresses the
+supplied slot even when the body has another logical ID.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+
+const spec = new RecordSpec({
+  schema: StringValueSchema,
+  extractId: (record) => record.value.slice(0, 1),
+  columns: [new RecordColumn("state", (record) => record.value)],
+});
+const records = factory.createRecordStorage({ name: "Orders", multitenant: false }, spec);
+await records.write(create(StringValueSchema, { value: "a-open" }));
+await records.writeAll([create(StringValueSchema, { value: "a-paid" })]);
+await records.compareAndSet("a", create(StringValueSchema, { value: "a-paid" }), undefined);
+```
+
+```ts
+await records.queryEntries({
+  filters: [{ column: "state", value: ["a-open", "a-paid"] }],
+  sort: [{ field: "state", direction: "asc" }],
+  offset: 0,
+  limit: 20,
+  after: { values: [{ field: "state", value: "a-open" }], id: "a" },
+});
+```
+
+Filters are ANDed; value arrays are OR/IN. `ids` and returned entries use
+actual slots. Missing columns match no rows. Keysets require the complete sort
+tuple; unspecified ordering uses a binary slot tie-break. MySQL can filesort
+some orderings and large offsets are costly.
+
+`MysqlStorageConfigurationError`, `MysqlStorageConnectionError`,
+`MysqlStorageSchemaError`, `MysqlStorageDataError`, and
+`MysqlStorageOperationError` are sanitized public error classes. Query LIMIT
+uses mysql2's parameterized `query()` route because server-prepared JS-number
+LIMIT binds are rejected; it never interpolates values. Pool-close failures are
+reported as `MysqlStorageConnectionError`; repeated close calls still return
+the same rejecting promise.
+
+### Lifecycle, verification, and future engines
+
+Run the opt-in disposable-database proof with
+`SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' pnpm --filter @spine-ts/storage-rdbms test:mysql`.
+It creates and removes only the adapter tables; do not log credentials.
+
 ## Further reading
 
 - [Root README](../README.md) for workspace commands and package boundaries.
@@ -716,6 +850,8 @@ for the adapter contract and its current verification commands.
   constraints.
 - [Datastore adapter README](../packages/storage-datastore/README.md) for
   provider configuration, query bounds, and emulator/cloud test limits.
+- [MySQL RDBMS adapter README](../packages/storage-rdbms/README.md) for the
+  durable adapter's exact limits, lifecycle, and local MySQL proof.
 - [Datastore orders example](../examples/datastore-orders/README.md) for a
   provider-neutral application composition and loopback load specimen.
 - [To-do application guide](../examples/todo/USER_GUIDE.md) for the runnable

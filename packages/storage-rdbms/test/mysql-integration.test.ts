@@ -1,4 +1,4 @@
-import { createPool } from "mysql2/promise";
+import { createPool, type RowDataPacket } from "mysql2/promise";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-ts/storage";
@@ -46,43 +46,35 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const pool = createPool({ uri: url });
 
     try {
-      const [tables] = await pool.query<
-        { table_name: string; table_collation: string | null; engine: string | null }[]
-      >(
+      const [tables] = await pool.query<TableMetadataRow[]>(
         `SELECT TABLE_NAME AS table_name, TABLE_COLLATION AS table_collation, ENGINE AS engine
          FROM information_schema.tables
          WHERE table_schema = DATABASE()
            AND table_name IN ('spine_ts_records', 'spine_ts_columns')
          ORDER BY table_name`,
       );
-      const [version] = await pool.query<{ column_default: string | null }[]>(
+      const [version] = await pool.query<SchemaVersionRow[]>(
         `SELECT COLUMN_DEFAULT AS column_default
          FROM information_schema.columns
          WHERE table_schema = DATABASE()
            AND table_name = 'spine_ts_records'
            AND column_name = 'schema_version'`,
       );
-      const [columns] = await pool.query<
-        { table_name: string; column_name: string; is_nullable: string }[]
-      >(
+      const [columns] = await pool.query<ColumnMetadataRow[]>(
         `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, IS_NULLABLE AS is_nullable
          FROM information_schema.columns
          WHERE table_schema = DATABASE()
            AND table_name IN ('spine_ts_records', 'spine_ts_columns')
          ORDER BY table_name, ordinal_position`,
       );
-      const [indexes] = await pool.query<
-        { table_name: string; index_name: string; column_name: string }[]
-      >(
+      const [indexes] = await pool.query<IndexMetadataRow[]>(
         `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, COLUMN_NAME AS column_name
          FROM information_schema.statistics
          WHERE table_schema = DATABASE()
            AND table_name IN ('spine_ts_records', 'spine_ts_columns')
          ORDER BY table_name, index_name, seq_in_index`,
       );
-      const [foreignKeys] = await pool.query<
-        { column_name: string; referenced_column_name: string; delete_rule: string }[]
-      >(
+      const [foreignKeys] = await pool.query<ForeignKeyMetadataRow[]>(
         `SELECT kcu.COLUMN_NAME AS column_name, kcu.REFERENCED_COLUMN_NAME AS referenced_column_name,
                 rc.DELETE_RULE AS delete_rule
          FROM information_schema.key_column_usage AS kcu
@@ -255,14 +247,14 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     await newStorage.write(create(StringValueSchema, { value: "A" }));
     const pool = createPool({ uri: url });
     try {
-      const [stale] = await pool.query<{ count: number }[]>(
+      const [stale] = await pool.query<CountRow[]>(
         "SELECT COUNT(*) AS count FROM `spine_ts_columns` WHERE column_name = ?",
         [CanonicalMysqlValue.encode("old", 255)],
       );
       expect(stale).toEqual([{ count: 2 }]);
       expect(await oldStorage.delete("a")).toBe(true);
       expect(await oldStorage.delete("a")).toBe(false);
-      const [orphans] = await pool.query<{ count: number }[]>(
+      const [orphans] = await pool.query<CountRow[]>(
         `SELECT COUNT(*) AS count FROM \`spine_ts_columns\` AS c
          LEFT JOIN \`spine_ts_records\` AS r USING (scope_key, tenant_key, slot_key)
          WHERE r.slot_key IS NULL`,
@@ -282,7 +274,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         schema: StringValueSchema,
         extractId: () => "constant-slot",
         columns: [
-          new RecordColumn("value", (record) => {
+          new RecordColumn("value", (record: StringValue) => {
             if (record.value === "min") return -(1n << 63n);
             if (record.value === "max") return (1n << 63n) - 1n;
             if (record.value === "string") return "x".repeat(256);
@@ -298,7 +290,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const pool = createPool({ uri: url });
     try {
       await pool.query(
-        "ALTER TABLE `spine_ts_columns` ADD CONSTRAINT `spine_ts_t0051_reject_column` CHECK (column_name <> X'5B22737472696E67222C2272656A656374225D')",
+        "ALTER TABLE `spine_ts_columns` ADD CONSTRAINT `spine_ts_t0051_reject_column` " +
+          "CHECK (column_name <> X'5B22737472696E67222C2272656A656374225D')",
       );
       const rejected = factory.createRecordStorage(
         { name: "Rollback", multitenant: false },
@@ -314,7 +307,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       await expect(indexed.read("constant-slot")).resolves.toEqual(
         create(StringValueSchema, { value: "old-payload" }),
       );
-      const [columns] = await pool.query<{ value_data: Uint8Array }[]>(
+      const [columns] = await pool.query<ValueDataRow[]>(
         `SELECT value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? AND column_name = ?`,
         [
@@ -325,7 +318,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         ],
       );
       expect(columns).toHaveLength(1);
-      expect(new Uint8Array(columns[0]?.value_data)).toEqual(
+      const [column] = columns;
+      if (column === undefined) throw new Error("Expected the retained materialized column.");
+      expect(new Uint8Array(column.value_data)).toEqual(
         SortableMysqlColumnValue.encode("old-column").data,
       );
     } finally {
@@ -449,7 +444,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
 
     const pool = createPool({ uri: url });
     try {
-      const [plan] = await pool.query<{ key: string | null }[]>(
+      const [plan] = await pool.query<QueryPlanRow[]>(
         `EXPLAIN SELECT slot_key FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? AND column_name = ? AND value_kind = ? AND value_data = ?
          ORDER BY slot_key ASC`,
@@ -593,6 +588,68 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     await expect(first.index({ ids: ["addressed-slot"] })).resolves.toEqual(["body-id"]);
   });
 
+  it("waits for an admitted write to release before factory close resolves", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const storage = factory.createRecordStorage(
+      { name: "CloseRace", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    const controlPool = createPool({ uri: url, connectionLimit: 2 });
+    const lock = await controlPool.getConnection();
+    let released = false;
+    let write: Promise<void> | undefined;
+    let closing: Promise<void> | undefined;
+    try {
+      await storage.write(create(StringValueSchema, { value: "admitted" }));
+      await lock.beginTransaction();
+      await lock.query(
+        `SELECT payload FROM \`spine_ts_records\`
+         WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? FOR UPDATE`,
+        [
+          CanonicalMysqlValue.encode(["CloseRace", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValue.encode(null, 255),
+          CanonicalMysqlValue.encode("admitted", 768),
+        ],
+      );
+      write = storage.write(create(StringValueSchema, { value: "admitted" }));
+      await waitForBlockedInsert(controlPool);
+
+      closing = factory.close();
+      let closeSettled = false;
+      void closing.then(
+        () => {
+          closeSettled = true;
+        },
+        () => {
+          closeSettled = true;
+        },
+      );
+      await expect(storage.read("admitted")).rejects.toThrow("RecordStorage is closed");
+      expect(() =>
+        factory.createRecordStorage(
+          { name: "CloseRace", multitenant: false },
+          new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        ),
+      ).toThrow("StorageFactory is closed");
+      await Promise.resolve();
+      expect(closeSettled).toBe(false);
+
+      await lock.commit();
+      released = true;
+      await write;
+      expect(closeSettled).toBe(false);
+      await closing;
+      expect(closeSettled).toBe(true);
+    } finally {
+      if (!released) await lock.rollback().catch(() => undefined);
+      await write?.catch(() => undefined);
+      await closing?.catch(() => undefined);
+      lock.release();
+      await controlPool.end();
+    }
+  });
+
   it("rolls a later batch column failure back without changing prior rows", async () => {
     const factory = await MysqlStorageFactory.create({ url });
     factories.push(factory);
@@ -611,7 +668,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       const rejectedValue = SortableMysqlColumnValue.encode("b-new").data;
       const hex = [...rejectedValue].map((value) => value.toString(16).padStart(2, "0")).join("");
       await pool.query(
-        `ALTER TABLE \`spine_ts_columns\` ADD CONSTRAINT \`spine_ts_t0051_reject_batch_column\` CHECK (value_data <> X'${hex}')`,
+        `ALTER TABLE \`spine_ts_columns\` ` +
+          `ADD CONSTRAINT \`spine_ts_t0051_reject_batch_column\` CHECK (value_data <> X'${hex}')`,
       );
 
       await expect(
@@ -627,7 +685,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         create(StringValueSchema, { value: "b-old" }),
       );
       await expect(storage.read("c")).resolves.toBeUndefined();
-      const [columns] = await pool.query<{ slot_key: Uint8Array; value_data: Uint8Array }[]>(
+      const [columns] = await pool.query<StoredColumnRow[]>(
         `SELECT slot_key, value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? ORDER BY slot_key ASC`,
         [
@@ -658,3 +716,64 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     }
   });
 });
+
+async function waitForBlockedInsert(pool: ReturnType<typeof createPool>): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [rows] = await pool.query<ProcessRow[]>(
+      "SELECT INFO AS info FROM information_schema.processlist WHERE DB = DATABASE() " +
+        "AND INFO LIKE 'INSERT INTO `spine\\_ts\\_records`%'",
+    );
+    if (rows.length > 0) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error("The admitted MySQL write did not reach the server.");
+}
+
+interface ProcessRow extends RowDataPacket {
+  readonly info: string | null;
+}
+
+interface TableMetadataRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly table_collation: string | null;
+  readonly engine: string | null;
+}
+
+interface SchemaVersionRow extends RowDataPacket {
+  readonly column_default: string | null;
+}
+
+interface ColumnMetadataRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly column_name: string;
+  readonly is_nullable: string;
+}
+
+interface IndexMetadataRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly index_name: string;
+  readonly column_name: string;
+}
+
+interface ForeignKeyMetadataRow extends RowDataPacket {
+  readonly column_name: string;
+  readonly referenced_column_name: string;
+  readonly delete_rule: string;
+}
+
+interface CountRow extends RowDataPacket {
+  readonly count: number;
+}
+
+interface ValueDataRow extends RowDataPacket {
+  readonly value_data: Uint8Array;
+}
+
+interface QueryPlanRow extends RowDataPacket {
+  readonly key: string | null;
+}
+
+interface StoredColumnRow extends RowDataPacket {
+  readonly slot_key: Uint8Array;
+  readonly value_data: Uint8Array;
+}

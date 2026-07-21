@@ -24,6 +24,10 @@ delivery queues, subscriber fan-out, or retry behavior.
 caller acceptance, and append on one captured storage context without making the
 store own dispatch.
 
+One `RecordSpec` cannot declare the same `RecordColumn` name twice. Its
+constructor rejects duplicate names before any storage adapter receives the
+specification.
+
 The package stays independent of `@spine-ts/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
 `tenantId`.

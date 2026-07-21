@@ -26,6 +26,11 @@ const tenantKeyBytes = 255;
 const slotKeyBytes = 768;
 const columnNameBytes = 255;
 const valueDataBytes = 768;
+const maxQueryFilters = 32;
+const maxFilterValues = 64;
+const maxQueryIds = 256;
+const maxQuerySorts = 8;
+const maxQueryBinds = 2_048;
 
 const createRecordsTable = `
 CREATE TABLE IF NOT EXISTS ${recordsTable} (
@@ -104,10 +109,10 @@ export class MysqlStorageConfigurationError extends Error {
   }
 }
 
-/** Thrown when MySQL cannot be connected or initialized without exposing provider details. */
+/** Thrown when the adapter cannot connect, initialize, or close without exposing provider details. */
 export class MysqlStorageConnectionError extends Error {
   constructor() {
-    super("MySQL storage could not connect or initialize.");
+    super("MySQL storage could not connect, initialize, or close.");
     this.name = "MysqlStorageConnectionError";
   }
 }
@@ -139,7 +144,8 @@ export class MysqlStorageOperationError extends Error {
 /** MySQL-backed factory that owns its connection pool and private normalized schema. */
 export class MysqlStorageFactory extends StorageFactory {
   readonly #pool: Pool;
-  readonly #handles = new Set<MysqlRecordStorage<unknown, Message>>();
+  readonly #handles = new Set<{ close(): void }>();
+  readonly #lifecycle = new MysqlPoolLifecycle();
   #closePromise: Promise<void> | undefined;
 
   private constructor(pool: Pool) {
@@ -192,7 +198,9 @@ export class MysqlStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    const handle = new MysqlRecordStorage(context, recordSpec, this.#pool);
+    const handle = new MysqlRecordStorage(context, recordSpec, this.#pool, this.#lifecycle, () => {
+      this.#handles.delete(handle);
+    });
     this.#handles.add(handle);
     return handle;
   }
@@ -213,7 +221,41 @@ export class MysqlStorageFactory extends StorageFactory {
     for (const handle of this.#handles) {
       handle.close();
     }
-    await this.#pool.end();
+    await this.#lifecycle.close();
+    try {
+      await this.#pool.end();
+    } catch {
+      throw new MysqlStorageConnectionError();
+    }
+  }
+}
+
+class MysqlPoolLifecycle {
+  #active = 0;
+  #closing = false;
+  #drained: Promise<void> | undefined;
+  #onDrained: (() => void) | undefined;
+
+  admit(): void {
+    if (this.#closing) throw new MysqlStorageOperationError();
+    this.#active += 1;
+  }
+
+  release(): void {
+    this.#active -= 1;
+    if (this.#active === 0) {
+      this.#onDrained?.();
+      this.#onDrained = undefined;
+    }
+  }
+
+  close(): Promise<void> {
+    this.#closing = true;
+    if (this.#active === 0) return Promise.resolve();
+    this.#drained ??= new Promise<void>((onDrained) => {
+      this.#onDrained = onDrained;
+    });
+    return this.#drained;
   }
 }
 
@@ -224,12 +266,20 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     private readonly pool: Pool,
+    private readonly lifecycle: MysqlPoolLifecycle,
+    private readonly onClose: () => void,
   ) {
     super(context, recordSpec);
     this.#scope = CanonicalMysqlValue.encode(
       [context.name, context.multitenant, recordSpec.schema.typeName],
       scopeKeyBytes,
     );
+  }
+
+  override close(): void {
+    if (!this.isOpen()) return;
+    super.close();
+    this.onClose();
   }
 
   protected async deleteRecord(id: I): Promise<boolean> {
@@ -248,7 +298,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       await connection.rollback().catch(() => undefined);
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -267,7 +317,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       if (error instanceof MysqlStorageDataError) throw error;
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -292,7 +342,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       if (error instanceof MysqlStorageDataError) throw error;
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -356,12 +406,13 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       } catch {
         throw new MysqlStorageOperationError();
       }
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set only by the exact records-key claim.
+      // Set only by the exact records-key claim.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (duplicateCreate) return false;
       if (error instanceof MysqlStorageDataError) throw error;
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -380,7 +431,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       await connection.rollback().catch(() => undefined);
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -396,7 +447,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       await connection.rollback().catch(() => undefined);
       throw new MysqlStorageOperationError();
     } finally {
-      connection.release();
+      this.releaseConnection(connection);
     }
   }
 
@@ -405,10 +456,20 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   private async acquireConnection(): Promise<PoolConnection> {
+    this.lifecycle.admit();
     try {
       return await this.pool.getConnection();
     } catch {
+      this.lifecycle.release();
       throw new MysqlStorageOperationError();
+    }
+  }
+
+  private releaseConnection(connection: PoolConnection): void {
+    try {
+      connection.release();
+    } finally {
+      this.lifecycle.release();
     }
   }
 
@@ -432,7 +493,9 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     record: PreparedRecord,
   ): Promise<void> {
     await connection.execute(
-      `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), revision = revision + 1`,
+      `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload) ` +
+        `VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), ` +
+        `revision = revision + 1`,
       [this.#scope, tenant, record.slot, record.payload],
     );
     await connection.execute(
@@ -441,7 +504,8 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     );
     for (const column of record.columns)
       await connection.execute(
-        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, ` +
+          `column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
         [this.#scope, tenant, record.slot, column.name, column.value.kind, column.value.data],
       );
   }
@@ -453,7 +517,8 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   ): Promise<void> {
     for (const column of record.columns)
       await connection.execute(
-        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, ` +
+          `column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
         [this.#scope, tenant, record.slot, column.name, column.value.kind, column.value.data],
       );
   }
@@ -516,6 +581,7 @@ function compileQuery<I>(
   scope: Uint8Array,
   tenant: Uint8Array,
 ): CompiledQuery | undefined {
+  validateQuery(query);
   const filters = query.filters ?? [];
   const filterValues = filters.map((filter) => ({
     column: queryColumn(filter.column),
@@ -530,44 +596,40 @@ function compileQuery<I>(
     column: queryColumn(order.field),
     direction: order.direction === "desc" ? "DESC" : "ASC",
   }));
-  const joins: string[] = [];
-  const values: unknown[] = [];
+  const joins: SqlClause[] = [];
 
   for (const [index, filter] of filterValues.entries()) {
     if (filter.column === "id") continue;
     const alias = `f${String(index)}`;
     const encoded = uniqueEncoded(filter.values.map(encodeColumnValue));
-    joins.push(columnFilterJoin(alias, filter.column, encoded));
-    values.push(...columnFilterValues(filter.column, encoded));
+    joins.push(columnFilter(alias, filter.column, encoded));
   }
   for (const [index, sort] of sorts.entries()) {
     if (sort.column === "id") continue;
     const alias = `s${String(index)}`;
-    joins.push(
-      `INNER JOIN ${columnsTable} AS ${alias}
+    joins.push({
+      sql: `INNER JOIN ${columnsTable} AS ${alias}
          ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
         AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?`,
-    );
-    values.push(encodeColumnName(sort.column));
+      values: [encodeColumnName(sort.column)],
+    });
   }
 
-  const where = ["r.scope_key = ?", "r.tenant_key = ?"];
-  const prefixValues: unknown[] = [];
+  const where: SqlClause[] = [
+    { sql: "r.scope_key = ?", values: [scope] },
+    { sql: "r.tenant_key = ?", values: [tenant] },
+  ];
   if (ids.length > 0) {
-    where.push(`r.slot_key IN (${placeholders(ids.length)})`);
-    prefixValues.push(...ids);
+    where.push({ sql: `r.slot_key IN (${placeholders(ids.length)})`, values: ids });
   }
-  for (const [index, filter] of filterValues.entries()) {
+  for (const filter of filterValues) {
     if (filter.column !== "id") continue;
     const encoded = filter.values.map((value) => CanonicalMysqlValue.encode(value, slotKeyBytes));
-    where.push(`r.slot_key IN (${placeholders(encoded.length)})`);
-    prefixValues.push(...encoded);
-    void index;
+    where.push({ sql: `r.slot_key IN (${placeholders(encoded.length)})`, values: encoded });
   }
   const continuation = compileContinuation(query, sorts);
   if (continuation !== undefined) {
-    where.push(continuation.sql);
-    prefixValues.push(...continuation.values);
+    where.push(continuation);
   }
   const order = [
     ...sorts.map((sort, index) =>
@@ -577,31 +639,65 @@ function compileQuery<I>(
     ),
     "r.slot_key ASC",
   ];
-  const suffixValues: unknown[] = [];
-  let window = "";
+  let window: SqlClause = { sql: "", values: [] };
   if (query.limit !== undefined) {
-    window += " LIMIT ?";
-    suffixValues.push(query.limit);
+    window = { sql: " LIMIT ?", values: [query.limit] };
     if (query.offset !== undefined) {
-      window += " OFFSET ?";
-      suffixValues.push(query.offset);
+      window = { sql: " LIMIT ? OFFSET ?", values: [query.limit, query.offset] };
     }
   } else if (query.offset !== undefined) {
-    window = " LIMIT 18446744073709551615 OFFSET ?";
-    suffixValues.push(query.offset);
+    window = { sql: " LIMIT 18446744073709551615 OFFSET ?", values: [query.offset] };
+  }
+  const values = [
+    ...joins.flatMap((clause) => clause.values),
+    ...where.flatMap((clause) => clause.values),
+    ...window.values,
+  ];
+  if (values.length > maxQueryBinds) {
+    throw new MysqlStorageConfigurationError(
+      `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
+    );
   }
   return {
     sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
-${joins.join("\n")}
-WHERE ${where.join(" AND ")}
-ORDER BY ${order.join(", ")}${window}`,
-    values: [...values, scope, tenant, ...prefixValues, ...suffixValues],
+${joins.map((clause) => clause.sql).join("\n")}
+WHERE ${where.map((clause) => clause.sql).join(" AND ")}
+ORDER BY ${order.join(", ")}${window.sql}`,
+    values,
   };
 }
 
-interface CompiledQuery {
+interface SqlClause {
   readonly sql: string;
   readonly values: readonly unknown[];
+}
+
+type CompiledQuery = SqlClause;
+
+function validateQuery<I>(query: RecordQuery<I>): void {
+  const filters = query.filters ?? [];
+  if (filters.length > maxQueryFilters) {
+    throw new MysqlStorageConfigurationError(
+      `MySQL queries support at most ${String(maxQueryFilters)} filters.`,
+    );
+  }
+  for (const filter of filters) {
+    if (Array.isArray(filter.value) && filter.value.length > maxFilterValues) {
+      throw new MysqlStorageConfigurationError(
+        `MySQL query filters support at most ${String(maxFilterValues)} values.`,
+      );
+    }
+  }
+  if ((query.ids?.length ?? 0) > maxQueryIds) {
+    throw new MysqlStorageConfigurationError(
+      `MySQL queries support at most ${String(maxQueryIds)} IDs.`,
+    );
+  }
+  if ((query.sort?.length ?? 0) > maxQuerySorts) {
+    throw new MysqlStorageConfigurationError(
+      `MySQL queries support at most ${String(maxQuerySorts)} sort fields.`,
+    );
+  }
 }
 
 function queryColumn(column: string): string {
@@ -613,13 +709,14 @@ function queryColumn(column: string): string {
   return column;
 }
 
-function columnFilterJoin(
+function columnFilter(
   alias: string,
   column: string,
   values: readonly { readonly data: Uint8Array; readonly kind: number }[],
-): string {
+): SqlClause {
   const groups = groupEncoded(values);
-  return `INNER JOIN ${columnsTable} AS ${alias}
+  return {
+    sql: `INNER JOIN ${columnsTable} AS ${alias}
      ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
     AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?
     AND (${groups
@@ -627,20 +724,12 @@ function columnFilterJoin(
         (group) =>
           `${alias}.value_kind = ? AND ${alias}.value_data IN (${placeholders(group.length)})`,
       )
-      .join(" OR ")})`;
-}
-
-function columnFilterValues(
-  column: string,
-  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
-): readonly unknown[] {
-  return [
-    encodeColumnName(column),
-    ...groupEncoded(values).flatMap((group) => [
-      group[0]?.kind,
-      ...group.map((value) => value.data),
-    ]),
-  ];
+      .join(" OR ")})`,
+    values: [
+      encodeColumnName(column),
+      ...groups.flatMap((group) => [group[0]?.kind, ...group.map((value) => value.data)]),
+    ],
+  };
 }
 
 function compileContinuation<I>(

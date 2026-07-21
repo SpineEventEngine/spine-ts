@@ -37,6 +37,29 @@ describe("CanonicalMysqlValue", () => {
       "valid record identifier",
     );
   });
+
+  it("decodes every supported canonical scalar, byte, and collection form", () => {
+    const decode = (value: unknown) =>
+      CanonicalMysqlValue.decode(new TextEncoder().encode(JSON.stringify(value)));
+
+    expect(decode(["undefined"])).toBeUndefined();
+    expect(decode(["null"])).toBeNull();
+    expect(decode(["boolean", true])).toBe(true);
+    expect(decode(["string", "slot"])).toBe("slot");
+    expect(decode(["bigint", "-2"])).toBe(-2n);
+    expect(decode(["bytes", [0, 255]])).toEqual(new Uint8Array([0, 255]));
+    expect(decode(["array", ["null"], ["number", "2"]])).toEqual([null, 2]);
+  });
+
+  it("rejects invalid canonical byte and object payloads", () => {
+    const decode = (value: unknown) =>
+      CanonicalMysqlValue.decode(new TextEncoder().encode(JSON.stringify(value)));
+
+    expect(() => decode(["bytes", [256]])).toThrow("valid record identifier");
+    expect(() => decode(["object", ["z", ["null"]], ["a", ["null"]]])).toThrow(
+      "valid record identifier",
+    );
+  });
 });
 
 describe("SortableMysqlColumnValue", () => {
