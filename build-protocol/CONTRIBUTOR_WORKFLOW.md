@@ -7,19 +7,23 @@ These notes help implementation and reviewer agents apply the autonomous build p
 ## Starting A Task
 
 1. Work only in the task worktree assigned by the orchestrator.
-2. Create or update the task log as the first bootstrap action, or record the
-   skill gate in the task log in the same atomic initial step before any other
-   task work. New task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
+2. Confirm the orchestrator's micro, standard, or high-risk classification.
+   Create or update the task record in the same atomic initial step as the
+   skill gate. Micro tasks use the combined template; standard and high-risk
+   task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
 3. Read the task brief, `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, relevant specification docs, and the current task log before editing.
 4. Confirm baseline commit, branch, worktree, and ownership boundaries.
-5. Run and record the canonical skill applicability checklist from `BUILD_PROTOCOL.md#skills-and-tooling`.
+5. Use the orchestrator's recorded canonical skill applicability check. Fully
+   read each selected skill that governs this role; do not repeat stable
+   inventory or manifest discovery.
 6. Record any skill, library, or tooling investigation attempts, including failures and the decision not to install or adopt a tool.
 
 ## While Working
 
 - Keep edits within the task ownership boundary.
 - Do not revert or overwrite unrelated edits made by other agents.
-- Update the task log and branch work log whenever scope, files, verification, or decisions change.
+- Update durable records at the meaningful resumability boundaries defined in
+  `BUILD_PROTOCOL.md`, not for every isolated correction.
 - Use `DECISION_LOG.md` or a linked task decision record for architectural or tooling choices.
 - Put unresolved blocking and non-blocking questions in `build-protocol/questions/UNRESOLVED.md`; stop for blocking questions.
 - Link to `CODE_QUALITY.md` for quality expectations instead of creating another quality-rule file.
@@ -28,27 +32,33 @@ These notes help implementation and reviewer agents apply the autonomous build p
 
 ## Review Loop
 
-Each task must keep a review log per reviewer round. The required reviewer perspectives are defined in `BUILD_PROTOCOL.md` and `CODE_QUALITY.md`:
+Standard and high-risk tasks keep review-wave evidence; micro tasks keep review
+dispositions in their combined record. Every task records a disposition for
+the four canonical concerns defined in `BUILD_PROTOCOL.md` and
+`CODE_QUALITY.md`, invoking only relevant existing reviewers:
 
 - code style/maintainability;
 - documentation completeness;
 - TypeScript/API docs;
-- security;
 - performance/reliability.
 
-Reviewer findings must be actionable and tied to files or protocol requirements. The authoring agent records accepted fixes, explicit exceptions, verification commands, and the next review request in the task log.
+Security remains the final release-readiness role unless the human explicitly
+requests it earlier. Reviewer findings must be actionable, tied to files or
+protocol requirements, and classified P0 through P3. The authoring agent
+records accepted fixes, rejected findings, verification, and one aggregated
+correction batch. Only substantively affected concerns are re-reviewed.
 
 Reviewers should record the commit or diff basis, baseline, worktree path, dirty status, relevant documentation/API impact evidence, tests, coverage, and per-role coverage notes. Security reviewers must link or apply `CODE_QUALITY.md#security-standards` and state which areas are applicable or not applicable for the task.
 
-Before reviewing, each reviewer must run and record the canonical skill
-applicability checklist from `BUILD_PROTOCOL.md#skills-and-tooling` for their
-review role. The review gate itself is mandatory; only individual skill sources
-or specific skills can be N/A with reasons. Reviewers should verify that the
-authoring agent recorded skill use and skip decisions in the task log.
+Before reviewing, each reviewer reads the selected skills supplied for the
+role. The reviewer reuses the task-level applicability evidence while scope,
+role, and inventory remain stable, and verifies that the authoring record names
+selected and skipped skills with reasons.
 
 ## Handoff And Resumption
 
-Before stopping, every task branch should make the next action obvious from durable files:
+Before stopping, every task branch should make the next action obvious from
+the combined micro record or the standard/high-risk durable files:
 
 - task log status and latest work-log entry;
 - files changed;

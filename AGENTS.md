@@ -40,12 +40,13 @@ allow the parent model to become the accidental default for a child.
 
 Before accepting child work, record the assignment's existing role or
 orchestrator-dispatched function, expected model, and expected reasoning in the
-task or review log. Before accepting the result, confirm that both fields were
-explicit in the dispatch and record the actual child model and reasoning from
-runtime metadata. Reject and redispatch work when either dispatch field is
-omitted or actual metadata is unavailable or mismatched; inherited parent
-defaults are not acceptable evidence. This is an orchestrator acceptance gate,
-not a separate verifier role.
+task or review log. Confirm that both fields were explicit in the dispatch.
+Record actual runtime metadata when the surface exposes it; otherwise record
+the immutable configured role/profile and the metadata limitation. Missing
+self-introspection alone does not invalidate a result. Reject and redispatch
+only an omitted field, wrong role, visible mismatch, or actual fallback to an
+inherited profile. This is an orchestrator acceptance gate, not a separate
+verifier role.
 
 At session startup, confirm that the selected execution surface supports the
 required model profiles and explicit child model/reasoning dispatch. Desktop
@@ -79,21 +80,26 @@ agent identities.
 
 ## Autonomous Cycle
 
-1. Frame the next coherent milestone from actual repository state and record
-   behavior-focused acceptance criteria and high-risk assumptions.
+1. Classify the milestone as micro, standard, or high-risk using
+   `BUILD_PROTOCOL.md`, and record behavior-focused acceptance criteria and
+   high-risk assumptions proportionate to that class.
 2. Invoke deep planning only for new subsystems/bounded contexts, public or
    serialized contracts, domain semantics, transaction/concurrency/idempotency,
    or a demonstrated architectural blocker.
-3. Give one bounded implementation owner the milestone and require focused
-   behavior tests.
-4. Run the narrowest useful mechanical checks before review.
+3. A micro task may be implemented directly by the orchestrator. Standard and
+   high-risk tasks use one bounded implementation owner and focused behavior
+   tests.
+4. Run deterministic mechanical checks before specialist review. Mechanical
+   findings do not require a reviewer invocation.
 5. Invoke only existing reviewer concerns relevant to the changed behavior.
    Every canonical review concern must still receive a recorded disposition;
    an N/A disposition requires a concrete reason.
-6. Return findings to implementation, rerun affected checks first, then the
-   appropriate regression suite.
-7. Record acceptance, evidence, resolved findings, limitations, and the next
-   milestone, then continue automatically.
+6. Collect one complete review wave, aggregate its findings, and return one
+   correction batch to implementation. Re-review only substantively affected
+   concerns; record-only and deterministic corrections do not reopen lanes.
+7. Run full verification only at the change-sensitive cadence in the build
+   protocol. Record acceptance, evidence, resolved findings, limitations, and
+   the next milestone, then continue automatically.
 
 After each task is complete, reviewed, merged, and post-merge verified, push
 the completed task branch and updated `main` to `origin`. Push any task tags at

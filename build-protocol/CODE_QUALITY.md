@@ -131,7 +131,8 @@ Coverage exceptions require a documented decision and reviewer approval.
 
 ## Documentation Requirements
 
-Every task must update documentation:
+Every task must keep relevant documentation current. Update only the surfaces
+affected by the task:
 
 - architecture documentation when behavior or boundaries change;
 - package README when public package behavior changes;
@@ -143,14 +144,25 @@ Both the framework and the to-do example must have separate `USER_GUIDE.md` file
 
 ## Review Standards
 
-Every task, including documentation-only tasks, must be reviewed by these reviewer roles:
+Every task records a disposition for these concerns, but invokes only the
+existing reviewers relevant to changed behavior or changed public claims:
 
-- code style/maintainability reviewer;
-- documentation reviewer;
-- TypeScript/API docs reviewer;
-- performance/reliability reviewer.
+- code style/maintainability for non-mechanical production structure and
+  maintainability;
+- documentation for public prose, README, guide, TSDoc, and behavior claims;
+- TypeScript/API docs for public exports, types, declarations, Protobuf
+  contracts, and public-API snippets; and
+- performance/reliability for runtime, persistence, concurrency, lifecycle,
+  resource, cancellation, retry, and performance semantics.
 
-Reviewers must produce actionable comments. The authoring sub-agent must address them or record an explicit accepted exception. Review repeats until no comments remain.
+An unaffected concern receives a concrete N/A reason. Mechanical rules are
+proved by deterministic checks and do not require a reviewer. Reviewers return
+all findings in one wave, ordered by the severity defined in
+`BUILD_PROTOCOL.md`. P0/P1 findings block acceptance, accepted P2 findings must
+be fixed, and P3 advice or unchanged baseline debt is recorded without
+expanding the task. Corrections reopen only substantively affected lanes, with
+at most two complete waves; record-only and mechanically proved corrections do
+not trigger another specialist review.
 
 Security review is a final project/release-readiness gate, or runs earlier only
 when the human explicitly requests it.

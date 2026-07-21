@@ -23,6 +23,8 @@ Reusable templates live in `templates/`:
 - `TASK_LOG_TEMPLATE.md` for task and sub-task logs.
 - `WORK_LOG_TEMPLATE.md` for per-branch work logs.
 - `REVIEW_LOG_TEMPLATE.md` for reviewer rounds.
+- `MICRO_TASK_RECORD_TEMPLATE.md` for one-file micro-task scope, verification,
+  review dispositions, and integration evidence.
 - `UNRESOLVED_QUESTIONS_TEMPLATE.md` for blocking and non-blocking question logs.
 - `DECISION_RECORD_TEMPLATE.md` for ADR-style decision records.
 

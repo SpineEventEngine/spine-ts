@@ -8,7 +8,7 @@ Worktree: `<absolute-path>`
 Reviewer role: code style/maintainability | documentation | TypeScript/API docs | security | performance/reliability
 Reviewer sub-agent: `<agent-id>`
 Review timestamp: `<YYYY-MM-DD HH:MM TZ>`
-Status: Pending | Comments | No remaining comments
+Status: Pending | Findings | Accepted | Clean | N/A
 
 ## Scope Reviewed
 
@@ -22,7 +22,7 @@ For any N/A entry, explain why the evidence does not apply to the reviewed task.
 
 | Evidence | Reviewed | Notes |
 | --- | --- | --- |
-| Mandatory skill applicability check | `<yes/no>` | `<evidence for BUILD_PROTOCOL.md#skills-and-tooling; individual skill sources/specific skills may be N/A with reasons, but the review gate is not optional>` |
+| Applicable skills read | `<yes/no/N/A>` | `<selected task skills supplied by the orchestrator>` |
 | Committed diff basis (`git diff main...HEAD`) | `<yes/no/N/A>` | `<notes>` |
 | Public export/API diff | `<yes/no/N/A>` | `<notes; if N/A, explain why no public export/API diff applies>` |
 | TypeDoc/reference generation | `<yes/no/N/A>` | `<notes; if N/A, explain why TypeDoc/reference generation does not apply>` |
@@ -52,7 +52,8 @@ For any N/A entry, explain why the evidence does not apply to the reviewed task.
 
 ## Author Response
 
-- Pending.
+- Record accepted/rejected dispositions and the one aggregated correction
+  batch. P0/P1 block; accepted P2 must be resolved; P3 does not expand scope.
 
 ## Verification Requested
 
@@ -60,4 +61,6 @@ For any N/A entry, explain why the evidence does not apply to the reviewed task.
 
 ## Outcome
 
-Pending.
+Pending. State whether this concern is clean, accepted after focused evidence,
+or N/A. Request re-review only when the correction substantively affects this
+concern; mechanical and record-only corrections use deterministic checks.
