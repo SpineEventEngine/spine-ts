@@ -1,6 +1,7 @@
 # T-0050: Risk-tiered convergent review protocol
 
-Status: Ready for integration
+Status: Completed, merged, and post-merge verified; closure record requires
+`origin/main` push
 
 ## Objective
 
@@ -77,3 +78,17 @@ behavior.
 - No full coverage gate is required: this standard documentation task changes
   no runtime, test, public contract, generated artifact, dependency, or shared
   build behavior. Recent verified `main` evidence remains authoritative.
+
+## Integration Closure
+
+- Accepted task endpoint `5564729d` is pushed to
+  `origin/task/T-0050-convergent-review`.
+- Merge commit `fb1b9088` is pushed to `origin/main`.
+- The verified task and merged `main` trees are byte-identical at tree
+  `b569d834176ceb293ab63820ee8d94bcec6aa5db`.
+- Fresh post-merge focused verification passed Prettier, `git diff --check`,
+  cleanup enforcement, release readiness at 59 imports / 119 links, and all
+  TypeDoc/API expected-export checks.
+- The commit containing this closure record must be pushed to `origin/main`.
+  Its content-addressed SHA is intentionally not embedded in itself; the remote
+  ref and Git history are the durable evidence required by D-0097.

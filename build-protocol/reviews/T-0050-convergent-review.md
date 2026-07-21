@@ -1,6 +1,6 @@
 # T-0050 Convergent Review Protocol Review
 
-Status: Accepted; no findings
+Status: Accepted, merged, and post-merge verified; no findings
 
 ## Scope And Review Dispositions
 
@@ -56,3 +56,12 @@ full verification.
 - TypeScript/API docs: N/A with the reason above.
 - Performance/reliability: N/A with the reason above.
 - Security: N/A with the reason above.
+
+## Integration Disposition
+
+- Accepted endpoint: `5564729d`, pushed to the task branch.
+- Merge endpoint: `fb1b9088`, pushed to `origin/main`.
+- Merged tree equals the verified task tree exactly.
+- Post-merge focused documentation verification is clean; no concern reopened.
+- Final remote closure is established by pushing the commit containing this
+  record, without a self-referential status-only follow-up.
