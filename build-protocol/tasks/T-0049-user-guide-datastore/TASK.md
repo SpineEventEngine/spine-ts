@@ -1,6 +1,6 @@
 # T-0049: User guide correctness and Datastore development guide
 
-Status: Round 1 corrections verified; accepting re-review pending
+Status: Accepted after full verification; integration pending
 
 ## Objective
 
@@ -189,3 +189,17 @@ the optional Google Cloud Datastore adapter.
   scan. Nineteen fenced TypeScript, Protobuf, Bash, or shell blocks remain.
 - The implementation endpoint is accepted for commit, immediate branch push,
   and canonical review.
+
+## Final task acceptance — 2026-07-21
+
+- Every canonical reviewer lane is CLEAN after one complete finding/fix wave.
+- `pnpm --config.verify-deps-before-run=false verify` passed: ordinary and
+  coverage executions each passed 80 files / 1,855 tests with 2 files / 8
+  opt-in tests skipped. Coverage was 94.41% statements, 90.09% branches, 94.68%
+  functions, and 94.85% lines.
+- Node/proto generation, generated/tooling typecheck, full lint/cleanup,
+  repository formatting, TypeDoc/API, Proto lint/generated cleanliness, and
+  release readiness at 59 package imports / 119 relative Markdown links all
+  passed.
+- The guide and linked Datastore README are accepted for final task commit,
+  immediate task-branch push, merge, post-merge verification, and main push.

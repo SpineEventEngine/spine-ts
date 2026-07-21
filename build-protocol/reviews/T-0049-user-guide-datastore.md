@@ -1,6 +1,6 @@
 # T-0049 User Guide and Datastore Review Log
 
-Status: Round 1 corrections verified; accepting re-review pending
+Status: All canonical review lanes CLEAN; full verification passed
 
 ## Human requirements
 
@@ -134,6 +134,28 @@ is not a finding unless the changed guide presents it as current behavior.
   `packages/storage-datastore/README.md` plus the original T-0049 files. No
   runtime/test/API edit, Git mutation, or subagent action is authorized.
 
+## Round 1 correction re-review assignments — endpoint `65d95306`
+
+- Correction baseline: `aa840c13`; correction endpoint: `65d95306`.
+- Re-run all four affected existing lanes against only the accepted corrections
+  and their interaction with the complete human ledger.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  `gpt-5.6-terra` / high; verify snippet self-containment, cross-reference,
+  line length, organization, and no regression.
+- Documentation: existing `documentation_reviewer`, immutable
+  `gpt-5.6-luna` / medium with medium reasoning explicit; verify linked README
+  command consistency, guide/README coherence, completeness, and no regression.
+  The previously recorded free-model override limitation still applies.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, explicitly
+  `gpt-5.6-terra` / high; verify CAS wording, snippet declarations/imports,
+  public APIs, and no regression.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly `gpt-5.6-terra` / high; verify continuation/finite-bound semantics,
+  CAS attempt semantics, README/guide operational claims, and the recorded
+  documentation-only test-request disposition.
+- Every assignment remains read-only, childless, and subject to its own
+  canonical skill-applicability check and actual runtime metadata gate.
+
 ## Round 1 correction disposition
 
 - Accepted findings 1–6 were applied by the original implementer under the
@@ -150,3 +172,31 @@ is not a finding unless the changed guide presents it as current behavior.
   and internal-import scans, and targeted corrected-claim presence scans. The
   rejected runtime-test scope expansions remain rejected for the recorded
   reasons.
+
+## Accepting re-review results
+
+- Style/maintainability: CLEAN. Existing role
+  `style_maintainability_reviewer`, immutable actual runtime profile
+  `gpt-5.6-terra` / high matching explicit dispatch. Self-contained snippet,
+  cross-reference, line length, correction prose, and full ledger passed.
+- Documentation: CLEAN. Existing role `documentation_reviewer`, immutable
+  actual runtime profile `gpt-5.6-luna` / medium. The role and medium reasoning
+  were explicit; the API's redundant free-Luna override limitation is recorded
+  above. Guide/README coherence, emulator port, full adapter journey, limits,
+  links, and ledger passed.
+- TypeScript/API docs: CLEAN. Existing role
+  `typescript_api_docs_reviewer`, immutable actual runtime profile
+  `gpt-5.6-terra` / high matching explicit dispatch. CAS count, bounded-scan
+  snippet, query ordering, all public imports/options, handler and generated
+  paths, and full ledger passed.
+- Performance/reliability: CLEAN. Existing role
+  `performance_reliability_reviewer`, immutable actual runtime profile
+  `gpt-5.6-terra` / high matching explicit dispatch. Candidate-set bound,
+  continuation ordering, CAS attempts, emulator endpoint, lifecycle, cloud
+  limits, and the documentation-only test-request disposition passed.
+- Reviewer contexts reported that self-introspection of runtime metadata was
+  unavailable. Acceptance uses the collaboration runtime's immutable existing
+  role configuration plus the explicit dispatch fields recorded for every
+  lane. No reviewer edited files or Git state, and no reviewer spawned a child.
+- All accepted findings are resolved. No canonical finding remains; final full
+  task verification is authorized.
