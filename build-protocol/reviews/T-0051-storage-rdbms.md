@@ -1,6 +1,6 @@
 # T-0051 Storage RDBMS Review Log
 
-Status: Converged and accepted; integration pending
+Status: Converged, accepted, merged, post-merge verified, and pushed
 
 ## Human Requirements
 
@@ -244,6 +244,22 @@ resource ownership, real MySQL proof, and no speculative public SQL surface.
 - Independent final MySQL 8.4.10 acceptance passes 13/13. T-0051 is accepted
   for commit, immediate task-branch push, main integration, post-merge
   verification, and main push.
+
+## T-0051 Integration Closure
+
+- Accepted Packet 5 commit `c4a0ba52` was pushed to
+  `origin/task/T-0051-storage-rdbms`. The complete task branch was merged into
+  `main` as `81a6b335` and pushed immediately to `origin/main`; local and remote
+  refs were confirmed equal at both boundaries.
+- After refreshing main's lockfile-pinned workspace links, post-merge
+  `pnpm --config.verify-deps-before-run=false verify` passed. Ordinary and
+  coverage runs each passed 82 files with three skipped and 1,901 tests with 21
+  skipped; coverage remained 94.45% statements, 90.14% branches, 94.71%
+  functions, and 94.93% lines. TypeScript build/tooling, lint/cleanup, Prettier,
+  TypeDoc/API, Protobuf lint/generated cleanliness, and release readiness all
+  passed.
+- Post-merge MySQL 8.4.10 acceptance passed 13/13. T-0051 has no unresolved
+  review finding, verification gap, integration step, or remote-sync action.
 
 ## Packet 5 Final Targeted Correction Evidence
 

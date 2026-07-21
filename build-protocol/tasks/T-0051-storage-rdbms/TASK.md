@@ -1,6 +1,6 @@
 # T-0051: MySQL-first RDBMS storage adapter
 
-Status: Complete; reviewed and verified; integration pending
+Status: Complete; merged to main, post-merge verified, and pushed
 
 ## Objective
 
