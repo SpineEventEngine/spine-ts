@@ -14,7 +14,8 @@ command/query/subscription services with durable inactive subscription recovery
 over the same storage factory, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, the first `@spine-ts/transport`
 contracts, the first `@spine-ts/storage` contracts, and the minimal
-`@spine-ts/testing` bounded-context fixture.
+`@spine-ts/testing` bounded-context fixture, optional Datastore storage, and
+the MySQL-first RDBMS storage factory/errors/options.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -734,6 +735,8 @@ those slot IDs beside each record for callers that need slot-addressed
 validation or repair. `RecordStorage.index()` is the deliberate exception: it
 returns logical record IDs derived from each record body through the
 `RecordSpec`.
+`RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
+before a factory or adapter receives the specification.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was
@@ -842,12 +845,14 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON and verifies eight expected
+`docs:check` also emits temporary TypeDoc JSON and verifies nine expected
 entry points in the API model: `@spine-ts/proto`, `@spine-ts/core`,
-`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`, `@spine-ts/transport`,
+`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`,
+`@spine-ts/storage-rdbms`, `@spine-ts/transport`,
 `@spine-ts/transport/zeromq`, and `@spine-ts/testing`. The
 `@spine-ts/transport/zeromq` entry point has its own exact-six-public-export
 gate. It also checks
-`@spine-ts/server`, `@spine-ts/storage`, and `@spine-ts/storage-datastore` root exports against source
+`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`, and
+`@spine-ts/storage-rdbms` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

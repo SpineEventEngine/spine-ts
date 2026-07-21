@@ -11,6 +11,11 @@ export class RecordSpec<I, R extends Message> {
   readonly #idSchema: (I extends Message ? GenMessage<I> : undefined) | undefined;
   readonly #record: GenMessage<R>;
 
+  /**
+   * Creates a record specification.
+   *
+   * @throws Error if two declared columns have the same name.
+   */
   constructor(input: {
     readonly schema: GenMessage<R>;
     readonly idSchema?: I extends Message ? GenMessage<I> : undefined;
@@ -18,6 +23,15 @@ export class RecordSpec<I, R extends Message> {
     readonly columns?: readonly RecordColumn<R>[];
   }) {
     this.#columns = input.columns ?? [];
+    const names = new Set<string>();
+    for (const column of this.#columns) {
+      if (names.has(column.name)) {
+        throw new Error(
+          `Storage record specification has duplicate record column "${column.name}".`,
+        );
+      }
+      names.add(column.name);
+    }
     this.#extractId = input.extractId;
     this.#idSchema = input.idSchema;
     this.#record = input.schema;

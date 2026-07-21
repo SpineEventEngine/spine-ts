@@ -79,6 +79,17 @@ describe("RecordSpec", () => {
     expect(() => spec.materialize(event)).toThrow("Storage value could not be cloned.");
   });
 
+  it("rejects duplicate declared record-column names", () => {
+    expect(
+      () =>
+        new RecordSpec({
+          schema: EventSchema,
+          extractId: (event) => event.id,
+          columns: [new RecordColumn("kind", () => "one"), new RecordColumn("kind", () => "two")],
+        }),
+    ).toThrow('duplicate record column "kind"');
+  });
+
   it("raises a stable error when record cloning falls back to an invalid schema", () => {
     const spec = new RecordSpec<string, Message>({
       schema: {} as GenMessage<Message>,
