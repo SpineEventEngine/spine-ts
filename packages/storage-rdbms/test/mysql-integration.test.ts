@@ -527,4 +527,134 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       tenantStorage.queryEntries({ filters: [{ column: "rank", value: 1 }] }),
     ).resolves.toMatchObject([{ id: "shared-slot", record: { value: "tenant-a-payload" } }]);
   });
+
+  it("commits ordered batches and applies payload-based compare-and-set", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const storage = factory.createRecordStorage(
+      { name: "PacketFour", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record: StringValue) => record.value.slice(0, 1),
+        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+      }),
+    );
+    await storage.writeAll(
+      ["a-first", "b-first", "a-last"].map((value) => create(StringValueSchema, { value })),
+    );
+    await expect(storage.read("a")).resolves.toEqual(
+      create(StringValueSchema, { value: "a-last" }),
+    );
+    await expect(storage.read("b")).resolves.toEqual(
+      create(StringValueSchema, { value: "b-first" }),
+    );
+
+    const created = create(StringValueSchema, { value: "c-created" });
+    const replacement = create(StringValueSchema, { value: "c-replaced" });
+    await expect(storage.compareAndSet("c", undefined, created)).resolves.toBe(true);
+    await expect(storage.compareAndSet("c", created, replacement)).resolves.toBe(true);
+    await expect(storage.compareAndSet("c", created, undefined)).resolves.toBe(false);
+    await expect(storage.compareAndSet("c", replacement, undefined)).resolves.toBe(true);
+    await expect(storage.read("c")).resolves.toBeUndefined();
+  });
+
+  it("serializes independent absent creates and keeps a CAS replacement at its addressed slot", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const spec = new RecordSpec({
+      schema: StringValueSchema,
+      extractId: (record: StringValue) => record.value,
+    });
+    const first = factory.createRecordStorage({ name: "CasRace", multitenant: false }, spec);
+    const second = factory.createRecordStorage({ name: "CasRace", multitenant: false }, spec);
+    const next = create(StringValueSchema, { value: "body-id" });
+    let releaseStart: (() => void) | undefined;
+    const start = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    let ready = 0;
+    const race = (storage: typeof first) =>
+      new Promise<boolean>((resolve, reject) => {
+        ready += 1;
+        void start
+          .then(() => storage.compareAndSet("addressed-slot", undefined, next))
+          .then(resolve, reject);
+      });
+    const firstAttempt = race(first);
+    const secondAttempt = race(second);
+    expect(ready).toBe(2);
+    releaseStart?.();
+    const raced = await Promise.all([firstAttempt, secondAttempt]);
+    expect(raced.sort()).toEqual([false, true]);
+    await expect(first.read("addressed-slot")).resolves.toEqual(next);
+    await expect(first.queryEntries({ ids: ["addressed-slot"] })).resolves.toMatchObject([
+      { id: "addressed-slot", record: { value: "body-id" } },
+    ]);
+    await expect(first.index({ ids: ["addressed-slot"] })).resolves.toEqual(["body-id"]);
+  });
+
+  it("rolls a later batch column failure back without changing prior rows", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const storage = factory.createRecordStorage(
+      { name: "BatchRollback", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value.slice(0, 1),
+        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+      }),
+    );
+    await storage.write(create(StringValueSchema, { value: "a-old" }));
+    await storage.write(create(StringValueSchema, { value: "b-old" }));
+    const pool = createPool({ uri: url });
+    try {
+      const rejectedValue = SortableMysqlColumnValue.encode("b-new").data;
+      const hex = [...rejectedValue].map((value) => value.toString(16).padStart(2, "0")).join("");
+      await pool.query(
+        `ALTER TABLE \`spine_ts_columns\` ADD CONSTRAINT \`spine_ts_t0051_reject_batch_column\` CHECK (value_data <> X'${hex}')`,
+      );
+
+      await expect(
+        storage.writeAll(
+          ["a-new", "b-new", "c-new"].map((value) => create(StringValueSchema, { value })),
+        ),
+      ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+      await expect(storage.read("a")).resolves.toEqual(
+        create(StringValueSchema, { value: "a-old" }),
+      );
+      await expect(storage.read("b")).resolves.toEqual(
+        create(StringValueSchema, { value: "b-old" }),
+      );
+      await expect(storage.read("c")).resolves.toBeUndefined();
+      const [columns] = await pool.query<{ slot_key: Uint8Array; value_data: Uint8Array }[]>(
+        `SELECT slot_key, value_data FROM \`spine_ts_columns\`
+         WHERE scope_key = ? AND tenant_key = ? ORDER BY slot_key ASC`,
+        [
+          CanonicalMysqlValue.encode(["BatchRollback", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValue.encode(null, 255),
+        ],
+      );
+      expect(
+        columns.map(({ slot_key, value_data }) => ({
+          slot_key: new Uint8Array(slot_key),
+          value_data: new Uint8Array(value_data),
+        })),
+      ).toEqual([
+        {
+          slot_key: CanonicalMysqlValue.encode("a", 768),
+          value_data: SortableMysqlColumnValue.encode("a-old").data,
+        },
+        {
+          slot_key: CanonicalMysqlValue.encode("b", 768),
+          value_data: SortableMysqlColumnValue.encode("b-old").data,
+        },
+      ]);
+    } finally {
+      await pool
+        .query("ALTER TABLE `spine_ts_columns` DROP CHECK `spine_ts_t0051_reject_batch_column`")
+        .catch(() => undefined);
+      await pool.end();
+    }
+  });
 });

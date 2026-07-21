@@ -1,6 +1,6 @@
 # T-0051: MySQL-first RDBMS storage adapter
 
-Status: Packet 3 accepted; Packet 4 next
+Status: Packet 4 accepted; Packet 5 next
 
 ## Objective
 

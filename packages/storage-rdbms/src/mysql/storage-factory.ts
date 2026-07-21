@@ -235,7 +235,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected async deleteRecord(id: I): Promise<boolean> {
     const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
     const tenant = this.tenant();
-    const connection = await this.pool.getConnection();
+    const connection = await this.acquireConnection();
     try {
       await connection.beginTransaction();
       const [result] = await connection.execute<ResultSetHeader>(
@@ -256,7 +256,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     const tenant = this.tenant();
     const compiled = compileQuery(query, this.#scope, tenant);
     if (compiled === undefined) return [];
-    const connection = await this.pool.getConnection();
+    const connection = await this.acquireConnection();
     try {
       const [rows] = await connection.query<QueryRow[]>(
         compiled.sql,
@@ -274,7 +274,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected async readRecord(id: I): Promise<R | undefined> {
     const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
     const tenant = this.tenant();
-    const connection = await this.pool.getConnection();
+    const connection = await this.acquireConnection();
     try {
       const [rows] = await connection.execute<PayloadRow[]>(
         `SELECT payload FROM ${recordsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
@@ -296,42 +296,85 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     }
   }
 
-  protected compareAndSetRecord(): Promise<boolean> {
-    return unavailable();
-  }
-
-  protected writeAllRecords(): Promise<void> {
-    return unavailable();
-  }
-
-  protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    const slot = CanonicalMysqlValue.encode(record.id, slotKeyBytes);
-    const payload = toBinary(this.recordSpec.schema, record.record, { writeUnknownFields: false });
-    const columns = [...record.columns].map(([name, value]) => ({
-      name: encodeColumnName(name),
-      value: encodeColumnValue(value),
-    }));
+  protected async compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const expectedPayload = expected === undefined ? undefined : this.payload(expected.record);
+    const replacement = next === undefined ? undefined : this.prepare(next, slot);
     const tenant = this.tenant();
-    const connection = await this.pool.getConnection();
+    const connection = await this.acquireConnection();
+    let duplicateCreate = false;
     try {
       await connection.beginTransaction();
-      await connection.execute(
-        `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE payload = VALUES(payload), revision = revision + 1`,
-        [this.#scope, tenant, slot, payload],
-      );
-      await connection.execute(
-        `DELETE FROM ${columnsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+      if (expectedPayload === undefined && replacement !== undefined) {
+        try {
+          await connection.execute(
+            `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload) VALUES (?, ?, ?, ?)`,
+            [this.#scope, tenant, replacement.slot, replacement.payload],
+          );
+        } catch (error) {
+          duplicateCreate = isDuplicateKey(error);
+          throw error;
+        }
+        await this.insertColumns(connection, tenant, replacement);
+        await connection.commit();
+        return true;
+      }
+      const [rows] = await connection.execute<PayloadRow[]>(
+        `SELECT payload FROM ${recordsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? FOR UPDATE`,
         [this.#scope, tenant, slot],
       );
-      for (const column of columns) {
-        await connection.execute(
-          `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [this.#scope, tenant, slot, column.name, column.value.kind, column.value.data],
-        );
+      const current = rows[0];
+      if (current === undefined) {
+        if (expectedPayload !== undefined) {
+          await connection.rollback();
+          return false;
+        }
+        await connection.commit();
+        return true;
+      } else {
+        if (!(current.payload instanceof Uint8Array)) throw new MysqlStorageDataError();
+        if (expectedPayload === undefined || !sameBytes(current.payload, expectedPayload)) {
+          await connection.rollback();
+          return false;
+        }
+        if (replacement === undefined) {
+          await connection.execute(
+            `DELETE FROM ${recordsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+            [this.#scope, tenant, slot],
+          );
+        } else await this.replace(connection, tenant, replacement);
       }
+      await connection.commit();
+      return true;
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch {
+        throw new MysqlStorageOperationError();
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set only by the exact records-key claim.
+      if (duplicateCreate) return false;
+      if (error instanceof MysqlStorageDataError) throw error;
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
+  }
+
+  protected async writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    const prepared = records.map((record) => this.prepare(record));
+    if (prepared.length === 0) return;
+    const tenant = this.tenant();
+    const connection = await this.acquireConnection();
+    try {
+      await connection.beginTransaction();
+      for (const record of prepared) await this.replace(connection, tenant, record);
       await connection.commit();
     } catch {
       await connection.rollback().catch(() => undefined);
@@ -339,6 +382,80 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     } finally {
       connection.release();
     }
+  }
+
+  protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    const prepared = this.prepare(record);
+    const tenant = this.tenant();
+    const connection = await this.acquireConnection();
+    try {
+      await connection.beginTransaction();
+      await this.replace(connection, tenant, prepared);
+      await connection.commit();
+    } catch {
+      await connection.rollback().catch(() => undefined);
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
+  }
+
+  private payload(record: R): Uint8Array {
+    return toBinary(this.recordSpec.schema, record, { writeUnknownFields: false });
+  }
+
+  private async acquireConnection(): Promise<PoolConnection> {
+    try {
+      return await this.pool.getConnection();
+    } catch {
+      throw new MysqlStorageOperationError();
+    }
+  }
+
+  private prepare(
+    record: ReturnType<RecordSpec<I, R>["materialize"]>,
+    slot = CanonicalMysqlValue.encode(record.id, slotKeyBytes),
+  ): PreparedRecord {
+    return {
+      slot,
+      payload: this.payload(record.record),
+      columns: [...record.columns].map(([name, value]) => ({
+        name: encodeColumnName(name),
+        value: encodeColumnValue(value),
+      })),
+    };
+  }
+
+  private async replace(
+    connection: PoolConnection,
+    tenant: Uint8Array,
+    record: PreparedRecord,
+  ): Promise<void> {
+    await connection.execute(
+      `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), revision = revision + 1`,
+      [this.#scope, tenant, record.slot, record.payload],
+    );
+    await connection.execute(
+      `DELETE FROM ${columnsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+      [this.#scope, tenant, record.slot],
+    );
+    for (const column of record.columns)
+      await connection.execute(
+        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
+        [this.#scope, tenant, record.slot, column.name, column.value.kind, column.value.data],
+      );
+  }
+
+  private async insertColumns(
+    connection: PoolConnection,
+    tenant: Uint8Array,
+    record: PreparedRecord,
+  ): Promise<void> {
+    for (const column of record.columns)
+      await connection.execute(
+        `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data) VALUES (?, ?, ?, ?, ?, ?)`,
+        [this.#scope, tenant, record.slot, column.name, column.value.kind, column.value.data],
+      );
   }
 
   private tenant(): Uint8Array {
@@ -357,6 +474,27 @@ interface PayloadRow extends RowDataPacket {
 
 interface QueryRow extends PayloadRow {
   readonly slot_key: Uint8Array;
+}
+
+interface PreparedRecord {
+  readonly slot: Uint8Array;
+  readonly payload: Uint8Array;
+  readonly columns: readonly {
+    readonly name: Uint8Array;
+    readonly value: { readonly data: Uint8Array; readonly kind: number };
+  }[];
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength && left.every((value, index) => value === right[index])
+  );
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && Reflect.get(error, "code") === "ER_DUP_ENTRY"
+  );
 }
 
 function encodeColumnName(name: string): Uint8Array {
@@ -775,8 +913,4 @@ interface SchemaForeignKey extends RowDataPacket {
   readonly referenced_table_name: string;
   readonly referenced_column_name: string;
   readonly delete_rule: string;
-}
-
-function unavailable<T>(): Promise<T> {
-  return Promise.reject(new Error("MySQL record operations are not available until Packet 2."));
 }

@@ -11,6 +11,13 @@ let poolOptions: unknown;
 let operationError: Error | undefined;
 let operationRows: unknown[] = [];
 let connectionAcquires = 0;
+let executeFailure: ((sql: string) => Error | undefined) | undefined;
+let commitFailure: Error | undefined;
+let rollbackFailure: Error | undefined;
+let transactionStarts = 0;
+let commits = 0;
+let rollbacks = 0;
+let releases = 0;
 
 vi.mock("mysql2/promise", () => ({
   createPool: vi.fn((options) => {
@@ -44,6 +51,8 @@ vi.mock("mysql2/promise", () => ({
           async execute(sql: string, values?: readonly unknown[]) {
             await Promise.resolve();
             calls.push({ sql, values });
+            const failure = executeFailure?.(sql);
+            if (failure !== undefined) throw failure;
             if (operationError !== undefined) throw operationError;
             if (sql.includes("SELECT payload")) {
               return [operationRows, []];
@@ -51,15 +60,21 @@ vi.mock("mysql2/promise", () => ({
             return [{ affectedRows: 1 }, []];
           },
           beginTransaction() {
+            transactionStarts += 1;
             return Promise.resolve();
           },
           commit() {
+            commits += 1;
+            if (commitFailure !== undefined) return Promise.reject(commitFailure);
             return Promise.resolve();
           },
           rollback() {
+            rollbacks += 1;
+            if (rollbackFailure !== undefined) return Promise.reject(rollbackFailure);
             return Promise.resolve();
           },
           release() {
+            releases += 1;
             return undefined;
           },
         };
@@ -144,6 +159,13 @@ describe("MysqlStorageFactory", () => {
     operationError = undefined;
     operationRows = [];
     connectionAcquires = 0;
+    executeFailure = undefined;
+    commitFailure = undefined;
+    rollbackFailure = undefined;
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
     poolOptions = undefined;
   });
 
@@ -390,6 +412,286 @@ describe("MysqlStorageFactory", () => {
 
     await expect(storage.query({ filters: [{ column: "state", value: [] }] })).resolves.toEqual([]);
     expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("pre-encodes a whole batch before acquiring its single transaction connection", async () => {
+    const { MysqlStorageConfigurationError, MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Batch", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+      }),
+    );
+    connectionAcquires = 0;
+
+    await expect(
+      storage.writeAll([
+        create(StringValueSchema, { value: "first" }),
+        create(StringValueSchema, { value: "x".repeat(257) }),
+      ]),
+    ).rejects.toBeInstanceOf(MysqlStorageConfigurationError);
+
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("uses one transaction and preserves batch statement order", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Batch", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    calls.length = 0;
+    connectionAcquires = 0;
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
+
+    await storage.writeAll([
+      create(StringValueSchema, { value: "first" }),
+      create(StringValueSchema, { value: "second" }),
+      create(StringValueSchema, { value: "first" }),
+    ]);
+
+    expect(connectionAcquires).toBe(1);
+    expect(transactionStarts).toBe(1);
+    expect(commits).toBe(1);
+    expect(rollbacks).toBe(0);
+    expect(releases).toBe(1);
+    expect(
+      calls
+        .filter(({ sql }) => sql.startsWith("INSERT INTO `spine_ts_records`"))
+        .map(({ values }) => values?.[2]),
+    ).toEqual([
+      CanonicalMysqlValue.encode("first", 768),
+      CanonicalMysqlValue.encode("second", 768),
+      CanonicalMysqlValue.encode("first", 768),
+    ]);
+    await factory.close();
+  });
+
+  it("rolls a failed later batch statement back exactly once before releasing", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Batch", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
+    let inserts = 0;
+    executeFailure = (sql) => {
+      if (!sql.startsWith("INSERT INTO `spine_ts_records`")) return undefined;
+      inserts += 1;
+      return inserts === 2 ? new Error("later record failure") : undefined;
+    };
+
+    await expect(
+      storage.writeAll([
+        create(StringValueSchema, { value: "first" }),
+        create(StringValueSchema, { value: "second" }),
+      ]),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    expect({ transactionStarts, commits, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      commits: 0,
+      rollbacks: 1,
+      releases: 1,
+    });
+    await factory.close();
+  });
+
+  it("rolls a failed batch commit back exactly once before releasing", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Batch", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
+    commitFailure = new Error("commit failure");
+
+    await expect(
+      storage.writeAll([create(StringValueSchema, { value: "one" })]),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    expect({ transactionStarts, commits, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      commits: 1,
+      rollbacks: 1,
+      releases: 1,
+    });
+    await factory.close();
+  });
+
+  it("sanitizes a pool-acquisition failure for transactional writes", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Batch", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
+    connectError = new Error("provider secret");
+
+    await expect(
+      storage.writeAll([create(StringValueSchema, { value: "one" })]),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    expect({ transactionStarts, rollbacks, releases }).toEqual({
+      transactionStarts: 0,
+      rollbacks: 0,
+      releases: 0,
+    });
+    await factory.close();
+  });
+
+  it("returns false only after rolling back an exact duplicate absent-create claim", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Cas", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    commits = 0;
+    rollbacks = 0;
+    releases = 0;
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO `spine_ts_records`")
+        ? Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" })
+        : undefined;
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).resolves.toBe(false);
+
+    expect({ transactionStarts, commits, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      commits: 0,
+      rollbacks: 1,
+      releases: 1,
+    });
+    await factory.close();
+  });
+
+  it("sanitizes a duplicate claim when its rollback fails", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Cas", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    rollbacks = 0;
+    releases = 0;
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO `spine_ts_records`")
+        ? Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" })
+        : undefined;
+    rollbackFailure = new Error("rollback failure");
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    expect({ transactionStarts, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      rollbacks: 1,
+      releases: 1,
+    });
+    await factory.close();
+  });
+
+  it("sanitizes a nonduplicate absent-create claim failure after one rollback", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Cas", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    transactionStarts = 0;
+    rollbacks = 0;
+    releases = 0;
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO `spine_ts_records`") ? new Error("deadlock") : undefined;
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    expect({ transactionStarts, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      rollbacks: 1,
+      releases: 1,
+    });
+    await factory.close();
+  });
+
+  it("rolls stale and corrupt locked CAS rows back once before releasing", async () => {
+    const { MysqlStorageDataError, MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_4",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Cas", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    const expected = create(StringValueSchema, { value: "expected" });
+    transactionStarts = 0;
+    rollbacks = 0;
+    releases = 0;
+    operationRows = [{ payload: new Uint8Array([1]) }];
+
+    await expect(storage.compareAndSet("slot", expected, undefined)).resolves.toBe(false);
+    expect({ transactionStarts, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      rollbacks: 1,
+      releases: 1,
+    });
+
+    transactionStarts = 0;
+    rollbacks = 0;
+    releases = 0;
+    operationRows = [{ payload: "corrupt" }];
+    await expect(storage.compareAndSet("slot", expected, undefined)).rejects.toBeInstanceOf(
+      MysqlStorageDataError,
+    );
+    expect({ transactionStarts, rollbacks, releases }).toEqual({
+      transactionStarts: 1,
+      rollbacks: 1,
+      releases: 1,
+    });
     await factory.close();
   });
 });
