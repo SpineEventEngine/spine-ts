@@ -1,6 +1,6 @@
 # T-0049: User guide correctness and Datastore development guide
 
-Status: Accepted after full verification; integration pending
+Status: Completed, merged, post-merge verified, and pushed
 
 ## Objective
 
@@ -203,3 +203,16 @@ the optional Google Cloud Datastore adapter.
   passed.
 - The guide and linked Datastore README are accepted for final task commit,
   immediate task-branch push, merge, post-merge verification, and main push.
+
+## Integration closure — 2026-07-21
+
+- Final accepted task commit `659a13f7` was pushed to
+  `origin/task/T-0049-user-guide-datastore` immediately after commit.
+- Merge commit `a6194577` was pushed to `origin/main` immediately after merge.
+- Fresh post-merge `pnpm --config.verify-deps-before-run=false verify` passed on
+  `main`: ordinary and coverage executions each passed 80 files / 1,855 tests
+  with 2 files / 8 opt-in tests skipped. Coverage remained 94.41% statements,
+  90.09% branches, 94.68% functions, and 94.85% lines.
+- Typecheck, lint/cleanup, formatting, TypeDoc/API, Proto, generated-clean, and
+  release readiness at 59 package imports / 119 relative Markdown links passed.
+- T-0049 is durably closed after this closure commit is pushed to `origin/main`.

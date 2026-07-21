@@ -1,6 +1,6 @@
 # T-0049 User Guide and Datastore Review Log
 
-Status: All canonical review lanes CLEAN; full verification passed
+Status: CLEAN, merged, post-merge verified, and pushed
 
 ## Human requirements
 
@@ -200,3 +200,12 @@ is not a finding unless the changed guide presents it as current behavior.
   lane. No reviewer edited files or Git state, and no reviewer spawned a child.
 - All accepted findings are resolved. No canonical finding remains; final full
   task verification is authorized.
+
+## Integration disposition
+
+- Accepted task endpoint: `659a13f7`, pushed to the task branch.
+- Merge endpoint: `a6194577`, pushed to `origin/main` immediately after merge.
+- Post-merge full verification: PASS with 80 files / 1,855 tests, 90.09%
+  branch coverage, and every generated, type, lint, cleanup, format,
+  documentation/API, Proto, generated-clean, and release-readiness gate clean.
+- All four canonical review dispositions remain CLEAN; no finding reopened.
