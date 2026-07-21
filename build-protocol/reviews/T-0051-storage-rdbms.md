@@ -47,3 +47,16 @@ resource ownership, real MySQL proof, and no speculative public SQL surface.
   record operations intentionally remain deferred.
 - No specialist lane ran at this intermediate packet. The task plan preserves
   one complete four-concern review wave over the immutable Packet 5 endpoint.
+
+## Packet 2 Interim Evidence
+
+- RED/GREEN CRUD and codec evidence is recorded in the T-0051 work log.
+  Packet 2 is accepted; no specialist review is due before Packet 5.
+- The Packet 2 schema/codec sub-slice now has local mechanical evidence for the
+  v3 width/index/FK shape and sortable provider-honest values. Specialist
+  review remains deferred; no Packet 5 endpoint claim is made here.
+- The adversarial CRUD acceptance extension has live MySQL 8.4.10 evidence for
+  binary tenant/ID isolation, corrupt-payload and provider-error distinction,
+  metadata nullability, cascade cleanup, stale columns, and transaction
+  rollback. The final specialist wave remains deferred to Packet 5; this is
+  mechanical implementation evidence only.

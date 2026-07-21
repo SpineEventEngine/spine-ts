@@ -18,6 +18,15 @@ export class RecordSpec<I, R extends Message> {
     readonly columns?: readonly RecordColumn<R>[];
   }) {
     this.#columns = input.columns ?? [];
+    const names = new Set<string>();
+    for (const column of this.#columns) {
+      if (names.has(column.name)) {
+        throw new Error(
+          `Storage record specification has duplicate record column "${column.name}".`,
+        );
+      }
+      names.add(column.name);
+    }
     this.#extractId = input.extractId;
     this.#idSchema = input.idSchema;
     this.#record = input.schema;

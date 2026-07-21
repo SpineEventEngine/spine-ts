@@ -1,6 +1,6 @@
 # T-0051: MySQL-first RDBMS storage adapter
 
-Status: Packet 1 accepted; Packet 2 next
+Status: Packet 2 accepted; Packet 3 next
 
 ## Objective
 
@@ -285,6 +285,10 @@ pool, transactions, codecs, and any future dialect interface remain private.
   ID filters, returned entries, CAS addressing, and final ordering all use that
   encoding. Reject unsupported or over-bound encodings before acquiring a
   connection; do not truncate.
+- **Accepted ID-order decision (Packet 2):** deterministic RDBMS ID/tie order
+  is the MySQL binary order of the canonical `slot_key` bytes. No separate
+  semantic slot-order column is introduced. Packet 3 must use exactly those
+  bytes for SQL ordering and continuation predicates.
 - Store records as deterministic Protobuf binary with unknown fields excluded,
   matching current Datastore behavior. Persisted corrupt/mismatched bytes yield
   one sanitized adapter decoding error.

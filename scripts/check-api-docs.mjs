@@ -169,8 +169,10 @@ const expectedDatastoreStorageExports = [
 const expectedRdbmsStorageExports = [
   "MysqlStorageConfigurationError",
   "MysqlStorageConnectionError",
+  "MysqlStorageDataError",
   "MysqlStorageFactory",
   "MysqlStorageOptions",
+  "MysqlStorageOperationError",
   "MysqlStorageSchemaError",
 ];
 const expectedTransportExports = [

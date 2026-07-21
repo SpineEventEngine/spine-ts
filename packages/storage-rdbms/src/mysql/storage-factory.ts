@@ -1,5 +1,12 @@
-import { createPool, type Pool, type PoolConnection, type RowDataPacket } from "mysql2/promise";
+import {
+  createPool,
+  type Pool,
+  type PoolConnection,
+  type ResultSetHeader,
+  type RowDataPacket,
+} from "mysql2/promise";
 import type { Message } from "@bufbuild/protobuf";
+import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   RecordStorage,
   StorageFactory,
@@ -9,15 +16,22 @@ import {
   type StorageContext,
 } from "@spine-ts/storage";
 
+import { CanonicalMysqlValue, SortableMysqlColumnValue } from "./value-codec.js";
+
 const recordsTable = "`spine_ts_records`";
 const columnsTable = "`spine_ts_columns`";
-const schemaVersion = 1;
+const schemaVersion = 3;
+const scopeKeyBytes = 512;
+const tenantKeyBytes = 255;
+const slotKeyBytes = 768;
+const columnNameBytes = 255;
+const valueDataBytes = 768;
 
 const createRecordsTable = `
 CREATE TABLE IF NOT EXISTS ${recordsTable} (
-  scope_key VARBINARY(768) NOT NULL,
-  tenant_key VARBINARY(768) NOT NULL,
-  slot_key VARBINARY(768) NOT NULL,
+  scope_key VARBINARY(${String(scopeKeyBytes)}) NOT NULL,
+  tenant_key VARBINARY(${String(tenantKeyBytes)}) NOT NULL,
+  slot_key VARBINARY(${String(slotKeyBytes)}) NOT NULL,
   payload MEDIUMBLOB NOT NULL,
   revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
   schema_version SMALLINT UNSIGNED NOT NULL DEFAULT ${String(schemaVersion)},
@@ -26,30 +40,44 @@ CREATE TABLE IF NOT EXISTS ${recordsTable} (
 
 const createColumnsTable = `
 CREATE TABLE IF NOT EXISTS ${columnsTable} (
-  scope_key VARBINARY(768) NOT NULL,
-  tenant_key VARBINARY(768) NOT NULL,
-  slot_key VARBINARY(768) NOT NULL,
-  column_name VARBINARY(768) NOT NULL,
+  scope_key VARBINARY(${String(scopeKeyBytes)}) NOT NULL,
+  tenant_key VARBINARY(${String(tenantKeyBytes)}) NOT NULL,
+  slot_key VARBINARY(${String(slotKeyBytes)}) NOT NULL,
+  column_name VARBINARY(${String(columnNameBytes)}) NOT NULL,
   value_kind TINYINT UNSIGNED NOT NULL,
-  value_data MEDIUMBLOB NULL,
+  value_data VARBINARY(${String(valueDataBytes)}) NOT NULL,
   PRIMARY KEY (scope_key, tenant_key, slot_key, column_name),
-  INDEX spine_ts_columns_lookup (scope_key, tenant_key, column_name, value_kind)
+  INDEX spine_ts_columns_lookup (scope_key, tenant_key, column_name, value_kind, value_data, slot_key),
+  CONSTRAINT spine_ts_columns_record_fk FOREIGN KEY (scope_key, tenant_key, slot_key)
+    REFERENCES ${recordsTable} (scope_key, tenant_key, slot_key) ON DELETE CASCADE
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`;
 
 const expectedColumns = new Map<string, string>([
-  ["spine_ts_records.scope_key", "varbinary(768)"],
-  ["spine_ts_records.tenant_key", "varbinary(768)"],
-  ["spine_ts_records.slot_key", "varbinary(768)"],
+  ["spine_ts_records.scope_key", `varbinary(${String(scopeKeyBytes)})`],
+  ["spine_ts_records.tenant_key", `varbinary(${String(tenantKeyBytes)})`],
+  ["spine_ts_records.slot_key", `varbinary(${String(slotKeyBytes)})`],
   ["spine_ts_records.payload", "mediumblob"],
   ["spine_ts_records.revision", "bigint unsigned"],
   ["spine_ts_records.schema_version", "smallint unsigned"],
-  ["spine_ts_columns.scope_key", "varbinary(768)"],
-  ["spine_ts_columns.tenant_key", "varbinary(768)"],
-  ["spine_ts_columns.slot_key", "varbinary(768)"],
-  ["spine_ts_columns.column_name", "varbinary(768)"],
+  ["spine_ts_columns.scope_key", `varbinary(${String(scopeKeyBytes)})`],
+  ["spine_ts_columns.tenant_key", `varbinary(${String(tenantKeyBytes)})`],
+  ["spine_ts_columns.slot_key", `varbinary(${String(slotKeyBytes)})`],
+  ["spine_ts_columns.column_name", `varbinary(${String(columnNameBytes)})`],
   ["spine_ts_columns.value_kind", "tinyint unsigned"],
-  ["spine_ts_columns.value_data", "mediumblob"],
+  ["spine_ts_columns.value_data", `varbinary(${String(valueDataBytes)})`],
 ]);
+
+const expectedIndexes = new Map<string, readonly string[]>([
+  ["spine_ts_records.PRIMARY", ["scope_key", "tenant_key", "slot_key"]],
+  ["spine_ts_columns.PRIMARY", ["scope_key", "tenant_key", "slot_key", "column_name"]],
+  [
+    "spine_ts_columns.spine_ts_columns_lookup",
+    ["scope_key", "tenant_key", "column_name", "value_kind", "value_data", "slot_key"],
+  ],
+]);
+
+const expectedForeignKey = ["scope_key", "tenant_key", "slot_key"] as const;
+const expectedNullability = "NO";
 
 /** Explicit connection and pool settings for the owned MySQL adapter pool. */
 export interface MysqlStorageOptions {
@@ -89,6 +117,22 @@ export class MysqlStorageSchemaError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "MysqlStorageSchemaError";
+  }
+}
+
+/** Thrown when durable MySQL record data cannot be decoded safely. */
+export class MysqlStorageDataError extends Error {
+  constructor() {
+    super("MySQL storage data could not be decoded.");
+    this.name = "MysqlStorageDataError";
+  }
+}
+
+/** Thrown when a record operation cannot complete without exposing provider details. */
+export class MysqlStorageOperationError extends Error {
+  constructor() {
+    super("MySQL storage record operation could not complete.");
+    this.name = "MysqlStorageOperationError";
   }
 }
 
@@ -148,7 +192,7 @@ export class MysqlStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    const handle = new MysqlRecordStorage(context, recordSpec);
+    const handle = new MysqlRecordStorage(context, recordSpec, this.#pool);
     this.#handles.add(handle);
     return handle;
   }
@@ -174,8 +218,38 @@ export class MysqlStorageFactory extends StorageFactory {
 }
 
 class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
-  protected deleteRecord(): Promise<boolean> {
-    return unavailable();
+  readonly #scope: Uint8Array;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly pool: Pool,
+  ) {
+    super(context, recordSpec);
+    this.#scope = CanonicalMysqlValue.encode(
+      [context.name, context.multitenant, recordSpec.schema.typeName],
+      scopeKeyBytes,
+    );
+  }
+
+  protected async deleteRecord(id: I): Promise<boolean> {
+    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const tenant = this.tenant();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute<ResultSetHeader>(
+        `DELETE FROM ${recordsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+        [this.#scope, tenant, slot],
+      );
+      await connection.commit();
+      return result.affectedRows === 1;
+    } catch {
+      await connection.rollback().catch(() => undefined);
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
   }
 
   protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
@@ -183,8 +257,29 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     return unavailable();
   }
 
-  protected readRecord(): Promise<R | undefined> {
-    return unavailable();
+  protected async readRecord(id: I): Promise<R | undefined> {
+    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const tenant = this.tenant();
+    const connection = await this.pool.getConnection();
+    try {
+      const [rows] = await connection.execute<PayloadRow[]>(
+        `SELECT payload FROM ${recordsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+        [this.#scope, tenant, slot],
+      );
+      const row = rows[0];
+      if (row === undefined) return undefined;
+      if (!(row.payload instanceof Uint8Array)) throw new MysqlStorageDataError();
+      try {
+        return fromBinary(this.recordSpec.schema, row.payload, { readUnknownFields: false });
+      } catch {
+        throw new MysqlStorageDataError();
+      }
+    } catch (error) {
+      if (error instanceof MysqlStorageDataError) throw error;
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
   }
 
   protected compareAndSetRecord(): Promise<boolean> {
@@ -195,8 +290,68 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     return unavailable();
   }
 
-  protected writeRecord(): Promise<void> {
-    return unavailable();
+  protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    const slot = CanonicalMysqlValue.encode(record.id, slotKeyBytes);
+    const payload = toBinary(this.recordSpec.schema, record.record, { writeUnknownFields: false });
+    const columns = [...record.columns].map(([name, value]) => ({
+      name: encodeColumnName(name),
+      value: encodeColumnValue(value),
+    }));
+    const tenant = this.tenant();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `INSERT INTO ${recordsTable} (scope_key, tenant_key, slot_key, payload)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE payload = VALUES(payload), revision = revision + 1`,
+        [this.#scope, tenant, slot, payload],
+      );
+      await connection.execute(
+        `DELETE FROM ${columnsTable} WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?`,
+        [this.#scope, tenant, slot],
+      );
+      for (const column of columns) {
+        await connection.execute(
+          `INSERT INTO ${columnsTable} (scope_key, tenant_key, slot_key, column_name, value_kind, value_data)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [this.#scope, tenant, slot, column.name, column.value.kind, column.value.data],
+        );
+      }
+      await connection.commit();
+    } catch {
+      await connection.rollback().catch(() => undefined);
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
+  }
+
+  private tenant(): Uint8Array {
+    if (!this.context.multitenant) return CanonicalMysqlValue.encode(null, tenantKeyBytes);
+    const tenantId = this.context.tenantId;
+    if (tenantId === undefined || tenantId.trim().length === 0) {
+      throw new MysqlStorageConfigurationError("Multitenant storage requires context.tenantId.");
+    }
+    return CanonicalMysqlValue.encode(tenantId, tenantKeyBytes);
+  }
+}
+
+interface PayloadRow extends RowDataPacket {
+  readonly payload: Uint8Array;
+}
+
+function encodeColumnName(name: string): Uint8Array {
+  if (name.trim().length === 0)
+    throw new MysqlStorageConfigurationError("MySQL record column name must not be blank.");
+  return CanonicalMysqlValue.encode(name, columnNameBytes);
+}
+
+function encodeColumnValue(value: unknown): { readonly data: Uint8Array; readonly kind: number } {
+  try {
+    return SortableMysqlColumnValue.encode(value);
+  } catch {
+    throw new MysqlStorageConfigurationError("MySQL record column has an unsupported value.");
   }
 }
 
@@ -240,7 +395,8 @@ function validateOptions(options: MysqlStorageOptions): URL {
 async function verifySchema(connection: PoolConnection): Promise<void> {
   const [rows] = await connection.query<SchemaColumn[]>(
     `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name,
-            COLUMN_TYPE AS column_type, COLUMN_DEFAULT AS column_default
+            COLUMN_TYPE AS column_type, COLUMN_DEFAULT AS column_default,
+            IS_NULLABLE AS is_nullable
      FROM information_schema.columns
      WHERE table_schema = DATABASE()
        AND table_name IN ('spine_ts_records', 'spine_ts_columns')`,
@@ -248,7 +404,8 @@ async function verifySchema(connection: PoolConnection): Promise<void> {
   const actualColumns = new Map(rows.map((row) => [`${row.table_name}.${row.column_name}`, row]));
 
   for (const [column, expectedType] of expectedColumns) {
-    if (actualColumns.get(column)?.column_type !== expectedType) {
+    const actual = actualColumns.get(column);
+    if (actual?.column_type !== expectedType || actual.is_nullable !== expectedNullability) {
       throw new MysqlStorageSchemaError(`MySQL adapter schema is incompatible at ${column}.`);
     }
   }
@@ -269,6 +426,77 @@ async function verifySchema(connection: PoolConnection): Promise<void> {
   if (tables.length !== 2 || tables.some((table) => table.engine?.toLowerCase() !== "innodb")) {
     throw new MysqlStorageSchemaError("MySQL adapter tables must use InnoDB.");
   }
+  await verifyIndexes(connection);
+  await verifyForeignKey(connection);
+}
+
+async function verifyIndexes(connection: PoolConnection): Promise<void> {
+  const [rows] = await connection.query<SchemaIndex[]>(
+    `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name,
+            SEQ_IN_INDEX AS seq_in_index, COLUMN_NAME AS column_name
+     FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name IN ('spine_ts_records', 'spine_ts_columns')
+     ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
+  );
+  const actualIndexes = new Map<string, string[]>();
+  for (const row of rows) {
+    const key = `${row.table_name}.${row.index_name}`;
+    const columns = actualIndexes.get(key) ?? [];
+    if (row.seq_in_index !== columns.length + 1) {
+      throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${key}.`);
+    }
+    columns.push(row.column_name);
+    actualIndexes.set(key, columns);
+  }
+  if (actualIndexes.size !== expectedIndexes.size) {
+    throw new MysqlStorageSchemaError("MySQL adapter schema has unexpected indexes.");
+  }
+  for (const [index, expectedColumnsForIndex] of expectedIndexes) {
+    if (!sameColumns(actualIndexes.get(index), expectedColumnsForIndex)) {
+      throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${index}.`);
+    }
+  }
+}
+
+async function verifyForeignKey(connection: PoolConnection): Promise<void> {
+  const [rows] = await connection.query<SchemaForeignKey[]>(
+    `SELECT kcu.TABLE_NAME AS table_name, kcu.CONSTRAINT_NAME AS constraint_name,
+            kcu.ORDINAL_POSITION AS ordinal_position, kcu.COLUMN_NAME AS column_name,
+            kcu.REFERENCED_TABLE_NAME AS referenced_table_name,
+            kcu.REFERENCED_COLUMN_NAME AS referenced_column_name, rc.DELETE_RULE AS delete_rule
+     FROM information_schema.key_column_usage AS kcu
+     INNER JOIN information_schema.referential_constraints AS rc
+       ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+      AND rc.TABLE_NAME = kcu.TABLE_NAME
+      AND rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+     WHERE kcu.CONSTRAINT_SCHEMA = DATABASE()
+       AND kcu.TABLE_NAME = 'spine_ts_columns'
+       AND kcu.CONSTRAINT_NAME = 'spine_ts_columns_record_fk'
+     ORDER BY kcu.ORDINAL_POSITION`,
+  );
+  if (
+    rows.length !== expectedForeignKey.length ||
+    rows.some(
+      (row, index) =>
+        row.table_name !== "spine_ts_columns" ||
+        row.constraint_name !== "spine_ts_columns_record_fk" ||
+        row.ordinal_position !== index + 1 ||
+        row.column_name !== expectedForeignKey[index] ||
+        row.referenced_table_name !== "spine_ts_records" ||
+        row.referenced_column_name !== expectedForeignKey[index] ||
+        row.delete_rule.toUpperCase() !== "CASCADE",
+    )
+  ) {
+    throw new MysqlStorageSchemaError("MySQL adapter foreign key is incompatible.");
+  }
+}
+
+function sameColumns(actual: readonly string[] | undefined, expected: readonly string[]): boolean {
+  return (
+    actual?.length === expected.length &&
+    actual.every((column, index) => column === expected[index])
+  );
 }
 
 interface SchemaColumn extends RowDataPacket {
@@ -276,11 +504,29 @@ interface SchemaColumn extends RowDataPacket {
   readonly column_name: string;
   readonly column_type: string;
   readonly column_default: string | null;
+  readonly is_nullable: string;
 }
 
 interface SchemaTable extends RowDataPacket {
   readonly table_name: string;
   readonly engine: string | null;
+}
+
+interface SchemaIndex extends RowDataPacket {
+  readonly table_name: string;
+  readonly index_name: string;
+  readonly seq_in_index: number;
+  readonly column_name: string;
+}
+
+interface SchemaForeignKey extends RowDataPacket {
+  readonly table_name: string;
+  readonly constraint_name: string;
+  readonly ordinal_position: number;
+  readonly column_name: string;
+  readonly referenced_table_name: string;
+  readonly referenced_column_name: string;
+  readonly delete_rule: string;
 }
 
 function unavailable<T>(): Promise<T> {
