@@ -166,6 +166,13 @@ const expectedDatastoreStorageExports = [
   "DatastoreStorageFactoryInput",
   "DatastoreStorageOptions",
 ];
+const expectedRdbmsStorageExports = [
+  "MysqlStorageConfigurationError",
+  "MysqlStorageConnectionError",
+  "MysqlStorageFactory",
+  "MysqlStorageOptions",
+  "MysqlStorageSchemaError",
+];
 const expectedTransportExports = [
   "AsyncCloseable",
   "PublishTransportHandler",
@@ -410,6 +417,7 @@ const expectedServerExports = [
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
+const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const zeroMqIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
@@ -450,6 +458,7 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
   "packages/storage-datastore/src",
 );
+const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const zeroMqModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src/zeromq");
 
@@ -752,6 +761,7 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
+const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
@@ -778,6 +788,15 @@ const missingDeclaredDatastoreStorageExports = expectedDatastoreStorageExports.f
 );
 const unexpectedDatastoreStorageExports = declaredDatastoreStorageExports.filter(
   (name) => !expectedDatastoreStorageExports.includes(name),
+);
+const missingRdbmsStorageExports = expectedRdbmsStorageExports.filter(
+  (name) => !rdbmsStorageModuleNames.has(name),
+);
+const missingDeclaredRdbmsStorageExports = expectedRdbmsStorageExports.filter(
+  (name) => !declaredRdbmsStorageExports.includes(name),
+);
+const unexpectedRdbmsStorageExports = declaredRdbmsStorageExports.filter(
+  (name) => !expectedRdbmsStorageExports.includes(name),
 );
 const missingTestingExports = expectedTestingExports.filter(
   (name) => !testingModuleNames.has(name),
@@ -874,6 +893,30 @@ if (unexpectedDatastoreStorageExports.length > 0) {
   console.error(
     "@spine-ts/storage-datastore root exports changed without updating docs expectations: " +
       unexpectedDatastoreStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingRdbmsStorageExports.length > 0) {
+  console.error(
+    "TypeDoc JSON is missing expected @spine-ts/storage-rdbms exports: " +
+      missingRdbmsStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredRdbmsStorageExports.length > 0) {
+  console.error(
+    "@spine-ts/storage-rdbms root is missing expected exports: " +
+      missingDeclaredRdbmsStorageExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedRdbmsStorageExports.length > 0) {
+  console.error(
+    "@spine-ts/storage-rdbms root exports changed without updating docs expectations: " +
+      unexpectedRdbmsStorageExports.join(", "),
   );
   process.exit(1);
 }

@@ -1,0 +1,25 @@
+{
+  "name": "@spine-ts/storage-rdbms",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MySQL-backed implementation of the Spine TS storage port.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "test:mysql": "node scripts/mysql.mjs&&pnpm exec vitest --root ../.. run test/mysql-integration.test.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-ts/storage": "workspace:*",
+    "mysql2": "3.23.1"
+  }
+}

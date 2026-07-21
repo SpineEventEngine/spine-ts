@@ -4505,3 +4505,47 @@ Consequences:
   must be resolved.
 - Final release-wide security review, worktree safety, and remote
   synchronization remain unchanged.
+
+## D-0098: Use Direct mysql2 with an Explicit External-URL Acceptance Harness
+
+Status: Accepted
+
+Date: 2026-07-21
+
+Task: `T-0051`, Packet 1
+
+Decision:
+
+- Add `mysql2@3.23.1` as the sole runtime database dependency for
+  `@spine-ts/storage-rdbms`. Use its Promise pool and bound parameters behind
+  private adapter code; its pool, connection, SQL, and type surface are not
+  package-root exports.
+- Keep public configuration driver-neutral: an explicit MySQL URL, bounded pool
+  limits, and optional CA/certificate/key/reject-unauthorized TLS material.
+  URL query/hash parameters are rejected rather than silently treated as driver
+  configuration.
+- Do not add Kysely or another query builder. Kysely `0.29.4` supports MySQL
+  and PostgreSQL, but Packet 1 has a fixed normalized schema and dynamic SQL
+  construction would be private/closed; its public type value would not offset
+  a second abstraction and dependency. Reconsider only when a second concrete
+  adapter proves a shared private compiler seam.
+- Support MySQL `8.4` as the initial production/LTS floor. The recorded
+  acceptance image is the Docker Official Image `mysql:8.4.10`, digest
+  `sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d`.
+- Use an explicit `SPINE_TS_MYSQL_URL` opt-in test harness. It neither starts
+  Docker nor falls back to a fake or another URL. It creates and removes only
+  the two fixed test tables in the supplied disposable database.
+
+Evidence and consequences:
+
+- Current npm registry metadata records mysql2 `3.23.1` as stable, with Node
+  `>=8`, Promise/pool support, prepared statements, and bundled TypeScript
+  declarations. The workspace requires Node `>=24`.
+- MySQL's official lifecycle information identifies 8.4 as an LTS,
+  production-grade series. The direct driver keeps pool ownership, DDL,
+  InnoDB checks, binary comparison, and later transaction invariants local to
+  one module instead of leaking a speculative generic SQL seam.
+- The harness is real acceptance evidence only for its supplied MySQL/image
+  combination. It is intentionally not a Testcontainers dependency: Docker
+  daemon availability is environmental, and silent container startup/fallback
+  would weaken credential and lifecycle ownership boundaries.
