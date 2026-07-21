@@ -361,4 +361,170 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       await pool.end();
     }
   });
+
+  it("pushes typed AND/IN filters, deterministic ordering, continuation, and windows into MySQL", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const storage = factory.createRecordStorage(
+      { name: "Queries", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record: StringValue) => `slot-${record.value}`,
+        columns: [
+          new RecordColumn<StringValue, string>(
+            "state",
+            (record) => record.value.split(":")[0] ?? "",
+          ),
+          new RecordColumn<StringValue, number>("priority", (record) =>
+            Number(record.value.split(":")[1]),
+          ),
+          new RecordColumn<StringValue, boolean | string>("mixed", (record) =>
+            record.value.startsWith("boolean:") ? true : "open",
+          ),
+        ],
+      }),
+    );
+    for (const value of ["open:2", "open:1", "closed:0", "boolean:3"]) {
+      await storage.write(create(StringValueSchema, { value }));
+    }
+
+    const first = await storage.queryEntries({
+      filters: [
+        { column: "state", value: "open" },
+        { column: "mixed", value: ["open", true] },
+      ],
+      sort: [{ field: "priority", direction: "asc" }],
+      limit: 1,
+    });
+    const second = await storage.queryEntries({
+      filters: [
+        { column: "state", value: "open" },
+        { column: "mixed", value: ["open", true] },
+      ],
+      sort: [{ field: "priority", direction: "asc" }],
+      after: {
+        values: [{ field: "priority", value: 1 }],
+        id: first[0]?.id ?? "slot-open:1",
+      },
+      offset: 0,
+      limit: 1,
+    });
+
+    expect(first).toMatchObject([{ id: "slot-open:1", record: { value: "open:1" } }]);
+    expect(second).toMatchObject([{ id: "slot-open:2", record: { value: "open:2" } }]);
+    const mixedFirst = await storage.queryEntries({
+      filters: [{ column: "mixed", value: [true, "open"] }],
+      sort: [{ field: "mixed", direction: "asc" }],
+      limit: 1,
+    });
+    const mixedSecond = await storage.queryEntries({
+      filters: [{ column: "mixed", value: [true, "open"] }],
+      sort: [{ field: "mixed", direction: "asc" }],
+      after: { values: [{ field: "mixed", value: true }], id: "slot-boolean:3" },
+      limit: 1,
+    });
+    const unsorted = await storage.queryEntries({ limit: 1 });
+    const unsortedNext = await storage.queryEntries({
+      after: { values: [], id: unsorted[0]?.id ?? "slot-boolean:3" },
+      limit: 1,
+    });
+    expect(mixedFirst).toMatchObject([{ id: "slot-boolean:3" }]);
+    expect(mixedSecond).toHaveLength(1);
+    expect(mixedSecond[0]?.id).not.toBe("slot-boolean:3");
+    await expect(
+      storage.query({
+        filters: [
+          { column: "state", value: "open" },
+          { column: "state", value: "closed" },
+        ],
+      }),
+    ).resolves.toEqual([]);
+    expect(unsortedNext[0]?.id).not.toBe(unsorted[0]?.id);
+    await expect(storage.query({ filters: [{ column: "missing", value: "x" }] })).resolves.toEqual(
+      [],
+    );
+    await expect(
+      storage.query({ filters: [{ column: "state.name", value: "open" }] }),
+    ).rejects.toThrow("materialized column or id");
+
+    const pool = createPool({ uri: url });
+    try {
+      const [plan] = await pool.query<{ key: string | null }[]>(
+        `EXPLAIN SELECT slot_key FROM \`spine_ts_columns\`
+         WHERE scope_key = ? AND tenant_key = ? AND column_name = ? AND value_kind = ? AND value_data = ?
+         ORDER BY slot_key ASC`,
+        [
+          CanonicalMysqlValue.encode(["Queries", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValue.encode(null, 255),
+          CanonicalMysqlValue.encode("state", 255),
+          SortableMysqlColumnValue.encode("open").kind,
+          SortableMysqlColumnValue.encode("open").data,
+        ],
+      );
+      expect(plan.some((row) => row.key === "spine_ts_columns_lookup")).toBe(true);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("orders complete tuples, continues descending pages, windows in SQL, and isolates query tenants", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const spec = new RecordSpec({
+      schema: StringValueSchema,
+      extractId: (record: StringValue) => `slot-${record.value}`,
+      columns: [
+        new RecordColumn<StringValue, string>(
+          "group",
+          (record) => record.value.split(":")[0] ?? "",
+        ),
+        new RecordColumn<StringValue, number>("rank", (record) =>
+          Number(record.value.split(":")[1]),
+        ),
+      ],
+    });
+    const single = factory.createRecordStorage({ name: "TupleQueries", multitenant: false }, spec);
+    for (const value of ["A:2:beta", "A:2:alpha", "A:1:z", "B:1:a"]) {
+      await single.write(create(StringValueSchema, { value }));
+    }
+    const tupleSort = [
+      { field: "group", direction: "asc" as const },
+      { field: "rank", direction: "desc" as const },
+    ];
+    const ordered = await single.queryEntries({ sort: tupleSort });
+    const page = await single.queryEntries({ sort: tupleSort, offset: 1, limit: 2 });
+    const descending = await single.queryEntries({
+      sort: [{ field: "rank", direction: "desc" }],
+      after: { values: [{ field: "rank", value: 2 }], id: "slot-A:2:beta" },
+    });
+
+    expect(ordered.map((entry) => entry.id)).toEqual([
+      "slot-A:2:alpha",
+      "slot-A:2:beta",
+      "slot-A:1:z",
+      "slot-B:1:a",
+    ]);
+    expect(page.map((entry) => entry.id)).toEqual(["slot-A:2:beta", "slot-A:1:z"]);
+    expect(descending.map((entry) => entry.id)).toEqual(["slot-A:1:z", "slot-B:1:a"]);
+
+    const mutableTenant = { name: "TenantQueries", multitenant: true, tenantId: "a" };
+    const tenantStorage = factory.createRecordStorage(
+      mutableTenant,
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: () => "shared-slot",
+        columns: [new RecordColumn<StringValue, number>("rank", () => 1)],
+      }),
+    );
+    await tenantStorage.write(create(StringValueSchema, { value: "tenant-a-payload" }));
+    mutableTenant.tenantId = "b";
+    await tenantStorage.write(create(StringValueSchema, { value: "tenant-b-payload" }));
+    await expect(
+      tenantStorage.queryEntries({ filters: [{ column: "rank", value: 1 }] }),
+    ).resolves.toMatchObject([{ id: "shared-slot", record: { value: "tenant-b-payload" } }]);
+    mutableTenant.tenantId = "a";
+    await expect(
+      tenantStorage.queryEntries({ filters: [{ column: "rank", value: 1 }] }),
+    ).resolves.toMatchObject([{ id: "shared-slot", record: { value: "tenant-a-payload" } }]);
+  });
 });

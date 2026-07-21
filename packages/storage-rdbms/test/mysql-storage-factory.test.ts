@@ -3,6 +3,8 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-ts/storage";
 
+import { CanonicalMysqlValue } from "../src/mysql/value-codec.js";
+
 const calls: { readonly sql: string; readonly values?: readonly unknown[] }[] = [];
 let endCalls = 0;
 let poolOptions: unknown;
@@ -36,12 +38,16 @@ vi.mock("mysql2/promise", () => ({
             if (sql.includes("information_schema.key_column_usage")) {
               return [foreignKeyRows, []];
             }
+            if (sql.includes("SELECT r.slot_key, r.payload")) return [operationRows, []];
             return [[], []];
           },
-          async execute(sql: string) {
+          async execute(sql: string, values?: readonly unknown[]) {
             await Promise.resolve();
+            calls.push({ sql, values });
             if (operationError !== undefined) throw operationError;
-            if (sql.includes("SELECT payload")) return [operationRows, []];
+            if (sql.includes("SELECT payload")) {
+              return [operationRows, []];
+            }
             return [{ affectedRows: 1 }, []];
           },
           beginTransaction() {
@@ -334,6 +340,55 @@ describe("MysqlStorageFactory", () => {
     await expect(
       oversizedValueStorage.write(create(StringValueSchema, { value: "slot" })),
     ).rejects.toBeInstanceOf(MysqlStorageConfigurationError);
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("pushes scoped typed ID and column equality predicates into one bound SQL query", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_3",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [new RecordColumn<StringValue, string>("state", () => "open")],
+      }),
+    );
+
+    operationRows = [];
+    await expect(
+      storage.queryEntries({ ids: ["slot-1"], filters: [{ column: "state", value: "open" }] }),
+    ).resolves.toEqual([]);
+
+    const query = calls.find(({ sql }) => sql.includes("SELECT r.slot_key, r.payload"));
+    expect(query?.sql).toContain("INNER JOIN `spine_ts_columns` AS f0");
+    expect(query?.sql).toContain("r.slot_key IN (?)");
+    expect(query?.sql).toContain("f0.value_kind = ? AND f0.value_data IN (?)");
+    expect(query?.sql).toContain("ORDER BY r.slot_key ASC");
+    expect(query?.values).toHaveLength(6);
+    expect(query?.values?.[0]).toEqual(CanonicalMysqlValue.encode("state", 255));
+    expect(query?.values?.[3]).toEqual(
+      CanonicalMysqlValue.encode(["Tasks", false, StringValueSchema.typeName], 512),
+    );
+    expect(query?.values?.[5]).toEqual(CanonicalMysqlValue.encode("slot-1", 768));
+    await factory.close();
+  });
+
+  it("short-circuits an empty column IN filter before acquiring a pool connection", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_3",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+    connectionAcquires = 0;
+
+    await expect(storage.query({ filters: [{ column: "state", value: [] }] })).resolves.toEqual([]);
     expect(connectionAcquires).toBe(0);
     await factory.close();
   });

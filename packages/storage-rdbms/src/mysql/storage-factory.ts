@@ -252,9 +252,23 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     }
   }
 
-  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
-    void query;
-    return unavailable();
+  protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
+    const tenant = this.tenant();
+    const compiled = compileQuery(query, this.#scope, tenant);
+    if (compiled === undefined) return [];
+    const connection = await this.pool.getConnection();
+    try {
+      const [rows] = await connection.query<QueryRow[]>(
+        compiled.sql,
+        compiled.values as (Uint8Array | number)[],
+      );
+      return rows.map((row) => decodeQueryRow(this.recordSpec, row));
+    } catch (error) {
+      if (error instanceof MysqlStorageDataError) throw error;
+      throw new MysqlStorageOperationError();
+    } finally {
+      connection.release();
+    }
   }
 
   protected async readRecord(id: I): Promise<R | undefined> {
@@ -341,6 +355,10 @@ interface PayloadRow extends RowDataPacket {
   readonly payload: Uint8Array;
 }
 
+interface QueryRow extends PayloadRow {
+  readonly slot_key: Uint8Array;
+}
+
 function encodeColumnName(name: string): Uint8Array {
   if (name.trim().length === 0)
     throw new MysqlStorageConfigurationError("MySQL record column name must not be blank.");
@@ -352,6 +370,236 @@ function encodeColumnValue(value: unknown): { readonly data: Uint8Array; readonl
     return SortableMysqlColumnValue.encode(value);
   } catch {
     throw new MysqlStorageConfigurationError("MySQL record column has an unsupported value.");
+  }
+}
+
+function compileQuery<I>(
+  query: RecordQuery<I>,
+  scope: Uint8Array,
+  tenant: Uint8Array,
+): CompiledQuery | undefined {
+  const filters = query.filters ?? [];
+  const filterValues = filters.map((filter) => ({
+    column: queryColumn(filter.column),
+    values: Array.isArray(filter.value) ? filter.value : [filter.value],
+  }));
+  if (filterValues.some((filter) => filter.values.length === 0)) return undefined;
+
+  const ids = query.ids?.map((id) => CanonicalMysqlValue.encode(id, slotKeyBytes)) ?? [];
+  const sorts: { readonly column: string; readonly direction: "ASC" | "DESC" }[] = (
+    query.sort ?? []
+  ).map((order) => ({
+    column: queryColumn(order.field),
+    direction: order.direction === "desc" ? "DESC" : "ASC",
+  }));
+  const joins: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [index, filter] of filterValues.entries()) {
+    if (filter.column === "id") continue;
+    const alias = `f${String(index)}`;
+    const encoded = uniqueEncoded(filter.values.map(encodeColumnValue));
+    joins.push(columnFilterJoin(alias, filter.column, encoded));
+    values.push(...columnFilterValues(filter.column, encoded));
+  }
+  for (const [index, sort] of sorts.entries()) {
+    if (sort.column === "id") continue;
+    const alias = `s${String(index)}`;
+    joins.push(
+      `INNER JOIN ${columnsTable} AS ${alias}
+         ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
+        AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?`,
+    );
+    values.push(encodeColumnName(sort.column));
+  }
+
+  const where = ["r.scope_key = ?", "r.tenant_key = ?"];
+  const prefixValues: unknown[] = [];
+  if (ids.length > 0) {
+    where.push(`r.slot_key IN (${placeholders(ids.length)})`);
+    prefixValues.push(...ids);
+  }
+  for (const [index, filter] of filterValues.entries()) {
+    if (filter.column !== "id") continue;
+    const encoded = filter.values.map((value) => CanonicalMysqlValue.encode(value, slotKeyBytes));
+    where.push(`r.slot_key IN (${placeholders(encoded.length)})`);
+    prefixValues.push(...encoded);
+    void index;
+  }
+  const continuation = compileContinuation(query, sorts);
+  if (continuation !== undefined) {
+    where.push(continuation.sql);
+    prefixValues.push(...continuation.values);
+  }
+  const order = [
+    ...sorts.map((sort, index) =>
+      sort.column === "id"
+        ? `r.slot_key ${sort.direction}`
+        : `s${String(index)}.value_kind ${sort.direction}, s${String(index)}.value_data ${sort.direction}`,
+    ),
+    "r.slot_key ASC",
+  ];
+  const suffixValues: unknown[] = [];
+  let window = "";
+  if (query.limit !== undefined) {
+    window += " LIMIT ?";
+    suffixValues.push(query.limit);
+    if (query.offset !== undefined) {
+      window += " OFFSET ?";
+      suffixValues.push(query.offset);
+    }
+  } else if (query.offset !== undefined) {
+    window = " LIMIT 18446744073709551615 OFFSET ?";
+    suffixValues.push(query.offset);
+  }
+  return {
+    sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
+${joins.join("\n")}
+WHERE ${where.join(" AND ")}
+ORDER BY ${order.join(", ")}${window}`,
+    values: [...values, scope, tenant, ...prefixValues, ...suffixValues],
+  };
+}
+
+interface CompiledQuery {
+  readonly sql: string;
+  readonly values: readonly unknown[];
+}
+
+function queryColumn(column: string): string {
+  if (column === "id") return column;
+  if (column.trim().length === 0 || column.includes(".")) {
+    throw new MysqlStorageConfigurationError("MySQL queries require a materialized column or id.");
+  }
+  encodeColumnName(column);
+  return column;
+}
+
+function columnFilterJoin(
+  alias: string,
+  column: string,
+  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
+): string {
+  const groups = groupEncoded(values);
+  return `INNER JOIN ${columnsTable} AS ${alias}
+     ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
+    AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?
+    AND (${groups
+      .map(
+        (group) =>
+          `${alias}.value_kind = ? AND ${alias}.value_data IN (${placeholders(group.length)})`,
+      )
+      .join(" OR ")})`;
+}
+
+function columnFilterValues(
+  column: string,
+  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
+): readonly unknown[] {
+  return [
+    encodeColumnName(column),
+    ...groupEncoded(values).flatMap((group) => [
+      group[0]?.kind,
+      ...group.map((value) => value.data),
+    ]),
+  ];
+}
+
+function compileContinuation<I>(
+  query: RecordQuery<I>,
+  sorts: readonly { readonly column: string; readonly direction: "ASC" | "DESC" }[],
+): CompiledQuery | undefined {
+  const after = query.after;
+  if (after === undefined) return undefined;
+  const comparisons: string[] = [];
+  const values: unknown[] = [];
+  const equal: string[] = [];
+  for (const [index, sort] of sorts.entries()) {
+    const value = after.values[index]?.value;
+    const before = equalValues(sorts.slice(0, index), after);
+    if (sort.column === "id") {
+      comparisons.push(
+        [...equal, `r.slot_key ${sort.direction === "ASC" ? ">" : "<"} ?`].join(" AND "),
+      );
+      values.push(...before, CanonicalMysqlValue.encode(value, slotKeyBytes));
+      equal.push("r.slot_key = ?");
+      continue;
+    }
+    const encoded = encodeColumnValue(value);
+    const alias = `s${String(index)}`;
+    const comparison = sort.direction === "ASC" ? ">" : "<";
+    comparisons.push(
+      [
+        ...equal,
+        `(${alias}.value_kind ${comparison} ? OR (${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?))`,
+      ].join(" AND "),
+    );
+    values.push(...before, encoded.kind, encoded.kind, encoded.data);
+    equal.push(`${alias}.value_kind = ? AND ${alias}.value_data = ?`);
+  }
+  comparisons.push([...equal, "r.slot_key > ?"].join(" AND "));
+  values.push(...equalValues(sorts, after), CanonicalMysqlValue.encode(after.id, slotKeyBytes));
+  return { sql: `(${comparisons.map((comparison) => `(${comparison})`).join(" OR ")})`, values };
+}
+
+function equalValues(
+  sorts: readonly { readonly column: string }[],
+  after: NonNullable<RecordQuery<unknown>["after"]>,
+): readonly unknown[] {
+  return sorts.flatMap((sort, index) => {
+    const value = after.values[index]?.value;
+    if (sort.column === "id") return [CanonicalMysqlValue.encode(value, slotKeyBytes)];
+    const encoded = encodeColumnValue(value);
+    return [encoded.kind, encoded.data];
+  });
+}
+
+function placeholders(count: number): string {
+  return Array.from({ length: count }, () => "?").join(", ");
+}
+
+function uniqueEncoded(
+  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
+): readonly { readonly data: Uint8Array; readonly kind: number }[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = `${String(value.kind)}:${bytesKey(value.data)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function groupEncoded(
+  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
+): readonly (readonly { readonly data: Uint8Array; readonly kind: number }[])[] {
+  const groups = new Map<number, { readonly data: Uint8Array; readonly kind: number }[]>();
+  for (const value of values) {
+    const group = groups.get(value.kind) ?? [];
+    group.push(value);
+    groups.set(value.kind, group);
+  }
+  return [...groups.values()];
+}
+
+function bytesKey(value: Uint8Array): string {
+  return [...value].join(",");
+}
+
+function decodeQueryRow<I, R extends Message>(
+  spec: RecordSpec<I, R>,
+  row: QueryRow,
+): RecordEntry<I, R> {
+  if (!(row.slot_key instanceof Uint8Array) || !(row.payload instanceof Uint8Array)) {
+    throw new MysqlStorageDataError();
+  }
+  try {
+    return {
+      id: CanonicalMysqlValue.decode(row.slot_key) as I,
+      record: fromBinary(spec.schema, row.payload, { readUnknownFields: false }),
+    };
+  } catch {
+    throw new MysqlStorageDataError();
   }
 }
 
