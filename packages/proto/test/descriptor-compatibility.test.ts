@@ -90,7 +90,9 @@ describe("frozen Spine descriptor compatibility", () => {
       location: [{ path: [1], span: [0, 0, 0] }],
     });
 
-    expect(compareNormalizedDescriptorSets(descriptorSet, withSourceInfo)).toEqual({ equal: true });
+    expect(compareNormalizedDescriptorSets(descriptorSet, withSourceInfo)).toEqual({
+      equal: true,
+    });
     expect(normalizeDescriptorSet(descriptorSet)).toEqual(normalizeDescriptorSet(withSourceInfo));
   });
 
@@ -103,41 +105,112 @@ describe("frozen Spine descriptor compatibility", () => {
       ["field name", (set) => (scalarCommandField(set).name = "changed")],
       ["field number", (set) => (scalarCommandField(set).number += 100)],
       ["scalar field type", (set) => (scalarCommandField(set).type = 8)],
-      ["referenced field type name", (set) => (typedCommandField(set).typeName = ".spine.changed.Message")],
+      [
+        "referenced field type name",
+        (set) => (typedCommandField(set).typeName = ".spine.changed.Message"),
+      ],
       ["field label", (set) => (scalarCommandField(set).label = 3)],
-      ["oneof", (set) => (requireFirst(requireMessage(requireFile(set, "spine/core/tenant_id.proto"), "TenantId").oneofDecl, "TenantId oneof").name = "changed")],
-      ["proto3 optional", (set) => (scalarCommandField(set).proto3Optional = !scalarCommandField(set).proto3Optional)],
-      ["map-entry structure", (set) => {
-        const mapEntry = requireFirst(
-          requireMessage(requireFile(set, "spine/core/command.proto"), "CommandContext").nestedType,
-          "CommandContext map-entry message",
-        );
-        if (mapEntry.options === undefined) {
-          throw new Error("Expected map-entry options.");
-        }
-        mapEntry.options.mapEntry = !mapEntry.options.mapEntry;
-      }],
-      ["packed option", (set) => {
-        scalarCommandField(set).options = fromBinary(FieldOptionsSchema, Buffer.from([0x10, 0x01]));
-      }],
+      [
+        "oneof",
+        (set) =>
+          (requireFirst(
+            requireMessage(requireFile(set, "spine/core/tenant_id.proto"), "TenantId").oneofDecl,
+            "TenantId oneof",
+          ).name = "changed"),
+      ],
+      [
+        "proto3 optional",
+        (set) => (scalarCommandField(set).proto3Optional = !scalarCommandField(set).proto3Optional),
+      ],
+      [
+        "map-entry structure",
+        (set) => {
+          const mapEntry = requireFirst(
+            requireMessage(requireFile(set, "spine/core/command.proto"), "CommandContext")
+              .nestedType,
+            "CommandContext map-entry message",
+          );
+          if (mapEntry.options === undefined) {
+            throw new Error("Expected map-entry options.");
+          }
+          mapEntry.options.mapEntry = !mapEntry.options.mapEntry;
+        },
+      ],
+      [
+        "packed option",
+        (set) => {
+          scalarCommandField(set).options = fromBinary(
+            FieldOptionsSchema,
+            Buffer.from([0x10, 0x01]),
+          );
+        },
+      ],
       ["default option", (set) => (scalarCommandField(set).defaultValue = "changed")],
       ["JSON name", (set) => (scalarCommandField(set).jsonName = "changedName")],
-      ["enum name", (set) => (requireFirst(requireFile(set, "spine/core/command.proto").enumType, "command enum").name = "Changed")],
-      ["message extension range", (set) => (requireFirst(requireMessage(requireFile(set, "google/protobuf/descriptor.proto"), "FileDescriptorSet").extensionRange, "message extension range").start += 1)],
-      ["extension declaration", (set) => (requireFirst(requireFile(set, "spine/options.proto").extension, "Spine option extension").name = "changed")],
-      ["custom option bytes", (set) => (requireFirst(set.file, "file").options = fromBinary(FileOptionsSchema, Buffer.from([0x88, 0xb5, 0x18, 0x01])))],
-      ["service name", (set) => (requireFirst(requireFile(set, "spine/client/command_service.proto").service, "CommandService").name = "Changed")],
+      [
+        "enum name",
+        (set) =>
+          (requireFirst(
+            requireFile(set, "spine/core/command.proto").enumType,
+            "command enum",
+          ).name = "Changed"),
+      ],
+      [
+        "message extension range",
+        (set) =>
+          (requireFirst(
+            requireMessage(
+              requireFile(set, "google/protobuf/descriptor.proto"),
+              "FileDescriptorSet",
+            ).extensionRange,
+            "message extension range",
+          ).start += 1),
+      ],
+      [
+        "extension declaration",
+        (set) =>
+          (requireFirst(
+            requireFile(set, "spine/options.proto").extension,
+            "Spine option extension",
+          ).name = "changed"),
+      ],
+      [
+        "custom option bytes",
+        (set) =>
+          (requireFirst(set.file, "file").options = fromBinary(
+            FileOptionsSchema,
+            Buffer.from([0x88, 0xb5, 0x18, 0x01]),
+          )),
+      ],
+      [
+        "service name",
+        (set) =>
+          (requireFirst(
+            requireFile(set, "spine/client/command_service.proto").service,
+            "CommandService",
+          ).name = "Changed"),
+      ],
       ["method name", (set) => (commandServiceMethod(set).name = "Changed")],
       ["RPC input", (set) => (commandServiceMethod(set).inputType = ".spine.changed.Input")],
       ["RPC output", (set) => (commandServiceMethod(set).outputType = ".spine.changed.Output")],
-      ["RPC client streaming", (set) => (commandServiceMethod(set).clientStreaming = !commandServiceMethod(set).clientStreaming)],
-      ["RPC server streaming", (set) => (commandServiceMethod(set).serverStreaming = !commandServiceMethod(set).serverStreaming)],
+      [
+        "RPC client streaming",
+        (set) =>
+          (commandServiceMethod(set).clientStreaming = !commandServiceMethod(set).clientStreaming),
+      ],
+      [
+        "RPC server streaming",
+        (set) =>
+          (commandServiceMethod(set).serverStreaming = !commandServiceMethod(set).serverStreaming),
+      ],
     ];
 
     for (const [category, mutate] of cases) {
       const changed = clonedDescriptorSet();
       mutate(changed);
-      expect(compareNormalizedDescriptorSets(descriptorSet, changed), category).toEqual({ equal: false });
+      expect(compareNormalizedDescriptorSets(descriptorSet, changed), category).toEqual({
+        equal: false,
+      });
     }
   });
 });
