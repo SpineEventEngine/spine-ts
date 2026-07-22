@@ -1,6 +1,6 @@
 # T-0056 Projection Column Model Review
 
-Status: All required concerns closed; full branch verification passed
+Status: Closed; integrated, post-merge verified, and pushed
 
 Baseline: `55b460b6`
 
