@@ -174,11 +174,14 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   create(command: CreateTask): TaskCreated {
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState(() =>
-      create(TaskSchema, {
-        id,
-        title: command.title,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskSchema, {
+          id,
+          title: command.title,
+        }),
+      ),
     );
     return create(TaskCreatedSchema, { id, title: command.title });
   }
@@ -190,11 +193,14 @@ export class TaskWorkflowProcess extends ProcessManager<TaskId, typeof TaskWorkf
     void event;
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState(() =>
-      create(TaskWorkflowSchema, {
-        id,
-        ownerNotificationRequested: true,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskWorkflowSchema, {
+          id,
+          ownerNotificationRequested: true,
+        }),
+      ),
     );
     return create(OwnerNotificationRequestedSchema, { id });
   }
@@ -204,11 +210,14 @@ export class TaskWorkflowProcess extends ProcessManager<TaskId, typeof TaskWorkf
     void event;
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState(() =>
-      create(TaskWorkflowSchema, {
-        id,
-        ownerNotificationRequested: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskWorkflowSchema, {
+          id,
+          ownerNotificationRequested: false,
+        }),
+      ),
     );
     return create(NotifyOwnerSchema, { id });
   }
@@ -219,24 +228,64 @@ export class TaskListProjection extends Projection<TaskId, typeof TaskListSchema
   include(event: TaskCreated): void {
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState(() =>
-      create(TaskListSchema, {
-        id,
-        title: event.title,
-        openTaskCount: 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id,
+          title: event.title,
+          openTaskCount: 1,
+        }),
+      ),
     );
   }
 }
 ```
 
 The repository invokes each handler inside a framework-owned transaction.
-`updateDraftState()` replaces only that active draft; accepted framework work
-commits it to the entity and storage. `this.id` is the framework-provided routed
+`update()` synchronously mutates the live active draft and returns its resulting
+state; use it when the handler has already decided the transition is valid. A
+throw after a partial `update()` mutation propagates and does not roll that
+partial mutation back. Use `tryUpdate()`
+when a proposed mutation must be checked before it is applied: it mutates a
+deeply independent scratch draft, returns an immutable empty array on success
+or immutable constraint violations on failure, and leaves the live draft
+unchanged on validation failure or a thrown error. Mutators must be synchronous;
+async/thenable results are rejected. Unrelated errors are not converted to
+validation results. Accepted framework work commits the
+draft to the entity and storage. `this.id` is the framework-provided routed
 entity identity, so handlers do not extract or validate a target for routing.
 Keep business decisions in these methods, but do not open, commit, or roll back
-transactions yourself. Application handlers return only generated domain
-messages.
+transactions yourself. Application handlers return only generated domain messages.
+
+```ts
+import { clone, create } from "@bufbuild/protobuf";
+import { Assign, Aggregate } from "@spine-ts/server";
+import {
+  RenameTaskRejectedSchema,
+  TaskIdSchema,
+  TaskRenamedSchema,
+  TaskSchema,
+  type RenameTask,
+  type RenameTaskRejected,
+  type TaskId,
+  type TaskRenamed,
+} from "@example/tasks-proto";
+
+class ValidatingTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+  @Assign
+  rename(command: RenameTask): TaskRenamed | RenameTaskRejected {
+    const id = clone(TaskIdSchema, this.id);
+    const violations = this.tryUpdate((draft) => {
+      draft.title = command.title;
+    });
+
+    return violations.length === 0
+      ? create(TaskRenamedSchema, { id, title: command.title })
+      : create(RenameTaskRejectedSchema, { id, violation: [...violations] });
+  }
+}
+```
 
 ## 4. Generate and load the handler registry
 

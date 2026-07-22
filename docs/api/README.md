@@ -483,9 +483,9 @@ facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported in this slice and fail closed with field-specific validation
 violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
-version metadata contracts, lifecycle flags, status/updater/helper operation
+version metadata contracts, lifecycle flags, status/mutator/helper operation
 types, `EntityTransactionStateError`, and
-`EntityTransactionDraftStateError`. This public surface is an in-memory,
+`DraftStateError`. This public surface is an in-memory,
 framework-owned draft/result boundary over one entity state. It is intentionally
 not a storage-backed transaction API, repository unit of work, async-local
 transaction context, dispatch phase, or lifecycle-event emitter. It is a
