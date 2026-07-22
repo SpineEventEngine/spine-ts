@@ -6,7 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0054 transactional entity update API
+Active implementation frontier: T-0055 Environment and singleton server facilities
 
 ## Purpose
 
@@ -54,8 +54,8 @@ part of the accepted release. The temporary readiness reopening is closed.
 
 The accepted initial release remains complete. On `2026-07-22`, the human
 opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
-Wave 1. The human subsequently started Wave 1; T-0053 is integrated,
-post-merge verified, and pushed. T-0054 is next.
+Wave 1. The human subsequently started Wave 1; T-0053 and T-0054 are integrated,
+post-merge verified, and pushed. T-0055 is next.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

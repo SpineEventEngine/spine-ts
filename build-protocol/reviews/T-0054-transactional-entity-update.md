@@ -1,6 +1,6 @@
 # T-0054 Transactional Entity Update Review
 
-Status: Complete; all concerns closed and full task verification passed
+Status: Complete; all concerns closed and post-merge verified
 
 Baseline: `09d405d3`
 
@@ -92,3 +92,5 @@ Baseline: `09d405d3`
 - TypeScript/tooling build, ESLint, cleanup enforcement, TypeDoc/API, frozen
   Proto provenance/descriptor parity, generated cleanliness, release readiness,
   formatting, and diff hygiene passed.
+- The same full gate passed post-merge on pushed `main` at `ad6499c3`; no review
+  concern reopened and no integration correction was required.

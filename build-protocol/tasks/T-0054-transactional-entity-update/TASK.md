@@ -1,6 +1,6 @@
 # T-0054: Transactional `update` And `tryUpdate`
 
-Status: Reviewed and fully verified; awaiting commit and integration
+Status: Complete, reviewed, integrated, post-merge verified, and pushed
 
 ## Objective
 
@@ -132,3 +132,13 @@ unrelated cleanup.
 - No active source, example, or current guide retains `updateDraftState()`, a
   return-value replacement bridge, obsolete transaction names, or stale
   replacement-based mutator guidance.
+
+## Durable Integration Closure
+
+- Reviewed task endpoint `0a22178b` is pushed on
+  `origin/task/T-0054-transactional-entity-update`.
+- Merge commit `ad6499c3` is pushed on `origin/main`.
+- Full post-merge verification on `main` at `ad6499c3` repeated the accepted
+  ordinary/coverage results and every TypeDoc, Proto, generated-clean, cleanup,
+  formatting, and release-readiness gate.
+- T-0054 is durably closed. T-0055 is the active Wave 1 frontier.
