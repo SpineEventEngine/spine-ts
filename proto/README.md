@@ -1,10 +1,19 @@
 # Proto Intake
 
-This directory contains verbatim Spine `.proto` intake sets.
+This directory contains verbatim Spine `.proto` intake sets and the frozen
+Wave 1 client/delivery closure.
 
-## Copied Spine Files
+## Frozen Source Closure
 
-The current minimal compileable closure includes:
+The manifest pins 39 verbatim source files. They comprise the curated root
+contracts and transitive support below, seven `spine.client` service/query/
+subscription contracts, five Core JVM server/catch-up/delivery contracts, six
+simple delivery-server contracts plus gRPC health, and the option/time sources
+needed to compile them. The complete authoritative inventory is
+[`spine-sources.json`](spine-sources.json); do not treat the shorter list below
+as exhaustive.
+
+The original curated package-root subset includes:
 
 - `spine/options.proto`
 - `spine/base/field_path.proto`
@@ -27,7 +36,9 @@ The current minimal compileable closure includes:
 URL, raw URL, upstream path, local path, and SHA-256 checksum for each copied
 file. The files are copied from the exact commits recorded in
 `build-protocol/DECISION_LOG.md#d-0025-t-0004-proto-intake-uses-exact-researched-spine-source-commits`
-and the later task-specific decisions that extend the manifest.
+and the later task-specific decisions that extend the manifest. Buf resolves
+standard imported descriptors while compiling these 39 sources, producing the
+48-file frozen descriptor set checked by this task.
 
 ## Verification And Generation
 
@@ -41,10 +52,19 @@ pnpm proto:check-generated
 ```
 
 `proto:verify`, `proto:lint`, and `proto:generate` use network-free local drift
-protection. They validate the manifest, require exact set equality with copied
-`proto/spine/**/*.proto` files, reject unsafe paths, and verify local SHA-256
-checksums before Buf runs. The manifest's pinned source URLs are provenance for
-review and future refreshes; default verification does not fetch upstream.
+protection. They validate the manifest, require exact set equality with every
+copied `proto/**/*.proto` file (including the frozen gRPC health contract),
+reject unsafe paths, and verify local SHA-256 checksums before Buf runs. The
+manifest's pinned source URLs are provenance for review and future refreshes;
+default verification does not fetch upstream.
+
+Before lint or generation, the workflow also builds a complete
+`google.protobuf.FileDescriptorSet` from the verified frozen sources and
+compares its normalized SHA-256 with `frozen-descriptor-set.sha256`. The
+normalizer removes only `source_code_info` and orders files by name. It retains
+all other descriptor data, including custom-option unknown fields, so a change
+to a type-URL option or any other compatibility-relevant descriptor element
+fails the workflow.
 
 Buf lint uses narrow compatibility exceptions because Spine upstream
 `options.proto` is intentionally package-less and the copied files preserve

@@ -2,9 +2,9 @@
 
 TypeDoc is the canonical API documentation generator for this repository.
 
-Current status: the generated reference contains the curated `@spine-ts/proto`
-root API for copied Spine contracts, the `@spine-ts/core` metadata/type
-registry and validation facade APIs, the first `@spine-ts/server`
+Current status: the generated TypeDoc reference contains the curated
+`@spine-ts/proto` root API for copied Spine contracts, the `@spine-ts/core`
+metadata/type registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, context-owned `Repository` registration,
 set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
@@ -20,7 +20,15 @@ the MySQL-first RDBMS storage factory/errors/options.
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
 validation, core signal envelope, actor/tenant/user/version context, time, net,
-and UI language contracts.
+and UI language contracts. Separately from that generated root reference, the
+package supports imports from `@spine-ts/proto/client`,
+`@spine-ts/proto/delivery`, and `@spine-ts/proto/delivery-server`. Those curated
+wire-contract subpaths are package exports, not TypeDoc entrypoints. Arbitrary
+`generated/**` paths and delivery runtime helpers are intentionally not public
+APIs. The frozen source manifest pins each copied source to an upstream commit
+and SHA-256. The generation workflow also compares the complete normalized
+FileDescriptorSet against its frozen digest, removing only `source_code_info`
+while preserving custom options and all other wire-relevant descriptor fields.
 
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message

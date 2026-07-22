@@ -1,9 +1,6 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import {
-  SubscriptionSchema,
-  type Subscription,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { SubscriptionSchema, type Subscription } from "@spine-ts/proto/client";
 import { RecordSpec } from "@spine-ts/storage";
 
 /** Durable inactive subscription record persisted by SubscriptionService. */

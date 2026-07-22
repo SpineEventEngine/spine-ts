@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 export function rejectionMessages(file) {
-  return file.name.endsWith("rejections.proto")
+  return file.name.endsWith("rejections.proto") && !file.name.startsWith("spine/delivery/")
     ? file.messages.filter((message) => message.parent === undefined)
     : [];
 }

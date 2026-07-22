@@ -21,6 +21,25 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
+  ignore_only:
+    SERVICE_SUFFIX:
+      - proto/grpc/health/v1/health.proto
+    PACKAGE_DIRECTORY_MATCH:
+      - proto/spine/delivery/admin/admin_service.proto
+    PACKAGE_SAME_DIRECTORY:
+      - proto/spine/delivery/admin/admin_service.proto
+      - proto/spine/delivery/commands.proto
+      - proto/spine/delivery/events.proto
+      - proto/spine/delivery/message_delivery.proto
+      - proto/spine/delivery/pick_up_outcome.proto
+      - proto/spine/delivery/rejections.proto
+    PACKAGE_SAME_JAVA_MULTIPLE_FILES:
+      - proto/spine/delivery/admin/admin_service.proto
+      - proto/spine/delivery/commands.proto
+      - proto/spine/delivery/events.proto
+      - proto/spine/delivery/message_delivery.proto
+      - proto/spine/delivery/pick_up_outcome.proto
+      - proto/spine/delivery/rejections.proto
 breaking:
   use:
     - FILE

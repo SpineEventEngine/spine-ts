@@ -1,0 +1,169 @@
+/*
+ * Copyright 2026, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+syntax = "proto3";
+
+package spine.server.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option (internal_all) = true;
+
+option java_package = "io.spine.server.delivery";
+option java_outer_classname = "InboxProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+import "spine/client/entities.proto";
+import "spine/core/event.proto";
+import "spine/core/command.proto";
+import "spine/server/delivery/delivery.proto";
+
+
+// An identifier of an entity inbox.
+message InboxId {
+
+    // The ID of the entity.
+    spine.client.EntityId entity_id = 1;
+
+    // The type URL of the entity state.
+    string type_url = 2;
+}
+
+// A label telling how to dispatch a message, residing in the `Inbox`.
+enum InboxLabel {
+
+    IL_UNKNOWN = 0;
+
+    // Pass a command message to an `@Assign` or `@Command`-annotated command handler.
+    HANDLE_COMMAND = 1;
+
+    // Pass an event message to a `@Subscribe`-annotated event handler.
+    UPDATE_SUBSCRIBER = 3;
+
+    // Pass an event message to a `@React` or `@Command`-annotated event handler.
+    REACT_UPON_EVENT = 4;
+
+    // Retained for wire compatibility; no longer produced by the runtime.
+    //
+    // This label used to route an event to an event-importing receptor (an
+    // `@Apply` applier with `allowImport` enabled). Event import and `@Apply`
+    // were removed during the event-sourcing cutover, so nothing emits this
+    // label anymore. The value is kept so that `InboxMessage` records written
+    // by earlier versions still parse.
+    IMPORT_EVENT = 5 [deprecated = true];
+
+    // Pass an event message to the projection in scope of a catch-up process.
+    CATCH_UP = 6;
+}
+
+// A status of the message in the `Inbox`.
+enum InboxMessageStatus {
+
+    IMS_UNKNOWN = 0;
+
+    // The message is ready to be delivered.
+    TO_DELIVER = 1;
+
+    // The message is scheduled for the delivery.
+    SCHEDULED = 2;
+
+    // The message is already delivered and can be removed once it's no longer needed
+    // for deduplication.
+    DELIVERED = 3;
+
+    // The message is sent as a part of a catch-up process.
+    TO_CATCH_UP = 4;
+}
+
+// Identifies the message in the `Inbox`.
+message InboxMessageId {
+
+    // UUID-based identifier.
+    string uuid = 1 [(required) = true];
+
+    // A shard in which the identified message resides.
+    ShardIndex index = 2 [(required) = true];
+}
+
+// Identifies the original signal message that is packed inside the `InboxMessage`.
+message InboxSignalId {
+
+    // The value of the identifier of the source signal message that has been put into the `Inbox`.
+    //
+    // E.g. if an instance of `Event` is put into the `Inbox`,
+    // this field has a value of `Event.id.value`.
+    //
+    string value = 1 [(required) = true];
+}
+
+
+// A message in the inbox.
+message InboxMessage {
+
+    option (is).java_type = "io.spine.server.delivery.InboxMessageMixin";
+
+    InboxMessageId id = 1 [(required) = true];
+
+    InboxSignalId signal_id = 2 [(required) = true];
+
+    // The identifier of the `Inbox` in which this message is stored.
+    InboxId inbox_id = 3 [(required) = true];
+
+    // The `shard_index` is now a part of `InboxMessageId`.
+    reserved 4;
+    reserved "shard_index";
+
+    // What the message is.
+    oneof payload {
+
+        core.Event event = 5;
+
+        core.Command command = 6;
+    }
+
+    InboxLabel label = 7 [(required) = true];
+
+    InboxMessageStatus status = 8 [(required) = true];
+
+    // A point in time when the message was received by the `Inbox` instance.
+    google.protobuf.Timestamp when_received = 9 [(required) = true];
+
+    // An `Inbox`-internal version of the message.
+    //
+    // Used to order the messages received at the very same millisecond.
+    //
+    int32 version = 10 [(min).value = "0"];
+
+    // If set, this value determines for how long the message should be kept in the `Inbox`
+    // after being delivered. During this time it may be used for deduplication.
+    //
+    // If not set, the message will not be kept any longer than required to deliver it.
+    //
+    google.protobuf.Timestamp keep_until = 11;
+}

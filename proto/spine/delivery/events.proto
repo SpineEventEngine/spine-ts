@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery.event";
+option java_outer_classname = "EventsProto";
+option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
+
+import "google/protobuf/timestamp.proto";
+
+import "spine/server/delivery/inbox.proto";
+import "spine/server/delivery/delivery.proto";
+
+// A new message was written to a particular Inbox.
+message MessageWritten {
+    option (is).java_type = "io.spine.delivery.WithInboxMessage";
+
+    // The message that was written to the Inbox.
+    spine.server.delivery.InboxMessage message = 1 [(required) = true];
+}
+
+// New messages were written to a particular Inbox.
+message MessagesWritten {
+
+    // A shard into which the messages are written.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The messages that were written to the Inbox.
+    repeated spine.server.delivery.InboxMessage message = 2 [(required) = true];
+}
+
+// A message was removed from a particular Inbox.
+message MessageRemoved {
+    option (is).java_type = "io.spine.delivery.WithInboxMessage";
+
+    // The message that was removed from the Inbox.
+    spine.server.delivery.InboxMessage message = 1 [(required) = true];
+}
+
+// Messages were removed from a particular Inbox.
+message MessagesRemoved {
+
+    // A shard from which the messages are removed.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The messages that were removed from the Inbox.
+    repeated spine.server.delivery.InboxMessage message = 2 [(required) = true];
+}
+
+// A shard has been picked up by a worker.
+message ShardPickedUp {
+
+    // The shard in which the worker has picked up work from.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // An identifier of the worker, which picked up the shard.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+
+    // The time when the `worker` has picked up the shard.
+    google.protobuf.Timestamp when_picked = 3 [(required) = true];
+}
+
+// A shard has been released by a worker.
+message ShardReleased {
+
+    // The shard that was released.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // An identifier of the worker that released the shard.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+
+    // The time when the `worker` has released the shard.
+    google.protobuf.Timestamp when_released = 3 [(required) = true];
+}
+
+// Sharded work sessions that were picked up before the specified inactivity period were released.
+message ExpiredSessionsReleased {
+
+    // The shards that were released if any.
+    repeated ExpiredSession shard = 1;
+}
+
+// The expired sharded work session.
+message ExpiredSession {
+
+    // The shard that was released.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // An identifier of the worker that released the shard.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+
+    // The time when the `worker` has picked up the shard.
+    google.protobuf.Timestamp when_picked = 3 [(required) = true];
+
+    // The time when the `worker` has released the shard.
+    google.protobuf.Timestamp when_released = 4 [(required) = true];
+}

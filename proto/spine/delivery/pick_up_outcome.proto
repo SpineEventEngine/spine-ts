@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery";
+option java_outer_classname = "LiquorPickUpOutcomeProto";
+option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
+
+import "spine/delivery/events.proto";
+import "spine/delivery/rejections.proto";
+
+// An outcome of the shard pick up attempt.
+//
+// This is a Liquor-internal type that is created as counterpart of `PickUpOutcome` introduced in
+// `spine-core` in version `1.9.x`. Liquor servers are already using the core library `2.0.x`
+// which doesn't have this type yet. That's why this counterpart helps to connect Liquor servers
+// that using core `2.0.x` and Liquor clients that are on core `1.9.x`.
+//
+message LiquorPickUpOutcome {
+
+    oneof value {
+
+        option (choice).required = true;
+
+        // Signals that he shard is successfully picked up.
+        ShardPickedUp picked_up = 1;
+
+        // Signals that the shard could not be picked up as it's already picked by another worker.
+        ShardAlreadyPickedUp already_picked_up = 2;
+    }
+}

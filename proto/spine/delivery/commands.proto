@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery.command";
+option java_outer_classname = "CommandsProto";
+option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
+
+import "google/protobuf/duration.proto";
+
+import "spine/server/delivery/inbox.proto";
+import "spine/server/delivery/delivery.proto";
+
+// Writes a new message to the Inbox.
+message WriteMessage {
+    option (is).java_type = "io.spine.delivery.WithInboxMessage";
+
+    // The message to be written to the Inbox.
+    spine.server.delivery.InboxMessage message = 1 [(required) = true];
+}
+
+// Writes new messages to the Inbox.
+message WriteMessages {
+
+    // A shard into which the messages are written.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The messages to be written to the Inbox.
+    repeated spine.server.delivery.InboxMessage message = 2 [(required) = true];
+}
+
+// Removes a message from the Inbox.
+message RemoveMessage {
+    option (is).java_type = "io.spine.delivery.WithInboxMessage";
+
+    // The message to be removed from the Inbox.
+    spine.server.delivery.InboxMessage message = 1 [(required) = true];
+}
+
+// Removes messages from the Inbox.
+message RemoveMessages {
+
+    // A shard from which the messages are removed.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The messages to be removed from the Inbox.
+    repeated spine.server.delivery.InboxMessage message = 2 [(required) = true];
+}
+
+// Picks up the shard for processing.
+message PickUpShard {
+
+    // The shard to pick up work from.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The worker that is going to perform the work.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+}
+
+// Releases the shard which has been previously picked up.
+message ReleaseShard {
+
+    // The shard to release.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The worker that was performing the work.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+}
+
+// Releases the sharded work sessions that were picked up before the configured
+// inactivity period.
+message ReleaseExpiredSessions {
+
+    // The duration of the period after which the shard delivery session is considered expired.
+    google.protobuf.Duration inactivity_period = 1 [(required) = true];
+}

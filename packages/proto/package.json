@@ -9,13 +9,17 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
-    "./generated/*": {
-      "types": "./dist/generated/*.d.ts",
-      "default": "./dist/generated/*.js"
+    "./client": {
+      "types": "./dist/src/client.d.ts",
+      "default": "./dist/src/client.js"
     },
-    "./generated/*.js": {
-      "types": "./dist/generated/*.d.ts",
-      "default": "./dist/generated/*.js"
+    "./delivery": {
+      "types": "./dist/src/delivery.d.ts",
+      "default": "./dist/src/delivery.js"
+    },
+    "./delivery-server": {
+      "types": "./dist/src/delivery-server.d.ts",
+      "default": "./dist/src/delivery-server.js"
     }
   },
   "files": [

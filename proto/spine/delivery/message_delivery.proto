@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery";
+option java_outer_classname = "MessageDeliveryServiceProto";
+option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+import "spine/delivery/commands.proto";
+import "spine/delivery/events.proto";
+import "spine/delivery/pick_up_outcome.proto";
+import "spine/server/delivery/inbox.proto";
+import "spine/server/delivery/delivery.proto";
+
+
+// Acts as a back-end implementation for `InboxStorage`.
+service InboxService {
+
+    // Writes a single message to the `InboxStorage`.
+    rpc WriteOne(WriteMessage) returns (google.protobuf.Empty);
+
+    // Writes several messages to the `InboxStorage`.
+    rpc WriteMany(WriteMessages) returns (google.protobuf.Empty);
+
+    // Removes a single message from the `InboxStorage`.
+    rpc RemoveOne(RemoveMessage) returns (google.protobuf.Empty);
+
+    // Removes several messages from the `InboxStorage`.
+    rpc RemoveMany(RemoveMessages) returns (google.protobuf.Empty);
+
+    // Finds a single message by its ID.
+    rpc FindOne(spine.server.delivery.InboxMessageId) returns (OptionalInboxMessage);
+
+    // Finds many messages according to the query parameters.
+    rpc FindManyInShard(ReadMessagesSinceTime) returns (PageOfMessages);
+
+    // Finds the latest `InboxMessage` in `TO_DELIVER` status, which belongs to the specified shard.
+    rpc NewestMessageToDeliver(spine.server.delivery.ShardIndex) returns (OptionalInboxMessage);
+}
+
+// Acts as a back-end implementation for `ShardSessionRegistry`.
+service ShardService {
+
+    // Picks up the shard for processing.
+    rpc PickShard(PickUpShard) returns (LiquorPickUpOutcome);
+
+    // Releases the shard after its processing is done.
+    rpc ReleaseSession(ReleaseShard) returns (google.protobuf.Empty);
+
+    // Releases sessions which were picked up earlier that the configured inactivity period.
+    rpc ReleaseSessions(ReleaseExpiredSessions) returns (ExpiredSessionsReleased);
+}
+
+// A query to read `InboxMessage`s.
+message ReadMessagesSinceTime {
+
+    // The shard to which the target messages belong.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The point in time, being the earliest receival time for the target messages.
+    google.protobuf.Timestamp since_when = 2;
+
+    // The maximum number of matched messages to return.
+    int32 page_size = 3;
+}
+
+// A result of `ReadMessagesSinceTime` query execution.
+message PageOfMessages {
+
+    // The messages read.
+    repeated spine.server.delivery.InboxMessage message = 1;
+}
+
+// An optional `InboxMessage` that may or may not have been found in the `InboxStorage`.
+message OptionalInboxMessage {
+
+    spine.server.delivery.InboxMessage message = 1;
+}

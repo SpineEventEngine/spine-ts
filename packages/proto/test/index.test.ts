@@ -65,7 +65,7 @@ describe("@spine-ts/proto", () => {
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.sources).toHaveLength(25);
+    expect(manifest.sources).toHaveLength(39);
 
     for (const source of manifest.sources) {
       const contents = readFileSync(resolve(source.localPath));
@@ -144,6 +144,7 @@ describe("@spine-ts/proto", () => {
   it("keeps the public root runtime exports curated", () => {
     expect(Object.keys(protoRoot).sort()).toEqual(
       [
+        "AckSchema",
         "ActorContextSchema",
         "ConstraintViolationSchema",
         "CommandContextSchema",
@@ -165,6 +166,7 @@ describe("@spine-ts/proto", () => {
         "EntityOption_VisibilitySchema",
         "EnrichmentSchema",
         "Enrichment_ContainerSchema",
+        "ErrorSchema",
         "every_is",
         "EveryIsOptionSchema",
         "EventContextSchema",
@@ -186,7 +188,10 @@ describe("@spine-ts/proto", () => {
         "MonthSchema",
         "OriginSchema",
         "RejectionEventContextSchema",
+        "ResponseSchema",
         "set_once",
+        "SPI_type",
+        "StatusSchema",
         "TemplateStringSchema",
         "TenantIdSchema",
         "UserIdSchema",
@@ -195,12 +200,15 @@ describe("@spine-ts/proto", () => {
         "YearMonthSchema",
         "ZoneIdSchema",
         "ZonedDateTimeSchema",
+        "file_spine_base_error",
         "file_spine_base_field_path",
+        "file_spine_core_ack",
         "file_spine_core_actor_context",
         "file_spine_core_command",
         "file_spine_core_diagnostics",
         "file_spine_core_enrichment",
         "file_spine_core_event",
+        "file_spine_core_response",
         "file_spine_core_tenant_id",
         "file_spine_core_user_id",
         "file_spine_core_version",
@@ -211,6 +219,8 @@ describe("@spine-ts/proto", () => {
         "file_spine_time_time",
         "file_spine_ui_language",
         "file_spine_validation_validation_error",
+        "internal_all",
+        "internal_type",
         "type_url_prefix",
       ].sort(),
     );

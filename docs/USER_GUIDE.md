@@ -325,7 +325,7 @@ and actor context.
 ```ts
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { CommandService } from "@spine-ts/proto/client";
 
 const commands = createClient(CommandService, createGrpcTransport({ baseUrl: running.baseUrl }));
 declare const postRequest: Parameters<typeof commands.post>[0];
@@ -388,8 +388,7 @@ fixtures targeting a registered state schema, then use the three clients.
 ```ts
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
-import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { QueryService, SubscriptionService } from "@spine-ts/proto/client";
 
 const transport = createGrpcTransport({ baseUrl: running.baseUrl });
 const queries = createClient(QueryService, transport);

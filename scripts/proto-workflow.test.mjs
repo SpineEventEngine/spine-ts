@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -20,6 +21,86 @@ import {
 } from "./proto-workflow.mjs";
 
 describe("proto-workflow", () => {
+  it("keeps frozen-source lint ignores scoped away from authored modules", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-lint-scope-"));
+    const modulePaths = [
+      "proto",
+      "examples/todo/proto",
+      "examples/project-management/proto",
+      "examples/datastore-orders/proto",
+    ];
+
+    for (const modulePath of modulePaths) {
+      mkdirSync(join(repoRoot, modulePath), { recursive: true });
+    }
+
+    writeFileSync(join(repoRoot, "buf.yaml"), readFileSync("buf.yaml", "utf8"));
+    const frozenHealthRoot = join(repoRoot, "proto/grpc/health/v1");
+    mkdirSync(frozenHealthRoot, { recursive: true });
+    writeFileSync(
+      join(frozenHealthRoot, "health.proto"),
+      'syntax = "proto3";\npackage grpc.health.v1;\nservice Health {}\n',
+    );
+    const validExampleModules = [
+      [
+        "examples/project-management/proto/spine/example/project_management/v1",
+        "project_management",
+      ],
+      ["examples/datastore-orders/proto/spine/example/datastore_orders/v1", "datastore_orders"],
+    ];
+    for (const [directory, packageSegment] of validExampleModules) {
+      const absoluteDirectory = join(repoRoot, directory);
+      mkdirSync(absoluteDirectory, { recursive: true });
+      writeFileSync(
+        join(absoluteDirectory, "fixture.proto"),
+        `syntax = "proto3";\npackage spine.example.${packageSegment}.v1;\n`,
+      );
+    }
+
+    const authoredRoot = join(repoRoot, "examples/todo/proto");
+    const packageRoot = join(authoredRoot, "spine/example/todo/v1");
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(
+      join(packageRoot, "service.proto"),
+      'syntax = "proto3";\npackage spine.example.todo.v1;\nservice Todo {}\n',
+    );
+    writeFileSync(
+      join(packageRoot, "first.proto"),
+      'syntax = "proto3";\npackage spine.example.todo.v1;\noption java_multiple_files = true;\n',
+    );
+    writeFileSync(
+      join(packageRoot, "second.proto"),
+      'syntax = "proto3";\npackage spine.example.todo.v1;\n',
+    );
+    mkdirSync(join(authoredRoot, "alternate"), { recursive: true });
+    writeFileSync(
+      join(authoredRoot, "alternate/shared.proto"),
+      'syntax = "proto3";\npackage spine.example.todo.v1;\n',
+    );
+
+    const result = spawnSync(
+      join(process.cwd(), "node_modules/.bin/buf"),
+      ["lint", "--error-format=json"],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    const findings = `${result.stdout}\n${result.stderr}`
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => JSON.parse(line));
+
+    expect(result.status).not.toBe(0);
+    expect(findings.map(({ type }) => type)).toEqual(
+      expect.arrayContaining([
+        "SERVICE_SUFFIX",
+        "PACKAGE_DIRECTORY_MATCH",
+        "PACKAGE_SAME_DIRECTORY",
+        "PACKAGE_SAME_JAVA_MULTIPLE_FILES",
+      ]),
+    );
+    expect(findings.every(({ path }) => path.startsWith("examples/todo/proto/"))).toBe(true);
+  });
+
   it("stages every plugin output for a generated target", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const stageRoot = join(repoRoot, "packages/proto/.generated-test");

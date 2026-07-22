@@ -1,0 +1,49 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery.rejection";
+option java_generate_equals_and_hash = true;
+
+import "google/protobuf/timestamp.proto";
+import "spine/server/delivery/delivery.proto";
+
+// A shard cannot be picked up because some worker has already picked it up.
+message ShardAlreadyPickedUp {
+
+    // The shard in which some worker has picked up work in.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The worker that picked up the work in the shard.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+
+    // When the worker picked up the work in the shard.
+    google.protobuf.Timestamp when_picked = 3 [(required) = true];
+}
+
+// A shard cannot be release by the worker.
+message UnableToReleaseShard {
+
+    // The shard that should have been released.
+    spine.server.delivery.ShardIndex shard = 1 [(required) = true];
+
+    // The worker which was trying to release the `shard`.
+    spine.server.delivery.WorkerId worker = 2 [(required) = true];
+
+    Reason reason = 3;
+
+    // The reason why the shard cannot be released.
+    message Reason {
+
+        string value = 1 [(required) = true];
+    }
+}
