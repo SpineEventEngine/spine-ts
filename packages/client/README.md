@@ -1,6 +1,65 @@
 # @spine-ts/client
 
-Descriptor-backed client foundations for Spine Projection queries.
+Node client facade and descriptor-backed Projection query foundations for Spine.
+
+`Client.connectTo(url)` owns its HTTP/2 session; `Client.usingTransport(transport)`
+leaves a caller-supplied Connect transport open. A client defaults to the `guest`
+actor. Request scopes are immutable, so actor and tenant context cannot leak between
+concurrent calls. Call `close()` once application work is finished; it is idempotent
+and rejects work started after close begins.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client } from "@spine-ts/client";
+import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
+
+const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const result = await client
+  .onBehalfOf("alice")
+  .post(CreateTaskSchema, create(CreateTaskSchema, { title: "Read client results" }));
+
+if (result.kind === "error") console.error(result.error);
+if (result.kind === "rejection") console.error(result.rejection);
+```
+
+The `@example/*` import above represents the application's generated
+Protobuf-ES module; replace it with the real module that exports the command
+schema.
+
+To observe immediate events caused by a command, pass one or more generated
+event schemas. Subscription and activation complete before posting. The
+accepted result exposes one bounded, single-consumer `AsyncIterable`; cancel it
+when enough events have arrived:
+
+```ts
+import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
+
+const abortController = new AbortController();
+const observed = await client
+  .onBehalfOf("alice")
+  .post(CreateTaskSchema, create(CreateTaskSchema, { title: "Observe the result" }), {
+    observe: [TaskCreatedSchema],
+    signal: abortController.signal,
+  });
+if (observed.kind === "ok") {
+  for await (const event of observed.events) {
+    console.log(event.message, event.context);
+    await observed.events.cancel();
+  }
+}
+await client.close();
+```
+
+Refusal, post failure, caller abort, buffer overflow, and `Client.close()` clean
+up observation automatically. Successful observation remains caller-owned.
+Remote cancellation is internally bounded to one second. Explicit `cancel()`
+reports cleanup failure; `Client.close()` completes owned-session shutdown and
+then reports any cleanup failures it collected.
+
+`post()` and `query()` return `ok`, `error`, or `rejection` for valid service
+responses. Network and deadline failures remain Connect errors. Caller abort
+rejects with the `AbortSignal` reason. The facade throws `ClientProtocolError`
+when a successful wire response is malformed.
 
 Generated Projection metadata is registered with
 `ProjectionColumn.register(schema, generatedDefinition)`. Registration checks
@@ -16,12 +75,13 @@ other message fields support equality only.
 Application code cannot construct arbitrary columns or author generated
 definitions through the package root. `ProjectionQuery.select()` builds a
 Projection-only frozen `spine.client.Query`; Aggregate and Process Manager
-high-level factories remain deferred until Wave 2. Network execution belongs
-to the later client facade or the generated `QueryService` client.
+high-level factories remain deferred until Wave 2. Execute the built query with
+`ClientRequest.query()` as shown below.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
 import {
+  Client,
   ProjectionColumn,
   ProjectionQuery,
   all,
@@ -60,6 +120,15 @@ const query = ProjectionQuery.select({
   .orderBy(TaskListColumns.openTaskCount, "desc")
   .limit(20)
   .build();
+
+const queryClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const queryResult = await queryClient.onBehalfOf("alice").query(TaskListSchema, query);
+if (queryResult.kind === "ok") {
+  for (const { state, version } of queryResult.states) {
+    console.log(state, version);
+  }
+}
+await queryClient.close();
 ```
 
 The two `@example/*` imports are consumer substitutions, not packages shipped

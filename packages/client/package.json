@@ -22,9 +22,15 @@
     "dist",
     "README.md"
   ],
+  "devDependencies": {
+    "@spine-ts/server": "workspace:*"
+  },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@bufbuild/protoplugin": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
+    "@spine-ts/core": "workspace:*",
     "@spine-ts/proto": "workspace:*"
   }
 }

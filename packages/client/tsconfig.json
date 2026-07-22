@@ -4,6 +4,8 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
+    "lib": ["ES2024", "DOM", "decorators"],
+    "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
