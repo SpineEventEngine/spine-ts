@@ -152,3 +152,37 @@ query behavior, Delivery runtime, or delivery-server services in this task.
 - TypeDoc/API, path-scoped Proto lint, generated cleanliness, release readiness,
   formatting, and diff hygiene passed. The earlier Connect cancellation did
   not recur in the accepted full run.
+
+## Post-merge Correction Status
+
+- The post-merge tracked-file gate reopened this task only for layout and line
+  length: the three internal subpath entrypoints were moved into semantic
+  directories and their private package-export targets updated. The public
+  import contract remains exactly root, `client`, `delivery`, and
+  `delivery-server`.
+- Descriptor compatibility fixture coverage is preserved; the previously
+  overlong mutation expressions are reflowed without changing categories or
+  assertions.
+- Captured RED is the post-merge cleanup failure plus the expected stale-dist
+  entrypoint failure before rebuilding. GREEN: tracked cleanup; focused
+  descriptor/entrypoint/metadata tests (3 files / 7 tests); generated
+  typecheck; lint; format; and diff hygiene.
+- This bounded correction still requires TypeScript/API and
+  style/maintainability re-review and the orchestrator's final full gate.
+  Documentation and performance/reliability are N/A because no end-user claim
+  or runtime behavior changed.
+
+## Post-merge Correction Acceptance
+
+- TypeScript/API re-review is CLEAN: all four public package specifiers and
+  symbol surfaces resolve, declarations build, and no stale source/dist target
+  remains. Style/maintainability re-review is CLEAN: semantic directory depth,
+  line-length compliance, mutation coverage, and tracked cleanup are accepted.
+- Runtime self-introspection was unavailable for both reviewers. The explicit
+  immutable profiles `typescript_api_docs_reviewer` / `gpt-5.6-terra` / `high`
+  and `style_maintainability_reviewer` / `gpt-5.6-terra` / `high` are accepted
+  with no visible fallback or mismatch.
+- Final staged full verification passed 84 files / 1,911 tests in both ordinary
+  and coverage runs, with 3 files / 21 tests intentionally skipped. Coverage,
+  TypeDoc/API, tracked cleanup, scoped Proto lint, generated cleanliness,
+  release readiness, formatting, and diff hygiene passed.

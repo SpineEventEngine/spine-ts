@@ -279,3 +279,55 @@ Baseline: `2bdbc903`
 - Final full verification passed 84 files / 1,911 tests twice, coverage at
   94.45% statements and 90.14% branches, TypeDoc/API, scoped Proto lint,
   generated cleanliness, release readiness, formatting, and diff hygiene.
+
+## Post-merge Correction Review Gate
+
+- Post-merge tracked-file cleanup exposed a package-layout and test-line-length
+  correction after merge `4e3a68a9`; the prior endpoint is not durably closed.
+- Implementation owner: existing `implementer`, explicitly
+  `gpt-5.6-terra` / `medium`.
+- TypeScript/API re-review is required for unchanged public subpath resolution
+  after moving internal entrypoint files. Style/maintainability re-review is
+  required for directory depth, line-length compliance, and cleanup-rule
+  coverage. Documentation is N/A if no claim changes; reliability remains N/A
+  because no runtime behavior changes.
+- Expected re-review profiles: existing `typescript_api_docs_reviewer`,
+  `gpt-5.6-terra` / `high`; existing
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / `high`. All fields must be
+  explicit in dispatch; reviewers are read-only and may not spawn children.
+
+## Post-merge Correction Implementation Evidence
+
+- The three non-root implementation files now use semantic directories; package
+  exports preserve exactly `.`, `./client`, `./delivery`, and
+  `./delivery-server` while their private dist targets move to each directory's
+  `index` output.
+- Focused entrypoint resolution passes for all supported imports and continues
+  to reject private paths after a clean TypeScript build. Descriptor mutation
+  coverage remains behaviorally identical, with all source lines at or below
+  120 characters.
+- Mechanical GREEN: tracked-file cleanup, focused 3-file / 7-test suite,
+  generated typecheck, lint, formatting, and diff hygiene all pass.
+- Runtime metadata is not exposed; the correction assignment explicitly used
+  existing `implementer`, `gpt-5.6-terra` / `medium`, with no visible fallback
+  or mismatch. TypeScript/API and style/maintainability re-review remain
+  required. Documentation and performance/reliability are N/A for the concrete
+  no-claim-change and no-runtime-path reasons recorded above.
+
+## Post-merge Correction Final Dispositions
+
+- TypeScript/API: CLEAN. Internal source/dist paths moved to semantic
+  directories while exact public specifiers, exported symbols, declarations,
+  and private-path rejection remain unchanged.
+- Style/maintainability: CLEAN. Tracked cleanup, semantic source layout,
+  120-character enforcement, and unchanged descriptor mutation coverage are
+  accepted.
+- Documentation: N/A for the correction because no end-user claim changed.
+  Performance/reliability: N/A because no production runtime behavior changed.
+- Reviewer runtime introspection was unavailable; the explicitly dispatched
+  immutable API and style reviewer profiles were both
+  `gpt-5.6-terra` / `high`, with no visible fallback or mismatch.
+- Final staged full verification passed 84 files / 1,911 tests twice, coverage
+  at 94.45% statements and 90.14% branches, TypeDoc/API, tracked cleanup,
+  scoped Proto lint, generated cleanliness, release readiness, formatting, and
+  diff hygiene.

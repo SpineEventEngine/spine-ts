@@ -40,16 +40,16 @@ describe("package metadata", () => {
         default: "./dist/src/index.js",
       },
       "./client": {
-        types: "./dist/src/client.d.ts",
-        default: "./dist/src/client.js",
+        types: "./dist/src/client/index.d.ts",
+        default: "./dist/src/client/index.js",
       },
       "./delivery": {
-        types: "./dist/src/delivery.d.ts",
-        default: "./dist/src/delivery.js",
+        types: "./dist/src/delivery/index.d.ts",
+        default: "./dist/src/delivery/index.js",
       },
       "./delivery-server": {
-        types: "./dist/src/delivery-server.d.ts",
-        default: "./dist/src/delivery-server.js",
+        types: "./dist/src/delivery-server/index.d.ts",
+        default: "./dist/src/delivery-server/index.js",
       },
     });
   });
