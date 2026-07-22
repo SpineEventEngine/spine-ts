@@ -139,12 +139,29 @@ const expectedCoreExports = [
   "packCommand",
   "packEvent",
 ];
+const expectedClientExports = [
+  "ProjectionColumn",
+  "ProjectionColumnDefinition",
+  "ProjectionColumnDefinitionEntry",
+  "ProjectionColumnOperator",
+  "ProjectionColumnValue",
+  "ProjectionColumnValueKind",
+  "ProjectionColumns",
+  "ProjectionComparison",
+  "ProjectionEqualityOperator",
+  "ProjectionOrderingOperator",
+];
 const expectedStorageExports = [
   "EventStore",
   "EventRollback",
   "InMemoryRecordStorage",
   "InMemoryStorageFactory",
   "OnEventAccepted",
+  "NormalizedComparisonOperator",
+  "NormalizedQueryMask",
+  "NormalizedQueryOrder",
+  "NormalizedQueryPlan",
+  "NormalizedQueryPredicate",
   "RecordColumn",
   "RecordContinuation",
   "RecordContinuationValue",
@@ -159,6 +176,9 @@ const expectedStorageExports = [
   "Storage",
   "StorageContext",
   "StorageFactory",
+  "StorageQueryCapabilities",
+  "StorageQueryFeature",
+  "StorageQueryPolicy",
 ];
 const expectedDatastoreStorageExports = [
   "DatastoreQueryLimitError",
@@ -416,6 +436,7 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const clientIndexPath = join("packages", "client", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
@@ -454,6 +475,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
+const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -760,12 +782,20 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingClientExports = expectedClientExports.filter((name) => !clientModuleNames.has(name));
+const missingDeclaredClientExports = expectedClientExports.filter(
+  (name) => !declaredClientExports.includes(name),
+);
+const unexpectedClientExports = declaredClientExports.filter(
+  (name) => !expectedClientExports.includes(name),
+);
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
 );
@@ -826,6 +856,27 @@ if (missingExports.length > 0) {
 if (missingCoreExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/core exports: ${missingCoreExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingClientExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/client exports: ${missingClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredClientExports.length > 0) {
+  console.error(
+    `@spine-ts/client root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (unexpectedClientExports.length > 0) {
+  console.error(
+    `@spine-ts/client root exports changed without updating docs expectations: ${unexpectedClientExports.join(", ")}`,
   );
   process.exit(1);
 }
@@ -1028,6 +1079,7 @@ console.log(
   [
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports`,
     `${expectedCoreExports.length} expected @spine-ts/core exports`,
+    `${expectedClientExports.length} expected @spine-ts/client exports`,
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
     `${expectedTransportExports.length} expected @spine-ts/transport exports`,

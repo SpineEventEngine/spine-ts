@@ -34,6 +34,12 @@ small structural `StorageContext` with `name`, `multitenant`, and optional
 
 ## Query Model
 
+`StorageQueryPolicy.validate(plan, capabilities)` is the canonical normalized
+query boundary for adapters. A provider advertises comparison operators and
+optional `either`, nested-predicate, ordering, mask, and limit features. The
+shared policy rejects malformed or unsupported plans before provider execution;
+it does not execute queries or expose an application query DSL.
+
 `RecordStorage` queries are intentionally small and deterministic:
 
 - exact ID filters;

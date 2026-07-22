@@ -82,6 +82,43 @@ message TaskList {
 }
 ```
 
+### Projection columns
+
+Projection code generation emits a descriptor-backed definition next to the
+state schema. Register that value once and reuse the returned immutable column
+collection. The imports and exported declaration below come from
+`examples/todo/src/projection-columns.ts`, so their relative paths resolve from
+that application source file. The final property-access lines illustrate the
+inferred column API and are not part of that source file:
+
+```ts
+import { ProjectionColumn } from "@spine-ts/client";
+import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
+import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
+
+export const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+
+TaskListColumns.openTaskCount; // number, ordering operators
+TaskListColumns.version; // spine.core.Version, ordering operators
+TaskListColumns.archived; // boolean, equality only
+TaskListColumns.deleted; // boolean, equality only
+```
+
+| Protobuf column value                                | Comparison operators  |
+| ---------------------------------------------------- | --------------------- |
+| string and numeric scalar                            | equality and ordering |
+| `google.protobuf.Timestamp` and `spine.core.Version` | equality and ordering |
+| boolean, bytes, enum, and other message              | equality only         |
+
+Repeated, map, and oneof fields are rejected. The root API does not let
+application code construct arbitrary string columns or authored definitions.
+This packet provides Projection column metadata only: Aggregate and Process
+Manager factories, a query DSL, and query execution are not yet included.
+The repository's `proto:generate` workflow runs the
+`protoc-gen-spine-projection-columns` executable shipped by `@spine-ts/client`
+after Protobuf-ES for every example target. Installed projects can add that bin
+as a local plugin in their Buf generation template.
+
 `task_commands.proto` — commands (the filename ends in `commands.proto`):
 
 ```proto

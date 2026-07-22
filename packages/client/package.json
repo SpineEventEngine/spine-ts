@@ -1,0 +1,30 @@
+{
+  "name": "@spine-ts/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Spine TS client-side Projection metadata and query foundations.",
+  "bin": {
+    "protoc-gen-spine-projection-columns": "./codegen/generate-projection-columns.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "default": "./dist/codegen/index.js"
+    }
+  },
+  "files": [
+    "codegen",
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@bufbuild/protoplugin": "2.12.1",
+    "@spine-ts/proto": "workspace:*"
+  }
+}
