@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Complete - release ready with first-class domain rejections
+Status: Initial release complete; post-release JVM parity Wave 1 planning active
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: None - accepted initial release is complete
+Active implementation frontier: T-0052 Wave 1 plan; implementation awaits human start approval
 
 ## Purpose
 
@@ -49,6 +49,33 @@ post-merge verified, and remotely synchronized. Generated throwable companions,
 rollback-safe rejection event publication, subscriber/reactor handling,
 client-boundary redaction, current documentation, and the to-do proof are now
 part of the accepted release. The temporary readiness reopening is closed.
+
+## Post-Release JVM Parity Program
+
+The accepted initial release remains complete. On `2026-07-22`, the human
+opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
+Wave 1; it does not authorize implementation by itself.
+
+- **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
+  end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a
+  singleton `ServerEnvironment`, JVM-parity `Delivery`, a delivery client, and
+  the in-memory `delivery-server/simple-server` gRPC topology including its
+  machine-facing `AdminService`.
+- **Wave 2:** recent state/event history and the resulting high-level Aggregate
+  and Process Manager query parity. A separate Q&A and approved plan are
+  required before execution.
+- **Wave 3:** packaging/deployment and live bidirectional TS/JVM delivery-server
+  compatibility tests. A separate Q&A and approved plan are required.
+- **Wave 4:** human-facing delivery administration, including the unresolved
+  browser-versus-TUI direction. A separate Q&A and approved plan are required.
+
+Wave 1 uses frozen `core-java` commit
+`a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` and frozen `delivery-server`
+commit `21f2901f393e552208b97166f4eaeb942f9f5172`. Only the upstream
+`simple-server` module is in scope, and the TypeScript server is in-memory only.
+Redis, Hazelcast, human admin interfaces, and other delivery-server modules are
+not Wave 1 work. A final relevant upstream-delta audit is required before Wave
+1 closure.
 
 ## Authority And Reconciliation Rules
 
