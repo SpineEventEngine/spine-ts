@@ -148,8 +148,20 @@ const expectedClientExports = [
   "ProjectionColumnValueKind",
   "ProjectionColumns",
   "ProjectionComparison",
+  "ProjectionComparisonPredicate",
   "ProjectionEqualityOperator",
+  "ProjectionGroup",
   "ProjectionOrderingOperator",
+  "ProjectionPredicate",
+  "ProjectionQuery",
+  "ProjectionQueryBuilder",
+  "all",
+  "either",
+  "eq",
+  "ge",
+  "gt",
+  "le",
+  "lt",
 ];
 const expectedStorageExports = [
   "EventStore",
@@ -158,6 +170,7 @@ const expectedStorageExports = [
   "InMemoryStorageFactory",
   "OnEventAccepted",
   "NormalizedComparisonOperator",
+  "NormalizedQueryEntry",
   "NormalizedQueryMask",
   "NormalizedQueryOrder",
   "NormalizedQueryPlan",
@@ -177,7 +190,9 @@ const expectedStorageExports = [
   "StorageContext",
   "StorageFactory",
   "StorageQueryCapabilities",
+  "StorageQueryCandidateLimitError",
   "StorageQueryFeature",
+  "StorageQueryEvaluator",
   "StorageQueryPolicy",
 ];
 const expectedDatastoreStorageExports = [

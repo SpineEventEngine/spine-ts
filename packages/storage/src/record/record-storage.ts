@@ -5,6 +5,12 @@ import { RecordQuery } from "./record-query.js";
 import type { RecordReadOptions } from "./record-query.js";
 import type { RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
+import {
+  StorageQueryCandidateLimitError,
+  StorageQueryEvaluator,
+} from "../query/query-execution.js";
+import { StorageQueryPolicy } from "../query/query-policy.js";
+import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
 
 /** Common record-oriented storage contract for identified Protobuf messages. */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
@@ -104,6 +110,32 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
+  /** Execute one provider-independent normalized query plan. */
+  async queryPlan(plan: NormalizedQueryPlan<I>): Promise<readonly R[]> {
+    const entries = await this.queryPlanEntries(plan);
+    return entries.map((entry) => entry.record);
+  }
+
+  /** Execute a normalized plan and retain actual storage slot IDs for version lookup. */
+  async queryPlanEntries(plan: NormalizedQueryPlan<I>): Promise<readonly RecordEntry<I, R>[]> {
+    this.requireOpen();
+    StorageQueryPolicy.validate(plan, this.queryCapabilities());
+    const candidates = await this.queryPlanRecordEntries(plan);
+    if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
+      throw new StorageQueryCandidateLimitError(plan.candidateLimit);
+    }
+    const materialized = candidates.map((entry) => {
+      const stored = this.#recordSpec.materialize(entry.record);
+      return { id: entry.id, record: stored.record, columns: stored.columns };
+    });
+    return StorageQueryEvaluator.evaluate(materialized, plan).map((entry) =>
+      Object.freeze({
+        id: this.#recordSpec.cloneId(entry.id),
+        record: RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), plan.mask?.paths),
+      }),
+    );
+  }
+
   /** Write one record, replacing any previous value with the same ID. */
   async write(record: R): Promise<void> {
     this.requireOpen();
@@ -151,6 +183,19 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   protected abstract queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]>;
+
+  /** Logical normalized features admitted before provider access. */
+  protected queryCapabilities(): StorageQueryCapabilities {
+    return { comparisons: [], features: [] };
+  }
+
+  /** Provider candidate retrieval; shared evaluation applies the complete plan afterward. */
+  protected queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    void plan;
+    return this.queryRecordEntries({});
+  }
   protected abstract readRecord(id: I): Promise<R | undefined>;
   protected abstract compareAndSetRecord(
     id: I,

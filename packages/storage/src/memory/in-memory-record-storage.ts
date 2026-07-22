@@ -5,6 +5,7 @@ import type { RecordQuery } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
+import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
 import { TenantRecords } from "./tenant-records.js";
 
 /** In-memory record storage with per-tenant slices when the context is multitenant. */
@@ -36,6 +37,23 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(this.records().queryEntries(this.recordSpec, query));
+  }
+
+  protected override queryCapabilities(): StorageQueryCapabilities {
+    return {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    };
+  }
+
+  protected override queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    return Promise.resolve(
+      this.records().queryEntries(this.recordSpec, {
+        ...(plan.candidateLimit === undefined ? {} : { limit: plan.candidateLimit + 1 }),
+      }),
+    );
   }
 
   protected readRecord(id: I): Promise<R | undefined> {

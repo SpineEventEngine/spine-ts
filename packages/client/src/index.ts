@@ -10,3 +10,17 @@ export {
   type ProjectionEqualityOperator,
   type ProjectionOrderingOperator,
 } from "./projection/projection-column.js";
+export {
+  ProjectionQuery,
+  ProjectionQueryBuilder,
+  all,
+  either,
+  eq,
+  ge,
+  gt,
+  le,
+  lt,
+  type ProjectionComparisonPredicate,
+  type ProjectionGroup,
+  type ProjectionPredicate,
+} from "./query/projection-query.js";

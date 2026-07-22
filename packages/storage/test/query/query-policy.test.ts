@@ -145,6 +145,9 @@ describe("StorageQueryPolicy", () => {
     expect(() => {
       StorageQueryPolicy.validate({ mask: { paths: [] } }, completeCapabilities);
     }).toThrow(/field mask must not be empty/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: 0 }, completeCapabilities);
+    }).toThrow(/candidate limit must be a positive safe integer/);
   });
 
   it("detects nested groups separately from the top-level group", () => {

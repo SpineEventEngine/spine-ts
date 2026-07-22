@@ -33,6 +33,8 @@ export interface NormalizedQueryPlan<Id> {
   readonly order?: readonly NormalizedQueryOrder[];
   readonly mask?: NormalizedQueryMask;
   readonly limit?: number;
+  /** Maximum provider candidates materialized before semantic evaluation. */
+  readonly candidateLimit?: number;
 }
 
 /** Optional normalized query features a storage provider can execute. */
@@ -78,9 +80,17 @@ export const StorageQueryPolicy: Readonly<{
     validateOrder(normalizedPlan.order, requirements);
     validateMask(normalizedPlan.mask, requirements);
     validateLimit(normalizedPlan.limit, normalizedPlan.order, requirements);
+    validateCandidateLimit(normalizedPlan.candidateLimit);
     admitCapabilities(requirements, comparisons, features);
   },
 });
+
+function validateCandidateLimit(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError("query candidate limit must be a positive safe integer.");
+  }
+}
 
 interface QueryRequirements {
   readonly comparisons: Set<NormalizedComparisonOperator>;

@@ -1,9 +1,14 @@
-import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
 import { VersionSchema, type Version } from "@spine-ts/proto";
 import {
   RecordColumn,
+  RecordMask,
   RecordSpec,
+  StorageQueryCandidateLimitError,
+  StorageQueryEvaluator,
+  StorageQueryPolicy,
+  type NormalizedQueryPlan,
   type RecordQuery,
   type RecordStorage,
   type StorageContext,
@@ -235,6 +240,68 @@ export class Stand {
     } finally {
       finish();
     }
+  }
+
+  /** Query latest states through the canonical normalized plan and retain versions. */
+  async queryPlanVersioned<Schema extends MessageSchema>(
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions = {},
+  ): Promise<readonly StandReadResult<Schema>[]> {
+    const finish = this.#beginOperation();
+    try {
+      const registration = this.#registration(schema, "read");
+      const tenantId = this.#tenantId(options.tenantId);
+      const storage = this.#openStorage(registration, tenantId);
+      try {
+        const stored = usesSystemPlan(plan)
+          ? await this.#querySystemPlan(registration, storage, plan, tenantId)
+          : await storage.queryPlanEntries(plan);
+        return stored.map((entry) =>
+          this.#readResult(registration, entry.record as MessageShape<Schema>, tenantId, entry.id),
+        );
+      } finally {
+        storage.close();
+      }
+    } finally {
+      finish();
+    }
+  }
+
+  async #querySystemPlan(
+    registration: Registration,
+    storage: RecordStorage<unknown, Message>,
+    plan: NormalizedQueryPlan<unknown>,
+    tenantId: string | undefined,
+  ): Promise<readonly { readonly id: unknown; readonly record: Message }[]> {
+    StorageQueryPolicy.validate(plan, {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    });
+    const candidates = await storage.queryEntries(
+      plan.candidateLimit === undefined ? {} : { limit: plan.candidateLimit + 1 },
+    );
+    if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
+      throw new StorageQueryCandidateLimitError(plan.candidateLimit);
+    }
+    const entries = candidates.map((entry) => {
+      const materialized = registration.recordSpec.materialize(entry.record);
+      const version = this.#versions.get(versionKey(registration.typeUrl, tenantId, entry.id));
+      return {
+        id: entry.id,
+        record: materialized.record,
+        columns: new Map([
+          ...materialized.columns,
+          ["version", version ?? create(VersionSchema)],
+          ["archived", false],
+          ["deleted", false],
+        ]),
+      };
+    });
+    return StorageQueryEvaluator.evaluate(entries, plan).map((entry) => ({
+      id: entry.id,
+      record: RecordMask.apply(registration.recordSpec.cloneRecord(entry.record), plan.mask?.paths),
+    }));
   }
 
   /**
@@ -562,6 +629,24 @@ function readRecordField(record: Message, localName: string): unknown {
 
 function cloneValue(value: unknown): unknown {
   return typeof value === "object" && value !== null ? structuredClone(value) : value;
+}
+
+function usesSystemPlan(plan: NormalizedQueryPlan<unknown>): boolean {
+  if (plan.order?.some((order) => isSystemColumn(order.column)) === true) return true;
+  const pending = plan.predicate === undefined ? [] : [plan.predicate];
+  while (pending.length > 0) {
+    const predicate = pending.pop();
+    if (predicate === undefined) break;
+    if (predicate.kind === "comparison" && isSystemColumn(predicate.column)) return true;
+    if (predicate.kind === "all" || predicate.kind === "either") {
+      pending.push(...predicate.predicates);
+    }
+  }
+  return false;
+}
+
+function isSystemColumn(column: string): boolean {
+  return column === "version" || column === "archived" || column === "deleted";
 }
 
 function versionKey(typeUrl: string, tenantId: string | undefined, id: unknown): string {
