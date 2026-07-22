@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Server } from "../../src/index.js";
 import { createContextRoutingPlan } from "../../src/runtime/runtime-routing.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { lifecycleFixture } from "./server-lifecycle-fixture.js";
 
 const createHttp2Server = vi.hoisted(() =>
@@ -33,12 +34,15 @@ vi.mock("node:http2", async (importOriginal) => {
 });
 
 describe("Server context transport lifecycle", () => {
-  beforeEach(() => createHttp2Server.mockReset());
+  beforeEach(async () => {
+    await resetServerEnvironmentForTest();
+    createHttp2Server.mockReset();
+  });
 
   it("opens context transports in context order after recovery and before listening", async () => {
     const events: string[] = [];
     const transport = new LifecycleSignalTransport(events);
-    const fixture = await lifecycleFixture({ events, environment: { transport } });
+    const fixture = await lifecycleFixture({ events, settings: { transport } });
     const secondContext = await fixture.createContext("LifecycleSecond");
     const firstDescriptor = requireFirst(
       createContextRoutingPlan(fixture.context).events.subscriptions,
@@ -47,10 +51,7 @@ describe("Server context transport lifecycle", () => {
       createContextRoutingPlan(secondContext).events.subscriptions,
     ).descriptorKey;
     createHttp2Server.mockImplementationOnce(() => events.push("listener"));
-    const starting = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .add(secondContext)
-      .start();
+    const starting = Server.atPort(0).add(fixture.context).add(secondContext).start();
     let running: Awaited<typeof starting> | undefined;
 
     try {
@@ -76,7 +77,7 @@ describe("Server context transport lifecycle", () => {
       await running?.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
       await secondContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -85,7 +86,7 @@ describe("Server context transport lifecycle", () => {
     const events: string[] = [];
     const closeFailure = new Error("context transport close failed");
     const transport = new LifecycleSignalTransport(events);
-    const fixture = await lifecycleFixture({ events, environment: { transport } });
+    const fixture = await lifecycleFixture({ events, settings: { transport } });
     const descriptor = requireFirst(
       createContextRoutingPlan(fixture.context).events.subscriptions,
     ).descriptorKey;
@@ -96,7 +97,7 @@ describe("Server context transport lifecycle", () => {
       network = trackNetworkClose(server, events);
       events.push("listener");
     });
-    const starting = Server.atPort(0, { environment: fixture.environment })
+    const starting = Server.atPort(0)
       .add(fixture.context)
       .addResource({ close: closeResource })
       .start();
@@ -132,7 +133,7 @@ describe("Server context transport lifecycle", () => {
       await starting.catch(() => undefined);
       await running?.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -143,7 +144,7 @@ describe("Server context transport lifecycle", () => {
     const firstCloseFailure = new Error("partial command close failed first");
     const secondCloseFailure = new Error("partial command close failed second");
     const transport = new LifecycleSignalTransport(events);
-    const fixture = await lifecycleFixture({ events, environment: { transport } });
+    const fixture = await lifecycleFixture({ events, settings: { transport } });
     const mixedContext = fixture.createMixedContext("LifecyclePartialOpen");
     const firstDescriptor = requireFirst(
       createContextRoutingPlan(fixture.context).events.subscriptions,
@@ -155,7 +156,7 @@ describe("Server context transport lifecycle", () => {
     transport.failRegistrationClose(commandDescriptor, firstCloseFailure);
     transport.failRegistrationClose(commandDescriptor, secondCloseFailure);
     const closeResource = vi.fn(() => events.push("resource"));
-    const server = Server.atPort(0, { environment: fixture.environment })
+    const server = Server.atPort(0)
       .add(fixture.context)
       .add(mixedContext)
       .addResource({ close: closeResource });
@@ -198,21 +199,21 @@ describe("Server context transport lifecycle", () => {
       await fixture.context.close().catch(() => undefined);
       await mixedContext.close().catch(() => undefined);
       await transport.close();
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
   it("closes context intake before detach after listener open fails", async () => {
-    const blocker = await Server.atPort(0).start();
     const events: string[] = [];
     const transport = new LifecycleSignalTransport(events);
-    const fixture = await lifecycleFixture({ events, environment: { transport } });
+    const fixture = await lifecycleFixture({ events, settings: { transport } });
+    const blocker = await createPortBlocker();
     const descriptor = requireFirst(
       createContextRoutingPlan(fixture.context).events.subscriptions,
     ).descriptorKey;
     const closeResource = vi.fn(() => events.push("resource"));
-    const server = Server.atPort(blocker.port, { environment: fixture.environment })
+    const server = Server.atPort(blocker.port)
       .add(fixture.context)
       .addResource({ close: closeResource });
     const starting = server.start();
@@ -248,18 +249,14 @@ describe("Server context transport lifecycle", () => {
     fixture.worker.release();
     const firstContext = fixture.createMixedContext("CommandOwnerFirst");
     const duplicateContext = fixture.createMixedContext("CommandOwnerDuplicate");
-    const duplicateServer = Server.atPort(0, { environment: fixture.environment }).add(
-      duplicateContext,
-    );
+    const duplicateServer = Server.atPort(0).add(duplicateContext);
     let first: Awaited<ReturnType<Server["start"]>> | undefined;
     let duplicateRunning: Awaited<ReturnType<Server["start"]>> | undefined;
     let fresh: Awaited<ReturnType<Server["start"]>> | undefined;
     let freshContext: ReturnType<typeof fixture.createMixedContext> | undefined;
 
     try {
-      first = await Server.atPort(0, { environment: fixture.environment })
-        .add(firstContext)
-        .start();
+      first = await Server.atPort(0).add(firstContext).start();
 
       const failure = await duplicateServer.start().catch((error: unknown) => error);
       if (!(failure instanceof Error)) {
@@ -281,9 +278,7 @@ describe("Server context transport lifecycle", () => {
       await first.close();
       first = undefined;
       freshContext = fixture.createMixedContext("CommandOwnerFresh");
-      fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      fresh = await Server.atPort(0).add(freshContext).start();
       expect(createHttp2Server).toHaveBeenCalledTimes(2);
       await expectConnectable(fresh);
     } finally {
@@ -295,14 +290,14 @@ describe("Server context transport lifecycle", () => {
       await duplicateContext.close().catch(() => undefined);
       await freshContext?.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
   it("closes one server registration while preserving its shared-transport sibling", async () => {
     const transport = new LifecycleSignalTransport([]);
-    const fixture = await lifecycleFixture({ environment: { transport } });
+    const fixture = await lifecycleFixture({ settings: { transport } });
     fixture.worker.release();
     const firstObserved: string[] = [];
     const siblingObserved: string[] = [];
@@ -313,12 +308,8 @@ describe("Server context transport lifecycle", () => {
     let sibling: Awaited<ReturnType<Server["start"]>> | undefined;
 
     try {
-      first = await Server.atPort(0, { environment: fixture.environment })
-        .add(firstContext)
-        .start();
-      sibling = await Server.atPort(0, { environment: fixture.environment })
-        .add(siblingContext)
-        .start();
+      first = await Server.atPort(0).add(firstContext).start();
+      sibling = await Server.atPort(0).add(siblingContext).start();
 
       await transport.publish({ topic, envelope: fixture.createEvent("shared") });
       await first.close();
@@ -338,14 +329,14 @@ describe("Server context transport lifecycle", () => {
       await siblingContext.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
       await transport.close();
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
   it("drains accepted context transport work before detaching delivery", async () => {
     const transport = new LifecycleSignalTransport([]);
-    const fixture = await lifecycleFixture({ environment: { transport } });
+    const fixture = await lifecycleFixture({ settings: { transport } });
     fixture.worker.release();
     const dispatch = Promise.withResolvers<undefined>();
     const started = Promise.withResolvers<undefined>();
@@ -354,10 +345,7 @@ describe("Server context transport lifecycle", () => {
       return dispatch.promise;
     });
     const topic = requireFirst(createContextRoutingPlan(context).events.topics);
-    const running = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .add(context)
-      .start();
+    const running = await Server.atPort(0).add(fixture.context).add(context).start();
     let closing: Promise<void> | undefined;
 
     try {
@@ -383,7 +371,7 @@ describe("Server context transport lifecycle", () => {
       await context.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
       await transport.close();
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -393,13 +381,10 @@ describe("Server context transport lifecycle", () => {
     const transport = new LifecycleSignalTransport(events);
     const fixture = await lifecycleFixture({
       events,
-      environment: { transport, ownsTransport: true },
+      settings: { transport },
     });
     const closeResource = vi.fn(() => events.push("resource"));
-    const starting = Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const starting = Server.atPort(0)
       .add(fixture.context)
       .addResource({ close: closeResource })
       .start();
@@ -410,6 +395,7 @@ describe("Server context transport lifecycle", () => {
       fixture.worker.release();
       running = await starting;
       await running.close();
+      await resetServerEnvironmentForTest();
 
       expect(transport.closeCalls).toBe(1);
       expect(events.indexOf("registration-close:succeeded")).toBeLessThan(events.indexOf("stop"));
@@ -420,7 +406,7 @@ describe("Server context transport lifecycle", () => {
       await starting.catch(() => undefined);
       await running?.close().catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -625,4 +611,29 @@ async function expectConnectable(server: { readonly baseUrl: string }): Promise<
   await new Promise<void>((resolve) => session.once("remoteSettings", resolve));
   session.close();
   await new Promise<void>((resolve) => session.once("close", resolve));
+}
+
+async function createPortBlocker(): Promise<{ readonly port: number; close(): Promise<void> }> {
+  const server = http2.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Port blocker did not expose a TCP address.");
+  }
+  return Object.freeze({
+    port: address.port,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error === undefined) resolve();
+          else reject(error);
+        });
+      }),
+  });
 }

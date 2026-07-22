@@ -30,14 +30,16 @@ complete server/runtime environment. It introduced a Node HTTP/2 listener over
 `SpineServices`, defaulted to `127.0.0.1`, and returned a `RunningServer` with
 `host`, `port`, `baseUrl`, and idempotent `close()`; it did not yet include
 `ServerEnvironment` or environment-owned delivery. That is historical. The
-current runtime exposes `ServerEnvironment` for storage, transport, optional
-delivery/tracing facilities, and close ownership. Server startup completes
-finite environment recovery and opens command/event transport intake before
-listener intake. Server close stops network intake and sessions, drains
-accepted transport work, detaches and quiesces delivery, then closes contexts,
-resources, and any server-owned environment. This lifecycle adds no process
-supervision, public delivery scheduler, retry-timing policy, or production
-transport-topology policy.
+current runtime exposes one process-wide `Environment`/`ServerEnvironment`
+singleton graph for storage, transport, optional delivery/tracing facilities,
+and their explicit process-close ownership. Server startup completes finite
+environment recovery and opens command/event transport intake before listener
+intake. Server close stops network intake and sessions, drains accepted
+transport work, detaches and quiesces delivery, then closes its contexts and
+resources. Shared facilities remain open until every server has detached and
+the process explicitly closes `ServerEnvironment.instance()`. This lifecycle
+adds no process supervision, public delivery scheduler, retry-timing policy, or
+production transport-topology policy.
 
 ## Read-Side and Write-Side Segregation
 
@@ -359,7 +361,8 @@ before delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
-`ServerEnvironment` owns the delivery lifecycle for attached contexts.
+The process-wide `ServerEnvironment` owns the delivery lifecycle for attached
+contexts.
 `Server.start()` builds its contexts and completes finite environment recovery
 before opening listener intake. If recovery rejects, startup rejects and the
 listener is not opened. Recovery completion does not claim that every pending
@@ -367,9 +370,9 @@ delivery was completed.
 
 `RunningServer.close()` stops listener intake and sessions, closes context
 transport intake and drains accepted work, detaches delivery and waits for
-quiescence, then closes contexts and resources. A caller-owned environment may
-remain in use by sibling servers and is not closed by this server; a
-server-owned environment closes only after those dependencies. Retriable close
+quiescence, then closes contexts and resources. It never closes process-wide
+facilities. After all sibling servers detach, explicit
+`ServerEnvironment.instance().close()` closes the singleton. Retriable close
 failures retain unfinished work and do not duplicate completed phases.
 `ServerEnvironment.close()` is permanent only after it is no longer in use; an
 in-use close rejects without tearing down its owned facilities.

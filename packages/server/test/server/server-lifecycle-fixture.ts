@@ -23,9 +23,10 @@ import {
 } from "@spine-ts/storage";
 import {
   BoundedContext,
+  EnvironmentType,
   Projection,
   ServerEnvironment,
-  type ServerEnvironmentLocalOptions,
+  type ServerEnvironmentSettings,
 } from "../../src/index.js";
 import type { DeliveryRunObligation } from "../../src/delivery/delivery-run-coordinator.js";
 import type { DeliveryWorkerEvidence } from "../../src/delivery/delivery-worker.js";
@@ -49,7 +50,7 @@ class LifecycleProjection extends Projection<string, typeof LifecycleStateSchema
 export async function lifecycleFixture(
   options: {
     readonly events?: string[];
-    readonly environment?: ServerEnvironmentLocalOptions;
+    readonly settings?: ServerEnvironmentSettings;
     readonly awaitFailure?: Error;
     readonly workers?: readonly HeldStartupWorker[];
   } = {},
@@ -62,7 +63,8 @@ export async function lifecycleFixture(
   }
   const worker = configuredWorkers?.[0] ?? new HeldStartupWorker(events, options.awaitFailure);
   let generation = 0;
-  const environment = ServerEnvironment.local(options.environment);
+  ServerEnvironment.when(EnvironmentType.Local).use(options.settings ?? {});
+  const environment = ServerEnvironment.instance();
   serverEnvironmentAccess.installTestAttachments(environment, () => {
     if (configuredWorkers === undefined) {
       return worker;

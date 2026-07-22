@@ -106,7 +106,8 @@ Current slice exposes:
   uncompressed limit; set top-level `readMaxBytes` and `writeMaxBytes` only to
   integer values from 1 through 4,294,967,295. `RunningServer.close()` stops network intake, closes active
   HTTP/2 sessions, waits until active work can no longer use its dependencies,
-  then closes contexts, resources, and any server-owned environment;
+  then closes contexts and resources; process facilities close only through
+  explicit `ServerEnvironment.instance().close()`;
   and
 - generated rejection throwables for domain-rule failures: repository rollback
   leaves state unchanged, `CommandService.Post` returns an OK acceptance
@@ -254,15 +255,13 @@ Current slice exposes:
   supplied `SignalTransport`, validating generated Spine command/event envelope
   shape and enclosed message type URL before runtime intake, and enqueuing
   accepted callbacks through `SingleProcessServerRuntime`.
-- `ServerEnvironment` for a small explicit runtime environment boundary around
-  storage, transport, optional delivery, optional tracing, and facility
-  ownership during server assembly. Local environments use in-memory storage
-  and same-process transport defaults; production environments require
-  caller-supplied storage and transport before a server opens network intake.
-  `close()` permanently closes an environment once it is no longer in use. An
-  in-use close rejects non-destructively and performs no owned-facility
-  teardown. A caller-owned environment remains open after its servers close and
-  may be used by a newly assembled server with fresh contexts.
+- `ServerEnvironment` for the process-wide runtime boundary around storage,
+  transport, optional delivery, and optional tracing. Local environments use
+  in-memory storage and same-process transport defaults; production
+  environments require caller-supplied storage and transport before a server
+  opens network intake. `close()` permanently closes process facilities once
+  no server is attached; an in-use close rejects non-destructively. Closing a
+  server does not close these shared facilities.
   `Server` builds added `BoundedContextBuilder` values with the environment
   storage factory unless the builder already selected a local factory.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
@@ -978,14 +977,14 @@ exposes `host`, `port`, `baseUrl`, and an idempotent `close()`.
 Connect and default to 4,194,304 uncompressed bytes per request or response
 message. They bound decompressed messages as well as uncompressed traffic.
 
-The server uses a small explicit `ServerEnvironment`. Omitting it creates a
-server-owned local environment with `InMemoryStorageFactory` and same-process
-transport defaults. Supplying one leaves it caller-owned unless
-`ownsEnvironment: true` is explicit:
+The server uses one lazy process `ServerEnvironment` for this module graph.
+Local development defaults to `InMemoryStorageFactory` and same-process
+transport; deployments configure the singleton before the first server is
+constructed:
 
 ```ts
 import type { BoundedContext } from "@spine-ts/server";
-import { Server, ServerEnvironment } from "@spine-ts/server";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
 import type { StorageFactory } from "@spine-ts/storage";
 import type { SignalTransport } from "@spine-ts/transport";
 
@@ -993,28 +992,30 @@ declare const tasks: BoundedContext;
 declare const durableStorageFactory: StorageFactory;
 declare const deploymentSignalTransport: SignalTransport;
 
-const environment = ServerEnvironment.production({
+// Start this process with NODE_ENV=production before this first resolution.
+ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory: durableStorageFactory,
   transport: deploymentSignalTransport,
 });
 
-await Server.atPort(8080, { environment }).add(tasks).start();
+await Server.atPort(8080).add(tasks).start();
 ```
 
-Production construction rejects missing `storageFactory` or `transport` before
-network intake opens. Production mode validates explicit facility injection
+Production selection requires `NODE_ENV=production` before the first
+`Environment` or `ServerEnvironment` resolution (including `Server.atPort()`).
+After selection, resolution rejects missing `storageFactory` or `transport`
+before network intake opens. Production mode validates explicit facility injection
 only; durable production storage adapters are outside the initial release, and
-`InMemoryStorageFactory` is local/test-only. The environment selects facilities
-for server assembly. It closes a supplied facility only when the corresponding
-`ownsStorageFactory`, `ownsTransport`, `ownsDelivery`, or `ownsTracerFactory`
-flag is true; all four flags default to false for production environments.
-These per-facility flags are independent of `ServerOptions.ownsEnvironment`,
-which controls whether the server closes the environment object after contexts
-and explicit resources. `Server` accepts built contexts and
+`InMemoryStorageFactory` is local/test-only. The process environment owns its
+configured facilities: closing an individual server never closes them; call
+`await ServerEnvironment.instance().close()` during process shutdown.
+`Server` accepts built contexts and
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
-more specific local factory first. This object is not a Java-style process-wide
-singleton.
+more specific local factory first. Tests import
+`resetServerEnvironmentForTest` from `@spine-ts/server/testing`, await it, and
+then reconfigure through `when(...).use(...)`; reset is intentionally absent
+from the package root.
 
 Startup assembles added context builders and completes finite startup recovery
 for environment delivery. It then opens every built context's command/event
@@ -1031,9 +1032,9 @@ redelivery, retries, process restarts, or remote transport.
 
 If environment startup, context transport intake, or listener open fails,
 cleanup closes acquired network resources and context intake first, waits until
-accepted work can no longer use the server's dependencies, closes contexts and
-explicit resources, then closes facilities when the environment is
-server-owned. Network and context-intake cleanup are hard gates: a cleanup-only
+accepted work can no longer use the server's dependencies, then closes contexts
+and explicit resources. Process facilities remain open until explicit
+`ServerEnvironment.instance().close()` shutdown. Network and context-intake cleanup are hard gates: a cleanup-only
 `start()` retry must complete them before contexts, explicit resources, or
 environment facilities close; all remain open until then. An initial rejection
 combines the original startup or listener failure first with reached cleanup
@@ -1044,17 +1045,15 @@ same `Server` is cleanup-only: it does not rebuild contexts or open a listener.
 That retry reports only current cleanup failures, without repeating the
 original startup failure or failures already reported. Once cleanup completes,
 the retry rejects instead of returning a fake `RunningServer`, and the same
-`Server` remains terminal. A newly assembled server with fresh contexts may
-reuse a caller-owned environment; a server-owned environment is permanently
-closed after its ordered cleanup completes.
+`Server` remains terminal. A newly assembled server with fresh contexts reuses
+the singleton environment.
 
 Running close is also ordered. The listener stops accepting new requests and
 active HTTP/2 sessions close first. Context transport intake then closes and
 drains accepted work before environment delivery detaches. Only then do
-contexts and explicit resources close, followed by facilities when the server
-owns its environment. Closing one server that shares a caller-owned environment
-or transport does not interrupt its siblings. Caller-owned facilities remain
-open and can later be used by a newly assembled server with fresh contexts.
+contexts and explicit resources close. Closing one server does not interrupt
+siblings or close singleton facilities; explicitly close the singleton after
+all servers have detached.
 
 A network- or context-intake-close failure prevents dependency cleanup until a
 later `close()` retry completes that gate. Other failed closes retry only

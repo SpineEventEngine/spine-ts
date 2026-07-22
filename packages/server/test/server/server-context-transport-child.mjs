@@ -12,6 +12,7 @@ import {
   Projection,
   Repository,
   Server,
+  EnvironmentType,
   ServerEnvironment,
   defineEntityHandlers,
 } from "@spine-ts/server";
@@ -94,10 +95,9 @@ const transport = createZeroMqTransport(
     onBackgroundFailure: (error) => reportFailure("transport", error),
   },
 );
-const environment = ServerEnvironment.local({
+ServerEnvironment.when(EnvironmentType.Local).use({
   storageFactory: new InMemoryStorageFactory(),
   transport,
-  ownsStorageFactory: true,
 });
 let running;
 let stopping;
@@ -149,7 +149,7 @@ try {
     .add(aggregateRepository)
     .add(projectionRepository)
     .add(auditRepository);
-  running = await Server.atPort(0, { environment }).add(context).start();
+  running = await Server.atPort(0).add(context).start();
   await sendControl({ type: "ready", host: running.host, port: running.port });
 } catch (error) {
   await reportFailure("startup", error);
@@ -202,8 +202,7 @@ function shutdown(exitCode = 0) {
 async function closeChild(exitCode) {
   const failures = [];
   await captureClose(() => running?.close(), "server close", failures);
-  await captureClose(() => environment.close(), "environment close", failures);
-  await captureClose(() => transport.close(), "transport close", failures);
+  await captureClose(() => ServerEnvironment.instance().close(), "environment close", failures);
 
   if (failures.length > 0) {
     await reportFailure("shutdown", new AggregateError(failures, "Child shutdown failed."));

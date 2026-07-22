@@ -1,5 +1,5 @@
 import { InMemoryStorageFactory, type StorageContext } from "@spine-ts/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ContextDeliveryDescriptor,
@@ -31,7 +31,22 @@ import {
   EnvironmentDeliveryWorker,
   type EnvironmentDeliveryRuntime,
 } from "../../src/server/environment-delivery-worker.js";
-import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import {
+  ServerEnvironment,
+  type ServerEnvironmentSettings,
+  serverEnvironmentAccess,
+} from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+
+afterEach(async () => {
+  await resetServerEnvironmentForTest();
+});
+
+function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvironment {
+  ServerEnvironment.when(EnvironmentType.Local).use(settings);
+  return ServerEnvironment.instance();
+}
 
 describe("EnvironmentRegistrations", () => {
   it("shares one caller-owned generation and rejects every exclusive conflict before mutation", () => {
@@ -459,7 +474,7 @@ describe("ServerEnvironment attachment", () => {
         return second.value.startupScopes();
       },
     });
-    const environment = ServerEnvironment.local();
+    const environment = serverEnvironment();
 
     const firstAttach = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
@@ -473,8 +488,10 @@ describe("ServerEnvironment attachment", () => {
     expect(events).toEqual(["first-start"]);
 
     releaseFirst.resolve(undefined);
-    await Promise.all([firstAttach, secondAttach]);
+    const [firstHandle, secondHandle] = await Promise.all([firstAttach, secondAttach]);
     expect(events).toEqual(["first-start", "first-finish", "second-start"]);
+    await serverEnvironmentAccess.detach(environment, secondHandle);
+    await serverEnvironmentAccess.detach(environment, firstHandle);
   });
 
   it("recovers actual descriptor storage and shares one caller generation", async () => {
@@ -483,7 +500,7 @@ describe("ServerEnvironment attachment", () => {
     const second = descriptor("Second", "type.example.dev/Second", storageFactory);
     const delivery = new Delivery({ context: first.context, storageFactory });
     await delivery.inbox.receive(message(first.ready, "startup"));
-    const environment = ServerEnvironment.local({ storageFactory });
+    const environment = serverEnvironment({ storageFactory });
 
     const firstHandle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
@@ -497,15 +514,17 @@ describe("ServerEnvironment attachment", () => {
     expect(first.replayed).toEqual(["startup"]);
     expect(secondHandle.generation).toBe(firstHandle.generation);
     expect(secondHandle.token).not.toBe(firstHandle.token);
+    await serverEnvironmentAccess.detach(environment, secondHandle);
+    await serverEnvironmentAccess.detach(environment, firstHandle);
   });
 
   it("rejects server-owned conflicts before descriptor enumeration", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("First", "type.example.dev/First", storageFactory);
     const rejected = descriptor("Rejected", "type.example.dev/Rejected", storageFactory);
-    const environment = ServerEnvironment.local({ storageFactory });
+    const environment = serverEnvironment({ storageFactory });
 
-    await serverEnvironmentAccess.attach(environment, {
+    const handle = await serverEnvironmentAccess.attach(environment, {
       ownership: "server",
       descriptors: [first.value],
     });
@@ -517,12 +536,13 @@ describe("ServerEnvironment attachment", () => {
     ).rejects.toThrow("Server-owned environment registration requires exclusive ownership.");
 
     expect(rejected.enumerations).toBe(0);
+    await serverEnvironmentAccess.detach(environment, handle);
   });
 
   it("rejects a repeated descriptor before ownership or descriptor work", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("Duplicate", "type.example.dev/Duplicate", storageFactory);
-    const environment = ServerEnvironment.local({ storageFactory });
+    const environment = serverEnvironment({ storageFactory });
 
     await expect(
       serverEnvironmentAccess.attach(environment, {
@@ -536,15 +556,14 @@ describe("ServerEnvironment attachment", () => {
     expect(target.transitions).toBe(0);
     expect(target.readyCallbacks).toBe(0);
 
-    await expect(
-      serverEnvironmentAccess.attach(environment, {
-        ownership: "caller",
-        descriptors: [target.value],
-      }),
-    ).resolves.toBeDefined();
+    const handle = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [target.value],
+    });
     expect(target.enumerations).toBe(1);
     expect(target.storageContexts).toBe(1);
     expect(target.transitions).toBe(1);
+    await serverEnvironmentAccess.detach(environment, handle);
   });
 
   it("awaits an older direct drain and transfers transition readiness exactly once", async () => {
@@ -552,7 +571,7 @@ describe("ServerEnvironment attachment", () => {
     const target = descriptor("Race", "type.example.dev/Race", storageFactory);
     const release = Promise.withResolvers<undefined>();
     const admitted = target.readiness.claim(target.ready).complete(() => release.promise);
-    const environment = ServerEnvironment.local({ storageFactory });
+    const environment = serverEnvironment({ storageFactory });
     const attaching = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [target.value],
@@ -571,7 +590,7 @@ describe("ServerEnvironment attachment", () => {
     expect(directDrains).toBe(0);
 
     release.resolve(undefined);
-    await Promise.all([admitted, buffered, attaching]);
+    const [, , handle] = await Promise.all([admitted, buffered, attaching]);
     expect(target.replayed).toEqual(["buffered"]);
     expect(directDrains).toBe(0);
 
@@ -583,6 +602,7 @@ describe("ServerEnvironment attachment", () => {
     await until(() => target.replayed.length === 2);
     expect(target.replayed).toEqual(["buffered", "later"]);
     expect(directDrains).toBe(0);
+    await serverEnvironmentAccess.detach(environment, handle);
   });
 
   it("fails a stalled-peer attachment closed after bounded unknown routed readiness", async () => {
@@ -601,7 +621,7 @@ describe("ServerEnvironment attachment", () => {
     await delivery.inbox.receive(message(transferred.ready, "startup-row"));
     const releasePeer = Promise.withResolvers<undefined>();
     const admittedPeer = peer.readiness.claim(peer.ready).complete(() => releasePeer.promise);
-    const attaching = serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+    const attaching = serverEnvironmentAccess.attach(serverEnvironment(), {
       ownership: "caller",
       descriptors: [peer.value, transferred.value],
     });
@@ -666,7 +686,7 @@ describe("ServerEnvironment attachment", () => {
       await delivery.inbox.receive(message({ ...target.ready, tenantId }, tenantId));
     }
 
-    const handle = await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+    const handle = await serverEnvironmentAccess.attach(serverEnvironment(), {
       ownership: "caller",
       descriptors: [target.value],
     });
@@ -676,6 +696,7 @@ describe("ServerEnvironment attachment", () => {
       "tenant-b",
     ]);
     expect(target.replayTenants).toEqual(["tenant-a", "tenant-b"]);
+    await serverEnvironmentAccess.detach(ServerEnvironment.instance(), handle);
   });
 
   it("extends the configured domain for a newly persisted tenant after attachment", async () => {
@@ -683,7 +704,8 @@ describe("ServerEnvironment attachment", () => {
     const target = descriptor("Growing", "type.example.dev/Growing", storageFactory, {
       tenants: [],
     });
-    await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+    const environment = serverEnvironment();
+    const handle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [target.value],
     });
@@ -699,6 +721,7 @@ describe("ServerEnvironment attachment", () => {
     await until(() => target.replayed.includes("tenant-b-later"));
 
     expect(target.replayTenants).toContain("tenant-b");
+    await serverEnvironmentAccess.detach(environment, handle);
   });
 
   it("keeps fulfilled FAILED as cause-less parked startup without rejecting attachment", async () => {
@@ -709,18 +732,16 @@ describe("ServerEnvironment attachment", () => {
     const delivery = new Delivery({ context: target.context, storageFactory });
     await delivery.inbox.receive(message(target.ready, "failed"));
 
-    const handle = await serverEnvironmentAccess.attach(
-      ServerEnvironment.local({ storageFactory }),
-      {
-        ownership: "caller",
-        descriptors: [target.value],
-      },
-    );
+    const handle = await serverEnvironmentAccess.attach(serverEnvironment({ storageFactory }), {
+      ownership: "caller",
+      descriptors: [target.value],
+    });
 
     expect(handle.startup.scopes).toMatchObject([{ disposition: "PARKED" }]);
     expect(handle.records()).toEqual([
       expect.objectContaining({ hasCause: false, occurrences: 0 }),
     ]);
+    await serverEnvironmentAccess.detach(ServerEnvironment.instance(), handle);
   });
 
   it("does not blame or restart a distinct owner with equal shard facts", async () => {
@@ -739,7 +760,7 @@ describe("ServerEnvironment attachment", () => {
     const attaching = descriptor("Attaching", "type.example.dev/Attaching", healthyStorage, {
       shard: new ShardIndex(0, 2),
     });
-    const environment = ServerEnvironment.local();
+    const environment = serverEnvironment();
 
     await expect(
       serverEnvironmentAccess.attach(environment, {
@@ -758,6 +779,7 @@ describe("ServerEnvironment attachment", () => {
     expect(attached?.scope.ready).toEqual(attaching.ready);
     expect(attached?.disposition).toBe("IDLE");
     expect(rejectedQueries).toBe(1);
+    await serverEnvironmentAccess.detach(environment, handle);
   });
 });
 
@@ -932,9 +954,8 @@ describe("non-last registration detach", () => {
     expect(worker.retiredOwners).toEqual([["environment-owner-1"]]);
   });
 
-  it("validates opaque environment ownership and coalesces duplicate handle detach", async () => {
-    const environment = ServerEnvironment.local();
-    const foreignEnvironment = ServerEnvironment.local();
+  it("validates opaque attachment handles and coalesces duplicate detach", async () => {
+    const environment = serverEnvironment();
     const first = descriptor(
       "HandleFirst",
       "type.example.dev/HandleFirst",
@@ -945,11 +966,6 @@ describe("non-last registration detach", () => {
       "type.example.dev/HandleSibling",
       new InMemoryStorageFactory(),
     );
-    const foreign = descriptor(
-      "HandleForeign",
-      "type.example.dev/HandleForeign",
-      new InMemoryStorageFactory(),
-    );
     const firstHandle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [first.value],
@@ -957,10 +973,6 @@ describe("non-last registration detach", () => {
     const siblingHandle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [sibling.value],
-    });
-    const foreignHandle = await serverEnvironmentAccess.attach(foreignEnvironment, {
-      ownership: "caller",
-      descriptors: [foreign.value],
     });
     const forged = Object.freeze({
       // eslint-disable-next-line @typescript-eslint/no-misused-spread -- Intentional nominal copy.
@@ -972,15 +984,6 @@ describe("non-last registration detach", () => {
     await expect(serverEnvironmentAccess.detach(environment, forged)).rejects.toThrow(
       "Environment attachment handle is not owned by this environment.",
     );
-    await expect(serverEnvironmentAccess.detach(environment, foreignHandle)).rejects.toThrow(
-      "Environment attachment handle is not owned by this environment.",
-    );
-    await expect(serverEnvironmentAccess.retryDetach(environment, foreignHandle)).rejects.toThrow(
-      "Environment attachment handle is not owned by this environment.",
-    );
-    await expect(
-      serverEnvironmentAccess.retryDetach(foreignEnvironment, foreignHandle),
-    ).rejects.toThrow("Environment attachment has no failed detach to retry.");
     await expect(serverEnvironmentAccess.retryDetach(environment, siblingHandle)).rejects.toThrow(
       "Environment attachment has no failed detach to retry.",
     );
@@ -995,6 +998,7 @@ describe("non-last registration detach", () => {
     await expect(
       serverEnvironmentAccess.retryDetach(environment, firstHandle),
     ).resolves.toBeUndefined();
+    await serverEnvironmentAccess.detach(environment, siblingHandle);
   });
 
   it.each(["stop", "await"] as const)(

@@ -19,16 +19,26 @@ import type {
   TransportSubscriptionHandle,
 } from "@spine-ts/transport";
 import { createTransportSubscription, createTransportTopic } from "@spine-ts/transport";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   BoundedContext,
+  EnvironmentType,
   Server,
   ServerEnvironment,
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
 describe("Server", () => {
+  beforeEach(async () => {
+    await resetServerEnvironmentForTest();
+  });
+
+  afterEach(async () => {
+    await resetServerEnvironmentForTest();
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
@@ -214,9 +224,9 @@ describe("Server", () => {
 
   it("builds added context builders with the server environment storage factory", async () => {
     const storageFactory = new TrackingStorageFactory();
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
     const server = await new Server({
       contexts: [BoundedContext.singleTenant("Tasks")],
-      environment: ServerEnvironment.local({ storageFactory }),
     }).start();
 
     try {
@@ -231,9 +241,8 @@ describe("Server", () => {
   it("keeps explicit builder storage factories over the server environment default", async () => {
     const environmentStorage = new TrackingStorageFactory();
     const builderStorage = new TrackingStorageFactory();
-    const server = await Server.atPort(0, {
-      environment: ServerEnvironment.local({ storageFactory: environmentStorage }),
-    })
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: environmentStorage });
+    const server = await Server.atPort(0)
       .add(BoundedContext.singleTenant("Tasks").withStorageFactory(builderStorage))
       .start();
 
@@ -247,6 +256,7 @@ describe("Server", () => {
 
   it("closes contexts built earlier in the same start attempt when a later builder fails", async () => {
     const storageFactory = new TrackingStorageFactory();
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
     const brokenBuilder = BoundedContext.singleTenant("Broken").addEventDispatcher({
       messageSchemas() {
         throw new Error("Cannot read event schemas.");
@@ -255,38 +265,15 @@ describe("Server", () => {
     });
 
     await expect(
-      Server.atPort(0, {
-        environment: ServerEnvironment.local({ storageFactory }),
-      })
-        .add(BoundedContext.singleTenant("Tasks"))
-        .add(brokenBuilder)
-        .start(),
+      Server.atPort(0).add(BoundedContext.singleTenant("Tasks")).add(brokenBuilder).start(),
     ).rejects.toThrow("Cannot read event schemas.");
 
     expect(storageFactory.contextNames()).toContain("Tasks");
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
-  it("rejects production environments without required storage and transport", () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const transport = new CloseTrackingTransport([]);
-
-    expect(() =>
-      ServerEnvironment.production({ transport } as unknown as {
-        storageFactory: InMemoryStorageFactory;
-        transport: SignalTransport;
-      }),
-    ).toThrow("Production ServerEnvironment requires storageFactory.");
-    expect(() =>
-      ServerEnvironment.production({ storageFactory } as unknown as {
-        storageFactory: InMemoryStorageFactory;
-        transport: SignalTransport;
-      }),
-    ).toThrow("Production ServerEnvironment requires transport.");
-  });
-
   it("removes local publish handlers when the last subscription closes", async () => {
-    const environment = ServerEnvironment.local();
+    const environment = ServerEnvironment.instance();
     const topic = createTransportTopic({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
@@ -320,7 +307,7 @@ describe("Server", () => {
   });
 
   it("routes local request handlers and rejects duplicate responders", async () => {
-    const environment = ServerEnvironment.local();
+    const environment = ServerEnvironment.instance();
     const topic = createTransportTopic({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.LookupTask",
@@ -369,7 +356,7 @@ describe("Server", () => {
   });
 
   it("rejects local transport work after environment close", async () => {
-    const environment = ServerEnvironment.local();
+    const environment = ServerEnvironment.instance();
     const topic = createTransportTopic({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.ClosedTransportTask",
@@ -395,15 +382,14 @@ describe("Server", () => {
     );
   });
 
-  it("leaves caller-owned environments open by default", async () => {
+  it("leaves singleton facilities open when a server closes", async () => {
     const closed: string[] = [];
-    const environment = ServerEnvironment.local({
+    ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
       transport: new CloseTrackingTransport(closed),
-      ownsStorageFactory: true,
-      ownsTransport: true,
     });
-    const server = await Server.atPort(0, { environment }).start();
+    const environment = ServerEnvironment.instance();
+    const server = await Server.atPort(0).start();
 
     await server.close();
 
@@ -417,12 +403,11 @@ describe("Server", () => {
   it("retries failed environment facility closes without rerunning successful closes", async () => {
     const closed: string[] = [];
     const storageError = new Error("storage close failed once");
-    const environment = ServerEnvironment.local({
+    ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
       transport: new CloseTrackingTransport(closed),
-      ownsStorageFactory: true,
-      ownsTransport: true,
     });
+    const environment = ServerEnvironment.instance();
 
     await expect(environment.close()).rejects.toMatchObject({
       errors: [storageError],
@@ -433,45 +418,25 @@ describe("Server", () => {
     expect(closed).toEqual(["transport", "storage", "storage"]);
   });
 
-  it("closes optional environment facilities only when owned", async () => {
+  it("closes configured optional singleton facilities", async () => {
     const closed: string[] = [];
-    const ownedDelivery = new CloseTrackingCloseable(closed, "delivery");
-    const ownedTracer = new CloseTrackingCloseable(closed, "tracer");
-    const callerDelivery = new CloseTrackingCloseable(closed, "caller-delivery");
-    const callerTracer = new CloseTrackingCloseable(closed, "caller-tracer");
-
-    await ServerEnvironment.local({
-      delivery: ownedDelivery satisfies ServerEnvironmentCloseable,
-      tracerFactory: ownedTracer,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-    }).close();
-    await ServerEnvironment.production({
-      storageFactory: new InMemoryStorageFactory(),
-      transport: new CloseTrackingTransport(closed),
-      delivery: callerDelivery satisfies ServerEnvironmentCloseable,
-      tracerFactory: callerTracer,
-    }).close();
-    const production = ServerEnvironment.production({
-      storageFactory: new InMemoryStorageFactory(),
-      transport: new CloseTrackingTransport(closed),
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      delivery: new CloseTrackingCloseable(closed, "delivery") satisfies ServerEnvironmentCloseable,
+      tracerFactory: new CloseTrackingCloseable(closed, "tracer"),
     });
 
-    expect(production.delivery).toBe(undefined);
-    expect(production.tracerFactory).toBe(undefined);
-    await production.close();
+    await ServerEnvironment.instance().close();
     expect(closed).toEqual(["delivery", "tracer"]);
   });
 
-  it("closes server-owned environments after network sessions and resources", async () => {
+  it("closes singleton facilities only after server network sessions and resources", async () => {
     const closed: string[] = [];
-    const environment = ServerEnvironment.local({
+    ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
       transport: new CloseTrackingTransport(closed),
-      ownsStorageFactory: true,
-      ownsTransport: true,
     });
-    const server = await Server.atPort(0, { environment, ownsEnvironment: true })
+    const environment = ServerEnvironment.instance();
+    const server = await Server.atPort(0)
       .addResource({
         close() {
           closed.push("resource");
@@ -485,22 +450,23 @@ describe("Server", () => {
 
     await server.close();
 
+    expect(closed).toEqual(["session", "resource"]);
+    await environment.close();
     expect(closed).toEqual(["session", "resource", "transport", "storage"]);
   });
 
-  it("cleans up owned resources and environment when listener open fails", async () => {
-    const first = await Server.atPort(0).start();
+  it("cleans up owned resources but leaves the singleton open when listener open fails", async () => {
     const closed: string[] = [];
-    const environment = ServerEnvironment.local({
+    ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
       transport: new CloseTrackingTransport(closed),
-      ownsStorageFactory: true,
-      ownsTransport: true,
     });
+    const environment = ServerEnvironment.instance();
+    const first = await Server.atPort(0).start();
 
     try {
       await expect(
-        Server.atPort(first.port, { environment, ownsEnvironment: true })
+        Server.atPort(first.port)
           .addResource({
             close() {
               closed.push("resource");
@@ -509,6 +475,9 @@ describe("Server", () => {
           .start(),
       ).rejects.toMatchObject({ code: "EADDRINUSE" });
 
+      expect(closed).toEqual(["resource"]);
+      await first.close();
+      await environment.close();
       expect(closed).toEqual(["resource", "transport", "storage"]);
     } finally {
       await first.close();

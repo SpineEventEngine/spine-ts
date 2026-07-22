@@ -137,6 +137,8 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     ],
     ["readRepositoryEntityTypeOption", "packages/server/src/repository/repository.ts", 256],
     ["readSafeUint8ArrayBytes", "packages/server/src/entity/entity-transition-validation.ts", 361],
+    ["resetServerEnvironmentForTest", "packages/server/src/server/server-environment.ts", 153],
+    ["resetServerEnvironmentForTest", "packages/server/src/testing/index.ts", 4],
     [
       "registeredCommandMessageFullTypeNames",
       "packages/server/src/handler/command-registration-readiness.ts",

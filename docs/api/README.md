@@ -337,30 +337,30 @@ stream ownership, or durable retained update queue. A crashed owner can leave a
 stale claim because this contract has no lease, heartbeat, routing, supervision,
 or automatic reclamation.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
-owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
-`ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select
-storage, transport, optional delivery, optional tracing, and facility ownership
-for server assembly without introducing a process-wide singleton. `Server`
+owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
+`ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide
+storage, transport, optional delivery, and optional tracing facility set through
+`ServerEnvironment.when(type).use(settings)`. `Server`
 accepts built contexts and `BoundedContextBuilder` values; builders added
 through `Server` use the environment storage factory unless
 `withStorageFactory()` already selected a more specific local factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
-explicit through `ServerOptions`. When no environment is supplied, `Server`
-creates and owns a local environment with in-memory storage and same-process
-transport defaults. Supplied environments are caller-owned unless
-`ownsEnvironment` is true. Production environment construction requires
-`storageFactory` and `transport` and rejects missing facilities before a
-listener is opened. `RunningServer` exposes `host`, `port`, `baseUrl`, and
+explicit through `ServerOptions`. All servers share the lazily resolved
+singleton; production configuration requires `storageFactory` and `transport`
+before first resolution, and production selection itself requires
+`NODE_ENV=production` before that first resolution. `RunningServer` exposes
+`host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
 closes context transport intake and drains accepted work, then detaches and
-quiesces environment delivery before closing contexts, explicit resources, and
-the environment when the server owns it. Network or context-intake close
-failure is a hard gate: delivery detach and dependency cleanup do not begin
+quiesces environment delivery before closing contexts and explicit resources.
+Shared facilities remain open when a server closes. Network or context-intake
+close failure is a hard gate: delivery detach and dependency cleanup do not begin
 until a later `close()` retry completes that phase. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
 close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
-global environment configuration.
+delivery-topology configuration; it intentionally exposes this one JVM-style
+global process environment configuration.
 `@spine-ts/testing` exports `BoundedContextFixture`,
 `BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
 built `BoundedContext`, captures the in-process `SpineServices` handlers, and
