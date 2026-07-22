@@ -1,6 +1,6 @@
 # T-0055: Environment And Singleton Server Facilities
 
-Status: Verified; ready for integration
+Status: Complete; integrated, post-merge verified, and pushed
 
 ## Objective
 
@@ -111,3 +111,16 @@ requirements split is needed.
   `ServerOptions`. Individual servers may create and close implicit
   environments. T-0055 replaces this surface atomically while preserving the
   mature attachment/cleanup machinery beneath it.
+
+## Durable Closure
+
+- Reviewed task endpoint: `b374ac71` on
+  `origin/task/T-0055-server-environment-singleton`.
+- Integrated into `main` by merge commit `8b1990f4`, pushed to `origin/main`.
+- The required post-merge `pnpm --config.verify-deps-before-run=false verify`
+  passed on that merge: 86 test files passed with 3 skipped, 1,931 tests passed
+  with 21 skipped, and branch coverage was 90.06%.
+- Both typechecks, lint/cleanup, formatting, TypeDoc/API validation, copied
+  Proto checksums, frozen descriptors, generated cleanliness, and release
+  readiness also passed. T-0055 is durably closed; T-0056 is the active
+  implementation frontier.
