@@ -405,53 +405,64 @@ create a new server instance for a new attempt.
 
 ## 7. Post commands and read acknowledgements
 
-Use the generated Spine `CommandService` through a Connect or gRPC client.
-`Post` returns an `Ack` after command intake, validation, and the command
+Use `Client` with the application's generated command schema. `post()` returns
+an outcome after command intake, validation, and the command
 handler's immediate work; it is not proof that every resulting projection,
 process-manager reaction, or subscription update has completed. Wait for the
 specific observable consequence through a query, subscription, or test poll.
 
-The following client setup is illustrative and typeable after substituting the
-application's generated service package and a concrete valid `postRequest`
-fixture. The fixture must contain the generated Spine command-service request
-for a valid generated domain command, including its caller-selected command ID
-and actor context.
+The `@example/*` imports below are placeholders for the application's generated
+Protobuf-ES modules.
 
 ```ts
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
-import { CommandService } from "@spine-ts/proto/client";
+import { create } from "@bufbuild/protobuf";
+import { Client } from "@spine-ts/client";
+import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
+import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
-const commands = createClient(CommandService, createGrpcTransport({ baseUrl: running.baseUrl }));
-declare const postRequest: Parameters<typeof commands.post>[0];
-const ack = await commands.post(postRequest);
+const abortController = new AbortController();
+const client = Client.connectTo(running.baseUrl, { tenant: "tasks" });
+const outcome = await client
+  .onBehalfOf("alice")
+  .post(CreateTaskSchema, create(CreateTaskSchema, { title: "First task" }), {
+    observe: [TaskCreatedSchema],
+    signal: abortController.signal,
+  });
+if (outcome.kind === "ok") {
+  for await (const event of outcome.events) {
+    console.log(event.message, event.context);
+    await outcome.events.cancel();
+  }
+}
+await client.close();
 ```
 
-Treat an OK acknowledgement as acceptance for the supported immediate path.
-The framework may continue follow-up work asynchronously.
+Subscription and activation occur before posting. Refusal, transport failure,
+caller abort, overflow, and client close clean up automatically; after an OK
+result, the caller cancels the single-consumer bounded iterable. Network and
+deadline failures remain Connect errors, while caller abort rejects with the
+`AbortSignal` reason.
 
 ## 8. Query and subscribe to state
 
 Use `ProjectionQuery` to compile descriptor-backed columns to the frozen
-`spine.client.Query`, then pass that message to the generated `QueryService`.
+`spine.client.Query`, then pass that message to an immutable `Client` request
+scope. `Client.connectTo()` owns its Node HTTP/2 session; use
+`Client.usingTransport()` when the caller owns the Connect transport.
 The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
 state masks, repeated ordering, and positive limits:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { unpackAny } from "@spine-ts/core";
-import { ProjectionQuery, all, either, eq, ge, gt, le, lt } from "@spine-ts/client";
-import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
-import type { Query, QueryResponse } from "@spine-ts/proto/client";
+import { Client, ProjectionQuery, all, either, eq, ge, gt, le, lt } from "@spine-ts/client";
+import { ActorContextSchema } from "@spine-ts/proto";
 
-declare const queries: { read(query: Query): Promise<QueryResponse> };
+const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 
 const taskListQuery = ProjectionQuery.select({
   schema: TaskListSchema,
   columns: TaskListColumns,
-  context: create(ActorContextSchema, {
-    actor: create(UserIdSchema, { value: "guest" }),
-  }),
+  context: create(ActorContextSchema),
 })
   .byId("list-1", "list-2")
   .where(
@@ -470,14 +481,12 @@ const taskListQuery = ProjectionQuery.select({
   .limit(20)
   .build();
 
-const taskLists = await queries.read(taskListQuery);
-const states = taskLists.message.map(({ state }) => {
-  if (state === undefined) throw new Error("Query result state is required.");
-  const decoded = unpackAny(state, TaskListSchema);
-  if (decoded === undefined) throw new Error("Query result state type does not match TaskList.");
-  return decoded;
-});
-const versions = taskLists.message.map((item) => item.version);
+const result = await client.onBehalfOf("alice").query(TaskListSchema, taskListQuery);
+if (result.kind === "ok") {
+  const states = result.states.map(({ state }) => state);
+  const versions = result.states.map(({ version }) => version);
+}
+await client.close();
 ```
 
 Here `TaskListSchema` comes from the consumer's generated Protobuf-ES module,

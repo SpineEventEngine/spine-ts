@@ -24,3 +24,18 @@ export {
   type ProjectionGroup,
   type ProjectionPredicate,
 } from "./query/projection-query.js";
+export {
+  Client,
+  ClientProtocolError,
+  type ClientRequest,
+  type ClientOperationOptions,
+  type ClientOptions,
+  type ClientObserveOptions,
+  type ClientPostOptions,
+  type CommandEvent,
+  type CommandEvents,
+  type ObservedClientOutcome,
+  type ClientOutcome,
+  type ClientQueryOutcome,
+  type QueryState,
+} from "./client/client.js";
