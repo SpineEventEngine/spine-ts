@@ -30,7 +30,7 @@ exclusions, not commitments to a future policy or implementation.
 - Package manager: `pnpm@11.9.0` via the `packageManager` field.
 - Node.js engine target: Node 24 LTS or newer.
 - TypeScript module target: ESM-first `NodeNext`.
-- Package boundaries: `packages/proto`, `packages/core`, `packages/server`,
+- Package boundaries: `packages/proto`, `packages/client`, `packages/core`, `packages/server`,
   `packages/transport`, `packages/storage`, `packages/storage-datastore`,
   `packages/storage-rdbms`, and `packages/testing`.
 - Example boundary: `examples/todo`.
@@ -38,6 +38,8 @@ exclusions, not commitments to a future policy or implementation.
   `proto/spine-sources.json`.
 - `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
+- `@spine-ts/client` owns descriptor-backed, typed Projection column metadata;
+  it does not yet provide query execution or a query DSL.
 - `@spine-ts/core` owns type metadata, validation, and envelope helpers;
   `@spine-ts/server` owns bounded-context, service, lifecycle, and durable
   handoff behavior; `@spine-ts/storage` owns record storage; and

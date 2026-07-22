@@ -6,5 +6,13 @@ plugins:
     opt:
       - target=ts
       - import_extension=js
+  - local:
+      - node
+      - packages/client/codegen/generate-projection-columns.mjs
+    out: examples/datastore-orders/generated
+    include_imports: true
+    opt:
+      - target=ts
+      - import_extension=js
 inputs:
   - directory: examples/datastore-orders/proto

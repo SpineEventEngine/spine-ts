@@ -1,6 +1,16 @@
 export { EventStore, type EventRollback, type OnEventAccepted } from "./event/event-store.js";
 export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
+export { StorageQueryPolicy } from "./query/query-policy.js";
+export type {
+  NormalizedComparisonOperator,
+  NormalizedQueryMask,
+  NormalizedQueryOrder,
+  NormalizedQueryPlan,
+  NormalizedQueryPredicate,
+  StorageQueryCapabilities,
+  StorageQueryFeature,
+} from "./query/query-policy.js";
 export { RecordColumn } from "./record/record-column.js";
 export { RecordMask } from "./record/record-mask.js";
 export type {
