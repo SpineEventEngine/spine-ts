@@ -6,11 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import { deriveTypeUrl } from "@spine-ts/core";
 import { EventSchema, type Command, type Event, type TenantId } from "@spine-ts/proto";
-import {
-  SPI_type,
-  internal_all,
-  internal_type,
-} from "@spine-ts/proto/generated/spine/options_pb.js";
+import { SPI_type, internal_all, internal_type } from "@spine-ts/proto";
 import {
   EventStore,
   InMemoryStorageFactory,

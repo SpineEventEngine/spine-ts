@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateRejectionCompanions } from "./generate-rejections.mjs";
+import { generateRejectionCompanions, rejectionMessages } from "./generate-rejections.mjs";
 
 function generatedOutput() {
   const imports = [];
@@ -32,6 +32,15 @@ function generatedOutput() {
 }
 
 describe("rejection companion generator", () => {
+  it("keeps delivery-server rejection runtime helpers private", () => {
+    expect(
+      rejectionMessages({
+        name: "spine/delivery/rejections.proto",
+        messages: [{ name: "ShardAlreadyPickedUp" }],
+      }),
+    ).toEqual([]);
+  });
+
   it("emits a same-directory companion for only top-level rejection messages", () => {
     const output = generatedOutput();
     const generatedFiles = [];

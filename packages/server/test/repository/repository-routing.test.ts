@@ -32,7 +32,7 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
-import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
+import type { UserId } from "@spine-ts/proto";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
 import {

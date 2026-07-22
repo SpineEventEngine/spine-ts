@@ -1,5 +1,5 @@
 import { unpackAny } from "@spine-ts/core";
-import type { QueryResponse } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import type { QueryResponse } from "@spine-ts/proto/client";
 
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
 

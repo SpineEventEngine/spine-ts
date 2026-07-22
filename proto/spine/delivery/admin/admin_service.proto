@@ -1,0 +1,110 @@
+/*
+ * Copyright (c) 2000-2026 TeamDev. All rights reserved.
+ * TeamDev PROPRIETARY and CONFIDENTIAL.
+ * Use is subject to license terms.
+ */
+syntax = "proto3";
+
+package spine.delivery;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.delivery.admin.grpc";
+option java_outer_classname = "AdminServiceProto";
+option java_multiple_files = true;
+option java_generate_equals_and_hash = true;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+import "spine/server/delivery/delivery.proto";
+
+// Acts as a backend implementation for `AdminService`
+service AdminService {
+
+    // Gets an information about shards on Liquor server.
+    rpc GetShardInfo(google.protobuf.Empty) returns (ShardInfoList);
+
+    // Subscribes to the updates of shard info.
+    //
+    // The first received `SubscriptionResponse` is an acknowledgement of a successfully created
+    // subscription and contains only the `created` filed set. All other responses contain
+    // `ShardInfoUpdate`. It is guaranteed that the acknowledgement is sent only once as a first
+    // response and never repeated again. Also, it is impossible that any update comes
+    // before the acknowledgement.
+    //
+    // Users should consider the subscription as created only after receiving the acknowledgement
+    // in the `SubscriptionResponse`. All changes in the system occurred before the subscription
+    // acknowledgement is not tracked by this call.
+    //
+    // Each update is sent as a single `ShardInfoUpdate`.
+    //
+    rpc SubscribeToShardUpdates(google.protobuf.Empty) returns (stream SubscriptionResponse);
+}
+
+// An outcome of the subscription to the `ShardInfoUpdate`.
+message SubscriptionResponse {
+
+    oneof value {
+
+        // Indicates that the subscription is created.
+        bool created = 1;
+
+        // An update of the shard state.
+        ShardInfoUpdate update = 2;
+    }
+}
+
+// An update of the shard info.
+message ShardInfoUpdate {
+
+    spine.server.delivery.ShardIndex index = 1 [(required) = true];
+
+    // New status of the shard.
+    ShardStatus new_status = 2;
+
+    // New time when the shard was picked for delivery last time.
+    google.protobuf.Timestamp when_last_picked = 3;
+
+    // New number of messages present in the shard.
+    int32 new_messages_count = 4;
+}
+
+// A list of `ShardInfo`.
+message ShardInfoList {
+
+    repeated ShardInfo shards = 1;
+}
+
+// Information about shard status on the Liquor server.
+message ShardInfo {
+
+    // Index of the shard.
+    spine.server.delivery.ShardIndex index = 1 [(required) = true];
+
+    // Shows whether the shard picked for delivery or not.
+    ShardStatus status = 2 [(required) = true];
+
+    // When the shard was picked for delivery last time.
+    //
+    // Can be unset if the shard has never been picked by workers.
+    google.protobuf.Timestamp last_picked = 3;
+
+    // Number of messages present in the shard.
+    //
+    // The `(required)` option is not applicable to scalar `int32` fields in the current
+    // Spine validation rules, so it is not set here; `0` is a valid value.
+    int32 messages = 4;
+}
+
+// Current status of the shard.
+enum ShardStatus {
+    SS_UNKNOWN = 0;
+
+    // Shard is picked for delivery.
+    PICKED = 1;
+
+    // Shard is not picked for delivery.
+    NOT_PICKED = 2;
+}

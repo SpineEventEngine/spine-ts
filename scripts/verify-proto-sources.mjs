@@ -101,17 +101,19 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     isAbsolute(localPath) ||
     localPath.includes("\\") ||
     localPath.split("/").includes("..") ||
-    !localPath.startsWith("proto/spine/") ||
+    !localPath.startsWith("proto/") ||
     !localPath.endsWith(".proto")
   ) {
-    failures.push(
-      `${localPath}: localPath must be a relative proto/spine/**/*.proto path without '..'`,
-    );
+    failures.push(`${localPath}: localPath must be a relative proto/**/*.proto path without '..'`);
     return undefined;
   }
 
   if (!/^[0-9a-f]{40}$/.test(commit)) {
     failures.push(`${localPath}: commit must be a 40-character lowercase hex SHA`);
+  }
+
+  if (!/^SpineEventEngine\/[A-Za-z0-9._-]+$/.test(repository)) {
+    failures.push(`${localPath}: repository must be a SpineEventEngine owner/name path`);
   }
 
   if (
@@ -122,18 +124,17 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     failures.push(`${localPath}: upstreamPath must be a relative .proto path without '..'`);
   }
 
-  if (!/^https:\/\/github\.com\/SpineEventEngine\/[^/]+\/blob\/[0-9a-f]{40}\//.test(sourceUrl)) {
-    failures.push(`${localPath}: sourceUrl must be a GitHub blob URL pinned to the full commit`);
-  } else if (!sourceUrl.includes(`/blob/${commit}/`)) {
-    failures.push(`${localPath}: sourceUrl must use the manifest commit`);
+  const expectedSourceUrl = `https://github.com/${repository}/blob/${commit}/${upstreamPath}`;
+  const expectedRawUrl = `https://raw.githubusercontent.com/${repository}/${commit}/${upstreamPath}`;
+
+  if (sourceUrl !== expectedSourceUrl) {
+    failures.push(
+      `${localPath}: sourceUrl must exactly match repository, commit, and upstreamPath`,
+    );
   }
 
-  if (
-    !/^https:\/\/raw\.githubusercontent\.com\/SpineEventEngine\/[^/]+\/[0-9a-f]{40}\//.test(rawUrl)
-  ) {
-    failures.push(`${localPath}: rawUrl must be a raw GitHub URL pinned to the full commit`);
-  } else if (!rawUrl.includes(`/${commit}/`)) {
-    failures.push(`${localPath}: rawUrl must use the manifest commit`);
+  if (rawUrl !== expectedRawUrl) {
+    failures.push(`${localPath}: rawUrl must exactly match repository, commit, and upstreamPath`);
   }
 
   if (!/^[0-9a-f]{64}$/.test(sha256)) {
@@ -143,7 +144,7 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
   const filePath = resolve(repoRoot, localPath);
 
   if (!isUnderPath(filePath, protoRoot) && filePath !== protoRoot) {
-    failures.push(`${localPath}: resolved path escapes proto/spine`);
+    failures.push(`${localPath}: resolved path escapes proto`);
     return undefined;
   }
 
@@ -173,7 +174,7 @@ export function verifyProtoSources(options = {}) {
   const manifestPath = resolve(
     options.manifestPath ?? resolve(repoRoot, "proto/spine-sources.json"),
   );
-  const protoRoot = resolve(repoRoot, "proto/spine");
+  const protoRoot = resolve(repoRoot, "proto");
   const failures = [];
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 

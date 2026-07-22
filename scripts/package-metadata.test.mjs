@@ -31,16 +31,26 @@ describe("package metadata", () => {
     expect(generatedVerify).not.toContain("pnpm proto:generate");
   });
 
-  it("exports generated proto modules with extensionless and .js ESM subpaths", () => {
+  it("exports exactly the curated Proto contract entrypoints", () => {
     const protoPackage = readJson("packages/proto/package.json");
 
-    expect(protoPackage.exports["./generated/*"]).toEqual({
-      types: "./dist/generated/*.d.ts",
-      default: "./dist/generated/*.js",
-    });
-    expect(protoPackage.exports["./generated/*.js"]).toEqual({
-      types: "./dist/generated/*.d.ts",
-      default: "./dist/generated/*.js",
+    expect(protoPackage.exports).toEqual({
+      ".": {
+        types: "./dist/src/index.d.ts",
+        default: "./dist/src/index.js",
+      },
+      "./client": {
+        types: "./dist/src/client.d.ts",
+        default: "./dist/src/client.js",
+      },
+      "./delivery": {
+        types: "./dist/src/delivery.d.ts",
+        default: "./dist/src/delivery.js",
+      },
+      "./delivery-server": {
+        types: "./dist/src/delivery-server.d.ts",
+        default: "./dist/src/delivery-server.js",
+      },
     });
   });
 });

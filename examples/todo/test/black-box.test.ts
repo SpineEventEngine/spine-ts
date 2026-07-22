@@ -18,7 +18,7 @@ import {
   FilterSchema,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+} from "@spine-ts/proto/client";
 import {
   EntityStateWithVersionSchema,
   QueryIdSchema,
@@ -26,17 +26,17 @@ import {
   QuerySchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
+} from "@spine-ts/proto/client";
+import { CommandService } from "@spine-ts/proto/client";
+import { QueryService } from "@spine-ts/proto/client";
 import {
   EventUpdatesSchema,
   SubscriptionUpdateSchema,
   TopicIdSchema,
   TopicSchema,
   type SubscriptionUpdate,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
-import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+} from "@spine-ts/proto/client";
+import { SubscriptionService } from "@spine-ts/proto/client";
 import { SignalMetadata } from "@spine-ts/server";
 import { BoundedContextFixture } from "@spine-ts/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";

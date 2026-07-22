@@ -142,6 +142,11 @@ import type {
   ValidationError,
 } from "../generated/spine/validation/validation_error_pb.js";
 
+export * from "../generated/spine/base/error_pb.js";
+export * from "../generated/spine/core/ack_pb.js";
+export * from "../generated/spine/core/response_pb.js";
+export { SPI_type, internal_all, internal_type } from "../generated/spine/options_pb.js";
+
 /**
  * Curated Protobuf-ES root exports for copied Spine proto contracts.
  *

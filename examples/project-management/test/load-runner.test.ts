@@ -7,20 +7,13 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { packAny, unpackAny } from "@spine-ts/core";
-import { AckSchema } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
-import { ResponseSchema, StatusSchema } from "@spine-ts/proto/generated/spine/core/response_pb.js";
-import {
-  type Query,
-  type QueryResponse,
-  QueryResponseSchema,
-} from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import {
-  SubscriptionSchema,
-  SubscriptionUpdateSchema,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
-import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
-import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { AckSchema } from "@spine-ts/proto";
+import { ResponseSchema, StatusSchema } from "@spine-ts/proto";
+import { type Query, type QueryResponse, QueryResponseSchema } from "@spine-ts/proto/client";
+import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-ts/proto/client";
+import { CommandService } from "@spine-ts/proto/client";
+import { QueryService } from "@spine-ts/proto/client";
+import { SubscriptionService } from "@spine-ts/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { projectManagementLoadLevels, runProjectManagementLoad } from "../src/load-runner.js";

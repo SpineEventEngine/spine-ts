@@ -14,15 +14,9 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
-import {
-  TargetFiltersSchema,
-  TargetSchema,
-} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import {
-  TopicIdSchema,
-  TopicSchema,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { TargetFiltersSchema, TargetSchema } from "@spine-ts/proto/client";
+import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/client";
+import { TopicIdSchema, TopicSchema } from "@spine-ts/proto/client";
 import {
   Aggregate,
   BoundedContext,

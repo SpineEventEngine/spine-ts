@@ -79,6 +79,14 @@ export function main(argv = process.argv.slice(2)) {
     return verifyStatus;
   }
 
+  const descriptorStatus = runCommand("frozen descriptor compatibility", process.execPath, [
+    join(repoRoot, "packages/proto/scripts/verify-descriptor-compatibility.mjs"),
+  ]);
+
+  if (descriptorStatus !== 0) {
+    return descriptorStatus;
+  }
+
   if (command === "generate") {
     const prepareStatus = prepareGeneratedOutput();
 

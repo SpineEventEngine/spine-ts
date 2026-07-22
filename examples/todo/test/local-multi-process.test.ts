@@ -17,12 +17,9 @@ import {
   QuerySchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
-import {
-  TargetFiltersSchema,
-  TargetSchema,
-} from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+} from "@spine-ts/proto/client";
+import { QueryService } from "@spine-ts/proto/client";
+import { TargetFiltersSchema, TargetSchema } from "@spine-ts/proto/client";
 import { SignalMetadata } from "@spine-ts/server";
 import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";

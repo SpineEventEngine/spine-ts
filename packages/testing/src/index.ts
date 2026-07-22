@@ -5,8 +5,8 @@ import {
   QueryResponseSchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/generated/spine/client/query_pb.js";
-import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
+} from "@spine-ts/proto/client";
+import { QueryService } from "@spine-ts/proto/client";
 import {
   SubscriptionSchema,
   SubscriptionUpdateSchema,
@@ -14,12 +14,12 @@ import {
   type SubscriptionUpdate,
   type Subscription,
   type Topic,
-} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
-import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
-import { AckSchema, type Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
-import { ResponseSchema, type Response } from "@spine-ts/proto/generated/spine/core/response_pb.js";
+} from "@spine-ts/proto/client";
+import { SubscriptionService } from "@spine-ts/proto/client";
+import { AckSchema, type Ack } from "@spine-ts/proto";
+import { ResponseSchema, type Response } from "@spine-ts/proto";
 import { BoundedContext, SpineServices, type SpineServicesOptions } from "@spine-ts/server";
-import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { CommandService } from "@spine-ts/proto/client";
 
 /** Options for an in-process bounded-context test fixture. */
 export interface BoundedContextFixtureOptions {

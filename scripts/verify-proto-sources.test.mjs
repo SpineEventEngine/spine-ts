@@ -43,6 +43,26 @@ function runVerifier(repoRoot, manifest) {
 }
 
 describe("verify-proto-sources", () => {
+  it("accepts frozen non-Spine service contracts under proto", () => {
+    const repoRoot = createFixture();
+    const localPath = "proto/grpc/health/v1/health.proto";
+    const filePath = join(repoRoot, localPath);
+    mkdirSync(join(repoRoot, "proto/grpc/health/v1"), { recursive: true });
+    writeFileSync(filePath, copiedProtoContents);
+
+    const source = manifestSource(localPath);
+    source.repository = "SpineEventEngine/delivery-server";
+    source.upstreamPath = "grpc-api/src/main/proto/grpc/health/v1/health.proto";
+    source.sourceUrl =
+      "https://github.com/SpineEventEngine/delivery-server/blob/43b55858c410eaf79fc594ca6f3f3eab0daca027/grpc-api/src/main/proto/grpc/health/v1/health.proto";
+    source.rawUrl =
+      "https://raw.githubusercontent.com/SpineEventEngine/delivery-server/43b55858c410eaf79fc594ca6f3f3eab0daca027/grpc-api/src/main/proto/grpc/health/v1/health.proto";
+
+    const result = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
+
+    expect(result.status).toBe(0);
+  });
+
   it("rejects copied proto files missing from the manifest", () => {
     const repoRoot = createFixture();
     writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
@@ -74,7 +94,7 @@ describe("verify-proto-sources", () => {
     expect(result.stderr).toContain("proto/spine/present.proto: duplicate manifest localPath");
   });
 
-  it("rejects manifest paths that escape proto/spine", () => {
+  it("rejects manifest paths containing traversal", () => {
     const repoRoot = createFixture();
 
     const result = runVerifier(repoRoot, {
@@ -84,7 +104,41 @@ describe("verify-proto-sources", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "localPath must be a relative proto/spine/**/*.proto path without '..'",
+      "localPath must be a relative proto/**/*.proto path without '..'",
+    );
+  });
+
+  it("rejects provenance URLs for a different repository", () => {
+    const repoRoot = createFixture();
+    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
+    const source = manifestSource("proto/spine/present.proto");
+    source.repository = "SpineEventEngine/core-java";
+
+    const result = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "sourceUrl must exactly match repository, commit, and upstreamPath",
+    );
+    expect(result.stderr).toContain(
+      "rawUrl must exactly match repository, commit, and upstreamPath",
+    );
+  });
+
+  it("rejects provenance URLs for a different upstream path", () => {
+    const repoRoot = createFixture();
+    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
+    const source = manifestSource("proto/spine/present.proto");
+    source.upstreamPath = "base/src/main/proto/spine/other.proto";
+
+    const result = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "sourceUrl must exactly match repository, commit, and upstreamPath",
+    );
+    expect(result.stderr).toContain(
+      "rawUrl must exactly match repository, commit, and upstreamPath",
     );
   });
 });
