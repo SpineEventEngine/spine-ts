@@ -1,6 +1,6 @@
 # T-0052: JVM Feature Parity — Wave 1
 
-Status: Planning packet accepted; implementation awaits human start approval
+Status: Planning packet accepted, merged, verified, and pushed; implementation awaits human start approval
 
 ## Objective
 
@@ -186,3 +186,6 @@ The binding implementation sequence and parity matrix are in
   release-readiness package/link resolution, and cleanup enforcement. No runtime
   or generated source changed, so the protocol does not require a second full
   suite after the recorded planning baseline.
+- Planning commit `6d2c4a11` is pushed on the task branch and integrated into
+  `main` at `ed63277c`. Post-merge tree equality and the focused gates passed;
+  both local/remote task and main refs matched before this record-only closure.

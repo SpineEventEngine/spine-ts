@@ -272,3 +272,17 @@ digest using their originally recorded explicit roles/profiles.
 - No runtime, dependency, generated source, public declaration, or build graph
   changed. The protocol's documentation-only cadence therefore uses these
   focused gates rather than repeating the baseline full test suite.
+
+## Integration Disposition
+
+- Accepted planning endpoint `6d2c4a11` was pushed to
+  `origin/task/T-0052-jvm-feature-parity-wave-1`.
+- Merged `main` endpoint `ed63277c` was pushed to `origin/main` immediately after
+  the merge commit.
+- Task and merged trees both resolve to
+  `a35c64341fe414870060b9cf659a3a2ba944e420`.
+- Post-merge Prettier, diff, release-readiness, and cleanup checks passed with
+  the same 60-import/120-link inventory. Local and remote task/main refs matched.
+- This closure evidence is record-only and does not reopen any specialist lane.
+  The commit containing it must be pushed immediately; its SHA is represented
+  by final `origin/main` history rather than a self-referential record.
