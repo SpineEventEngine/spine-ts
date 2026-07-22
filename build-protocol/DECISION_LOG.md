@@ -4549,3 +4549,58 @@ Evidence and consequences:
   combination. It is intentionally not a Testcontainers dependency: Docker
   daemon availability is environmental, and silent container startup/fallback
   would weaken credential and lifecycle ownership boundaries.
+
+## D-0099: Stage JVM Feature Parity In Four Human-Gated Waves
+
+Status: Accepted
+
+Date: 2026-07-22
+
+Task: `T-0052`
+
+Decision:
+
+- Implement the first parity wave against frozen `core-java` commit
+  `a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` and `delivery-server` commit
+  `21f2901f393e552208b97166f4eaeb942f9f5172`, adapting observable behavior and
+  supported extension points idiomatically rather than copying JVM internals.
+- Wave 1 replaces `updateDraftState()` with `update()` and `tryUpdate()`, adds a
+  Node `@spine-ts/client`, makes `BlackBox` the end-user testing API, completes
+  Projection column/Query parity, implements JVM-equivalent `Environment` and
+  singleton `ServerEnvironment`, and completes the approved `Delivery`
+  behavior and multi-machine topology.
+- Add `@spine-ts/delivery-client` and an in-memory Node
+  `@spine-ts/delivery-server` that ports only upstream `simple-server`,
+  including Inbox, Shard, Health, stale-session/config behavior, and the
+  machine-facing Admin service/shard-status stream. Shared Protobuf contracts
+  belong to `@spine-ts/proto`.
+- Do not provide deprecation aliases. No real-world Spine TS usage requires a
+  compatibility cycle, and the accepted public model replaces explicit
+  per-server environment injection with `ServerEnvironment.instance()`.
+- Defer recent state/event history and high-level Aggregate/Process Manager
+  queries to Wave 2; packaging and live TS/JVM compatibility execution to Wave
+  3; and human-facing browser/TUI administration to Wave 4. Each later wave
+  requires a separate Q&A and approved plan.
+- Exclude Redis, Hazelcast, every delivery-server module outside
+  `simple-server`, and all human admin interfaces from Wave 1. Perform one
+  relevant upstream-delta audit before Wave 1 closure.
+
+Reasoning:
+
+- The chosen order resolves missing end-user and runtime foundations before
+  recent-history storage changes and deployment packaging depend on them.
+- A standalone in-memory simple server proves the distributed protocol and
+  lifecycle without prematurely coupling delivery coordination to a storage
+  adapter or copying deployment-specific JVM modules.
+- Human gates between waves keep active JVM changes, packaging topology, and
+  administration UX from being decided speculatively.
+
+Consequences:
+
+- T-0052 must produce a frozen-source parity matrix and dependency-ordered
+  task packets before Wave 1 implementation can start.
+- Wave 1 may prove descriptor parity and real TS-client-to-TS-server gRPC
+  behavior, but it must not claim live cross-runtime compatibility until the
+  Wave 3 tests run.
+- Existing low-level Aggregate and Process Manager ID queries remain; their
+  new high-level Query/column guarantees are intentionally absent until Wave 2.
