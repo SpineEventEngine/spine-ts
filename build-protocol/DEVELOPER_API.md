@@ -481,19 +481,22 @@ await running.close();
 `ServerOptions.host` defaults to local-only `127.0.0.1`; broader binding such
 as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent: it stops
 listener intake and sessions, closes context transport intake and accepted work,
-then detaches delivery before closing contexts, resources, and any
-server-owned environment. A failed close retains unfinished phases for a later
-retry.
+then detaches delivery before closing contexts and resources. Process-wide
+facilities remain open until explicit `ServerEnvironment.instance().close()`
+shutdown. A failed close retains unfinished phases for a later retry.
 
-`ServerEnvironment` is a supported public server-assembly value. Use
-`ServerEnvironment.local()` for local/in-memory defaults or
-`ServerEnvironment.production(...)` with deployment facilities, then supply it
-to `Server` when the caller owns that environment. A caller-owned environment
-remains open when one attached server closes and can be reused after detach;
-`ServerEnvironment.close()` permanently closes an unused environment and
-rejects non-destructively while it is in use. The public lifecycle does not
-provide a delivery scheduler, monitor, retry policy, worker supervision,
-topology policy, or internal lifecycle controls.
+`ServerEnvironment` is the supported process-wide server-assembly value.
+Configure it before first resolution with
+`ServerEnvironment.when(EnvironmentType.Local).use(...)` or
+`ServerEnvironment.when(EnvironmentType.Production).use(...)`; `Server`
+always uses the resolved singleton. The singleton remains open when one server
+closes and can be reused after detach; `ServerEnvironment.close()` permanently
+closes an unused singleton and rejects non-destructively while it is in use.
+The selected `EnvironmentType` comes from `NODE_ENV` at first resolution, so a
+production process sets `NODE_ENV=production` before `Server.atPort()`,
+`Environment.instance()`, or `ServerEnvironment.instance()` first runs.
+The public lifecycle does not provide a delivery scheduler, monitor, retry
+policy, worker supervision, topology policy, or internal lifecycle controls.
 
 ## Validation API
 

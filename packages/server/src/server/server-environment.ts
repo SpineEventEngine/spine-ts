@@ -17,9 +17,7 @@ import {
   type EnvironmentAttachmentHandle,
   type EnvironmentGenerationWorker,
 } from "./environment-attachment.js";
-
-/** Deployment profile used by a small explicit server runtime environment. */
-export type ServerEnvironmentMode = "local" | "production";
+import { Environment, EnvironmentType, resetEnvironmentForTest } from "./environment.js";
 
 /** Common closeable facility owned by a server environment. */
 export interface ServerEnvironmentCloseable {
@@ -27,23 +25,11 @@ export interface ServerEnvironmentCloseable {
   close(): unknown;
 }
 
-/** Optional ownership flags for environment facilities. */
-export interface ServerEnvironmentOwnershipOptions {
-  /** Whether this environment closes the supplied storage factory. */
-  readonly ownsStorageFactory?: boolean;
-  /** Whether this environment closes the supplied transport. */
-  readonly ownsTransport?: boolean;
-  /** Whether this environment closes the supplied delivery owner. */
-  readonly ownsDelivery?: boolean;
-  /** Whether this environment closes the supplied tracing factory. */
-  readonly ownsTracerFactory?: boolean;
-}
-
-/** Local/test environment options. Missing storage and transport use in-memory defaults. */
-export interface ServerEnvironmentLocalOptions extends ServerEnvironmentOwnershipOptions {
+/** Facilities configured for one Node environment type. */
+export interface ServerEnvironmentSettings {
   /** Storage facility selected for server assembly, including server-added context builders. */
   readonly storageFactory?: StorageFactory;
-  /** Local signal transport facility. */
+  /** Signal transport facility selected for server assembly. */
   readonly transport?: SignalTransport;
   /** Optional closeable delivery owner for durable delivery seams. */
   readonly delivery?: ServerEnvironmentCloseable;
@@ -51,38 +37,20 @@ export interface ServerEnvironmentLocalOptions extends ServerEnvironmentOwnershi
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
 
-/** Production environment options. Storage and transport are required. */
-export interface ServerEnvironmentProductionOptions extends ServerEnvironmentOwnershipOptions {
-  /** Durable storage facility selected for server assembly, including server-added context builders. */
-  readonly storageFactory: StorageFactory;
-  /** Signal transport facility supplied by the deployment. */
-  readonly transport: SignalTransport;
-  /** Optional closeable delivery owner for durable delivery seams. */
-  readonly delivery?: ServerEnvironmentCloseable;
-  /** Optional tracing factory placeholder for later tracing adapters. */
-  readonly tracerFactory?: ServerEnvironmentCloseable;
-}
-
-interface ServerEnvironmentConstructorOptions extends ServerEnvironmentOwnershipOptions {
-  readonly mode: ServerEnvironmentMode;
-  readonly storageFactory: StorageFactory;
-  readonly transport: SignalTransport;
-  readonly delivery?: ServerEnvironmentCloseable;
-  readonly tracerFactory?: ServerEnvironmentCloseable;
-}
+export type ServerEnvironmentSettingsFactory = () => ServerEnvironmentSettings;
+type SettingsInput = ServerEnvironmentSettings | ServerEnvironmentSettingsFactory;
+const configuredSettings = new Map<EnvironmentType, SettingsInput>();
+let resolvedEnvironment: ServerEnvironment | undefined;
+let resetInProgress: Promise<void> | undefined;
 
 /**
- * Explicit server runtime environment for storage, transport, delivery, and tracing facilities.
- *
- * This is deliberately a small object, not a process-wide singleton. Local
- * environments use in-memory storage and same-process transport defaults.
- * Production environments require caller-supplied storage and transport before
- * a server is assembled. Server-added context builders use this environment's
- * storage factory unless they selected one explicitly.
+ * Process-wide server facilities for the canonical {@link Environment}.
  */
 export class ServerEnvironment implements ServerEnvironmentCloseable {
-  /** Environment deployment profile. */
-  readonly mode: ServerEnvironmentMode;
+  /** The environment whose settings resolved these facilities. */
+  readonly environment: Environment;
+  /** Stable identity shared by every server in this singleton lifecycle. */
+  readonly nodeId: string;
   /** Storage facility selected for server assembly, including server-added context builders. */
   readonly storageFactory: StorageFactory;
   /** Transport facility selected for this environment. */
@@ -96,13 +64,14 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly #closeGroup: RetryableCloseGroup;
   #close: Promise<void> | undefined;
 
-  private constructor(options: ServerEnvironmentConstructorOptions) {
-    this.mode = options.mode;
-    this.storageFactory = options.storageFactory;
-    this.transport = options.transport;
-    this.delivery = options.delivery;
-    this.tracerFactory = options.tracerFactory;
-    this.#ownedCloseables = ownedEnvironmentCloseables(options);
+  private constructor(environment: Environment, settings: RequiredFacilities) {
+    this.environment = environment;
+    this.nodeId = crypto.randomUUID();
+    this.storageFactory = settings.storageFactory;
+    this.transport = settings.transport;
+    this.delivery = settings.delivery;
+    this.tracerFactory = settings.tracerFactory;
+    this.#ownedCloseables = facilitiesToClose(settings);
     this.#closeGroup = new RetryableCloseGroup(
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
@@ -112,40 +81,35 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     Object.freeze(this);
   }
 
-  /** Create a local/test environment with deterministic in-memory defaults. */
-  static local(options: ServerEnvironmentLocalOptions = {}): ServerEnvironment {
-    const storageFactory = options.storageFactory ?? new InMemoryStorageFactory();
-    const transport = options.transport ?? new LocalSignalTransport();
-
-    return new ServerEnvironment({
-      mode: "local",
-      storageFactory,
-      transport,
-      ...(options.delivery === undefined ? {} : { delivery: options.delivery }),
-      ...(options.tracerFactory === undefined ? {} : { tracerFactory: options.tracerFactory }),
-      ownsStorageFactory: options.ownsStorageFactory ?? options.storageFactory === undefined,
-      ownsTransport: options.ownsTransport ?? options.transport === undefined,
-      ownsDelivery: options.ownsDelivery ?? false,
-      ownsTracerFactory: options.ownsTracerFactory ?? false,
+  /** Select facilities for one environment type before first resolution. */
+  static when(type: EnvironmentType): { use(settings: SettingsInput): void } {
+    return Object.freeze({
+      use(settings: SettingsInput) {
+        if (resetInProgress !== undefined) {
+          throw new Error("ServerEnvironment reset is in progress.");
+        }
+        if (resolvedEnvironment !== undefined) {
+          throw new Error("ServerEnvironment is already resolved and cannot be reconfigured.");
+        }
+        configuredSettings.set(type, settings);
+      },
     });
   }
 
-  /** Create a production environment. Storage and transport must be supplied by the deployment. */
-  static production(options: ServerEnvironmentProductionOptions): ServerEnvironment {
-    const storageFactory = requireProductionFacility(options.storageFactory, "storageFactory");
-    const transport = requireProductionFacility(options.transport, "transport");
+  /** Resolve this module graph's configured server facilities exactly once. */
+  static instance(): ServerEnvironment {
+    if (resetInProgress !== undefined) {
+      throw new Error("ServerEnvironment reset is in progress.");
+    }
+    return (resolvedEnvironment ??= this.#resolve());
+  }
 
-    return new ServerEnvironment({
-      mode: "production",
-      storageFactory,
-      transport,
-      ...(options.delivery === undefined ? {} : { delivery: options.delivery }),
-      ...(options.tracerFactory === undefined ? {} : { tracerFactory: options.tracerFactory }),
-      ownsStorageFactory: options.ownsStorageFactory ?? false,
-      ownsTransport: options.ownsTransport ?? false,
-      ownsDelivery: options.ownsDelivery ?? false,
-      ownsTracerFactory: options.ownsTracerFactory ?? false,
-    });
+  static #resolve(): ServerEnvironment {
+    const environment = Environment.instance();
+    const configured = configuredSettings.get(environment.type);
+    const settings = typeof configured === "function" ? configured() : configured;
+    const facilities = resolveFacilities(environment.type, settings ?? {});
+    return new ServerEnvironment(environment, facilities);
   }
 
   /**
@@ -176,6 +140,34 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     }
     return attachments;
   }
+}
+
+interface RequiredFacilities {
+  readonly storageFactory: StorageFactory;
+  readonly transport: SignalTransport;
+  readonly delivery: ServerEnvironmentCloseable | undefined;
+  readonly tracerFactory: ServerEnvironmentCloseable | undefined;
+}
+
+/** @internal Test-only singleton reset behind the package testing subpath. */
+export function resetServerEnvironmentForTest(): Promise<void> {
+  const current = resetInProgress;
+  if (current !== undefined) {
+    return current;
+  }
+  const resolved = resolvedEnvironment;
+  const reset = Promise.resolve()
+    .then(() => resolved?.close())
+    .then(() => {
+      resolvedEnvironment = undefined;
+      configuredSettings.clear();
+      resetEnvironmentForTest();
+    })
+    .finally(() => {
+      resetInProgress = undefined;
+    });
+  resetInProgress = reset;
+  return reset;
 }
 
 interface ServerEnvironmentAccess {
@@ -301,24 +293,39 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   },
 });
 
-function ownedEnvironmentCloseables(
-  options: ServerEnvironmentConstructorOptions,
-): readonly unknown[] {
+function facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
   return Object.freeze([
-    ...(options.ownsDelivery === true && options.delivery !== undefined ? [options.delivery] : []),
-    ...(options.ownsTracerFactory === true && options.tracerFactory !== undefined
-      ? [options.tracerFactory]
-      : []),
-    ...(options.ownsTransport === true ? [options.transport] : []),
-    ...(options.ownsStorageFactory === true ? [options.storageFactory] : []),
+    ...(options.delivery === undefined ? [] : [options.delivery]),
+    ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
+    options.transport,
+    options.storageFactory,
   ]);
 }
 
-function requireProductionFacility<T>(facility: T | undefined, name: string): T {
-  if (facility === undefined || facility === null) {
-    throw new Error(`Production ServerEnvironment requires ${name}.`);
+function resolveFacilities(
+  type: EnvironmentType,
+  settings: ServerEnvironmentSettings,
+): RequiredFacilities {
+  if (type === EnvironmentType.Production) {
+    if (settings.storageFactory === undefined) {
+      throw new Error("Production ServerEnvironment requires storageFactory.");
+    }
+    if (settings.transport === undefined) {
+      throw new Error("Production ServerEnvironment requires transport.");
+    }
+    return {
+      storageFactory: settings.storageFactory,
+      transport: settings.transport,
+      delivery: settings.delivery,
+      tracerFactory: settings.tracerFactory,
+    };
   }
-  return facility;
+  return {
+    storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
+    transport: settings.transport ?? new LocalSignalTransport(),
+    delivery: settings.delivery,
+    tracerFactory: settings.tracerFactory,
+  };
 }
 
 class LocalSignalTransport implements SignalTransport {

@@ -313,23 +313,31 @@ registry stops assembly before the listener opens.
 
 ## 5. Assemble storage, contexts, and an environment
 
-Use `ServerEnvironment.local()` for development and tests. It supplies
-in-memory storage and same-process transport. For a deployment-shaped assembly,
-use `ServerEnvironment.production({ storageFactory, transport })`; both
-facilities are required and remain caller-selected.
+`ServerEnvironment` is a process singleton. Local Node environments use
+in-memory storage and same-process transport by default. Configure a deployment
+before the first server is constructed with `when(...).use(...)`. Production
+selection requires `NODE_ENV=production` to be set before the first
+`Environment` or `ServerEnvironment` resolution (including `Server.atPort()`),
+and then requires both storage and transport.
 
 ```ts
-import { Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import type { SignalTransport } from "@spine-ts/transport";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
 import { tasksBuilder } from "@example/tasks-domain";
 
-const environment = ServerEnvironment.local();
-const server = Server.atPort(0, { environment }).add(tasksBuilder);
+// Start this process with NODE_ENV=production.
+declare const storageFactory: StorageFactory;
+declare const transport: SignalTransport;
+
+ServerEnvironment.when(EnvironmentType.Production).use({ storageFactory, transport });
+const server = Server.atPort(0).add(tasksBuilder);
 ```
 
-The server gives its environment storage factory to added builders unless a
-builder explicitly selected a storage factory. A supplied environment is
-caller-owned by default. Set `ownsEnvironment: true` only when this server is
-responsible for permanently closing it.
+The server gives the singleton storage factory to added builders unless a
+builder explicitly selected a storage factory. Closing a server never closes
+process facilities; call `await ServerEnvironment.instance().close()` during
+explicit process shutdown.
 
 ## 6. Start and close the server
 
@@ -349,13 +357,13 @@ try {
 ```
 
 `close()` stops listener intake and sessions, closes context transport intake,
-drains accepted work, detaches delivery, then closes contexts, added resources,
-and any server-owned environment. Concurrent closes share work; a successful
-close is idempotent. If close fails, call `close()` again to retry only the
-unfinished cleanup. Caller-owned environments stay open after this server
-closes and can be used by a fresh server with fresh contexts. A failed start is
-terminal for that `Server` instance after its cleanup completes; create a new
-server instance for a new attempt.
+drains accepted work, detaches delivery, then closes contexts and added
+resources. It does not close shared process facilities; after every server has
+detached, call `await ServerEnvironment.instance().close()` during process
+shutdown. Concurrent closes share work; a successful close is idempotent. If
+close fails, call `close()` again to retry only unfinished server cleanup. A
+failed start is terminal for that `Server` instance after its cleanup completes;
+create a new server instance for a new attempt.
 
 ## 7. Post commands and read acknowledgements
 

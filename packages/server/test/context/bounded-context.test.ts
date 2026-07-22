@@ -457,7 +457,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
 
-    const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+    const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
       ownership: "caller",
       descriptors: [boundedContextAccess.delivery(context)],
     });
@@ -468,6 +468,7 @@ describe("BoundedContext assembly", () => {
         (await context.stand().read(ProcessManagerStateSchema, "task-attached")) !== undefined,
       "attached environment delivery",
     );
+    await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
   });
 
   it("recovers a durable dynamic-tenant row through a fresh same-storage descriptor", async () => {
@@ -522,7 +523,7 @@ describe("BoundedContext assembly", () => {
       const descriptor = internalDeliveryDescriptor(recovered);
 
       await expect(descriptor.startupScopes()).resolves.toEqual([{ tenantId }]);
-      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.local(), {
+      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
         ownership: "caller",
         descriptors: [boundedContextAccess.delivery(recovered)],
       });
@@ -546,6 +547,7 @@ describe("BoundedContext assembly", () => {
         id: "dynamic-task",
         queue: "Task Ready recovered",
       });
+      await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
     } finally {
       await first?.close();
       await recovered?.close();

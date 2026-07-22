@@ -561,21 +561,22 @@ built contexts, command payload validation and rejection/Ack mapping through
 transport binding. The package now also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
 `host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
-called. `ServerEnvironment` is an explicit assembly object for storage,
-transport, optional delivery, optional tracing, and facility ownership. Local
-servers get in-memory storage and same-process transport defaults; production
-environment construction requires storage and transport before any listener is
-opened. The environment selects facilities for server assembly; `Server` now
-builds added `BoundedContextBuilder` values before listener open and uses the
-environment storage factory unless the builder chose one explicitly. Shutdown stops
-intake, closes active sessions, closes owned contexts/resources, then closes
-environment-owned facilities when the server owns the environment. Failed close
-attempts are retryable without rerunning close hooks that already succeeded. It
-still does not export a production transport endpoint runner, integration
-broker, durable retry owner, process supervisor, event storage policy beyond
-current seams, retained active-stream/update replay storage, worker topology,
-or a Java-style process-wide
-`ServerEnvironment` singleton as part of this closure.
+called. `Environment` and `ServerEnvironment` are one lazy process singleton
+graph for storage, transport, optional delivery, and optional tracing. Local
+environments get in-memory storage and same-process transport defaults. A
+production process must set `NODE_ENV=production` before the first environment
+or server resolution, then configure storage and transport through
+`ServerEnvironment.when(EnvironmentType.Production).use(...)` before that
+resolution. `Server` builds added `BoundedContextBuilder` values before listener
+open and uses the singleton storage factory unless the builder chose one
+explicitly. Shutdown stops intake, closes active sessions, and closes owned
+contexts/resources; facilities remain open until every server has detached and
+the process explicitly calls `ServerEnvironment.instance().close()`. Failed
+close attempts are retryable without rerunning close hooks that already
+succeeded. It still does not export a production transport endpoint runner,
+integration broker, durable retry owner, process supervisor, event storage
+policy beyond current seams, retained active-stream/update replay storage, or
+worker topology as part of this closure.
 
 The same local runtime boundary now owns a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced follow-up commands/events

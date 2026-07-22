@@ -1409,29 +1409,34 @@ describe("SpineServices", () => {
       )
       .build();
     const singleServer = await startServices(singleTenant);
-    const multiServer = await startServices(multitenant);
 
     try {
       const singleClient = createClient(
         CommandService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
-      const multiClient = createClient(
-        CommandService,
-        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
-      );
-
       const singleTenantAck = await singleClient.post(
         createProjectionCommand("single-with-tenant", "tenant-a"),
-      );
-      const multitenantAck = await multiClient.post(
-        createProjectionCommand("multi-without-tenant"),
       );
 
       expect(singleTenantAck.status?.status.case).toBe("error");
       expect(errorMessage(singleTenantAck.status?.status)).toBe(
         "Tenant is not applicable for this command.",
       );
+    } finally {
+      await singleServer.close();
+    }
+
+    const multiServer = await startServices(multitenant);
+    try {
+      const multiClient = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
+      );
+      const multitenantAck = await multiClient.post(
+        createProjectionCommand("multi-without-tenant"),
+      );
+
       expect(multitenantAck.status?.status.case).toBe("error");
       expect(errorMessage(multitenantAck.status?.status)).toBe(
         "Tenant is required for this command.",
@@ -1440,7 +1445,6 @@ describe("SpineServices", () => {
       expect(multitenantDispatches).toEqual([]);
     } finally {
       await multiServer.close();
-      await singleServer.close();
     }
   });
 
@@ -1458,35 +1462,39 @@ describe("SpineServices", () => {
       )
       .build();
     const singleServer = await startServices(singleTenant);
-    const multiServer = await startServices(multitenant);
 
     try {
       const singleClient = createClient(
         CommandService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
-      const multiClient = createClient(
-        CommandService,
-        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
-      );
-
       const inapplicable = await singleClient.post(
         createProjectionCommand("single-domain-tenant", tenantDomain("tenant.example")),
-      );
-      const accepted = await multiClient.post(
-        createProjectionCommand("multi-email-tenant", tenantEmail("tenant@example.test")),
       );
 
       expect(inapplicable.status?.status.case).toBe("error");
       expect(errorMessage(inapplicable.status?.status)).toBe(
         "Tenant is not applicable for this command.",
       );
+    } finally {
+      await singleServer.close();
+    }
+
+    const multiServer = await startServices(multitenant);
+    try {
+      const multiClient = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
+      );
+      const accepted = await multiClient.post(
+        createProjectionCommand("multi-email-tenant", tenantEmail("tenant@example.test")),
+      );
+
       expect(accepted.status?.status.case).toBe("ok");
       expect(singleTenantDispatches).toEqual([]);
       expect(multitenantDispatches).toEqual(["multi-email-tenant"]);
     } finally {
       await multiServer.close();
-      await singleServer.close();
     }
   });
 

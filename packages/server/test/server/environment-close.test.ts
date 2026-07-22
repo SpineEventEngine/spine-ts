@@ -1,6 +1,6 @@
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 import type { SignalTransport } from "@spine-ts/transport";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
 import {
@@ -16,8 +16,20 @@ import {
 import {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
+  type ServerEnvironmentSettings,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+
+afterEach(async () => {
+  await resetServerEnvironmentForTest().catch(() => undefined);
+});
+
+function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvironment {
+  ServerEnvironment.when(EnvironmentType.Local).use(settings);
+  return ServerEnvironment.instance();
+}
 
 describe("ServerEnvironment close", () => {
   it("flattens nested and cyclic owned-facility failures in facility order", async () => {
@@ -42,15 +54,15 @@ describe("ServerEnvironment close", () => {
       "delivery aggregate",
     );
     const tracerFailure = new AggregateError([tracerError], "tracer aggregate");
-    const environment = ServerEnvironment.local({
-      delivery: failingCloseable("delivery", deliveryFailure, attempts),
-      tracerFactory: failingCloseable("tracer", tracerFailure, attempts),
-      transport: failingCloseable("transport", transportError, attempts) as SignalTransport,
-      storageFactory: failingCloseable("storage", cyclicStorageFailure, attempts) as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
+    const environment = serverEnvironment({
+      delivery: failingOnceCloseable("delivery", deliveryFailure, attempts),
+      tracerFactory: failingOnceCloseable("tracer", tracerFailure, attempts),
+      transport: failingOnceCloseable("transport", transportError, attempts) as SignalTransport,
+      storageFactory: failingOnceCloseable(
+        "storage",
+        cyclicStorageFailure,
+        attempts,
+      ) as StorageFactory,
     });
 
     const failure = await environment.close().catch((error: unknown) => error);
@@ -75,15 +87,11 @@ describe("ServerEnvironment close", () => {
     const iterableLeaf = new Error("iterable delivery close failed");
     const iterableFailure = new AggregateError([], "iterable delivery aggregate");
     (iterableFailure as unknown as { errors: Set<unknown> }).errors = new Set([iterableLeaf]);
-    const environment = ServerEnvironment.local({
-      delivery: failingCloseable("delivery", iterableFailure, attempts),
+    const environment = serverEnvironment({
+      delivery: failingOnceCloseable("delivery", iterableFailure, attempts),
       tracerFactory: successfulCloseable("tracer", attempts),
       transport: successfulCloseable("transport", attempts) as SignalTransport,
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
     });
 
     const failure = await environment.close().catch((error: unknown) => error);
@@ -100,15 +108,11 @@ describe("ServerEnvironment close", () => {
     for (let depth = 0; depth < 20_000; depth += 1) {
       failure = new AggregateError([failure], "deep aggregate");
     }
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery: failingOnceCloseable("delivery", failure as AggregateError, attempts),
       tracerFactory: successfulCloseable("tracer", attempts),
       transport: successfulCloseable("transport", attempts) as SignalTransport,
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
     });
 
     const firstFailure = await environment.close().catch((error: unknown) => error);
@@ -124,15 +128,11 @@ describe("ServerEnvironment close", () => {
     const attempts: string[] = [];
     const tracerError = new Error("tracer close failed once");
     const storageError = new Error("storage close failed once");
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery: successfulCloseable("delivery", attempts),
       tracerFactory: failingOnceCloseable("tracer", tracerError, attempts),
       transport: successfulCloseable("transport", attempts) as SignalTransport,
       storageFactory: failingOnceCloseable("storage", storageError, attempts) as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
     });
 
     const firstFailure = await environment.close().catch((error: unknown) => error);
@@ -169,15 +169,11 @@ describe("ServerEnvironment close", () => {
         };
       },
     });
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery,
       tracerFactory: successfulCloseable("tracer", attempts),
       transport: successfulCloseable("transport", attempts) as SignalTransport,
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
     });
 
     const firstFailure = await environment.close().catch((error: unknown) => error);
@@ -190,34 +186,27 @@ describe("ServerEnvironment close", () => {
     expect(getterAttempts).toBe(2);
   });
 
-  it("does not close caller-owned closeable facilities", async () => {
+  it("closes every configured closeable facility", async () => {
     const attempts: string[] = [];
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery: successfulCloseable("delivery", attempts),
       tracerFactory: successfulCloseable("tracer", attempts),
       transport: successfulCloseable("transport", attempts) as SignalTransport,
       storageFactory: successfulCloseable("storage", attempts) as StorageFactory,
-      ownsTracerFactory: false,
-      ownsTransport: false,
-      ownsStorageFactory: false,
     });
 
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(attempts).toEqual([]);
+    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
   });
 
   it("ignores owned non-closeable facilities", async () => {
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery: {} as ServerEnvironmentCloseable,
       tracerFactory: {} as ServerEnvironmentCloseable,
       transport: {} as SignalTransport,
       storageFactory: {} as StorageFactory,
-      ownsDelivery: true,
-      ownsTracerFactory: true,
-      ownsTransport: true,
-      ownsStorageFactory: true,
     });
 
     await expect(environment.close()).resolves.toBeUndefined();
@@ -228,7 +217,7 @@ describe("ServerEnvironment close", () => {
     const delivery = { close: vi.fn() };
     const attachStarted = Promise.withResolvers<undefined>();
     const releaseAttach = Promise.withResolvers<undefined>();
-    const environment = ServerEnvironment.local({ delivery, ownsDelivery: true });
+    const environment = serverEnvironment({ delivery });
     const attaching = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [gatedDescriptor(attachStarted, releaseAttach)],
@@ -267,7 +256,7 @@ describe("ServerEnvironment close", () => {
   });
 
   it("rejects a close-first queued direct attach before claim, descriptor, or worker work", async () => {
-    const environment = ServerEnvironment.local();
+    const environment = serverEnvironment();
     const descriptors = countedDescriptors();
     const stopping = serverEnvironmentAccess.stopDelivery(environment);
     const closing = environment.close();
@@ -359,7 +348,7 @@ describe("ServerEnvironment close", () => {
 
   it("permanently closes an owner-free environment and rejects later lifecycle admission", async () => {
     const delivery = { close: vi.fn() };
-    const environment = ServerEnvironment.local({ delivery, ownsDelivery: true });
+    const environment = serverEnvironment({ delivery });
     const first = environment.close();
 
     expect(environment.close()).toBe(first);
@@ -382,14 +371,13 @@ describe("ServerEnvironment close", () => {
   it("cancels a close-first provisional stop and settles its waiter while facilities remain pending", async () => {
     const facility = Promise.withResolvers<undefined>();
     const closeStarted = Promise.withResolvers<undefined>();
-    const environment = ServerEnvironment.local({
+    const environment = serverEnvironment({
       delivery: {
         close() {
           closeStarted.resolve(undefined);
           return facility.promise;
         },
       },
-      ownsDelivery: true,
     });
     const closing = environment.close();
     let closeSettled = false;
@@ -427,7 +415,7 @@ describe("ServerEnvironment close", () => {
   });
 
   it("leaves a completed stop-first no-generation operation to settle its waiter normally", async () => {
-    const environment = ServerEnvironment.local();
+    const environment = serverEnvironment();
     const stopping = serverEnvironmentAccess.stopDelivery(environment);
     const waiting = serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
@@ -619,22 +607,9 @@ function successfulCloseable(name: string, attempts: string[]): ServerEnvironmen
   };
 }
 
-function failingCloseable(
-  name: string,
-  error: Error | AggregateError,
-  attempts: string[],
-): ServerEnvironmentCloseable {
-  return {
-    close() {
-      attempts.push(name);
-      throw error;
-    },
-  };
-}
-
 function failingOnceCloseable(
   name: string,
-  error: Error,
+  error: Error | AggregateError,
   attempts: string[],
 ): ServerEnvironmentCloseable {
   let failed = false;

@@ -88,7 +88,7 @@ interface FixtureSetupResources {
   readonly childExit: Promise<ChildExitState>;
 }
 
-type ChildCloseResource = "running server" | "environment" | "transport";
+type ChildCloseResource = "running server" | "environment";
 type WorkerMode = "default" | "exit-after-ready" | "ignore-stop" | "no-ready" | "pending-startup";
 
 interface FixtureCreateOptions {
@@ -411,14 +411,14 @@ describe("local multi-process to-do mode", () => {
   );
 
   it(
-    "attempts every child close in order and still stops after shutdown failures",
+    "attempts every owned child close in order and still stops after shutdown failures",
     async () => {
       let resources: FixtureSetupResources | undefined;
       const fixture = await LocalMultiProcessFixture.create({
         onResourcesAcquired: (acquired: FixtureSetupResources) => {
           resources = acquired;
         },
-        childCloseFailures: ["running server", "environment", "transport"],
+        childCloseFailures: ["running server", "environment"],
       });
 
       await fixture.ready();
@@ -429,8 +429,7 @@ describe("local multi-process to-do mode", () => {
       expect(aggregateMessages(rejection)).toEqual([
         expect.stringContaining(
           "running server close failed: Injected running server close failure.; " +
-            "environment close failed: Injected environment close failure.; " +
-            "transport close failed: Injected transport close failure.",
+            "environment close failed: Injected environment close failure.",
         ),
       ]);
       expect(await resources?.childExit).toEqual({ code: 1, signal: null });

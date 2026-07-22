@@ -30,13 +30,11 @@ export {
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 export { Server, type RunningServer, type ServerOptions } from "./server/server.js";
+export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
-  type ServerEnvironmentLocalOptions,
-  type ServerEnvironmentMode,
-  type ServerEnvironmentOwnershipOptions,
-  type ServerEnvironmentProductionOptions,
+  type ServerEnvironmentSettings,
 } from "./server/server-environment.js";
 
 export { CommandBus } from "./bus/command-bus.js";

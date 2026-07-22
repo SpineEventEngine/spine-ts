@@ -3,10 +3,11 @@ import * as http2 from "node:http2";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTransportTopic } from "@spine-ts/transport";
 
-import { BoundedContext, Server, ServerEnvironment } from "../../src/index.js";
+import { BoundedContext, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import {
   HeldStartupWorker,
   LifecycleTrackingStorageFactory,
@@ -30,13 +31,14 @@ vi.mock("node:http2", async (importOriginal) => {
 });
 
 describe("Server lifecycle integration", () => {
-  beforeEach(() => createHttp2Server.mockReset());
+  beforeEach(async () => {
+    await resetServerEnvironmentForTest();
+    createHttp2Server.mockReset();
+  });
 
   it("waits for attached startup recovery before opening the listener", async () => {
     const fixture = await lifecycleFixture();
-    const starting = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const starting = Server.atPort(0).add(fixture.context).start();
 
     try {
       await fixture.worker.startedWithin();
@@ -58,7 +60,7 @@ describe("Server lifecycle integration", () => {
       expect(server.baseUrl).toBe(`http://127.0.0.1:${server.port.toString()}`);
       await server.close();
       await server.close();
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       fixture.worker.release();
       await starting.then(
@@ -73,9 +75,8 @@ describe("Server lifecycle integration", () => {
     const events: string[] = [];
     const fixture = await lifecycleFixture({
       events,
-      environment: {
+      settings: {
         delivery: { close: () => events.push("facility") },
-        ownsDelivery: true,
       },
     });
     const closeFixtureContext = fixture.context.close.bind(fixture.context);
@@ -88,10 +89,7 @@ describe("Server lifecycle integration", () => {
       events.push("context");
       return closeFixtureContext();
     });
-    const server = Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const server = Server.atPort(0)
       .add(fixture.context)
       .addResource({ close: () => events.push("resource") });
     const starting = server.start();
@@ -107,6 +105,7 @@ describe("Server lifecycle integration", () => {
 
       await running.close();
       await running.close();
+      await resetServerEnvironmentForTest();
 
       expect(events).toEqual([
         "recovery",
@@ -135,9 +134,7 @@ describe("Server lifecycle integration", () => {
     firstWorker.release();
     freshWorker.release();
     const fixture = await lifecycleFixture({ workers: [firstWorker, freshWorker] });
-    const firstStart = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const firstStart = Server.atPort(0).add(fixture.context).start();
     let first: Awaited<ReturnType<Server["start"]>> | undefined;
     let firstClose: Promise<void> | undefined;
     let freshContext: BoundedContext | undefined;
@@ -164,7 +161,7 @@ describe("Server lifecycle integration", () => {
         },
       );
 
-      freshStart = Server.atPort(0, { environment: fixture.environment }).add(freshContext).start();
+      freshStart = Server.atPort(0).add(freshContext).start();
       void freshStart.catch(() => undefined);
       let freshStartSettled = false;
       void freshStart.then(
@@ -190,7 +187,7 @@ describe("Server lifecycle integration", () => {
 
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       firstWorker.release();
       freshWorker.release();
@@ -207,14 +204,14 @@ describe("Server lifecycle integration", () => {
       );
       await fresh?.close().catch(() => undefined);
       await freshContext?.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
   it("coalesces concurrent starts into one build, attachment, and running result", async () => {
     const fixture = await lifecycleFixture();
-    const server = Server.atPort(0, { environment: fixture.environment }).add(fixture.context);
+    const server = Server.atPort(0).add(fixture.context);
     const first = server.start();
     const second = server.start();
     void second.catch(() => undefined);
@@ -244,9 +241,7 @@ describe("Server lifecycle integration", () => {
 
   it("coalesces concurrent close and detaches exactly once", async () => {
     const fixture = await lifecycleFixture();
-    const starting = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const starting = Server.atPort(0).add(fixture.context).start();
 
     try {
       await fixture.worker.startedWithin();
@@ -279,11 +274,9 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: {
+      settings: {
         storageFactory,
-        ownsStorageFactory: true,
         delivery: { close: closeDelivery },
-        ownsDelivery: true,
       },
     });
     const closeResource = vi.fn(() => events.push("resource"));
@@ -323,13 +316,7 @@ describe("Server lifecycle integration", () => {
       createHttp2Server.mockImplementationOnce((httpServer) => {
         network = trackNetworkClose(httpServer);
       });
-      running = await Server.atPort(0, {
-        environment: fixture.environment,
-        ownsEnvironment: true,
-      })
-        .add(context)
-        .addResource({ close: closeResource })
-        .start();
+      running = await Server.atPort(0).add(context).addResource({ close: closeResource }).start();
       session = http2.connect(running.baseUrl);
       session.on("error", () => undefined);
       session.on("close", () => {
@@ -376,6 +363,7 @@ describe("Server lifecycle integration", () => {
       releaseActive = undefined;
       await Promise.all([firstClose, concurrentClose]);
       await running.close();
+      await resetServerEnvironmentForTest();
 
       expect(worker.starts).toBe(2);
       expect(worker.stopCalls).toBe(1);
@@ -412,7 +400,7 @@ describe("Server lifecycle integration", () => {
         restoreContextClose();
         await context?.close().catch(() => undefined);
         await fixture.context.close().catch(() => undefined);
-        await fixture.environment.close().catch(() => undefined);
+        await resetServerEnvironmentForTest().catch(() => undefined);
         fixture.dispose();
       }
     }
@@ -427,11 +415,9 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: {
+      settings: {
         storageFactory,
-        ownsStorageFactory: true,
         delivery: { close: closeDelivery },
-        ownsDelivery: true,
       },
     });
     const closeResource = vi.fn(() => events.push("resource"));
@@ -467,13 +453,7 @@ describe("Server lifecycle integration", () => {
       createHttp2Server.mockImplementationOnce((httpServer) => {
         network = trackNetworkClose(httpServer);
       });
-      running = await Server.atPort(0, {
-        environment: fixture.environment,
-        ownsEnvironment: true,
-      })
-        .add(context)
-        .addResource({ close: closeResource })
-        .start();
+      running = await Server.atPort(0).add(context).addResource({ close: closeResource }).start();
       worker.failNextAwait(quiescenceFailure);
       const firstFailure = await running.close().catch((error: unknown) => error);
 
@@ -502,6 +482,7 @@ describe("Server lifecycle integration", () => {
       releaseRetry = undefined;
       await Promise.all([firstRetry, concurrentRetry]);
       await running.close();
+      await resetServerEnvironmentForTest();
 
       expect(network?.calls()).toBe(1);
       expect(worker.stopCalls).toBe(1);
@@ -523,13 +504,13 @@ describe("Server lifecycle integration", () => {
         restoreContextClose();
         await context?.close().catch(() => undefined);
         await fixture.context.close().catch(() => undefined);
-        await fixture.environment.close().catch(() => undefined);
+        await resetServerEnvironmentForTest().catch(() => undefined);
         fixture.dispose();
       }
     }
   });
 
-  it("continues owned last cleanup after safe retirement errors and retries failed indexes", async () => {
+  it("separates server cleanup from singleton facility cleanup after safe retirement errors", async () => {
     const events: string[] = [];
     const firstRetirementFailure = new Error("last retirement failed");
     const nestedRetirementFailure = new Error("nested last retirement failed");
@@ -574,11 +555,9 @@ describe("Server lifecycle integration", () => {
       fixture = await lifecycleFixture({
         events,
         workers: [worker],
-        environment: {
+        settings: {
           storageFactory,
-          ownsStorageFactory: true,
           delivery: { close: closeDelivery },
-          ownsDelivery: true,
         },
       });
       const closeFixtureContext = fixture.context.close.bind(fixture.context);
@@ -595,10 +574,7 @@ describe("Server lifecycle integration", () => {
       restoreContextClose = () => {
         closeContext.mockRestore();
       };
-      running = await Server.atPort(0, {
-        environment: fixture.environment,
-        ownsEnvironment: true,
-      })
+      running = await Server.atPort(0)
         .add(fixture.context)
         .addResource({ close: closeSuccessfulResource })
         .addResource({ close: closeRetryingResource })
@@ -611,7 +587,6 @@ describe("Server lifecycle integration", () => {
         nestedRetirementFailure,
         contextFailure,
         resourceFailure,
-        facilityFailure,
       ]);
       expect(worker.stopCalls).toBe(1);
       expect(worker.awaitCalls).toBe(1);
@@ -619,8 +594,8 @@ describe("Server lifecycle integration", () => {
       expect(closeContext).toHaveBeenCalledOnce();
       expect(closeSuccessfulResource).toHaveBeenCalledOnce();
       expect(closeRetryingResource).toHaveBeenCalledOnce();
-      expect(closeDelivery).toHaveBeenCalledOnce();
-      expect(storageFactory.closeCalls).toBe(1);
+      expect(closeDelivery).not.toHaveBeenCalled();
+      expect(storageFactory.closeCalls).toBe(0);
 
       await running.close();
       await running.close();
@@ -631,6 +606,16 @@ describe("Server lifecycle integration", () => {
       expect(closeContext).toHaveBeenCalledTimes(2);
       expect(closeSuccessfulResource).toHaveBeenCalledOnce();
       expect(closeRetryingResource).toHaveBeenCalledTimes(2);
+      expect(closeDelivery).not.toHaveBeenCalled();
+      expect(storageFactory.closeCalls).toBe(0);
+
+      const facilityClose = await fixture.environment.close().catch((error: unknown) => error);
+      expect(facilityClose).toBeInstanceOf(AggregateError);
+      expect((facilityClose as AggregateError).errors).toEqual([facilityFailure]);
+      expect(closeDelivery).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(1);
+
+      await fixture.environment.close();
       expect(closeDelivery).toHaveBeenCalledTimes(2);
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
@@ -677,7 +662,7 @@ describe("Server lifecycle integration", () => {
 
       try {
         fixture = await lifecycleFixture({ workers: [worker] });
-        running = await Server.atPort(0, { environment: fixture.environment })
+        running = await Server.atPort(0)
           .add(fixture.context)
           .addResource({ close: closeResource })
           .start();
@@ -695,7 +680,7 @@ describe("Server lifecycle integration", () => {
         expect(worker.awaitCalls).toBe(1);
         expect(worker.retireCalls).toBe(1);
         expect(closeResource).toHaveBeenCalledOnce();
-        await expect(fixture.environment.close()).resolves.toBeUndefined();
+        await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
       } finally {
         await running?.close().catch(() => undefined);
         await fixture?.context.close().catch(() => undefined);
@@ -754,7 +739,7 @@ describe("Server lifecycle integration", () => {
       try {
         fixture = await lifecycleFixture();
         fixture.worker.release();
-        running = await Server.atPort(0, { environment: fixture.environment })
+        running = await Server.atPort(0)
           .add(fixture.context)
           .addResource({ close: retryingResource })
           .addResource({ close: laterResource })
@@ -788,7 +773,7 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
     const departingResource = vi.fn();
@@ -798,12 +783,12 @@ describe("Server lifecycle integration", () => {
     let joined: Awaited<ReturnType<Server["start"]>> | undefined;
 
     try {
-      departing = await Server.atPort(0, { environment: fixture.environment })
+      departing = await Server.atPort(0)
         .add(fixture.createBuilder("LifecycleSharedDeparting"))
         .addResource({ close: departingResource })
         .start();
       const departingStorages = [...storageFactory.storages];
-      sibling = await Server.atPort(0, { environment: fixture.environment })
+      sibling = await Server.atPort(0)
         .add(fixture.createBuilder("LifecycleSharedSibling"))
         .addResource({ close: siblingResource })
         .start();
@@ -831,9 +816,7 @@ describe("Server lifecycle integration", () => {
       expect(storageFactory.closeCalls).toBe(0);
 
       await expectConnectable(sibling);
-      joined = await Server.atPort(0, { environment: fixture.environment })
-        .add(fixture.createBuilder("LifecycleSharedJoined"))
-        .start();
+      joined = await Server.atPort(0).add(fixture.createBuilder("LifecycleSharedJoined")).start();
       expect(worker.starts).toBe(3);
       await expectConnectable(sibling);
       await joined.close();
@@ -846,7 +829,7 @@ describe("Server lifecycle integration", () => {
       await joined?.close().catch(() => undefined);
       await departing?.close().catch(() => undefined);
       await sibling?.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -855,9 +838,7 @@ describe("Server lifecycle integration", () => {
     const worker = new HeldStartupWorker([]);
     worker.release();
     const fixture = await lifecycleFixture({ workers: [worker] });
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
       .createBuilder("LifecycleUnsafeRunningDetach")
@@ -868,7 +849,7 @@ describe("Server lifecycle integration", () => {
     createHttp2Server.mockImplementationOnce((httpServer) => {
       network = trackNetworkClose(httpServer);
     });
-    const departing = await Server.atPort(0, { environment: fixture.environment })
+    const departing = await Server.atPort(0)
       .add(context)
       .addResource({ close: resourceClose })
       .start();
@@ -912,7 +893,7 @@ describe("Server lifecycle integration", () => {
       await departing.close().catch(() => undefined);
       await sibling.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -942,10 +923,10 @@ describe("Server lifecycle integration", () => {
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const fixture = await lifecycleFixture({
       workers: [worker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
+    const sibling = await Server.atPort(0)
       .add(fixture.createBuilder("LifecycleEmptyAggregateSibling"))
       .start();
     const siblingStorages = [...storageFactory.storages];
@@ -954,7 +935,7 @@ describe("Server lifecycle integration", () => {
     createHttp2Server.mockImplementationOnce((httpServer) => {
       network = trackNetworkClose(httpServer);
     });
-    const departing = await Server.atPort(0, { environment: fixture.environment })
+    const departing = await Server.atPort(0)
       .add(fixture.createBuilder("LifecycleEmptyAggregateDeparting"))
       .addResource({ close: resourceClose })
       .start();
@@ -1007,7 +988,7 @@ describe("Server lifecycle integration", () => {
       releaseRetry?.();
       await departing.close().catch(() => undefined);
       await sibling.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1016,9 +997,7 @@ describe("Server lifecycle integration", () => {
     const worker = new HeldStartupWorker([]);
     worker.release();
     const fixture = await lifecycleFixture({ workers: [worker] });
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
       .createBuilder("LifecycleSafeRunningDetachFailure")
@@ -1043,7 +1022,7 @@ describe("Server lifecycle integration", () => {
     createHttp2Server.mockImplementationOnce((httpServer) => {
       network = trackNetworkClose(httpServer);
     });
-    const departing = await Server.atPort(0, { environment: fixture.environment })
+    const departing = await Server.atPort(0)
       .add(context)
       .addResource({ close: successfulResource })
       .addResource({ close: retryingResource })
@@ -1089,7 +1068,7 @@ describe("Server lifecycle integration", () => {
       await departing.close().catch(() => undefined);
       await sibling.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1098,9 +1077,7 @@ describe("Server lifecycle integration", () => {
     const worker = new HeldStartupWorker([]);
     worker.release();
     const fixture = await lifecycleFixture({ workers: [worker] });
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
       .createBuilder("LifecycleRunningNetworkGate")
@@ -1112,7 +1089,7 @@ describe("Server lifecycle integration", () => {
     createHttp2Server.mockImplementationOnce((httpServer) => {
       network = trackNetworkClose(httpServer, [networkFailure]);
     });
-    const departing = await Server.atPort(0, { environment: fixture.environment })
+    const departing = await Server.atPort(0)
       .add(context)
       .addResource({ close: resourceClose })
       .start();
@@ -1142,12 +1119,12 @@ describe("Server lifecycle integration", () => {
       await departing.close().catch(() => undefined);
       await sibling.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
-  it("closes server-owned dependencies after safe startup rollback errors", async () => {
+  it("closes singleton facilities only after safe startup rollback cleanup", async () => {
     const events: string[] = [];
     const startupFailure = new Error("owned startup recovery failed");
     const retirementFailure = new Error("owned startup retirement failed");
@@ -1158,11 +1135,9 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: {
+      settings: {
         storageFactory,
-        ownsStorageFactory: true,
         delivery: { close: () => events.push("delivery") },
-        ownsDelivery: true,
       },
     });
     await fixture.context.close();
@@ -1180,10 +1155,7 @@ describe("Server lifecycle integration", () => {
       events.push("context");
       return closeBuiltContext();
     });
-    const server = Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const server = Server.atPort(0)
       .add(context)
       .addResource({ close: () => events.push("resource") });
     const starting = server.start();
@@ -1197,6 +1169,15 @@ describe("Server lifecycle integration", () => {
       expect(failure).toBeInstanceOf(AggregateError);
       expect((failure as AggregateError).errors).toEqual([startupFailure, retirementFailure]);
       expect(createHttp2Server).not.toHaveBeenCalled();
+      expect(events).toEqual(["recovery", "stop", "await", "retire", "context", "resource"]);
+      expect(closeContext).toHaveBeenCalledOnce();
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(storageFactory.closeCalls).toBe(0);
+      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
+      const terminal = await server.start().catch((error: unknown) => error);
+      expectConsumedFailedStartServer(terminal);
+
+      await fixture.environment.close();
       expect(events).toEqual([
         "recovery",
         "stop",
@@ -1207,23 +1188,19 @@ describe("Server lifecycle integration", () => {
         "delivery",
         "facility",
       ]);
-      expect(closeContext).toHaveBeenCalledOnce();
       expect(storageFactory.isOpen()).toBe(false);
       expect(storageFactory.closeCalls).toBe(1);
-      expect(serverEnvironmentAccess.failedStartPending(fixture.environment)).toBe(false);
-      const terminal = await server.start().catch((error: unknown) => error);
-      expectConsumedFailedStartServer(terminal);
     } finally {
       closeContext.mockRestore();
       worker.release();
       await starting.catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
-  it("retains unsafe server-owned startup dependencies for cleanup-only retry", async () => {
+  it("retains unsafe startup dependencies until retry, then closes singleton facilities explicitly", async () => {
     const events: string[] = [];
     const startupFailure = new Error("unsafe owned startup recovery failed");
     const quiescenceFailure = new Error("unsafe owned startup quiescence unavailable");
@@ -1234,11 +1211,9 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: {
+      settings: {
         storageFactory,
-        ownsStorageFactory: true,
         delivery: { close: () => events.push("delivery") },
-        ownsDelivery: true,
       },
     });
     await fixture.context.close();
@@ -1258,12 +1233,7 @@ describe("Server lifecycle integration", () => {
       return closeBuiltContext();
     });
     const closeResource = vi.fn(() => events.push("resource"));
-    const server = Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
-      .add(context)
-      .addResource({ close: closeResource });
+    const server = Server.atPort(0).add(context).addResource({ close: closeResource });
     const starting = server.start();
     void starting.catch(() => undefined);
 
@@ -1298,8 +1268,6 @@ describe("Server lifecycle integration", () => {
         "retire",
         "context",
         "resource",
-        "delivery",
-        "facility",
       ]);
       expect(worker.starts).toBe(1);
       expect(worker.stopCalls).toBe(1);
@@ -1308,24 +1276,39 @@ describe("Server lifecycle integration", () => {
       expect(closeContext).toHaveBeenCalledOnce();
       expect(closeResource).toHaveBeenCalledOnce();
       expect(storageFactory.storages).toHaveLength(builtStorageCount);
-      expect(storageFactory.closeCalls).toBe(1);
-      expect(storageFactory.isOpen()).toBe(false);
+      expect(storageFactory.closeCalls).toBe(0);
+      expect(storageFactory.isOpen()).toBe(true);
       expect(createHttp2Server).not.toHaveBeenCalled();
 
       const terminal = await server.start().catch((error: unknown) => error);
       expectConsumedFailedStartServer(terminal);
+
+      await fixture.environment.close();
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "delivery",
+        "facility",
+      ]);
+      expect(storageFactory.closeCalls).toBe(1);
+      expect(storageFactory.isOpen()).toBe(false);
     } finally {
       closeContext.mockRestore();
       worker.release();
       await starting.catch(() => undefined);
       await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
-  it("retries only failed server-owned dependency and facility close indexes", async () => {
+  it("retries server and singleton facility close indexes in separate phases", async () => {
     const events: string[] = [];
     const startupFailure = new Error("owned partial-cleanup startup failed");
     const contextFailure = new Error("owned context storage close failed");
@@ -1354,13 +1337,10 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [worker],
-      environment: {
+      settings: {
         storageFactory: facilityStorage,
-        ownsStorageFactory: true,
         delivery,
-        ownsDelivery: true,
         tracerFactory,
-        ownsTracerFactory: true,
       },
     });
     await fixture.context.close();
@@ -1392,10 +1372,7 @@ describe("Server lifecycle integration", () => {
         throw resourceFailure;
       }
     });
-    const server = Server.atPort(0, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const server = Server.atPort(0)
       .add(context)
       .addResource({ close: successfulResource })
       .addResource({ close: retryingResource });
@@ -1412,14 +1389,13 @@ describe("Server lifecycle integration", () => {
         startupFailure,
         contextFailure,
         resourceFailure,
-        facilityFailure,
       ]);
       expect(successfulResource).toHaveBeenCalledOnce();
       expect(retryingResource).toHaveBeenCalledOnce();
-      expect(deliveryCloses).toBe(1);
-      expect(tracerCloses).toBe(1);
-      expect(facilityStorage.closeCalls).toBe(1);
-      expect(facilityStorage.isOpen()).toBe(false);
+      expect(deliveryCloses).toBe(0);
+      expect(tracerCloses).toBe(0);
+      expect(facilityStorage.closeCalls).toBe(0);
+      expect(facilityStorage.isOpen()).toBe(true);
       expect(contextCloses).toBe(1);
       expect(contextStorage.storages.every((storage) => storage.isOpen())).toBe(true);
       expect(
@@ -1430,9 +1406,9 @@ describe("Server lifecycle integration", () => {
       expectDeferredCleanupCompletion(completion);
       expect(successfulResource).toHaveBeenCalledOnce();
       expect(retryingResource).toHaveBeenCalledTimes(2);
-      expect(deliveryCloses).toBe(1);
-      expect(tracerCloses).toBe(2);
-      expect(facilityStorage.closeCalls).toBe(1);
+      expect(deliveryCloses).toBe(0);
+      expect(tracerCloses).toBe(0);
+      expect(facilityStorage.closeCalls).toBe(0);
       expect(contextCloses).toBe(2);
       expect(
         contextStorage.storages.every((storage) => contextStorage.closeCallsFor(storage) === 1),
@@ -1442,6 +1418,19 @@ describe("Server lifecycle integration", () => {
 
       const terminal = await server.start().catch((error: unknown) => error);
       expectConsumedFailedStartServer(terminal);
+
+      const facilityClose = await fixture.environment.close().catch((error: unknown) => error);
+      expect(facilityClose).toBeInstanceOf(AggregateError);
+      expect((facilityClose as AggregateError).errors).toEqual([facilityFailure]);
+      expect(deliveryCloses).toBe(1);
+      expect(tracerCloses).toBe(1);
+      expect(facilityStorage.closeCalls).toBe(1);
+      expect(facilityStorage.isOpen()).toBe(false);
+
+      await fixture.environment.close();
+      expect(deliveryCloses).toBe(1);
+      expect(tracerCloses).toBe(2);
+      expect(facilityStorage.closeCalls).toBe(1);
     } finally {
       closeContext.mockRestore();
       worker.release();
@@ -1449,22 +1438,21 @@ describe("Server lifecycle integration", () => {
       await server.start().catch(() => undefined);
       await context.close().catch(() => undefined);
       contextStorage.close();
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
-  it("detaches before eligible owned cleanup after listener bind failure", async () => {
-    const blocker = await Server.atPort(0).start();
+  it("detaches before explicit singleton cleanup after listener bind failure", async () => {
     const events: string[] = [];
     const retirementFailure = new Error("listener cleanup retirement failed");
     const fixture = await lifecycleFixture({
       events,
-      environment: {
+      settings: {
         delivery: { close: () => events.push("facility") },
-        ownsDelivery: true,
       },
     });
+    const blocker = await createPortBlocker();
     fixture.worker.failNextRetire(retirementFailure);
     const closeFixtureContext = fixture.context.close.bind(fixture.context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
@@ -1476,10 +1464,7 @@ describe("Server lifecycle integration", () => {
       events.push("context");
       return closeFixtureContext();
     });
-    const server = Server.atPort(blocker.port, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const server = Server.atPort(blocker.port)
       .add(fixture.context)
       .addResource({ close: () => events.push("resource") });
     const starting = server.start();
@@ -1494,55 +1479,50 @@ describe("Server lifecycle integration", () => {
         expect.objectContaining({ code: "EADDRINUSE" }),
         retirementFailure,
       ]);
-      expect(events).toEqual([
-        "recovery",
-        "stop",
-        "await",
-        "retire",
-        "context",
-        "resource",
-        "facility",
-      ]);
+      expect(events).toEqual(["recovery", "stop", "await", "retire", "context", "resource"]);
       expect(createHttp2Server).toHaveBeenCalledTimes(2);
       const completion = await server.start().catch((error: unknown) => error);
       expectDeferredCleanupCompletion(completion);
-      expect(events).toEqual([
-        "recovery",
-        "stop",
-        "await",
-        "retire",
-        "context",
-        "resource",
-        "facility",
-      ]);
+      expect(events).toEqual(["recovery", "stop", "await", "retire", "context", "resource"]);
       expect(createHttp2Server).toHaveBeenCalledTimes(2);
 
       const terminal = await server.start().catch((error: unknown) => error);
       expectConsumedFailedStartServer(terminal);
+
+      await fixture.environment.close();
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "facility",
+      ]);
     } finally {
       closeContext.mockRestore();
       fixture.worker.release();
       await starting.catch(() => undefined);
+      await server.start().catch(() => undefined);
+      await fixture.environment.close().catch(() => undefined);
       await blocker.close();
       fixture.dispose();
     }
   });
 
   it("retains endpoint dependencies when listener cleanup cannot establish quiescence", async () => {
-    const blocker = await Server.atPort(0).start();
     const events: string[] = [];
     const quiescenceFailure = new Error("quiescence unavailable");
     const storageFactory = new LifecycleTrackingStorageFactory(events);
     const fixture = await lifecycleFixture({
       events,
       awaitFailure: quiescenceFailure,
-      environment: {
+      settings: {
         storageFactory,
-        ownsStorageFactory: true,
         delivery: { close: () => events.push("facility") },
-        ownsDelivery: true,
       },
     });
+    const blocker = await createPortBlocker();
     await fixture.context.close();
     const context = await fixture
       .createBuilder("LifecycleUnsafeListenerCleanup")
@@ -1559,10 +1539,7 @@ describe("Server lifecycle integration", () => {
       events.push("context");
       return closeFixtureContext();
     });
-    const server = Server.atPort(blocker.port, {
-      environment: fixture.environment,
-      ownsEnvironment: true,
-    })
+    const server = Server.atPort(blocker.port)
       .add(context)
       .addResource({ close: () => events.push("resource") });
     const starting = server.start();
@@ -1595,21 +1572,35 @@ describe("Server lifecycle integration", () => {
         "retire",
         "context",
         "resource",
-        "facility",
-        "facility",
       ]);
       expect(fixture.worker.starts).toBe(1);
       expect(fixture.worker.stopCalls).toBe(1);
       expect(fixture.worker.awaitCalls).toBe(2);
       expect(fixture.worker.retireCalls).toBe(1);
       expect(closeContext).toHaveBeenCalledOnce();
+      expect(storageFactory.closeCalls).toBe(0);
+      expect(storageFactory.isOpen()).toBe(true);
+      expect(createHttp2Server).toHaveBeenCalledTimes(2);
+
+      await fixture.environment.close();
+      expect(events).toEqual([
+        "recovery",
+        "stop",
+        "await",
+        "await",
+        "retire",
+        "context",
+        "resource",
+        "facility",
+        "facility",
+      ]);
       expect(storageFactory.closeCalls).toBe(1);
       expect(storageFactory.isOpen()).toBe(false);
-      expect(createHttp2Server).toHaveBeenCalledTimes(2);
     } finally {
       closeContext.mockRestore();
       fixture.worker.release();
       await starting.catch(() => undefined);
+      await server.start().catch(() => undefined);
       await context.close().catch(() => undefined);
       await fixture.environment.close().catch(() => undefined);
       await blocker.close();
@@ -1621,9 +1612,7 @@ describe("Server lifecycle integration", () => {
     const events: string[] = [];
     const retirementFailure = new Error("selected worker retirement failed after barrier");
     const fixture = await lifecycleFixture({ events });
-    const siblingStarting = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const siblingStarting = Server.atPort(0).add(fixture.context).start();
     fixture.worker.release();
     const sibling = await siblingStarting;
     const departingStorage = new LifecycleTrackingStorageFactory([]);
@@ -1633,7 +1622,7 @@ describe("Server lifecycle integration", () => {
       .buildAsync();
     const resourceClose = vi.fn();
     fixture.worker.failNextRetire(retirementFailure);
-    const server = Server.atPort(sibling.port, { environment: fixture.environment })
+    const server = Server.atPort(sibling.port)
       .add(departingContext)
       .addResource({ close: resourceClose });
     const starting = server.start();
@@ -1680,7 +1669,7 @@ describe("Server lifecycle integration", () => {
       await server.start().catch(() => undefined);
       await sibling.close().catch(() => undefined);
       await departingContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1702,9 +1691,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(storageFactory)
       .buildAsync();
     const resourceClose = vi.fn();
-    const server = Server.atPort(0, { environment: fixture.environment })
-      .add(context)
-      .addResource({ close: resourceClose });
+    const server = Server.atPort(0).add(context).addResource({ close: resourceClose });
     const starting = server.start();
     void starting.catch(() => undefined);
 
@@ -1740,7 +1727,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await server.start().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1748,9 +1735,7 @@ describe("Server lifecycle integration", () => {
   it("uses ordinary detach after another server clears unsafe failed-start rollback", async () => {
     const fixture = await lifecycleFixture();
     fixture.worker.release();
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
     const listenerFailure = Object.assign(new Error("cross-server listener bind failed"), {
       code: "EADDRINUSE",
     });
@@ -1764,7 +1749,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(listenerStorage)
       .buildAsync();
     const listenerResource = vi.fn();
-    const listenerServer = Server.atPort(0, { environment: fixture.environment })
+    const listenerServer = Server.atPort(0)
       .add(listenerContext)
       .addResource({ close: listenerResource });
     const listenerStarting = listenerServer.start();
@@ -1778,7 +1763,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(rollbackStorage)
       .buildAsync();
     const rollbackResource = vi.fn();
-    const rollbackServer = Server.atPort(0, { environment: fixture.environment })
+    const rollbackServer = Server.atPort(0)
       .add(rollbackContext)
       .addResource({ close: rollbackResource });
     let rollbackStarting: Promise<unknown> | undefined;
@@ -1843,7 +1828,7 @@ describe("Server lifecycle integration", () => {
 
       await sibling.close();
       expect(fixture.worker.retireCalls).toBe(3);
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       fixture.worker.release();
       await listenerStarting.catch(() => undefined);
@@ -1853,7 +1838,7 @@ describe("Server lifecycle integration", () => {
       await sibling.close().catch(() => undefined);
       await listenerContext.close().catch(() => undefined);
       await rollbackContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -1861,9 +1846,7 @@ describe("Server lifecycle integration", () => {
   it("keeps listener cleanup out of another server's failed-start retry", async () => {
     const fixture = await lifecycleFixture();
     fixture.worker.release();
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
     const listenerRetirementFailure = new Error("isolated listener retirement failed");
     const listenerStorage = new LifecycleTrackingStorageFactory([]);
     const listenerContext = await fixture
@@ -1872,7 +1855,7 @@ describe("Server lifecycle integration", () => {
       .buildAsync();
     const listenerResource = vi.fn();
     fixture.worker.failNextRetire(listenerRetirementFailure);
-    const listenerServer = Server.atPort(sibling.port, { environment: fixture.environment })
+    const listenerServer = Server.atPort(sibling.port)
       .add(listenerContext)
       .addResource({ close: listenerResource });
     const listenerStarting = listenerServer.start();
@@ -1887,7 +1870,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(rollbackStorage)
       .buildAsync();
     const rollbackResource = vi.fn();
-    const rollbackServer = Server.atPort(0, { environment: fixture.environment })
+    const rollbackServer = Server.atPort(0)
       .add(rollbackContext)
       .addResource({ close: rollbackResource });
     let rollbackStarting: Promise<unknown> | undefined;
@@ -1983,7 +1966,7 @@ describe("Server lifecycle integration", () => {
       await once(sessionAfterRetry, "close");
 
       await sibling.close();
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       releaseRollbackRetry?.();
       await listenerStarting.catch(() => undefined);
@@ -1996,7 +1979,7 @@ describe("Server lifecycle integration", () => {
       await sibling.close().catch(() => undefined);
       await listenerContext.close().catch(() => undefined);
       await rollbackContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2004,9 +1987,7 @@ describe("Server lifecycle integration", () => {
   it("keeps a blocked attachment out of another server's failed-start retry", async () => {
     const fixture = await lifecycleFixture();
     fixture.worker.release();
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
 
     const ownerStartupFailure = new Error("attachment owner startup failed");
     const ownerQuiescenceFailure = new Error("attachment owner remained unsafe");
@@ -2017,9 +1998,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(ownerStorage)
       .buildAsync();
     const ownerResource = vi.fn();
-    const ownerServer = Server.atPort(0, { environment: fixture.environment })
-      .add(ownerContext)
-      .addResource({ close: ownerResource });
+    const ownerServer = Server.atPort(0).add(ownerContext).addResource({ close: ownerResource });
     fixture.worker.rejectNextStart(ownerStartupFailure);
     fixture.worker.failNextAwait(ownerQuiescenceFailure);
     const ownerStarting = ownerServer.start();
@@ -2038,7 +2017,7 @@ describe("Server lifecycle integration", () => {
         throw duplicateBlockedClose;
       }
     });
-    const blockedServer = Server.atPort(0, { environment: fixture.environment })
+    const blockedServer = Server.atPort(0)
       .add(blockedContext)
       .addResource({ close: blockedResource });
     let blockedStarting: Promise<unknown> | undefined;
@@ -2132,7 +2111,7 @@ describe("Server lifecycle integration", () => {
       await once(sessionAfterRetry, "close");
 
       await sibling.close();
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       releaseOwnerRetry?.();
       await ownerStarting.catch(() => undefined);
@@ -2145,7 +2124,7 @@ describe("Server lifecycle integration", () => {
       await sibling.close().catch(() => undefined);
       await ownerContext.close().catch(() => undefined);
       await blockedContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2153,9 +2132,7 @@ describe("Server lifecycle integration", () => {
   it("expires rollback authority before retrying a partial dependency close", async () => {
     const fixture = await lifecycleFixture();
     fixture.worker.release();
-    const sibling = await Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .start();
+    const sibling = await Server.atPort(0).add(fixture.context).start();
 
     const firstStartupFailure = new Error("expired authority startup failed");
     const firstQuiescenceFailure = new Error("expired authority remained unsafe");
@@ -2183,7 +2160,7 @@ describe("Server lifecycle integration", () => {
         throw duplicateFirstClose;
       }
     });
-    const firstServer = Server.atPort(0, { environment: fixture.environment })
+    const firstServer = Server.atPort(0)
       .add(firstContext)
       .addResource({ close: successfulResource })
       .addResource({ close: retryingResource });
@@ -2201,9 +2178,7 @@ describe("Server lifecycle integration", () => {
       .withStorageFactory(secondStorage)
       .buildAsync();
     const secondResource = vi.fn();
-    const secondServer = Server.atPort(0, { environment: fixture.environment })
-      .add(secondContext)
-      .addResource({ close: secondResource });
+    const secondServer = Server.atPort(0).add(secondContext).addResource({ close: secondResource });
     let secondStarting: Promise<unknown> | undefined;
     let secondRetry: Promise<unknown> | undefined;
     let firstRetry: Promise<unknown> | undefined;
@@ -2310,7 +2285,7 @@ describe("Server lifecycle integration", () => {
       await once(sessionAfterRetry, "close");
 
       await sibling.close();
-      await expect(fixture.environment.close()).resolves.toBeUndefined();
+      await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
     } finally {
       releaseSecondRetry?.();
       await firstStarting.catch(() => undefined);
@@ -2323,7 +2298,7 @@ describe("Server lifecycle integration", () => {
       await sibling.close().catch(() => undefined);
       await firstContext.close().catch(() => undefined);
       await secondContext.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2382,7 +2357,7 @@ describe("Server lifecycle integration", () => {
           }
         });
         const closeSuccessfulResource = vi.fn();
-        server = Server.atPort(0, { environment: fixture.environment })
+        server = Server.atPort(0)
           .add(fixture.context)
           .addResource({ close: closeFailedResource })
           .addResource({ close: closeSuccessfulResource });
@@ -2504,7 +2479,7 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [firstWorker, freshWorker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
     const context = await fixture
@@ -2530,7 +2505,7 @@ describe("Server lifecycle integration", () => {
         throw duplicateResourceClose;
       }
     });
-    const server = Server.atPort(0, { environment: fixture.environment })
+    const server = Server.atPort(0)
       .add(context)
       .addResource({ close: closeResource })
       .addResource({ close: failResource });
@@ -2590,9 +2565,7 @@ describe("Server lifecycle integration", () => {
         .createBuilder("LifecycleAfterConsumedFailedStart")
         .withStorageFactory(storageFactory)
         .buildAsync();
-      fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
@@ -2601,7 +2574,7 @@ describe("Server lifecycle integration", () => {
 
       expect(storageFactory.isOpen()).toBe(true);
       expect(storageFactory.closeCalls).toBe(0);
-      await fixture.environment.close();
+      await resetServerEnvironmentForTest();
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
       closeContext.mockRestore();
@@ -2610,7 +2583,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await fresh?.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2627,7 +2600,7 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [firstWorker, freshWorker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
     const context = await fixture
@@ -2643,9 +2616,7 @@ describe("Server lifecycle integration", () => {
         throw duplicateResourceClose;
       }
     });
-    const server = Server.atPort(0, { environment: fixture.environment })
-      .add(context)
-      .addResource({ close: closeResource });
+    const server = Server.atPort(0).add(context).addResource({ close: closeResource });
     const starting = server.start();
     void starting.catch(() => undefined);
     let fresh: { close(): Promise<void> } | undefined;
@@ -2680,9 +2651,7 @@ describe("Server lifecycle integration", () => {
         .createBuilder("LifecycleAfterImmediateSafeTerminal")
         .withStorageFactory(storageFactory)
         .buildAsync();
-      fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
@@ -2690,7 +2659,7 @@ describe("Server lifecycle integration", () => {
       await fresh.close();
 
       expect(storageFactory.isOpen()).toBe(true);
-      await fixture.environment.close();
+      await resetServerEnvironmentForTest();
     } finally {
       closeContext.mockRestore();
       firstWorker.release();
@@ -2698,7 +2667,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await fresh?.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2719,7 +2688,7 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [firstWorker, freshWorker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
     const context = await fixture
@@ -2735,9 +2704,7 @@ describe("Server lifecycle integration", () => {
         throw duplicateResourceClose;
       }
     });
-    const server = Server.atPort(0, { environment: fixture.environment })
-      .add(context)
-      .addResource({ close: closeResource });
+    const server = Server.atPort(0).add(context).addResource({ close: closeResource });
     const starting = server.start();
     void starting.catch(() => undefined);
     let fresh: { close(): Promise<void> } | undefined;
@@ -2787,9 +2754,7 @@ describe("Server lifecycle integration", () => {
         .createBuilder("LifecycleAfterRetirementErrorTerminal")
         .withStorageFactory(storageFactory)
         .buildAsync();
-      fresh = await Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
@@ -2797,7 +2762,7 @@ describe("Server lifecycle integration", () => {
       await fresh.close();
 
       expect(storageFactory.isOpen()).toBe(true);
-      await fixture.environment.close();
+      await resetServerEnvironmentForTest();
     } finally {
       closeContext.mockRestore();
       firstWorker.release();
@@ -2806,7 +2771,7 @@ describe("Server lifecycle integration", () => {
       await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
       await fresh?.close().catch(() => undefined);
       await context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2865,9 +2830,7 @@ describe("Server lifecycle integration", () => {
         );
       }
     });
-    const server = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .addResource({ close: closeResource });
+    const server = Server.atPort(0).add(fixture.context).addResource({ close: closeResource });
     const starting = server.start();
     void starting.catch(() => undefined);
 
@@ -2904,7 +2867,7 @@ describe("Server lifecycle integration", () => {
       worker.release();
       await starting.catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -2929,9 +2892,7 @@ describe("Server lifecycle integration", () => {
       return closeFixtureContext();
     });
     const closeResource = vi.fn();
-    const server = Server.atPort(0, { environment: fixture.environment })
-      .add(fixture.context)
-      .addResource({ close: closeResource });
+    const server = Server.atPort(0).add(fixture.context).addResource({ close: closeResource });
     const starting = server.start();
     void starting.catch(() => undefined);
 
@@ -2981,7 +2942,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -3015,7 +2976,7 @@ describe("Server lifecycle integration", () => {
         throw resourceFailure;
       }
     });
-    const server = Server.atPort(0, { environment: fixture.environment })
+    const server = Server.atPort(0)
       .add(fixture.context)
       .addResource({ close: closeSuccessfulResource })
       .addResource({ close: closeFailedResource });
@@ -3054,7 +3015,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
       await fixture.context.close().catch(() => undefined);
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
@@ -3072,13 +3033,13 @@ describe("Server lifecycle integration", () => {
     const fixture = await lifecycleFixture({
       events,
       workers: [firstWorker, freshWorker],
-      environment: { storageFactory, ownsStorageFactory: true },
+      settings: { storageFactory },
     });
     await fixture.context.close();
     const contextBuilder = fixture.createBuilder("LifecycleFailedStart");
     let resourceCloses = 0;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close");
-    const server = Server.atPort(0, { environment: fixture.environment })
+    const server = Server.atPort(0)
       .add(contextBuilder)
       .addResource({
         close() {
@@ -3143,9 +3104,7 @@ describe("Server lifecycle integration", () => {
       ]);
 
       const freshContext = await fixture.createContext("LifecycleAfterFailedStart");
-      const freshStarting = Server.atPort(0, { environment: fixture.environment })
-        .add(freshContext)
-        .start();
+      const freshStarting = Server.atPort(0).add(freshContext).start();
       const fresh = await freshStarting;
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(1);
@@ -3154,7 +3113,7 @@ describe("Server lifecycle integration", () => {
 
       expect(storageFactory.isOpen()).toBe(true);
       expect(storageFactory.closeCalls).toBe(0);
-      await fixture.environment.close();
+      await resetServerEnvironmentForTest();
       expect(storageFactory.closeCalls).toBe(1);
     } finally {
       closeContext.mockRestore();
@@ -3163,27 +3122,33 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await serverEnvironmentAccess.retryFailedStart(fixture.environment).catch(() => undefined);
       await fixture.context.close();
-      await fixture.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
   });
 
   it("installs a deterministic attachment worker only once before lifecycle use", async () => {
-    const first = ServerEnvironment.local();
+    ServerEnvironment.when(EnvironmentType.Local).use({});
+    const first = ServerEnvironment.instance();
     const worker = new HeldStartupWorker([]);
     serverEnvironmentAccess.installTestAttachments(first, () => worker);
     expect(() => {
       serverEnvironmentAccess.installTestAttachments(first, () => worker);
     }).toThrow("Test attachments may only be installed before environment lifecycle use.");
 
-    const observed = ServerEnvironment.local();
+    expect(serverEnvironmentAccess.failedStartPending(first)).toBe(false);
+    await resetServerEnvironmentForTest();
+
+    ServerEnvironment.when(EnvironmentType.Local).use({});
+    const observed = ServerEnvironment.instance();
     expect(serverEnvironmentAccess.failedStartPending(observed)).toBe(false);
     expect(() => {
       serverEnvironmentAccess.installTestAttachments(observed, () => worker);
     }).not.toThrow();
-    await observed.close();
+    await resetServerEnvironmentForTest();
 
-    const used = ServerEnvironment.local();
+    ServerEnvironment.when(EnvironmentType.Local).use({});
+    const used = ServerEnvironment.instance();
     const handle = await serverEnvironmentAccess.attach(used, {
       ownership: "caller",
       descriptors: [],
@@ -3197,32 +3162,26 @@ describe("Server lifecycle integration", () => {
     expect(rejected).toBe(true);
     if (rejected) {
       await serverEnvironmentAccess.detach(used, handle);
-      await used.close();
+      await resetServerEnvironmentForTest();
     }
 
-    const closed = ServerEnvironment.local();
-    await closed.close();
+    ServerEnvironment.when(EnvironmentType.Local).use({});
+    const closed = ServerEnvironment.instance();
+    await resetServerEnvironmentForTest();
     expect(() => {
       serverEnvironmentAccess.installTestAttachments(closed, () => worker);
     }).toThrow("Test attachments may only be installed before environment lifecycle use.");
   });
 
-  it("observes exact-handle endpoint safety without mutating pre-detach state", async () => {
+  it("observes exact-handle endpoint safety without mutating its active attachment", async () => {
     const first = await lifecycleFixture();
-    const second = await lifecycleFixture();
     first.worker.release();
-    second.worker.release();
     let firstHandle: EnvironmentAttachmentHandle | undefined;
-    let secondHandle: EnvironmentAttachmentHandle | undefined;
 
     try {
       firstHandle = await serverEnvironmentAccess.attach(first.environment, {
         ownership: "caller",
         descriptors: [boundedContextAccess.delivery(first.context)],
-      });
-      secondHandle = await serverEnvironmentAccess.attach(second.environment, {
-        ownership: "caller",
-        descriptors: [boundedContextAccess.delivery(second.context)],
       });
 
       expect(serverEnvironmentAccess.detachRetryPending(first.environment, firstHandle)).toBe(
@@ -3230,16 +3189,6 @@ describe("Server lifecycle integration", () => {
       );
       expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
       expect(serverEnvironmentAccess.endpointSafe(first.environment, firstHandle)).toBe(false);
-      expect(first.worker.stopCalls).toBe(0);
-      expect(first.worker.awaitCalls).toBe(0);
-      expect(first.worker.retireCalls).toBe(0);
-      const foreignHandle = secondHandle;
-      expect(() => serverEnvironmentAccess.endpointSafe(first.environment, foreignHandle)).toThrow(
-        "Environment attachment handle is not owned by this environment.",
-      );
-      expect(() =>
-        serverEnvironmentAccess.detachRetryPending(first.environment, foreignHandle),
-      ).toThrow("Environment attachment handle is not owned by this environment.");
       expect(first.worker.stopCalls).toBe(0);
       expect(first.worker.awaitCalls).toBe(0);
       expect(first.worker.retireCalls).toBe(0);
@@ -3252,17 +3201,9 @@ describe("Server lifecycle integration", () => {
       if (firstHandle !== undefined) {
         await serverEnvironmentAccess.detach(first.environment, firstHandle).catch(() => undefined);
       }
-      if (secondHandle !== undefined) {
-        await serverEnvironmentAccess
-          .detach(second.environment, secondHandle)
-          .catch(() => undefined);
-      }
       await first.context.close().catch(() => undefined);
-      await second.context.close().catch(() => undefined);
-      await first.environment.close().catch(() => undefined);
-      await second.environment.close().catch(() => undefined);
+      await resetServerEnvironmentForTest().catch(() => undefined);
       first.dispose();
-      second.dispose();
     }
   });
 });
@@ -3313,6 +3254,31 @@ async function closeIfRunningServer(value: unknown): Promise<void> {
   if (typeof close === "function") {
     await Reflect.apply(close, value, []);
   }
+}
+
+async function createPortBlocker(): Promise<{ readonly port: number; close(): Promise<void> }> {
+  const server = http2.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Port blocker did not expose a TCP address.");
+  }
+  return Object.freeze({
+    port: address.port,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error === undefined) resolve();
+          else reject(error);
+        });
+      }),
+  });
 }
 
 function failListenerNetwork(

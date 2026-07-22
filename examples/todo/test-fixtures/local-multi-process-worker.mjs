@@ -3,7 +3,7 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 
-import { Server, ServerEnvironment } from "@spine-ts/server";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
 import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
 
 import { createTodoContext } from "@spine-ts/example-todo";
@@ -24,7 +24,7 @@ const transport =
   workerMode === "pending-startup"
     ? pendingStartupTransport(baseTransport, startupGate)
     : baseTransport;
-const environment = ServerEnvironment.local({ transport, ownsTransport: false });
+ServerEnvironment.when(EnvironmentType.Local).use({ transport });
 let running;
 let stopping;
 let stopRequested = false;
@@ -71,7 +71,7 @@ try {
 }
 
 async function startServer() {
-  return await Server.atPort(0, { host: "127.0.0.1", environment })
+  return await Server.atPort(0, { host: "127.0.0.1" })
     .add(await createTodoContext())
     .start();
 }
@@ -87,8 +87,11 @@ async function shutdown(exitCode = 0) {
       closeFailures.push(new Error(`startup rollback failed: ${safeMessage(error)}`));
     }
     await captureClose("running server", async () => running?.close(), closeFailures);
-    await captureClose("environment", async () => environment.close(), closeFailures);
-    await captureClose("transport", async () => transport.close(), closeFailures);
+    await captureClose(
+      "environment",
+      async () => ServerEnvironment.instance().close(),
+      closeFailures,
+    );
     if (closeFailures.length > 0) {
       await reportFailure(
         "shutdown",
@@ -236,7 +239,7 @@ function closeFailureEnvironment() {
   if (value === undefined || value.length === 0) {
     return new Set();
   }
-  const allowed = new Set(["running server", "environment", "transport"]);
+  const allowed = new Set(["running server", "environment"]);
   const failures = value.split(",");
   for (const failure of failures) {
     if (!allowed.has(failure)) {

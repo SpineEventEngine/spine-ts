@@ -1,5 +1,5 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type {
   ContextDeliveryDescriptor,
@@ -24,9 +24,19 @@ import {
   RegistrationReadiness,
 } from "../../src/server/environment-attachment.js";
 import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-delivery-worker.js";
+import { EnvironmentType } from "../../src/server/environment.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
 describe("environment generation stop", () => {
+  beforeEach(async () => {
+    await resetServerEnvironmentForTest();
+  });
+
+  afterEach(async () => {
+    await resetServerEnvironmentForTest();
+  });
+
   it("admits a queued attachment before selecting stop survivors", async () => {
     const oldWorker = new ControlledWorker([], "queued-old");
     const candidateWorker = new ControlledWorker([], "queued-candidate");
@@ -2287,7 +2297,8 @@ describe("environment generation stop", () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("First", "type.example.dev/First", storageFactory);
     const second = descriptor("Second", "type.example.dev/Second", storageFactory);
-    const environment = ServerEnvironment.local({ storageFactory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+    const environment = ServerEnvironment.instance();
 
     const firstHandle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",

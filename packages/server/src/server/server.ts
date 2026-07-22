@@ -39,7 +39,6 @@ export class Server {
   readonly #resources: { close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #environment: ServerEnvironment;
-  readonly #ownsEnvironment: boolean;
   #starting: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
   #failedStartConsumed = false;
@@ -59,9 +58,7 @@ export class Server {
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
-    this.#environment = options.environment ?? ServerEnvironment.local();
-    this.#ownsEnvironment =
-      options.environment === undefined ? true : (options.ownsEnvironment ?? false);
+    this.#environment = ServerEnvironment.instance();
   }
 
   /** Create a server builder for the passed port on local-only `127.0.0.1`. */
@@ -105,10 +102,11 @@ export class Server {
    * by that attempt. If environment startup, context transport registration, or
    * listener open fails, the server first closes acquired network resources and
    * context transport intake, waits until active work can no longer use its
-   * dependencies, then closes contexts and explicit resources, followed by
-   * facilities of a server-owned environment. Network and context transport
-   * cleanup are hard gates: a cleanup-only `start()` retry must complete them
-   * before delivery detaches or dependencies close. An initial rejection
+   * dependencies, then closes contexts and explicit resources. Process-wide
+   * facilities remain open until explicit {@link ServerEnvironment.close}
+   * shutdown. Network and context transport cleanup are hard gates: a
+   * cleanup-only `start()` retry must complete them before delivery detaches or
+   * dependencies close. An initial rejection
    * combines the original startup failure first with reached cleanup failures
    * in stable phase order.
    *
@@ -119,10 +117,9 @@ export class Server {
    * completes, the attempt rejects instead of returning a {@link RunningServer},
    * and this `Server` instance remains terminal.
    *
-   * A newly assembled `Server` with fresh contexts may reuse a caller-owned
-   * environment after cleanup. A server-owned environment is permanently
-   * closed when its ordered startup cleanup completes. Concurrent calls share
-   * the same in-flight start or cleanup attempt.
+   * A newly assembled `Server` with fresh contexts may reuse the singleton
+   * environment after cleanup. Concurrent calls share the same in-flight start
+   * or cleanup attempt.
    */
   start(): Promise<RunningServer> {
     const current = this.#starting;
@@ -154,12 +151,12 @@ export class Server {
     let attachment: EnvironmentAttachmentHandle;
     try {
       attachment = await serverEnvironmentAccess.attach(this.#environment, {
-        ownership: this.#ownsEnvironment ? "server" : "caller",
+        ownership: "caller",
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
     } catch (error) {
       const closeGroup = new RetryableCloseGroup(
-        [...contexts, ...this.#resources, ...(this.#ownsEnvironment ? [this.#environment] : [])],
+        [...contexts, ...this.#resources],
         "Server start cleanup failed while closing owned contexts/resources.",
       );
       if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
@@ -178,11 +175,7 @@ export class Server {
       }
       throw error;
     }
-    const closeables = [
-      ...contexts,
-      ...this.#resources,
-      ...(this.#ownsEnvironment ? [this.#environment] : []),
-    ];
+    const closeables = [...contexts, ...this.#resources];
     const contextTransports = new ContextTransportGroup(this.#environment.transport);
     try {
       await contextTransports.open(contexts);
@@ -446,14 +439,6 @@ export interface ServerOptions {
   readonly services?: Omit<SpineServicesOptions, "contexts">;
   /** Extra framework-owned closeables to close after contexts become safe to close. */
   readonly resources?: readonly { close(): unknown }[];
-  /**
-   * Server runtime environment. Supplied environments are caller-owned unless
-   * `ownsEnvironment` is explicitly true. When omitted, the server creates and
-   * owns a local/test environment with in-memory defaults.
-   */
-  readonly environment?: ServerEnvironment;
-  /** Whether this server permanently closes the environment after contexts and resources. */
-  readonly ownsEnvironment?: boolean;
 }
 
 /** Running local Spine service host. */
@@ -466,15 +451,15 @@ export interface RunningServer {
   readonly baseUrl: string;
   /**
    * Stop network intake and sessions, close context transport registrations and
-   * drain accepted work, then detach delivery before closing contexts, explicit
-   * resources, and any server-owned environment.
+   * drain accepted work, then detach delivery before closing contexts and
+   * explicit resources. Process-wide facilities remain open until explicit
+   * {@link ServerEnvironment.close} shutdown.
    *
    * A failure while closing the network or context transport intake prevents
    * detach and dependency cleanup until a later retry completes that phase.
-   * Closing one server that shares a caller-owned environment does not
-   * interrupt sibling servers, and the caller-owned environment and its
-   * facilities remain open. A server-owned environment closes only after its
-   * contexts and resources.
+   * Closing one server does not interrupt sibling servers. The singleton
+   * environment and its facilities remain open until explicit process
+   * shutdown.
    *
    * Concurrent calls share one in-flight close. Repeated calls after a
    * successful close are idempotent. After a failed close, a later call retries
