@@ -43,15 +43,17 @@ import {
 
 export class OrderAggregate extends Aggregate<string, typeof OrderSchema> {
   @Assign createOrder(command: CreateOrder): OrderCreated {
-    this.updateDraftState(() => create(OrderSchema, { id: this.id, skuId: command.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(OrderSchema, { id: this.id, skuId: command.skuId })),
+    );
     return create(OrderCreatedSchema, { id: this.id, skuId: command.skuId });
   }
 }
 
 export class SkuAggregate extends Aggregate<string, typeof SkuSchema> {
   @Assign registerSku(command: RegisterSku): SkuRegistered {
-    this.updateDraftState(() =>
-      create(SkuSchema, { id: this.id, displayName: command.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(SkuSchema, { id: this.id, displayName: command.displayName })),
     );
     return create(SkuRegisteredSchema, { id: this.id, displayName: command.displayName });
   }
@@ -59,77 +61,93 @@ export class SkuAggregate extends Aggregate<string, typeof SkuSchema> {
 
 export class OrderSummaryProjection extends Projection<string, typeof OrderSummarySchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState(() => create(OrderSummarySchema, { id: event.id, value: event.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(OrderSummarySchema, { id: event.id, value: event.skuId })),
+    );
   }
 }
 export class SalesSummaryProjection extends Projection<string, typeof SalesSummarySchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState(() => create(SalesSummarySchema, { id: event.id, value: event.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(SalesSummarySchema, { id: event.id, value: event.skuId })),
+    );
   }
 }
 export class OrderSkuViewProjection extends Projection<string, typeof OrderSkuViewSchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState(() => create(OrderSkuViewSchema, { id: event.id, value: event.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(OrderSkuViewSchema, { id: event.id, value: event.skuId })),
+    );
   }
 }
 export class OrderAuditViewProjection extends Projection<string, typeof OrderAuditViewSchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState(() => create(OrderAuditViewSchema, { id: event.id, value: event.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(OrderAuditViewSchema, { id: event.id, value: event.skuId })),
+    );
   }
 }
 export class SalesFeedProjection extends Projection<string, typeof SalesFeedSchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState(() => create(SalesFeedSchema, { id: event.id, value: event.skuId }));
+    this.update((draft) =>
+      Object.assign(draft, create(SalesFeedSchema, { id: event.id, value: event.skuId })),
+    );
   }
 }
 export class SkuCatalogProjection extends Projection<string, typeof SkuCatalogSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState(() =>
-      create(SkuCatalogSchema, { id: event.id, value: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(SkuCatalogSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
 export class SkuSalesViewProjection extends Projection<string, typeof SkuSalesViewSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState(() =>
-      create(SkuSalesViewSchema, { id: event.id, value: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(SkuSalesViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
 export class SkuAuditViewProjection extends Projection<string, typeof SkuAuditViewSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState(() =>
-      create(SkuAuditViewSchema, { id: event.id, value: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(SkuAuditViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
 export class InventoryViewProjection extends Projection<string, typeof InventoryViewSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState(() =>
-      create(InventoryViewSchema, { id: event.id, value: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(InventoryViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
 export class SalesSkuIndexProjection extends Projection<string, typeof SalesSkuIndexSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState(() =>
-      create(SalesSkuIndexSchema, { id: event.id, value: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(SalesSkuIndexSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
 
 export class OrderSalesManager extends ProcessManager<string, typeof OrderSalesManagerSchema> {
   @Subscribe onOrderCreated(event: OrderCreated): void {
-    this.updateDraftState((state) =>
-      create(OrderSalesManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(OrderSalesManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class SkuSalesManager extends ProcessManager<string, typeof SkuSalesManagerSchema> {
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
-    this.updateDraftState((state) =>
-      create(SkuSalesManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(SkuSalesManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }

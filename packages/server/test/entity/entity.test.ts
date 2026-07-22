@@ -127,18 +127,28 @@ class TestTransactionalEntity extends TransactionalEntity<
   }
 
   renameDraft(name: string, priority = this.currentDraft().priority): ProjectionState {
-    return this.updateDraftState((draft) => ({
-      ...draft,
-      name,
-      priority,
-    }));
+    return this.update((draft) => {
+      draft.name = name;
+      draft.priority = priority;
+    });
   }
 
   changeDraftId(id: string): ProjectionState {
-    return this.updateDraftState((draft) => ({
-      ...draft,
-      id,
-    }));
+    return this.update((draft) => {
+      draft.id = id;
+    });
+  }
+
+  tryRenameDraft(name: string): readonly import("@spine-ts/proto").ConstraintViolation[] {
+    return this.tryUpdate((draft) => {
+      draft.name = name;
+    });
+  }
+
+  tryChangeDraftId(id: string): readonly import("@spine-ts/proto").ConstraintViolation[] {
+    return this.tryUpdate((draft) => {
+      draft.id = id;
+    });
   }
 
   reviseDraft(revision: number): {
@@ -192,10 +202,9 @@ class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, Revi
   }
 
   renameDraft(name: string): ProjectionState {
-    return this.updateDraftState((draft) => ({
-      ...draft,
-      name,
-    }));
+    return this.update((draft) => {
+      draft.name = name;
+    });
   }
 
   reviseDraft(revision: number): void {
@@ -733,6 +742,27 @@ describe("entities", () => {
 
     expect(entity.stateReads).toBe(1);
     expect(entity.draft()).toEqual(createProjectionState());
+  });
+
+  it("exposes protected tryUpdate with atomic validation failures", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(() => entity.tryRenameDraft("Outside transaction")).toThrow(
+      TransactionalEntityScopeError,
+    );
+
+    entity.start();
+    expect(entity.tryRenameDraft("Validated")).toEqual([]);
+    const violations = entity.tryChangeDraftId("task-2");
+
+    expect(Object.isFrozen(violations)).toBe(true);
+    expect(violations).not.toEqual([]);
+    expect(entity.draft()).toEqual(createProjectionState({ name: "Validated" }));
   });
 
   it("commits accepted draft state, version metadata, and lifecycle flags back to the entity", () => {

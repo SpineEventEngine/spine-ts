@@ -1,4 +1,5 @@
-import { create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { ConstraintViolationSchema, type ConstraintViolation } from "@spine-ts/proto";
 
 import type { DescriptorMessageSchema } from "./entity-metadata.js";
 import {
@@ -23,7 +24,7 @@ export interface EntityTransactionVersionMetadata<Version = unknown> {
 }
 
 /** Explicit version metadata returned by an accepted commit. */
-export interface EntityTransactionCommittedVersionMetadata<Version = unknown> {
+export interface CommittedVersionMetadata<Version = unknown> {
   /** Caller-supplied previous committed version metadata. */
   readonly previous: Version;
   /** Draft metadata accepted by the commit boundary. */
@@ -41,17 +42,20 @@ export type EntityTransactionOperation =
   | "requireActive"
   | "restore"
   | "rollback"
+  | "tryUpdate"
   | "unarchive"
   | "update"
   | "updateVersionMetadata";
 
 /** Draft lifecycle reason that prevents active-only entity state mutation. */
-export type EntityTransactionDraftStateReason = "archived" | "deleted";
+export type DraftStateReason = "archived" | "deleted";
 
-/** Function used to produce the next buffered draft state. */
-export type EntityTransactionUpdater<Schema extends DescriptorMessageSchema> = (
+/** Function that mutates an entity-state draft in place. */
+export type EntityTransactionMutator<Schema extends DescriptorMessageSchema> = (
   draft: MessageShape<Schema>,
-) => MessageShape<Schema>;
+) => void;
+
+const noConstraintViolations: readonly ConstraintViolation[] = Object.freeze([]);
 
 /** Options for creating an {@link EntityTransaction}. */
 export interface EntityTransactionOptions<
@@ -82,7 +86,7 @@ export interface EntityTransactionAcceptedCommit<
   /** Accepted next state snapshot. */
   readonly next: MessageShape<Schema>;
   /** Accepted commit version metadata. */
-  readonly version: EntityTransactionCommittedVersionMetadata<Version>;
+  readonly version: CommittedVersionMetadata<Version>;
   /** Lifecycle flags accepted with the committed state. */
   readonly lifecycle: EntityTransactionLifecycleFlags;
   /** Successful transition validation result. */
@@ -158,14 +162,14 @@ export class EntityTransactionStateError extends Error {
  * The error exposes only the deterministic draft lifecycle reason. It does not
  * include entity state payloads, IDs, or previous/draft values.
  */
-export class EntityTransactionDraftStateError extends Error {
+export class DraftStateError extends Error {
   /** Draft lifecycle reason that rejected active-only mutation. */
-  readonly reason: EntityTransactionDraftStateReason;
+  readonly reason: DraftStateReason;
 
   /** Create a deterministic draft lifecycle guard error. */
-  constructor(reason: EntityTransactionDraftStateReason) {
+  constructor(reason: DraftStateReason) {
     super(`Cannot mutate active entity state while the draft is ${reason}.`);
-    this.name = "EntityTransactionDraftStateError";
+    this.name = "DraftStateError";
     this.reason = reason;
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -238,7 +242,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    *
    * @throws {@link EntityTransactionStateError} when the transaction was already
    * committed or rolled back.
-   * @throws {@link EntityTransactionDraftStateError} when the active draft is
+   * @throws {@link DraftStateError} when the active draft is
    * archived or deleted.
    */
   requireActive(): void {
@@ -247,16 +251,56 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
   }
 
   /**
-   * Replace the buffered draft with the state returned by `updater`.
+   * Mutate the buffered draft in place.
    *
-   * The updater receives a snapshot of the current draft. The previous committed
-   * state is never exposed as mutable transaction storage.
+   * The mutator receives the live draft. The previous committed state is never
+   * exposed as mutable transaction storage. Mutators must complete
+   * synchronously; a returned thenable is rejected and cannot later mutate the
+   * live draft. If a synchronous mutator throws after changing the draft, its
+   * partial changes remain visible.
    */
-  update(updater: EntityTransactionUpdater<Schema>): MessageShape<Schema> {
+  update(mutator: EntityTransactionMutator<Schema>): MessageShape<Schema> {
     this.#requireActiveForStateMutation("update");
-    this.#draft = cloneState(this.#schema, updater(this.currentDraft));
+    const before = cloneState(this.#schema, this.#draft);
+    try {
+      invokeSynchronousMutator(mutator, this.#draft);
+    } catch (error) {
+      if (error instanceof AsyncMutatorError) {
+        this.#draft = before;
+      }
+      throw error;
+    }
 
     return this.currentDraft;
+  }
+
+  /**
+   * Mutate and validate a scratch draft, applying it only when it is valid.
+   *
+   * Validation failures are returned as an immutable violations list. Errors
+   * thrown by the mutator propagate and leave the live draft unchanged.
+   * Mutators must complete synchronously; returned thenables are rejected.
+   */
+  tryUpdate(mutator: EntityTransactionMutator<Schema>): readonly ConstraintViolation[] {
+    this.#requireActiveForStateMutation("tryUpdate");
+    const candidate = cloneState(this.#schema, this.#draft);
+    invokeSynchronousMutator(mutator, candidate);
+
+    const validation = validateEntityStateTransition({
+      schema: this.#schema,
+      previous: this.#previous,
+      next: candidate,
+    });
+    if (!validation.valid) {
+      return Object.freeze(
+        validation.violations.map((violation) =>
+          deepFreeze(clone(ConstraintViolationSchema, violation)),
+        ),
+      );
+    }
+
+    this.#draft = cloneState(this.#schema, candidate);
+    return noConstraintViolations;
   }
 
   /**
@@ -398,7 +442,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     };
   }
 
-  #requireActiveForStateMutation(operation: "update"): void {
+  #requireActiveForStateMutation(operation: "tryUpdate" | "update"): void {
     this.#requireActiveStatus(operation);
     this.#requireDraftAllowsStateMutation();
   }
@@ -411,12 +455,55 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
 
   #requireDraftAllowsStateMutation(): void {
     if (this.#lifecycle.archived) {
-      throw new EntityTransactionDraftStateError("archived");
+      throw new DraftStateError("archived");
     }
     if (this.#lifecycle.deleted) {
-      throw new EntityTransactionDraftStateError("deleted");
+      throw new DraftStateError("deleted");
     }
   }
+}
+
+class AsyncMutatorError extends TypeError {
+  constructor() {
+    super("Entity state mutators must be synchronous.");
+    this.name = "AsyncMutatorError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+function invokeSynchronousMutator<Schema extends DescriptorMessageSchema>(
+  mutator: EntityTransactionMutator<Schema>,
+  draft: MessageShape<Schema>,
+): void {
+  const result = (mutator as (state: MessageShape<Schema>) => unknown)(draft);
+  if (!isThenable(result)) {
+    return;
+  }
+
+  void Promise.resolve(result).catch(() => undefined);
+  throw new AsyncMutatorError();
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    ((typeof value === "object" && value !== null) || typeof value === "function") &&
+    typeof (value as { readonly then?: unknown }).then === "function"
+  );
+}
+
+function deepFreeze<Value>(value: Value, seen = new WeakSet<object>()): Value {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+
+  for (const child of Object.values(value)) {
+    deepFreeze(child, seen);
+  }
+  return Object.freeze(value);
 }
 
 /** Create an {@link EntityTransaction} with inferred schema state typing. */

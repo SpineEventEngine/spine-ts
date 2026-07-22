@@ -45,12 +45,15 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   createTask(command: CreateTask): TaskCreated {
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState(() =>
-      create(TaskSchema, {
-        id,
-        title: command.title,
-        completed: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskSchema, {
+          id,
+          title: command.title,
+          completed: false,
+        }),
+      ),
     );
     return create(TaskCreatedSchema, {
       id,
@@ -63,12 +66,15 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   renameTask(command: RenameTask): TaskRenamed {
     const id = clone(TaskIdSchema, this.id);
 
-    this.updateDraftState((state) =>
-      create(TaskSchema, {
-        id,
-        title: command.title,
-        completed: state.completed,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskSchema, {
+          id,
+          title: command.title,
+          completed: draft.completed,
+        }),
+      ),
     );
     return create(TaskRenamedSchema, {
       id,
@@ -85,12 +91,15 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
       throw TaskAlreadyDone.create({ id });
     }
 
-    this.updateDraftState((state) =>
-      create(TaskSchema, {
-        id,
-        title: state.title,
-        completed: true,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskSchema, {
+          id,
+          title: draft.title,
+          completed: true,
+        }),
+      ),
     );
     return create(TaskCompletedSchema, { id });
   }
@@ -104,12 +113,15 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
       throw TaskNotDone.create({ id });
     }
 
-    this.updateDraftState((state) =>
-      create(TaskSchema, {
-        id,
-        title: state.title,
-        completed: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskSchema, {
+          id,
+          title: draft.title,
+          completed: false,
+        }),
+      ),
     );
     return create(TaskReopenedSchema, { id });
   }
@@ -135,19 +147,22 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   onTaskCreated(event: TaskCreated): void {
     const id = taskId(event.id);
 
-    this.updateDraftState((state) =>
-      create(TaskListSchema, {
-        id: id.value,
-        tasks: [
-          ...state.tasks,
-          create(TaskSchema, {
-            id: clone(TaskIdSchema, id),
-            title: event.title,
-            completed: false,
-          }),
-        ],
-        openTaskCount: state.openTaskCount + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: id.value,
+          tasks: [
+            ...draft.tasks,
+            create(TaskSchema, {
+              id: clone(TaskIdSchema, id),
+              title: event.title,
+              completed: false,
+            }),
+          ],
+          openTaskCount: draft.openTaskCount + 1,
+        }),
+      ),
     );
   }
 
@@ -156,20 +171,23 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   onTaskRenamed(event: TaskRenamed): void {
     const id = taskId(event.id);
 
-    this.updateDraftState((state) =>
-      create(TaskListSchema, {
-        id: id.value,
-        tasks: state.tasks.map((task) =>
-          task.id?.value === id.value
-            ? create(TaskSchema, {
-                id: clone(TaskIdSchema, id),
-                title: event.title,
-                completed: task.completed,
-              })
-            : task,
-        ),
-        openTaskCount: state.openTaskCount,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: id.value,
+          tasks: draft.tasks.map((task) =>
+            task.id?.value === id.value
+              ? create(TaskSchema, {
+                  id: clone(TaskIdSchema, id),
+                  title: event.title,
+                  completed: task.completed,
+                })
+              : task,
+          ),
+          openTaskCount: draft.openTaskCount,
+        }),
+      ),
     );
   }
 
@@ -178,8 +196,8 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   onTaskCompleted(event: TaskCompleted): void {
     const id = taskId(event.id);
 
-    this.updateDraftState((state) => {
-      const tasks = state.tasks.map((task) =>
+    this.update((draft) => {
+      const tasks = draft.tasks.map((task) =>
         task.id?.value === id.value
           ? create(TaskSchema, {
               id: clone(TaskIdSchema, id),
@@ -188,12 +206,14 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
             })
           : clone(TaskSchema, task),
       );
-
-      return create(TaskListSchema, {
-        id: id.value,
-        tasks,
-        openTaskCount: tasks.filter((task) => !task.completed).length,
-      });
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: id.value,
+          tasks,
+          openTaskCount: tasks.filter((task) => !task.completed).length,
+        }),
+      );
     });
   }
 
@@ -202,8 +222,8 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   onTaskReopened(event: TaskReopened): void {
     const id = taskId(event.id);
 
-    this.updateDraftState((state) => {
-      const tasks = state.tasks.map((task) =>
+    this.update((draft) => {
+      const tasks = draft.tasks.map((task) =>
         task.id?.value === id.value
           ? create(TaskSchema, {
               id: clone(TaskIdSchema, id),
@@ -212,12 +232,14 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
             })
           : clone(TaskSchema, task),
       );
-
-      return create(TaskListSchema, {
-        id: id.value,
-        tasks,
-        openTaskCount: tasks.filter((task) => !task.completed).length,
-      });
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: id.value,
+          tasks,
+          openTaskCount: tasks.filter((task) => !task.completed).length,
+        }),
+      );
     });
   }
 }

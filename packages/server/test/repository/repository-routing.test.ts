@@ -312,12 +312,15 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   applyTask(event: AggregateState): void {
     ExecutingTaskAggregate.applierCalls++;
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: `${event.name} (applied)`,
-        archived: true,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: `${event.name} (applied)`,
+          archived: true,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -334,12 +337,15 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
 
   assignTask(command: AggregateState): AggregateState {
     ManagedTaskAggregate.assigneeCalls++;
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: `${command.name} (assigned)`,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} (assigned)`,
+          archived: false,
+        }),
+      ),
     );
     if (ManagedTaskAggregate.failure !== undefined) {
       throw ManagedTaskAggregate.failure;
@@ -392,12 +398,15 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     GeneratedTwoArgAggregate.contexts.push(context);
     GeneratedTwoArgAggregate.assigneeStarted++;
     await GeneratedTwoArgAggregate.#assigneeCanFinish;
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: `${command.name} (generated)`,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} (generated)`,
+          archived: false,
+        }),
+      ),
     );
     return create(AggregateStateSchema, {
       id: command.id,
@@ -419,12 +428,15 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
   reactProjection(event: ProjectionState, context: EventContext): AggregateState {
     GeneratedReactorAggregate.argumentCounts.push(arguments.length);
     GeneratedReactorAggregate.contexts.push(context);
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: `${event.name} (reacted)`,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: `${event.name} (reacted)`,
+          archived: false,
+        }),
+      ),
     );
     return create(AggregateStateSchema, {
       id: event.id,
@@ -476,12 +488,15 @@ class GeneratedCommandingAggregate extends Aggregate<string, typeof AggregateSta
 
 class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): readonly AggregateState[] {
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: `${command.name} two (assigned)`,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} two (assigned)`,
+          archived: false,
+        }),
+      ),
     );
     return [
       create(AggregateStateSchema, {
@@ -500,12 +515,15 @@ class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
 
 class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): undefined {
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: command.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: command.name,
+          archived: false,
+        }),
+      ),
     );
     return undefined;
   }
@@ -513,12 +531,15 @@ class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchem
 
 class EnvelopeManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): SpineEvent {
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: command.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: command.name,
+          archived: false,
+        }),
+      ),
     );
     return createAggregateEvent("spoofed-event", command.id, 0, command.name);
   }
@@ -545,11 +566,14 @@ class ValidatingTaskAggregate extends Aggregate<
   applyTask(event: ValidatedAggregateState): void {
     ValidatingTaskAggregate.applierCalls++;
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(ValidatedAggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ValidatedAggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -568,11 +592,14 @@ class ValidatingProcessManager extends ProcessManager<
 
   assignTask(command: ValidatedTaskCommand): ProjectionState {
     ValidatingProcessManager.commandCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: command.id,
-        queue: `${command.name} assigned`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: command.id,
+          queue: `${command.name} assigned`,
+        }),
+      ),
     );
     return create(ProjectionStateSchema, {
       id: command.id,
@@ -589,12 +616,15 @@ class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateSta
 
   applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -607,12 +637,15 @@ class RollingBackTransitionAggregate extends TransitionViolatingAggregate {
 
   override applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     const result = this.commitTransaction();
     if (result.status === "rejected") {
@@ -628,12 +661,15 @@ class RestartingTransitionAggregate extends TransitionViolatingAggregate {
 
   override applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     const result = this.commitTransaction();
     if (result.status === "rejected") {
@@ -650,12 +686,15 @@ class MutatingRejectedAggregate extends TransitionViolatingAggregate {
 
   override applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     const result = this.commitTransaction();
     if (result.status === "rejected") {
@@ -671,12 +710,15 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
 
   override applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     const result = this.commitTransaction();
     if (result.status === "accepted") {
@@ -685,12 +727,15 @@ class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
 
     this.rollbackTransaction();
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: `${event.name} recovered`,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: `${event.name} recovered`,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -709,12 +754,15 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
 
   applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: `${event.name} (applied)`,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: `${event.name} (applied)`,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -744,12 +792,15 @@ class AsyncApplierAggregate extends Aggregate<string, typeof AggregateStateSchem
     }
 
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: `${event.name} (async applied)`,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: `${event.name} (async applied)`,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -757,12 +808,15 @@ class AsyncApplierAggregate extends Aggregate<string, typeof AggregateStateSchem
 
 class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): AggregateState {
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: `${command.name} (reaction metadata)`,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} (reaction metadata)`,
+          archived: false,
+        }),
+      ),
     );
     return create(AggregateStateSchema, {
       id: command.id,
@@ -803,12 +857,15 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
 
   applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -827,12 +884,15 @@ class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateSta
 
   applyProjection(event: ProjectionState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+          archived: false,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -849,12 +909,15 @@ class CommandTenantProjectionProducingAggregate extends Aggregate<
 
   applyProjection(event: ProjectionState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+          archived: false,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -869,12 +932,15 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
 
   subscribeTask(event: ProjectionState): void {
     ExecutingTaskProjection.subscriberCalls++;
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (projected)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (projected)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -888,12 +954,15 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSch
 
   subscribeTask(event: ProjectionState): void {
     ManagedTaskProjection.subscriberCalls++;
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (managed)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (managed)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -907,11 +976,14 @@ class AlternateCatchUpProjection extends Projection<string, typeof TaskListSchem
 
   subscribeAggregate(event: AggregateState): void {
     AlternateCatchUpProjection.subscriberCalls++;
-    this.updateDraftState(() =>
-      create(TaskListSchema, {
-        id: event.id,
-        openTaskCount: event.archived ? 0 : 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: event.id,
+          openTaskCount: event.archived ? 0 : 1,
+        }),
+      ),
     );
   }
 }
@@ -952,12 +1024,15 @@ class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStat
     }
 
     BlockingCatchUpProjection.completedCalls++;
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (blocking)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (blocking)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -974,12 +1049,15 @@ class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStat
   subscribeTask(event: ProjectionState, context: EventContext): void {
     GeneratedTwoArgProjection.argumentCounts.push(arguments.length);
     GeneratedTwoArgProjection.contexts.push(context);
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (generated)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (generated)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -1042,12 +1120,15 @@ class ContextMutatingGeneratedProjection extends Projection<
     ContextMutatingGeneratedProjection.observerSawSameContext =
       context === ContextMutatingGeneratedProjection.firstContext;
     ContextMutatingGeneratedProjection.observedVersions.push(context.version?.number);
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (observed)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (observed)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -1067,10 +1148,9 @@ class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSch
 
 class AccumulatingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
-    this.updateDraftState((draft) => {
+    this.update((draft) => {
       draft.name = event.name;
       draft.priority += event.priority;
-      return draft;
     });
   }
 }
@@ -1145,11 +1225,14 @@ class RoutingProcessManager extends ProcessManager<
 
   assignTask(command: AggregateState): ProjectionState {
     RoutingProcessManager.commandCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: command.id,
-        queue: `${command.name} assigned`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: command.id,
+          queue: `${command.name} assigned`,
+        }),
+      ),
     );
     if (RoutingProcessManager.failure !== undefined) {
       throw RoutingProcessManager.failure;
@@ -1163,21 +1246,27 @@ class RoutingProcessManager extends ProcessManager<
 
   reactTask(event: ProjectionState): void {
     RoutingProcessManager.eventCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: event.id,
-        queue: `${event.name} reacted`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} reacted`,
+        }),
+      ),
     );
   }
 
   commandTask(event: ProjectionState): AggregateState {
     RoutingProcessManager.commandReactionCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: event.id,
-        queue: `${event.name} commanded`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} commanded`,
+        }),
+      ),
     );
     return create(AggregateStateSchema, {
       id: event.id,
@@ -1188,11 +1277,14 @@ class RoutingProcessManager extends ProcessManager<
 
   reactTaskWithEvent(event: ProjectionState): AggregateState {
     RoutingProcessManager.eventCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: event.id,
-        queue: `${event.name} evented`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} evented`,
+        }),
+      ),
     );
     return create(AggregateStateSchema, {
       id: event.id,
@@ -1235,11 +1327,14 @@ class InboxCheckingProcessManager extends ProcessManager<
         message.inboxId.targetId === event.id,
     );
     InboxCheckingProcessManager.eventCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: event.id,
-        queue: `${event.name} checked`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} checked`,
+        }),
+      ),
     );
   }
 }
@@ -1267,11 +1362,14 @@ class BlockingProcessManager extends ProcessManager<
     BlockingProcessManager.startedCalls++;
     await BlockingProcessManager.gate.promise;
     BlockingProcessManager.completedCalls++;
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: event.id,
-        queue: `${event.name} blocked`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} blocked`,
+        }),
+      ),
     );
   }
 }
@@ -1297,11 +1395,14 @@ class SplitRouteProcessManager extends ProcessManager<
     }
 
     SplitRouteProcessManager.completedIds.push(this.id);
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: this.id,
-        queue: `${event.name} split`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: this.id,
+          queue: `${event.name} split`,
+        }),
+      ),
     );
   }
 }

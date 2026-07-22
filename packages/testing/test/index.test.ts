@@ -65,12 +65,15 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
   applyTask(event: ProjectionState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+          archived: false,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -78,12 +81,15 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (projected)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (projected)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }

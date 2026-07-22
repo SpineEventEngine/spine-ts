@@ -50,12 +50,12 @@ class TaskAggregate extends Aggregate {
 
   applyTask(event) {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
+    this.update((draft) =>
+      Object.assign(draft,       create(AggregateStateSchema, {
         id: event.id,
         name: event.name,
         archived: false,
-      }),
+      })),
     );
     this.commitTransaction();
   }
@@ -63,12 +63,12 @@ class TaskAggregate extends Aggregate {
 
 class TaskProjection extends Projection {
   subscribeTask(event) {
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
+    this.update((draft) =>
+      Object.assign(draft,       create(ProjectionStateSchema, {
         id: event.id,
         name: `${event.name} (projected)`,
         priority: event.priority + 1,
-      }),
+      })),
     );
     observe("primary-projected", eventSource(event.id), event.id);
   }
@@ -76,11 +76,11 @@ class TaskProjection extends Projection {
 
 class AuditProjection extends Projection {
   subscribeTask(event) {
-    this.updateDraftState(() =>
-      create(SingularSetOnceStateSchema, {
+    this.update((draft) =>
+      Object.assign(draft,       create(SingularSetOnceStateSchema, {
         id: event.id,
         mutableNote: `${event.name} (audited)`,
-      }),
+      })),
     );
     observe("secondary-projected", eventSource(event.id), event.id);
   }

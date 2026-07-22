@@ -12,7 +12,7 @@ import {
   type EntityTransactionLifecycleFlags,
   type EntityTransactionRejectedCommit,
   type EntityTransactionRollbackResult,
-  type EntityTransactionUpdater,
+  type EntityTransactionMutator,
   type EntityTransactionVersionMetadata,
 } from "./entity-transaction.js";
 import type { EntityStateTransitionValidationResult } from "./entity-transition-validation.js";
@@ -47,7 +47,8 @@ export type TransactionalEntityScopeOperation =
   | "rollbackTransaction"
   | "startTransaction"
   | "unarchiveDraft"
-  | "updateDraftState"
+  | "tryUpdate"
+  | "update"
   | "updateDraftVersionMetadata";
 
 /** Error thrown when a transactional entity draft helper is used outside its scope. */
@@ -362,12 +363,24 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Replace the buffered draft state with the updater result.
+   * Mutate the buffered draft state in place and return its resulting snapshot.
    *
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
-  protected updateDraftState(updater: EntityTransactionUpdater<Schema>): MessageShape<Schema> {
-    return this.#requireTransaction("updateDraftState").update(updater);
+  protected update(mutator: EntityTransactionMutator<Schema>): MessageShape<Schema> {
+    return this.#requireTransaction("update").update(mutator);
+  }
+
+  /**
+   * Mutate and validate a scratch draft, applying it only when valid.
+   *
+   * Validation failures return immutable constraint violations. Other errors
+   * propagate and leave the active draft unchanged.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected tryUpdate(mutator: EntityTransactionMutator<Schema>): readonly ConstraintViolation[] {
+    return this.#requireTransaction("tryUpdate").tryUpdate(mutator);
   }
 
   /**

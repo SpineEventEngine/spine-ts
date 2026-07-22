@@ -209,12 +209,15 @@ const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (projected)`,
-        priority: event.priority + 1,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (projected)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
   }
 }
@@ -238,11 +241,14 @@ class ValidatingTaskAggregate extends Aggregate<
 
   applyTask(event: ValidatedAggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(ValidatedAggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ValidatedAggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -259,12 +265,15 @@ class TransitionViolatingTaskAggregate extends Aggregate<
 
   applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -277,12 +286,15 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
 
   override applyTask(event: AggregateState): void {
     this.startTransaction();
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: `${event.id}-changed`,
-        name: event.name,
-        archived: event.archived,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${event.id}-changed`,
+          name: event.name,
+          archived: event.archived,
+        }),
+      ),
     );
     const result = this.commitTransaction();
     if (result.status === "rejected") {

@@ -65,7 +65,9 @@ import {
 export class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
   @Assign
   createProject(command: CreateProject): ProjectCreated {
-    this.updateDraftState(() => create(ProjectSchema, { id: this.id, name: command.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(ProjectSchema, { id: this.id, name: command.name })),
+    );
     return create(ProjectCreatedSchema, { id: this.id, name: command.name });
   }
 }
@@ -74,7 +76,9 @@ export class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
 export class TaskAggregate extends Aggregate<string, typeof TaskSchema> {
   @Assign
   createTask(command: CreateTask): TaskCreated {
-    this.updateDraftState(() => create(TaskSchema, { id: this.id, projectId: command.projectId }));
+    this.update((draft) =>
+      Object.assign(draft, create(TaskSchema, { id: this.id, projectId: command.projectId })),
+    );
     return create(TaskCreatedSchema, { id: this.id, projectId: command.projectId });
   }
 }
@@ -83,8 +87,8 @@ export class TaskAggregate extends Aggregate<string, typeof TaskSchema> {
 export class PersonAggregate extends Aggregate<string, typeof PersonSchema> {
   @Assign
   enrollPerson(command: EnrollPerson): PersonEnrolled {
-    this.updateDraftState(() =>
-      create(PersonSchema, { id: this.id, displayName: command.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(PersonSchema, { id: this.id, displayName: command.displayName })),
     );
     return create(PersonEnrolledSchema, { id: this.id, displayName: command.displayName });
   }
@@ -92,59 +96,71 @@ export class PersonAggregate extends Aggregate<string, typeof PersonSchema> {
 
 export class ProjectSummaryProjection extends Projection<string, typeof ProjectSummarySchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(ProjectSummarySchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(ProjectSummarySchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class TaskListProjection extends Projection<string, typeof TaskListSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() => create(TaskListSchema, { id: event.projectId, name: event.id }));
+    this.update((draft) =>
+      Object.assign(draft, create(TaskListSchema, { id: event.projectId, name: event.id })),
+    );
   }
 }
 export class StatusCountersProjection extends Projection<string, typeof StatusCountersSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(StatusCountersSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(draft, create(StatusCountersSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
 export class PriorityCountersProjection extends Projection<string, typeof PriorityCountersSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(PriorityCountersSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(draft, create(PriorityCountersSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
 export class AssigneeWorkloadProjection extends Projection<string, typeof AssigneeWorkloadSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(AssigneeWorkloadSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(draft, create(AssigneeWorkloadSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
 export class ActivityFeedProjection extends Projection<string, typeof ActivityFeedSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(ActivityFeedSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(ActivityFeedSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class TenantViewProjection extends Projection<string, typeof TenantViewSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(TenantViewSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(TenantViewSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class UserViewProjection extends Projection<string, typeof UserViewSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(UserViewSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(UserViewSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class DueDateViewProjection extends Projection<string, typeof DueDateViewSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() => create(DueDateViewSchema, { id: event.projectId, name: event.id }));
+    this.update((draft) =>
+      Object.assign(draft, create(DueDateViewSchema, { id: event.projectId, name: event.id })),
+    );
   }
 }
 export class AssignmentViewProjection extends Projection<string, typeof AssignmentViewSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(AssignmentViewSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(draft, create(AssignmentViewSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
@@ -153,8 +169,8 @@ export class ProjectLifecycleViewProjection extends Projection<
   typeof ProjectLifecycleViewSchema
 > {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() =>
-      create(ProjectLifecycleViewSchema, { id: event.id, name: event.name }),
+    this.update((draft) =>
+      Object.assign(draft, create(ProjectLifecycleViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
@@ -163,14 +179,19 @@ export class TaskDependencyViewProjection extends Projection<
   typeof TaskDependencyViewSchema
 > {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(TaskDependencyViewSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskDependencyViewSchema, { id: event.projectId, name: event.id }),
+      ),
     );
   }
 }
 export class AuditViewProjection extends Projection<string, typeof AuditViewSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(AuditViewSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(AuditViewSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class SubscriptionFanoutViewProjection extends Projection<
@@ -178,84 +199,108 @@ export class SubscriptionFanoutViewProjection extends Projection<
   typeof SubscriptionFanoutViewSchema
 > {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() =>
-      create(SubscriptionFanoutViewSchema, { id: event.id, name: event.name }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(SubscriptionFanoutViewSchema, { id: event.id, name: event.name }),
+      ),
     );
   }
 }
 export class CleanupViewProjection extends Projection<string, typeof CleanupViewSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(CleanupViewSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(CleanupViewSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class ProjectIndexProjection extends Projection<string, typeof ProjectIndexSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState(() => create(ProjectIndexSchema, { id: event.id, name: event.name }));
+    this.update((draft) =>
+      Object.assign(draft, create(ProjectIndexSchema, { id: event.id, name: event.name })),
+    );
   }
 }
 export class TaskIndexProjection extends Projection<string, typeof TaskIndexSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() => create(TaskIndexSchema, { id: event.projectId, name: event.id }));
+    this.update((draft) =>
+      Object.assign(draft, create(TaskIndexSchema, { id: event.projectId, name: event.id })),
+    );
   }
 }
 export class PersonIndexProjection extends Projection<string, typeof PersonIndexSchema> {
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
-    this.updateDraftState(() =>
-      create(PersonIndexSchema, { id: event.id, name: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(PersonIndexSchema, { id: event.id, name: event.displayName })),
     );
   }
 }
 export class CapacityViewProjection extends Projection<string, typeof CapacityViewSchema> {
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
-    this.updateDraftState(() =>
-      create(CapacityViewSchema, { id: event.id, name: event.displayName }),
+    this.update((draft) =>
+      Object.assign(draft, create(CapacityViewSchema, { id: event.id, name: event.displayName })),
     );
   }
 }
 export class ProgressViewProjection extends Projection<string, typeof ProgressViewSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState(() =>
-      create(ProgressViewSchema, { id: event.projectId, name: event.id }),
+    this.update((draft) =>
+      Object.assign(draft, create(ProgressViewSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
 
 export class AssignmentManager extends ProcessManager<string, typeof AssignmentManagerSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState((state) =>
-      create(AssignmentManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AssignmentManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class DueDateManager extends ProcessManager<string, typeof DueDateManagerSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState((state) =>
-      create(DueDateManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(DueDateManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class StatusManager extends ProcessManager<string, typeof StatusManagerSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState((state) =>
-      create(StatusManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(StatusManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class NotificationManager extends ProcessManager<string, typeof NotificationManagerSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState((state) =>
-      create(NotificationManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(NotificationManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class WorkloadManager extends ProcessManager<string, typeof WorkloadManagerSchema> {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState((state) =>
-      create(WorkloadManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(WorkloadManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
@@ -265,8 +310,11 @@ export class ProjectLifecycleManager extends ProcessManager<
   typeof ProjectLifecycleManagerSchema
 > {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState((state) =>
-      create(ProjectLifecycleManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectLifecycleManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
@@ -276,16 +324,19 @@ export class TaskDependencyManager extends ProcessManager<
   typeof TaskDependencyManagerSchema
 > {
   @Subscribe onTaskCreated(event: TaskCreated): void {
-    this.updateDraftState((state) =>
-      create(TaskDependencyManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskDependencyManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class AuditManager extends ProcessManager<string, typeof AuditManagerSchema> {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState((state) =>
-      create(AuditManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(draft, create(AuditManagerSchema, { id: this.id, updates: draft.updates + 1 })),
     );
     void event;
   }
@@ -295,16 +346,22 @@ export class SubscriptionFanoutManager extends ProcessManager<
   typeof SubscriptionFanoutManagerSchema
 > {
   @Subscribe onProjectCreated(event: ProjectCreated): void {
-    this.updateDraftState((state) =>
-      create(SubscriptionFanoutManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(SubscriptionFanoutManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }
 }
 export class CleanupManager extends ProcessManager<string, typeof CleanupManagerSchema> {
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
-    this.updateDraftState((state) =>
-      create(CleanupManagerSchema, { id: this.id, updates: state.updates + 1 }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(CleanupManagerSchema, { id: this.id, updates: draft.updates + 1 }),
+      ),
     );
     void event;
   }

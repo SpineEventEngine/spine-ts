@@ -91,13 +91,6 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       "packages/server/src/entity/entity-transition-validation.ts",
       40,
     ],
-    [
-      "EntityTransactionCommittedVersionMetadata",
-      "packages/server/src/entity/entity-transaction.ts",
-      26,
-    ],
-    ["EntityTransactionDraftStateError", "packages/server/src/entity/entity-transaction.ts", 161],
-    ["EntityTransactionDraftStateReason", "packages/server/src/entity/entity-transaction.ts", 49],
     ["eventReceiverGroupToHandlerKind", "packages/server/src/runtime/runtime-routing.ts", 143],
     ["expectedMessageFullTypeName", "packages/server/src/runtime/runtime-routing.ts", 589],
     ["fieldValueShapeIsSafe", "packages/server/src/entity/entity-transition-validation.ts", 204],

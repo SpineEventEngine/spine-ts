@@ -148,12 +148,15 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignProjection(command: ProjectionState): ProjectionState {
-    this.updateDraftState(() =>
-      create(AggregateStateSchema, {
-        id: command.id,
-        name: command.name,
-        archived: false,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: command.name,
+          archived: false,
+        }),
+      ),
     );
 
     return create(ProjectionStateSchema, command);
@@ -161,12 +164,15 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
 }
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   onProjection(event: ProjectionState): void {
-    this.updateDraftState(() =>
-      create(ProjectionStateSchema, {
-        id: event.id,
-        name: event.name,
-        priority: event.priority,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: event.name,
+          priority: event.priority,
+        }),
+      ),
     );
   }
 }
@@ -177,11 +183,14 @@ class GeneratedTaskProcessManager extends ProcessManager<
   number
 > {
   assignTask(command: AggregateState): ProjectionState {
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: command.id,
-        queue: `${command.name} assigned`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: command.id,
+          queue: `${command.name} assigned`,
+        }),
+      ),
     );
 
     return create(ProjectionStateSchema, {
@@ -211,11 +220,14 @@ class FreshRecoveryProcessManager extends ProcessManager<
   number
 > {
   assignTask(command: AggregateState): ProjectionState {
-    this.updateDraftState(() =>
-      create(ProcessManagerStateSchema, {
-        id: command.id,
-        queue: `${command.name} recovered`,
-      }),
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: command.id,
+          queue: `${command.name} recovered`,
+        }),
+      ),
     );
     return create(ProjectionStateSchema, {
       id: command.id,

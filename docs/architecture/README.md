@@ -297,9 +297,12 @@ metadata, lifecycle flags, and visible status (`active`, `committed`, or
 JVM-familiar: this API owns only in-memory transaction evidence for
 framework-controlled entity bases, not repository storage, database
 transactions, dispatch phases, event emission, or process-wide transaction
-state. `update()` replaces only the buffered draft, while `previous` and
-`currentDraft` accessors return snapshots so callers do not mutate the
-transaction's stored previous state by accident. `archive()`, `unarchive()`,
+state. `update()` mutates the live buffered draft and returns its resulting
+snapshot. `tryUpdate()` instead mutates a deeply independent scratch draft,
+validates it, and applies it only when valid; it returns an immutable violations
+array and propagates unrelated mutator errors without changing the live draft.
+The `previous` and `currentDraft` accessors return snapshots so callers do not
+mutate the transaction's stored previous state by accident. `archive()`, `unarchive()`,
 `markDeleted()`, and `restore()` replace only buffered lifecycle flags, and
 `updateVersionMetadata()` replaces only caller-owned draft version metadata.
 These helpers deliberately do not compute automatic version increments, emit

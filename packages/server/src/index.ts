@@ -99,19 +99,19 @@ export {
 export {
   createEntityTransaction,
   EntityTransaction,
-  EntityTransactionDraftStateError,
+  DraftStateError,
   EntityTransactionStateError,
   type EntityTransactionAcceptedCommit,
   type EntityTransactionCommitResult,
-  type EntityTransactionCommittedVersionMetadata,
-  type EntityTransactionDraftStateReason,
+  type CommittedVersionMetadata,
+  type DraftStateReason,
   type EntityTransactionLifecycleFlags,
   type EntityTransactionOperation,
   type EntityTransactionOptions,
   type EntityTransactionRejectedCommit,
   type EntityTransactionRollbackResult,
   type EntityTransactionStatus,
-  type EntityTransactionUpdater,
+  type EntityTransactionMutator,
   type EntityTransactionVersionMetadata,
 } from "./entity/entity-transaction.js";
 
