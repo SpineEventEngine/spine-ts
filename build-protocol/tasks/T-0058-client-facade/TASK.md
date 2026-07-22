@@ -1,6 +1,6 @@
 # T-0058: Public Client Command And Query Facade
 
-Status: Accepted for integration
+Status: Complete
 
 Baseline: `9a247c77`
 
@@ -75,7 +75,7 @@ a genuine conflict.
 ## Frozen Minimal Public Shape
 
 - The root concept is `Client`, matching Spine JVM. `Client.connectTo(baseUrl,
-  options?)` creates and owns the Node HTTP/2 session/transport;
+options?)` creates and owns the Node HTTP/2 session/transport;
   `Client.usingTransport(transport, options?)` uses a caller-owned Connect
   `Transport` and never closes it.
 - Tenant and guest configuration are fixed when creating the client. The

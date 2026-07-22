@@ -4,7 +4,13 @@ import { create, type Message } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { packAny } from "@spine-ts/core";
-import { AckSchema, CommandIdSchema, ResponseSchema, StatusSchema, type Command } from "@spine-ts/proto";
+import {
+  AckSchema,
+  CommandIdSchema,
+  ResponseSchema,
+  StatusSchema,
+  type Command,
+} from "@spine-ts/proto";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-ts/proto/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,22 +57,28 @@ describe("Client owned transport", () => {
 
   it("waits for an already-running event cancellation before aborting the session", async () => {
     let finishCancel!: () => void;
-    const remoteCancel = new Promise<void>((resolve) => { finishCancel = resolve; });
+    const remoteCancel = new Promise<void>((resolve) => {
+      finishCancel = resolve;
+    });
     session.transport = ownedObservationTransport(remoteCancel);
     const client = Client.connectTo("http://127.0.0.1:8080");
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     const cancelling = result.events.cancel();
     let cancelSettled = false;
-    void cancelling.then(() => { cancelSettled = true; });
+    void cancelling.then(() => {
+      cancelSettled = true;
+    });
     const closing = client.close();
     let closeSettled = false;
-    void closing.then(() => { closeSettled = true; });
+    void closing.then(() => {
+      closeSettled = true;
+    });
     await Promise.resolve();
 
     expect(cancelSettled).toBe(false);
@@ -88,11 +100,9 @@ describe("Client owned transport", () => {
     void remoteCancel.catch(() => undefined);
     session.transport = ownedObservationTransport(remoteCancel);
     const client = Client.connectTo("http://127.0.0.1:8080");
-    await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    await client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+      observe: [ProjectionStateSchema],
+    });
 
     await expect(client.close()).rejects.toBe(failure);
     expect(session.aborts).toBe(1);
@@ -105,18 +115,21 @@ describe("Client owned transport", () => {
     session.transport = ownedObservationTransport(remoteCancel);
     const controller = new AbortController();
     const client = Client.connectTo("http://127.0.0.1:8080");
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema], signal: controller.signal },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+        signal: controller.signal,
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     controller.abort(new Error("caller stopped observing"));
     await vi.waitFor(() => {
       expect(session.timeline).toContain("cancel-failure");
     });
-    await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
     await expect(client.close()).rejects.toBe(failure);
     expect(session.timeline).toEqual(["cancel-start", "cancel-failure", "session-abort"]);
@@ -127,9 +140,12 @@ function ownedObservationTransport(remoteCancel: Promise<void>): Transport {
   return {
     async unary(method, _signal, _timeoutMs, _header, input) {
       if (method.name === "Subscribe") {
-        return response(method, create(SubscriptionSchema, {
-          id: create(SubscriptionIdSchema, { value: "s-owned" }),
-        }));
+        return response(
+          method,
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "s-owned" }),
+          }),
+        );
       }
       if (method.name === "Cancel") {
         session.timeline.push("cancel-start");
@@ -144,10 +160,13 @@ function ownedObservationTransport(remoteCancel: Promise<void>): Transport {
       }
       const command = input as Command;
       if (command.id === undefined) throw new Error("command ID required");
-      return response(method, create(AckSchema, {
-        messageId: packAny(CommandIdSchema, command.id),
-        status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
-      }));
+      return response(
+        method,
+        create(AckSchema, {
+          messageId: packAny(CommandIdSchema, command.id),
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        }),
+      );
     },
     async stream(method) {
       const messages: AsyncIterable<never> = {

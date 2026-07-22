@@ -17,15 +17,19 @@ describe("Client loopback", () => {
         return Promise.resolve();
       },
     };
-    const context = BoundedContext.singleTenant("ClientLoopback").addCommandDispatcher(dispatcher).build();
+    const context = BoundedContext.singleTenant("ClientLoopback")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await new Server({ contexts: [context] }).start();
     const client = Client.connectTo(server.baseUrl);
 
     try {
-      const posted = await client.asGuest().post(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema, { id: "task-1", title: "First" }),
-      );
+      const posted = await client
+        .asGuest()
+        .post(
+          ProjectionStateSchema,
+          create(ProjectionStateSchema, { id: "task-1", title: "First" }),
+        );
       const queried = await client.asGuest().query(
         ProjectionStateSchema,
         ProjectionQuery.select({

@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
 
 import { create, type Message } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
@@ -35,14 +36,18 @@ describe("Client", () => {
     ["malformed", { typeUrl: "type.googleapis.com/example.WrongId", value: new Uint8Array() }],
     ["mismatched", packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "wrong" }))],
   ])("rejects a %s acknowledgement command ID", async (_case, messageId) => {
-    const client = Client.usingTransport(unaryTransport(() => create(AckSchema, {
-      messageId,
-      status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
-    })));
-
-    await expect(client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema))).rejects.toThrow(
-      "Client protocol error",
+    const client = Client.usingTransport(
+      unaryTransport(() =>
+        create(AckSchema, {
+          messageId,
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        }),
+      ),
     );
+
+    await expect(
+      client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema)),
+    ).rejects.toThrow("Client protocol error");
   });
 
   it("posts a packed command with a fresh guest actor context and returns an ok outcome", async () => {
@@ -58,10 +63,9 @@ describe("Client", () => {
       }),
     );
 
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, { id: "task-1", title: "First" }),
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema, { id: "task-1", title: "First" }));
 
     expect(result.kind).toBe("ok");
     expect(command).toMatchObject({
@@ -106,11 +110,13 @@ describe("Client", () => {
   it("returns a cancellable handle for an observed successful post", async () => {
     const client = Client.usingTransport(streamingTransport());
 
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema, { id: "task-1", title: "First" }),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, { id: "task-1", title: "First" }),
+        { observe: [ProjectionStateSchema] },
+      );
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
@@ -123,11 +129,11 @@ describe("Client", () => {
     const observed = observationTransport("error");
     const client = Client.usingTransport(observed.transport);
 
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
 
     expect(result.kind).toBe("error");
     expect("events" in result).toBe(false);
@@ -141,11 +147,11 @@ describe("Client", () => {
     const observed = observationTransport("rejection");
     const client = Client.usingTransport(observed.transport);
 
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
 
     expect(result.kind).toBe("rejection");
     expect("events" in result).toBe(false);
@@ -170,11 +176,11 @@ describe("Client", () => {
     };
     const client = Client.usingTransport(transport);
 
-    const result = await client.onBehalfOf("actor-1").post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .onBehalfOf("actor-1")
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
 
     expect(topicContext).toEqual(commandContext);
     if (result.kind === "ok") await result.events.cancel();
@@ -184,11 +190,11 @@ describe("Client", () => {
   it("allows one event iterator consumer and shares cancellation", async () => {
     const observed = observationTransport("ok");
     const client = Client.usingTransport(observed.transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     result.events[Symbol.asyncIterator]();
@@ -204,11 +210,12 @@ describe("Client", () => {
     const observed = observationTransport("ok");
     const controller = new AbortController();
     const client = Client.usingTransport(observed.transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema], signal: controller.signal },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+        signal: controller.signal,
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     controller.abort(new Error("caller stopped observing"));
@@ -228,18 +235,21 @@ describe("Client", () => {
     });
     const controller = new AbortController();
     const client = Client.usingTransport(rejected.transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema], signal: controller.signal },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+        signal: controller.signal,
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     controller.abort(new Error("caller stopped observing"));
     await vi.waitFor(() => {
       expect(cancellations).toBe(1);
     });
-    await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
     await expect(client.close()).rejects.toBe(failure);
     expect(cancellations).toBe(1);
   });
@@ -247,11 +257,17 @@ describe("Client", () => {
   it("does not duplicate an automatic cancellation failure while close awaits another operation", async () => {
     const failure = new Error("captured cancel failed");
     let rejectCancel!: (error: unknown) => void;
-    const remoteCancel = new Promise<void>((_resolve, reject) => { rejectCancel = reject; });
+    const remoteCancel = new Promise<void>((_resolve, reject) => {
+      rejectCancel = reject;
+    });
     let releaseOperation!: () => void;
-    const delayedOperation = new Promise<void>((resolve) => { releaseOperation = resolve; });
+    const delayedOperation = new Promise<void>((resolve) => {
+      releaseOperation = resolve;
+    });
     let operationStarted!: () => void;
-    const started = new Promise<void>((resolve) => { operationStarted = resolve; });
+    const started = new Promise<void>((resolve) => {
+      operationStarted = resolve;
+    });
     let postCount = 0;
     const observed = observationTransport("ok");
     const transport: Transport = {
@@ -273,17 +289,17 @@ describe("Client", () => {
     };
     const controller = new AbortController();
     const client = Client.usingTransport(transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema], signal: controller.signal },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+        signal: controller.signal,
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
-    const pendingOperation = client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-    );
+    const pendingOperation = client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema));
     await started;
     controller.abort(new Error("caller stopped observing"));
     const closing = client.close();
@@ -299,11 +315,11 @@ describe("Client", () => {
     const failure = new Error("remote cancel failed");
     const rejected = cleanupTransport(() => Promise.reject(failure));
     const firstClient = Client.usingTransport(rejected.transport);
-    const first = await firstClient.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const first = await firstClient
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (first.kind !== "ok") throw new Error("expected an acknowledgement");
 
     await expect(first.events.cancel()).rejects.toBe(failure);
@@ -311,11 +327,9 @@ describe("Client", () => {
 
     const closing = cleanupTransport(() => Promise.reject(failure));
     const secondClient = Client.usingTransport(closing.transport);
-    await secondClient.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    await secondClient.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+      observe: [ProjectionStateSchema],
+    });
     await expect(secondClient.close()).rejects.toBe(failure);
   });
 
@@ -324,11 +338,11 @@ describe("Client", () => {
     try {
       const stalled = cleanupTransport(() => new Promise(() => undefined));
       const client = Client.usingTransport(stalled.transport);
-      const result = await client.asGuest().post(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema),
-        { observe: [ProjectionStateSchema] },
-      );
+      const result = await client
+        .asGuest()
+        .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+          observe: [ProjectionStateSchema],
+        });
       if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
       const cancelling = result.events.cancel();
@@ -339,11 +353,9 @@ describe("Client", () => {
 
       const closingStall = cleanupTransport(() => new Promise(() => undefined));
       const closingClient = Client.usingTransport(closingStall.transport);
-      await closingClient.asGuest().post(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema),
-        { observe: [ProjectionStateSchema] },
-      );
+      await closingClient.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
       const closing = expect(closingClient.close()).rejects.toThrow("cancellation timed out");
       await vi.advanceTimersByTimeAsync(1_000);
       await closing;
@@ -355,11 +367,11 @@ describe("Client", () => {
   it("ends pending and future reads when activation ends normally", async () => {
     const observed = terminalObservationTransport();
     const client = Client.usingTransport(observed.transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
     const iterator = result.events[Symbol.asyncIterator]();
     const pending = iterator.next();
@@ -373,11 +385,11 @@ describe("Client", () => {
   it("preserves activation errors for pending and future reads", async () => {
     const observed = terminalObservationTransport();
     const client = Client.usingTransport(observed.transport);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
     const iterator = result.events[Symbol.asyncIterator]();
     const pending = iterator.next();
@@ -392,11 +404,11 @@ describe("Client", () => {
   it("filters unrelated updates and decodes matching command events", async () => {
     const observed = bufferedObservationTransport(1, true);
     const client = Client.usingTransport(observed);
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
 
     const iterator = result.events[Symbol.asyncIterator]();
@@ -409,11 +421,11 @@ describe("Client", () => {
 
   it("fails explicitly and cleans up when matching events overflow the buffer", async () => {
     const client = Client.usingTransport(bufferedObservationTransport(33, false));
-    const result = await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
     if (result.kind !== "ok") throw new Error("expected an acknowledgement");
     await Promise.resolve();
     const iterator = result.events[Symbol.asyncIterator]();
@@ -427,10 +439,19 @@ describe("Client", () => {
 
   it("never closes a caller-supplied transport", async () => {
     let closed = 0;
-    const transport = Object.assign(unaryTransport((_method, input) => create(AckSchema, {
-      messageId: commandId(input as Command),
-      status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
-    })), { close: () => { closed += 1; } });
+    const transport = Object.assign(
+      unaryTransport((_method, input) =>
+        create(AckSchema, {
+          messageId: commandId(input as Command),
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        }),
+      ),
+      {
+        close: () => {
+          closed += 1;
+        },
+      },
+    );
     const client = Client.usingTransport(transport);
 
     await client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema));
@@ -456,11 +477,9 @@ describe("Client", () => {
       },
     };
     const client = Client.usingTransport(transport);
-    await client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema] },
-    );
+    await client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+      observe: [ProjectionStateSchema],
+    });
 
     await expect(client.close()).resolves.toBeUndefined();
     expect(observed.cancelled()).toBe(1);
@@ -471,7 +490,9 @@ describe("Client", () => {
     let resolveSubscribe!: (message: Message) => void;
     let activated = 0;
     let cancelled = 0;
-    const subscription = new Promise<Message>((resolve) => { resolveSubscribe = resolve; });
+    const subscription = new Promise<Message>((resolve) => {
+      resolveSubscribe = resolve;
+    });
     const transport: Transport = {
       async unary(method) {
         if (method.name === "Subscribe") return response(method, await subscription);
@@ -489,17 +510,18 @@ describe("Client", () => {
     try {
       const controller = new AbortController();
       const client = Client.usingTransport(transport);
-      const posting = client.asGuest().post(
-        ProjectionStateSchema,
-        create(ProjectionStateSchema),
-        { observe: [ProjectionStateSchema], signal: controller.signal },
-      );
+      const posting = client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+        signal: controller.signal,
+      });
       const originalFailure = expect(posting).rejects.toThrow("caller aborted");
 
       controller.abort(new Error("caller aborted"));
-      resolveSubscribe(create(SubscriptionSchema, {
-        id: create(SubscriptionIdSchema, { value: "s-late" }),
-      }));
+      resolveSubscribe(
+        create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "s-late" }),
+        }),
+      );
       await vi.advanceTimersByTimeAsync(1_000);
       await originalFailure;
       expect(activated).toBe(0);
@@ -514,9 +536,13 @@ describe("Client", () => {
     const abortFailure = new Error("caller aborted multi-schema startup");
     const cleanupFailure = new Error("first subscription cancel failed");
     let resolveSecondSubscribe!: () => void;
-    const secondSubscribe = new Promise<void>((resolve) => { resolveSecondSubscribe = resolve; });
+    const secondSubscribe = new Promise<void>((resolve) => {
+      resolveSecondSubscribe = resolve;
+    });
     let markSecondStarted!: () => void;
-    const secondStarted = new Promise<void>((resolve) => { markSecondStarted = resolve; });
+    const secondStarted = new Promise<void>((resolve) => {
+      markSecondStarted = resolve;
+    });
     let subscriptions = 0;
     let cancellations = 0;
     let activations = 0;
@@ -528,9 +554,12 @@ describe("Client", () => {
             markSecondStarted();
             await secondSubscribe;
           }
-          return response(method, create(SubscriptionSchema, {
-            id: create(SubscriptionIdSchema, { value: `s-${String(subscriptions)}` }),
-          }));
+          return response(
+            method,
+            create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: `s-${String(subscriptions)}` }),
+            }),
+          );
         }
         if (method.name === "Cancel") {
           cancellations += 1;
@@ -553,11 +582,10 @@ describe("Client", () => {
     };
     const controller = new AbortController();
     const client = Client.usingTransport(transport);
-    const posting = client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema, ProjectionStateSchema], signal: controller.signal },
-    );
+    const posting = client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+      observe: [ProjectionStateSchema, ProjectionStateSchema],
+      signal: controller.signal,
+    });
     await secondStarted;
 
     controller.abort(abortFailure);
@@ -577,7 +605,9 @@ describe("Client", () => {
     let resolveSubscribe!: (message: Message) => void;
     let activated = 0;
     let cancelled = 0;
-    const subscription = new Promise<Message>((resolve) => { resolveSubscribe = resolve; });
+    const subscription = new Promise<Message>((resolve) => {
+      resolveSubscribe = resolve;
+    });
     const transport: Transport = {
       async unary(method) {
         if (method.name === "Subscribe") return response(method, await subscription);
@@ -594,16 +624,17 @@ describe("Client", () => {
     };
     const controller = new AbortController();
     const client = Client.usingTransport(transport);
-    const posting = client.asGuest().post(
-      ProjectionStateSchema,
-      create(ProjectionStateSchema),
-      { observe: [ProjectionStateSchema], signal: controller.signal },
-    );
+    const posting = client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), {
+      observe: [ProjectionStateSchema],
+      signal: controller.signal,
+    });
 
     controller.abort(new Error("caller aborted"));
-    resolveSubscribe(create(SubscriptionSchema, {
-      id: create(SubscriptionIdSchema, { value: "s-late-success" }),
-    }));
+    resolveSubscribe(
+      create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: "s-late-success" }),
+      }),
+    );
 
     await expect(posting).rejects.toThrow("caller aborted");
     expect(activated).toBe(0);
@@ -613,18 +644,27 @@ describe("Client", () => {
   });
 
   it("deeply freezes decoded query state and version", async () => {
-    const client = Client.usingTransport(unaryTransport(() => create(QueryResponseSchema, {
-      response: create(ResponseSchema, {
-        status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
-      }),
-      message: [{
-        state: packAny(ProjectionStateSchema, create(ProjectionStateSchema, {
-          id: "task-1",
-          fingerprint: new Uint8Array([1, 2]),
-        })),
-        version: create(VersionSchema, { number: 1 }),
-      }],
-    })));
+    const client = Client.usingTransport(
+      unaryTransport(() =>
+        create(QueryResponseSchema, {
+          response: create(ResponseSchema, {
+            status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+          }),
+          message: [
+            {
+              state: packAny(
+                ProjectionStateSchema,
+                create(ProjectionStateSchema, {
+                  id: "task-1",
+                  fingerprint: new Uint8Array([1, 2]),
+                }),
+              ),
+              version: create(VersionSchema, { number: 1 }),
+            },
+          ],
+        }),
+      ),
+    );
     const query = ProjectionQuery.select({
       schema: ProjectionStateSchema,
       columns: {} as never,
@@ -638,9 +678,15 @@ describe("Client", () => {
     const first = result.states[0];
     if (first === undefined) throw new Error("expected one query state");
     expect(() => Object.assign(first.state, { id: "changed" })).toThrow();
-    expect(() => { first.state.fingerprint[0] = 9; }).toThrow();
-    expect(() => { first.state.fingerprint.set([9]); }).toThrow();
-    first.state.fingerprint.forEach((_value, index, bytes) => { bytes[index] = 9; });
+    expect(() => {
+      first.state.fingerprint[0] = 9;
+    }).toThrow();
+    expect(() => {
+      first.state.fingerprint.set([9]);
+    }).toThrow();
+    first.state.fingerprint.forEach((_value, index, bytes) => {
+      bytes[index] = 9;
+    });
     expect([...first.state.fingerprint]).toEqual([1, 2]);
     await client.close();
   });
@@ -652,24 +698,30 @@ describe("Client", () => {
         if (method.name === "Post") {
           if (signal === undefined) throw new Error("expected operation signal");
           await new Promise<void>((_resolve, reject) => {
-            signal.addEventListener("abort", () => {
-              aborted = true;
-              reject(new Error("client closed"));
-            }, { once: true });
+            signal.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                reject(new Error("client closed"));
+              },
+              { once: true },
+            );
           });
         }
         return response(method, create(AckSchema));
       },
-      async stream() { throw new Error("not used"); },
+      async stream() {
+        throw new Error("not used");
+      },
     });
     const pending = client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema));
 
     await client.close();
     await expect(pending).rejects.toBeDefined();
     expect(aborted).toBe(true);
-    await expect(client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema))).rejects.toThrow(
-      "client is closing",
-    );
+    await expect(
+      client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema)),
+    ).rejects.toThrow("client is closing");
   });
 
   it("propagates an already-aborted caller signal before starting a post", async () => {
@@ -678,7 +730,9 @@ describe("Client", () => {
     const client = Client.usingTransport(unaryTransport((_method, _input) => create(AckSchema)));
 
     await expect(
-      client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema), { signal: controller.signal }),
+      client
+        .asGuest()
+        .post(ProjectionStateSchema, create(ProjectionStateSchema), { signal: controller.signal }),
     ).rejects.toThrow("caller cancelled");
     await client.close();
   });
@@ -708,7 +762,10 @@ function streamingTransport(): Transport {
   return {
     async unary(method, _signal, _timeoutMs, _header, input) {
       if (method.name === "Subscribe") {
-        return response(method, create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: "s-1" }) }));
+        return response(
+          method,
+          create(SubscriptionSchema, { id: create(SubscriptionIdSchema, { value: "s-1" }) }),
+        );
       }
       if (method.name === "Post") {
         return response(
@@ -719,7 +776,12 @@ function streamingTransport(): Transport {
           }),
         );
       }
-      return response(method, create(ResponseSchema, { status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }) }));
+      return response(
+        method,
+        create(ResponseSchema, {
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        }),
+      );
     },
     async stream(method) {
       const updates = (async function* () {
@@ -729,9 +791,15 @@ function streamingTransport(): Transport {
             value: create(EventUpdatesSchema, {
               event: [
                 create(EventSchema, {
-                  message: { typeUrl: `type.googleapis.com/${ProjectionStateSchema.typeName}`, value: new Uint8Array() },
+                  message: {
+                    typeUrl: `type.googleapis.com/${ProjectionStateSchema.typeName}`,
+                    value: new Uint8Array(),
+                  },
                   context: create(EventContextSchema, {
-                    originId: { case: "commandId", value: create(CommandIdSchema, { uuid: "other" }) },
+                    originId: {
+                      case: "commandId",
+                      value: create(CommandIdSchema, { uuid: "other" }),
+                    },
                   }),
                 }),
               ],
@@ -739,13 +807,27 @@ function streamingTransport(): Transport {
           },
         });
       })();
-      return { stream: true, method, header: new Headers(), trailer: new Headers(), service: method.parent, message: updates } as never;
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: updates,
+      } as never;
     },
   };
 }
 
 function response(method: { readonly parent: unknown }, message: Message) {
-  return { stream: false, method, header: new Headers(), trailer: new Headers(), service: method.parent, message } as never;
+  return {
+    stream: false,
+    method,
+    header: new Headers(),
+    trailer: new Headers(),
+    service: method.parent,
+    message,
+  } as never;
 }
 
 function observationTransport(status: "ok" | "error" | "rejection") {
@@ -753,30 +835,50 @@ function observationTransport(status: "ok" | "error" | "rejection") {
   const transport: Transport = {
     async unary(method, _signal, _timeoutMs, _header, input) {
       if (method.name === "Subscribe") {
-        return response(method, create(SubscriptionSchema, {
-          id: create(SubscriptionIdSchema, { value: "s-observed" }),
-        }));
+        return response(
+          method,
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "s-observed" }),
+          }),
+        );
       }
       if (method.name === "Cancel") {
         cancelCount += 1;
         return response(method, create(ResponseSchema));
       }
-      const outcomeStatus = status === "ok"
-        ? { case: "ok" as const, value: create(EmptySchema) }
-        : status === "error"
-          ? { case: "error" as const, value: create(ErrorSchema) }
-          : { case: "rejection" as const, value: create(EventSchema) };
-      return response(method, create(AckSchema, {
-        messageId: commandId(input as Command),
-        status: create(StatusSchema, { status: outcomeStatus }),
-      }));
+      const outcomeStatus =
+        status === "ok"
+          ? { case: "ok" as const, value: create(EmptySchema) }
+          : status === "error"
+            ? { case: "error" as const, value: create(ErrorSchema) }
+            : { case: "rejection" as const, value: create(EventSchema) };
+      return response(
+        method,
+        create(AckSchema, {
+          messageId: commandId(input as Command),
+          status: create(StatusSchema, { status: outcomeStatus }),
+        }),
+      );
     },
     async stream(method, signal) {
       const ended = new Promise<void>((resolve) => {
-        signal?.addEventListener("abort", () => { resolve(); }, { once: true });
+        signal?.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
       });
       const messages = endingStream(ended);
-      return { stream: true, method, header: new Headers(), trailer: new Headers(), service: method.parent, message: messages } as never;
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: messages,
+      } as never;
     },
   };
   return { transport, cancelled: () => cancelCount };
@@ -809,7 +911,14 @@ function terminalObservationTransport() {
     ...observed.transport,
     async stream(method) {
       const messages = endingStream(terminal);
-      return { stream: true, method, header: new Headers(), trailer: new Headers(), service: method.parent, message: messages } as never;
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: messages,
+      } as never;
     },
   };
   return { transport, end: resolve, fail: reject };
@@ -818,46 +927,64 @@ function terminalObservationTransport() {
 function bufferedObservationTransport(count: number, includeUnrelated: boolean): Transport {
   let postedId = "";
   let release!: () => void;
-  const posted = new Promise<void>((resolve) => { release = resolve; });
+  const posted = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   return {
     async unary(method, _signal, _timeoutMs, _header, input) {
       if (method.name === "Subscribe") {
-        return response(method, create(SubscriptionSchema, {
-          id: create(SubscriptionIdSchema, { value: "s-buffered" }),
-        }));
+        return response(
+          method,
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "s-buffered" }),
+          }),
+        );
       }
       if (method.name === "Cancel") return response(method, create(ResponseSchema));
       const command = input as Command;
       postedId = command.id?.uuid ?? "";
       release();
-      return response(method, create(AckSchema, {
-        messageId: commandId(command),
-        status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
-      }));
+      return response(
+        method,
+        create(AckSchema, {
+          messageId: commandId(command),
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        }),
+      );
     },
     async stream(method) {
       const messages = (async function* () {
         await posted;
-        const ids = includeUnrelated ? ["unrelated", ...Array.from({ length: count }, () => postedId)] :
-          Array.from({ length: count }, () => postedId);
+        const ids = includeUnrelated
+          ? ["unrelated", ...Array.from({ length: count }, () => postedId)]
+          : Array.from({ length: count }, () => postedId);
         yield create(SubscriptionUpdateSchema, {
           update: {
             case: "eventUpdates",
             value: create(EventUpdatesSchema, {
-              event: ids.map((id, index) => create(EventSchema, {
-                message: packAny(
-                  ProjectionStateSchema,
-                  create(ProjectionStateSchema, { id: `event-${String(index)}` }),
-                ),
-                context: create(EventContextSchema, {
-                  originId: { case: "commandId", value: create(CommandIdSchema, { uuid: id }) },
+              event: ids.map((id, index) =>
+                create(EventSchema, {
+                  message: packAny(
+                    ProjectionStateSchema,
+                    create(ProjectionStateSchema, { id: `event-${String(index)}` }),
+                  ),
+                  context: create(EventContextSchema, {
+                    originId: { case: "commandId", value: create(CommandIdSchema, { uuid: id }) },
+                  }),
                 }),
-              })),
+              ),
             }),
           },
         });
       })();
-      return { stream: true, method, header: new Headers(), trailer: new Headers(), service: method.parent, message: messages } as never;
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: messages,
+      } as never;
     },
   };
 }

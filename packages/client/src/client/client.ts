@@ -196,18 +196,21 @@ class Request implements ClientRequest {
         schema,
         message,
       });
-      const events = options.observe === undefined
-        ? undefined
-        : await CommandEventStream.start(
-            this.#owner,
-            command.id?.uuid,
-            options.observe,
-            context,
-            signal,
-            options.signal,
-          );
+      const events =
+        options.observe === undefined
+          ? undefined
+          : await CommandEventStream.start(
+              this.#owner,
+              command.id?.uuid,
+              options.observe,
+              context,
+              signal,
+              options.signal,
+            );
       try {
-        const ack = await createClient(CommandService, this.#owner.transport).post(command, { signal });
+        const ack = await createClient(CommandService, this.#owner.transport).post(command, {
+          signal,
+        });
         validateAckId(ack.messageId, command.id?.uuid);
         const result = outcome(ack.status?.status);
         if (result.kind !== "ok") {
@@ -236,10 +239,14 @@ class Request implements ClientRequest {
       const source = "build" in queryOrBuilder ? queryOrBuilder.build() : queryOrBuilder;
       const query = clone(QuerySchema, source);
       query.context = this.#context();
-      const response = await createClient(QueryService, this.#owner.transport).read(query, { signal });
+      const response = await createClient(QueryService, this.#owner.transport).read(query, {
+        signal,
+      });
       const status = outcome(response.response?.status?.status);
       if (status.kind !== "ok") return status;
-      const states = response.message.map((entry) => decodeState(entry.state, entry.version, stateSchema));
+      const states = response.message.map((entry) =>
+        decodeState(entry.state, entry.version, stateSchema),
+      );
       return Object.freeze({ kind: "ok" as const, states: Object.freeze(states) });
     });
   }
@@ -255,7 +262,7 @@ class Request implements ClientRequest {
 
 class ClientOwner {
   readonly transport: Transport;
-  readonly #closeTransport: (() => void) | undefined;
+  readonly #onCloseTransport: (() => void) | undefined;
   readonly #operations = new Map<AbortController, Promise<unknown>>();
   readonly #events = new Set<CommandEventStream>();
   readonly #lateCleanup = new Set<Promise<void>>();
@@ -266,9 +273,9 @@ class ClientOwner {
   #state: "open" | "closing" | "closed" = "open";
   #closing: Promise<void> | undefined;
 
-  constructor(transport: Transport, closeTransport?: () => void) {
+  constructor(transport: Transport, onCloseTransport?: () => void) {
     this.transport = transport;
-    this.#closeTransport = closeTransport;
+    this.#onCloseTransport = onCloseTransport;
   }
 
   async run<Result>(
@@ -317,7 +324,7 @@ class ClientOwner {
     const cleanupResults = await Promise.allSettled(cleanupPromises);
     let closeFailure: unknown;
     try {
-      this.#closeTransport?.();
+      this.#onCloseTransport?.();
     } catch (error) {
       closeFailure = error;
     } finally {
@@ -375,16 +382,22 @@ class CommandEventStream implements CommandEvents {
   readonly #abortListeners: { readonly signal: AbortSignal; readonly listener: () => void }[] = [];
   readonly #stopped: Promise<typeof STREAM_STOPPED>;
   #stop!: () => void;
-  #waiter: {
-    readonly resolve: (result: IteratorResult<CommandEvent>) => void;
-    readonly reject: (error: unknown) => void;
-  } | undefined;
+  #waiter:
+    | {
+        readonly resolve: (result: IteratorResult<CommandEvent>) => void;
+        readonly reject: (error: unknown) => void;
+      }
+    | undefined;
   #terminal: Readonly<{ readonly error?: Error }> | undefined;
   #iteratorClaimed = false;
   #cancelling: Promise<void> | undefined;
   #closed = false;
 
-  private constructor(owner: ClientOwner, commandId: string | undefined, schemas: readonly MessageSchema[]) {
+  private constructor(
+    owner: ClientOwner,
+    commandId: string | undefined,
+    schemas: readonly MessageSchema[],
+  ) {
     this.#owner = owner;
     this.#commandId = commandId;
     this.#schemas = schemas;
@@ -438,7 +451,9 @@ class CommandEventStream implements CommandEvents {
       return;
     }
     this.#subscriptions.push(subscription);
-    const consuming = this.consume(service.activate(subscription, { signal: this.#controller.signal }));
+    const consuming = this.consume(
+      service.activate(subscription, { signal: this.#controller.signal }),
+    );
     this.#consumers.add(consuming);
     void consuming.finally(() => this.#consumers.delete(consuming));
   }
@@ -494,7 +509,9 @@ class CommandEventStream implements CommandEvents {
     return { next: () => this.next() };
   }
 
-  async consume(updates: AsyncIterable<import("@spine-ts/proto/client").SubscriptionUpdate>): Promise<void> {
+  async consume(
+    updates: AsyncIterable<import("@spine-ts/proto/client").SubscriptionUpdate>,
+  ): Promise<void> {
     const iterator = updates[Symbol.asyncIterator]();
     try {
       while (!this.#closed) {
@@ -662,9 +679,13 @@ function decodeState<Schema extends MessageSchema>(
 ): QueryState<Schema> {
   if (packed === undefined) throw new ClientProtocolError("query state is missing.");
   const state = unpackAny(packed, schema);
-  if (state === undefined) throw new ClientProtocolError("query state does not match its requested schema.");
+  if (state === undefined)
+    throw new ClientProtocolError("query state does not match its requested schema.");
   if (version === undefined) throw new ClientProtocolError("query state version is missing.");
-  return Object.freeze({ state: deepClone(schema, state), version: deepFreeze(cloneMessage(version)) });
+  return Object.freeze({
+    state: deepClone(schema, state),
+    version: deepFreeze(cloneMessage(version)),
+  });
 }
 
 function cloneMessage<MessageValue extends Message>(message: MessageValue): MessageValue {
