@@ -68,6 +68,15 @@ One query accepts at most 256 `ids`, 32 filters, 64 values in each filter, eight
 sort fields, and 2,048 total bound values. These fixed adapter limits are
 validated before pool acquisition; they are not configurable.
 
+Normalized Projection plans additionally compile nested `ALL`/`EITHER` and all
+five comparisons to SQL with bound column names and values. A framework
+`candidateLimit` becomes the bound sentinel `LIMIT` parameter independently of
+any semantic result limit, avoiding unbounded row materialization and detecting
+overflow before the semantic limit is applied. Repeated ordering uses left
+joins for the frozen missing-value order and finishes with the binary slot-ID
+tie-breaker. Authored identifiers and values are never interpolated into SQL
+text.
+
 ## Verify locally
 
 ```sh

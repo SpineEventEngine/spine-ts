@@ -112,8 +112,9 @@ TaskListColumns.deleted; // boolean, equality only
 
 Repeated, map, and oneof fields are rejected. The root API does not let
 application code construct arbitrary string columns or authored definitions.
-This packet provides Projection column metadata only: Aggregate and Process
-Manager factories, a query DSL, and query execution are not yet included.
+The high-level Query API targets Projections only. Aggregate and Process Manager
+high-level factories remain deferred until Wave 2; their existing low-level ID
+paths are unchanged.
 The repository's `proto:generate` workflow runs the
 `protoc-gen-spine-projection-columns` executable shipped by `@spine-ts/client`
 after Protobuf-ES for every example target. Installed projects can add that bin
@@ -431,13 +432,68 @@ The framework may continue follow-up work asynchronously.
 
 ## 8. Query and subscribe to state
 
-Use the generated `QueryService` for registered aggregate or projection state.
-It supports ID-target reads and projection `include_all` reads. Projection
-queries can use declared proto `column` names, equality filters, field masks,
-ordering, and positive limits from `1` through `1000` when ordering is present.
-When the format is absent or its wire limit is zero, the framework applies a
-1,000-row storage safety cap without requiring ordering. Invalid criteria fail
-before state storage is read, and tenant selection is applied before this cap.
+Use `ProjectionQuery` to compile descriptor-backed columns to the frozen
+`spine.client.Query`, then pass that message to the generated `QueryService`.
+The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
+state masks, repeated ordering, and positive limits:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { unpackAny } from "@spine-ts/core";
+import { ProjectionQuery, all, either, eq, ge, gt, le, lt } from "@spine-ts/client";
+import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
+import type { Query, QueryResponse } from "@spine-ts/proto/client";
+
+declare const queries: { read(query: Query): Promise<QueryResponse> };
+
+const taskListQuery = ProjectionQuery.select({
+  schema: TaskListSchema,
+  columns: TaskListColumns,
+  context: create(ActorContextSchema, {
+    actor: create(UserIdSchema, { value: "guest" }),
+  }),
+})
+  .byId("list-1", "list-2")
+  .where(
+    all(
+      eq(TaskListColumns.archived, false),
+      gt(TaskListColumns.openTaskCount, 0),
+      lt(TaskListColumns.openTaskCount, 100),
+      ge(TaskListColumns.openTaskCount, 1),
+      le(TaskListColumns.openTaskCount, 20),
+      either(eq(TaskListColumns.deleted, false), eq(TaskListColumns.archived, false)),
+    ),
+  )
+  .mask("id", "openTaskCount")
+  .orderBy(TaskListColumns.openTaskCount, "desc")
+  .orderBy(TaskListColumns.version, "asc")
+  .limit(20)
+  .build();
+
+const taskLists = await queries.read(taskListQuery);
+const states = taskLists.message.map(({ state }) => {
+  if (state === undefined) throw new Error("Query result state is required.");
+  const decoded = unpackAny(state, TaskListSchema);
+  if (decoded === undefined) throw new Error("Query result state type does not match TaskList.");
+  return decoded;
+});
+const versions = taskLists.message.map((item) => item.version);
+```
+
+Here `TaskListSchema` comes from the consumer's generated Protobuf-ES module,
+and `TaskListColumns` comes from its generated `*_columns.ts` companion. The
+`@example/*` paths used elsewhere in this guide are placeholders for those
+consumer-owned modules, not Spine TS packages.
+
+Repeated ordering preserves caller order and uses entity ID as the final stable
+tie-breaker. Missing values are first ascending and last descending. A positive
+limit from `1` through `1000` requires ordering. Invalid columns, masks,
+operators, and packed value types fail before state storage is read.
+Every query applies a 1,000-candidate storage safety bound. A missing format or
+wire limit of zero does not require ordering. Providers fetch at most one
+sentinel candidate beyond the bound; overflow fails the read before any
+explicit result limit can silently truncate the semantic result. Invalid criteria fail before
+state storage is read, and tenant selection is applied before this bound.
 
 Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
 returned `Subscription` message, not its opaque ID alone; pass that message

@@ -1,17 +1,43 @@
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 import { describe, expect, it } from "vitest";
 
 import {
+  InMemoryRecordStorage,
   InMemoryStorageFactory,
   RecordColumn,
   RecordSpec,
   RecordStorage,
 } from "../../src/index.js";
+import type { NormalizedQueryPlan, RecordEntry } from "../../src/index.js";
+import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
 
 describe("InMemoryRecordStorage", () => {
+  it("conforms to the shared normalized query provider fixture", async () => {
+    const storage = new ObservedInMemoryStorage(
+      { name: "QueryConformance", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [
+          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+        ],
+      }),
+    );
+
+    await assertQueryProviderConformance({
+      name: "in-memory",
+      storage,
+      providerCalls: () => storage.queryPlanCalls,
+    });
+  });
   it("reads back cloned protobuf records and applies simple masks", async () => {
     const storage = createStorage();
     const event = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 3n);
@@ -74,6 +100,44 @@ describe("InMemoryRecordStorage", () => {
 
     expect(ids).toMatchObject([{ value: "event-3" }]);
     expect(records.map((record) => record.id?.value)).toEqual(["event-1", "event-2"]);
+  });
+
+  it("executes the complete normalized query plan before applying masks", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 3n),
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+
+    const records = await storage.queryPlan({
+      predicate: {
+        kind: "either",
+        predicates: [
+          { kind: "comparison", column: "timestamp", operator: "lessThan", value: 2n },
+          { kind: "comparison", column: "timestamp", operator: "greaterOrEqual", value: 3n },
+        ],
+      },
+      order: [{ column: "timestamp", direction: "desc" }],
+      limit: 2,
+      mask: { paths: ["id"] },
+    });
+
+    expect(records.map((record) => record.id?.value)).toEqual(["event-3", "event-1"]);
+    expect(records.every((record) => record.message === undefined)).toBe(true);
+  });
+
+  it("rejects normalized plans before materializing beyond their candidate budget", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-2", "type.spine.io/tasks.TaskCreated", 2n),
+      createEvent("event-3", "type.spine.io/tasks.TaskCreated", 3n),
+    ]);
+
+    await expect(storage.queryPlan({ candidateLimit: 2 })).rejects.toThrow(
+      "Storage query exceeded the candidate limit of 2",
+    );
   });
 
   it("applies query offsets after sorting and before limits", async () => {
@@ -576,6 +640,17 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
   });
 });
+
+class ObservedInMemoryStorage extends InMemoryRecordStorage<string, StringValue> {
+  queryPlanCalls = 0;
+
+  protected override queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<string>,
+  ): Promise<readonly RecordEntry<string, StringValue>[]> {
+    this.queryPlanCalls += 1;
+    return super.queryPlanRecordEntries(plan);
+  }
+}
 
 function createStorage(
   context: { name: string; multitenant: boolean; tenantId?: string } = {

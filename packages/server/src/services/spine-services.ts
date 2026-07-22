@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  ScalarType,
+  toBinary,
+  type DescField,
+  type Message,
+  type MessageShape,
+} from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import {
   AnySchema,
@@ -35,7 +43,6 @@ import {
   EntityStateWithVersionSchema,
   OrderBy_Direction,
   QueryResponseSchema,
-  type OrderBy,
   type Query,
   type QueryResponse,
 } from "@spine-ts/proto/client";
@@ -57,10 +64,10 @@ import { AckSchema, type Ack } from "@spine-ts/proto";
 import { ResponseSchema, StatusSchema, type Response, type Status } from "@spine-ts/proto";
 import {
   RecordMask,
+  type NormalizedComparisonOperator,
+  type NormalizedQueryPlan,
+  type NormalizedQueryPredicate,
   type RecordStorage,
-  type RecordFilter,
-  type RecordOrder,
-  type RecordQuery,
   type StorageContext,
   type StorageFactory,
 } from "@spine-ts/storage";
@@ -143,8 +150,17 @@ export class SpineServices {
       for (const repository of context.registeredRepositories()) {
         const schema = repository.stateSchema;
         const typeUrl = deriveTypeUrl(schema);
+        const declaredColumns = repository.metadata.columns.map((column) => column.name);
+        const systemColumns =
+          repository.entityFamily === "projection" ? ["version", "archived", "deleted"] : [];
         this.#stateRoutes.set(typeUrl, {
-          allowedColumnNames: new Set(repository.metadata.columns.map((column) => column.name)),
+          allowedColumnNames: new Set([...declaredColumns, ...systemColumns]),
+          columnFields: new Map(
+            repository.metadata.columns.flatMap((column) => {
+              const field = schema.fields.find((candidate) => candidate.name === column.name);
+              return field === undefined ? [] : [[column.name, field] as const];
+            }),
+          ),
           context,
           entityFamily: repository.entityFamily,
           idField: stateRouteIdField(schema, repository.idField),
@@ -255,7 +271,7 @@ export class SpineServices {
     }
 
     try {
-      return await this.#query(route, createReadQuery(target, query), tenantId);
+      return await this.#query(route, createReadPlan(target, query, route), tenantId);
     } catch {
       return queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
@@ -267,12 +283,16 @@ export class SpineServices {
 
   async #query(
     route: StateRoute,
-    recordQuery: RecordQuery<unknown>,
+    plan: NormalizedQueryPlan<unknown>,
     tenantId: string | undefined,
   ): Promise<QueryResponse> {
+    const boundedPlan: NormalizedQueryPlan<unknown> = {
+      ...plan,
+      candidateLimit: MAX_QUERY_LIMIT,
+    };
     const results = await route.context
       .stand()
-      .queryVersioned(route.schema, recordQuery, tenantOptions(tenantId));
+      .queryPlanVersioned(route.schema, boundedPlan, tenantOptions(tenantId));
 
     return create(QueryResponseSchema, {
       response: okResponse(),
@@ -1008,6 +1028,7 @@ interface CommandRoute {
 
 interface StateRoute {
   readonly allowedColumnNames: ReadonlySet<string>;
+  readonly columnFields: ReadonlyMap<string, DescField>;
   readonly context: BoundedContext;
   readonly entityFamily: EntityFamily;
   readonly idField: MessageFieldInfo;
@@ -1244,16 +1265,12 @@ function validateFilters(filters: TargetFilters, route: StateRoute): ContractErr
   if (idCount > MAX_QUERY_ID_FILTER_IDS) {
     return invalidQueryError("QueryService.Read id_filter may contain at most 100 IDs.");
   }
+  const idEntries = filters.idFilter?.id as readonly (Any | undefined)[] | undefined;
+  if (idEntries?.some((id) => id === undefined) === true) {
+    return invalidQueryError("QueryService.Read id_filter entries are required.");
+  }
   if (filters.filter.length > MAX_QUERY_COMPOSITE_FILTERS) {
     return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
-  }
-
-  const fieldFilterCount = filters.filter.reduce(
-    (count, composite) => count + composite.filter.length,
-    0,
-  );
-  if (fieldFilterCount > MAX_QUERY_SIMPLE_FILTERS) {
-    return invalidQueryError("QueryService.Read may contain at most 16 simple column filters.");
   }
 
   const filterError = validateCompositeFilters(filters.filter, route);
@@ -1261,7 +1278,7 @@ function validateFilters(filters: TargetFilters, route: StateRoute): ContractErr
     return filterError;
   }
 
-  return idCount === 0 && fieldFilterCount === 0
+  return idCount === 0 && countSimpleFilters(filters.filter) === 0
     ? {
         type: "INVALID_QUERY",
         message: "QueryService.Read requires an ID filter or column filter.",
@@ -1273,13 +1290,43 @@ function validateCompositeFilters(
   filters: readonly CompositeFilter[],
   route: StateRoute,
 ): ContractError | undefined {
-  for (const filter of filters) {
-    const operator = filter.operator;
-    if (operator !== CompositeFilter_CompositeOperator.ALL) {
-      return unsupportedFilterError("QueryService.Read supports only ALL column filters.");
+  const pending = filters.map((filter) => ({ filter, depth: 0 }));
+  const seen = new WeakSet<object>();
+  let compositeCount = 0;
+  let simpleCount = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) break;
+    const filter = current.filter;
+    if (seen.has(filter))
+      return unsupportedFilterError("QueryService.Read filters must not contain cycles.");
+    seen.add(filter);
+    compositeCount += 1;
+    simpleCount += filter.filter.length;
+    if (filter.filter.length === 0 && filter.compositeFilter.length === 0) {
+      return invalidQueryError("QueryService.Read composite filter must not be empty.");
     }
-    if (filter.compositeFilter.length > 0) {
-      return unsupportedFilterError("QueryService.Read does not support nested column filters.");
+    if (compositeCount > MAX_QUERY_COMPOSITE_FILTERS || current.depth > 8) {
+      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+    }
+    if (simpleCount > MAX_QUERY_SIMPLE_FILTERS) {
+      return invalidQueryError("QueryService.Read may contain at most 16 simple column filters.");
+    }
+    if (
+      compositeCount + pending.length + filter.compositeFilter.length >
+      MAX_QUERY_COMPOSITE_FILTERS
+    ) {
+      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+    }
+    if (current.depth >= 8 && filter.compositeFilter.length > 0) {
+      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+    }
+    const operator = filter.operator;
+    if (
+      operator !== CompositeFilter_CompositeOperator.ALL &&
+      operator !== CompositeFilter_CompositeOperator.EITHER
+    ) {
+      return unsupportedFilterError("QueryService.Read composite operator must be ALL or EITHER.");
     }
     if (route.entityFamily !== "projection" && filter.filter.length > 0) {
       return unsupportedFilterError(
@@ -1290,9 +1337,24 @@ function validateCompositeFilters(
     if (simpleError !== undefined) {
       return simpleError;
     }
+    for (const child of filter.compositeFilter) {
+      pending.push({ filter: child, depth: current.depth + 1 });
+    }
   }
 
   return undefined;
+}
+
+function countSimpleFilters(filters: readonly CompositeFilter[]): number {
+  const pending = [...filters];
+  let count = 0;
+  while (pending.length > 0) {
+    const filter = pending.pop();
+    if (filter === undefined) break;
+    count += filter.filter.length;
+    pending.push(...filter.compositeFilter);
+  }
+  return count;
 }
 
 function validateSimpleFilters(
@@ -1300,8 +1362,8 @@ function validateSimpleFilters(
   route: StateRoute,
 ): ContractError | undefined {
   for (const filter of filters) {
-    if (filter.operator !== Filter_Operator.EQUAL) {
-      return unsupportedFilterError("QueryService.Read supports only EQUAL column filters.");
+    if (wireComparison(filter.operator) === undefined) {
+      return unsupportedFilterError("QueryService.Read comparison operator is not supported.");
     }
     const column = filter.fieldPath?.fieldName[0];
     if (column === undefined || column.trim().length === 0) {
@@ -1317,6 +1379,24 @@ function validateSimpleFilters(
     }
     if (filter.value === undefined) {
       return unsupportedFilterError("QueryService.Read column filter value is required.");
+    }
+    const field = route.columnFields.get(column);
+    if (
+      field === undefined
+        ? !systemValueMatches(column, filter.value)
+        : !filterValueMatches(field, filter.value)
+    ) {
+      return unsupportedFilterError(
+        `QueryService.Read column filter "${column}" has the wrong value type.`,
+      );
+    }
+    if (
+      filter.operator !== Filter_Operator.EQUAL &&
+      (field === undefined ? column !== "version" : !supportsRange(field))
+    ) {
+      return unsupportedFilterError(
+        `QueryService.Read column filter "${column}" does not support range comparison.`,
+      );
     }
   }
 
@@ -1341,6 +1421,13 @@ function formatReadError(format: Query["format"], route: StateRoute): ContractEr
       "QueryService.Read field_mask paths may contain at most 128 characters.",
     );
   }
+  for (const path of format.fieldMask?.paths ?? []) {
+    if (resolveQueryMask(route.schema, path) === undefined) {
+      return unsupportedFormatError(
+        `QueryService.Read field_mask path "${path}" is not a state field.`,
+      );
+    }
+  }
   if (format.limit > MAX_QUERY_LIMIT) {
     return {
       type: "INVALID_QUERY",
@@ -1362,6 +1449,12 @@ function formatReadError(format: Query["format"], route: StateRoute): ContractEr
         `QueryService.Read order_by column "${order.column}" is not a declared column.`,
       );
     }
+    const field = route.columnFields.get(order.column);
+    if (field === undefined ? order.column !== "version" : !supportsRange(field)) {
+      return unsupportedFormatError(
+        `QueryService.Read order_by column "${order.column}" is not orderable.`,
+      );
+    }
     if (
       order.direction !== OrderBy_Direction.ASCENDING &&
       order.direction !== OrderBy_Direction.DESCENDING
@@ -1375,60 +1468,210 @@ function formatReadError(format: Query["format"], route: StateRoute): ContractEr
   return undefined;
 }
 
-function createReadQuery(target: Target, query: Query): RecordQuery<unknown> {
+function createReadPlan(
+  target: Target,
+  query: Query,
+  route: StateRoute,
+): NormalizedQueryPlan<unknown> {
+  const predicate =
+    target.criterion.case === "filters"
+      ? normalizedFilters(target.criterion.value, route)
+      : undefined;
+  const format = query.format;
   return Object.freeze({
-    ...criterionQuery(target),
-    ...formatQuery(query.format),
+    ...(predicate === undefined ? {} : { predicate }),
+    ...(format?.fieldMask === undefined
+      ? {}
+      : {
+          mask: {
+            paths: format.fieldMask.paths.map((path) => requiredQueryMask(route.schema, path)),
+          },
+        }),
+    ...(format === undefined || format.orderBy.length === 0
+      ? {}
+      : {
+          order: format.orderBy.map((order) => ({
+            column: order.column,
+            direction:
+              order.direction === OrderBy_Direction.DESCENDING
+                ? ("desc" as const)
+                : ("asc" as const),
+          })),
+        }),
+    ...(format === undefined || format.limit === 0 ? {} : { limit: format.limit }),
   });
 }
 
-function criterionQuery(target: Target): RecordQuery<unknown> {
-  switch (target.criterion.case) {
-    case "includeAll":
-      return {};
-    case "filters":
-      return filtersQuery(target.criterion.value);
-    default:
-      return {};
+function normalizedFilters(
+  filters: TargetFilters,
+  route: StateRoute,
+): NormalizedQueryPredicate<unknown> {
+  const predicates: NormalizedQueryPredicate<unknown>[] = [];
+  if (filters.idFilter !== undefined) {
+    predicates.push({ kind: "ids", ids: filters.idFilter.id.map((id) => decodeAnyValue(id)) });
   }
+  predicates.push(...filters.filter.map((filter) => normalizedComposite(filter, route)));
+  const onlyPredicate = predicates[0];
+  return predicates.length === 1 && onlyPredicate !== undefined
+    ? onlyPredicate
+    : { kind: "all", predicates };
 }
 
-function filtersQuery(filters: TargetFilters): RecordQuery<unknown> {
-  const ids = filters.idFilter?.id.map((id) => decodeAnyValue(id)) ?? [];
-  const recordFilters = filters.filter.flatMap((composite) => composite.filter.map(toRecordFilter));
-
+function normalizedComposite(
+  filter: CompositeFilter,
+  route: StateRoute,
+): NormalizedQueryPredicate<unknown> {
+  const predicates: NormalizedQueryPredicate<unknown>[] = [
+    ...filter.filter.map((child) => ({
+      kind: "comparison" as const,
+      column: requiredFilterColumn(child),
+      operator: requiredComparison(child),
+      value: decodeColumnValue(child, route),
+    })),
+    ...filter.compositeFilter.map((child) => normalizedComposite(child, route)),
+  ];
   return {
-    ...(ids.length === 0 ? {} : { ids }),
-    ...(recordFilters.length === 0 ? {} : { filters: recordFilters }),
+    kind: filter.operator === CompositeFilter_CompositeOperator.EITHER ? "either" : "all",
+    predicates,
   };
 }
 
-function toRecordFilter(filter: Filter): RecordFilter {
-  return {
-    column: filter.fieldPath?.fieldName[0] ?? "",
-    value: decodeAnyValue(filter.value),
-  };
+function requiredFilterColumn(filter: Filter): string {
+  const column = filter.fieldPath?.fieldName[0];
+  if (column !== undefined) return column;
+  throw new TypeError("Validated query filter has no column.");
 }
 
-function formatQuery(format: Query["format"]): RecordQuery<unknown> {
-  if (format === undefined) {
-    return { limit: MAX_QUERY_LIMIT };
+function requiredComparison(filter: Filter): NormalizedComparisonOperator {
+  const operator = wireComparison(filter.operator);
+  if (operator !== undefined) return operator;
+  throw new TypeError("Validated query filter has no supported comparison operator.");
+}
+
+function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
+  const column = filter.fieldPath?.fieldName[0] ?? "";
+  if (column === "version" && filter.value !== undefined) {
+    const value = unpackAny(filter.value, VersionSchema);
+    if (value !== undefined) return value;
+    throw new TypeError('Validated query column "version" has an invalid value.');
   }
-
-  const sort = format.orderBy.map(toRecordOrder);
-
-  return {
-    ...(format.fieldMask === undefined ? {} : { mask: format.fieldMask.paths }),
-    ...(sort.length === 0 ? {} : { sort }),
-    limit: format.limit > 0 ? format.limit : MAX_QUERY_LIMIT,
-  };
+  if ((column === "archived" || column === "deleted") && filter.value !== undefined) {
+    const value = unpackAny(filter.value, BoolValueSchema);
+    if (value !== undefined) return value.value;
+    throw new TypeError(`Validated query column "${column}" has an invalid value.`);
+  }
+  const field = route.columnFields.get(column);
+  return decodeAnyValue(
+    filter.value,
+    field?.fieldKind === "message" ? (field.message as MessageSchema) : undefined,
+  );
 }
 
-function toRecordOrder(order: OrderBy): RecordOrder {
-  return {
-    field: order.column,
-    direction: order.direction === OrderBy_Direction.DESCENDING ? "desc" : "asc",
-  };
+function filterValueMatches(field: DescField, value: Any): boolean {
+  const schema = filterValueSchema(field);
+  if (schema === undefined || value.typeUrl !== deriveTypeUrl(schema)) return false;
+  const decoded =
+    field.fieldKind === "message" ? decodeAnyValue(value, schema) : decodeAnyValue(value);
+  if (field.fieldKind === "message") {
+    return isMessage(decoded) && decoded.$typeName === field.message.typeName;
+  }
+  if (field.fieldKind === "enum") return typeof decoded === "number" && Number.isInteger(decoded);
+  if (field.fieldKind !== "scalar") return false;
+  if (field.scalar === ScalarType.BOOL) return typeof decoded === "boolean";
+  if (field.scalar === ScalarType.BYTES) return decoded instanceof Uint8Array;
+  if (field.scalar === ScalarType.STRING) return typeof decoded === "string";
+  if (
+    field.scalar === ScalarType.INT64 ||
+    field.scalar === ScalarType.UINT64 ||
+    field.scalar === ScalarType.SFIXED64 ||
+    field.scalar === ScalarType.FIXED64 ||
+    field.scalar === ScalarType.SINT64
+  ) {
+    return typeof decoded === "bigint";
+  }
+  return typeof decoded === "number" && Number.isFinite(decoded);
+}
+
+function filterValueSchema(field: DescField): MessageSchema | undefined {
+  if (field.fieldKind === "message") return field.message as MessageSchema;
+  if (field.fieldKind === "enum") return Int32ValueSchema;
+  if (field.fieldKind !== "scalar") return undefined;
+  if (field.scalar === ScalarType.BOOL) return BoolValueSchema;
+  if (field.scalar === ScalarType.BYTES) return BytesValueSchema;
+  if (field.scalar === ScalarType.DOUBLE) return DoubleValueSchema;
+  if (field.scalar === ScalarType.FLOAT) return FloatValueSchema;
+  if (
+    field.scalar === ScalarType.INT64 ||
+    field.scalar === ScalarType.SFIXED64 ||
+    field.scalar === ScalarType.SINT64
+  ) {
+    return Int64ValueSchema;
+  }
+  if (field.scalar === ScalarType.UINT64 || field.scalar === ScalarType.FIXED64) {
+    return UInt64ValueSchema;
+  }
+  if (field.scalar === ScalarType.UINT32 || field.scalar === ScalarType.FIXED32) {
+    return UInt32ValueSchema;
+  }
+  if (field.scalar === ScalarType.STRING) return StringValueSchema;
+  return Int32ValueSchema;
+}
+
+function systemValueMatches(column: string, value: Any): boolean {
+  if (column === "version") {
+    return (
+      value.typeUrl === deriveTypeUrl(VersionSchema) &&
+      unpackAny(value, VersionSchema) !== undefined
+    );
+  }
+  if (column === "archived" || column === "deleted") {
+    return (
+      value.typeUrl === deriveTypeUrl(BoolValueSchema) &&
+      unpackAny(value, BoolValueSchema) !== undefined
+    );
+  }
+  return false;
+}
+
+function supportsRange(field: DescField): boolean {
+  if (field.fieldKind === "message") {
+    return (
+      field.message.typeName === "google.protobuf.Timestamp" ||
+      field.message.typeName === "spine.core.Version"
+    );
+  }
+  return (
+    field.fieldKind === "scalar" &&
+    field.scalar !== ScalarType.BOOL &&
+    field.scalar !== ScalarType.BYTES
+  );
+}
+
+function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator | undefined {
+  if (operator === Filter_Operator.EQUAL) return "equal";
+  if (operator === Filter_Operator.GREATER_THAN) return "greaterThan";
+  if (operator === Filter_Operator.LESS_THAN) return "lessThan";
+  if (operator === Filter_Operator.GREATER_OR_EQUAL) return "greaterOrEqual";
+  if (operator === Filter_Operator.LESS_OR_EQUAL) return "lessOrEqual";
+  return undefined;
+}
+
+function resolveQueryMask(schema: MessageSchema, path: string): string | undefined {
+  let current: MessageSchema | undefined = schema;
+  const local: string[] = [];
+  for (const segment of path.split(".")) {
+    const field = findMessageField(current, segment);
+    if (field === undefined) return undefined;
+    local.push(field.localName);
+    current = field.message;
+  }
+  return local.join(".");
+}
+
+function requiredQueryMask(schema: MessageSchema, path: string): string {
+  const resolved = resolveQueryMask(schema, path);
+  if (resolved !== undefined) return resolved;
+  throw new TypeError(`Validated query mask path "${path}" is invalid.`);
 }
 
 function unsupportedFilterError(message: string): ContractError {

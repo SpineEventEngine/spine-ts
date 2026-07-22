@@ -859,17 +859,21 @@ lifecycle, retries, and transport topology remain out of scope for this slice.
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
 ID filters on any registered state route and projection-state
-`Target.include_all = true` reads. Projection queries also support top-level
-`EQUAL` filters over declared projection `(column)` proto field names,
+`Target.include_all = true` reads. Projection queries also support nested
+`ALL`/`EITHER` filters and all five compatible comparisons over declared
+projection `(column)` and system-column names,
 `ResponseFormat.field_mask`, repeated `ResponseFormat.order_by` over declared
 proto column names, and positive `limit` values when at least one ordering
-directive is present. A missing format or wire limit of zero applies a
-framework-to-storage safety cap of 1,000 rows without requiring ordering;
-explicit limits from 1 through 1,000 retain their ordering requirement. Use
+directive is present. Every query applies a framework-to-storage safety bound
+of 1,000 candidates; a missing format or wire limit of zero does not require
+ordering. Providers request one sentinel candidate beyond that bound and fail
+on overflow instead of fully materializing or silently truncating the result.
+Explicit limits from 1 through 1,000 apply only after the complete candidate
+set passes that bound and retain their ordering requirement. Use
 proto column names such as `open_task_count`, not
-generated TS local names such as `openTaskCount`. Undeclared columns,
-unsupported operators, nested/disjunctive composites, positive limits without
-ordering, missing criteria, and `include_all = false` return `INVALID_QUERY`
+generated TS local names such as `openTaskCount`. Undeclared columns, wrong
+packed value/operator pairs, invalid masks, positive limits without ordering,
+missing criteria, and `include_all = false` return `INVALID_QUERY`
 before reading Stand storage.
 
 `SubscriptionService.Subscribe` accepts known registered state targets and

@@ -4,6 +4,10 @@ import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-ts/storage";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
+import {
+  assertQueryProviderConformance,
+  queryProviderConformanceRecords,
+} from "../../storage/test/query/query-provider-conformance.js";
 
 const calls: { readonly sql: string; readonly values?: readonly unknown[] }[] = [];
 let endCalls = 0;
@@ -158,6 +162,35 @@ let foreignKeyRows = compatibleForeignKeyRows;
 let connectError: Error | undefined;
 
 describe("MysqlStorageFactory", () => {
+  it("conforms to the shared normalized query provider fixture", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_query_conformance",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "QueryConformance", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [
+          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+        ],
+      }),
+    );
+
+    await assertQueryProviderConformance({
+      name: "mysql",
+      storage,
+      providerCalls: () => connectionAcquires,
+      beforeRead: () => {
+        operationRows = queryProviderConformanceRecords.map((value) => ({
+          slot_key: CanonicalMysqlValue.encode(value, 768),
+          payload: toBinary(StringValueSchema, create(StringValueSchema, { value })),
+        }));
+      },
+    });
+    await factory.close();
+  });
   beforeEach(() => {
     calls.length = 0;
     endCalls = 0;
@@ -402,11 +435,17 @@ describe("MysqlStorageFactory", () => {
 
     const factory = await MysqlStorageFactory.create({
       url: "mysql://spine:secret@localhost:3306/spine_packet_1",
+      connectionLimit: 4,
+      connectTimeoutMs: 2_000,
       tls: { ca: "test-ca", rejectUnauthorized: true },
     });
     await factory.close();
 
-    expect(poolOptions).toMatchObject({ ssl: { ca: "test-ca", rejectUnauthorized: true } });
+    expect(poolOptions).toMatchObject({
+      connectionLimit: 4,
+      connectTimeout: 2_000,
+      ssl: { ca: "test-ca", rejectUnauthorized: true },
+    });
     await expect(
       MysqlStorageFactory.create({
         url: "mysql://spine:secret@localhost:3306/spine_packet_1?ssl=0",
@@ -564,6 +603,104 @@ describe("MysqlStorageFactory", () => {
       CanonicalMysqlValue.encode(["Tasks", false, StringValueSchema.typeName], 512),
     );
     expect(query?.values?.[5]).toEqual(CanonicalMysqlValue.encode("slot-1", 768));
+    await factory.close();
+  });
+
+  it("compiles nested normalized comparisons, ordering, and limits with bound values", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_query",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [new RecordColumn<StringValue, string>("state", (record) => record.value)],
+      }),
+    );
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "either",
+        predicates: [
+          { kind: "comparison", column: "state", operator: "greaterThan", value: "private-value" },
+          { kind: "ids", ids: ["slot-1"] },
+        ],
+      },
+      order: [{ column: "state", direction: "desc" }],
+      limit: 3,
+    });
+
+    const query = calls.find(({ sql }) => sql.includes("SELECT r.slot_key, r.payload"));
+    expect(query?.sql).toContain("LEFT JOIN `spine_ts_columns` AS p0");
+    expect(query?.sql).toContain("LEFT JOIN `spine_ts_columns` AS s0");
+    expect(query?.sql).toContain(" OR ");
+    expect(query?.sql).toContain("LIMIT ?");
+    expect(query?.sql).not.toContain("private-value");
+    expect(query?.values).toContain(3);
+    await factory.close();
+  });
+
+  it("parameterizes every normalized comparison and conjunctive ID shape", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_query_operators",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [new RecordColumn<StringValue, string>("state", (record) => record.value)],
+      }),
+    );
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids: ["slot-1", "slot-2"] },
+          { kind: "comparison", column: "state", operator: "equal", value: "a" },
+          { kind: "comparison", column: "state", operator: "lessThan", value: "b" },
+          { kind: "comparison", column: "state", operator: "greaterOrEqual", value: "c" },
+          { kind: "comparison", column: "state", operator: "lessOrEqual", value: "d" },
+        ],
+      },
+      order: [{ column: "state", direction: "asc" }],
+    });
+
+    const query = calls.findLast(({ sql }) => sql.includes("SELECT r.slot_key, r.payload"));
+    expect(query?.sql).toContain(" AND ");
+    expect(query?.sql).toContain("r.slot_key IN (?, ?)");
+    expect(query?.sql).toContain("value_data = ?");
+    expect(query?.sql).toContain("value_data < ?");
+    expect(query?.sql).toContain("value_data >= ?");
+    expect(query?.sql).toContain("value_data <= ?");
+    expect(query?.sql).toContain("value_data ASC");
+    expect(query?.sql).not.toContain("LIMIT ?");
+    await factory.close();
+  });
+
+  it("binds a candidate sentinel limit before materializing a semantically limited plan", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_query_candidate_limit",
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+    );
+
+    await storage.queryPlan({
+      candidateLimit: 2,
+      limit: 1,
+      order: [{ column: "id", direction: "asc" }],
+    });
+
+    const query = calls.findLast(({ sql }) => sql.includes("SELECT r.slot_key, r.payload"));
+    expect(query?.sql).toContain("LIMIT ?");
+    expect(query?.values?.at(-1)).toBe(3);
     await factory.close();
   });
 

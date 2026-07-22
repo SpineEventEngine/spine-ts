@@ -6,8 +6,29 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DatastoreStorageFactory } from "../src/index.js";
 import { CanonicalValue } from "../src/datastore/value-codec.js";
+import { assertQueryProviderConformance } from "../../storage/test/query/query-provider-conformance.js";
 
 describe("DatastoreStorageFactory", () => {
+  it("conforms to the shared normalized query provider fixture", async () => {
+    const client = new MemoryDatastoreClient();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const storage = factory.createRecordStorage(
+      { name: "QueryConformance", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [
+          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+        ],
+      }),
+    );
+
+    await assertQueryProviderConformance({
+      name: "datastore",
+      storage,
+      providerCalls: () => client.runQueryCalls,
+    });
+  });
   it("constructs an explicitly configured client without selecting credentials itself", () => {
     const factory = DatastoreStorageFactory.create({ projectId: "spine-ts-adapter-test" });
 
@@ -522,6 +543,97 @@ describe("DatastoreStorageFactory", () => {
     ).rejects.toThrow("Datastore query exceeded the client-side scan limit of 1");
     expect(client.lastQuery?.limitValue).toBe(2);
     expect(client.lastQuery?.orders).toContainEqual(["__key__", { descending: false }]);
+  });
+
+  it("pushes only legal normalized predicates and post-filters within the finite scan", async () => {
+    const client = new MemoryDatastoreClient();
+    const factory = new DatastoreStorageFactory({ client: client as never, maxClientSideScan: 3 });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        extractId: (record) => record.value,
+        columns: [new RecordColumn<StringValue>("group", (record) => record.value.slice(0, 1))],
+      }),
+    );
+    await storage.writeAll([
+      create(StringValueSchema, { value: "a-1" }),
+      create(StringValueSchema, { value: "b-1" }),
+      create(StringValueSchema, { value: "c-1" }),
+    ]);
+
+    await expect(
+      storage.queryPlan({
+        predicate: {
+          kind: "either",
+          predicates: [
+            { kind: "comparison", column: "group", operator: "equal", value: "a" },
+            { kind: "comparison", column: "group", operator: "equal", value: "c" },
+          ],
+        },
+        order: [{ column: "group", direction: "desc" }],
+        limit: 2,
+      }),
+    ).resolves.toMatchObject([{ value: "c-1" }, { value: "a-1" }]);
+    expect(client.lastQuery?.filters).toEqual([]);
+    expect(client.lastQuery?.limitValue).toBe(4);
+
+    await storage.queryPlan({
+      predicate: { kind: "comparison", column: "group", operator: "greaterOrEqual", value: "b" },
+      order: [{ column: "group", direction: "asc" }],
+    });
+    expect(client.lastQuery?.filters).toContainEqual(["$spine.column.group", ">=", "b"]);
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids: ["a-1"] },
+          { kind: "comparison", column: "group", operator: "equal", value: "a" },
+        ],
+      },
+      order: [{ column: "group", direction: "asc" }],
+    });
+    expect(client.lastQuery?.filters).toEqual(
+      expect.arrayContaining([
+        ["__key__", "=", expect.anything()],
+        ["$spine.column.group", "=", "a"],
+      ]),
+    );
+    expect(client.lastQuery?.orders).toContainEqual(["$spine.column.group", { descending: false }]);
+
+    await storage.queryPlan({ predicate: { kind: "ids", ids: ["a-1", "c-1"] } });
+    expect(client.lastQuery?.filters).toContainEqual(["__key__", "IN", expect.any(Array)]);
+
+    for (const [operator, providerOperator] of [
+      ["greaterThan", ">"],
+      ["lessThan", "<"],
+      ["lessOrEqual", "<="],
+    ] as const) {
+      await storage.queryPlan({
+        predicate: { kind: "comparison", column: "group", operator, value: "b" },
+        order: [{ column: "group", direction: "asc" }],
+      });
+      expect(client.lastQuery?.filters).toContainEqual([
+        "$spine.column.group",
+        providerOperator,
+        "b",
+      ]);
+    }
+
+    await storage.queryPlan({
+      predicate: { kind: "comparison", column: "group", operator: "greaterThan", value: "a" },
+      order: [{ column: "id", direction: "asc" }],
+    });
+    expect(client.lastQuery?.filters).toEqual([]);
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "ids",
+        ids: Array.from({ length: 31 }, (_, index) => `${String(index)}-missing`),
+      },
+    });
+    expect(client.lastQuery?.filters).toEqual([]);
   });
 
   it("atomically creates, replaces, deletes, and rejects stale compare-and-set values", async () => {

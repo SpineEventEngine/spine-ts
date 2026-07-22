@@ -10,10 +10,13 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   RecordStorage,
   StorageFactory,
+  type NormalizedQueryPlan,
+  type NormalizedQueryPredicate,
   type RecordEntry,
   type RecordQuery,
   type RecordSpec,
   type StorageContext,
+  type StorageQueryCapabilities,
 } from "@spine-ts/storage";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "./value-codec.js";
@@ -306,6 +309,33 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     const tenant = this.tenant();
     const compiled = compileQuery(query, this.#scope, tenant);
     if (compiled === undefined) return [];
+    const connection = await this.acquireConnection();
+    try {
+      const [rows] = await connection.query<QueryRow[]>(
+        compiled.sql,
+        compiled.values as (Uint8Array | number)[],
+      );
+      return rows.map((row) => decodeQueryRow(this.recordSpec, row));
+    } catch (error) {
+      if (error instanceof MysqlStorageDataError) throw error;
+      throw new MysqlStorageOperationError();
+    } finally {
+      this.releaseConnection(connection);
+    }
+  }
+
+  protected override queryCapabilities(): StorageQueryCapabilities {
+    return {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    };
+  }
+
+  protected override async queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const tenant = this.tenant();
+    const compiled = compilePlan(plan, this.#scope, tenant);
     const connection = await this.acquireConnection();
     try {
       const [rows] = await connection.query<QueryRow[]>(
@@ -664,6 +694,114 @@ ${joins.map((clause) => clause.sql).join("\n")}
 WHERE ${where.map((clause) => clause.sql).join(" AND ")}
 ORDER BY ${order.join(", ")}${window.sql}`,
     values,
+  };
+}
+
+function compilePlan<I>(
+  plan: NormalizedQueryPlan<I>,
+  scope: Uint8Array,
+  tenant: Uint8Array,
+): CompiledQuery {
+  const comparisons = collectComparisons(plan.predicate);
+  const joins: SqlClause[] = comparisons.map((comparison, index) => ({
+    sql: `LEFT JOIN ${columnsTable} AS p${String(index)}
+       ON p${String(index)}.scope_key = r.scope_key AND p${String(index)}.tenant_key = r.tenant_key
+      AND p${String(index)}.slot_key = r.slot_key AND p${String(index)}.column_name = ?`,
+    values: [encodeColumnName(comparison.column)],
+  }));
+  for (const [index, order] of (plan.order ?? []).entries()) {
+    joins.push({
+      sql: `LEFT JOIN ${columnsTable} AS s${String(index)}
+       ON s${String(index)}.scope_key = r.scope_key AND s${String(index)}.tenant_key = r.tenant_key
+      AND s${String(index)}.slot_key = r.slot_key AND s${String(index)}.column_name = ?`,
+      values: [encodeColumnName(order.column)],
+    });
+  }
+  const where: SqlClause[] = [
+    { sql: "r.scope_key = ?", values: [scope] },
+    { sql: "r.tenant_key = ?", values: [tenant] },
+  ];
+  if (plan.predicate !== undefined) {
+    where.push(compilePredicate(plan.predicate, comparisons));
+  }
+  const order = [
+    ...(plan.order ?? []).flatMap((item, index) => {
+      const direction = item.direction === "desc" ? "DESC" : "ASC";
+      return [
+        `s${String(index)}.value_kind ${direction}`,
+        `s${String(index)}.value_data ${direction}`,
+      ];
+    }),
+    "r.slot_key ASC",
+  ];
+  const materializationLimit =
+    plan.candidateLimit === undefined ? plan.limit : plan.candidateLimit + 1;
+  const window: SqlClause =
+    materializationLimit === undefined
+      ? { sql: "", values: [] }
+      : { sql: " LIMIT ?", values: [materializationLimit] };
+  const values = [
+    ...joins.flatMap((clause) => clause.values),
+    ...where.flatMap((clause) => clause.values),
+    ...window.values,
+  ];
+  if (values.length > maxQueryBinds) {
+    throw new MysqlStorageConfigurationError(
+      `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
+    );
+  }
+  return {
+    sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
+${joins.map((clause) => clause.sql).join("\n")}
+WHERE ${where.map((clause) => clause.sql).join(" AND ")}
+ORDER BY ${order.join(", ")}${window.sql}`,
+    values,
+  };
+}
+
+function collectComparisons<I>(
+  predicate: NormalizedQueryPredicate<I> | undefined,
+): readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[] {
+  if (predicate === undefined || predicate.kind === "ids") return [];
+  if (predicate.kind === "comparison") return [predicate];
+  return predicate.predicates.flatMap(collectComparisons);
+}
+
+function compilePredicate<I>(
+  predicate: NormalizedQueryPredicate<I>,
+  comparisons: readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[],
+): SqlClause {
+  if (predicate.kind === "ids") {
+    const ids = predicate.ids.map((id) => CanonicalMysqlValue.encode(id, slotKeyBytes));
+    return { sql: `r.slot_key IN (${placeholders(ids.length)})`, values: ids };
+  }
+  if (predicate.kind === "comparison") {
+    const index = comparisons.indexOf(predicate);
+    const alias = `p${String(index)}`;
+    const encoded = encodeColumnValue(predicate.value);
+    if (predicate.operator === "equal") {
+      return {
+        sql: `(${alias}.value_kind = ? AND ${alias}.value_data = ?)`,
+        values: [encoded.kind, encoded.data],
+      };
+    }
+    const comparison =
+      predicate.operator === "greaterThan"
+        ? ">"
+        : predicate.operator === "greaterOrEqual"
+          ? ">="
+          : predicate.operator === "lessThan"
+            ? "<"
+            : "<=";
+    return {
+      sql: `(${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?)`,
+      values: [encoded.kind, encoded.data],
+    };
+  }
+  const children = predicate.predicates.map((child) => compilePredicate(child, comparisons));
+  return {
+    sql: `(${children.map((child) => child.sql).join(predicate.kind === "either" ? " OR " : " AND ")})`,
+    values: children.flatMap((child) => child.values),
   };
 }
 

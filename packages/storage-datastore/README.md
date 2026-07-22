@@ -53,6 +53,14 @@ and requested result limit locally; a continuation cannot page around provider
 candidate-set overflow. No partial result is returned. There is no unlimited
 option or adapter-specific generic cursor API.
 
+Normalized Projection plans push down only a whole provider-legal plan: no
+more than 30 IDs, and any inequality property must be the first requested
+ordering property. Conjunctive equality/ID sets meeting those rules are legal;
+nested, disjunctive, over-30-ID, or misordered inequality plans use the finite
+fallback. The sentinel is checked before local filtering, ordering, masks, or
+limits, so overflow raises
+`DatastoreQueryLimitError` instead of returning a truncated semantic result.
+
 ## Verification commands
 
 Unit tests use an injected narrow client fake and run by default with the

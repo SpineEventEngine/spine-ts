@@ -38,7 +38,13 @@ small structural `StorageContext` with `name`, `multitenant`, and optional
 query boundary for adapters. A provider advertises comparison operators and
 optional `either`, nested-predicate, ordering, mask, and limit features. The
 shared policy rejects malformed or unsupported plans before provider execution;
-it does not execute queries or expose an application query DSL.
+`RecordStorage.queryPlan()` then applies the shared complete evaluator for
+nested predicates, repeated ordering, the stable ID tie-breaker, masks, and
+limits. Application query construction remains in `@spine-ts/client`.
+Framework callers may set `candidateLimit` to bound provider materialization
+independently of the semantic result limit. Providers fetch at most one
+sentinel row beyond that bound, and `RecordStorage` raises
+`StorageQueryCandidateLimitError` before evaluation when it is exceeded.
 
 `RecordStorage` queries are intentionally small and deterministic:
 

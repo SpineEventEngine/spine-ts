@@ -2,10 +2,13 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { Datastore } from "@google-cloud/datastore";
 import {
   RecordStorage,
+  type NormalizedQueryPlan,
+  type NormalizedQueryPredicate,
   type RecordEntry,
   type RecordQuery,
   type RecordSpec,
   type StorageContext,
+  type StorageQueryCapabilities,
 } from "@spine-ts/storage";
 
 import { CanonicalValue } from "./value-codec.js";
@@ -167,6 +170,38 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }));
 
     return applyQuery(entries, _query);
+  }
+
+  protected override queryCapabilities(): StorageQueryCapabilities {
+    return {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    };
+  }
+
+  protected override async queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const query = this.#codec.createQuery(this.client);
+    pushPlan(
+      query,
+      plan,
+      (id) => this.#codec.key(this.client, id),
+      (column) => this.#codec.columnProperty(column),
+    );
+    const providerLimit = Math.min(
+      this.#codec.queryLimit(),
+      plan.candidateLimit === undefined ? Number.POSITIVE_INFINITY : plan.candidateLimit + 1,
+    );
+    query.limit(providerLimit);
+    const entities = queryEntities(await this.client.runQuery(query, wrappedReadOptions));
+    if (entities.length >= providerLimit && providerLimit === this.#codec.queryLimit()) {
+      throw new DatastoreQueryLimitError(providerLimit - 1);
+    }
+    return entities.map((entity) => ({
+      id: this.#codec.id(entity),
+      record: this.#codec.decode(entity),
+    }));
   }
 
   protected async readRecord(id: I): Promise<R | undefined> {
@@ -343,6 +378,89 @@ function translateQuery<I>(
     });
   }
   query.order("__key__");
+}
+
+function pushPlan<I>(
+  query: ReturnType<Datastore["createQuery"]>,
+  plan: NormalizedQueryPlan<I>,
+  keyFor: (id: I) => ReturnType<Datastore["key"]>,
+  columnProperty: (column: string) => string,
+): void {
+  const legal = legalPushdown(plan);
+  if (legal !== undefined) {
+    pushPredicate(query, legal, keyFor, columnProperty);
+  }
+  if (legal !== undefined || plan.predicate === undefined) {
+    for (const order of plan.order ?? []) {
+      query.order(columnProperty(order.column), { descending: order.direction === "desc" });
+    }
+    if ((plan.order?.length ?? 0) > 0) query.order("__key__");
+  }
+}
+
+function legalPushdown<I>(plan: NormalizedQueryPlan<I>): NormalizedQueryPredicate<I> | undefined {
+  const predicate = plan.predicate;
+  if (predicate === undefined) return undefined;
+  const leaves = predicate.kind === "all" ? predicate.predicates : [predicate];
+  let idCount = 0;
+  const inequalityColumns = new Set<string>();
+  for (const leaf of leaves) {
+    if (leaf.kind !== "ids" && leaf.kind !== "comparison") return undefined;
+    if (leaf.kind === "ids") {
+      idCount += leaf.ids.length;
+      if (idCount > 30) return undefined;
+      continue;
+    }
+    if (leaf.operator !== "equal") {
+      inequalityColumns.add(leaf.column);
+    }
+  }
+  if (inequalityColumns.size > 1) return undefined;
+  const inequalityColumn = inequalityColumns.values().next().value;
+  if (inequalityColumn !== undefined && plan.order?.[0]?.column !== inequalityColumn) {
+    return undefined;
+  }
+  return predicate;
+}
+
+function pushPredicate<I>(
+  query: ReturnType<Datastore["createQuery"]>,
+  predicate: NormalizedQueryPredicate<I>,
+  keyFor: (id: I) => ReturnType<Datastore["key"]>,
+  columnProperty: (column: string) => string,
+): void {
+  if (predicate.kind === "all") {
+    predicate.predicates.forEach((child) => {
+      pushPredicate(query, child, keyFor, columnProperty);
+    });
+    return;
+  }
+  if (predicate.kind === "ids") {
+    const keys = predicate.ids.map(keyFor);
+    const firstKey = keys[0];
+    if (keys.length === 1 && firstKey !== undefined) {
+      query.filter("__key__", "=", firstKey);
+    } else {
+      query.filter("__key__", "IN", keys);
+    }
+    return;
+  }
+  if (predicate.kind !== "comparison") return;
+  const operator =
+    predicate.operator === "equal"
+      ? "="
+      : predicate.operator === "greaterThan"
+        ? ">"
+        : predicate.operator === "lessThan"
+          ? "<"
+          : predicate.operator === "greaterOrEqual"
+            ? ">="
+            : "<=";
+  query.filter(
+    columnProperty(predicate.column),
+    operator,
+    providerValue(predicate.value, `Datastore query filter "${predicate.column}"`),
+  );
 }
 
 function applyQuery<I, R extends Message>(

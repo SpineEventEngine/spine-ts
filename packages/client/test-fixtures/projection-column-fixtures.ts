@@ -64,6 +64,18 @@ type ProcessManagerState = Message<"spine_ts.client.test.ProcessManagerState"> &
   title: string;
 };
 
+type ScalarProjectionState = Message<"spine_ts.client.test.ScalarProjectionState"> & {
+  id: string;
+  doubleValue: number;
+  floatValue: number;
+  uint64Value: bigint;
+  fixed64Value: bigint;
+  uint32Value: number;
+  fixed32Value: number;
+  sfixed64Value: bigint;
+  sint64Value: bigint;
+};
+
 const descriptor = create(FileDescriptorProtoSchema, {
   name: "spine_ts/client/test/projection_columns.proto",
   package: "spine_ts.client.test",
@@ -168,6 +180,21 @@ const descriptor = create(FileDescriptorProtoSchema, {
         field("title", 2, FieldDescriptorProto_Type.STRING, { column: true }),
       ],
     },
+    {
+      name: "ScalarProjectionState",
+      options: entityOptions(EntityOption_Kind.PROJECTION),
+      field: [
+        field("id", 1, FieldDescriptorProto_Type.STRING),
+        field("double_value", 2, FieldDescriptorProto_Type.DOUBLE, { column: true }),
+        field("float_value", 3, FieldDescriptorProto_Type.FLOAT, { column: true }),
+        field("uint64_value", 4, FieldDescriptorProto_Type.UINT64, { column: true }),
+        field("fixed64_value", 5, FieldDescriptorProto_Type.FIXED64, { column: true }),
+        field("uint32_value", 6, FieldDescriptorProto_Type.UINT32, { column: true }),
+        field("fixed32_value", 7, FieldDescriptorProto_Type.FIXED32, { column: true }),
+        field("sfixed64_value", 8, FieldDescriptorProto_Type.SFIXED64, { column: true }),
+        field("sint64_value", 9, FieldDescriptorProto_Type.SINT64, { column: true }),
+      ],
+    },
   ],
 });
 
@@ -188,6 +215,10 @@ export const ProcessManagerStateSchema = messageDesc(
   fixtureFile,
   6,
 ) as GenMessage<ProcessManagerState>;
+export const ScalarProjectionStateSchema = messageDesc(
+  fixtureFile,
+  7,
+) as GenMessage<ScalarProjectionState>;
 
 export function projectionSchemaWithRawEntityOption(data: Uint8Array): GenMessage<ProjectionState> {
   const options = create(MessageOptionsSchema);
