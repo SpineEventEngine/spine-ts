@@ -5,7 +5,7 @@ import {
   RecordColumn,
   RecordMask,
   RecordSpec,
-  StorageQueryCandidateLimitError,
+  QueryCandidateLimitError,
   StorageQueryEvaluator,
   StorageQueryPolicy,
   type NormalizedQueryPlan,
@@ -282,7 +282,7 @@ export class Stand {
       plan.candidateLimit === undefined ? {} : { limit: plan.candidateLimit + 1 },
     );
     if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
-      throw new StorageQueryCandidateLimitError(plan.candidateLimit);
+      throw new QueryCandidateLimitError(plan.candidateLimit);
     }
     const entries = candidates.map((entry) => {
       const materialized = registration.recordSpec.materialize(entry.record);

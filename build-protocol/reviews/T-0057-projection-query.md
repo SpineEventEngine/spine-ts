@@ -193,3 +193,28 @@ are recorded.
 
 All accepted findings are resolved. Independent orchestrator verification is
 the remaining pre-commit gate.
+
+## Post-merge Deterministic Correction
+
+The exact pushed-main verification exposed one cleanup-rule failure that the
+pre-merge dependency state had not reported: the new public error name
+`StorageQueryCandidateLimitError` contained five semantic components, above
+the repository maximum of four. The mechanical correction renames it to
+`QueryCandidateLimitError` everywhere, including its runtime `name`, exports,
+consumers, README, and TypeDoc contract. Behavior and export count are
+unchanged.
+
+Typecheck, ESLint/cleanup, and TypeDoc/API checks pass after the correction;
+formatting was applied mechanically to one wrapped import. Because this is a
+public exported identifier, the existing `typescript_api_docs_reviewer` is
+limitedly redispatched read-only before the final full rerun. Expected model
+`gpt-5.6-terra` and reasoning `high` are explicit; no children are allowed.
+Runtime metadata is recorded when exposed, otherwise the immutable configured
+profile and limitation are recorded.
+
+The post-merge limited TypeScript/API re-review is CLEAN. Declaration and
+runtime `name`, package export, both throw sites, README, and API expectation
+all use `QueryCandidateLimitError`; no stale live identifier remains, behavior
+is unchanged, and the storage export count remains 30. The configured reviewer
+profile was the required `gpt-5.6-terra` / `high`; runtime self-introspection
+was not exposed. No other lane is reopened by this mechanical correction.

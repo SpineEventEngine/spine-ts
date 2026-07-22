@@ -12,10 +12,10 @@ export interface NormalizedQueryEntry<Id, Record> {
 }
 
 /** Raised before evaluating a plan that exceeded its finite candidate budget. */
-export class StorageQueryCandidateLimitError extends Error {
+export class QueryCandidateLimitError extends Error {
   constructor(readonly candidateLimit: number) {
     super(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);
-    this.name = "StorageQueryCandidateLimitError";
+    this.name = "QueryCandidateLimitError";
   }
 }
 

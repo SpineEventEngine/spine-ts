@@ -2,7 +2,7 @@ export { EventStore, type EventRollback, type OnEventAccepted } from "./event/ev
 export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
 export { StorageQueryPolicy } from "./query/query-policy.js";
-export { StorageQueryCandidateLimitError, StorageQueryEvaluator } from "./query/query-execution.js";
+export { QueryCandidateLimitError, StorageQueryEvaluator } from "./query/query-execution.js";
 export type { NormalizedQueryEntry } from "./query/query-execution.js";
 export type {
   NormalizedComparisonOperator,

@@ -44,7 +44,7 @@ limits. Application query construction remains in `@spine-ts/client`.
 Framework callers may set `candidateLimit` to bound provider materialization
 independently of the semantic result limit. Providers fetch at most one
 sentinel row beyond that bound, and `RecordStorage` raises
-`StorageQueryCandidateLimitError` before evaluation when it is exceeded.
+`QueryCandidateLimitError` before evaluation when it is exceeded.
 
 `RecordStorage` queries are intentionally small and deterministic:
 

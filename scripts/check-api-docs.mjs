@@ -190,7 +190,7 @@ const expectedStorageExports = [
   "StorageContext",
   "StorageFactory",
   "StorageQueryCapabilities",
-  "StorageQueryCandidateLimitError",
+  "QueryCandidateLimitError",
   "StorageQueryFeature",
   "StorageQueryEvaluator",
   "StorageQueryPolicy",
