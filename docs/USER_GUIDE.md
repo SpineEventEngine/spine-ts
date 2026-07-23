@@ -541,6 +541,59 @@ containing its ID can retry persistence cleanup. Active streams and their queues
 disconnection or process restart, so clients must query current state when they
 need a fresh view.
 
+Use the public client facade for application subscriptions. It creates the
+frozen topic and opaque subscription internally, keeps actor/tenant context
+consistent with `post()` and `query()`, and decodes immutable values instead of
+exposing wire envelopes. State topics permit IDs, equality predicates, nested
+`all()` / `either()` groups, and masks; ordered comparisons, ordering, and
+limits are not subscription criteria. Event topics currently take only an
+`AbortSignal` because the server accepts neither event criteria nor masks.
+Creation returns after `Subscribe` and after the activation consumer has locally
+issued its first read; it does not claim a remote activation acknowledgement.
+Asynchronous activation failures reject pending and future iterator reads.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client, ProjectionColumn, all, eq } from "@spine-ts/client";
+import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
+import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
+import { TaskIdSchema, TaskListSchema } from "@example/tasks-proto/task_list_pb";
+
+const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const states = await subscriptionClient
+  .onBehalfOf("alice")
+  .subscribeToState(TaskListSchema, TaskIdSchema, {
+    ids: [create(TaskIdSchema, { value: "list-1" })],
+    where: all(eq(TaskListColumns.archived, false)),
+    mask: ["id", "openTaskCount"],
+  });
+for await (const update of states) {
+  if (update.kind === "state") console.log(update.state);
+  else console.log(update.id);
+  await states.cancel();
+}
+
+const events = await subscriptionClient.asGuest().subscribeToEvents(TaskCreatedSchema);
+for await (const { message, context } of events) {
+  console.log(message, context);
+  await events.cancel();
+}
+await subscriptionClient.close();
+```
+
+Await `cancel()` when the application needs remote cleanup confirmation, or
+provide `signal: abortController.signal` in either options object for automatic
+cleanup. The client keeps at most 32 decoded updates per handle; a 33rd update
+ends iteration with `ClientProtocolError` and sends `Cancel`, rather than
+silently losing an update. Normal stream completion is terminal but cannot be
+identified as server overflow by this frozen protocol. Active updates are not
+replayed or reconnected after disconnect, so query current state before making
+a new subscription. `noLongerMatching` identifies an entity that had matched
+the state topic and subsequently stopped matching. `connectTo()` owns and
+closes its HTTP/2 transport; `usingTransport()` leaves the caller's transport
+open.
+
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
 
