@@ -1,6 +1,6 @@
 # T-0063: Production Delivery Scheduler And Supervisor
 
-Status: Review converged — full task verification pending
+Status: Accepted — full task verification passed; integration pending
 
 Branch: `task/T-0063-delivery-scheduler-supervisor`
 

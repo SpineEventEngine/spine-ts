@@ -17,6 +17,17 @@ afterEach(async () => {
 });
 
 describe("DeliveryBuilder", () => {
+  it("rejects empty target coordinates for uniform shard assignment", () => {
+    const strategy = UniformAcrossAllShards.singleShard();
+
+    expect(() => strategy.shardFor("", "type.example.dev/Task")).toThrow(
+      "Delivery target ID must be a non-empty string.",
+    );
+    expect(() => strategy.shardFor("task", "")).toThrow(
+      "Delivery target type must be a non-empty string.",
+    );
+  });
+
   it("runs through supplied exclusive inbox and registry ports without renewal", async () => {
     const shard = ShardIndex.single();
     const message = {

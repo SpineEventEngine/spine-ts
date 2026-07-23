@@ -5,6 +5,7 @@ import {
   DeliveryBuilder,
   DeliveryShutdownTimeoutError,
   DeliverySupervisor,
+  type DeliverySupervisorOptions,
   type Delivery,
   type DeliveryRunOptions,
   ShardIndex,
@@ -18,6 +19,30 @@ import type {
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it.each([
+    [{ concurrency: 0 }, "Delivery supervisor concurrency"],
+    [{ pendingLimit: 0 }, "Delivery supervisor pending limit"],
+    [{ recoveryMs: 0 }, "Delivery supervisor recovery interval"],
+    [{ staleMs: 0 }, "Delivery supervisor stale session interval"],
+    [{ watchInitialBackoffMs: 0 }, "Delivery supervisor watch initial backoff"],
+    [{ watchMaxBackoffMs: 0 }, "Delivery supervisor watch maximum backoff"],
+  ] as const)("rejects invalid positive bounds in %j", (options, name) => {
+    expect(() =>
+      supervisorFor({ run: () => Promise.resolve({ status: "COMPLETED", pages: [] }) }, options),
+    ).toThrow(`${name} must be a positive safe integer.`);
+  });
+
+  it("rejects a watch maximum below its initial reconnect delay", () => {
+    expect(() =>
+      supervisorFor(
+        { run: () => Promise.resolve({ status: "COMPLETED", pages: [] }) },
+        { watchInitialBackoffMs: 20, watchMaxBackoffMs: 10 },
+      ),
+    ).toThrow(
+      "Delivery supervisor watch maximum backoff must not be smaller than initial backoff.",
+    );
+  });
+
   it("rejects a forged port even when it copies the controlled method shape", () => {
     const run = () => Promise.resolve({ status: "COMPLETED" as const, pages: [] });
     expect(
@@ -63,6 +88,58 @@ describe("DeliverySupervisor", () => {
 
     expect(calls).toBe(1);
     await supervisor.close();
+  });
+
+  it("keeps start, notify, and completed close boundary states idempotent", async () => {
+    let calls = 0;
+    const supervisor = supervisorFor({
+      run: () => {
+        calls += 1;
+        return Promise.resolve({ status: "COMPLETED", pages: [] });
+      },
+    });
+
+    supervisor.notify(newShard(0));
+    await supervisor.start();
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await supervisor.whenIdle();
+    await supervisor.close();
+    await supervisor.close();
+    supervisor.notify(newShard(0));
+
+    expect(calls).toBe(1);
+    await expect(supervisor.start()).rejects.toThrow("Delivery supervisor is closed.");
+  });
+
+  it("rejects invalid close grace without changing lifecycle state", async () => {
+    const supervisor = supervisorFor({
+      run: () => Promise.resolve({ status: "COMPLETED", pages: [] }),
+    });
+
+    expect(() => supervisor.close({ graceMs: -1 })).toThrow(
+      "Delivery close grace must be a safe integer.",
+    );
+    await supervisor.start();
+    await supervisor.close();
+  });
+
+  it("returns one in-flight close attempt to concurrent callers", async () => {
+    const held = Promise.withResolvers<undefined>();
+    const supervisor = supervisorFor({
+      run: async () => {
+        await held.promise;
+        return { status: "COMPLETED", pages: [] };
+      },
+    });
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+
+    const first = supervisor.close({ graceMs: 1_000 });
+    const second = supervisor.close({ graceMs: 1 });
+    expect(second).toBe(first);
+    held.resolve(undefined);
+    await first;
   });
 
   it("coalesces a same-shard storm into one follow-up run", async () => {
@@ -287,6 +364,75 @@ describe("DeliverySupervisor", () => {
     }
   });
 
+  it("admits only positive unpicked updates from a completed Admin watch", async () => {
+    const seen: number[] = [];
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () =>
+          finiteUpdates([
+            { shard: newShard(0), status: "PICKED", messages: 1 },
+            { shard: newShard(1), status: "NOT_PICKED", messages: 0 },
+            { shard: newShard(2), status: "NOT_PICKED", messages: 1 },
+          ]),
+        releaseExpired: () => Promise.resolve([]),
+      },
+      delivery: qualifiedDelivery({
+        run: ({ shard }) => {
+          seen.push(requireShard(shard).index);
+          return Promise.resolve({ status: "COMPLETED", pages: [] });
+        },
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+
+    await supervisor.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await supervisor.whenIdle();
+
+    expect(seen).toEqual([2]);
+    await supervisor.close();
+  });
+
+  it("ignores an Admin update that settles after close", async () => {
+    const update = Promise.withResolvers<
+      IteratorResult<{
+        shard: ShardIndex;
+        status: "NOT_PICKED";
+        messages: number;
+      }>
+    >();
+    let calls = 0;
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => update.promise,
+          }),
+        }),
+        releaseExpired: () => Promise.resolve([]),
+      },
+      delivery: qualifiedDelivery({
+        run: () => {
+          calls += 1;
+          return Promise.resolve({ status: "COMPLETED", pages: [] });
+        },
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+
+    await supervisor.start();
+    await supervisor.close();
+    update.resolve({
+      done: false,
+      value: { shard: newShard(0), status: "NOT_PICKED", messages: 1 },
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(calls).toBe(0);
+  });
+
   it("retries only incomplete release cleanup on a later close", async () => {
     let releases = 0;
     const supervisor = new DeliverySupervisor({
@@ -490,7 +636,7 @@ function supervisorFor(
   delivery: {
     run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
   },
-  bounds: { concurrency?: number; pendingLimit?: number } = {},
+  bounds: Partial<Omit<DeliverySupervisorOptions, "source" | "delivery" | "onMessage">> = {},
 ): DeliverySupervisor {
   return new DeliverySupervisor({
     source: {
@@ -586,6 +732,27 @@ function failingUpdates(): AsyncIterable<never> {
     [Symbol.asyncIterator](): AsyncIterator<never> {
       return {
         next: () => Promise.reject(new Error("watch disconnected")),
+      };
+    },
+  };
+}
+
+function finiteUpdates(
+  updates: readonly {
+    readonly shard: ShardIndex;
+    readonly status: "PICKED" | "NOT_PICKED";
+    readonly messages: number;
+  }[],
+): AsyncIterable<{
+  readonly shard: ShardIndex;
+  readonly status: "PICKED" | "NOT_PICKED";
+  readonly messages: number;
+}> {
+  return {
+    [Symbol.asyncIterator]() {
+      const iterator = updates[Symbol.iterator]();
+      return {
+        next: () => Promise.resolve(iterator.next()),
       };
     },
   };

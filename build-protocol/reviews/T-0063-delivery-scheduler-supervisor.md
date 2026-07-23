@@ -237,3 +237,17 @@ change.
 - No P0/P1 remains, every accepted P2 is resolved, the sole P3 was absorbed
   into release ownership, and all four required concerns are clean. Final
   security remains N/A here and stays reserved for T-0067.
+
+## Final Task Gate
+
+- The coverage correction was test-only and did not reopen a specialist lane.
+  Focused verification passed 4 files / 141 tests and raised task-owned branch
+  coverage by 20 hits without changing production, contracts, thresholds, or
+  exclusions.
+- One no-await test-helper lint finding in the first final gate was corrected
+  mechanically with an explicit async iterator. Focused ESLint, Prettier, and
+  the 29-test supervisor suite passed afterward; no review concern changed.
+- The complete final gate passed 110 files / 2,238 tests with 3 files / 21 tests
+  skipped and 7,023/7,797 branches (90.07%). Frozen Proto, generated output,
+  typecheck, lint, cleanup, formatting, TypeDoc/API inventory, documentation,
+  and release-readiness checks are clean.

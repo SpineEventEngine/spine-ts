@@ -33,6 +33,22 @@ describe("DeliveryRunControl", () => {
     expect(calls).toBe(0);
   });
 
+  it("normalizes a non-Error abort reason", async () => {
+    const controller = new AbortController();
+    controller.abort("stop");
+    const control = new DeliveryRunControl(
+      controlledDelivery(() => Promise.resolve({ status: "COMPLETED", pages: [] })),
+    );
+
+    await expect(
+      control.run({
+        shard: ShardIndex.single(),
+        onMessage: () => Promise.resolve(),
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("Delivery run was aborted.");
+  });
+
   it("rejects a controlled caller on abort while observing a detached late settlement", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();

@@ -348,6 +348,26 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.retire();
   });
 
+  it("rejects an injected owner with no exact supervisor shards without retaining it", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    const fixture = environmentDeliveryWorkerFixture(firstRuntimeWorker, secondRuntimeWorker);
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("EmptyOwner", "type.example.dev/EmptyOwner", storageFactory);
+    const scope = runScope("empty-owner", target.ready);
+
+    expect(() => {
+      fixture.addScopes(target, scope.owner, []);
+    }).toThrow("Environment delivery supervisor requires at least one shard.");
+    expect(() => {
+      fixture.add(target, scope);
+    }).not.toThrow();
+
+    fixture.worker.stop();
+    await fixture.worker.awaitSettled();
+    await fixture.worker.retire();
+  });
+
   it("stops the real supervisor even when its paired legacy worker stop fails", async () => {
     const runtimeWorker = new LifecycleWorker();
     const stopFailure = new Error("legacy stop failed");
@@ -3256,6 +3276,20 @@ function environmentDeliveryWorkerFixture(...runtimeWorkers: readonly DeliveryRu
         tenant: {},
         context,
         scopes: [scope],
+      });
+    },
+    addScopes(
+      descriptor: TestDescriptor,
+      owner: DeliveryRunScope["owner"],
+      scopes: readonly DeliveryRunScope[],
+    ): void {
+      worker.add({
+        owner,
+        descriptor: descriptor.value,
+        storageFactory: descriptor.value.storageFactory,
+        tenant: {},
+        context: descriptor.context,
+        scopes,
       });
     },
   };

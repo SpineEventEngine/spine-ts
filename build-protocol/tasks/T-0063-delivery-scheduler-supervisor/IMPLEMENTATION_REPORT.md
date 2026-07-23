@@ -336,3 +336,58 @@ README.md`, `scripts/check-api-docs.mjs`, this report, and the T-0063 work
   generated build/tooling typecheck; touched-file Prettier; and diff hygiene.
 - No child agent, commit, push, merge, install, review-disposition edit, or
   unrelated/protected edit was performed.
+
+## Full-Gate Runtime Export Expectation Correction — 2026-07-23
+
+- Existing role/profile remained the explicit `implementer`,
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection remained unavailable;
+  no visible fallback or mismatch was exposed.
+- Full verification reached 109 passing files and 2,222 passing tests before
+  exposing one stale test-only exact runtime export list. The focused RED
+  showed only the already-public `DeliveryShutdownTimeoutError` and
+  `DeliverySupervisor` runtime values as missing expectations.
+- Added exactly those two runtime value names to `packages/server/test/index.test.ts`.
+  No type-only expectation, production code, public inventory, documentation,
+  or verification gate changed.
+- Focused verification passed `index.test.ts`, 10/10 tests, followed by
+  generated build/tooling typecheck, touched-file Prettier, and diff hygiene.
+- No child agent, commit, push, merge, install, review-disposition edit, or
+  unrelated/protected edit was performed.
+
+## Focused Full-Gate Coverage Correction — 2026-07-23
+
+- Existing role/profile remained the explicitly dispatched `implementer`,
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection remained unavailable;
+  no visible fallback or mismatch was exposed.
+- Retained LCOV guided behavior-focused boundary tests for supervisor option
+  validation and lifecycle idempotency, Admin watch admission and late-update
+  handling, non-`Error` abort normalization, uniform target validation, and
+  atomic retry after an injected owner lacks scopes.
+- Focused verification passed all four touched suites: 4 files / 141 tests.
+- The first exact full coverage command was blocked only by sandbox loopback
+  and IPC permissions. The same permission-enabled command,
+  `pnpm --config.verify-deps-before-run=false test:coverage:generated`, then
+  passed 110 files with 3 skipped and 2,238 tests with 21 skipped.
+- Exact branch coverage is 7,023/7,797 (90.07%), a gain of 20 covered branches
+  from the 7,003/7,797 (89.81%) baseline and above the practical 90.05% target.
+  Statements are 13,111/13,913 (94.23%), functions 3,270/3,441 (95.03%), and
+  lines 12,570/13,271 (94.71%).
+- The batch gained 20 rather than the aspirational 25 branches. Remaining
+  task-owned misses are complex internal concurrency/state-race paths; the
+  required gate and practical target were achieved without production,
+  threshold, exclusion, or public-contract changes.
+- No child agent, commit, push, merge, install, review-disposition edit, or
+  unrelated/protected edit was performed.
+
+## Orchestrator Final Gate — 2026-07-23
+
+- The first final full-gate attempt exposed one deterministic lint error in the
+  new finite-update test helper after generated Proto, typecheck, and cleanup
+  checks had passed. The helper now returns an explicit async iterator instead
+  of a no-await async generator; production and public declarations are
+  unchanged.
+- Focused ESLint and Prettier checks passed, followed by 29/29 supervisor tests.
+- The complete final `pnpm --config.verify-deps-before-run=false verify` rerun
+  passed 110 files / 2,238 tests, 7,023/7,797 branches (90.07%), frozen Proto
+  and generated-output checks, typecheck, lint, cleanup, formatting,
+  TypeDoc/API inventory, documentation, and release readiness.
