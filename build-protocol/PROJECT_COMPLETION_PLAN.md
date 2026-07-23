@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release complete; post-release JVM parity Wave 1 closure active
+Status: Initial release and post-release JVM parity Wave 1 complete
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0067 Documentation, upstream delta audit, and Wave 1 closure
+Active implementation frontier: none; Wave 2 awaits its required human Q&A and approved plan
 
 ## Purpose
 
@@ -54,9 +54,10 @@ part of the accepted release. The temporary readiness reopening is closed.
 
 The accepted initial release remains complete. On `2026-07-22`, the human
 opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
-Wave 1. The human subsequently started Wave 1; T-0053 through T-0066 are
-integrated, post-merge verified, and pushed. T-0067 is the active closure
-frontier for documentation, audit, review, and final verification.
+Wave 1. The human subsequently started Wave 1; T-0053 through T-0067 are
+implemented, reviewed, integrated, post-merge verified, and remotely
+synchronized at their closure boundaries. Wave 2 must not start before its
+required human Q&A and approved plan.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a
@@ -76,8 +77,8 @@ Wave 1 uses frozen `core-java` commit
 commit `21f2901f393e552208b97166f4eaeb942f9f5172`. Only the upstream
 `simple-server` module is in scope, and the TypeScript server is in-memory only.
 Redis, Hazelcast, human admin interfaces, and other delivery-server modules are
-not Wave 1 work. A final relevant upstream-delta audit is required before Wave
-1 closure.
+not Wave 1 work. The final upstream-delta audit found no delivery-server delta;
+current core-java changes are the already deferred Wave 2 recent-history work.
 
 ## Authority And Reconciliation Rules
 

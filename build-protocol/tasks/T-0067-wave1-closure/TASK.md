@@ -1,6 +1,6 @@
 # T-0067: Wave 1 Documentation And Closure
 
-Status: implementation, reviews, and full verification complete; integration pending.
+Status: complete; integrated and post-merge verified.
 
 Baseline: `893d8756`
 

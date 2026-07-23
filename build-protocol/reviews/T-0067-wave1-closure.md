@@ -1,6 +1,6 @@
 # T-0067 Review Record
 
-Status: all required concerns clean; full repository verification passed.
+Status: accepted; all required concerns and post-merge verification clean.
 
 Baseline: `893d8756`
 

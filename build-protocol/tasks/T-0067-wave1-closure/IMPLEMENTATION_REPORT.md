@@ -1,6 +1,6 @@
 # T-0067 Implementation Report
 
-Status: implementation, reviews, and full verification complete; integration pending.
+Status: accepted, integrated, and post-merge verified.
 
 ## Scope and behavior
 
