@@ -3,11 +3,29 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryShutdownTimeoutError,
   DeliverySupervisor,
+  type Delivery,
   type DeliveryRunOptions,
   ShardIndex,
 } from "../../src/index.js";
 
 describe("DeliverySupervisor", () => {
+  it("rejects an unqualified plain run port", () => {
+    expect(
+      () =>
+        new DeliverySupervisor({
+          source: {
+            shardSnapshot: () => Promise.resolve([]),
+            observeShardUpdates: () => emptyUpdates(),
+            releaseExpired: () => Promise.resolve([]),
+          },
+          delivery: {
+            run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+          } as never,
+          onMessage: () => Promise.resolve(),
+        }),
+    ).toThrow("DeliverySupervisor requires a Delivery built by DeliveryBuilder.");
+  });
+
   it("runs a notified shard through one controlled epoch", async () => {
     let calls = 0;
     const supervisor = new DeliverySupervisor({
@@ -16,12 +34,12 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: {
+      delivery: qualifiedDelivery({
         run: () => {
           calls += 1;
           return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
         },
-      },
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -98,14 +116,14 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: {
+      delivery: qualifiedDelivery({
         run: async ({ shard }) => {
           const selected = requireShard(shard);
           seen.push(selected.index);
           if (selected.index === 0) await first.promise;
           return { status: "COMPLETED" as const, pages: [] };
         },
-      },
+      }),
       onMessage: () => Promise.resolve(),
       concurrency: 1,
       pendingLimit: 1,
@@ -135,12 +153,12 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: {
+      delivery: qualifiedDelivery({
         run: ({ shard }) => {
           seen.push(requireShard(shard).index);
           return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
         },
-      },
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -157,12 +175,16 @@ describe("DeliverySupervisor", () => {
       source: {
         shardSnapshot: () => {
           snapshots += 1;
-          return Promise.resolve([{ shard: newShard(0), status: "NOT_PICKED" as const, messages: 1 }]);
+          return Promise.resolve([
+            { shard: newShard(0), status: "NOT_PICKED" as const, messages: 1 },
+          ]);
         },
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.reject(new Error("outcome unknown")),
       },
-      delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -191,6 +213,31 @@ describe("DeliverySupervisor", () => {
     await supervisor.whenIdle();
   });
 
+  it("drops retained queued work when close stops admission", async () => {
+    const first = Promise.withResolvers<undefined>();
+    const seen: number[] = [];
+    const supervisor = supervisorFor(
+      {
+        run: async ({ shard }) => {
+          const selected = requireShard(shard);
+          seen.push(selected.index);
+          if (selected.index === 0) await first.promise;
+          return { status: "COMPLETED", pages: [] };
+        },
+      },
+      { concurrency: 1, pendingLimit: 1 },
+    );
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    supervisor.notify(newShard(1));
+    const closing = supervisor.close({ graceMs: 100 });
+    first.resolve(undefined);
+    await closing;
+
+    expect(seen).toEqual([0]);
+  });
+
   it("restarts a failed Admin watch with one bounded backoff timer", async () => {
     vi.useFakeTimers();
     try {
@@ -204,7 +251,9 @@ describe("DeliverySupervisor", () => {
           },
           releaseExpired: () => Promise.resolve([]),
         },
-        delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+        delivery: qualifiedDelivery({
+          run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+        }),
         onMessage: () => Promise.resolve(),
         watchInitialBackoffMs: 10,
         watchMaxBackoffMs: 10,
@@ -232,7 +281,9 @@ describe("DeliverySupervisor", () => {
           return releases === 2 ? Promise.reject(new Error("release failed")) : Promise.resolve([]);
         },
       },
-      delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -264,7 +315,9 @@ describe("DeliverySupervisor", () => {
           });
         },
       },
-      delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -273,6 +326,70 @@ describe("DeliverySupervisor", () => {
       DeliveryShutdownTimeoutError,
     );
     expect(aborted).toBe(true);
+  });
+
+  it("does not overlap close cleanup with a noncooperative recovery release", async () => {
+    const release = Promise.withResolvers<readonly unknown[]>();
+    let releases = 0;
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+        releaseExpired: () => {
+          releases += 1;
+          return release.promise;
+        },
+      },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+
+    const starting = supervisor.start();
+    await Promise.resolve();
+    await expect(supervisor.close({ graceMs: 0 })).rejects.toBeInstanceOf(
+      DeliveryShutdownTimeoutError,
+    );
+    expect(releases).toBe(1);
+
+    release.resolve([]);
+    await starting;
+    await expect(supervisor.close({ graceMs: 10 })).resolves.toBeUndefined();
+    expect(releases).toBe(1);
+  });
+
+  it("reuses a timed-out noncooperative cleanup until it settles", async () => {
+    const cleanup = Promise.withResolvers<readonly unknown[]>();
+    let releases = 0;
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+        releaseExpired: () => {
+          releases += 1;
+          return releases === 1 ? Promise.resolve([]) : cleanup.promise;
+        },
+      },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+
+    await supervisor.start();
+    await expect(supervisor.close({ graceMs: 0 })).rejects.toBeInstanceOf(
+      DeliveryShutdownTimeoutError,
+    );
+    await expect(supervisor.close({ graceMs: 0 })).rejects.toBeInstanceOf(
+      DeliveryShutdownTimeoutError,
+    );
+    expect(releases).toBe(2);
+
+    cleanup.resolve([]);
+    await Promise.resolve();
+    await expect(supervisor.close({ graceMs: 10 })).resolves.toBeUndefined();
+    expect(releases).toBe(2);
   });
 
   it("cancels the Admin watch as soon as close stops admission", async () => {
@@ -286,7 +403,9 @@ describe("DeliverySupervisor", () => {
         },
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -306,7 +425,9 @@ describe("DeliverySupervisor", () => {
           observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
           releaseExpired: () => Promise.resolve([]),
         },
-        delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+        delivery: qualifiedDelivery({
+          run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+        }),
         onMessage: () => Promise.resolve(),
         recoveryMs: 10,
       });
@@ -334,7 +455,9 @@ describe("DeliverySupervisor", () => {
             : Promise.reject(Object.assign(new Error("private payload"), { actor: "private" }));
         },
       },
-      delivery: { run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }) },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+      }),
       onMessage: () => Promise.resolve(),
     });
 
@@ -358,7 +481,7 @@ function supervisorFor(
       observeShardUpdates: () => emptyUpdates(),
       releaseExpired: () => Promise.resolve([]),
     },
-    delivery,
+    delivery: qualifiedDelivery(delivery),
     onMessage: () => Promise.resolve(),
     ...bounds,
   });
@@ -366,6 +489,15 @@ function supervisorFor(
 
 function newShard(index: number): ShardIndex {
   return new ShardIndex(index, 3);
+}
+
+function qualifiedDelivery(delivery: {
+  run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
+}): Delivery {
+  return Object.freeze({
+    ...delivery,
+    runControlled: delivery.run,
+  }) as unknown as Delivery;
 }
 
 function requireShard(shard: ShardIndex | undefined): ShardIndex {

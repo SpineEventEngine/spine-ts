@@ -103,7 +103,12 @@ export class DeliveryLoop {
   async #admitEpoch(summary: DeliveryLoopSummary): Promise<DeliveryLoopRun | undefined> {
     if (this.#epoch === undefined) {
       this.#progress = loopProgress();
-      this.#epoch = await DeliveryEpoch.admit(this.#delivery, this.#shard, this.#admission.after);
+      this.#epoch = await DeliveryEpoch.admit(
+        this.#delivery,
+        this.#shard,
+        this.#admission.after,
+        this.#operation,
+      );
     }
     return this.#isStopped() ? this.#finish(summary, terminalTransition("STOPPED")) : undefined;
   }
@@ -364,11 +369,13 @@ class DeliveryEpoch {
     delivery: Delivery,
     shard: ShardIndex,
     initialAfter: InboxReadContinuation | undefined,
+    operation: DeliveryOperationOptions | undefined,
   ): Promise<DeliveryEpoch> {
     const messages = await delivery.inbox.read(shard, {
       statuses: ["TO_DELIVER"],
       limit: inboxStorageAccess.maxReadLimit,
       ...(initialAfter === undefined ? {} : { after: initialAfter }),
+      ...(operation ?? {}),
     });
     const last = messages.at(-1);
     const nextAdmissionAfter =

@@ -206,9 +206,9 @@ Current slice exposes:
   for process-manager command rows, process-manager event reaction rows, and
   live projection subscriber rows; their package-internal replay endpoints can
   also serve rows drained later by a delivery loop. This slice explicitly
-  excludes transport topology, worker supervision, retry monitors,
+  excludes remote transport topology, fleet supervision, retry monitors,
   conveyor/stations, generic repository invocation, projection catch-up through
-  inbox storage, broad production lifecycle, durable catch-up storage, and
+  inbox storage, durable catch-up storage, and
   example app work. Event import and aggregate importers are
   removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
   handlers are ordinary generated reactor handlers with current transaction
@@ -217,21 +217,31 @@ Current slice exposes:
 ### Public delivery runs
 
 `DeliverySupervisor` is the bounded production owner for notifications over a
-structural remote source. It accepts a `Delivery`-compatible `run()` port and a
-source with the same `shardSnapshot`, `observeShardUpdates`, and
-`releaseExpired` operations as `@spine-ts/delivery-client`; the server package
-does not import that client package. `start()` takes an initial snapshot and
-keeps one bounded recovery timer. Notifications for an active shard coalesce to
-one follow-up run, while pending distinct shards are bounded. `close()` stops
-admission and aborts controlled callers; a grace expiry reports
-`DeliveryShutdownTimeoutError`. Own the supervisor in the process lifecycle:
-start it after endpoint readiness and close it before its source client and
-storage. The source is trusted-network infrastructure; delivery remains
-at-least-once, and abort cannot preempt a synchronous endpoint. Remote mutable
-operations are never automatically retried after an unknown outcome. This small
-scheduler does not promise durable supervisor state, topology failover, or
-exactly-once endpoint effects, and it exposes no public scheduler or internal
-run-control type.
+structural remote source. It accepts a `DeliveryBuilder`-created `Delivery`; a
+forged `run()`-only object is rejected because it cannot honor controlled
+shutdown fencing. Its source has the same `shardSnapshot`,
+`observeShardUpdates`, and `releaseExpired` operations as
+`@spine-ts/delivery-client`; the server package does not import that client
+package. `start()` takes an initial snapshot and keeps one bounded recovery
+timer. Notifications for an active shard coalesce to one follow-up run, while
+pending distinct shards are bounded. `close()` stops admission and aborts
+controlled callers. It bounds active-work grace and stale-release cleanup as
+separate phases, both using `graceMs`; a cleanup failure takes precedence over
+an active-work timeout, so timeout is reported as
+`DeliveryShutdownTimeoutError` only when no cleanup failure takes precedence.
+Own the supervisor in the process lifecycle: start it after endpoint readiness
+and close it before its source client and storage. The source is trusted-network
+infrastructure; delivery remains at-least-once, and abort cannot preempt a
+synchronous endpoint. Remote mutable operations are never automatically retried
+after an unknown outcome. This small scheduler does not promise durable
+supervisor state, topology failover, or exactly-once endpoint effects, and it
+exposes no public scheduler or internal run-control type.
+
+Built context environments create and start one supervisor per exact
+storage/context/tenant runtime. The existing startup coordinator owns initial
+attachment evidence once; after readiness transfer, notifications and periodic
+local recovery route through the runtime supervisor. Environment stop and
+retirement close those supervisors before storage lifecycle completion.
 
 `DeliveryBuilder` assembles one immutable local delivery view. Omitted storage
 and node values resolve from `ServerEnvironment.instance()`; fully explicit

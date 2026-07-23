@@ -548,7 +548,14 @@ export class Delivery {
     requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      const action = await this.#markExhaustedDelivered(inbox, message, retry, lease, active);
+      const action = await this.#markExhaustedDelivered(
+        inbox,
+        message,
+        retry,
+        lease,
+        active,
+        deliveryOperationFence(undefined),
+      );
       await this.#recordExhaustedActionFailure(attempts, message, action);
       if (action.kind === "SKIPPED") {
         return deliveryRun("DRAINED", 1, 0, 0, 0, []);
@@ -634,11 +641,11 @@ export class Delivery {
     retry: DeliveryRetryDecision,
     lease: ShardLeaseKeeper,
     active: ActiveWork,
+    fence: DeliveryOperationFence,
   ): Promise<DeliveryMessageResult> {
     const failure: { stage: DeliveryFailureStage } = { stage: "CLAIM" };
 
     try {
-      const fence = deliveryOperationFence(undefined);
       const work = await this.#beginMessageDelivery(inbox, message, lease, fence);
       if (work === undefined) {
         return { kind: "SKIPPED" };
@@ -659,7 +666,7 @@ export class Delivery {
 
       return { kind: "DELIVERED" };
     } catch (error) {
-      const cleanup = await this.#clearFailedWork(error, active);
+      const cleanup = await this.#clearFailedWork(error, active, fence.options);
       const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : failure.stage;
       const failureError =
         failedStage === "STATUS_UPDATE" ? retryExhaustedMarkFailure(retry) : cleanup.error;
@@ -785,7 +792,14 @@ export class Delivery {
     requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
-      const action = await this.#markExhaustedDelivered(inbox, message, retry, lease, active);
+      const action = await this.#markExhaustedDelivered(
+        inbox,
+        message,
+        retry,
+        lease,
+        active,
+        fence,
+      );
       await this.#recordExhaustedActionFailure(attempts, message, action);
       progress.recordExhausted(message, action);
       return;
@@ -1299,9 +1313,10 @@ function keepShardLease(
   let current = session;
   let failed: unknown;
   let renewing: Promise<void> | undefined;
+  let stopped = false;
   const interval = setInterval(
     () => {
-      if (renewing !== undefined) {
+      if (stopped || renewing !== undefined) {
         return;
       }
 
@@ -1328,13 +1343,21 @@ function keepShardLease(
   if (typeof interval.unref === "function") {
     interval.unref();
   }
+  const stopRenewal = (): void => {
+    if (!stopped) {
+      stopped = true;
+      clearInterval(interval);
+    }
+  };
+  options.operation?.signal?.addEventListener("abort", stopRenewal, { once: true });
 
   return Object.freeze({
     async awaitRenewal() {
       await renewing;
     },
     async close() {
-      clearInterval(interval);
+      stopRenewal();
+      options.operation?.signal?.removeEventListener("abort", stopRenewal);
       await renewing;
     },
     requireActive() {

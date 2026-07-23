@@ -8,7 +8,10 @@ import {
   type DeliveryRunScope,
   type DeliveryRunWorker,
 } from "../delivery/delivery-run-coordinator.js";
-import { Delivery } from "../delivery/delivery.js";
+import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
+import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
+import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
+import { DeliverySupervisor, type DeliveryShardUpdate } from "../delivery/delivery-supervisor.js";
 import type { DeliveryWorkerEvidence } from "../delivery/delivery-worker.js";
 import { DeliveryWorker } from "../delivery/delivery-worker.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -26,6 +29,7 @@ export interface EnvironmentDeliveryRuntime {
 /** @internal Generation worker plus failed-registration owner retirement. */
 export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
   add(runtime: EnvironmentDeliveryRuntime): void;
+  notify?(scope: DeliveryRunScope): void;
   stopOwners(ownerKeys: readonly string[]): void;
   awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void>;
   retireOwners(ownerKeys: readonly string[]): Promise<void>;
@@ -34,6 +38,7 @@ export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
 /** @internal Routes each owner-partitioned obligation to its exact runtime worker. */
 export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
+  readonly #supervisors = new Map<string, RuntimeDeliverySupervisor>();
   readonly #stoppedOwners = new Set<string>();
   readonly #createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
 
@@ -46,6 +51,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       throw new Error("Environment delivery owner is already configured.");
     }
     this.#workers.set(runtime.owner.key, this.#createWorker(runtime));
+    const supervisor = createDeliverySupervisor(runtime);
+    this.#supervisors.set(runtime.owner.key, supervisor);
+    void supervisor.start();
   }
 
   start(
@@ -57,7 +65,17 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     if (worker === undefined) {
       return Promise.reject(new Error("Environment delivery owner is not configured."));
     }
-    return worker.start(obligation, shards);
+    return worker.start(obligation, shards).then(async (evidence) => {
+      await this.#requiredSupervisor(owner.key).start();
+      return evidence;
+    });
+  }
+
+  notify(scope: DeliveryRunScope): void {
+    if (this.#stoppedOwners.has(scope.owner.key)) {
+      return;
+    }
+    this.#requiredSupervisor(scope.owner.key).notify(scope.ready.shard);
   }
 
   stop(): void {
@@ -68,6 +86,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       }
       try {
         worker.stop();
+        this.#requiredSupervisor(key).stop();
         this.#stoppedOwners.add(key);
       } catch (error) {
         failures.push(error);
@@ -77,13 +96,17 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   }
 
   async awaitSettled(): Promise<void> {
-    await Promise.all(Array.from(this.#workers.values(), (worker) => worker.awaitSettled()));
+    await Promise.all([
+      ...Array.from(this.#workers.values(), (worker) => worker.awaitSettled()),
+      ...Array.from(this.#supervisors.values(), (supervisor) => supervisor.awaitSettled()),
+    ]);
   }
 
   async retire(): Promise<void> {
-    const settled = await Promise.allSettled(
-      Array.from(this.#workers.values(), (worker) => worker.retire()),
-    );
+    const settled = await Promise.allSettled([
+      ...Array.from(this.#workers.values(), (worker) => worker.retire()),
+      ...Array.from(this.#supervisors.values(), (supervisor) => supervisor.retire()),
+    ]);
     const failures: unknown[] = [];
     for (const result of settled) {
       if (result.status === "rejected") {
@@ -106,20 +129,36 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
         continue;
       }
       worker.stop();
+      this.#requiredSupervisor(key).stop();
       this.#stoppedOwners.add(key);
     }
   }
 
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
-    const selected = ownerKeys.map((key) => ({ worker: this.#requiredWorker(key) }));
-    await Promise.all(selected.map(({ worker }) => worker.awaitSettled()));
+    const selected = ownerKeys.map((key) => ({
+      worker: this.#requiredWorker(key),
+      supervisor: this.#requiredSupervisor(key),
+    }));
+    await Promise.all(
+      selected.flatMap(({ worker, supervisor }) => [
+        worker.awaitSettled(),
+        supervisor.awaitSettled(),
+      ]),
+    );
   }
 
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
-    const selected = ownerKeys.map((key) => ({ key, worker: this.#requiredWorker(key) }));
-    const retired = await Promise.allSettled(selected.map(({ worker }) => worker.retire()));
+    const selected = ownerKeys.map((key) => ({
+      key,
+      worker: this.#requiredWorker(key),
+      supervisor: this.#requiredSupervisor(key),
+    }));
+    const retired = await Promise.allSettled(
+      selected.flatMap(({ worker, supervisor }) => [worker.retire(), supervisor.retire()]),
+    );
     for (const { key } of selected) {
       this.#workers.delete(key);
+      this.#supervisors.delete(key);
       this.#stoppedOwners.delete(key);
     }
     const failures = retired.flatMap((result) =>
@@ -134,6 +173,14 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       throw new Error("Environment delivery owner is not configured.");
     }
     return worker;
+  }
+
+  #requiredSupervisor(key: string): RuntimeDeliverySupervisor {
+    const supervisor = this.#supervisors.get(key);
+    if (supervisor === undefined) {
+      throw new Error("Environment delivery owner is not configured.");
+    }
+    return supervisor;
   }
 }
 
@@ -153,6 +200,134 @@ function createDeliveryWorker(runtime: EnvironmentDeliveryRuntime): DeliveryRunW
     onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
   });
   return deliveryRunWorker(worker);
+}
+
+function createDeliverySupervisor(runtime: EnvironmentDeliveryRuntime): RuntimeDeliverySupervisor {
+  const shards = uniqueShards(runtime.scopes);
+  const first = shards[0];
+  if (first === undefined || shards.some((shard) => shard.ofTotal !== first.ofTotal)) {
+    throw new Error("Environment delivery shards require one configured shard total.");
+  }
+  const delivery = new DeliveryBuilder()
+    .withContext(runtime.context)
+    .withStorageFactory(runtime.storageFactory)
+    .withStrategy(UniformAcrossAllShards.forNumber(first.ofTotal))
+    .withNode(runtime.context.name)
+    .build();
+  return new RuntimeDeliverySupervisor({
+    delivery,
+    shards,
+    onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
+  });
+}
+
+class RuntimeDeliverySupervisor {
+  readonly #source: LocalDeliverySource;
+  readonly #supervisor: DeliverySupervisor;
+  #start: Promise<void> | undefined;
+  #stopped = false;
+  #close: Promise<void> | undefined;
+
+  constructor(options: {
+    readonly delivery: ReturnType<DeliveryBuilder["build"]>;
+    readonly shards: readonly ShardIndex[];
+    readonly onMessage: OnDeliveryMessage;
+  }) {
+    this.#source = new LocalDeliverySource(options.shards);
+    this.#supervisor = new DeliverySupervisor({
+      source: this.#source,
+      delivery: options.delivery,
+      onMessage: options.onMessage,
+    });
+  }
+
+  start(): Promise<void> {
+    if (this.#stopped) {
+      return Promise.reject(new Error("Environment delivery supervisor is stopped."));
+    }
+    if (this.#start === undefined) {
+      this.#start = this.#supervisor.start().then(() => {
+        this.#source.enableRecovery();
+      });
+    }
+    return this.#start;
+  }
+
+  notify(shard: ShardIndex): void {
+    if (this.#stopped) return;
+    void this.start().then(() => {
+      this.#supervisor.notify(shard);
+    });
+  }
+
+  stop(): void {
+    if (this.#stopped) return;
+    this.#stopped = true;
+    this.#close = this.#supervisor.close();
+    void this.#close.catch(() => undefined);
+  }
+
+  async awaitSettled(): Promise<void> {
+    await this.#start;
+    await this.#close;
+  }
+
+  async retire(): Promise<void> {
+    this.stop();
+    await this.awaitSettled();
+  }
+}
+
+class LocalDeliverySource {
+  readonly #shards: readonly ShardIndex[];
+  #recoveryEnabled = false;
+
+  constructor(shards: readonly ShardIndex[]) {
+    this.#shards = shards;
+  }
+
+  enableRecovery(): void {
+    this.#recoveryEnabled = true;
+  }
+
+  shardSnapshot(): Promise<readonly DeliveryShardUpdate[]> {
+    return Promise.resolve(
+      this.#recoveryEnabled
+        ? this.#shards.map((shard) => ({ shard, status: "NOT_PICKED" as const, messages: 1 }))
+        : [],
+    );
+  }
+
+  observeShardUpdates(options?: DeliveryOperationOptions): AsyncIterable<never> {
+    return updatesUntilAborted(options?.signal);
+  }
+
+  releaseExpired(): Promise<readonly unknown[]> {
+    return Promise.resolve([]);
+  }
+}
+
+function updatesUntilAborted(signal: AbortSignal | undefined): AsyncIterable<never> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<never> {
+      return {
+        next: () =>
+          new Promise<IteratorResult<never>>((resolve) => {
+            if (signal?.aborted) {
+              resolve({ done: true, value: undefined as never });
+              return;
+            }
+            signal?.addEventListener(
+              "abort",
+              () => {
+                resolve({ done: true, value: undefined as never });
+              },
+              { once: true },
+            );
+          }),
+      };
+    },
+  };
 }
 
 function soleOwner(scopes: readonly DeliveryRunScope[]): DeliveryRunOwner {

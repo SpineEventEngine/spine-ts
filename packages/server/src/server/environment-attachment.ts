@@ -1333,7 +1333,9 @@ class DeliveryGeneration {
     if (transferredReadiness !== undefined) {
       readiness.rebind(
         (descriptor, ready) => this.#prepareReady(descriptor, ready, ownership, claim.token),
-        (scope) => this.#coordinator?.notify(scope),
+        (scope) => {
+          this.#notify(scope);
+        },
       );
     }
     this.#registrations.set(claim.token, {
@@ -1390,7 +1392,9 @@ class DeliveryGeneration {
     readiness.rebindDescriptor(
       descriptor,
       (candidate, ready) => this.#prepareReady(candidate, ready, ownership, claim.token),
-      (scope) => this.#coordinator?.notify(scope),
+      (scope) => {
+        this.#notify(scope);
+      },
     );
     this.#descriptors.add(descriptor);
     return Promise.resolve(registration.scopes);
@@ -1643,6 +1647,14 @@ class DeliveryGeneration {
     await this.retireRegistration(token);
   }
 
+  #notify(scope: DeliveryRunScope): void {
+    if (this.#worker.notify === undefined) {
+      this.#coordinator?.notify(scope);
+      return;
+    }
+    this.#worker.notify(scope);
+  }
+
   #readiness(
     registration: AssembledRegistration,
     ownership: RegistrationOwnership,
@@ -1651,7 +1663,9 @@ class DeliveryGeneration {
     return new RegistrationReadiness(
       registration.descriptors,
       (descriptor, ready) => this.#prepareReady(descriptor, ready, ownership, token),
-      (scope) => this.#coordinator?.notify(scope),
+      (scope) => {
+        this.#notify(scope);
+      },
     );
   }
 

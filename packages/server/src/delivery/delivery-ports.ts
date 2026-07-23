@@ -10,7 +10,9 @@ import type { ShardSession } from "./sharded-work-registry.js";
 
 /** Cancellation and per-call deadline propagated through delivery port work. */
 export interface DeliveryOperationOptions {
+  /** Cooperative cancellation propagated through reads, mutations, lease work, and completion. */
   readonly signal?: AbortSignal;
+  /** Positive safe-integer operation deadline in milliseconds, measured from admission. */
   readonly timeoutMs?: number;
 }
 

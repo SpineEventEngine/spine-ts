@@ -13,7 +13,11 @@ describe("DeliveryRunControl", () => {
         calls += 1;
         return Promise.resolve({ status: "COMPLETED", pages: [] });
       },
-    });
+      runControlled: () => {
+        calls += 1;
+        return Promise.resolve({ status: "COMPLETED", pages: [] });
+      },
+    } as never);
 
     await expect(
       control.run({
@@ -28,7 +32,10 @@ describe("DeliveryRunControl", () => {
   it("rejects a controlled caller on abort while observing a detached late settlement", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
-    const control = new DeliveryRunControl({ run: () => settled.promise });
+    const control = new DeliveryRunControl({
+      run: () => settled.promise,
+      runControlled: () => settled.promise,
+    } as never);
 
     const running = control.run({
       shard: new ShardIndex(0, 1),
@@ -44,7 +51,10 @@ describe("DeliveryRunControl", () => {
   it("rejects a controlled caller before a detached late rejection", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
-    const control = new DeliveryRunControl({ run: () => settled.promise });
+    const control = new DeliveryRunControl({
+      run: () => settled.promise,
+      runControlled: () => settled.promise,
+    } as never);
 
     const running = control.run({
       shard: new ShardIndex(0, 1),

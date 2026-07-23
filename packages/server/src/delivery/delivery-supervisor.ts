@@ -1,25 +1,44 @@
 import type { OnDeliveryMessage } from "./delivery.js";
+import type { Delivery } from "./delivery-builder.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
-import { DeliveryRunControl, type DeliveryRunPort } from "./delivery-run-control.js";
+import { DeliveryRunControl } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 
 /** A detached shard update consumed by {@link DeliverySupervisor}. */
 export interface DeliveryShardUpdate {
+  /** Shard whose detached delivery status changed. */
   readonly shard: ShardIndex;
+  /** Current remote pickup state used for fail-closed admission. */
   readonly status: "PICKED" | "NOT_PICKED";
+  /** Non-negative remote message count; only positive counts are admitted. */
   readonly messages: number;
 }
 
 /** Structural remote source required by {@link DeliverySupervisor}. */
 export interface DeliverySource {
+  /**
+   * Read one detached shard snapshot for startup or recovery.
+   * The optional signal/deadline controls this read only; cancellation is cooperative.
+   */
   shardSnapshot(options?: DeliveryOperationOptions): Promise<readonly DeliveryShardUpdate[]>;
+  /**
+   * Observe detached Admin shard updates until completion, cancellation, or failure.
+   * The supervisor owns bounded reconnect and passes its lifecycle signal.
+   */
   observeShardUpdates(options?: DeliveryOperationOptions): AsyncIterable<DeliveryShardUpdate>;
-  releaseExpired(inactivityMs: number, options?: DeliveryOperationOptions): Promise<readonly unknown[]>;
+  /**
+   * Release sessions older than `inactivityMs` as one non-retried mutation.
+   * Rejection or timeout is never treated as successful release.
+   */
+  releaseExpired(
+    inactivityMs: number,
+    options?: DeliveryOperationOptions,
+  ): Promise<readonly unknown[]>;
 }
 
 export type { DeliveryOperationOptions } from "./delivery-ports.js";
 
-/** Raised when a supervisor fences still-active delivery after bounded close grace. */
+/** Raised when active delivery or release cleanup exceeds its bounded close phase. */
 export class DeliveryShutdownTimeoutError extends Error {
   constructor() {
     super("Delivery supervisor shutdown timed out.");
@@ -27,8 +46,11 @@ export class DeliveryShutdownTimeoutError extends Error {
   }
 }
 
-/** Minimal local delivery port used by the supervisor. */
-export type SupervisedDelivery = DeliveryRunPort;
+/**
+ * Public builder-owned delivery accepted by the supervisor.
+ * Runtime validation rejects structurally forged `run()`-only values.
+ */
+export type SupervisedDelivery = Delivery;
 
 /** Owns bounded local delivery admission and remote shard observation. */
 export class DeliverySupervisor {
@@ -64,9 +86,18 @@ export class DeliverySupervisor {
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
     this.#concurrency = requireBound("Delivery supervisor concurrency", options.concurrency ?? 1);
-    this.#pendingLimit = requireBound("Delivery supervisor pending limit", options.pendingLimit ?? 100);
-    this.#recoveryMs = requireBound("Delivery supervisor recovery interval", options.recoveryMs ?? 30_000);
-    this.#staleMs = requireBound("Delivery supervisor stale session interval", options.staleMs ?? 60_000);
+    this.#pendingLimit = requireBound(
+      "Delivery supervisor pending limit",
+      options.pendingLimit ?? 100,
+    );
+    this.#recoveryMs = requireBound(
+      "Delivery supervisor recovery interval",
+      options.recoveryMs ?? 30_000,
+    );
+    this.#staleMs = requireBound(
+      "Delivery supervisor stale session interval",
+      options.staleMs ?? 60_000,
+    );
     this.#watchInitialBackoffMs = requireBound(
       "Delivery supervisor watch initial backoff",
       options.watchInitialBackoffMs ?? 100,
@@ -76,12 +107,17 @@ export class DeliverySupervisor {
       options.watchMaxBackoffMs ?? 30_000,
     );
     if (this.#watchMaxBackoffMs < this.#watchInitialBackoffMs) {
-      throw new Error("Delivery supervisor watch maximum backoff must not be smaller than initial backoff.");
+      throw new Error(
+        "Delivery supervisor watch maximum backoff must not be smaller than initial backoff.",
+      );
     }
     this.#watchBackoffMs = this.#watchInitialBackoffMs;
   }
 
-  /** Start accepting local shard notifications and remote observation. */
+  /**
+   * Run initial stale release and snapshot recovery, then accept notifications and observation.
+   * Repeated successful calls are idempotent; starting after close is rejected.
+   */
   async start(): Promise<void> {
     if (this.#closing || this.#closed) throw new Error("Delivery supervisor is closed.");
     if (this.#started) return;
@@ -91,7 +127,10 @@ export class DeliverySupervisor {
     this.#startWatch();
   }
 
-  /** Coalesce one local or remote notification for a shard. */
+  /**
+   * Coalesce one local or remote notification for a shard.
+   * Calls before start or after close are ignored; capacity overflow requests one rescan.
+   */
   notify(shard: ShardIndex): void {
     if (!this.#started || this.#closing || this.#closed) return;
     const key = shardKey(shard);
@@ -103,7 +142,7 @@ export class DeliverySupervisor {
     void this.#run(shard, key).catch(() => undefined);
   }
 
-  /** Resolve when no admitted or coalesced shard work remains. */
+  /** Resolve when no active or retained pending shard work remains. */
   whenIdle(): Promise<void> {
     if (this.#active.size === 0 && this.#pending.size === 0) return Promise.resolve();
     const gate = Promise.withResolvers<undefined>();
@@ -115,8 +154,9 @@ export class DeliverySupervisor {
   }
 
   /**
-   * Stop admission, cancel source activity, and fence active epochs after grace.
-   * A failed release cleanup remains checkpointed for a later close call.
+   * Stop admission and source activity, wait one bounded active-work grace phase, then fence runs.
+   * A separate release-cleanup phase uses the same bound. Cleanup failure takes precedence over
+   * an active-work timeout; incomplete cleanup is retained for a later close retry.
    */
   close(options: DeliverySupervisorCloseOptions = {}): Promise<void> {
     if (this.#closed) return Promise.resolve();
@@ -159,19 +199,29 @@ export class DeliverySupervisor {
   async #releaseOnce(timeoutMs: number): Promise<void> {
     if (this.#releaseConfirmed) return;
     const controller = new AbortController();
-    const attempt = this.#source.releaseExpired(this.#staleMs, { signal: controller.signal }).then(() => {
+    const attempt = this.#releaseExpired({ signal: controller.signal }).then(() => {
       this.#releaseConfirmed = true;
     });
-    this.#releaseAttempt = attempt;
     try {
       await waitForIdle(attempt, timeoutMs);
     } catch (error) {
       controller.abort(new Error("Delivery supervisor release cleanup timed out."));
       void attempt.catch(() => undefined);
       throw error;
-    } finally {
-      if (this.#releaseAttempt === attempt) this.#releaseAttempt = undefined;
     }
+  }
+
+  #releaseExpired(options: DeliveryOperationOptions): Promise<void> {
+    const active = this.#releaseAttempt;
+    if (active !== undefined) return active;
+    const attempt = this.#source.releaseExpired(this.#staleMs, options).then(() => undefined);
+    this.#releaseAttempt = attempt;
+    void attempt
+      .finally(() => {
+        if (this.#releaseAttempt === attempt) this.#releaseAttempt = undefined;
+      })
+      .catch(() => undefined);
+    return attempt;
   }
 
   async #run(shard: ShardIndex, key: string): Promise<void> {
@@ -203,7 +253,7 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed) return;
     try {
       // Release is a mutation: a rejection is not treated as a successful release.
-      await this.#source.releaseExpired(this.#staleMs, { signal: this.#sourceController.signal });
+      await this.#releaseExpired({ signal: this.#sourceController.signal });
       const shards = await this.#source.shardSnapshot({ signal: this.#sourceController.signal });
       for (const shard of shards) {
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
@@ -233,7 +283,9 @@ export class DeliverySupervisor {
   async #watch(): Promise<void> {
     let failed = false;
     try {
-      for await (const shard of this.#source.observeShardUpdates({ signal: this.#sourceController.signal })) {
+      for await (const shard of this.#source.observeShardUpdates({
+        signal: this.#sourceController.signal,
+      })) {
         if (this.#closing || this.#closed) return;
         this.#watchBackoffMs = this.#watchInitialBackoffMs;
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
@@ -296,22 +348,35 @@ export class DeliverySupervisor {
 
 /** Construction options for {@link DeliverySupervisor}. */
 export interface DeliverySupervisorOptions {
+  /** Structural Admin source; mutable releases are serialized and never blindly retried. */
   readonly source: DeliverySource;
+  /** Delivery returned by {@link DeliveryBuilder.build}; forged `run()`-only ports are rejected. */
   readonly delivery: SupervisedDelivery;
+  /** Framework endpoint invoked for each supported admitted delivery row. */
   readonly onMessage: OnDeliveryMessage;
+  /** Positive safe-integer active-shard limit. Defaults to `1`. */
   readonly concurrency?: number;
+  /** Positive safe-integer retained pending-shard limit. Defaults to `100`. */
   readonly pendingLimit?: number;
+  /** Positive safe-integer periodic recovery delay in milliseconds. Defaults to `30000`. */
   readonly recoveryMs?: number;
+  /** Positive safe-integer stale-session age in milliseconds. Defaults to `60000`. */
   readonly staleMs?: number;
-  /** Initial bounded delay before reconnecting a completed or failed watch. */
+  /** Positive safe-integer initial watch reconnect delay. Defaults to `100` milliseconds. */
   readonly watchInitialBackoffMs?: number;
-  /** Maximum bounded delay before reconnecting a completed or failed watch. */
+  /**
+   * Positive safe-integer maximum watch reconnect delay. Defaults to `30000` milliseconds and
+   * must not be smaller than `watchInitialBackoffMs`.
+   */
   readonly watchMaxBackoffMs?: number;
 }
 
 /** Bounded close controls for {@link DeliverySupervisor}. */
 export interface DeliverySupervisorCloseOptions {
-  /** Milliseconds to await active work before it is fenced from future outcomes. */
+  /**
+   * Non-negative safe-integer bound used separately for active work and release cleanup.
+   * Defaults to `30000` milliseconds. A zero value fences without waiting.
+   */
   readonly graceMs?: number;
 }
 
@@ -320,12 +385,14 @@ function shardKey(shard: ShardIndex): string {
 }
 
 function requireBound(name: string, value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive safe integer.`);
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new Error(`${name} must be a positive safe integer.`);
   return value;
 }
 
 function requireGrace(value: number): void {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error("Delivery close grace must be a safe integer.");
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new Error("Delivery close grace must be a safe integer.");
 }
 
 function waitForIdle(idle: Promise<void>, graceMs: number): Promise<void> {

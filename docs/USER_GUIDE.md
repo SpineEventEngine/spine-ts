@@ -806,12 +806,20 @@ retry policy, catch-up facility, or remote topology.
 
 ### Production delivery supervision
 
-`DeliverySupervisor` owns bounded process-local admission for a `Delivery`
-port. Pair one supervisor with one lifecycle owner, start it after its local
-delivery endpoints are ready, and close it before closing the source client or
-storage it uses. `DeliveryClient` is structurally compatible with the
-supervisor source; `@spine-ts/server` does not depend on
-`@spine-ts/delivery-client`.
+`DeliverySupervisor` owns bounded process-local admission for a
+`DeliveryBuilder`-created `Delivery`. Pair one supervisor with one lifecycle
+owner, start it after its local delivery endpoints are ready, and close it
+before closing the source client or storage it uses. A forged `run()`-only
+object is rejected because it cannot honor controlled shutdown fencing.
+`DeliveryClient` is structurally compatible with the supervisor source;
+`@spine-ts/server` does not depend on `@spine-ts/delivery-client`.
+
+Built context environments create and start one supervisor for each exact
+storage/context/tenant runtime. Initial attachment recovery remains in the
+existing startup coordinator so it produces the established evidence once;
+after readiness transfer, notifications and periodic local recovery belong to
+that runtime supervisor. Environment stop and retirement close those
+supervisors before their storage lifecycle ends.
 
 ```ts
 import { DeliveryClient } from "@spine-ts/delivery-client";
@@ -848,13 +856,18 @@ to one follow-up drain; active and pending distinct shards are bounded by
 capacity is full is not retained. It instead requests one bounded rescan, so a
 later capacity/recovery pass can rediscover it from `shardSnapshot()`.
 
-The supervisor cancels its Admin watch and recovery activity during close,
-waits only through the configured grace, fences late delivery outcomes, and
-retries only unfinished stale-session release on a later `close()` call. It
-does not make endpoint effects exactly once: an endpoint may have run before a
-lease or shutdown fence takes effect, so endpoint side effects must remain
-at-least-once/replay-safe. Abort and deadline handling is cooperative between
-durable checkpoints; JavaScript cannot preempt a synchronous endpoint.
+The supervisor cancels its Admin watch and recovery activity during close. It
+first gives active delivery up to `graceMs` to settle, then fences late delivery
+outcomes. It separately gives stale-session release cleanup up to `graceMs`;
+these are two bounded phases, not one combined deadline. A cleanup rejection
+takes precedence over an active-work timeout, while unfinished cleanup remains
+owned for a later `close()` retry. Therefore
+`DeliveryShutdownTimeoutError` identifies a bounded phase timeout only when no
+cleanup failure takes precedence. The supervisor does not make endpoint effects
+exactly once: an endpoint may have run before a lease or shutdown fence takes
+effect, so endpoint side effects must remain at-least-once/replay-safe. Abort
+and deadline handling is cooperative between durable checkpoints; JavaScript
+cannot preempt a synchronous endpoint.
 
 The remote delivery service and client are for a trusted network only. Read
 operations may use their configured bounded retries, but mutable delivery RPCs

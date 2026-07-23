@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 
-import { Delivery } from "../../src/delivery/delivery.js";
+import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
+import { deliveryAttemptCapacity } from "../../src/delivery/delivery-attempts.js";
 import {
   DeliveryBuilder,
   DeliveryShutdownTimeoutError,
@@ -11,10 +12,12 @@ import type {
   DeliveryInbox,
   DeliveryInboxWork,
   DeliveryOperationOptions,
+  DeliveryWorkSession,
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
+import { ShardSession } from "../../src/delivery/sharded-work-registry.js";
 
 describe("Delivery operation fencing", () => {
   it("does not durably complete a row when its operation is aborted while its endpoint is pending", async () => {
@@ -76,16 +79,127 @@ describe("Delivery operation fencing", () => {
 
     expect(inbox.completed).toBe(0);
   });
+
+  it("stops a real delivery lease timer on abort before a blocked endpoint settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const started = Promise.withResolvers<undefined>();
+      const endpoint = Promise.withResolvers<undefined>();
+      const inbox = new FencedInbox("LEASED");
+      const registry = new RenewableRegistry();
+      const delivery = new Delivery({
+        context: { name: "lease-fencing", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        inbox,
+        workRegistry: registry,
+        leaseMs: 1_000,
+      });
+      const supervisor = new DeliverySupervisor({
+        source: {
+          shardSnapshot: () => Promise.resolve([]),
+          observeShardUpdates: () => emptyUpdates(),
+          releaseExpired: () => Promise.resolve([]),
+        },
+        delivery,
+        onMessage: () => {
+          started.resolve(undefined);
+          return endpoint.promise;
+        },
+      });
+
+      await supervisor.start();
+      supervisor.notify(ShardIndex.single());
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(500);
+      expect(registry.renewals).toBe(1);
+
+      await expect(supervisor.close({ graceMs: 0 })).rejects.toBeInstanceOf(
+        DeliveryShutdownTimeoutError,
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(registry.renewals).toBe(1);
+
+      endpoint.resolve(undefined);
+      await vi.runAllTimersAsync();
+      expect(registry.releases).toBe(1);
+      expect(inbox.completed).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("propagates the supervisor operation into initial epoch admission", async () => {
+    const inbox = new OperationRecordingInbox();
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "admission-fencing", multitenant: false })
+      .withStorageFactory(new InMemoryStorageFactory())
+      .withInbox(inbox)
+      .withWorkRegistry(new FencedRegistry())
+      .withNode("node")
+      .build();
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+        releaseExpired: () => Promise.resolve([]),
+      },
+      delivery,
+      onMessage: () => Promise.resolve(),
+    });
+
+    await supervisor.start();
+    supervisor.notify(ShardIndex.single());
+    await supervisor.whenIdle();
+
+    expect(inbox.readSignal).toBeInstanceOf(AbortSignal);
+    await supervisor.close();
+  });
+
+  it("fences exhausted-row completion when synchronization aborts the operation", async () => {
+    const controller = new AbortController();
+    const inbox = new AbortOnSynchronizeInbox(controller);
+    const delivery = new Delivery({
+      context: { name: "exhausted-fencing", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox,
+      workRegistry: new FencedRegistry(),
+    });
+    for (let sequence = 1; sequence <= deliveryAttemptCapacity; sequence += 1) {
+      await delivery.attempts.recordFailure({
+        message: message() as DeliveryEndpointMessage,
+        node: `node-${String(sequence)}`,
+        attemptedAt: new Date(sequence),
+        accepted: true,
+        stage: "ENDPOINT",
+        reason: "ENDPOINT_REJECTED",
+      });
+    }
+
+    await expect(
+      delivery.runControlled({
+        shard: ShardIndex.single(),
+        signal: controller.signal,
+        onMessage: () => Promise.resolve(),
+      }),
+    ).resolves.toMatchObject({ status: "FAILED" });
+
+    expect(inbox.completed).toBe(0);
+  });
 });
 
 class FencedInbox implements DeliveryInbox {
-  readonly sessionKind = "EXCLUSIVE" as const;
+  readonly sessionKind: DeliveryWorkSession["kind"];
   completed = 0;
   readonly #message = message();
+  constructor(sessionKind: DeliveryWorkSession["kind"] = "EXCLUSIVE") {
+    this.sessionKind = sessionKind;
+  }
   receive(): Promise<never> {
     throw new Error("unused");
   }
-  read(): Promise<readonly InboxMessage[]> {
+  read(_shard?: ShardIndex, _options?: DeliveryOperationOptions): Promise<readonly InboxMessage[]> {
+    void _shard;
+    void _options;
     return Promise.resolve([this.#message]);
   }
   readMessage(): Promise<InboxMessage | undefined> {
@@ -113,6 +227,75 @@ class FencedRegistry implements DeliveryWorkRegistry {
   release() {
     return Promise.resolve(true);
   }
+}
+
+class RenewableRegistry implements DeliveryWorkRegistry {
+  readonly sessionKind = "LEASED" as const;
+  renewals = 0;
+  releases = 0;
+  #session = session(1_000);
+
+  pickUp(): Promise<ShardSession> {
+    return Promise.resolve(this.#session);
+  }
+
+  renew(): Promise<ShardSession> {
+    this.renewals += 1;
+    this.#session = session(1_000);
+    return Promise.resolve(this.#session);
+  }
+
+  release(): Promise<boolean> {
+    this.releases += 1;
+    return Promise.resolve(true);
+  }
+}
+
+class OperationRecordingInbox extends FencedInbox {
+  readSignal: AbortSignal | undefined;
+
+  override read(
+    _shard: ShardIndex,
+    options?: DeliveryOperationOptions,
+  ): Promise<readonly InboxMessage[]> {
+    this.readSignal = options?.signal;
+    return Promise.resolve([]);
+  }
+}
+
+class AbortOnSynchronizeInbox extends FencedInbox {
+  readonly #controller: AbortController;
+
+  constructor(controller: AbortController) {
+    super();
+    this.#controller = controller;
+  }
+
+  override begin(): Promise<DeliveryInboxWork> {
+    return Promise.resolve({
+      message: message(),
+      synchronize: () => {
+        this.#controller.abort(new Error("stop exhausted completion"));
+        return Promise.resolve();
+      },
+      complete: () => {
+        this.completed += 1;
+        return Promise.resolve(true);
+      },
+      abandon: () => Promise.resolve(),
+    });
+  }
+}
+
+function session(leaseMs: number): ShardSession {
+  const now = Date.now();
+  return new ShardSession(
+    "lease",
+    ShardIndex.single(),
+    "node",
+    new Date(now),
+    new Date(now + leaseMs),
+  );
 }
 
 function message(): InboxMessage {
