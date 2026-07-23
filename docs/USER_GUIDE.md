@@ -804,6 +804,70 @@ terminal hooks run after release. Returning `false` from `onPage` yields
 an acquired shard reusable. This is deliberately not a scheduler, supervisor,
 retry policy, catch-up facility, or remote topology.
 
+### Production delivery supervision
+
+`DeliverySupervisor` owns bounded process-local admission for a `Delivery`
+port. Pair one supervisor with one lifecycle owner, start it after its local
+delivery endpoints are ready, and close it before closing the source client or
+storage it uses. `DeliveryClient` is structurally compatible with the
+supervisor source; `@spine-ts/server` does not depend on
+`@spine-ts/delivery-client`.
+
+```ts
+import { DeliveryClient } from "@spine-ts/delivery-client";
+import { DeliveryBuilder, DeliverySupervisor } from "@spine-ts/server";
+
+const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
+const delivery = new DeliveryBuilder().withNode("worker-a").build();
+const supervisor = new DeliverySupervisor({
+  source: client,
+  delivery,
+  onMessage(message) {
+    // Dispatch through framework-owned endpoint wiring.
+    void message;
+    return Promise.resolve();
+  },
+  concurrency: 4,
+  pendingLimit: 100,
+  recoveryMs: 30_000,
+  staleMs: 60_000,
+});
+
+await supervisor.start();
+try {
+  // Keep the process running while notifications and periodic recovery drain work.
+} finally {
+  await supervisor.close({ graceMs: 5_000 });
+  client.close();
+}
+```
+
+One shard has at most one active drain. Notifications for that shard coalesce
+to one follow-up drain; active and pending distinct shards are bounded by
+`concurrency` and `pendingLimit`. An unseen shard that arrives after pending
+capacity is full is not retained. It instead requests one bounded rescan, so a
+later capacity/recovery pass can rediscover it from `shardSnapshot()`.
+
+The supervisor cancels its Admin watch and recovery activity during close,
+waits only through the configured grace, fences late delivery outcomes, and
+retries only unfinished stale-session release on a later `close()` call. It
+does not make endpoint effects exactly once: an endpoint may have run before a
+lease or shutdown fence takes effect, so endpoint side effects must remain
+at-least-once/replay-safe. Abort and deadline handling is cooperative between
+durable checkpoints; JavaScript cannot preempt a synchronous endpoint.
+
+The remote delivery service and client are for a trusted network only. Read
+operations may use their configured bounded retries, but mutable delivery RPCs
+(including pickup, release, and stale-session release) are never retried
+automatically after an unknown result. Reconcile a `DeliveryOutcomeUnknownError`
+with the client’s prescribed observation/read operation instead.
+
+T-0063 deliberately excludes the in-memory delivery-server state/services
+(T-0064), standalone configuration (T-0065), multi-process parity (T-0066),
+Redis, Hazelcast, durable delivery-server persistence, and live TypeScript/JVM
+compatibility (Wave 3). It exposes no public scheduler or internal run-control
+API.
+
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and

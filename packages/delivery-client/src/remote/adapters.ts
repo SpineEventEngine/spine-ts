@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type {
   DeliveryInbox,
   DeliveryInboxWork,
+  DeliveryOperationOptions,
   DeliveryWorkRegistry,
   DeliveryWorkSession,
   ExclusiveDeliveryWorkSession,
@@ -47,15 +48,18 @@ export class RemoteInbox implements DeliveryInbox {
     Object.freeze(this);
   }
 
-  async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+  async receive(
+    input: InboxMessageInput,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxWriteResult> {
     const message = receiveMessage(input);
-    await this.client.writeOne(message);
+    await this.client.writeOne(message, options);
     return freeze({ outcome: "WRITTEN" as const, message });
   }
 
   async read(
     shardIndex: ShardIndex,
-    options: InboxReadOptions = {},
+    options: InboxReadOptions & DeliveryOperationOptions = {},
   ): Promise<readonly InboxMessage[]> {
     if (options.offset !== undefined && options.offset !== 0) throw new DeliveryPagingError();
     const limit = options.limit === undefined ? this.client.pageSize : pageSize(options.limit);
@@ -65,6 +69,8 @@ export class RemoteInbox implements DeliveryInbox {
     while (result.length < limit) {
       const page = await this.client.readPage(shardIndex, {
         pageSize: limit,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
         ...(after === undefined ? {} : { sinceWhen: after.whenReceived }),
       });
       const start = after === undefined ? 0 : exactAfter(page, after);
@@ -91,37 +97,41 @@ export class RemoteInbox implements DeliveryInbox {
     return Object.freeze(result);
   }
 
-  readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
-    return this.client.findOne(id);
+  readMessage(
+    id: InboxMessageId,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.client.findOne(id, options);
   }
 
   async begin(
     message: InboxMessage,
     session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
   ): Promise<DeliveryInboxWork | undefined> {
     if (session.kind !== "EXCLUSIVE" || !sameShard(session.shard, message.shard)) return undefined;
     const key = inboxKey(message);
     const quarantined = await quarantineGet(this.quarantine, key);
     if (quarantined !== undefined) {
-      const current = await this.client.findOne(message.id);
+      const current = await this.client.findOne(message.id, options);
       if (current === undefined) {
         await quarantineDelete(this.quarantine, key);
         return undefined;
       }
       if (quarantined.fingerprint !== fingerprint(current)) return undefined;
       if (quarantined.phase === "ADMITTED") return undefined;
-      await this.client.removeOne(current);
+      await this.client.removeOne(current, options);
       await quarantineDelete(this.quarantine, key);
       return undefined;
     }
-    const current = await this.client.findOne(message.id);
+    const current = await this.client.findOne(message.id, options);
     if (current?.status !== "TO_DELIVER" || !sameMessage(current, message)) return undefined;
     await quarantinePut(this.quarantine, {
       id: key,
       phase: "ADMITTED",
       fingerprint: fingerprint(current),
     });
-    return new RemoteInboxWork(this.client, current, this.quarantine);
+    return new RemoteInboxWork(this.client, current, this.quarantine, options);
   }
 }
 
@@ -131,12 +141,14 @@ class RemoteInboxWork implements DeliveryInboxWork {
     private readonly client: DeliveryClient,
     private readonly snapshot: InboxMessage,
     private readonly quarantine: RemovalQuarantine,
+    private readonly operation: DeliveryOperationOptions | undefined,
   ) {}
   get message(): InboxMessage {
     if (!this.#active) throw new DeliveryProtocolError();
     return snapshotInboxMessage(this.snapshot);
   }
-  synchronize(session: DeliveryWorkSession): Promise<void> {
+  synchronize(session: DeliveryWorkSession, _options?: DeliveryOperationOptions): Promise<void> {
+    void _options;
     if (
       !this.#active ||
       session.kind !== "EXCLUSIVE" ||
@@ -145,19 +157,20 @@ class RemoteInboxWork implements DeliveryInboxWork {
       return Promise.reject(new DeliveryProtocolError());
     return Promise.resolve();
   }
-  async complete(): Promise<boolean> {
+  async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
     await quarantinePut(this.quarantine, {
       id: inboxKey(this.snapshot),
       phase: "REMOVING",
       fingerprint: fingerprint(this.snapshot),
     });
-    await this.client.removeOne(this.snapshot);
+    await this.client.removeOne(this.snapshot, options ?? this.operation);
     await quarantineDelete(this.quarantine, inboxKey(this.snapshot));
     this.#active = false;
     return true;
   }
-  abandon(): Promise<void> {
+  abandon(_options?: DeliveryOperationOptions): Promise<void> {
+    void _options;
     return Promise.resolve();
   }
 }
@@ -176,12 +189,13 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   async pickUp(
     shardIndex: ShardIndex,
     node: string,
+    options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     const key = shardKey(shardIndex);
     if (this.#quarantined.has(key)) return undefined;
     let remote: RemoteShardSession | undefined;
     try {
-      remote = await this.client.pickUp(shardIndex, workerFor(node));
+      remote = await this.client.pickUp(shardIndex, workerFor(node), options);
     } catch (error) {
       if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
       throw error;
@@ -194,7 +208,10 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     this.#sessionsByShard.set(key, sessions);
     return session;
   }
-  async release(session: DeliveryWorkSession): Promise<boolean> {
+  async release(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
     if (session.kind !== "EXCLUSIVE") return false;
     const remote = this.#sessions.get(session);
     if (remote === undefined) return false;
@@ -205,7 +222,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     this.#releasesInFlight.add(key);
     this.#quarantined.add(key);
     try {
-      await this.client.release(remote);
+      await this.client.release(remote, options);
       this.#quarantined.delete(key);
       return true;
     } finally {

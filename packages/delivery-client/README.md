@@ -154,3 +154,7 @@ may mutate returned `Date` and byte values, but those mutations cannot affect la
 results, quarantine exact-snapshot checks, or internal state. It limits decoded payloads to
 1 MiB and every serialized unary request/response to 4 MiB. Batches are limited
 to 100 messages; pages are limited to 1,000 messages (100 by default).
+Its `shardSnapshot()`, `observeShardUpdates()`, and
+`releaseExpired(inactivityMs, options?)` methods also satisfy the structural
+source consumed by `DeliverySupervisor` in `@spine-ts/server`; no server-side
+dependency on this package is required.

@@ -11,6 +11,7 @@ import {
 import { InboxRecords } from "./inbox-records.js";
 import type { InboxMessage, InboxReadContinuation } from "./inbox.js";
 import type { ShardIndex } from "./shard-index.js";
+import type { DeliveryOperationOptions } from "./delivery-ports.js";
 
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
 export class DeliveryLoop {
@@ -21,6 +22,7 @@ export class DeliveryLoop {
   readonly #maxFailures: number;
   readonly #onMessage: OnDeliveryMessage;
   readonly #onStarted: (() => void) | undefined;
+  readonly #operation: DeliveryOperationOptions | undefined;
   readonly #admission = new DeliveryAdmissionSweep();
   #epoch: DeliveryEpoch | undefined;
   #progress = loopProgress();
@@ -42,6 +44,7 @@ export class DeliveryLoop {
     );
     this.#onMessage = options.onMessage;
     this.#onStarted = options.onStarted;
+    this.#operation = options.operation;
     deliveryLoopInternals.set(this, { progress: () => this.#progress });
     Object.freeze(this);
   }
@@ -183,6 +186,7 @@ export class DeliveryLoop {
         node: this.#node,
         onMessage: this.#onMessage,
         limit,
+        ...(this.#operation === undefined ? {} : { operation: this.#operation }),
       },
       {
         maxFailures: remainingFailures,
@@ -247,6 +251,8 @@ export interface DeliveryLoopOptions {
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: OnDeliveryMessage;
+  /** Optional operation cancellation/deadline propagated to every drain port call. */
+  readonly operation?: DeliveryOperationOptions;
   /** Optional package-owned observation after successful shard pickup. */
   readonly onStarted?: () => void;
 }

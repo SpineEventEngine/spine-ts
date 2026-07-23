@@ -258,6 +258,13 @@ class BuiltDelivery implements Delivery {
   run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#core.run(options);
   }
+
+  /** @internal Forward package-owned run fencing without widening the public Delivery contract. */
+  runControlled(
+    options: import("./delivery-run-control.js").DeliveryControlledRun,
+  ): Promise<DeliveryResult> {
+    return this.#core.runControlled(options);
+  }
 }
 
 function requireDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {

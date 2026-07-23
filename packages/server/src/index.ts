@@ -62,6 +62,15 @@ export {
   UniformAcrossAllShards,
 } from "./delivery/delivery-builder.js";
 export {
+  DeliverySupervisor,
+  DeliveryShutdownTimeoutError,
+  type DeliveryOperationOptions,
+  type DeliveryShardUpdate,
+  type DeliverySource,
+  type DeliverySupervisorOptions,
+  type DeliverySupervisorCloseOptions,
+} from "./delivery/delivery-supervisor.js";
+export {
   Inbox,
   type DeliveryLabel,
   type DeliveryStatus,

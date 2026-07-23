@@ -216,6 +216,23 @@ Current slice exposes:
 
 ### Public delivery runs
 
+`DeliverySupervisor` is the bounded production owner for notifications over a
+structural remote source. It accepts a `Delivery`-compatible `run()` port and a
+source with the same `shardSnapshot`, `observeShardUpdates`, and
+`releaseExpired` operations as `@spine-ts/delivery-client`; the server package
+does not import that client package. `start()` takes an initial snapshot and
+keeps one bounded recovery timer. Notifications for an active shard coalesce to
+one follow-up run, while pending distinct shards are bounded. `close()` stops
+admission and aborts controlled callers; a grace expiry reports
+`DeliveryShutdownTimeoutError`. Own the supervisor in the process lifecycle:
+start it after endpoint readiness and close it before its source client and
+storage. The source is trusted-network infrastructure; delivery remains
+at-least-once, and abort cannot preempt a synchronous endpoint. Remote mutable
+operations are never automatically retried after an unknown outcome. This small
+scheduler does not promise durable supervisor state, topology failover, or
+exactly-once endpoint effects, and it exposes no public scheduler or internal
+run-control type.
+
 `DeliveryBuilder` assembles one immutable local delivery view. Omitted storage
 and node values resolve from `ServerEnvironment.instance()`; fully explicit
 storage and node configuration does not resolve or lock the singleton.

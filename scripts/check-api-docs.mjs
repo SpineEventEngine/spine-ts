@@ -336,8 +336,15 @@ const expectedServerExports = [
   "DeliveryPage",
   "DeliveryResult",
   "DeliveryRunOptions",
+  "DeliveryOperationOptions",
+  "DeliveryShardUpdate",
+  "DeliveryShutdownTimeoutError",
+  "DeliverySource",
   "DeliveryStorageCorruptionError",
   "DeliveryStrategy",
+  "DeliverySupervisor",
+  "DeliverySupervisorCloseOptions",
+  "DeliverySupervisorOptions",
   "DeliveryStatus",
   "UniformAcrossAllShards",
   "createRoutingPlan",
@@ -894,6 +901,18 @@ const missingDeclaredStorageExports = expectedStorageExports.filter(
 const unexpectedServerExports = declaredServerExports.filter(
   (name) => !expectedServerExports.includes(name),
 );
+const forbiddenServerExports = [
+  "DeliveryControlledRun",
+  "DeliveryRunControl",
+  "DeliveryRunPort",
+  "DeliveryScheduler",
+];
+const forbiddenDeclaredServerExports = forbiddenServerExports.filter((name) =>
+  declaredServerExports.includes(name),
+);
+const forbiddenDocumentedServerExports = forbiddenServerExports.filter((name) =>
+  serverModuleNames.has(name),
+);
 const unexpectedStorageExports = declaredStorageExports.filter(
   (name) => !expectedStorageExports.includes(name),
 );
@@ -1000,6 +1019,14 @@ if (missingDeclaredServerExports.length > 0) {
 if (unexpectedServerExports.length > 0) {
   console.error(
     `@spine-ts/server root exports changed without updating docs expectations: ${unexpectedServerExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (forbiddenDeclaredServerExports.length > 0 || forbiddenDocumentedServerExports.length > 0) {
+  console.error(
+    "@spine-ts/server must not expose internal scheduler/run-control API: " +
+      [...forbiddenDeclaredServerExports, ...forbiddenDocumentedServerExports].join(", "),
   );
   process.exit(1);
 }
