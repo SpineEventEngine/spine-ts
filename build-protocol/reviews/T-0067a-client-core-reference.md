@@ -1,6 +1,6 @@
 # T-0067a Review Record
 
-Status: accepted; required reviews are clean.
+Status: closed; merged and post-merge verified on `main`.
 
 Baseline: `4e3b43d6`
 
@@ -48,3 +48,10 @@ acceptance.
 - Cleaned every TypeScript composite output and passed
   `typecheck:build:generated` from scratch.
 - Exact-file Prettier and `git diff --check` passed.
+
+## Integration Closure
+
+- Correction commit `4341b359` was pushed on
+  `task/T-0067a-client-core-reference` and fast-forwarded into `main`.
+- Post-merge verification cleaned every TypeScript composite output and passed
+  `typecheck:build:generated` on merged `main`.

@@ -1,6 +1,6 @@
 # T-0067a: Client-to-Core Build Reference
 
-Status: accepted; ready for commit and integration.
+Status: closed; merged and post-merge verified on `main`.
 
 Baseline: `4e3b43d6`
 
