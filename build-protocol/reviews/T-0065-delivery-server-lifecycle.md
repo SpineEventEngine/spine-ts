@@ -1,6 +1,6 @@
 # T-0065 Review Record
 
-Status: Accepted; full verification passed
+Status: Closed; merged into `main` and post-merge verified
 
 Baseline: `ad2950e9`
 
@@ -124,3 +124,13 @@ Human-Imposed Requirements Ledger, and must not spawn subagents.
 - Generated build/tooling typechecks, ESLint, cleanup, Prettier, TypeDoc/API
   inventory, Proto checksum/descriptor/lint/drift checks, and release-readiness
   all passed.
+
+## Integration Closure
+
+- Task commit `0acb1494` was pushed to
+  `origin/task/T-0065-delivery-server-lifecycle`.
+- `main` fast-forwarded from `ad2950e9` to `0acb1494` without disturbing the
+  unrelated root worktree changes.
+- Post-merge generated-build and tooling typechecks passed on `main`.
+- Post-merge delivery-server verification passed 15 files / 56 tests with native
+  loopback permissions.
