@@ -320,3 +320,19 @@ README.md`, `scripts/check-api-docs.mjs`, this report, and the T-0063 work
   server exports, and diff hygiene all passed.
 - No child agent, commit, push, merge, dependency installation, review
   disposition edit, gate weakening, or unrelated/protected edit was performed.
+
+## Final Mechanical Test-Fixture Cleanup — 2026-07-23
+
+- Existing role/profile remained the explicit `implementer`,
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection remained unavailable;
+  no visible fallback or mismatch was exposed.
+- Removed the atomic-construction test's duplicate private-constructor cast and
+  worker-selection closure. The centralized `environmentDeliveryWorkerFixture`
+  now accepts an optional storage-context override, so both the invalid and
+  valid setup attempts use the same injection path as the other lifecycle
+  tests. Production code, public contracts, documentation, and behavior were
+  unchanged.
+- Verification passed: `environment-attachment.test.ts`, 75/75 tests;
+  generated build/tooling typecheck; touched-file Prettier; and diff hygiene.
+- No child agent, commit, push, merge, install, review-disposition edit, or
+  unrelated/protected edit was performed.

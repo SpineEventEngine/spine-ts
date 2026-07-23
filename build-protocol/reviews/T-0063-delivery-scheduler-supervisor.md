@@ -1,6 +1,6 @@
 # T-0063 Review Record
 
-Status: Final targeted batch verified — narrow P1 closure review ready
+Status: Converged — all required concerns clean
 
 ## Scope
 
@@ -11,10 +11,10 @@ T-0061/T-0062 ports, compared with baseline `f2558ec5`.
 
 | Concern                          | Status              | Reason                                                                            |
 | -------------------------------- | ------------------- | --------------------------------------------------------------------------------- |
-| Style and maintainability        | Required; pending   | New production orchestration modules and state machines.                          |
-| Documentation completeness       | Required; pending   | New lifecycle, configuration, failure, and resource-bound claims.                 |
-| TypeScript and API compatibility | Required; pending   | New public runtime seams and declaration behavior are expected.                   |
-| Performance and reliability      | Required; pending   | Bounded concurrency, cancellation, leases, retries, timers, fencing, and cleanup. |
+| Style and maintainability        | Clean               | All P1/P2 findings resolved; final mechanical fixture cleanup verified.           |
+| Documentation completeness       | Clean               | Exact close phases, error precedence, lifecycle, limits, and exclusions verified. |
+| TypeScript and API compatibility | Clean               | Nominal private capability; declarations/snippets and 224-export inventory clean. |
+| Performance and reliability      | Clean               | Fencing, leases, release serialization, lifecycle, and resource tests clean.      |
 | Final security                   | N/A for this packet | Deferred to T-0067 unless a security-critical blocker is discovered.              |
 
 ## Review Dispatch Gate
@@ -203,3 +203,37 @@ third complete wave is opened. Explicit expected profiles before dispatch:
 Runtime metadata or the immutable configured profile plus unavailable
 self-introspection will be recorded before acceptance. Any remaining P1 is
 fixed immediately; otherwise these targeted results close the specialist gate.
+
+## Narrow Closure Results
+
+Runtime self-introspection was unavailable; all immutable configured reviewers
+matched their explicit `gpt-5.6-terra` / `high` dispatches with no visible
+fallback.
+
+- TypeScript/API: clean. Builder-private nominal capability rejects forged
+  controlled values, deep imports are blocked, real builder values work, and
+  the 224-export public surface is unchanged.
+- Performance/reliability: clean. Paired whole/selected stop and retirement
+  attempt both sides, checkpoint/retry correctly, aggregate failures, and stop
+  delivery after failure; 75 environment tests passed.
+- Style/maintainability: every prior P1 is resolved. One P2 remains only in
+  `environment-attachment.test.ts`: the new invalid-context atomic-construction
+  test duplicates a private-constructor assertion/injection setup already
+  centralized in the file's existing fixture. Extend that fixture and remove
+  the duplicate unsafe cast.
+
+The P2 is accepted and returns as one test-only mechanical correction. Focused
+tests, TypeScript, formatting, and diff hygiene prove it; no specialist lane is
+reopened because production behavior, public API, and claimed semantics do not
+change.
+
+## Mechanical P2 Closure And Convergence
+
+- The duplicated unsafe test injection was removed. The existing centralized
+  fixture now accepts the invalid-context override through one maintenance
+  path; no production, public API, or documentation behavior changed.
+- Independent environment attachment verification passed 75/75 tests, followed
+  by generated build/tooling typecheck and diff hygiene.
+- No P0/P1 remains, every accepted P2 is resolved, the sole P3 was absorbed
+  into release ownership, and all four required concerns are clean. Final
+  security remains N/A here and stays reserved for T-0067.

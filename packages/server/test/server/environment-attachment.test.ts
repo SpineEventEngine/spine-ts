@@ -330,41 +330,17 @@ describe("EnvironmentDeliveryWorker", () => {
   it("leaves no partial owner when supervisor construction fails", async () => {
     const firstRuntimeWorker = new LifecycleWorker();
     const secondRuntimeWorker = new LifecycleWorker();
-    let next = 0;
-    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
-      readonly createWorker: () => DeliveryRunWorker;
-    }) => EnvironmentDeliveryWorker;
-    const worker = new WorkerWithOptions({
-      createWorker: () => {
-        const selected = [firstRuntimeWorker, secondRuntimeWorker][next];
-        next += 1;
-        if (selected === undefined) throw new Error("Unexpected runtime worker creation.");
-        return selected;
-      },
-    });
+    const fixture = environmentDeliveryWorkerFixture(firstRuntimeWorker, secondRuntimeWorker);
+    const { worker } = fixture;
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("AtomicOwner", "type.example.dev/AtomicOwner", storageFactory);
     const scope = runScope("atomic-owner", target.ready);
 
     expect(() => {
-      worker.add({
-        owner: scope.owner,
-        descriptor: target.value,
-        storageFactory,
-        tenant: {},
-        context: { ...target.context, name: "" },
-        scopes: [scope],
-      });
+      fixture.add(target, scope, { ...target.context, name: "" });
     }).toThrow("Delivery storage context name must be a non-empty string.");
     expect(() => {
-      worker.add({
-        owner: scope.owner,
-        descriptor: target.value,
-        storageFactory,
-        tenant: {},
-        context: target.context,
-        scopes: [scope],
-      });
+      fixture.add(target, scope);
     }).not.toThrow();
 
     worker.stop();
@@ -3268,13 +3244,17 @@ function environmentDeliveryWorkerFixture(...runtimeWorkers: readonly DeliveryRu
 
   return {
     worker,
-    add(descriptor: TestDescriptor, scope: DeliveryRunScope): void {
+    add(
+      descriptor: TestDescriptor,
+      scope: DeliveryRunScope,
+      context: StorageContext = descriptor.context,
+    ): void {
       worker.add({
         owner: scope.owner,
         descriptor: descriptor.value,
         storageFactory: descriptor.value.storageFactory,
         tenant: {},
-        context: descriptor.context,
+        context,
         scopes: [scope],
       });
     },
