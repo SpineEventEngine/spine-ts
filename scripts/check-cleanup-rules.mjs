@@ -72,6 +72,11 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     ],
     ["createInMemoryStorageAdapter", "packages/storage/src/index.ts", 237],
     [
+      "createInMemoryDeliveryServerCore",
+      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+      27,
+    ],
+    [
       "createSetOnceTransitionRule",
       "packages/server/src/entity/entity-transition-validation.ts",
       96,
@@ -108,6 +113,16 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       388,
     ],
     ["InMemoryAggregateEventStore", "packages/storage/src/index.ts", 354],
+    [
+      "InMemoryDeliveryServerCore",
+      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+      18,
+    ],
+    [
+      "InMemoryDeliveryServerCoreOptions",
+      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+      10,
+    ],
     ["InMemoryDiagnosticRecordStore", "packages/storage/src/index.ts", 414],
     ["InMemoryTenantIndexStore", "packages/storage/src/index.ts", 400],
     [

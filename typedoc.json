@@ -4,6 +4,7 @@
     "packages/proto/src/index.ts",
     "packages/client/src/index.ts",
     "packages/delivery-client/src/index.ts",
+    "packages/delivery-server/src/index.ts",
     "packages/core/src/index.ts",
     "packages/server/src/index.ts",
     "packages/transport/src/index.ts",

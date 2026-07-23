@@ -206,6 +206,11 @@ const expectedDeliveryClientExports = [
   "RemovalQuarantine",
   "RemovalQuarantineRecord",
 ];
+const expectedDeliveryServerExports = [
+  "createInMemoryDeliveryServerCore",
+  "InMemoryDeliveryServerCore",
+  "InMemoryDeliveryServerCoreOptions",
+];
 const expectedStorageExports = [
   "EventStore",
   "EventRollback",
@@ -519,6 +524,7 @@ const expectedServerExports = [
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const clientIndexPath = join("packages", "client", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
+const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
@@ -559,6 +565,7 @@ const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
+const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -867,6 +874,7 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
+const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
@@ -888,6 +896,15 @@ const missingDeclaredDeliveryClientExports = expectedDeliveryClientExports.filte
 );
 const unexpectedDeliveryClientExports = declaredDeliveryClientExports.filter(
   (name) => !expectedDeliveryClientExports.includes(name),
+);
+const missingDeliveryServerExports = expectedDeliveryServerExports.filter(
+  (name) => !deliveryServerModuleNames.has(name),
+);
+const missingDeclaredDeliveryServerExports = expectedDeliveryServerExports.filter(
+  (name) => !declaredDeliveryServerExports.includes(name),
+);
+const unexpectedDeliveryServerExports = declaredDeliveryServerExports.filter(
+  (name) => !expectedDeliveryServerExports.includes(name),
 );
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -998,6 +1015,20 @@ if (unexpectedDeliveryClientExports.length > 0) {
   console.error(
     "@spine-ts/delivery-client exports changed without updating docs expectations: " +
       unexpectedDeliveryClientExports.join(", "),
+  );
+  process.exit(1);
+}
+if (missingDeliveryServerExports.length > 0 || missingDeclaredDeliveryServerExports.length > 0) {
+  console.error(
+    "@spine-ts/delivery-server is missing expected exports: " +
+      [...missingDeliveryServerExports, ...missingDeclaredDeliveryServerExports].join(", "),
+  );
+  process.exit(1);
+}
+if (unexpectedDeliveryServerExports.length > 0) {
+  console.error(
+    "@spine-ts/delivery-server exports changed without updating docs expectations: " +
+      unexpectedDeliveryServerExports.join(", "),
   );
   process.exit(1);
 }
@@ -1210,6 +1241,7 @@ console.log(
     `${expectedCoreExports.length} expected @spine-ts/core exports`,
     `${expectedClientExports.length} expected @spine-ts/client exports`,
     `${expectedDeliveryClientExports.length} expected @spine-ts/delivery-client exports`,
+    `${expectedDeliveryServerExports.length} expected @spine-ts/delivery-server exports`,
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
     `${expectedTransportExports.length} expected @spine-ts/transport exports`,

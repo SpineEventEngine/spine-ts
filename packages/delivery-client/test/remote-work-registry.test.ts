@@ -195,7 +195,10 @@ describe("RemoteWorkRegistry", () => {
     );
     await expect(client.pickUp(shard, worker)).rejects.toBeInstanceOf(DeliveryProtocolError);
     fake.reply(create(ExpiredSessionsReleasedSchema, { shard: [create(ExpiredSessionSchema)] }));
-    await expect(client.releaseExpired(1)).rejects.toBeInstanceOf(DeliveryProtocolError);
+    await expect(client.releaseExpired(1)).rejects.toMatchObject({
+      operation: "RELEASE_EXPIRED",
+      reconciliation: { kind: "OBSERVE_SHARD", scope: "ALL_SHARDS" },
+    });
     await expect(client.pickUp(shard, { nodeId: "", value: "worker" })).rejects.toThrow();
     await expect(client.release({} as never)).rejects.toThrow();
     for (const duration of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
@@ -210,7 +213,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenCalledTimes(4);
   });
 
-  it("rejects response collections above their public bounds", async () => {
+  it("accepts response collections above the former artificial bound", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -228,7 +231,7 @@ describe("RemoteWorkRegistry", () => {
       }),
     );
 
-    await expect(client.releaseExpired(1)).rejects.toBeInstanceOf(DeliveryProtocolError);
+    await expect(client.releaseExpired(1)).resolves.toHaveLength(101);
   });
 
   it("quarantines ambiguous shard mutation outcomes without retry or diagnostics", async () => {

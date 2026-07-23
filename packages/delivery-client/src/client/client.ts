@@ -380,9 +380,12 @@ export class DeliveryClient {
         return this.#shards.releaseSessions(request, callOptions(signal, timeoutMs));
       },
     );
-    responseBytes(ExpiredSessionsReleasedSchema, response);
-    if (response.shard.length > 100) throw protocol();
-    return Object.freeze(response.shard.map(decodeReleasedSession));
+    try {
+      responseBytes(ExpiredSessionsReleasedSchema, response);
+      return Object.freeze(response.shard.map(decodeReleasedSession));
+    } catch {
+      throw new DeliveryOutcomeUnknownError("RELEASE_EXPIRED", "ALL_SHARDS");
+    }
   }
 
   /**

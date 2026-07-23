@@ -398,6 +398,21 @@ describe("RemoteInbox and remote work adapters", () => {
         after: { messageId: "before", whenReceived: new Date(1_000), version: 2n },
       }),
     ).resolves.toMatchObject([{ id: { value: "after" } }]);
+    const request = fake.unary.mock.calls[0]?.[4] as {
+      sinceWhen?: { seconds: bigint; nanos: number };
+    };
+    expect(request.sinceWhen).toMatchObject({ seconds: 0n, nanos: 999_000_000 });
+  });
+
+  it("rejects a minimum-Protobuf-timestamp continuation before issuing an RPC", async () => {
+    const fake = transport();
+    const inbox = new RemoteInbox(DeliveryClient.usingTransport(fake.transport), quarantine());
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: { messageId: "anchor", whenReceived: new Date(-62_135_596_800_000), version: 1n },
+      }),
+    ).rejects.toBeInstanceOf(DeliveryPagingError);
+    expect(fake.unary).not.toHaveBeenCalled();
   });
 
   it("rejects invalid observed release timestamps without clearing a quarantined remote shard", async () => {

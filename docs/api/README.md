@@ -18,8 +18,10 @@ contracts, the first `@spine-ts/storage` contracts, and the minimal
 `@spine-ts/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
-The reference has 12 entry points, including `@spine-ts/delivery-client`. Its
-curated facade owns delivery-server Inbox/Shard/Admin operations and remote
+The reference has 13 entry points, including `@spine-ts/delivery-client` and
+`@spine-ts/delivery-server`. The latter is a listener-free, in-memory simple
+server core; constructing a replacement core intentionally loses its state.
+The delivery client facade owns curated delivery-server Inbox/Shard/Admin operations and remote
 delivery ports; generated delivery RPC clients remain internal.
 
 Proto exports include message types, generated schemas, enum values and enum

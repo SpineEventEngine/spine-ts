@@ -31,7 +31,7 @@ exclusions, not commitments to a future policy or implementation.
 - Node.js engine target: Node 24 LTS or newer.
 - TypeScript module target: ESM-first `NodeNext`.
 - Package boundaries: `packages/proto`, `packages/client`, `packages/core`, `packages/server`,
-  `packages/delivery-client`, `packages/transport`, `packages/storage`, `packages/storage-datastore`,
+  `packages/delivery-client`, `packages/delivery-server`, `packages/transport`, `packages/storage`, `packages/storage-datastore`,
   `packages/storage-rdbms`, and `packages/testing`.
 - Example boundary: `examples/todo`.
 - Copied Spine proto contracts live under `proto/`, with source provenance in
@@ -40,6 +40,8 @@ exclusions, not commitments to a future policy or implementation.
   types, and Spine custom options for the first intake set.
 - `@spine-ts/client` owns descriptor-backed, typed Projection column metadata;
   it does not yet provide query execution or a query DSL.
+- `@spine-ts/delivery-server` provides only an in-memory, listener-free simple
+  delivery-server core for caller-owned Connect registration; state is lost on restart.
 - `@spine-ts/core` owns type metadata, validation, and envelope helpers;
   `@spine-ts/server` owns bounded-context, service, lifecycle, and durable
   handoff behavior; `@spine-ts/storage` owns record storage; and

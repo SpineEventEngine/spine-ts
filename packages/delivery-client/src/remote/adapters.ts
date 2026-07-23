@@ -71,7 +71,7 @@ export class RemoteInbox implements DeliveryInbox {
         pageSize: limit,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
         ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-        ...(after === undefined ? {} : { sinceWhen: after.whenReceived }),
+        ...(after === undefined ? {} : { sinceWhen: pageAnchor(after.whenReceived) }),
       });
       const start = after === undefined ? 0 : exactAfter(page, after);
       const raw = page.slice(start);
@@ -281,6 +281,11 @@ function shardKey(value: ShardIndex): string {
 }
 function inboxKey(message: InboxMessage): string {
   return `${shardKey(message.id.shard)}:${message.id.value}`;
+}
+function pageAnchor(value: Date): Date {
+  const milliseconds = value.getTime();
+  if (milliseconds <= -62_135_596_800_000) throw new DeliveryPagingError();
+  return new Date(milliseconds - 1);
 }
 function sameShard(left: ShardIndex, right: ShardIndex): boolean {
   return left.index === right.index && left.ofTotal === right.ofTotal;

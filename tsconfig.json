@@ -4,6 +4,7 @@
     { "path": "./packages/proto" },
     { "path": "./packages/client" },
     { "path": "./packages/delivery-client" },
+    { "path": "./packages/delivery-server" },
     { "path": "./packages/core" },
     { "path": "./packages/transport" },
     { "path": "./packages/server" },

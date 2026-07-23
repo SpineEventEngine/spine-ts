@@ -1,0 +1,22 @@
+{
+  "name": "@spine-ts/delivery-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-memory simple delivery-server core.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@spine-ts/proto": "workspace:*"
+  }
+}
