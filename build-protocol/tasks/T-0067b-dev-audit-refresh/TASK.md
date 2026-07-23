@@ -1,6 +1,6 @@
 # T-0067b: Development Audit Refresh
 
-Status: accepted; ready for commit and integration.
+Status: closed; merged and post-merge verified on `main`.
 
 Baseline: `b45a4655`
 

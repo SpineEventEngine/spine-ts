@@ -1,6 +1,6 @@
 # T-0067b Review Record
 
-Status: accepted; required documentation/dependency review is clean.
+Status: closed; merged and post-merge verified on `main`.
 
 Baseline: `b45a4655`
 
@@ -38,3 +38,10 @@ recorded before acceptance.
 - Performance/reliability: N/A; no runtime or test behavior changed.
 - Final security: parent-owned by T-0067 with this zero-advisory lock endpoint
   as input.
+
+## Integration Closure
+
+- Correction commit `de4c8610` was pushed on
+  `task/T-0067b-dev-audit-refresh` and fast-forwarded into `main`.
+- Post-merge frozen installation passed the supply-chain policy. Production and
+  full low-threshold audits both report zero known vulnerabilities.
