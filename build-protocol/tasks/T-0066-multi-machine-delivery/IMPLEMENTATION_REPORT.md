@@ -1,6 +1,6 @@
 # T-0066 Implementation Report
 
-Status: accepted; awaiting commit and integration.
+Status: closed; merged and post-merge verified on `main`.
 
 ## Implemented topology
 

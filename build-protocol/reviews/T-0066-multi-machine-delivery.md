@@ -1,6 +1,6 @@
 # T-0066 Review Record
 
-Status: accepted; all required reviews and full verification are clean.
+Status: closed; merged and post-merge verified on `main`.
 
 Baseline and back-merge endpoint: `6d35cc98`
 
@@ -129,3 +129,12 @@ accepted and do not require another focused re-review.
   lines.
 - API documentation, Proto checksums and frozen descriptors, generated-output
   cleanliness, and release-readiness checks all passed.
+
+## Integration Closure
+
+- Feature commit `2ac308c4` was pushed on
+  `task/T-0066-multi-machine-delivery` and fast-forwarded into `main`.
+- Post-merge `typecheck:build` passed, including Proto generation and generated
+  TypeScript project-build checking.
+- The real loopback multi-process topology suite passed on merged `main`: 1
+  file / 3 tests in 5.02 seconds.
