@@ -30,7 +30,8 @@ export function transport(): {
   streamReplyAndHold(values: readonly Message[]): void;
   closed: boolean;
 } {
-  const replies: (Message | Error | { readonly value: Message; readonly held: Promise<void> })[] = [];
+  const replies: (Message | Error | { readonly value: Message; readonly held: Promise<void> })[] =
+    [];
   const unary = vi.fn(async (..._ignored: unknown[]) => {
     void _ignored;
     await Promise.resolve();

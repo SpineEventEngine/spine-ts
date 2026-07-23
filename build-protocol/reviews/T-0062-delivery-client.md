@@ -2,6 +2,63 @@
 
 Status: Accepted; all required lanes clean after correction and focused closure
 
+Post-merge status: cleanup correction accepted; focused style/API reviews clean.
+
+## Generated-Output Cleanup Follow-up — Pending Focused Verification
+
+- Scope is confined to removing stale `packages/delivery-client/dist` output
+  before the canonical project build, the related fixture regression, removal
+  of the now-dead root-entrypoint allowlist addition, and active-record error
+  names (`DeliveryOutcomeUnknownError`, `ShardObservationOverflowError`).
+- Style/maintainability and TypeScript/API remain relevant because the command
+  is canonical build tooling and it asserts the emitted public declaration
+  layout. Documentation is relevant to the active canonical naming records.
+  Performance/reliability is N/A: the exact synchronous cleanup has no runtime
+  resource, lifecycle, persistence, or retry behavior. Final security remains
+  N/A under the existing T-0067 release-gate disposition.
+
+## Post-merge Cleanup Correction
+
+Post-merge verification exposed cleanup findings because the cleanup script
+enumerates tracked files and the new package was untracked before its first
+commit. The correction moves implementation modules under cohesive
+`client`/`wire`/`remote` directories, keeps only the package `index.ts` root
+entrypoint, shortens the two overlong public error names without aliases, wraps
+the two test lines, and corrects a callback-style name. Root `index.ts` files
+were already permitted; the attempted dead allowlist addition was removed.
+
+Independent focused evidence passes: direct cleanup enforcement, tooling
+typecheck, exact 23-export TypeDoc/API inventory, 8 focused files/99 tests,
+generated lint/build/cleanup, Prettier, and diff hygiene.
+
+Focused re-review dispatch metadata:
+
+- Existing `style_maintainability_reviewer`, explicit `gpt-5.6-terra` / `high`.
+- Existing `typescript_api_docs_reviewer`, explicit `gpt-5.6-terra` / `high`.
+- Both read-only, no children/edits. Runtime metadata or the immutable configured
+  profile plus introspection limitation will be recorded before acceptance.
+
+Final post-merge cleanup disposition:
+
+- Style/maintainability: clean. Cohesive module ownership, records, cleaner,
+  tests, cleanup, and formatting have no actionable finding.
+- TypeScript/API: clean. Error renames, declarations, package paths, fixed-target
+  cross-platform cleaner, clean emitted output, and exact 23-export inventory
+  have no actionable finding.
+- Full verification passed 106 test files, 2,190 tests, and 6,837/7,592 branches
+  (90.05%), plus every type/lint/cleanup/format/docs/proto/release gate.
+
+## Post-Merge Cleanup Correction
+
+- Existing implementation context/profile: `implementer`, explicitly
+  configured as `gpt-5.6-terra` / `medium`. Runtime metadata is not exposed;
+  the immutable configured profile is recorded with no visible mismatch.
+- Correcting verified guard/API/style findings only: cohesive source placement,
+  exact public error names (without compatibility aliases), callback naming,
+  targeted line wrapping, and tracked-file cleanup enforcement. Validation is
+  in progress; the sandbox requires approved loopback access for the real
+  HTTP/2 integration test.
+
 ## Scope
 
 Public `@spine-ts/delivery-client`, its remote adapters, tests, documentation,

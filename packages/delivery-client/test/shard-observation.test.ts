@@ -13,9 +13,9 @@ import { ShardIndexSchema, WorkerIdSchema } from "@spine-ts/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
-  DeliveryShardObservationOverflowError,
+  ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { transport } from "./shared-fixtures.js";
@@ -61,9 +61,9 @@ describe("DeliveryClient shard observation", () => {
       }),
     );
 
-    await expect(DeliveryClient.usingTransport(fake.transport).shardSnapshot()).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
+    await expect(
+      DeliveryClient.usingTransport(fake.transport).shardSnapshot(),
+    ).rejects.toBeInstanceOf(DeliveryProtocolError);
   });
 
   it("yields only validated Admin updates after exactly one successful ACK", async () => {
@@ -142,7 +142,7 @@ describe("DeliveryClient shard observation", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
-      DeliveryShardObservationOverflowError,
+      ShardObservationOverflowError,
     );
   });
 
@@ -160,8 +160,8 @@ describe("DeliveryClient shard observation", () => {
     await vi.waitFor(() => {
       expect(fake.streamStarted).toBe(1);
     });
-    await expect(iterator.next()).rejects.toBeInstanceOf(DeliveryShardObservationOverflowError);
-    await expect(first).rejects.toBeInstanceOf(DeliveryShardObservationOverflowError);
+    await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
+    await expect(first).rejects.toBeInstanceOf(ShardObservationOverflowError);
   });
 
   it("reconnects a transient Admin stream ending only through a fresh ACK", async () => {
@@ -338,9 +338,7 @@ describe("DeliveryClient shard observation", () => {
     const session = await registry.pickUp(shard, "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     fake.fail(new Error("release response lost"));
-    await expect(registry.release(session)).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
-    );
+    await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.release(session)).resolves.toBe(false);
     registry.reconcile(
       Object.freeze({ shard, status: "PICKED" as const, messages: 0, lastPicked: new Date(1_000) }),

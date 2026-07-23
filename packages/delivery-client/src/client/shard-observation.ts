@@ -3,7 +3,7 @@ import type { SubscriptionResponse } from "@spine-ts/proto/delivery-server";
 import {
   DeliveryProtocolError,
   DeliveryShardObservationError,
-  DeliveryShardObservationOverflowError,
+  ShardObservationOverflowError,
   type DeliveryShardObservationStream,
   type RemoteShardObservation,
 } from "./types.js";
@@ -69,7 +69,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
           if (this.config.signal.aborted) return;
           if (
             error instanceof DeliveryProtocolError ||
-            error instanceof DeliveryShardObservationOverflowError
+            error instanceof ShardObservationOverflowError
           )
             throw error;
           if (attempt === this.config.reconnects) throw new DeliveryShardObservationError();
@@ -91,8 +91,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
       waiter({ done: false, value });
       return;
     }
-    if (this.#values.length >= this.config.capacity)
-      throw new DeliveryShardObservationOverflowError();
+    if (this.#values.length >= this.config.capacity) throw new ShardObservationOverflowError();
     this.#values.push(value);
   }
 
@@ -102,7 +101,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     if (value !== undefined) return Promise.resolve({ done: false, value });
     if (this.#done) return Promise.resolve({ done: true, value: undefined });
     if (this.#waiters.length >= this.config.capacity) {
-      const error = new DeliveryShardObservationOverflowError();
+      const error = new ShardObservationOverflowError();
       this.#error = error;
       this.config.cancel();
       this.#finish();
@@ -128,13 +127,19 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
 function pause(delay: number, signal: AbortSignal): Promise<void> {
   if (delay === 0)
     return signal.aborted
-      ? Promise.reject(signal.reason instanceof Error ? signal.reason : new Error("Delivery observation aborted."))
+      ? Promise.reject(
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error("Delivery observation aborted."),
+        )
       : Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(done, delay);
     const abort = () => {
       clearTimeout(timer);
-      done(signal.reason instanceof Error ? signal.reason : new Error("Delivery observation aborted."));
+      done(
+        signal.reason instanceof Error ? signal.reason : new Error("Delivery observation aborted."),
+      );
     };
     function done(reason?: Error) {
       signal.removeEventListener("abort", abort);

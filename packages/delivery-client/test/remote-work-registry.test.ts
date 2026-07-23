@@ -16,7 +16,7 @@ import { ShardIndexSchema, WorkerIdSchema } from "@spine-ts/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   RemoteWorkRegistry,
 } from "../src/index.js";
@@ -40,8 +40,7 @@ describe("RemoteWorkRegistry", () => {
           }),
         },
       });
-    const notPicked = () =>
-      Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 });
+    const notPicked = () => Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 });
 
     fake.reply(pickedUp());
     const firstSession = await registry.pickUp(shard, "node");
@@ -65,7 +64,7 @@ describe("RemoteWorkRegistry", () => {
 
     fake.fail(new Error("release outcome lost"));
     await expect(registry.release(secondSession)).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
+      DeliveryOutcomeUnknownError,
     );
     await expect(registry.pickUp(shard, "node")).resolves.toBeUndefined();
     expect(fake.unary).toHaveBeenCalledTimes(4);
@@ -250,7 +249,7 @@ describe("RemoteWorkRegistry", () => {
     try {
       await client.releaseExpired(1);
     } catch (error) {
-      const unknown = error as DeliveryOperationOutcomeUnknownError;
+      const unknown = error as DeliveryOutcomeUnknownError;
       expect(unknown).toMatchObject({
         operation: "RELEASE_EXPIRED",
         reconciliation: { kind: "OBSERVE_SHARD", scope: "ALL_SHARDS" },

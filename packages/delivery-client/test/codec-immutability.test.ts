@@ -12,7 +12,7 @@ import {
   DeliveryQuarantineError,
   RemoteInbox,
 } from "../src/index.js";
-import { decodeInboxMessage } from "../src/codec.js";
+import { decodeInboxMessage } from "../src/wire/codec.js";
 import { message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {

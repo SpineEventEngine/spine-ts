@@ -383,7 +383,7 @@ Acceptance:
   reconnecting Admin observation. Mutable RPCs are never automatically retried
   unless the frozen contract proves idempotency; after deadline/cancellation or
   a dropped response following admission, return a sanitized
-  `DeliveryOperationOutcomeUnknownError` and expose the read/session operation
+  `DeliveryOutcomeUnknownError` and expose the read/session operation
   needed to reconcile before another mutation.
 - Bound page sizes and allowlist decoded `Any`; generated transport details do
   not leak from the stable facade.

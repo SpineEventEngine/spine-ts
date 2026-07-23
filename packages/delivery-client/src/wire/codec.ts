@@ -35,7 +35,7 @@ import {
   type ReleasedShardSession,
   type RemoteShardObservation,
   type RemoteShardSession,
-} from "./types.js";
+} from "../client/types.js";
 
 export function encodeInboxBatch(messages: readonly InboxMessage[]): {
   readonly ids: readonly string[];

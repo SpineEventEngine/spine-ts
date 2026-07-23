@@ -19,7 +19,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DeliveryClient,
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
   RemoteInbox,
@@ -42,7 +42,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const work = await inbox.begin(value, session);
     expect(work?.message.id.value).toBe("remote-work");
     fake.fail(new Error("response lost"));
-    await expect(work?.complete()).rejects.toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
+    await expect(work?.complete()).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
 
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "remote-work") }));
     fake.reply(create(EmptySchema));
@@ -76,9 +76,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const session = await registry.pickUp(ShardIndex.single(), "node");
     fake.fail(new Error("response lost"));
     if (session === undefined) throw new Error("Shard session was not acquired.");
-    await expect(registry.release(session)).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
-    );
+    await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toBeUndefined();
     registry.reconcile(
       Object.freeze({ shard: ShardIndex.single(), status: "NOT_PICKED" as const, messages: 0 }),
@@ -129,7 +127,7 @@ describe("RemoteInbox and remote work adapters", () => {
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toBeUndefined();
     expect(fake.unary).toHaveBeenCalledTimes(2);
     rejectRelease?.(new Error("release response lost"));
-    await expect(release).rejects.toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
+    await expect(release).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toBeUndefined();
     expect(fake.unary).toHaveBeenCalledTimes(2);
     registry.reconcile(
@@ -223,7 +221,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const registry = new RemoteWorkRegistry(client);
     fake.fail(new Error("lost pickup"));
     await expect(registry.pickUp(ShardIndex.single(), "node")).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
+      DeliveryOutcomeUnknownError,
     );
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toBeUndefined();
 
@@ -292,7 +290,7 @@ describe("RemoteInbox and remote work adapters", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps remote work exclusive, invalidates it after completion, and fails closed on bad synchronization", async () => {
+  it("keeps remote work exclusive and fails closed on invalid synchronization", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const inbox = new RemoteInbox(client, quarantine());
@@ -333,7 +331,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const registry = new RemoteWorkRegistry(client);
     fake.fail(new Error("pickup outcome lost"));
     await expect(registry.pickUp(ShardIndex.single(), "node")).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
+      DeliveryOutcomeUnknownError,
     );
     expect(() => {
       registry.reconcile({ shard: {} as ShardIndex, status: "PICKED", messages: -1 });
@@ -408,7 +406,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const registry = new RemoteWorkRegistry(client);
     fake.fail(new Error("pickup outcome lost"));
     await expect(registry.pickUp(ShardIndex.single(), "node")).rejects.toBeInstanceOf(
-      DeliveryOperationOutcomeUnknownError,
+      DeliveryOutcomeUnknownError,
     );
 
     expect(() => {

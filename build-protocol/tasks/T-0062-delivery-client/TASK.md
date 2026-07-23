@@ -34,7 +34,7 @@ and supplies distributed-concurrency dependencies used by T-0063.
 - Automatically retry only side-effect-free reads, health checks, and
   reconnecting Admin observation. Do not automatically retry mutable RPCs.
 - After mutation deadline/cancellation or a dropped post-admission response,
-  throw a sanitized `DeliveryOperationOutcomeUnknownError` that identifies the
+  throw a sanitized `DeliveryOutcomeUnknownError` that identifies the
   safe read/session reconciliation operation required before another mutation.
 - Bound page sizes and decoded `Any` bytes; decode only through an explicit
   registered-schema allowlist.
@@ -116,3 +116,22 @@ one writer at a time:
 - Performance/reliability: required.
 - Final security: N/A until the Wave 1 T-0067 security gate unless a specialist
   identifies a security-critical blocker requiring earlier escalation.
+
+## Post-Merge Generated-Output Cleanup Follow-up — 2026-07-23
+
+- Classification: standard build-tooling correction. It changes the canonical
+  generated build precondition and requires a deterministic fixture regression.
+- Acceptance: before `tsc -b`, remove exactly the hardcoded
+  `packages/delivery-client/dist` directory when it is a real directory; do not
+  use globs or clean any other package output. The regenerated output must have
+  only root `index` plus `client`, `wire`, and `remote` modules, with no flat
+  pre-move modules or obsolete public error names.
+- Human-imposed requirements: preserve the current cohesive source moves; no
+  broad allowlist/gate exception, commit, push, merge, install, unrelated edit,
+  or weakened validation. Remove the dead delivery-client cleanup allowlist
+  entry. Durable records must use `DeliveryOutcomeUnknownError` and
+  `ShardObservationOverflowError` as the active canonical names.
+- Existing role/profile: `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection is unavailable on this
+  surface; the immutable configured profile is the acceptance evidence, with no
+  visible fallback or mismatch.

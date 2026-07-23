@@ -25,7 +25,7 @@ import {
 } from "@spine-ts/proto/delivery-server";
 import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-ts/proto/delivery";
 import {
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   MAX_DELIVERY_RPC_BYTES,
   type DeliveryClientOptions,
   type DeliveryFindOneOptions,
@@ -64,15 +64,15 @@ import {
   timeout,
   validBaseUrl,
   validateAlreadyPickedUp,
-} from "./codec.js";
+} from "../wire/codec.js";
 
 export {
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
   DeliveryQuarantineError,
   DeliveryShardObservationError,
-  DeliveryShardObservationOverflowError,
+  ShardObservationOverflowError,
   MAX_DELIVERY_BATCH_MESSAGES,
   MAX_INBOX_PAYLOAD_BYTES,
   MAX_DELIVERY_RPC_BYTES,
@@ -103,13 +103,13 @@ export class DeliveryClient {
   readonly #observationReconnectBackoffMs: number;
   readonly #observationBufferSize: number;
   readonly #activeReads = new Set<AbortController>();
-  readonly #closeOwnedTransport: (() => void) | undefined;
+  readonly #onCloseOwnedTransport: (() => void) | undefined;
   #closed = false;
 
   private constructor(
     transport: Transport,
     options: DeliveryClientOptions,
-    closeOwnedTransport?: () => void,
+    onCloseOwnedTransport?: () => void,
   ) {
     this.#pageSize = pageSize(options.pageSize ?? 100);
     this.#readRetries = retries(options.readRetries ?? 0);
@@ -125,7 +125,7 @@ export class DeliveryClient {
     this.#inbox = createClient(InboxService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
-    this.#closeOwnedTransport = closeOwnedTransport;
+    this.#onCloseOwnedTransport = onCloseOwnedTransport;
   }
 
   /** The bounded page size configured for this client. */
@@ -394,7 +394,7 @@ export class DeliveryClient {
     this.#closed = true;
     for (const controller of this.#activeReads)
       controller.abort(new Error("Delivery client is closed."));
-    this.#closeOwnedTransport?.();
+    this.#onCloseOwnedTransport?.();
   }
 
   async #read<T>(
@@ -428,7 +428,7 @@ export class DeliveryClient {
   }
 
   async #mutation<T>(
-    operation: DeliveryOperationOutcomeUnknownError["operation"],
+    operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
     options: DeliveryMutationOptions,
     invoke: (signal: AbortSignal | undefined, timeoutMs: number) => Promise<T>,
@@ -446,7 +446,7 @@ export class DeliveryClient {
       return await invoke(controller.signal, timeoutMs);
     } catch (error) {
       if (error instanceof ConnectError && error.code === Code.InvalidArgument) throw protocol();
-      throw new DeliveryOperationOutcomeUnknownError(operation, reconciliation);
+      throw new DeliveryOutcomeUnknownError(operation, reconciliation);
     } finally {
       options.signal?.removeEventListener("abort", abort);
       this.#activeReads.delete(controller);

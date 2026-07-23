@@ -55,8 +55,9 @@ part of the accepted release. The temporary readiness reopening is closed.
 The accepted initial release remains complete. On `2026-07-22`, the human
 opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
 Wave 1. The human subsequently started Wave 1; T-0053 through T-0061 are
-integrated, post-merge verified, and pushed. T-0062 is reviewed and fully
-verified for integration from pushed `main` at `dee92556`; T-0063 is next.
+integrated, post-merge verified, and pushed. T-0062 is integrated; its focused
+post-merge generated-output cleanup correction is reviewed and fully verified
+for integration. T-0063 remains next.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

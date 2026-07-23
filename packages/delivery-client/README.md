@@ -34,7 +34,7 @@ is 1..1,000 for both queued updates and pending `next()` calls. Per-operation
 `newestPending(shard)`, and `shardSnapshot()` are safe reads and
 may use configured bounded retries. `writeOne`, `writeMany`, `removeOne`,
 `removeMany`, `pickUp`, `release`, and `releaseExpired` are single-attempt
-mutations. A lost mutation response raises `DeliveryOperationOutcomeUnknownError`:
+mutations. A lost mutation response raises `DeliveryOutcomeUnknownError`:
 reconcile writes/removals with `FIND_MESSAGE`, and shard changes with
 `OBSERVE_SHARD`; never blindly retry a mutation. All calls accept cancellation
 and a bounded deadline.
@@ -70,16 +70,25 @@ const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
 // and atomically persist only the compact records below; do not use an in-memory
 // Map in production, because restart safety is part of the no-replay contract.
 declare const durableStore: {
-  get(id: string): Promise<{ id: string; phase: "ADMITTED" | "REMOVING"; fingerprint: string } | undefined>;
-  putIfCapacityAvailable(id: string, record: { id: string; phase: "ADMITTED" | "REMOVING"; fingerprint: string }): Promise<void>;
+  get(
+    id: string,
+  ): Promise<{ id: string; phase: "ADMITTED" | "REMOVING"; fingerprint: string } | undefined>;
+  putIfCapacityAvailable(
+    id: string,
+    record: { id: string; phase: "ADMITTED" | "REMOVING"; fingerprint: string },
+  ): Promise<void>;
   delete(id: string): Promise<void>;
 };
 const removalQuarantine = {
-  async get(id: string) { return durableStore.get(id); },
+  async get(id: string) {
+    return durableStore.get(id);
+  },
   async put(record: { id: string; phase: "ADMITTED" | "REMOVING"; fingerprint: string }) {
     await durableStore.putIfCapacityAvailable(record.id, record);
   },
-  async delete(id: string) { await durableStore.delete(id); },
+  async delete(id: string) {
+    await durableStore.delete(id);
+  },
 };
 const delivery = new DeliveryBuilder()
   .withNode("worker-a")
@@ -114,7 +123,7 @@ and no worker-conditional release, so a later worker must not release a stale
 session.
 
 ```ts
-import { DeliveryClient, DeliveryOperationOutcomeUnknownError } from "@spine-ts/delivery-client";
+import { DeliveryClient, DeliveryOutcomeUnknownError } from "@spine-ts/delivery-client";
 import { ShardIndex, type InboxMessage } from "@spine-ts/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
@@ -124,7 +133,7 @@ async function reconcileUnknownWrite(message: InboxMessage) {
     await client.writeOne(message);
   } catch (error) {
     if (
-      error instanceof DeliveryOperationOutcomeUnknownError &&
+      error instanceof DeliveryOutcomeUnknownError &&
       error.reconciliation.kind === "FIND_MESSAGE"
     ) {
       const observed = await Promise.all(

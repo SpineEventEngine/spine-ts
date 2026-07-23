@@ -14,9 +14,9 @@ import type {
 } from "@spine-ts/server";
 import { ShardIndex } from "@spine-ts/server";
 
-import { DeliveryClient } from "./client.js";
+import { DeliveryClient } from "../client/client.js";
 import {
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
   DeliveryQuarantineError,
@@ -25,8 +25,13 @@ import {
   type DeliveryWorkerId,
   type RemoteShardObservation,
   type RemoteShardSession,
-} from "./types.js";
-import { encodeInboxMessage, pageSize, snapshotInboxMessage, snapshotShard } from "./codec.js";
+} from "../client/types.js";
+import {
+  encodeInboxMessage,
+  pageSize,
+  snapshotInboxMessage,
+  snapshotShard,
+} from "../wire/codec.js";
 
 /** Server-owned inbox port backed by a delivery-server client. */
 export class RemoteInbox implements DeliveryInbox {
@@ -178,7 +183,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     try {
       remote = await this.client.pickUp(shardIndex, workerFor(node));
     } catch (error) {
-      if (error instanceof DeliveryOperationOutcomeUnknownError) this.#quarantined.add(key);
+      if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
       throw error;
     }
     if (remote === undefined) return undefined;

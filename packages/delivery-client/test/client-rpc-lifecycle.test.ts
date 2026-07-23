@@ -15,7 +15,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,
-  DeliveryOperationOutcomeUnknownError,
+  DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
   MAX_DELIVERY_BATCH_MESSAGES,
 } from "../src/index.js";
@@ -341,7 +341,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     await admitted;
     client.close();
 
-    await expect(mutation).rejects.toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
+    await expect(mutation).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
   it("quarantines ambiguous mutation outcomes without payload diagnostics or retry", async () => {
@@ -353,17 +353,15 @@ describe("DeliveryClient RPC and lifecycle", () => {
     try {
       await client.writeOne(value);
     } catch (error) {
-      expect(error).toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
+      expect(error).toBeInstanceOf(DeliveryOutcomeUnknownError);
       expect(error).toMatchObject({
         operation: "WRITE_ONE",
         reconciliation: { kind: "FIND_MESSAGE", messageIds: ["sensitive-id"] },
       });
       expect(error).not.toHaveProperty("cause");
       expect(String(error)).not.toContain("secret-payload");
-      expect(Object.isFrozen((error as DeliveryOperationOutcomeUnknownError).reconciliation)).toBe(
-        true,
-      );
-      const reconciliation = (error as DeliveryOperationOutcomeUnknownError).reconciliation;
+      expect(Object.isFrozen((error as DeliveryOutcomeUnknownError).reconciliation)).toBe(true);
+      const reconciliation = (error as DeliveryOutcomeUnknownError).reconciliation;
       if (reconciliation.kind !== "FIND_MESSAGE")
         throw new Error("Expected message reconciliation.");
       expect(Object.isFrozen(reconciliation.messageIds)).toBe(true);
@@ -374,7 +372,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const controller = new AbortController();
     const pending = client.removeOne(value, { signal: controller.signal });
     controller.abort(new Error("caller cancellation"));
-    await expect(pending).rejects.toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
+    await expect(pending).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
     expect(fake.unary).toHaveBeenCalledTimes(2);
   });
 
@@ -465,7 +463,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
           messageIds: ["sensitive-first", "sensitive-second"],
         },
       });
-      const unknown = error as DeliveryOperationOutcomeUnknownError;
+      const unknown = error as DeliveryOutcomeUnknownError;
       expect(Object.isFrozen(unknown.reconciliation)).toBe(true);
       if (unknown.reconciliation.kind !== "FIND_MESSAGE") {
         throw new Error("Expected message reconciliation.");
@@ -479,8 +477,8 @@ describe("DeliveryClient RPC and lifecycle", () => {
     try {
       await client.removeMany(messages);
     } catch (error) {
-      expect(error).toBeInstanceOf(DeliveryOperationOutcomeUnknownError);
-      const unknown = error as DeliveryOperationOutcomeUnknownError;
+      expect(error).toBeInstanceOf(DeliveryOutcomeUnknownError);
+      const unknown = error as DeliveryOutcomeUnknownError;
       expect(unknown.operation).toBe("REMOVE_MANY");
       expect(Object.isFrozen(unknown.reconciliation)).toBe(true);
       if (unknown.reconciliation.kind !== "FIND_MESSAGE") {
@@ -509,7 +507,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
-  it("validates outbound optional payload, shard, identifier, label, status, and date boundaries before RPC", async () => {
+  it("validates optional payload, shard, identifiers, labels, statuses, and dates before RPC", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const value = domainMessage();

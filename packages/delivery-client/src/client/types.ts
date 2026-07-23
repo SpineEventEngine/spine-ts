@@ -73,10 +73,10 @@ export interface RemovalQuarantineRecord {
 }
 
 /** Raised when a slow observer exceeds the bounded shard-update buffer. */
-export class DeliveryShardObservationOverflowError extends Error {
+export class ShardObservationOverflowError extends Error {
   constructor() {
     super("Delivery shard observation buffer overflowed.");
-    this.name = "DeliveryShardObservationOverflowError";
+    this.name = "ShardObservationOverflowError";
   }
 }
 
@@ -89,7 +89,7 @@ export class DeliveryShardObservationError extends Error {
 }
 
 /** Raised when a write may have reached the delivery server but its result was lost. */
-export class DeliveryOperationOutcomeUnknownError extends Error {
+export class DeliveryOutcomeUnknownError extends Error {
   readonly operation:
     | "WRITE_ONE"
     | "WRITE_MANY"
@@ -105,7 +105,7 @@ export class DeliveryOperationOutcomeUnknownError extends Error {
   >;
 
   constructor(
-    operation: DeliveryOperationOutcomeUnknownError["operation"],
+    operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
   ) {
     super(
@@ -115,7 +115,7 @@ export class DeliveryOperationOutcomeUnknownError extends Error {
           ? "Delivery removal outcome is unknown."
           : "Delivery shard operation outcome is unknown.",
     );
-    this.name = "DeliveryOperationOutcomeUnknownError";
+    this.name = "DeliveryOutcomeUnknownError";
     this.operation = operation;
     if (typeof reconciliation === "string")
       this.reconciliation = Object.freeze({ kind: "OBSERVE_SHARD", scope: reconciliation });

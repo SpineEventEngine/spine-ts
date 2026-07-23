@@ -82,7 +82,7 @@ therefore remains quarantined and stale sessions never issue a later release.
   release calls could both dispatch before the first response.
 - GREEN: snapshot/page/release-expired collection counts are bounded alongside
   serialized bytes; pending waiters share the public buffer bound and fail with
-  `DeliveryShardObservationOverflowError`; release invalidates local ownership
+  `ShardObservationOverflowError`; release invalidates local ownership
   before its first await, keeps unknown-outcome quarantine, and removes empty
   per-shard session sets.
 - GREEN: supplied ports with explicitly different session kinds fail at build
@@ -102,3 +102,19 @@ and `build-protocol/reviews/T-0062-delivery-client.md`.
 Runtime model self-introspection is not exposed. Immutable configured role and
 profile: existing `implementer`, `gpt-5.6-terra` / `medium`; no visible fallback
 or mismatch occurred.
+
+## Post-Merge Generated-Output Cleanup — 2026-07-23
+
+- RED: the focused cleaner fixture failed because
+  `clean-delivery-client-dist.mjs` did not exist.
+- GREEN: injected filesystem operations prove the helper removes only the fixed,
+  non-configurable `packages/delivery-client/dist` target. The canonical build
+  invokes it directly before `tsc -b`; no glob or configurable broad target is
+  used, and platform-native path construction preserves Windows compatibility.
+- The dead delivery-client root-entrypoint allowlist addition was removed. A
+  clean generated build produced only root `index`, `client`, `wire`, and
+  `remote` delivery-client outputs; old flat modules and the two superseded
+  error names were absent from `dist`.
+- Focused style and TypeScript/API closure reviews are clean. Final full
+  verification passed 106 files/2,190 tests, global branch coverage
+  6,837/7,592 (90.05%), and all type/lint/cleanup/format/docs/proto/release gates.
