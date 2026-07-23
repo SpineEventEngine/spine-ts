@@ -1,6 +1,6 @@
 # T-0066a Review Record
 
-Status: accepted; full verification passed.
+Status: closed; merged into `main` and post-merge verified.
 
 Baseline: `93ebf880`
 
@@ -82,3 +82,12 @@ accepted metadata-wise.
   and 94.67% lines.
 - Generated/tooling typechecks, ESLint, cleanup, Prettier, TypeDoc/API inventory,
   Proto checksum/descriptor/lint/drift checks, and release-readiness all passed.
+
+## Integration Closure
+
+- Task commit `d6a5921b` was pushed to
+  `origin/task/T-0066a-supervisor-empty-run-coalescing`.
+- `main` fast-forwarded from `93ebf880` to `d6a5921b` while preserving unrelated
+  root worktree changes.
+- Post-merge generated-build/tooling typechecks and the six focused delivery
+  suites / 154 tests passed on the exact merged tree.
