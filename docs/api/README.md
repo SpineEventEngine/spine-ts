@@ -15,7 +15,7 @@ command/query/subscription services with durable inactive subscription recovery
 over the same storage factory, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, the first `@spine-ts/transport`
 contracts, the first `@spine-ts/storage` contracts, and the minimal
-`@spine-ts/testing` bounded-context fixture, optional Datastore storage, and
+`@spine-ts/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
 Proto exports include message types, generated schemas, enum values and enum
@@ -362,15 +362,18 @@ close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
-`@spine-ts/testing` exports `BoundedContextFixture`,
-`BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
-built `BoundedContext`, captures the in-process `SpineServices` handlers, and
-lets tests post generated `Command` envelopes, post generated `Event` envelopes,
-read generated `Query` envelopes, poll query responses for asynchronous
-projection consequences, and subscribe to generated `Topic` envelopes. It clones
-protobuf messages at its boundary and keeps command, query, and subscription
-behavior on the real framework paths. It does not expose a broad client DSL,
-start a server/process, manage browser tooling, or simulate service outcomes.
+`@spine-ts/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
+`BlackBoxScope`, `BlackBoxTimeoutError`, and `BlackBoxClosedError`. `BlackBox`
+starts an owned ephemeral `Server` from a built context or builder and provides
+immutable guest/actor scopes over the public client contract. It supports
+generated command and direct-event input, decoded Projection queries, typed
+state/event subscriptions, bounded eventual assertions, and idempotent owned
+close. It is Node/Vitest runner-neutral and deliberately exposes no raw Connect
+envelopes, private server implementation types, or test-only construction seam.
+Construction validates tenant, zone, `timeoutMs`, and `intervalMs` before a
+context builder is built or server/client resources are acquired. Timing
+values and per-`eventually()` overrides must be positive integers; invalid
+overrides fail before the first read.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, `AggregateId`, `PrimitiveId`, and `MessageId` form the
 low-level aggregate persistence seam. It writes latest persisted state through

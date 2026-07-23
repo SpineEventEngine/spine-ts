@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import {
@@ -12,10 +12,13 @@ import {
   ErrorSchema,
   ResponseSchema,
   StatusSchema,
+  TenantIdSchema,
   UserIdSchema,
+  ZoneIdSchema,
   VersionSchema,
   type Command,
 } from "@spine-ts/proto";
+import { QuerySchema, TopicSchema } from "@spine-ts/proto/client";
 import { AckSchema } from "@spine-ts/proto";
 import {
   EventUpdatesSchema,
@@ -31,6 +34,231 @@ import { Client, ProjectionQuery } from "../src/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
 
 describe("Client", () => {
+  it("resolves the default zone once and retains the first resolution", async () => {
+    let resolutions = 0;
+    const dateTimeFormat = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+      () =>
+        ({
+          resolvedOptions: () => ({
+            timeZone: resolutions++ === 0 ? "Europe/Lisbon" : "America/New_York",
+          }),
+        }) as Intl.DateTimeFormat,
+    );
+    const contexts: Message[] = [];
+    const client = Client.usingTransport(
+      unaryTransport((method, input) => {
+        contexts.push((input as Command).context?.actorContext ?? create(ActorContextSchema));
+        return create(AckSchema, {
+          messageId: commandId(input as Command),
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        });
+      }),
+    );
+    try {
+      await client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema));
+      await client.onBehalfOf("alice").post(ProjectionStateSchema, create(ProjectionStateSchema));
+      expect(resolutions).toBe(1);
+      expect(contexts).toEqual([
+        expect.objectContaining({ zoneId: expect.objectContaining({ value: "Europe/Lisbon" }) }),
+        expect.objectContaining({ zoneId: expect.objectContaining({ value: "Europe/Lisbon" }) }),
+      ]);
+    } finally {
+      dateTimeFormat.mockRestore();
+      await client.close();
+    }
+  });
+
+  it("freezes cloned tenant and zone values across concurrent command and query scopes", async () => {
+    const tenant = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
+    const zone = create(ZoneIdSchema, { value: "Europe/Lisbon" });
+    const contexts: unknown[] = [];
+    const client = Client.usingTransport(
+      unaryTransport((method, input) => {
+        if (method.name === "Post") {
+          contexts.push((input as Command).context?.actorContext);
+          return create(AckSchema, {
+            messageId: commandId(input as Command),
+            status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+          });
+        }
+        if (method.name === "Read") {
+          contexts.push((input as MessageShape<typeof QuerySchema>).context);
+          return create(QueryResponseSchema, {
+            response: create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+            }),
+          });
+        }
+        throw new Error(`unexpected ${method.name}`);
+      }),
+      { tenant, zoneId: zone },
+    );
+    tenant.kind = { case: "value", value: "mutated-tenant" };
+    zone.value = "mutated-zone";
+    const query = ProjectionQuery.select({
+      schema: ProjectionStateSchema,
+      columns: {} as never,
+      context: create(ActorContextSchema),
+    }).build();
+
+    await Promise.all([
+      client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema)),
+      client.onBehalfOf("alice").query(ProjectionStateSchema, query),
+    ]);
+
+    expect(contexts).toEqual([
+      expect.objectContaining({
+        actor: expect.objectContaining({ value: "guest" }),
+        tenantId: expect.objectContaining({ kind: { case: "value", value: "tenant-a" } }),
+        zoneId: expect.objectContaining({ value: "Europe/Lisbon" }),
+      }),
+      expect.objectContaining({
+        actor: expect.objectContaining({ value: "alice" }),
+        tenantId: expect.objectContaining({ kind: { case: "value", value: "tenant-a" } }),
+        zoneId: expect.objectContaining({ value: "Europe/Lisbon" }),
+      }),
+    ]);
+    await client.close();
+  });
+
+  it("uses the exact operation context for preliminary command-event subscription and post", async () => {
+    let subscribed: unknown;
+    let posted: unknown;
+    const client = Client.usingTransport({
+      async unary(method, _signal, _timeoutMs, _header, input) {
+        if (method.name === "Subscribe") {
+          subscribed = (input as MessageShape<typeof TopicSchema>).context;
+          return response(
+            method,
+            create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "s-context" }),
+            }),
+          );
+        }
+        if (method.name === "Post") {
+          posted = (input as Command).context?.actorContext;
+          return response(
+            method,
+            create(AckSchema, {
+              messageId: commandId(input as Command),
+              status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+            }),
+          );
+        }
+        if (method.name === "Cancel") return response(method, create(ResponseSchema));
+        throw new Error(`unexpected ${method.name}`);
+      },
+      async stream(method, signal) {
+        return {
+          stream: true,
+          method,
+          header: new Headers(),
+          trailer: new Headers(),
+          service: method.parent,
+          message: endingStream(
+            new Promise<void>((resolve) =>
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              ),
+            ),
+          ),
+        } as never;
+      },
+    });
+
+    const result = await client
+      .asGuest()
+      .post(ProjectionStateSchema, create(ProjectionStateSchema), {
+        observe: [ProjectionStateSchema],
+      });
+
+    expect(result.kind).toBe("ok");
+    expect(subscribed).toStrictEqual(posted);
+    if (result.kind === "ok") await result.events.cancel();
+    await client.close();
+  });
+
+  it("rejects empty tenant or zone options before opening a client", () => {
+    const transport = unaryTransport(() => create(AckSchema));
+    expect(() => Client.usingTransport(transport, { tenant: "" })).toThrow(
+      "tenant must not be empty",
+    );
+    expect(() => Client.usingTransport(transport, { zoneId: "" })).toThrow(
+      "zoneId must not be empty",
+    );
+    expect(() =>
+      Client.usingTransport(transport, { tenant: create(TenantIdSchema), zoneId: "Europe/Lisbon" }),
+    ).toThrow("tenant must not be empty");
+    expect(() => Client.usingTransport(transport, { zoneId: create(ZoneIdSchema) })).toThrow(
+      "zoneId must not be empty",
+    );
+    expect(() => Client.connectTo("http://127.0.0.1:8080", { tenant: "" })).toThrow(
+      "tenant must not be empty",
+    );
+    expect(() => Client.connectTo("http://127.0.0.1:8080", { zoneId: "" })).toThrow(
+      "zoneId must not be empty",
+    );
+  });
+
+  it("resolves a nonempty system zone once for the client lifecycle", async () => {
+    const contexts: unknown[] = [];
+    const client = Client.usingTransport(
+      unaryTransport((method, input) => {
+        if (method.name !== "Post") throw new Error(`unexpected ${method.name}`);
+        contexts.push((input as Command).context?.actorContext);
+        return create(AckSchema, {
+          messageId: commandId(input as Command),
+          status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+        });
+      }),
+    );
+
+    await client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema));
+    await client.onBehalfOf("alice").post(ProjectionStateSchema, create(ProjectionStateSchema));
+
+    const zones = contexts.map(
+      (context) => (context as MessageShape<typeof ActorContextSchema>).zoneId?.value,
+    );
+    expect(zones[0]).toEqual(expect.any(String));
+    expect(zones[0]).not.toBe("");
+    expect(zones[1]).toBe(zones[0]);
+    await client.close();
+  });
+
+  it("uses one cloned client-wide zone in command contexts", async () => {
+    const zone = create(ZoneIdSchema, { value: "Europe/Lisbon" });
+    const contexts: unknown[] = [];
+    const client = Client.usingTransport(
+      unaryTransport((method, input) => {
+        if (method.name === "Post") {
+          contexts.push((input as Command).context?.actorContext);
+          return create(AckSchema, {
+            messageId: commandId(input as Command),
+            status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+          });
+        }
+        throw new Error(`unexpected ${method.name}`);
+      }),
+      { zoneId: zone },
+    );
+    zone.value = "mutated-after-construction";
+
+    await Promise.all([
+      client.asGuest().post(ProjectionStateSchema, create(ProjectionStateSchema)),
+      client.onBehalfOf("actor-1").post(ProjectionStateSchema, create(ProjectionStateSchema)),
+    ]);
+
+    expect(contexts).toEqual([
+      expect.objectContaining({ zoneId: expect.objectContaining({ value: "Europe/Lisbon" }) }),
+      expect.objectContaining({ zoneId: expect.objectContaining({ value: "Europe/Lisbon" }) }),
+    ]);
+    await client.close();
+  });
+
   it.each([
     ["missing", undefined],
     ["malformed", { typeUrl: "type.googleapis.com/example.WrongId", value: new Uint8Array() }],
@@ -678,16 +906,17 @@ describe("Client", () => {
     const first = result.states[0];
     if (first === undefined) throw new Error("expected one query state");
     expect(() => Object.assign(first.state, { id: "changed" })).toThrow();
+    const fingerprint = first.state.fingerprint as unknown as Uint8Array;
     expect(() => {
-      first.state.fingerprint[0] = 9;
+      fingerprint[0] = 9;
     }).toThrow();
     expect(() => {
-      first.state.fingerprint.set([9]);
+      fingerprint.set([9]);
     }).toThrow();
-    first.state.fingerprint.forEach((_value, index, bytes) => {
+    fingerprint.forEach((_value, index, bytes) => {
       bytes[index] = 9;
     });
-    expect([...first.state.fingerprint]).toEqual([1, 2]);
+    expect([...fingerprint]).toEqual([1, 2]);
     await client.close();
   });
 
