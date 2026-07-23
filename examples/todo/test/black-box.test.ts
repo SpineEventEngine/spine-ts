@@ -1,15 +1,8 @@
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageShape } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import {
-  deriveTypeUrl,
-  packAny,
-  packCommand,
-  packEvent,
-  unpackAny,
-  type MessageSchema,
-} from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
 import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -29,22 +22,17 @@ import {
 } from "@spine-ts/proto/client";
 import { CommandService } from "@spine-ts/proto/client";
 import { QueryService } from "@spine-ts/proto/client";
-import {
-  EventUpdatesSchema,
-  SubscriptionUpdateSchema,
-  TopicIdSchema,
-  TopicSchema,
-  type SubscriptionUpdate,
-} from "@spine-ts/proto/client";
+import { TopicIdSchema, TopicSchema, type SubscriptionUpdate } from "@spine-ts/proto/client";
 import { SubscriptionService } from "@spine-ts/proto/client";
+import { type StateSubscriptionUpdate, type SubscriptionEvent } from "@spine-ts/client";
 import { SignalMetadata } from "@spine-ts/server";
-import { BoundedContextFixture } from "@spine-ts/testing";
+import { BlackBox, type BlackBoxScope } from "@spine-ts/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { analyzeBuildHandlers } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
@@ -67,6 +55,12 @@ const signalMetadata = new SignalMetadata();
 const maxRemoteDiagnosticRows = 4;
 const maxRemoteDiagnosticIdLength = 64;
 const remoteOperationTimeoutMs = 500;
+const ownedBlackBoxes = new Set<BlackBox>();
+
+afterEach(async () => {
+  await Promise.all([...ownedBlackBoxes].map((blackBox) => blackBox.close()));
+  ownedBlackBoxes.clear();
+});
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
@@ -553,21 +547,19 @@ describe("@spine-ts/example-todo", () => {
   }, 15_000);
 
   it("creates one task through command handling and exposes it in the task list", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    const ack = await fixture.post(createTaskCommand("command-create-first", "task-1", "First"));
-    const response = await fixture.readEventually(
+    const ack = await scope.post(CreateTaskSchema, createTask("task-1", "First"));
+    const rows = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
-      (candidate) => unpackTaskList(candidate.message[0]?.state)?.tasks.length === 1,
+      (candidate) => candidate[0]?.tasks.length === 1,
     );
-    const list = unpackTaskList(response.message[0]?.state);
 
-    expect(ack.status?.status.case).toBe("ok");
-    expect(response.response?.status?.status.case).toBe("ok");
-    expect(list).toEqual(
+    expect(ack.kind).toBe("ok");
+    expect(rows[0]).toEqual(
       create(TaskListSchema, {
         id: "task-1",
         tasks: [
@@ -583,60 +575,55 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reads the task list by projection ID", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-list-query", "task-list-query", "Visible"));
-    const response = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-list-query", "Visible"));
+    const rows = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListIdQuery(),
-      (candidate) => candidate.message.length === 1,
+      (candidate) => candidate.length === 1,
     );
-    const list = unpackTaskList(response.message[0]?.state);
 
-    expect(response.response?.status?.status.case).toBe("ok");
-    expect(list?.tasks).toHaveLength(1);
-    expect(list?.tasks[0]?.title).toBe("Visible");
+    expect(rows[0]?.tasks).toHaveLength(1);
+    expect(rows[0]?.tasks[0]?.title).toBe("Visible");
   });
 
   it("reads all task-list rows after creating two tasks", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-list-first", "task-list-first", "First"));
-    await fixture.post(createTaskCommand("command-list-second", "task-list-second", "Second"));
-    const response = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-list-first", "First"));
+    await scope.post(CreateTaskSchema, createTask("task-list-second", "Second"));
+    const rows = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
-      (candidate) => candidate.message.length === 2,
+      (candidate) => candidate.length === 2,
     );
-    const rows = response.message.map((message) => unpackTaskList(message.state));
 
-    expect(rows.map((row) => row?.id).sort()).toEqual(["task-list-first", "task-list-second"]);
-    expect(rows.flatMap((row) => row?.tasks.map((task) => task.title) ?? []).sort()).toEqual([
+    expect(rows.map((row) => row.id).sort()).toEqual(["task-list-first", "task-list-second"]);
+    expect(rows.flatMap((row) => row.tasks.map((task) => task.title)).sort()).toEqual([
       "First",
       "Second",
     ]);
   });
 
   it("filters task-list rows by projection columns", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-column-first", "task-column-first", "First"));
-    await fixture.post(createTaskCommand("command-column-second", "task-column-second", "Second"));
-    await fixture.post(createCompleteCommand("command-column-complete", "task-column-first"));
-    const response = await fixture.readEventually(createOpenTaskCountQuery(1), (candidate) => {
-      const rows = candidate.message.map((message) => unpackTaskList(message.state));
-      return rows.length === 1 && rows[0]?.id === "task-column-second";
-    });
-    const rows = response.message.map((message) => unpackTaskList(message.state));
+    await scope.post(CreateTaskSchema, createTask("task-column-first", "First"));
+    await scope.post(CreateTaskSchema, createTask("task-column-second", "Second"));
+    await scope.post(CompleteTaskSchema, completeTask("task-column-first"));
+    const rows = await readTaskListsEventually(
+      fixture,
+      scope,
+      createOpenTaskCountQuery(1),
+      (candidate) => candidate.length === 1 && candidate[0]?.id === "task-column-second",
+    );
 
-    expect(response.response?.status?.status.case).toBe("ok");
     expect(rows).toHaveLength(1);
     expect(rows[0]?.id).toBe("task-column-second");
     expect(rows[0]?.openTaskCount).toBe(1);
@@ -644,21 +631,16 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
-    const subscription = await fixture.subscribe(createTaskListTopic());
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
+    const subscription = await scope.subscribeToState(TaskListSchema, TaskIdSchema);
+    const iterator = subscription[Symbol.asyncIterator]();
 
     try {
-      await fixture.post(createTaskCommand("command-subscribe-create", "task-live", "First"));
-      const created = unpackSubscribedTaskList(
-        await nextSubscriptionUpdate(subscription, "create"),
-      );
+      await scope.post(CreateTaskSchema, createTask("task-live", "First"));
+      const created = await nextTaskListState(iterator, "create");
 
-      expect(created.response.status?.status.case).toBe("ok");
-      expect(created.subscription.id).toEqual(subscription.subscription.id);
-      expect(created.list).toEqual(
+      expect(created).toEqual(
         create(TaskListSchema, {
           id: "task-live",
           tasks: [
@@ -672,104 +654,91 @@ describe("@spine-ts/example-todo", () => {
         }),
       );
 
-      await fixture.post(createRenameCommand("command-subscribe-rename", "task-live", "Renamed"));
-      const renamed = unpackSubscribedTaskList(
-        await nextSubscriptionUpdate(subscription, "rename"),
-      );
+      await scope.post(RenameTaskSchema, renameTask("task-live", "Renamed"));
+      const renamed = await nextTaskListState(iterator, "rename");
 
-      expect(renamed.list.tasks[0]?.title).toBe("Renamed");
-      expect(renamed.list.tasks[0]?.completed).toBe(false);
-      expect(renamed.list.openTaskCount).toBe(1);
+      expect(renamed.tasks[0]?.title).toBe("Renamed");
+      expect(renamed.tasks[0]?.completed).toBe(false);
+      expect(renamed.openTaskCount).toBe(1);
 
-      await fixture.post(createCompleteCommand("command-subscribe-complete", "task-live"));
-      const completed = unpackSubscribedTaskList(
-        await nextSubscriptionUpdate(subscription, "complete"),
-      );
+      await scope.post(CompleteTaskSchema, completeTask("task-live"));
+      const completed = await nextTaskListState(iterator, "complete");
 
-      expect(completed.list.tasks[0]?.title).toBe("Renamed");
-      expect(completed.list.tasks[0]?.completed).toBe(true);
-      expect(completed.list.openTaskCount).toBe(0);
+      expect(completed.tasks[0]?.title).toBe("Renamed");
+      expect(completed.tasks[0]?.completed).toBe(true);
+      expect(completed.openTaskCount).toBe(0);
 
-      await fixture.post(createReopenCommand("command-subscribe-reopen", "task-live"));
-      const reopened = unpackSubscribedTaskList(
-        await nextSubscriptionUpdate(subscription, "reopen"),
-      );
+      await scope.post(ReopenTaskSchema, reopenTask("task-live"));
+      const reopened = await nextTaskListState(iterator, "reopen");
 
-      expect(reopened.list.tasks[0]?.title).toBe("Renamed");
-      expect(reopened.list.tasks[0]?.completed).toBe(false);
-      expect(reopened.list.openTaskCount).toBe(1);
+      expect(reopened.tasks[0]?.title).toBe("Renamed");
+      expect(reopened.tasks[0]?.completed).toBe(false);
+      expect(reopened.openTaskCount).toBe(1);
     } finally {
-      await withTimeout(subscription.close(), "subscription cleanup", 250);
+      await withTimeout(subscription.cancel(), "subscription cleanup", 250);
     }
   });
 
   it("renames one task through command handling and exposes the new title", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-rename-create", "task-rename", "Original"));
-    const ack = await fixture.post(
-      createRenameCommand("command-rename-task", "task-rename", "Renamed"),
-    );
-    const response = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-rename", "Original"));
+    const ack = await scope.post(RenameTaskSchema, renameTask("task-rename", "Renamed"));
+    const rows = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskTitle(candidate, "task-rename") === "Renamed",
     );
-    const task = readTask(response, "task-rename");
+    const task = readTask(rows, "task-rename");
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.kind).toBe("ok");
     expect(task?.title).toBe("Renamed");
     expect(task?.completed).toBe(false);
-    expect(readList(response, "task-rename")?.openTaskCount).toBe(1);
+    expect(readList(rows, "task-rename")?.openTaskCount).toBe(1);
   });
 
   it("rejects invalid rename payloads with validation details without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-invalid-rename-create", "task-invalid", "Kept"));
-    const originalResponse = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-invalid", "Kept"));
+    const originalResponse = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskTitle(candidate, "task-invalid") === "Kept",
     );
 
-    const ack = await fixture.post(
-      createRenameCommand("command-invalid-rename", "task-invalid", "", { validate: false }),
+    await expect(scope.post(RenameTaskSchema, renameTask("task-invalid", ""))).rejects.toThrow(
+      "Message validation failed",
     );
     const response = await expectTaskListEventuallyUnchanged(
       fixture,
+      scope,
       originalResponse,
       "task-invalid",
     );
-    const details = validationDetails(ack.status?.status);
-
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
-    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
-    expect(details?.constraintViolation.length).toBeGreaterThan(0);
     expect(readTask(response, "task-invalid")).toEqual(readTask(originalResponse, "task-invalid"));
     expect(readList(response, "task-invalid")?.openTaskCount).toBe(1);
   });
 
   it("completes one task through command handling and closes the list row", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-complete-create", "task-complete", "Open"));
-    const ack = await fixture.post(createCompleteCommand("command-complete-task", "task-complete"));
-    const response = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-complete", "Open"));
+    const ack = await scope.post(CompleteTaskSchema, completeTask("task-complete"));
+    const response = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskCompleted(candidate, "task-complete") === true,
     );
     const task = readTask(response, "task-complete");
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.kind).toBe("ok");
     expect(task?.title).toBe("Open");
     expect(task?.completed).toBe(true);
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
@@ -777,7 +746,7 @@ describe("@spine-ts/example-todo", () => {
 
   it("starts no probe after the rejection readiness deadline expires", async () => {
     let postCount = 0;
-    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+    const pendingRead = new Promise<RejectionEvent | undefined>(() => undefined);
 
     await expect(
       establishRejectionSubscriptionReadiness(
@@ -796,7 +765,7 @@ describe("@spine-ts/example-todo", () => {
 
   it("bounds a non-settling probe post by the rejection readiness deadline", async () => {
     let postCount = 0;
-    const pendingRead = new Promise<SubscriptionUpdate | undefined>(() => undefined);
+    const pendingRead = new Promise<RejectionEvent | undefined>(() => undefined);
 
     await expect(
       establishRejectionSubscriptionReadiness(
@@ -840,16 +809,16 @@ describe("@spine-ts/example-todo", () => {
 
   it("waits for the received readiness probe post before starting the fence", async () => {
     const postFailure = new Error("late rejection readiness post failed");
-    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstRead = Promise.withResolvers<RejectionEvent | undefined>();
     const firstPost = Promise.withResolvers<undefined>();
     let nextCount = 0;
     let postCount = 0;
     const readiness = establishRejectionSubscriptionReadiness(
       {
-        postEvent: (event) => {
+        postEvent: (_schema, message) => {
           postCount++;
           if (postCount === 1) {
-            firstRead.resolve(createEventSubscriptionUpdate(event));
+            firstRead.resolve({ message });
             return firstPost.promise;
           }
           return Promise.resolve();
@@ -860,7 +829,7 @@ describe("@spine-ts/example-todo", () => {
           nextCount++;
           return nextCount === 1
             ? firstRead.promise
-            : new Promise<SubscriptionUpdate | undefined>(() => undefined);
+            : new Promise<RejectionEvent | undefined>(() => undefined);
         },
       },
       100,
@@ -875,23 +844,23 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("completes received-probe readiness only after its post and fence succeed", async () => {
-    const firstRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const firstRead = Promise.withResolvers<RejectionEvent | undefined>();
     const firstPost = Promise.withResolvers<undefined>();
-    const fenceRead = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const fenceRead = Promise.withResolvers<RejectionEvent | undefined>();
     const fencePost = Promise.withResolvers<undefined>();
     let nextCount = 0;
     let postCount = 0;
     let readinessSettled = false;
     const readiness = establishRejectionSubscriptionReadiness(
       {
-        postEvent: (event) => {
+        postEvent: (_schema, message) => {
           postCount++;
           if (postCount === 1) {
-            firstRead.resolve(createEventSubscriptionUpdate(event));
+            firstRead.resolve({ message });
             return firstPost.promise;
           }
           if (postCount === 2) {
-            fenceRead.resolve(createEventSubscriptionUpdate(event));
+            fenceRead.resolve({ message });
             return fencePost.promise;
           }
           throw new Error("Unexpected rejection readiness post.");
@@ -967,140 +936,140 @@ describe("@spine-ts/example-todo", () => {
 
   it("accepts an already-completed rejection and publishes its typed event", async () => {
     const context = await createTodoContext();
-    const fixture = new BoundedContextFixture(context, {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
-    const subscription = await fixture.subscribe(createEventTopic(TaskAlreadyDoneSchema));
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const subscription = await scope.subscribeToEvents(TaskAlreadyDoneSchema);
+    const iterator = subscription[Symbol.asyncIterator]();
 
     try {
-      await establishRejectionSubscriptionReadiness(fixture, subscription);
-      await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
-      await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
-      const completedResponse = await fixture.readEventually(
+      await establishRejectionSubscriptionReadiness(scope, {
+        next: async () => {
+          const result = await iterator.next();
+          return result.done ? undefined : result.value;
+        },
+      });
+      await scope.post(CreateTaskSchema, createTask("task-refuse", "One-shot"));
+      await scope.post(CompleteTaskSchema, completeTask("task-refuse"));
+      const completedResponse = await readTaskListsEventually(
+        fixture,
+        scope,
         createTaskListQuery(),
         (candidate) => taskCompleted(candidate, "task-refuse") === true,
       );
-      const command = createCompleteCommand("command-refuse-complete-again", "task-refuse");
-      const nextRejection = nextSubscriptionUpdate(subscription, "task already done");
+      const nextRejection = iterator.next();
 
-      const ack = await fixture.post(command);
+      const ack = await scope.post(CompleteTaskSchema, completeTask("task-refuse"));
       const update = await nextRejection;
-      const event = subscribedEvent(update);
+      if (update.done) throw new Error("Expected a task rejection event.");
+      const event = update.value;
       expect(context.storedEventDispatchFailures()).toEqual([]);
       const response = await expectTaskListEventuallyUnchanged(
         fixture,
+        scope,
         completedResponse,
         "task-refuse",
       );
       const task = readTask(response, "task-refuse");
 
-      expect(ack.status?.status.case).toBe("ok");
-      expect(event.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
-      expect(
-        event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
-      ).toEqual(
+      expect(ack.kind).toBe("ok");
+      expect(event.message).toEqual(
         create(TaskAlreadyDoneSchema, {
           id: create(TaskIdSchema, { value: "task-refuse" }),
         }),
       );
-      expect(event.context?.rejection?.command).toBeUndefined();
-      // Verify that the legacy wire payload is absent at the client boundary.
+      expect(event.context.rejection?.command).toBeUndefined();
       // eslint-disable-next-line @typescript-eslint/no-deprecated
-      expect(event.context?.rejection?.commandMessage).toBeUndefined();
-      expect(event.context?.rejection?.stacktrace).toBe("");
+      expect(event.context.rejection?.commandMessage).toBeUndefined();
+      expect(event.context.rejection?.stacktrace).toBe("");
       expect(task).toEqual(readTask(completedResponse, "task-refuse"));
       expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
     } finally {
-      await withTimeout(subscription.close(), "rejection subscription cleanup", 250);
+      await withTimeout(subscription.cancel(), "rejection subscription cleanup", 250);
     }
   });
 
   it("accepts reopening an open task as a rejection without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-refuse-reopen-create", "task-open", "Open"));
-    const openResponse = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-open", "Open"));
+    const openResponse = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskCompleted(candidate, "task-open") === false,
     );
 
-    const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
-    const response = await expectTaskListEventuallyUnchanged(fixture, openResponse, "task-open");
+    const ack = await scope.post(ReopenTaskSchema, reopenTask("task-open"));
+    const response = await expectTaskListEventuallyUnchanged(
+      fixture,
+      scope,
+      openResponse,
+      "task-open",
+    );
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.kind).toBe("ok");
     expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
     expect(readList(response, "task-open")?.openTaskCount).toBe(1);
   });
 
   it("cancels task-list subscriptions and makes later reads inert", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
-    const subscription = await fixture.subscribe(createTaskListTopic());
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
+    const subscription = await scope.subscribeToState(TaskListSchema, TaskIdSchema);
+    const iterator = subscription[Symbol.asyncIterator]();
 
     try {
-      await fixture.post(createTaskCommand("command-cancel-subscribe", "task-cancel", "Cancel"));
-      expect(
-        unpackSubscribedTaskList(
-          await withTimeout(subscription.next(), "subscription update for cancel", 250),
-        ).list.id,
-      ).toBe("task-cancel");
+      await scope.post(CreateTaskSchema, createTask("task-cancel", "Cancel"));
+      expect((await nextTaskListState(iterator, "cancel")).id).toBe("task-cancel");
 
-      const cancel = await subscription.cancel();
-
-      expect(cancel.status?.status.case).toBe("ok");
-      await expect(nextSubscriptionUpdate(subscription, "cancel")).resolves.toBeUndefined();
+      await subscription.cancel();
+      await expect(iterator.next()).resolves.toMatchObject({ done: true });
     } finally {
-      await withTimeout(subscription.close(), "subscription cancellation cleanup", 250);
+      await withTimeout(subscription.cancel(), "subscription cancellation cleanup", 250);
     }
   });
 
   it("counts duplicate same-id projection rows", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-duplicate-first", "task-duplicate", "First"));
-    await fixture.post(createTaskCommand("command-duplicate-second", "task-duplicate", "Second"));
-    await fixture.post(createCompleteCommand("command-duplicate-complete", "task-duplicate"));
-    const completed = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-duplicate", "First"));
+    await scope.post(CreateTaskSchema, createTask("task-duplicate", "Second"));
+    await scope.post(CompleteTaskSchema, completeTask("task-duplicate"));
+    const completed = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListIdQuery("task-duplicate"),
-      (candidate) =>
-        unpackTaskList(candidate.message[0]?.state)?.tasks.every((task) => task.completed) === true,
+      (candidate) => candidate[0]?.tasks.every((task) => task.completed) === true,
     );
-    const completedList = unpackTaskList(completed.message[0]?.state);
+    const completedList = completed[0];
 
     expect(completedList?.openTaskCount).toBe(0);
     expect(completedList?.tasks.map((task) => task.completed)).toEqual([true, true]);
 
-    await fixture.post(createReopenCommand("command-duplicate-reopen", "task-duplicate"));
-    const reopened = await fixture.readEventually(
+    await scope.post(ReopenTaskSchema, reopenTask("task-duplicate"));
+    const reopened = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListIdQuery("task-duplicate"),
-      (candidate) =>
-        unpackTaskList(candidate.message[0]?.state)?.tasks.every((task) => !task.completed) ===
-        true,
+      (candidate) => candidate[0]?.tasks.every((task) => !task.completed) === true,
     );
-    const reopenedList = unpackTaskList(reopened.message[0]?.state);
+    const reopenedList = reopened[0];
 
     expect(reopenedList?.openTaskCount).toBe(2);
     expect(reopenedList?.tasks.map((task) => task.completed)).toEqual([false, false]);
   });
 
   it("detects changed task-list snapshots when an extra task row appears", () => {
-    const expected = createTaskListResponse("task-snapshot", [
+    const expected = createTaskListRows("task-snapshot", [
       create(TaskSchema, {
         id: create(TaskIdSchema, { value: "task-snapshot" }),
         title: "First",
         completed: false,
       }),
     ]);
-    const actual = createTaskListResponse("task-snapshot", [
+    const actual = createTaskListRows("task-snapshot", [
       create(TaskSchema, {
         id: create(TaskIdSchema, { value: "task-snapshot" }),
         title: "First",
@@ -1122,14 +1091,14 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reopens one task through command handling and opens the list row", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-reopen-create", "task-reopen", "Done"));
-    await fixture.post(createCompleteCommand("command-reopen-complete", "task-reopen"));
-    const completedResponse = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-reopen", "Done"));
+    await scope.post(CompleteTaskSchema, completeTask("task-reopen"));
+    const completedResponse = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskCompleted(candidate, "task-reopen") === true,
     );
@@ -1138,37 +1107,41 @@ describe("@spine-ts/example-todo", () => {
     expect(completedTask?.completed).toBe(true);
     expect(readList(completedResponse, "task-reopen")?.openTaskCount).toBe(0);
 
-    const ack = await fixture.post(createReopenCommand("command-reopen-task", "task-reopen"));
-    const response = await fixture.readEventually(
+    const ack = await scope.post(ReopenTaskSchema, reopenTask("task-reopen"));
+    const response = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskCompleted(candidate, "task-reopen") === false,
     );
     const task = readTask(response, "task-reopen");
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.kind).toBe("ok");
     expect(task?.title).toBe("Done");
     expect(task?.completed).toBe(false);
     expect(readList(response, "task-reopen")?.openTaskCount).toBe(1);
   });
 
   it("preserves visible task state through command and projection updates", async () => {
-    const fixture = new BoundedContextFixture(await createTodoContext(), {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
 
-    await fixture.post(createTaskCommand("command-history-create", "task-history", "Original"));
-    await fixture.post(createCompleteCommand("command-history-complete", "task-history"));
-    await fixture.post(createRenameCommand("command-history-rename", "task-history", "Still done"));
-    const doneResponse = await fixture.readEventually(
+    await scope.post(CreateTaskSchema, createTask("task-history", "Original"));
+    await scope.post(CompleteTaskSchema, completeTask("task-history"));
+    await scope.post(RenameTaskSchema, renameTask("task-history", "Still done"));
+    const doneResponse = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) =>
         taskTitle(candidate, "task-history") === "Still done" &&
         taskCompleted(candidate, "task-history") === true,
     );
 
-    await fixture.post(createReopenCommand("command-history-reopen", "task-history"));
-    const openResponse = await fixture.readEventually(
+    await scope.post(ReopenTaskSchema, reopenTask("task-history"));
+    const openResponse = await readTaskListsEventually(
+      fixture,
+      scope,
       createTaskListQuery(),
       (candidate) => taskCompleted(candidate, "task-history") === false,
     );
@@ -1185,15 +1158,15 @@ describe("@spine-ts/example-todo", () => {
 
   it("rebuilds the task list from stored events during read-side catch-up", async () => {
     const context = await createTodoContext();
-    const fixture = new BoundedContextFixture(context, {
-      timeoutMs: 500,
-      intervalMs: 5,
-    });
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
 
     try {
-      await fixture.post(createTaskCommand("command-catch-up-create", "task-catch-up", "Original"));
-      await fixture.post(createCompleteCommand("command-catch-up-complete", "task-catch-up"));
-      await fixture.readEventually(
+      await scope.post(CreateTaskSchema, createTask("task-catch-up", "Original"));
+      await scope.post(CompleteTaskSchema, completeTask("task-catch-up"));
+      await readTaskListsEventually(
+        fixture,
+        scope,
         createTaskListQuery(),
         (candidate) => taskCompleted(candidate, "task-catch-up") === true,
       );
@@ -1242,6 +1215,46 @@ interface RemoteTodo {
   readonly commands: Client<typeof CommandService>;
   readonly queries: Client<typeof QueryService>;
   readonly subscriptions: Client<typeof SubscriptionService>;
+}
+
+async function createTodoBlackBox(context?: Awaited<ReturnType<typeof createTodoContext>>) {
+  const blackBox = await BlackBox.from(context ?? (await createTodoContext()), {
+    timeoutMs: 500,
+    intervalMs: 5,
+  });
+  ownedBlackBoxes.add(blackBox);
+  return blackBox;
+}
+
+async function readTaskLists(scope: BlackBoxScope, query: Query): Promise<readonly TaskList[]> {
+  const outcome = await scope.query(TaskListSchema, query);
+  if (outcome.kind !== "ok") {
+    throw new Error(`Expected a successful task-list query, received ${outcome.kind}.`);
+  }
+  return outcome.states.map(({ state }) => state as unknown as TaskList);
+}
+
+async function readTaskListsEventually(
+  blackBox: BlackBox,
+  scope: BlackBoxScope,
+  query: Query,
+  accept: (rows: readonly TaskList[]) => boolean,
+): Promise<readonly TaskList[]> {
+  return await blackBox.eventually(() => readTaskLists(scope, query), accept);
+}
+
+type TodoStateUpdate = StateSubscriptionUpdate<typeof TaskListSchema, typeof TaskIdSchema>;
+type DecodedTaskList = Extract<TodoStateUpdate, { readonly kind: "state" }>["state"];
+
+async function nextTaskListState(
+  iterator: AsyncIterator<TodoStateUpdate>,
+  label: string,
+): Promise<DecodedTaskList> {
+  const result = await withTimeout(iterator.next(), `subscription update for ${label}`, 250);
+  if (result.done || result.value.kind !== "state") {
+    throw new Error(`Expected a task-list state update for ${label}.`);
+  }
+  return result.value.state;
 }
 
 type RemoteCommandClient = Pick<Client<typeof CommandService>, "post">;
@@ -1420,6 +1433,13 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
   });
 }
 
+function createTask(taskId: string, title: string) {
+  return create(CreateTaskSchema, {
+    id: create(TaskIdSchema, { value: taskId }),
+    title,
+  });
+}
+
 function createRenameCommand(
   commandId: string,
   taskId: string,
@@ -1437,6 +1457,13 @@ function createRenameCommand(
   });
 }
 
+function renameTask(taskId: string, title: string) {
+  return create(RenameTaskSchema, {
+    id: create(TaskIdSchema, { value: taskId }),
+    title,
+  });
+}
+
 function createCompleteCommand(commandId: string, taskId: string) {
   return packCommand({
     ...createCommandMetadata(commandId),
@@ -1447,6 +1474,10 @@ function createCompleteCommand(commandId: string, taskId: string) {
   });
 }
 
+function completeTask(taskId: string) {
+  return create(CompleteTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
+}
+
 function createReopenCommand(commandId: string, taskId: string) {
   return packCommand({
     ...createCommandMetadata(commandId),
@@ -1455,6 +1486,10 @@ function createReopenCommand(commandId: string, taskId: string) {
       id: create(TaskIdSchema, { value: taskId }),
     }),
   });
+}
+
+function reopenTask(taskId: string) {
+  return create(ReopenTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
 }
 
 function createCommandMetadata(commandId: string) {
@@ -1549,17 +1584,6 @@ function createTaskListTopic(id?: string) {
   });
 }
 
-function createEventTopic(schema: MessageSchema) {
-  return create(TopicSchema, {
-    id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
-    target: create(TargetSchema, {
-      type: deriveTypeUrl(schema),
-      criterion: { case: "includeAll", value: true },
-    }),
-    context: createActorContext(),
-  });
-}
-
 function createActorContext() {
   return signalMetadata.actorContext({
     actor: create(UserIdSchema, { value: "todo-user" }),
@@ -1590,27 +1614,17 @@ function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
   };
 }
 
-function subscribedEvent(update: SubscriptionUpdate | undefined) {
-  const event = update?.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
-  if (event === undefined) {
-    throw new Error("Expected a subscribed event.");
-  }
-  return event;
-}
+type RejectionEvent = Pick<SubscriptionEvent<typeof TaskAlreadyDoneSchema>, "message">;
 
-function createEventSubscriptionUpdate(
-  event: Parameters<BoundedContextFixture["postEvent"]>[0],
-): SubscriptionUpdate {
-  return create(SubscriptionUpdateSchema, {
-    update: {
-      case: "eventUpdates",
-      value: create(EventUpdatesSchema, { event: [event] }),
-    },
-  });
+interface RejectionPublisher {
+  postEvent(
+    schema: typeof TaskAlreadyDoneSchema,
+    message: MessageShape<typeof TaskAlreadyDoneSchema>,
+  ): Promise<void>;
 }
 
 type RejectionReadOutcome =
-  | { readonly case: "received"; readonly update: SubscriptionUpdate | undefined }
+  | { readonly case: "received"; readonly update: RejectionEvent | undefined }
   | { readonly case: "readFailed"; readonly error: unknown };
 
 type RejectionPostOutcome =
@@ -1621,8 +1635,8 @@ interface RejectionPendingOutcome {
 }
 
 async function establishRejectionSubscriptionReadiness(
-  fixture: Pick<BoundedContextFixture, "postEvent">,
-  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
+  fixture: RejectionPublisher,
+  subscription: { readonly next: () => Promise<RejectionEvent | undefined> },
   timeoutMs = 500,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -1634,9 +1648,9 @@ async function establishRejectionSubscriptionReadiness(
   const receiveProbe = async (): Promise<void> => {
     for (let attempt = 1; attempt <= 16; attempt++) {
       const probe = createTaskAlreadyDoneProbe(`readiness-${String(attempt)}`);
-      probes.set(probe.eventId, probe.taskId);
+      probes.set(probe.taskId, probe.taskId);
       const postBudget = remainingMs(deadline);
-      const post = fixture.postEvent(probe.event);
+      const post = fixture.postEvent(TaskAlreadyDoneSchema, probe.message);
       const postOutcome = withTimeout(
         post,
         `rejection readiness probe ${String(attempt)} post`,
@@ -1654,7 +1668,7 @@ async function establishRejectionSubscriptionReadiness(
         if (settledPost.case === "postFailed") {
           return propagateReadinessFailure(settledPost.error);
         }
-        expectTaskAlreadyDoneProbe(subscribedEvent(initialOutcome.update), probes);
+        expectTaskAlreadyDoneProbe(assertRejectionEvent(initialOutcome.update), probes);
         return;
       }
       if (initialOutcome.case === "postFailed") {
@@ -1669,7 +1683,7 @@ async function establishRejectionSubscriptionReadiness(
         return propagateReadinessFailure(readOutcome.error);
       }
       if (readOutcome.case === "received") {
-        expectTaskAlreadyDoneProbe(subscribedEvent(readOutcome.update), probes);
+        expectTaskAlreadyDoneProbe(assertRejectionEvent(readOutcome.update), probes);
         return;
       }
     }
@@ -1682,28 +1696,28 @@ async function establishRejectionSubscriptionReadiness(
     if (finalOutcome.case === "readFailed") {
       return propagateReadinessFailure(finalOutcome.error);
     }
-    expectTaskAlreadyDoneProbe(subscribedEvent(finalOutcome.update), probes);
+    expectTaskAlreadyDoneProbe(assertRejectionEvent(finalOutcome.update), probes);
   };
   await receiveProbe();
 
   const fence = createTaskAlreadyDoneProbe("readiness-fence");
-  probes.set(fence.eventId, fence.taskId);
-  let nextProbe = nextSubscriptionUpdate(
+  probes.set(fence.taskId, fence.taskId);
+  let nextProbe = nextRejectionEvent(
     subscription,
     "rejection subscription readiness fence",
     remainingMs(deadline),
   );
   const fencePostBudget = remainingMs(deadline);
-  const fencePost = fixture.postEvent(fence.event);
+  const fencePost = fixture.postEvent(TaskAlreadyDoneSchema, fence.message);
   await withTimeout(fencePost, "rejection subscription readiness fence post", fencePostBudget);
 
   for (let remaining = probes.size; remaining > 0; remaining--) {
-    const event = subscribedEvent(await nextProbe);
+    const event = await nextProbe;
     expectTaskAlreadyDoneProbe(event, probes);
-    if (event.id?.value === fence.eventId) {
+    if (event.message.id?.value === fence.taskId) {
       return;
     }
-    nextProbe = nextSubscriptionUpdate(
+    nextProbe = nextRejectionEvent(
       subscription,
       "queued rejection readiness probe",
       remainingMs(deadline),
@@ -1721,35 +1735,25 @@ function propagateReadinessFailure(error: unknown): Promise<never> {
 
 function createTaskAlreadyDoneProbe(suffix: string) {
   const taskId = `task-rejection-${suffix}`;
-  const eventId = `event-rejection-${suffix}`;
 
   return {
-    eventId,
     taskId,
-    event: packEvent({
-      id: signalMetadata.eventId(eventId),
-      context: signalMetadata.eventContext({ producerId: taskId }),
-      schema: TaskAlreadyDoneSchema,
-      message: create(TaskAlreadyDoneSchema, {
-        id: create(TaskIdSchema, { value: taskId }),
-      }),
+    message: create(TaskAlreadyDoneSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
     }),
   };
 }
 
 function expectTaskAlreadyDoneProbe(
-  event: ReturnType<typeof subscribedEvent>,
+  event: RejectionEvent,
   probes: ReadonlyMap<string, string>,
 ): void {
-  const eventId = event.id?.value ?? "";
-  const taskId = probes.get(eventId);
-  if (taskId === undefined) {
-    throw new Error(`Received unexpected rejection readiness event "${eventId}".`);
+  const taskId = event.message.id?.value;
+  if (taskId === undefined || !probes.has(taskId)) {
+    throw new Error("Received an unexpected rejection readiness event.");
   }
 
-  expect(
-    event.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
-  ).toEqual(
+  expect(event.message).toEqual(
     create(TaskAlreadyDoneSchema, {
       id: create(TaskIdSchema, { value: taskId }),
     }),
@@ -1768,12 +1772,23 @@ function remainingMs(deadline: number): number {
   return remaining;
 }
 
-async function nextSubscriptionUpdate(
-  subscription: Pick<Awaited<ReturnType<BoundedContextFixture["subscribe"]>>, "next">,
+async function nextRejectionEvent(
+  subscription: { readonly next: () => Promise<RejectionEvent | undefined> },
   label: string,
   timeoutMs = 250,
-) {
-  return await withTimeout(subscription.next(), `subscription update for ${label}`, timeoutMs);
+): Promise<RejectionEvent> {
+  const result = await withTimeout(
+    subscription.next(),
+    `subscription update for ${label}`,
+    timeoutMs,
+  );
+  if (result === undefined) throw new Error(`Expected a rejection event for ${label}.`);
+  return result;
+}
+
+function assertRejectionEvent(value: RejectionEvent | undefined): RejectionEvent {
+  if (value === undefined) throw new Error("Expected a rejection event.");
+  return value;
 }
 
 async function readRemoteEventually(
@@ -1864,51 +1879,66 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function readList(response: Pick<QueryResponse, "message">, taskId: string) {
-  return response.message
-    .map((message) => unpackTaskList(message.state))
-    .find((list) => list?.id === taskId);
+interface TaskView {
+  readonly id?: { readonly value: string } | undefined;
+  readonly title: string;
+  readonly completed: boolean;
 }
 
-function readTask(response: Pick<QueryResponse, "message">, taskId: string): Task | undefined {
-  return readList(response, taskId)?.tasks.find((task) => task.id?.value === taskId);
+interface TaskListView {
+  readonly id: string;
+  readonly tasks: readonly TaskView[];
+  readonly openTaskCount: number;
 }
 
-function createTaskListResponse(id: string, tasks: Task[]): Pick<QueryResponse, "message"> {
-  return {
-    message: [
-      create(EntityStateWithVersionSchema, {
-        state: packAny(
-          TaskListSchema,
-          create(TaskListSchema, {
-            id,
-            openTaskCount: tasks.filter((task) => !task.completed).length,
-            tasks,
-          }),
-        ),
-      }),
-    ],
-  };
+type TaskListRows = readonly TaskListView[] | Pick<QueryResponse, "message">;
+
+function decodedTaskLists(rows: TaskListRows): readonly TaskListView[] {
+  if ("message" in rows) {
+    const lists: TaskList[] = [];
+    for (const message of rows.message) {
+      const list = unpackTaskList(message.state);
+      if (list !== undefined) lists.push(list);
+    }
+    return lists;
+  }
+  return rows;
+}
+
+function readList(rows: TaskListRows, taskId: string) {
+  return decodedTaskLists(rows).find((list) => list.id === taskId);
+}
+
+function readTask(rows: TaskListRows, taskId: string): TaskView | undefined {
+  return readList(rows, taskId)?.tasks.find((task) => task.id?.value === taskId);
+}
+
+function createTaskListRows(id: string, tasks: Task[]): readonly TaskList[] {
+  return [
+    create(TaskListSchema, {
+      id,
+      openTaskCount: tasks.filter((task) => !task.completed).length,
+      tasks,
+    }),
+  ];
 }
 
 async function expectTaskListEventuallyUnchanged(
-  fixture: BoundedContextFixture,
-  expected: QueryResponse,
+  fixture: BlackBox,
+  scope: BlackBoxScope,
+  expected: readonly TaskList[],
   taskId: string,
-): Promise<QueryResponse> {
+): Promise<readonly TaskList[]> {
   const expectedSnapshot = taskListSnapshot(expected, taskId);
-  const response = await fixture.readEventually(
-    createTaskListQuery(),
-    (candidate) => !sameTaskListSnapshot(taskListSnapshot(candidate, taskId), expectedSnapshot),
-  );
+  const response = await readTaskLists(scope, createTaskListQuery());
 
   expect(taskListSnapshot(response, taskId)).toEqual(expectedSnapshot);
 
   return response;
 }
 
-function taskListSnapshot(response: Pick<QueryResponse, "message">, taskId: string) {
-  const list = readList(response, taskId);
+function taskListSnapshot(rows: TaskListRows, taskId: string) {
+  const list = readList(rows, taskId);
 
   return {
     id: list?.id,
@@ -1943,31 +1973,12 @@ function sameTaskListSnapshot(
   );
 }
 
-function taskTitle(response: Pick<QueryResponse, "message">, taskId: string): string | undefined {
-  return readTask(response, taskId)?.title;
+function taskTitle(rows: TaskListRows, taskId: string): string | undefined {
+  return readTask(rows, taskId)?.title;
 }
 
-function taskCompleted(
-  response: Pick<QueryResponse, "message">,
-  taskId: string,
-): boolean | undefined {
-  return readTask(response, taskId)?.completed;
-}
-
-function errorMessage(status: unknown) {
-  if (
-    typeof status !== "object" ||
-    status === null ||
-    !("case" in status) ||
-    status.case !== "error"
-  ) {
-    return undefined;
-  }
-  const value = "value" in status ? status.value : undefined;
-
-  return typeof value === "object" && value !== null && "message" in value
-    ? value.message
-    : undefined;
+function taskCompleted(rows: TaskListRows, taskId: string): boolean | undefined {
+  return readTask(rows, taskId)?.completed;
 }
 
 function errorType(status: unknown) {

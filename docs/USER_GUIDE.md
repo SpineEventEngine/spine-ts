@@ -557,7 +557,8 @@ import { create } from "@bufbuild/protobuf";
 import { Client, ProjectionColumn, all, eq } from "@spine-ts/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
-import { TaskIdSchema, TaskListSchema } from "@example/tasks-proto/task_list_pb";
+import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
+import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
 const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
 const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
@@ -660,37 +661,71 @@ errors remain non-OK acknowledgements with their existing error contracts.
 
 ## 10. Test the real paths
 
-`@spine-ts/testing` provides `BoundedContextFixture` for in-process black-box
-tests over a built context. It posts commands, reads queries, polls eventual
-query results, and activates subscriptions through the same service adapters.
-Use it for focused application behavior, including asynchronous projection
-consequences. It does not start a listener or replace a network client.
+`@spine-ts/testing` provides `BlackBox`, a runner-neutral local test boundary.
+`await BlackBox.from(contextOrBuilder, options)` starts an ephemeral server and
+uses the public client API, so the same test works under Node's test runner or
+Vitest. It owns the client, server, and any subscriptions created by its scopes;
+always close it in `finally`. Tenant and zone are fixed for its whole lifetime:
+a multitenant context requires `tenant`, a single-tenant context rejects it,
+and `zoneId` is fixed once. Scopes are immutable: use `asGuest()` or
+`onBehalfOf("actor-id")`.
 
 This practical test shape requires a built `tasksContext` and generated service
 message fixtures from the consumer test-support package.
 
 ```ts
-import { BoundedContextFixture } from "@spine-ts/testing";
-import {
-  createTaskRequest,
-  taskListQuery,
-  taskListTopic,
-  tasksContext,
-} from "@example/tasks-test-support";
+import { create } from "@bufbuild/protobuf";
+import { BlackBox } from "@spine-ts/testing";
+import { taskListQuery, tasksContext } from "@example/tasks-test-support";
+import { CreateTaskSchema } from "../generated/acme/tasks/v1/task_commands_pb.js";
+import { TaskCreatedSchema } from "../generated/acme/tasks/v1/task_events_pb.js";
+import { TaskIdSchema } from "../generated/acme/tasks/v1/task_id_pb.js";
+import { TaskListSchema } from "../generated/acme/tasks/v1/task_list_pb.js";
 
-const fixture = new BoundedContextFixture(tasksContext);
-const updates = await fixture.subscribe(taskListTopic);
-const ack = await fixture.post(createTaskRequest);
-const response = await fixture.readEventually(taskListQuery);
-await updates.close();
-void ack;
-void response;
+const blackBox = await BlackBox.from(tasksContext, { zoneId: "Europe/Lisbon" });
+try {
+  const actor = blackBox.onBehalfOf("test-user");
+  const outcome = await actor.post(
+    CreateTaskSchema,
+    create(CreateTaskSchema, {
+      id: create(TaskIdSchema, { value: "task-1" }),
+      title: "Write docs",
+    }),
+  );
+  if (outcome.kind !== "ok") throw new Error(`CreateTask failed: ${outcome.kind}`);
+  const observed = await blackBox.eventually(
+    () => actor.query(TaskListSchema, taskListQuery),
+    (candidate) =>
+      candidate.kind === "ok" && candidate.states.some((row) => row.state.id?.value === "task-1"),
+  );
+  if (observed.kind !== "ok") throw new Error(`TaskList failed: ${observed.kind}`);
+  const updates = await actor.subscribeToState(TaskListSchema, TaskIdSchema);
+  const events = await actor.subscribeToEvents(TaskCreatedSchema);
+  await actor.postEvent(
+    TaskCreatedSchema,
+    create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: "imported-task" }),
+      title: "Imported task",
+    }),
+  );
+  await updates.cancel();
+  await events.cancel();
+} finally {
+  await blackBox.close();
+}
 ```
 
-Also run a real loopback test: start `Server` on port `0`, create Connect clients
-with `createGrpcTransport({ baseUrl: running.baseUrl })`, and exercise command,
-query, and subscription services. This verifies the actual HTTP/2 service
-boundary; it needs an environment that permits loopback listeners.
+`eventually()` has a bounded timeout (`BlackBoxTimeoutError` on expiry) and is
+the correct assertion boundary for asynchronous projections. State and event
+subscriptions yield decoded immutable observations; do not depend on raw
+Connect envelopes or private server types in application tests.
+`postEvent(EventSchema, message)` injects a generated domain event directly
+with the calling scope's fixed actor, tenant, and zone; use it for test setup
+when a command is not the behavior under test.
+`timeoutMs` and `intervalMs`, including per-call overrides, must be positive
+integers. Construction options are rejected before a context builder is built
+or any server/client resource is acquired; per-call overrides are rejected
+before the first read.
 
 Network request and response messages default to a 4,194,304-byte uncompressed
 limit. Configure `Server.atPort(port, { readMaxBytes, writeMaxBytes })` only when

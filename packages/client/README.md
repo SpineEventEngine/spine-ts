@@ -4,22 +4,46 @@ Node client facade and descriptor-backed Projection query foundations for Spine.
 
 `Client.connectTo(url)` owns its HTTP/2 session; `Client.usingTransport(transport)`
 leaves a caller-supplied Connect transport open. A client defaults to the `guest`
-actor. Request scopes are immutable, so actor and tenant context cannot leak between
-concurrent calls. Call `close()` once application work is finished; it is idempotent
-and rejects work started after close begins.
+actor. Request scopes are immutable, so actor, tenant, and time-zone context cannot
+leak between concurrent calls. Tenant and `zoneId` are fixed for the full client
+lifecycle: nonempty strings and Protobuf inputs are validated and cloned when the
+client is created. Omitting `zoneId` resolves Node's current nonempty system IANA
+zone once; it does not change for later operations. Call `close()` once application
+work is finished; it is idempotent and rejects work started after close begins.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Client } from "@spine-ts/client";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 
-const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const client = Client.connectTo("http://127.0.0.1:8080", {
+  tenant: "tasks",
+  zoneId: "Europe/Lisbon",
+});
 const result = await client
   .onBehalfOf("alice")
   .post(CreateTaskSchema, create(CreateTaskSchema, { title: "Read client results" }));
 
 if (result.kind === "error") console.error(result.error);
 if (result.kind === "rejection") console.error(result.rejection);
+```
+
+For the system-zone default, omit `zoneId`; the selected zone remains stable for
+both guest and actor scopes. Use a Protobuf ID when that better fits application
+configuration; it is still copied at construction:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client } from "@spine-ts/client";
+import { TenantIdSchema, ZoneIdSchema } from "@spine-ts/proto";
+
+const client = Client.connectTo("http://127.0.0.1:8080", {
+  tenant: create(TenantIdSchema, { kind: { case: "value", value: "tasks" } }),
+  zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
+});
+const guest = client.asGuest();
+const alice = client.onBehalfOf("alice");
+await client.close();
 ```
 
 The `@example/*` import above represents the application's generated
@@ -70,7 +94,8 @@ criteria or mask.
 import { create } from "@bufbuild/protobuf";
 import { Client, ProjectionColumn, all, either, eq } from "@spine-ts/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
-import { TaskIdSchema, TaskListSchema } from "@example/tasks-proto/task_list_pb";
+import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
+import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
 const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);

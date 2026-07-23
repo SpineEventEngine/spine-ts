@@ -42,10 +42,11 @@ pnpm vitest run examples/todo/test/local-multi-process.test.ts
 ```
 
 The black-box suite covers real loopback command, query, and subscription
-behavior. The local multi-process suite proves a bounded same-host fixture;
-it is not an application CLI. Managed sandboxes can reject loopback or local
-IPC binding with `EPERM`; rerun those native tests where those permissions are
-available.
+behavior through `@spine-ts/testing` `BlackBox`, which is equally usable from
+Node's test runner and Vitest. The local multi-process suite proves a bounded
+same-host fixture; it is not an application CLI. Managed sandboxes can reject
+loopback or local IPC binding with `EPERM`; rerun those native tests where
+those permissions are available.
 
 ## What it demonstrates
 

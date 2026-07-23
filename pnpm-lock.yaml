@@ -238,6 +238,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-ts/client':
+        specifier: workspace:*
+        version: link:../client
       '@spine-ts/core':
         specifier: workspace:*
         version: link:../core

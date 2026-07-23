@@ -11,9 +11,11 @@ import {
   CommandIdSchema,
   TenantIdSchema,
   UserIdSchema,
+  ZoneIdSchema,
   type ActorContext,
   type Status,
   type TenantId,
+  type ZoneId,
   type Version,
   type EventContext,
 } from "@spine-ts/proto";
@@ -50,8 +52,8 @@ export type ObservedClientOutcome =
 
 /** A successfully decoded Projection state and its server version. */
 export interface QueryState<Schema extends MessageSchema> {
-  readonly state: MessageShape<Schema>;
-  readonly version: Version;
+  readonly state: DeepReadonly<MessageShape<Schema>>;
+  readonly version: DeepReadonly<Version>;
 }
 
 /** A query outcome, whose successful branch is fully decoded. */
@@ -83,8 +85,8 @@ export interface CommandEvents extends AsyncIterable<CommandEvent> {
 
 /** A decoded event and its immutable context. */
 export interface CommandEvent {
-  readonly message: Message;
-  readonly context: Message;
+  readonly message: DeepReadonly<Message>;
+  readonly context: DeepReadonly<Message>;
 }
 
 /** A decoded state update from a Projection subscription. */
@@ -151,9 +153,19 @@ type StateFieldName<Schema extends MessageSchema> = Exclude<
 > &
   string;
 
-/** Options for creating a client. */
+/**
+ * Immutable context selected when a client is created.
+ *
+ * Tenant and zone apply to every request scope for the client lifecycle. String
+ * values must be nonempty; Protobuf values are validated and cloned, so later
+ * caller mutation cannot change requests. When omitted, `zoneId` resolves once
+ * to the current system IANA zone and remains fixed for that client.
+ */
 export interface ClientOptions {
+  /** Optional client-wide tenant included in every request context. */
   readonly tenant?: string | TenantId;
+  /** Fixed IANA time zone included in every request context. */
+  readonly zoneId?: string | ZoneId;
 }
 
 /** Thrown for a service response that violates the frozen wire contract. */
@@ -168,37 +180,50 @@ export class ClientProtocolError extends Error {
 export class Client {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
+  readonly #zoneId: ZoneId;
 
-  private constructor(owner: ClientOwner, options: ClientOptions) {
+  private constructor(owner: ClientOwner, options: NormalizedClientOptions) {
     this.#owner = owner;
     this.#tenant = tenant(options.tenant);
+    this.#zoneId = zoneId(options.zoneId);
   }
 
-  /** Connect to an endpoint using a client-owned HTTP/2 session. */
+  /**
+   * Connect to an endpoint using a client-owned HTTP/2 session.
+   *
+   * Options are validated before the owned session is created. `close()` aborts
+   * that session; each request scope shares the client-wide fixed tenant and zone.
+   */
   static connectTo(baseUrl: string, options: ClientOptions = {}): Client {
+    const normalized = normalizeOptions(options);
     const sessions = new Http2SessionManager(baseUrl);
     return new Client(
       new ClientOwner(createGrpcTransport({ baseUrl, sessionManager: sessions }), () => {
         sessions.abort();
       }),
-      options,
+      normalized,
     );
   }
 
-  /** Use a caller-owned Connect transport. */
+  /**
+   * Use a caller-owned Connect transport.
+   *
+   * Options are cloned and validated at construction. `close()` does not close
+   * the supplied transport.
+   */
   static usingTransport(transport: Transport, options: ClientOptions = {}): Client {
-    return new Client(new ClientOwner(transport), options);
+    return new Client(new ClientOwner(transport), normalizeOptions(options));
   }
 
   /** Create an immutable request scope for the guest actor. */
   asGuest(): ClientRequest {
-    return new Request(this.#owner, this.#tenant, "guest");
+    return new Request(this.#owner, this.#tenant, this.#zoneId, "guest");
   }
 
   /** Create an immutable request scope for one actor. */
   onBehalfOf(user: string): ClientRequest {
     if (user.length === 0) throw new TypeError("Client actor must not be empty.");
-    return new Request(this.#owner, this.#tenant, user);
+    return new Request(this.#owner, this.#tenant, this.#zoneId, user);
   }
 
   /** Start closing this client, cancelling its operations and owned session once. */
@@ -259,11 +284,18 @@ export interface ClientRequest {
 class Request implements ClientRequest {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
+  readonly #zoneId: ZoneId;
   readonly #actor: string;
 
-  constructor(owner: ClientOwner, selectedTenant: TenantId | undefined, actor: string) {
+  constructor(
+    owner: ClientOwner,
+    selectedTenant: TenantId | undefined,
+    selectedZone: ZoneId,
+    actor: string,
+  ) {
     this.#owner = owner;
     this.#tenant = selectedTenant;
+    this.#zoneId = clone(ZoneIdSchema, selectedZone);
     this.#actor = actor;
   }
 
@@ -390,6 +422,7 @@ class Request implements ClientRequest {
   #context(): ActorContext {
     return create(ActorContextSchema, {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
+      zoneId: clone(ZoneIdSchema, this.#zoneId),
       actor: create(UserIdSchema, { value: this.#actor }),
       timestamp: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) }),
     });
@@ -1084,9 +1117,36 @@ function throwFailures(failures: readonly unknown[], message: string): void {
 
 function tenant(value: string | TenantId | undefined): TenantId | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string") return clone(TenantIdSchema, value);
+  if (typeof value !== "string") {
+    if (value.kind.case !== "value" || value.kind.value.length === 0) {
+      throw new TypeError("Client tenant must not be empty.");
+    }
+    return clone(TenantIdSchema, value);
+  }
   if (value.length === 0) throw new TypeError("Client tenant must not be empty.");
   return create(TenantIdSchema, { kind: { case: "value", value } });
+}
+
+function zoneId(value: string | ZoneId | undefined): ZoneId {
+  if (typeof value !== "string" && value !== undefined) {
+    if (value.value.length === 0) throw new TypeError("Client zoneId must not be empty.");
+    return clone(ZoneIdSchema, value);
+  }
+  const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (zone.length === 0) throw new TypeError("Client zoneId must not be empty.");
+  return create(ZoneIdSchema, { value: zone });
+}
+
+interface NormalizedClientOptions {
+  readonly tenant: TenantId | undefined;
+  readonly zoneId: ZoneId;
+}
+
+function normalizeOptions(options: ClientOptions): NormalizedClientOptions {
+  return Object.freeze({
+    tenant: tenant(options.tenant),
+    zoneId: zoneId(options.zoneId),
+  });
 }
 
 function outcome(status: Status["status"] | undefined): ClientOutcome {
@@ -1127,7 +1187,7 @@ function decodeState<Schema extends MessageSchema>(
     throw new ClientProtocolError("query state does not match its requested schema.");
   if (version === undefined) throw new ClientProtocolError("query state version is missing.");
   return Object.freeze({
-    state: deepClone(schema, state),
+    state: deepClone(schema, state) as DeepReadonly<MessageShape<Schema>>,
     version: deepFreeze(cloneMessage(version)),
   });
 }

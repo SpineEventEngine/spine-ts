@@ -259,9 +259,11 @@ const expectedZeroMqExports = [
   "createZeroMqTransport",
 ];
 const expectedTestingExports = [
-  "BoundedContextFixture",
-  "BoundedContextFixtureOptions",
-  "FixtureSubscription",
+  "BlackBox",
+  "BlackBoxClosedError",
+  "BlackBoxOptions",
+  "BlackBoxScope",
+  "BlackBoxTimeoutError",
 ];
 const expectedServerExports = [
   "Aggregate",

@@ -10,6 +10,7 @@ import {
   ResponseSchema,
   TenantIdSchema,
   UserIdSchema,
+  ZoneIdSchema,
 } from "@spine-ts/proto";
 import {
   EntityUpdatesSchema,
@@ -46,6 +47,34 @@ const subscriptionColumns = ProjectionColumn.register(
 );
 
 describe("Client subscriptions", () => {
+  it("uses fixed string and message zones in state and event topics", async () => {
+    const messageZone = create(ZoneIdSchema, { value: "Europe/Lisbon" });
+    const stateTopics: Message[] = [];
+    const stateClient = Client.usingTransport(topicCaptureTransport(stateTopics), {
+      zoneId: "America/New_York",
+    });
+    const states = await stateClient
+      .asGuest()
+      .subscribeToState(ProjectionStateSchema, UserIdSchema);
+    expect((stateTopics[0] as MessageShape<typeof TopicSchema>).context?.zoneId).toMatchObject({
+      value: "America/New_York",
+    });
+    await states.cancel();
+    await stateClient.close();
+
+    const eventTopics: Message[] = [];
+    const eventClient = Client.usingTransport(topicCaptureTransport(eventTopics), {
+      zoneId: messageZone,
+    });
+    messageZone.value = "mutated-after-construction";
+    const events = await eventClient.asGuest().subscribeToEvents(ProjectionStateSchema);
+    expect((eventTopics[0] as MessageShape<typeof TopicSchema>).context?.zoneId).toMatchObject({
+      value: "Europe/Lisbon",
+    });
+    await events.cancel();
+    await eventClient.close();
+  });
+
   it("builds a scoped state topic and decodes state and no-longer-matching IDs", async () => {
     const observed: unknown[] = [];
     const client = Client.usingTransport(subscriptionTransport(observed, "state"));

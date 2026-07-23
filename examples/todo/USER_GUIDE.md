@@ -30,6 +30,14 @@ module path; rerun `pnpm typecheck:build` and retry. Application handlers keep
 their bare `@Assign` and `@Subscribe` decorators: they do not manually register
 handler schemas.
 
+For application behavior tests, prefer `await BlackBox.from(await createTodoContext())`
+from `@spine-ts/testing`. Use `asGuest()` or `onBehalfOf()` for a fixed actor,
+post generated command messages, query `TaskListSchema`, and use
+`blackBox.eventually()` for projection visibility. Close the BlackBox in
+`finally`; it owns its local listener, client session, and uncancelled typed
+state/event subscriptions. This runner-neutral boundary works in Node and
+Vitest without raw Connect or private server types.
+
 ## Post commands and inspect acknowledgements
 
 Use generated schemas and public clients. The checked-in `pnpm --filter
