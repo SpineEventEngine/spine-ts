@@ -1,6 +1,6 @@
 # T-0063 Review Record
 
-Status: Corrections verified — focused re-review ready
+Status: Final targeted batch verified — narrow P1 closure review ready
 
 ## Scope
 
@@ -142,3 +142,64 @@ immutable corrected endpoint. Explicit expected profiles before dispatch:
 Runtime metadata or the immutable configured profile plus the introspection
 limitation will be recorded before acceptance. The complete focused re-review
 wave is collected before any further correction.
+
+## Focused Re-review Results And Final Targeted Batch
+
+Runtime self-introspection remained unavailable. The immutable configured
+profiles matched all three explicit dispatches with no visible fallback:
+existing style, TypeScript/API, and performance/reliability reviewers at
+`gpt-5.6-terra` / `high`.
+
+Resolved and clean: renewable lease stop, initial/epoch/exhaustion operation
+fencing, non-overlapping stale release, ordinary environment routing, queued
+close, detached settlement, timer/resource bounds, public exports, TSDoc,
+README/guide snippets, and wire boundaries.
+
+The second wave leaves this final accepted targeted batch:
+
+1. **P1 — nominal controlled capability.** Replace the structural
+   `runControlled` check with a module-private `WeakSet`/accessor owned by
+   `delivery-builder.ts`. Only actual `BuiltDelivery` identities may yield the
+   internal controlled runner. Keep the public `Delivery` interface unchanged
+   and export no brand, symbol, access object, or run-control type.
+2. **P1 — atomic mixed-shard environment setup.** Remove the unsupported
+   single-`ofTotal` restriction. Existing valid owner scopes may contain
+   different shard totals. Construct every required owner object before
+   installing either map entry, so failure cannot retain a worker without its
+   supervisor.
+3. **P1 — independent paired shutdown.** Whole-generation and owner-specific
+   stop/retire paths must attempt the legacy worker and supervisor independently
+   and aggregate/preserve failures. A worker stop failure may not leave the
+   supervisor's recovery/watch active.
+4. **P2 — real environment lifecycle evidence.** Add real-worker regressions
+   for routed notification into the supervisor, local periodic recovery, full
+   and selected-owner retirement, mixed shard totals, atomic setup failure, and
+   paired stop failure. Avoid test-only access to public internals.
+
+This is not a third complete review wave. The protocol permits immediate fixes
+and narrow re-review for unresolved P1 risk after the second wave. The existing
+implementation context owns only this batch; subsequent review is targeted to
+the exact P1/P2 behaviors above.
+
+## Final Targeted Verification And Closure Review
+
+- Independent loopback-enabled regression passed 12 files / 292 tests.
+- Generated build/tooling typecheck, repository ESLint and cleanup enforcement,
+  full Prettier check, generated TypeDoc/API inventory with the unchanged 224
+  server exports, and diff hygiene passed independently.
+- The final endpoint uses builder-owned private identity capability, exact
+  per-shard-total supervisor groups with atomic installation, independent
+  checkpointed paired shutdown, and real environment lifecycle regressions.
+
+Only the unresolved P1/P2 correction claims receive narrow closure review; no
+third complete wave is opened. Explicit expected profiles before dispatch:
+
+| Concern                                | Existing role                      | Explicit expected profile | Status |
+| -------------------------------------- | ---------------------------------- | ------------------------- | ------ |
+| Builder identity and public boundary   | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / `high`  | Ready  |
+| Environment setup/lifecycle simplicity | `style_maintainability_reviewer`   | `gpt-5.6-terra` / `high`  | Ready  |
+| Paired shutdown and real lifecycle     | `performance_reliability_reviewer` | `gpt-5.6-terra` / `high`  | Ready  |
+
+Runtime metadata or the immutable configured profile plus unavailable
+self-introspection will be recorded before acceptance. Any remaining P1 is
+fixed immediately; otherwise these targeted results close the specialist gate.

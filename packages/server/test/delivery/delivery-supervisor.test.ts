@@ -1,15 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 
 import {
+  DeliveryBuilder,
   DeliveryShutdownTimeoutError,
   DeliverySupervisor,
   type Delivery,
   type DeliveryRunOptions,
   ShardIndex,
+  UniformAcrossAllShards,
 } from "../../src/index.js";
+import type {
+  DeliveryInbox,
+  DeliveryOperationOptions,
+  DeliveryWorkRegistry,
+} from "../../src/delivery/delivery-ports.js";
+import type { InboxMessage } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
-  it("rejects an unqualified plain run port", () => {
+  it("rejects a forged port even when it copies the controlled method shape", () => {
+    const run = () => Promise.resolve({ status: "COMPLETED" as const, pages: [] });
     expect(
       () =>
         new DeliverySupervisor({
@@ -19,7 +29,8 @@ describe("DeliverySupervisor", () => {
             releaseExpired: () => Promise.resolve([]),
           },
           delivery: {
-            run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
+            run,
+            runControlled: run,
           } as never,
           onMessage: () => Promise.resolve(),
         }),
@@ -34,12 +45,15 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: qualifiedDelivery({
-        run: () => {
-          calls += 1;
-          return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+      delivery: qualifiedDelivery(
+        {
+          run: () => {
+            calls += 1;
+            return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+          },
         },
-      }),
+        1,
+      ),
       onMessage: () => Promise.resolve(),
     });
 
@@ -153,12 +167,15 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: () => emptyUpdates(),
         releaseExpired: () => Promise.resolve([]),
       },
-      delivery: qualifiedDelivery({
-        run: ({ shard }) => {
-          seen.push(requireShard(shard).index);
-          return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+      delivery: qualifiedDelivery(
+        {
+          run: ({ shard }) => {
+            seen.push(requireShard(shard).index);
+            return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+          },
         },
-      }),
+        2,
+      ),
       onMessage: () => Promise.resolve(),
     });
 
@@ -491,13 +508,63 @@ function newShard(index: number): ShardIndex {
   return new ShardIndex(index, 3);
 }
 
-function qualifiedDelivery(delivery: {
-  run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
-}): Delivery {
-  return Object.freeze({
-    ...delivery,
-    runControlled: delivery.run,
-  }) as unknown as Delivery;
+function qualifiedDelivery(
+  delivery: {
+    run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
+  },
+  shardCount = 3,
+): Delivery {
+  return new DeliveryBuilder()
+    .withContext({ name: "supervisor-test", multitenant: false })
+    .withStorageFactory(new InMemoryStorageFactory())
+    .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
+    .withInbox(new RunnerInbox(delivery.run))
+    .withWorkRegistry(new OpenRegistry())
+    .withNode("test-node")
+    .build();
+}
+
+class RunnerInbox implements DeliveryInbox {
+  readonly sessionKind = "EXCLUSIVE" as const;
+  readonly #run: (options: DeliveryRunOptions) => Promise<unknown>;
+
+  constructor(run: (options: DeliveryRunOptions) => Promise<unknown>) {
+    this.#run = run;
+  }
+
+  receive(): Promise<never> {
+    return Promise.reject(new Error("RunnerInbox.receive is unused."));
+  }
+
+  async read(shard: ShardIndex): Promise<readonly InboxMessage[]> {
+    await this.#run({ shard, onMessage: () => Promise.resolve() });
+    return [];
+  }
+
+  readMessage(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  begin(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+}
+
+class OpenRegistry implements DeliveryWorkRegistry {
+  readonly sessionKind = "EXCLUSIVE" as const;
+
+  pickUp(shard: ShardIndex) {
+    return Promise.resolve({ kind: "EXCLUSIVE" as const, shard });
+  }
+
+  release(
+    _session: Parameters<DeliveryWorkRegistry["release"]>[0],
+    _options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    void _session;
+    void _options;
+    return Promise.resolve(true);
+  }
 }
 
 function requireShard(shard: ShardIndex | undefined): ShardIndex {

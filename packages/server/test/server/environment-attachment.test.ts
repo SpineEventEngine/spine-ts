@@ -222,6 +222,269 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.retire();
   });
 
+  it("routes post-start work through the real runtime supervisor", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "RoutedSupervisor",
+      "type.example.dev/RoutedSupervisor",
+      storageFactory,
+    );
+    const scope = runScope("routed-supervisor-owner", target.ready);
+    const worker = new EnvironmentDeliveryWorker();
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await new Delivery({ context: target.context, storageFactory }).inbox.receive(
+      message(target.ready, "routed-after-start"),
+    );
+
+    worker.notify(scope);
+    await until(() => target.replayed.includes("routed-after-start"));
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("recovers local pending work on the real supervisor interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const storageFactory = new InMemoryStorageFactory();
+      const target = descriptor(
+        "PeriodicSupervisor",
+        "type.example.dev/PeriodicSupervisor",
+        storageFactory,
+      );
+      const scope = runScope("periodic-supervisor-owner", target.ready);
+      const worker = new EnvironmentDeliveryWorker();
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [scope],
+      });
+      await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+      await new Delivery({ context: target.context, storageFactory }).inbox.receive(
+        message(target.ready, "periodic-recovery"),
+      );
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => {
+        expect(target.replayed).toContain("periodic-recovery");
+      });
+
+      worker.stop();
+      await worker.awaitSettled();
+      await worker.retire();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("supports one real owner whose exact scopes use mixed shard totals", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("MixedTotals", "type.example.dev/MixedTotals", storageFactory);
+    const firstReady = Object.freeze({ ...target.ready, shard: new ShardIndex(0, 2) });
+    const secondReady = Object.freeze({ ...target.ready, shard: new ShardIndex(1, 3) });
+    const firstScope = runScope("mixed-total-owner", firstReady);
+    const secondScope = runScope("mixed-total-owner", secondReady);
+    const worker = new EnvironmentDeliveryWorker();
+
+    expect(() => {
+      worker.add({
+        owner: firstScope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [firstScope, secondScope],
+      });
+    }).not.toThrow();
+
+    await worker.start({ scopes: [firstScope, secondScope] }, [
+      firstReady.shard,
+      secondReady.shard,
+    ]);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    await delivery.inbox.receive(message(firstReady, "mixed-two"));
+    await delivery.inbox.receive(message(secondReady, "mixed-three"));
+    worker.notify(firstScope);
+    worker.notify(secondScope);
+    await until(
+      () => target.replayed.includes("mixed-two") && target.replayed.includes("mixed-three"),
+    );
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("leaves no partial owner when supervisor construction fails", async () => {
+    const firstRuntimeWorker = new LifecycleWorker();
+    const secondRuntimeWorker = new LifecycleWorker();
+    let next = 0;
+    const WorkerWithOptions = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly createWorker: () => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new WorkerWithOptions({
+      createWorker: () => {
+        const selected = [firstRuntimeWorker, secondRuntimeWorker][next];
+        next += 1;
+        if (selected === undefined) throw new Error("Unexpected runtime worker creation.");
+        return selected;
+      },
+    });
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("AtomicOwner", "type.example.dev/AtomicOwner", storageFactory);
+    const scope = runScope("atomic-owner", target.ready);
+
+    expect(() => {
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: { ...target.context, name: "" },
+        scopes: [scope],
+      });
+    }).toThrow("Delivery storage context name must be a non-empty string.");
+    expect(() => {
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [scope],
+      });
+    }).not.toThrow();
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("stops the real supervisor even when its paired legacy worker stop fails", async () => {
+    const runtimeWorker = new LifecycleWorker();
+    const stopFailure = new Error("legacy stop failed");
+    runtimeWorker.stopFailures.push(stopFailure);
+    const fixture = environmentDeliveryWorkerFixture(runtimeWorker);
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("PairedStop", "type.example.dev/PairedStop", storageFactory);
+    const scope = runScope("paired-stop-owner", target.ready);
+    fixture.add(target, scope);
+
+    expect(() => {
+      fixture.worker.stop();
+    }).toThrow(stopFailure);
+    await fixture.worker.awaitSettled();
+    await new Delivery({ context: target.context, storageFactory }).inbox.receive(
+      message(target.ready, "after-failed-stop"),
+    );
+    fixture.worker.notify(scope);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(target.replayed).not.toContain("after-failed-stop");
+
+    fixture.worker.stop();
+    await fixture.worker.awaitSettled();
+    await fixture.worker.retire();
+    expect(runtimeWorker.stopCalls).toBe(2);
+  });
+
+  it("stops a selected real supervisor when its paired owner stop fails", async () => {
+    const runtimeWorker = new LifecycleWorker();
+    const stopFailure = new Error("selected legacy stop failed");
+    runtimeWorker.stopFailures.push(stopFailure);
+    const fixture = environmentDeliveryWorkerFixture(runtimeWorker);
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "SelectedPairedStop",
+      "type.example.dev/SelectedPairedStop",
+      storageFactory,
+    );
+    const scope = runScope("selected-paired-stop-owner", target.ready);
+    fixture.add(target, scope);
+
+    expect(() => {
+      fixture.worker.stopOwners([scope.owner.key]);
+    }).toThrow(stopFailure);
+    await fixture.worker.awaitOwnersSettled([scope.owner.key]);
+    await new Delivery({ context: target.context, storageFactory }).inbox.receive(
+      message(target.ready, "after-selected-failed-stop"),
+    );
+    fixture.worker.notify(scope);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(target.replayed).not.toContain("after-selected-failed-stop");
+
+    fixture.worker.stopOwners([scope.owner.key]);
+    await fixture.worker.awaitOwnersSettled([scope.owner.key]);
+    await fixture.worker.retireOwners([scope.owner.key]);
+    expect(runtimeWorker.stopCalls).toBe(2);
+  });
+
+  it("retires selected and full real supervisors without leaving routed work active", async () => {
+    const firstStorage = new InMemoryStorageFactory();
+    const secondStorage = new InMemoryStorageFactory();
+    const first = descriptor("RetireRealFirst", "type.example.dev/RetireRealFirst", firstStorage);
+    const second = descriptor(
+      "RetireRealSecond",
+      "type.example.dev/RetireRealSecond",
+      secondStorage,
+    );
+    const firstScope = runScope("retire-real-first", first.ready);
+    const secondScope = runScope("retire-real-second", second.ready);
+    const worker = new EnvironmentDeliveryWorker();
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      storageFactory: firstStorage,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      storageFactory: secondStorage,
+      tenant: {},
+      context: second.context,
+      scopes: [secondScope],
+    });
+    await worker.start({ scopes: [firstScope] }, [firstScope.ready.shard]);
+    await worker.start({ scopes: [secondScope] }, [secondScope.ready.shard]);
+
+    worker.stopOwners([firstScope.owner.key]);
+    await worker.awaitOwnersSettled([firstScope.owner.key]);
+    await worker.retireOwners([firstScope.owner.key]);
+    expect(() => {
+      worker.notify(firstScope);
+    }).toThrow("Environment delivery owner is not configured.");
+
+    await new Delivery({ context: second.context, storageFactory: secondStorage }).inbox.receive(
+      message(second.ready, "live-sibling"),
+    );
+    worker.notify(secondScope);
+    await until(() => second.replayed.includes("live-sibling"));
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+    await new Delivery({ context: second.context, storageFactory: secondStorage }).inbox.receive(
+      message(second.ready, "after-full-retire"),
+    );
+    worker.notify(secondScope);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(second.replayed).not.toContain("after-full-retire");
+  });
+
   it("selects the exact owner when distinct storage runtimes have equal readiness", async () => {
     const firstStorage = new InMemoryStorageFactory();
     const secondStorage = new InMemoryStorageFactory();
@@ -3033,6 +3296,7 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   readonly awaitOwnerFailures: Error[] = [];
   readonly retireOwnerFailures: Error[] = [];
   readonly startFailures: Error[] = [];
+  readonly stopFailures: Error[] = [];
   readonly retiredOwners: string[][] = [];
   readonly stoppedOwners: string[][] = [];
   readonly awaitedOwners: string[][] = [];
@@ -3105,6 +3369,8 @@ class LifecycleWorker implements EnvironmentGenerationWorker {
   stop(): void {
     this.stopCalls += 1;
     this.#events.push("stop");
+    const failure = this.stopFailures.shift();
+    if (failure !== undefined) throw failure;
   }
 
   awaitSettled(): Promise<void> {

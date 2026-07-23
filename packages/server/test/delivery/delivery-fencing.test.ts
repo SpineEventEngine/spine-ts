@@ -87,13 +87,13 @@ describe("Delivery operation fencing", () => {
       const endpoint = Promise.withResolvers<undefined>();
       const inbox = new FencedInbox("LEASED");
       const registry = new RenewableRegistry();
-      const delivery = new Delivery({
-        context: { name: "lease-fencing", multitenant: false },
-        storageFactory: new InMemoryStorageFactory(),
-        inbox,
-        workRegistry: registry,
-        leaseMs: 1_000,
-      });
+      const delivery = new DeliveryBuilder()
+        .withContext({ name: "lease-fencing", multitenant: false })
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withInbox(inbox)
+        .withWorkRegistry(registry)
+        .withNode("node")
+        .build();
       const supervisor = new DeliverySupervisor({
         source: {
           shardSnapshot: () => Promise.resolve([]),
@@ -110,13 +110,13 @@ describe("Delivery operation fencing", () => {
       await supervisor.start();
       supervisor.notify(ShardIndex.single());
       await started.promise;
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(15_000);
       expect(registry.renewals).toBe(1);
 
       await expect(supervisor.close({ graceMs: 0 })).rejects.toBeInstanceOf(
         DeliveryShutdownTimeoutError,
       );
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(50_000);
       expect(registry.renewals).toBe(1);
 
       endpoint.resolve(undefined);
@@ -233,7 +233,7 @@ class RenewableRegistry implements DeliveryWorkRegistry {
   readonly sessionKind = "LEASED" as const;
   renewals = 0;
   releases = 0;
-  #session = session(1_000);
+  #session = session(30_000);
 
   pickUp(): Promise<ShardSession> {
     return Promise.resolve(this.#session);
@@ -241,7 +241,7 @@ class RenewableRegistry implements DeliveryWorkRegistry {
 
   renew(): Promise<ShardSession> {
     this.renewals += 1;
-    this.#session = session(1_000);
+    this.#session = session(30_000);
     return Promise.resolve(this.#session);
   }
 

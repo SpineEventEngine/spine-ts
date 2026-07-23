@@ -3,6 +3,7 @@ import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
+import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { inboxStorageAccess } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
@@ -14,6 +15,17 @@ const defaultContext: StorageContext = Object.freeze({
 const defaultPageSize = 100;
 const defaultBatchSize = 100;
 const maxBatchSize = 1_000;
+const controlledDeliveryRunners = new WeakMap<
+  Delivery,
+  (options: DeliveryControlledRun) => Promise<DeliveryResult>
+>();
+
+/** @internal Resolve controlled execution only for identities created by this module. */
+export function controlledDeliveryRunner(
+  delivery: Delivery,
+): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
+  return controlledDeliveryRunners.get(delivery);
+}
 
 /** Assigns inbox targets to durable delivery shards. */
 export interface DeliveryStrategy {
@@ -252,18 +264,12 @@ class BuiltDelivery implements Delivery {
     this.pageSize = core.pageSize;
     this.batchSize = core.batchSize;
     this.inbox = core.inbox;
+    controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     Object.freeze(this);
   }
 
   run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#core.run(options);
-  }
-
-  /** @internal Forward package-owned run fencing without widening the public Delivery contract. */
-  runControlled(
-    options: import("./delivery-run-control.js").DeliveryControlledRun,
-  ): Promise<DeliveryResult> {
-    return this.#core.runControlled(options);
   }
 }
 

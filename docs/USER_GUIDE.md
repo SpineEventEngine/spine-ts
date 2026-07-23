@@ -809,8 +809,9 @@ retry policy, catch-up facility, or remote topology.
 `DeliverySupervisor` owns bounded process-local admission for a
 `DeliveryBuilder`-created `Delivery`. Pair one supervisor with one lifecycle
 owner, start it after its local delivery endpoints are ready, and close it
-before closing the source client or storage it uses. A forged `run()`-only
-object is rejected because it cannot honor controlled shutdown fencing.
+before closing the source client or storage it uses. Any forged delivery
+lookalike is rejected, even if it copies an internal method shape, because only
+builder-created identities carry the private controlled capability.
 `DeliveryClient` is structurally compatible with the supervisor source;
 `@spine-ts/server` does not depend on `@spine-ts/delivery-client`.
 

@@ -217,9 +217,10 @@ Current slice exposes:
 ### Public delivery runs
 
 `DeliverySupervisor` is the bounded production owner for notifications over a
-structural remote source. It accepts a `DeliveryBuilder`-created `Delivery`; a
-forged `run()`-only object is rejected because it cannot honor controlled
-shutdown fencing. Its source has the same `shardSnapshot`,
+structural remote source. It accepts a `DeliveryBuilder`-created `Delivery`;
+forged lookalikes are rejected even when they copy an internal method shape,
+because only builder-created identities carry the private controlled
+capability. Its source has the same `shardSnapshot`,
 `observeShardUpdates`, and `releaseExpired` operations as
 `@spine-ts/delivery-client`; the server package does not import that client
 package. `start()` takes an initial snapshot and keeps one bounded recovery

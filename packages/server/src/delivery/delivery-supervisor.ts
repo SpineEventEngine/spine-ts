@@ -48,7 +48,7 @@ export class DeliveryShutdownTimeoutError extends Error {
 
 /**
  * Public builder-owned delivery accepted by the supervisor.
- * Runtime validation rejects structurally forged `run()`-only values.
+ * Runtime validation accepts only identities created by {@link DeliveryBuilder}.
  */
 export type SupervisedDelivery = Delivery;
 
@@ -350,7 +350,7 @@ export class DeliverySupervisor {
 export interface DeliverySupervisorOptions {
   /** Structural Admin source; mutable releases are serialized and never blindly retried. */
   readonly source: DeliverySource;
-  /** Delivery returned by {@link DeliveryBuilder.build}; forged `run()`-only ports are rejected. */
+  /** Delivery returned by {@link DeliveryBuilder.build}; forged lookalike ports are rejected. */
   readonly delivery: SupervisedDelivery;
   /** Framework endpoint invoked for each supported admitted delivery row. */
   readonly onMessage: OnDeliveryMessage;

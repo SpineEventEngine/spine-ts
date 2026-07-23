@@ -286,3 +286,37 @@ README.md`, `scripts/check-api-docs.mjs`, this report, and the T-0063 work
 - Verification passed: focused T-0061/T-0062/T-0063 regression set, 9 files /
   140 tests; `pnpm typecheck:generated`; repository Prettier check; and
   `git diff --check`.
+
+## Focused Wave 2 Targeted Corrections — 2026-07-23
+
+- Existing role: `implementer`; configured dispatch remained explicitly
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection remained unavailable;
+  no visible fallback or mismatch was exposed.
+- Nominal capability RED: a forged value with both `run()` and
+  `runControlled()` was accepted. GREEN: `delivery-builder.ts` now owns a
+  module-private `WeakMap` from actual `BuiltDelivery` identities to controlled
+  runners. The package-internal resolver returns a runner only for a registered
+  identity; `DeliveryRunControl` no longer probes a structural method.
+  `BuiltDelivery` no longer carries a runtime `runControlled` method, and the
+  public interface, root exports, and API inventory remain unchanged.
+- Environment REDs reproduced the single-shard-total rejection and partial
+  worker installation after supervisor construction failure. GREEN: exact
+  shards are grouped by `ofTotal`, with one builder-created delivery/supervisor
+  per group behind the runtime owner. Worker and all supervisor resources are
+  constructed before either owner map entry is installed.
+- Whole and selected-owner stop track the legacy worker and supervisor
+  independently. A failure in either component does not skip the other;
+  successful components are checkpointed while an exact failed component is
+  retried. Whole and selected retirement wrap every component call so
+  synchronous throws and asynchronous rejections are all settled and
+  aggregated without suppressing sibling cleanup.
+- New real-runtime evidence covers routed notification, periodic local
+  recovery, mixed shard totals, atomic setup failure, paired whole/selected
+  stop failure, live sibling behavior after selected retirement, and no routed
+  work after full retirement.
+- Fresh verification passed the exact prior 12-file regression plus these
+  additions: 278 tests. Generated build/tooling typecheck, repository ESLint
+  and cleanup enforcement, full formatting, TypeDoc/API inventory with 224
+  server exports, and diff hygiene all passed.
+- No child agent, commit, push, merge, dependency installation, review
+  disposition edit, gate weakening, or unrelated/protected edit was performed.
