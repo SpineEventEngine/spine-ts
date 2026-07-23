@@ -501,8 +501,8 @@ operators, and packed value types fail before state storage is read.
 Every query applies a 1,000-candidate storage safety bound. A missing format or
 wire limit of zero does not require ordering. Providers fetch at most one
 sentinel candidate beyond the bound; overflow fails the read before any
-explicit result limit can silently truncate the semantic result. Invalid criteria fail before
-state storage is read, and tenant selection is applied before this bound.
+explicit result limit can silently truncate the semantic result. Tenant
+selection is applied before this bound.
 
 Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
 returned `Subscription` message, not its opaque ID alone; pass that message
@@ -804,6 +804,112 @@ terminal hooks run after release. Returning `false` from `onPage` yields
 an acquired shard reusable. This is deliberately not a scheduler, supervisor,
 retry policy, catch-up facility, or remote topology.
 
+### Standalone in-memory delivery server and two-machine topology
+
+Run one standalone `DeliveryServer` where both application machines can reach
+it on a trusted private network. It owns the in-memory Inbox, Shard, Admin, and
+health services; each application machine owns its own `DeliveryClient`,
+`DeliveryBuilder`, and `DeliverySupervisor`. This is coordination for
+at-least-once local endpoint delivery, not shared application-state storage.
+
+```ts
+import { DeliveryServer } from "@spine-ts/delivery-server";
+
+const server = new DeliveryServer({
+  host: "10.0.0.5",
+  port: 8484,
+  maxInboundMessageBytes: 4 * 1024 * 1024,
+  processingTimeoutSeconds: 60,
+  maxRetainedMessages: 10_000,
+  maxRetainedBytes: 32 * 1024 * 1024,
+  maxTrackedShards: 1_000,
+});
+await server.start();
+try {
+  console.log(server.baseUrl); // http://10.0.0.5:8484
+  // Keep the trusted-network coordinator available to both application machines.
+} finally {
+  await server.close();
+}
+```
+
+Options override `HOST`, `PORT`, `MAX_INBOUND_MESSAGE_SIZE`,
+`SHARD_PROCESSING_TIMEOUT`, `MAX_RETAINED_MESSAGES`, `MAX_RETAINED_BYTES`, and
+`MAX_TRACKED_SHARDS`; values are read and validated once at construction. The
+defaults are `127.0.0.1:8484`, 4 MiB inbound messages, a zero/off shard
+processing timeout, 10,000 retained messages, 32 MiB of serialized retained
+message data, and 1,000 tracked shards. Retained message/byte options accept
+integers from 1 through 2,147,483,647; tracked shards accept 1 through 1,000.
+Invalid explicit or environment values fail synchronously during construction.
+Write and remove batches contain 1 through 100 records. A write batch is
+admitted atomically and is rejected without partial persistence when a
+retained-state budget would be exceeded; removes do not consume retained-state
+capacity. Every persisted record is a canonical client-decodable Command or
+Event payload no larger than 1 MiB, and the full record fits the 4 MiB RPC
+boundary. A requested page over 4 MiB fails with `RESOURCE_EXHAUSTED`; request a
+smaller page size. The server never silently shortens it. Admin snapshots and
+one expired-session release response are capped at 1,000 shard observations, below
+the 4 MiB RPC ceiling; worker and node IDs together are limited to 128 UTF-8
+bytes so expiration responses stay within it too. `DeliveryClient` applies the
+same identity limit before pickup or release RPCs. `spine-delivery-server` starts the same listener from
+those environment variables and handles `SIGINT`/`SIGTERM`; embedded use calls
+`close()` under its own process lifecycle. Shutdown becomes non-serving,
+rejects not-yet-admitted mutations, completes Admin streams, then closes the
+listener. The server is terminal and loses all state when it stops.
+
+Admin is machine-facing: an observer receives its creation acknowledgement
+before bounded shard updates. Health `Check` reports the registered services
+while serving and `NOT_SERVING` for an unknown name; health `Watch` is
+unimplemented. The coordinator is unauthenticated cleartext infrastructure.
+Bind a non-loopback address only inside a trusted network; do not expose it to
+the public Internet. Wave 1 excludes TLS, authentication/authorization,
+durable delivery-server persistence, Redis, Hazelcast, clustering, deployment
+packaging, a human Admin UI/TUI, and live TypeScript/JVM operation.
+
+```ts
+import {
+  DeliveryClient,
+  RemoteInbox,
+  RemoteWorkRegistry,
+  type RemovalQuarantine,
+} from "@spine-ts/delivery-client";
+import { DeliveryBuilder, DeliverySupervisor } from "@spine-ts/server";
+
+// Run this independently on application machine A and application machine B.
+const source = DeliveryClient.connectTo("http://10.0.0.5:8484");
+// The application supplies a durable, capacity-bounded implementation; never use
+// an in-memory Map because restart safety is part of RemoteInbox's no-replay contract.
+declare const durableRemovalQuarantine: RemovalQuarantine;
+const delivery = new DeliveryBuilder()
+  .withNode(process.env.HOSTNAME ?? "worker-a")
+  .withInbox(new RemoteInbox(source, durableRemovalQuarantine))
+  .withWorkRegistry(new RemoteWorkRegistry(source))
+  .build();
+const supervisor = new DeliverySupervisor({
+  source,
+  delivery,
+  onMessage(message) {
+    // Route to this machine's framework-owned endpoint wiring.
+    void message;
+    return Promise.resolve();
+  },
+});
+await supervisor.start();
+try {
+  // Keep this machine ready while it competes for shared shards.
+} finally {
+  await supervisor.close({ graceMs: 5_000 });
+  source.close();
+  // Release the application-owned durableRemovalQuarantine resource afterwards.
+}
+```
+
+The two machines compete for shared shards and can recover stale ownership
+through the shared service. A completed endpoint may still be retried after an
+uncertain handoff, so endpoint effects must be replay-safe. This topology does
+not prove live compatibility with a JVM server; that verification is deferred
+to Wave 3.
+
 ### Production delivery supervision
 
 `DeliverySupervisor` owns bounded process-local admission for a
@@ -823,11 +929,22 @@ that runtime supervisor. Environment stop and retirement close those
 supervisors before their storage lifecycle ends.
 
 ```ts
-import { DeliveryClient } from "@spine-ts/delivery-client";
+import {
+  DeliveryClient,
+  RemoteInbox,
+  RemoteWorkRegistry,
+  type RemovalQuarantine,
+} from "@spine-ts/delivery-client";
 import { DeliveryBuilder, DeliverySupervisor } from "@spine-ts/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
-const delivery = new DeliveryBuilder().withNode("worker-a").build();
+// Caller-owned durable storage; an in-memory Map is not restart-safe here.
+declare const durableRemovalQuarantine: RemovalQuarantine;
+const delivery = new DeliveryBuilder()
+  .withNode("worker-a")
+  .withInbox(new RemoteInbox(client, durableRemovalQuarantine))
+  .withWorkRegistry(new RemoteWorkRegistry(client))
+  .build();
 const supervisor = new DeliverySupervisor({
   source: client,
   delivery,
@@ -848,6 +965,7 @@ try {
 } finally {
   await supervisor.close({ graceMs: 5_000 });
   client.close();
+  // Release the application-owned durableRemovalQuarantine resource afterwards.
 }
 ```
 
@@ -876,11 +994,11 @@ operations may use their configured bounded retries, but mutable delivery RPCs
 automatically after an unknown result. Reconcile a `DeliveryOutcomeUnknownError`
 with the client’s prescribed observation/read operation instead.
 
-T-0063 deliberately excludes the in-memory delivery-server state/services
-(T-0064), standalone configuration (T-0065), multi-process parity (T-0066),
-Redis, Hazelcast, durable delivery-server persistence, and live TypeScript/JVM
-compatibility (Wave 3). It exposes no public scheduler or internal run-control
-API.
+Wave 1 includes the in-memory delivery-server state/services, standalone
+configuration, and two-application-machine topology described above. It still
+excludes Redis, Hazelcast, durable delivery-server persistence, and live
+TypeScript/JVM compatibility (Wave 3). It exposes no public scheduler or
+internal run-control API.
 
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime

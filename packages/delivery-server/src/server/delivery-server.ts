@@ -33,6 +33,24 @@ export interface DeliveryServerOptions {
    * non-negative integers through `2_147_483_647`.
    */
   readonly processingTimeoutSeconds?: number;
+  /**
+   * Maximum retained Inbox records. The explicit option overrides
+   * `MAX_RETAINED_MESSAGES`; the default is `10_000`. Accepts integers from 1
+   * through `2_147_483_647`.
+   */
+  readonly maxRetainedMessages?: number;
+  /**
+   * Maximum serialized bytes retained across Inbox records. The explicit option
+   * overrides `MAX_RETAINED_BYTES`; the default is 32 MiB (`33_554_432`).
+   * Accepts integers from 1 through `2_147_483_647`.
+   */
+  readonly maxRetainedBytes?: number;
+  /**
+   * Maximum distinct shards retained by messages or pickup sessions. The
+   * explicit option overrides `MAX_TRACKED_SHARDS`; the default is `1_000`.
+   * Accepts integers from 1 through `1_000`.
+   */
+  readonly maxTrackedShards?: number;
 }
 
 /** A small in-memory Connect listener for the frozen delivery simple-server API. */
@@ -128,7 +146,7 @@ export class DeliveryServer {
   }
 
   async #startOnce(): Promise<this> {
-    const core = createDeliveryAssembly(this.#configuration.processingTimeoutMs);
+    const core = createDeliveryAssembly(this.#configuration);
     this.#assembly = core;
     const server = http2.createServer(
       connectNodeAdapter({

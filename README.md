@@ -17,13 +17,14 @@ The runnable `examples/todo` package is a real local Connect/Node
 gRPC-compatible app. It uses generated Protobuf and handler-registry artifacts
 from the build workflow, bare application handler decorators, and process-local
 in-memory storage. It is not a production persistence, deployment,
-authentication, tracing, health-check, process-supervision, or multi-host
-transport recipe. The initial release excludes production deployment/resilience
-guarantees, remote/multi-host transport adapters, broker or worker process
-supervision, deployment/authentication/tracing/health hardening, retained
-attempt/update replay policy, application-owned semantic-tag registration or
-handler materialization, and broader production verification. These are release
-exclusions, not commitments to a future policy or implementation.
+authentication, tracing, or multi-machine topology recipe. The framework now
+also provides a trusted-network in-memory delivery server, delivery client, and
+supervisor; the example does not configure or prove those capabilities.
+Remaining Wave 1 exclusions are durable delivery-server persistence, Redis,
+Hazelcast, TLS, authentication/authorization, public-Internet hardening, live
+TypeScript/JVM compatibility, deployment packaging, a human administration
+surface, retained attempt/update replay policy, application-owned semantic-tag
+registration or handler materialization, and broader production verification.
 
 ## Workspace
 
@@ -38,10 +39,12 @@ exclusions, not commitments to a future policy or implementation.
   `proto/spine-sources.json`.
 - `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
-- `@spine-ts/client` owns descriptor-backed, typed Projection column metadata;
-  it does not yet provide query execution or a query DSL.
-- `@spine-ts/delivery-server` provides only an in-memory, listener-free simple
-  delivery-server core for caller-owned Connect registration; state is lost on restart.
+- `@spine-ts/client` owns the Node command, Projection-query, and subscription
+  facade, plus descriptor-backed typed Projection columns and Query DSL.
+- `@spine-ts/delivery-server` provides the in-memory simple-server core and a
+  standalone cleartext HTTP/2 listener with Inbox, Shard, Admin, and health
+  services. State is lost on restart; it is trusted-network infrastructure,
+  not a public-Internet or durable deployment.
 - `@spine-ts/core` owns type metadata, validation, and envelope helpers;
   `@spine-ts/server` owns bounded-context, service, lifecycle, and durable
   handoff behavior; `@spine-ts/storage` owns record storage; and

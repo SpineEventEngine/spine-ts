@@ -1,9 +1,12 @@
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
+import { CommandSchema } from "@spine-ts/proto";
 import {
   ReadMessagesSinceTimeSchema,
+  OptionalInboxMessageSchema,
+  PageOfMessagesSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   WriteMessagesSchema,
@@ -72,6 +75,131 @@ describe("in-memory Inbox", () => {
         context,
       ),
     ).toThrow(expect.objectContaining({ code: Code.InvalidArgument }));
+  });
+
+  it("rejects poison direct-RPC records and atomically rejects a mixed batch", async () => {
+    const core = createInMemoryDeliveryServerCore();
+    const poison = message("poison", 1, 1);
+    poison.payload = { case: undefined };
+    await expect(
+      core.inbox.writeOne(create(WriteMessageSchema, { message: poison }), context),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    const oversized = message("oversized", 1, 1);
+    oversized.payload = {
+      case: "command",
+      value: create(CommandSchema, {
+        message: { typeUrl: "example.Payload", value: new Uint8Array(1_048_577) },
+      }),
+    };
+    await expect(
+      core.inbox.writeOne(create(WriteMessageSchema, { message: oversized }), context),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    const invalid = message("invalid", 1, 1);
+    invalid.label = 0;
+    await expect(
+      core.inbox.writeMany(
+        create(WriteMessagesSchema, { shard, message: [message("safe", 1, 1), invalid] }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    expect((await core.inbox.findOne(id("safe", shard), context)).message).toBeUndefined();
+  });
+
+  it("rejects retained message, byte, and shard capacity atomically", async () => {
+    const messages = createInMemoryDeliveryServerCore({ maxRetainedMessages: 1 });
+    await expect(
+      messages.inbox.writeMany(
+        create(WriteMessagesSchema, {
+          shard,
+          message: [message("one", 1, 1), message("two", 1, 1)],
+        }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+    expect((await messages.inbox.findOne(id("one", shard), context)).message).toBeUndefined();
+
+    const bytes = createInMemoryDeliveryServerCore({ maxRetainedBytes: 1 });
+    await expect(
+      bytes.inbox.writeOne(
+        create(WriteMessageSchema, { message: message("bytes", 1, 1) }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+
+    const shards = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const other = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
+    await shards.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("first", 1, 1) }),
+      context,
+    );
+    await expect(
+      shards.inbox.writeOne(
+        create(WriteMessageSchema, { message: message("second", 1, 1, other) }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+  });
+
+  it("bounds full records and explicitly rejects an oversized requested page", async () => {
+    const core = createInMemoryDeliveryServerCore();
+    const records = Array.from({ length: 5 }, (_, index) =>
+      message(`large-${String(index)}`, 1, index, shard, 0, 900_000),
+    );
+    await core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: records }), context);
+    const one = await core.inbox.findOne(id("large-0", shard), context);
+    expect(
+      toBinary(OptionalInboxMessageSchema, create(OptionalInboxMessageSchema, one)).byteLength,
+    ).toBeLessThanOrEqual(4_194_304);
+    const newest = await core.inbox.newestMessageToDeliver(shard, context);
+    expect(
+      toBinary(OptionalInboxMessageSchema, create(OptionalInboxMessageSchema, newest)).byteLength,
+    ).toBeLessThanOrEqual(4_194_304);
+    expect(() =>
+      core.inbox.findManyInShard(
+        create(ReadMessagesSinceTimeSchema, { shard, pageSize: 5 }),
+        context,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: Code.ResourceExhausted,
+        rawMessage: "Delivery page exceeds the 4 MiB response limit; request a smaller page.",
+      }),
+    );
+    const page = await core.inbox.findManyInShard(
+      create(ReadMessagesSinceTimeSchema, { shard, pageSize: 4 }),
+      context,
+    );
+    expect(
+      toBinary(PageOfMessagesSchema, create(PageOfMessagesSchema, page)).byteLength,
+    ).toBeLessThanOrEqual(4_194_304);
+
+    const oversizedRecord = message("record", 1, 1);
+    if (oversizedRecord.inboxId === undefined) throw new Error("Expected Inbox ID.");
+    oversizedRecord.inboxId.typeUrl = "x".repeat(4_194_304);
+    await expect(
+      core.inbox.writeOne(create(WriteMessageSchema, { message: oversizedRecord }), context),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+  });
+
+  it("rejects write and remove batch lengths before inspecting records", async () => {
+    const core = createInMemoryDeliveryServerCore();
+    for (const request of [
+      core.inbox.writeMany(
+        create(WriteMessagesSchema, { shard, message: Array.from({ length: 101 }, () => ({})) }),
+        context,
+      ),
+      core.inbox.removeMany(
+        create(RemoveMessagesSchema, { shard, message: Array.from({ length: 101 }, () => ({})) }),
+        context,
+      ),
+      core.inbox.writeMany(create(WriteMessagesSchema, { shard, message: [] }), context),
+      core.inbox.removeMany(create(RemoveMessagesSchema, { shard, message: [] }), context),
+    ]) {
+      await expect(request).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+        rawMessage: "Delivery message batch is invalid.",
+      });
+    }
   });
 
   it("rejects impossible shard identities before Inbox reads or admission", async () => {
@@ -207,9 +335,25 @@ describe("in-memory Inbox", () => {
   });
 });
 
-function message(uuid: string, seconds: number, version: number, index = shard, nanos = 0) {
+function message(
+  uuid: string,
+  seconds: number,
+  version: number,
+  index = shard,
+  nanos = 0,
+  payloadBytes = 0,
+) {
   return create(InboxMessageSchema, {
     id: { uuid, index },
+    signalId: { value: "signal" },
+    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
+    payload: {
+      case: "command",
+      value: create(CommandSchema, {
+        message: { typeUrl: "example.Payload", value: new Uint8Array(payloadBytes) },
+      }),
+    },
+    label: 1,
     whenReceived: { seconds: BigInt(seconds), nanos },
     version,
     status: InboxMessageStatus.TO_DELIVER,

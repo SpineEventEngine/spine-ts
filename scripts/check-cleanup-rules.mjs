@@ -74,7 +74,7 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     [
       "createInMemoryDeliveryServerCore",
       "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-      27,
+      34,
     ],
     [
       "createSetOnceTransitionRule",
@@ -116,7 +116,7 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     [
       "InMemoryDeliveryServerCore",
       "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-      18,
+      24,
     ],
     [
       "InMemoryDeliveryServerCoreOptions",

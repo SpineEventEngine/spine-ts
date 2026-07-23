@@ -178,11 +178,7 @@ describe("TS-to-TS multi-machine delivery", () => {
       expect(adminUpdates).toHaveLength(20);
       expect(adminUpdates.map(summary)).toEqual(fullSequence());
       const snapshot = await admin.getShardInfo(create(EmptySchema));
-      expect(snapshot.shards).toHaveLength(1);
-      expect(snapshot.shards[0]).toMatchObject({
-        status: ShardStatus.NOT_PICKED,
-        messages: 0,
-      });
+      expect(snapshot.shards).toHaveLength(0);
     } catch (error) {
       primary = error;
     } finally {

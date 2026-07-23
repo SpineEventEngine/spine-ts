@@ -24,7 +24,7 @@ const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("delivery assembly Admin projection", () => {
-  it("tracks actual counts and retained shard state in deterministic complete snapshots", async () => {
+  it("tracks actual counts and prunes released message-free shards from snapshots", async () => {
     const assembly = createDeliveryAssembly();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
@@ -48,14 +48,9 @@ describe("delivery assembly Admin projection", () => {
           status: ShardStatus.NOT_PICKED,
           messages: 1,
         },
-        {
-          index: second,
-          status: ShardStatus.NOT_PICKED,
-          messages: 0,
-        },
       ],
     });
-    expect(snapshot.shards[1]?.lastPicked).toBeDefined();
+    expect(snapshot.shards).toHaveLength(1);
   });
 
   it("discards a real mutation before ACK eligibility and publishes the later complete count", async () => {
@@ -96,6 +91,10 @@ describe("delivery assembly Admin projection", () => {
 function message(uuid: string, shard: ShardIndex) {
   return create(InboxMessageSchema, {
     id: { uuid, index: shard },
+    signalId: { value: "signal" },
+    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
+    payload: { case: "command", value: {} },
+    label: 1,
     whenReceived: { seconds: 0n, nanos: 0 },
     status: InboxMessageStatus.TO_DELIVER,
   });

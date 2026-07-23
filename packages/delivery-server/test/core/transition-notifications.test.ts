@@ -27,6 +27,10 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worke
 const message = (uuid: string) =>
   create(InboxMessageSchema, {
     id: { uuid, index: shard },
+    signalId: { value: "signal" },
+    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
+    payload: { case: "command", value: {} },
+    label: 1,
     whenReceived: { seconds: 0n, nanos: 0 },
     status: InboxMessageStatus.TO_DELIVER,
   });

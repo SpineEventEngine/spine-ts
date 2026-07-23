@@ -30,6 +30,11 @@ each retry/reconnect count is 0..5; both backoffs are 0..10,000 ms; the buffer
 is 1..1,000 for both queued updates and pending `next()` calls. Per-operation
 `timeoutMs` is 1..120,000 ms (30,000 default).
 
+`DeliveryWorkerId.nodeId` and `.value` must both be non-blank and together use
+at most 128 UTF-8 bytes; invalid identities fail before an RPC is attempted.
+If a requested `readPage()` response would exceed 4 MiB, the in-memory server
+returns `RESOURCE_EXHAUSTED`; retry the safe read with a smaller `pageSize`.
+
 `findOne(id)`, `readPage(shard, { sinceWhen, pageSize })`,
 `newestPending(shard)`, and `shardSnapshot()` are safe reads and
 may use configured bounded retries. `writeOne`, `writeMany`, `removeOne`,

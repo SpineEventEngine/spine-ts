@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release complete; post-release JVM parity Wave 1 implementation active
+Status: Initial release complete; post-release JVM parity Wave 1 closure active
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0065 Delivery server lifecycle and Admin
+Active implementation frontier: T-0067 Documentation, upstream delta audit, and Wave 1 closure
 
 ## Purpose
 
@@ -54,8 +54,9 @@ part of the accepted release. The temporary readiness reopening is closed.
 
 The accepted initial release remains complete. On `2026-07-22`, the human
 opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
-Wave 1. The human subsequently started Wave 1; T-0053 through T-0064 are
-integrated, post-merge verified, and pushed. T-0065 is the active frontier.
+Wave 1. The human subsequently started Wave 1; T-0053 through T-0066 are
+integrated, post-merge verified, and pushed. T-0067 is the active closure
+frontier for documentation, audit, review, and final verification.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

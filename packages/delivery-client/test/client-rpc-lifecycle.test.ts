@@ -552,14 +552,12 @@ describe("DeliveryClient RPC and lifecycle", () => {
     );
   });
 
-  it("keeps exhausted transient reads and nonretryable read failures distinct", async () => {
+  it("preserves exhausted page reads without retrying and sanitizes other statuses", async () => {
     const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const unavailable = new ConnectError("temporary", Code.Unavailable);
-    fake.fail(unavailable);
-    await expect(client.findOne({ value: "retry-end", shard: ShardIndex.single() })).rejects.toBe(
-      unavailable,
-    );
+    const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });
+    const exhausted = new ConnectError("request a smaller page", Code.ResourceExhausted);
+    fake.fail(exhausted);
+    await expect(client.readPage(ShardIndex.single())).rejects.toBe(exhausted);
 
     fake.fail(new ConnectError("not retryable", Code.Unknown));
     await expect(

@@ -200,6 +200,9 @@ describe("RemoteWorkRegistry", () => {
       reconciliation: { kind: "OBSERVE_SHARD", scope: "ALL_SHARDS" },
     });
     await expect(client.pickUp(shard, { nodeId: "", value: "worker" })).rejects.toThrow();
+    await expect(client.pickUp(shard, { nodeId: "node", value: "é".repeat(63) })).rejects.toThrow(
+      "Delivery worker ID is invalid.",
+    );
     await expect(client.release({} as never)).rejects.toThrow();
     for (const duration of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(client.releaseExpired(duration)).rejects.toThrow();
@@ -232,6 +235,28 @@ describe("RemoteWorkRegistry", () => {
     );
 
     await expect(client.releaseExpired(1)).resolves.toHaveLength(101);
+  });
+
+  it("rejects expiration responses above the shared tracked-shard bound", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
+    fake.reply(
+      create(ExpiredSessionsReleasedSchema, {
+        shard: Array.from({ length: 1_001 }, () =>
+          create(ExpiredSessionSchema, {
+            shard,
+            worker,
+            whenPicked: { seconds: 0n },
+            whenReleased: { seconds: 1n },
+          }),
+        ),
+      }),
+    );
+    await expect(client.releaseExpired(1)).rejects.toMatchObject({
+      operation: "RELEASE_EXPIRED",
+    });
   });
 
   it("quarantines ambiguous shard mutation outcomes without retry or diagnostics", async () => {

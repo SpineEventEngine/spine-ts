@@ -12,6 +12,7 @@ import type { ShardIndex, WorkerId } from "@spine-ts/proto/delivery";
 
 import { MutationAdmission } from "./mutation-admission.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
+import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_WORKER_BYTES } from "./limits.js";
 import { copyShard, copyWorker } from "./wire-values.js";
 
 export function createShardService(
@@ -76,6 +77,7 @@ export function createShardService(
         const releasedAt = currentTime(now);
         const released = [];
         for (const record of state.shards.values()) {
+          if (released.length === MAX_DELIVERY_RESPONSE_SHARDS) break;
           const session = state.session(record.shard);
           if (session !== undefined && releasedAt - requiredWhenPicked(session) >= period) {
             state.release(record.shard);
@@ -106,10 +108,15 @@ function requiredWorker(worker: WorkerId | undefined): WorkerId {
   if (
     worker?.nodeId === undefined ||
     worker.value.trim().length === 0 ||
-    worker.nodeId.value.trim().length === 0
+    worker.nodeId.value.trim().length === 0 ||
+    utf8Bytes(worker.value) + utf8Bytes(worker.nodeId.value) > MAX_DELIVERY_WORKER_BYTES
   )
     throw invalid("Delivery worker is invalid.");
   return worker;
+}
+
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 function requiredShard(shard: ShardIndex | undefined): ShardIndex {

@@ -124,6 +124,15 @@ describe("in-memory Shards", () => {
       core.shards.pickShard(create(PickUpShardSchema, { shard, worker: { value: "" } }), context),
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
     await expect(
+      core.shards.pickShard(
+        create(PickUpShardSchema, {
+          shard,
+          worker: { nodeId: { value: "node" }, value: "x".repeat(129) },
+        }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    await expect(
       core.shards.releaseSessions(
         create(ReleaseExpiredSessionsSchema, {
           inactivityPeriod: { seconds: 315_576_000_001n, nanos: 0 },
@@ -147,6 +156,25 @@ describe("in-memory Shards", () => {
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
     await expect(
       core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context),
+    ).resolves.toMatchObject({ value: { case: "pickedUp" } });
+  });
+
+  it("rejects a new session once tracked-shard capacity is full", async () => {
+    const core = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    await expect(
+      core.shards.pickShard(create(PickUpShardSchema, { shard: other, worker }), context),
+    ).rejects.toMatchObject({ code: Code.ResourceExhausted });
+  });
+
+  it("prunes released message-free shards so normal churn does not consume capacity", async () => {
+    const core = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
+    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await expect(
+      core.shards.pickShard(create(PickUpShardSchema, { shard: other, worker }), context),
     ).resolves.toMatchObject({ value: { case: "pickedUp" } });
   });
 

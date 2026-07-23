@@ -27,6 +27,7 @@ import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-ts/proto/delivery
 import {
   DeliveryOutcomeUnknownError,
   MAX_DELIVERY_RPC_BYTES,
+  MAX_DELIVERY_TRACKED_SHARDS,
   type DeliveryClientOptions,
   type DeliveryFindOneOptions,
   type DeliveryMutationOptions,
@@ -174,7 +175,7 @@ export class DeliveryClient {
       this.#admin.getShardInfo(request, callOptions(signal, timeoutMs)),
     );
     responseBytes(ShardInfoListSchema, response);
-    if (response.shards.length > 1_000) throw protocol();
+    if (response.shards.length > MAX_DELIVERY_TRACKED_SHARDS) throw protocol();
     return Object.freeze(response.shards.map(decodeShardObservation));
   }
 
@@ -230,7 +231,12 @@ export class DeliveryClient {
       : decodeInboxMessage(response.message, id.shard);
   }
 
-  /** Read and decode the first bounded ordered page for one shard. */
+  /**
+   * Read and decode the first bounded ordered page for one shard.
+   *
+   * A server rejects an encoded response above 4 MiB with `RESOURCE_EXHAUSTED`;
+   * retry this safe read with a smaller `pageSize`.
+   */
   async readPage(
     shardIndex: ShardIndex,
     options: DeliveryReadPageOptions = {},
@@ -382,6 +388,7 @@ export class DeliveryClient {
     );
     try {
       responseBytes(ExpiredSessionsReleasedSchema, response);
+      if (response.shard.length > MAX_DELIVERY_TRACKED_SHARDS) throw protocol();
       return Object.freeze(response.shard.map(decodeReleasedSession));
     } catch {
       throw new DeliveryOutcomeUnknownError("RELEASE_EXPIRED", "ALL_SHARDS");
@@ -419,6 +426,7 @@ export class DeliveryClient {
           return await operation(controller.signal, timeoutMs);
         } catch (error) {
           if (controller.signal.aborted) throw error;
+          if (error instanceof ConnectError && error.code === Code.ResourceExhausted) throw error;
           if (!retryableReadError(error)) throw protocol();
           if (attempt === this.#readRetries) throw error;
           await pause(this.#retryBackoffMs, controller.signal);

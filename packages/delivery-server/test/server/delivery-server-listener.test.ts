@@ -7,6 +7,8 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AdminService, Health, InboxService, ShardService } from "@spine-ts/proto/delivery-server";
+import { CommandSchema } from "@spine-ts/proto";
+import { InboxLabel, InboxMessageSchema, InboxMessageStatus } from "@spine-ts/proto/delivery";
 
 import { DeliveryServer } from "../../src/index.js";
 
@@ -67,7 +69,7 @@ describe("DeliveryServer listener", () => {
   });
 
   it("rejects an over-limit inbound request while accepting an allowed request", async () => {
-    const server = tracked(new DeliveryServer({ port: 0, maxInboundMessageBytes: 256 }));
+    const server = tracked(new DeliveryServer({ port: 0, maxInboundMessageBytes: 1_024 }));
     await server.start();
     const sessions = new Http2SessionManager(server.baseUrl);
     const inbox = createClient(
@@ -99,9 +101,20 @@ function connected(session: http2.ClientHttp2Session): Promise<void> {
 
 function inboxMessage(uuid: string) {
   return {
-    message: {
+    message: create(InboxMessageSchema, {
       id: { uuid, index: { index: 0, ofTotal: 1 } },
+      signalId: { value: "signal" },
+      inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
+      payload: {
+        case: "command",
+        value: create(CommandSchema, {
+          id: { uuid: "command" },
+          message: { typeUrl: "example.Command", value: new Uint8Array([1]) },
+        }),
+      },
+      label: InboxLabel.HANDLE_COMMAND,
       whenReceived: { seconds: 0n, nanos: 0 },
-    },
+      status: InboxMessageStatus.TO_DELIVER,
+    }),
   };
 }

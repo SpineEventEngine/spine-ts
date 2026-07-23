@@ -29,6 +29,7 @@ import {
   DeliveryProtocolError,
   MAX_DELIVERY_BATCH_MESSAGES,
   MAX_DELIVERY_RPC_BYTES,
+  MAX_DELIVERY_WORKER_BYTES,
   MAX_INBOX_PAYLOAD_BYTES,
   type DeliveryClientOptions,
   type DeliveryWorkerId,
@@ -217,7 +218,8 @@ export function encodeWorker(value: DeliveryWorkerId): WorkerId {
     typeof value.nodeId !== "string" ||
     !text(value.nodeId) ||
     typeof value.value !== "string" ||
-    !text(value.value)
+    !text(value.value) ||
+    utf8Bytes(value.nodeId) + utf8Bytes(value.value) > MAX_DELIVERY_WORKER_BYTES
   )
     throw new TypeError("Delivery worker ID is invalid.");
   return create(WorkerIdSchema, { nodeId: { value: value.nodeId }, value: value.value });
@@ -526,6 +528,10 @@ function finite(value: number, minimum: number, maximum: number, name: string): 
 
 function text(value: string): boolean {
   return value.trim().length > 0;
+}
+
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 function freeze<T extends object>(value: T): T {

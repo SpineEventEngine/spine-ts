@@ -8,6 +8,11 @@ and canonically clean. Final focused security review and full verification pass.
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
+Wave 1 extension status: draft for T-0067 final security review. The T-0041
+model and accepted SF-013 residual remain unchanged; the extension below adds
+only the public client, singleton environment, BlackBox, and remote in-memory
+delivery topology introduced after that gate.
+
 Committed canonical wave 5 finding basis: `b43cf705`. Earlier production
 implementation evidence is `c7f8a901`; the later test-only maintainability
 correction is `fdd9da0a`. D-0091 implementation evidence is `da730e04`. Later
@@ -35,6 +40,112 @@ in `README.md:15-24`, `build-protocol/TECHNICAL_SPEC.md:260-293`, and
   immediate pre-native recheck enforce canonical final-directory identity and
   POSIX owner/exact-0700 rules (`adapter-config.ts`; `signal-transport.ts`).
 - Tenant validation is not authenticated identity-to-tenant authorization.
+
+## Wave 1 extension
+
+### Validated context and scope
+
+The human-approved Wave 1 context already resolves the service-context questions
+that would otherwise block threat ranking:
+
+- Node.js is the only supported runtime.
+- The application server defaults to loopback. The standalone delivery server
+  also defaults to `127.0.0.1`, and a non-loopback bind is an explicit
+  unauthenticated, cleartext, trusted-network deployment. Public-Internet
+  exposure is unsupported.
+- Application payload sensitivity and identity-to-tenant authorization remain
+  consumer/deployment concerns. Framework tenant propagation and storage
+  isolation remain in scope.
+- The delivery server is in-memory only and intentionally loses state on
+  restart. Redis, Hazelcast, durable delivery-server persistence, packaging,
+  live TS/JVM execution, and human administration are outside Wave 1.
+- `BlackBox` is test-only and runner-neutral; it is not a production isolation
+  or authorization boundary.
+
+These assumptions are binding human decisions in
+`build-protocol/tasks/T-0052-jvm-feature-parity-wave-1/TASK.md` and
+`build-protocol/planning/WAVE_1_JVM_PARITY_PLAN.md`. If a deployment exposes
+either listener outside its trusted boundary, the likelihood of TM-001,
+TM-004, and TM-013 through TM-016 rises materially.
+
+### Added system model
+
+```mermaid
+flowchart LR
+  U["Node application client"] -->|Connect RPC| A["Application server"]
+  A -->|Validated domain work| C["Bounded context"]
+  N1["Application node one"] -->|Delivery RPC| DS["In memory delivery server"]
+  N2["Application node two"] -->|Delivery RPC| DS
+  DS -->|Bounded Admin stream| N1
+  DS -->|Bounded Admin stream| N2
+  E["Process environment"] --> A
+  B["BlackBox tests"] --> A
+```
+
+### Added assets and boundaries
+
+| ID    | Boundary / asset                             | Existing controls and evidence                                                                                                                                                                                                            |
+| ----- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TB-11 | Node client -> application server            | Public facade owns/cancels bounded command observation and subscriptions; network message limits remain at `packages/server/src/server/server.ts` and client bounds at `packages/client/src/client`.                                      |
+| TB-12 | Application node -> delivery Inbox/Shard RPC | Loopback default, finite inbound limit, FIFO mutation admission capped at 100, canonical Command/Event record validation, and finite retained-message/byte/tracked-shard budgets in `packages/delivery-server/src/server` and `src/core`. |
+| TB-13 | Delivery Admin stream -> supervisor          | ACK-before-update protocol, server queue cap 100, client buffer 1..1,000, bounded reconnects/deadlines, cancellation, and sanitised protocol failures in `packages/delivery-server/src/admin` and client.                                 |
+| TB-14 | Remote delivery payload -> local worker      | Command/Event-only decoding, 1 MiB payload and 4 MiB RPC limits, batch/page caps, detached values, and quarantine-before-removal in `packages/delivery-client/src/wire` and `src/remote`.                                                 |
+| TB-15 | Process environment -> singleton facilities  | Resolve-once environment type/configuration, canonical package-root imports, terminal close, and test-only reset under `packages/server/src/server`.                                                                                      |
+| TB-16 | Test caller -> `BlackBox` local runtime      | Fixed actor/tenant/zone scopes, bounded eventual waits, owned client/subscription/server cleanup, and no runner dependency under `packages/testing/src/black-box`.                                                                        |
+
+Availability-critical assets are delivery shard ownership, Inbox integrity,
+bounded observer/scheduler capacity, and deterministic shutdown. Integrity-
+critical assets are worker/session identity, tenant-scoped application state,
+and the no-blind-retry/quarantine record. Confidentiality of application
+payloads depends on the trusted network because Wave 1 adds no TLS or
+authentication.
+
+### Added attacker model
+
+Realistic attackers are a caller who can reach a consumer-exposed application
+listener, a peer already present on the delivery trusted network, a tenant-aware
+caller not independently authorised for its claimed tenant, and a malicious or
+corrupt delivery peer returning malformed wire values. They cannot modify
+source, generated descriptors, lockfiles, local process memory, or test-only
+configuration without a separate host/build compromise.
+
+### Added abuse paths and hypotheses
+
+| ID     | Threat source / abuse path                                                                                                                                 | Existing controls                                                                                                                                                                                                                                                                                                                                                                                           | Gap / residual and priority                                                                                                                                              |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TM-013 | A trusted-network peer forges a worker and releases another worker's shard, disrupting ownership and enabling duplicate work.                              | Worker and shard shapes are validated; pickup is serialized and exclusive.                                                                                                                                                                                                                                                                                                                                  | Frozen `ReleaseShard` is worker-agnostic in `shard-service.ts`. High if exposed; Medium residual inside the explicitly trusted topology. Final reviewer must adjudicate. |
+| TM-014 | A reachable peer floods mutations, large messages, or slow Admin subscriptions to exhaust memory/CPU or block useful delivery.                             | 4 MiB inbound/full-record/response cap with explicit over-page rejection, 100 pending mutations and 1..100 batch records, 100 queued server updates, finite retained-message (10,000), serialized-byte (32 MiB), and tracked-shard (1,000) budgets, released-shard pruning, bounded Admin/expiration responses, 128-byte worker/node IDs enforced by client and server, cancellation, and ordered shutdown. | Deployment still owns connection/rate limits. Medium under trusted-network scope; High if exposed publicly.                                                              |
+| TM-015 | A malicious/corrupt delivery peer returns mismatched shards, workers, payload kinds, timestamps, counts, or oversized responses to confuse local dispatch. | Server admission and client decoding both require complete client-decodable Command/Event records, valid enums/timestamps, 1 MiB payloads, and byte/count bounds; observations are detached and failures stable.                                                                                                                                                                                            | Residual availability loss from a hostile peer; Medium only if the trusted server is compromised.                                                                        |
+| TM-016 | A timeout loses a non-idempotent mutation response; an application retries blindly and duplicates writes/removals or releases a newer owner's shard.       | Mutations are single-attempt; `DeliveryOutcomeUnknownError` provides read/observation reconciliation; removal requires durable bounded quarantine before callback/removal.                                                                                                                                                                                                                                  | Operators must implement durable quarantine and reconciliation correctly. Medium integrity risk from consumer misuse; documentation/API review is required.              |
+| TM-017 | Duplicate module graphs or late environment mutation create inconsistent singleton facilities, storage, node identity, or cleanup ownership.               | Canonical package roots, resolve-once configuration, stable instance identity, explicit close, and test-only reset are covered in server package tests.                                                                                                                                                                                                                                                     | Developer/build misconfiguration rather than a remote attack; Low production security priority, Medium correctness priority.                                             |
+| TM-018 | A consumer treats `BlackBox` actor/tenant selection or its ephemeral listener as a production authentication/isolation control.                            | Package placement, runner-neutral test API, owned ephemeral lifecycle, and documentation identify test scope.                                                                                                                                                                                                                                                                                               | Documentation misuse risk only; Low if guide/package claims remain explicit.                                                                                             |
+
+### Wave 1 dependency evidence
+
+The T-0067 production audit reports zero known vulnerabilities. The initial full
+audit found patched development-only advisories under ESLint/TypeDoc; T-0067b
+owns a minimal transitive lockfile refresh. Final acceptance requires both the
+production and full audits to report zero known vulnerabilities after that
+correction is integrated.
+
+### Wave 1 focus paths
+
+| Path                                                      | Reason                                                        | Related threats |
+| --------------------------------------------------------- | ------------------------------------------------------------- | --------------- |
+| `packages/delivery-server/src/core/shard-service.ts`      | Worker-agnostic release and stale takeover semantics.         | TM-013, TM-016  |
+| `packages/delivery-server/src/core/mutation-admission.ts` | Mutation serialization, abort point, and capacity bound.      | TM-014          |
+| `packages/delivery-server/src/admin/admin-service.ts`     | Machine-facing bounded stream and cancellation cleanup.       | TM-014          |
+| `packages/delivery-server/src/server/delivery-server.ts`  | Listener limits, cleartext bind, and ordered shutdown.        | TM-014          |
+| `packages/delivery-client/src/client/client.ts`           | Deadlines, retries, unknown mutation outcomes, and ownership. | TM-015, TM-016  |
+| `packages/delivery-client/src/wire/codec.ts`              | Malformed wire, payload, byte, page, and batch validation.    | TM-015          |
+| `packages/delivery-client/src/remote/adapters.ts`         | Quarantine and reconciliation before endpoint/removal.        | TM-016          |
+| `packages/server/src/delivery/delivery-supervisor.ts`     | Bounded scheduling, recovery, fencing, and shutdown.          | TM-014, TM-016  |
+| `packages/server/src/server/server-environment.ts`        | Singleton configuration and facility lifecycle.               | TM-017          |
+| `packages/testing/src/black-box/black-box.ts`             | Test-only actor/tenant scopes and owned resource cleanup.     | TM-018          |
+
+This extension is a hypothesis register, not a clean-security conclusion. The
+existing final security reviewer must confirm or reject each residual after
+T-0067 documentation and T-0067b dependency correction converge.
 
 ## System and build flows
 

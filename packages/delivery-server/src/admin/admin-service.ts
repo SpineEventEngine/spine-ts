@@ -12,6 +12,7 @@ import {
 import type { ShardIndex } from "@spine-ts/proto/delivery";
 
 import type { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
+import { MAX_DELIVERY_RESPONSE_SHARDS } from "../core/limits.js";
 import { copyShard, shardKey } from "../core/wire-values.js";
 
 export interface AdminPublisher {
@@ -89,9 +90,9 @@ function snapshot(
   messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex; readonly count: number }>,
 ) {
   return create(ShardInfoListSchema, {
-    shards: [...shards(state, messageCounts)].map((shard) =>
-      create(ShardInfoSchema, observation(state, messageCounts, shard)),
-    ),
+    shards: [...shards(state, messageCounts)]
+      .slice(0, MAX_DELIVERY_RESPONSE_SHARDS)
+      .map((shard) => create(ShardInfoSchema, observation(state, messageCounts, shard))),
   });
 }
 

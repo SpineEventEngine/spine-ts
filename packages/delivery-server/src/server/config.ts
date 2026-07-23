@@ -1,6 +1,13 @@
 import type { DeliveryServerOptions } from "./delivery-server.js";
+import {
+  DEFAULT_DELIVERY_STATE_LIMITS,
+  MAX_DELIVERY_LIMIT,
+  MAX_DELIVERY_RESPONSE_SHARDS,
+  MAX_DELIVERY_RPC_BYTES,
+  resolveStateLimits,
+} from "../core/limits.js";
 
-export interface DeliveryConfiguration {
+export interface DeliveryConfiguration extends ReturnType<typeof resolveStateLimits> {
   readonly host: string;
   readonly port: number;
   readonly maxInboundMessageBytes: number;
@@ -17,9 +24,9 @@ export function resolveConfiguration(options: DeliveryServerOptions = {}): Deliv
     maxInboundMessageBytes: numberOption(
       options.maxInboundMessageBytes,
       "MAX_INBOUND_MESSAGE_SIZE",
-      4_194_304,
+      MAX_DELIVERY_RPC_BYTES,
       1,
-      2_147_483_647,
+      MAX_DELIVERY_LIMIT,
       "inbound message size",
     ),
     processingTimeoutMs:
@@ -28,9 +35,35 @@ export function resolveConfiguration(options: DeliveryServerOptions = {}): Deliv
         "SHARD_PROCESSING_TIMEOUT",
         0,
         0,
-        2_147_483_647,
+        MAX_DELIVERY_LIMIT,
         "processing timeout",
       ) * 1_000,
+    ...resolveStateLimits({
+      maxRetainedMessages: numberOption(
+        options.maxRetainedMessages,
+        "MAX_RETAINED_MESSAGES",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedMessages,
+        1,
+        MAX_DELIVERY_LIMIT,
+        "retained message limit",
+      ),
+      maxRetainedBytes: numberOption(
+        options.maxRetainedBytes,
+        "MAX_RETAINED_BYTES",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxRetainedBytes,
+        1,
+        MAX_DELIVERY_LIMIT,
+        "retained byte limit",
+      ),
+      maxTrackedShards: numberOption(
+        options.maxTrackedShards,
+        "MAX_TRACKED_SHARDS",
+        DEFAULT_DELIVERY_STATE_LIMITS.maxTrackedShards,
+        1,
+        MAX_DELIVERY_RESPONSE_SHARDS,
+        "tracked shard limit",
+      ),
+    }),
   });
 }
 

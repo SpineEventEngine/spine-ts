@@ -1,6 +1,9 @@
 import { ShardIndex } from "@spine-ts/server";
 
-/** Stable public worker identity represented by the frozen `WorkerId` wire type. */
+/**
+ * Stable public worker identity represented by the frozen `WorkerId` wire type.
+ * `nodeId` and `value` must be non-blank and together occupy at most 128 UTF-8 bytes.
+ */
 export interface DeliveryWorkerId {
   readonly nodeId: string;
   readonly value: string;
@@ -33,6 +36,10 @@ export const MAX_INBOX_PAYLOAD_BYTES: 1048576 = 1_048_576;
 export const MAX_DELIVERY_BATCH_MESSAGES = 100;
 /** Maximum serialized delivery RPC request or page response accepted by this client. */
 export const MAX_DELIVERY_RPC_BYTES: 4194304 = 4_194_304;
+/** Maximum shard observations accepted from the in-memory delivery server. */
+export const MAX_DELIVERY_TRACKED_SHARDS = 1_000;
+/** Maximum combined UTF-8 bytes of one worker and node identity. */
+export const MAX_DELIVERY_WORKER_BYTES = 128;
 
 /** Raised when a frozen delivery-server response cannot be represented safely. */
 export class DeliveryProtocolError extends Error {
