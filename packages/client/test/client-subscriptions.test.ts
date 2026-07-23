@@ -898,7 +898,8 @@ describe("Client subscriptions", () => {
               next: () =>
                 new Promise((_resolve, reject) => {
                   setTimeout(() => {
-                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- verifies defensive normalization.
+                    // Verifies defensive normalization of non-Error rejections.
+                    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
                     reject("wire failed");
                   }, 0);
                 }),
