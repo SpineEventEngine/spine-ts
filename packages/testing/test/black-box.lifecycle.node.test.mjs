@@ -5,17 +5,17 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  createBlackBoxForTesting,
-  openBlackBoxForTesting,
-  trackBlackBoxHandleForTesting,
-} from "../dist/internal-test-access.js";
+  createTestBlackBox,
+  openTestBlackBox,
+  trackTestHandle,
+} from "../dist/black-box/internal-test-access.js";
 
 test("close drains subscriptions, then client, then server, even when each phase fails", async () => {
   const calls = [];
   const subscriptionFailure = new Error("subscription");
   const clientFailure = new Error("client");
   const serverFailure = new Error("server");
-  const blackBox = createBlackBoxForTesting({
+  const blackBox = createTestBlackBox({
     client: {
       close: async () => {
         calls.push("client");
@@ -50,7 +50,7 @@ test("close drains subscriptions, then client, then server, even when each phase
 
 test("concurrent close shares its outcome and invokes every resource once", async () => {
   const calls = [];
-  const blackBox = createBlackBoxForTesting({
+  const blackBox = createTestBlackBox({
     client: {
       close: async () => {
         calls.push("client");
@@ -83,7 +83,7 @@ test("startup failure retains the primary error and appends acquired cleanup fai
   const cleanup = new Error("server close");
 
   await assert.rejects(
-    openBlackBoxForTesting({
+    openTestBlackBox({
       start: async () => ({
         close: async () => {
           calls.push("server");
@@ -113,7 +113,10 @@ test("root package exports and declarations omit the internal lifecycle seam", a
 });
 
 test("BlackBox declarations expose only the public facade", async () => {
-  const declarations = await readFile(new URL("../dist/black-box.d.ts", import.meta.url), "utf8");
+  const declarations = await readFile(
+    new URL("../dist/black-box/black-box.d.ts", import.meta.url),
+    "utf8",
+  );
   const blackBox = declarations.match(/export declare class BlackBox \{([\s\S]*?)\n\}/)?.[1];
   assert.notEqual(blackBox, undefined);
   assert.match(blackBox, /\b(?:asGuest|onBehalfOf|eventually|close)\(/);
@@ -124,7 +127,7 @@ test("tracked state, event, and observed handles cancel exactly once before Blac
   for (const operation of ["cancel", "return", "throw"]) {
     for (const kind of ["state", "event", "observed"]) {
       let cancellations = 0;
-      const blackBox = createBlackBoxForTesting({
+      const blackBox = createTestBlackBox({
         client: { close: async () => {} },
         server: { close: async () => {} },
       });
@@ -140,7 +143,7 @@ test("tracked state, event, and observed handles cancel exactly once before Blac
           },
         }),
       };
-      const tracked = trackBlackBoxHandleForTesting(blackBox, handle);
+      const tracked = trackTestHandle(blackBox, handle);
       const iterator = tracked[Symbol.asyncIterator]();
       if (operation === "cancel") await tracked.cancel();
       if (operation === "return") await iterator.return();

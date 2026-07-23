@@ -78,7 +78,7 @@ interface BlackBoxInternal {
     message: MessageShape<Schema>,
   ): Promise<void>;
   track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle;
-  release(handle: { cancel(): Promise<void> }): void;
+  onRelease(handle: { cancel(): Promise<void> }): void;
 }
 
 const blackBoxInternals = new WeakMap<BlackBox, BlackBoxInternal>();
@@ -122,7 +122,7 @@ export class BlackBox {
       },
       postEvent: (actor, schema, message) => this.#postEvent(actor, schema, message),
       track: (handle) => this.#track(handle),
-      release: (handle) => {
+      onRelease: (handle) => {
         this.#release(handle);
       },
     });
@@ -248,7 +248,7 @@ export class BlackBox {
 }
 
 /** @internal Internal lifecycle seam; intentionally omitted from the package entry point. */
-export function createBlackBoxForTesting(resources: {
+export function createTestBlackBox(resources: {
   readonly client: { close(): Promise<void> };
   readonly server: { close(): Promise<void> };
   readonly subscriptions?: readonly { cancel(): Promise<void> }[];
@@ -265,18 +265,18 @@ export function createBlackBoxForTesting(resources: {
 }
 
 /** @internal Internal tracked-handle seam; intentionally omitted from the package entry point. */
-export function trackBlackBoxHandleForTesting(
+export function trackTestHandle(
   blackBox: BlackBox,
   handle: { cancel(): Promise<void> } & AsyncIterable<unknown>,
 ): AsyncIterable<unknown> & { cancel(): Promise<void> } {
   const tracked = new Tracked(handle, () => {
-    internalsOf(blackBox).release(tracked);
+    internalsOf(blackBox).onRelease(tracked);
   });
   return internalsOf(blackBox).track(tracked);
 }
 
 /** @internal Internal startup seam; intentionally omitted from the package entry point. */
-export function openBlackBoxForTesting(resources: {
+export function openTestBlackBox(resources: {
   readonly start: () => Promise<{ close(): Promise<void> }>;
   readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
 }): Promise<BlackBox> {
@@ -402,7 +402,7 @@ class Request implements BlackBoxScope {
 
   private track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
     const tracked = new Tracked(handle, () => {
-      this.#internals.release(tracked);
+      this.#internals.onRelease(tracked);
     });
     return this.#internals.track(tracked) as unknown as Handle;
   }
@@ -410,11 +410,11 @@ class Request implements BlackBoxScope {
 
 class Tracked<Handle extends { cancel(): Promise<void> }> {
   readonly #handle: Handle;
-  readonly #release: () => void;
+  readonly #onRelease: () => void;
   #cancellation: Promise<void> | undefined;
-  constructor(handle: Handle, release: () => void) {
+  constructor(handle: Handle, onRelease: () => void) {
     this.#handle = handle;
-    this.#release = release;
+    this.#onRelease = onRelease;
   }
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
     const iterator = (this.#handle as Handle & AsyncIterable<unknown>)[Symbol.asyncIterator]();
@@ -422,10 +422,10 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
       next: async (...arguments_) => {
         try {
           const result = await iterator.next(...arguments_);
-          if (result.done) this.#release();
+          if (result.done) this.#onRelease();
           return result;
         } catch (error) {
-          this.#release();
+          this.#onRelease();
           throw error;
         }
       },
@@ -436,7 +436,7 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
           if (returned !== undefined) return returned as IteratorResult<unknown>;
           return { done: true, value: undefined };
         } finally {
-          this.#release();
+          this.#onRelease();
         }
       },
       throw: async (error) => {
@@ -445,7 +445,7 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
           if (iterator.throw === undefined) throw error;
           return await iterator.throw(error);
         } finally {
-          this.#release();
+          this.#onRelease();
         }
       },
     };
@@ -455,7 +455,7 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
       this.#cancellation ??= this.#handle.cancel();
       await this.#cancellation;
     } finally {
-      this.#release();
+      this.#onRelease();
     }
   }
 }

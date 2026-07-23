@@ -70,8 +70,9 @@ conflict.
   subscriptions, closes the one client, then closes the running server. Every
   phase is attempted, failures retain stable phase order, and concurrent or
   repeated close calls share one outcome.
-- The only production prerequisite correction is `ClientOptions.zoneId?:
-  string | ZoneId`. Tenant remains client-wide; zone is likewise client-wide.
+- The only production prerequisite correction is
+  `ClientOptions.zoneId?: string | ZoneId`. Tenant remains client-wide; zone is
+  likewise client-wide.
   An omitted zone resolves once to Node's nonempty system IANA zone. Strings
   must be nonempty, Protobuf inputs are cloned, and every command/query/topic
   ActorContext receives the fixed zone. `asGuest()` and `onBehalfOf()` do not

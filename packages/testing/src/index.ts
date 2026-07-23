@@ -4,4 +4,4 @@ export {
   BlackBoxTimeoutError,
   type BlackBoxOptions,
   type BlackBoxScope,
-} from "./black-box.js";
+} from "./black-box/black-box.js";
