@@ -33,6 +33,43 @@ uses strict `elapsed > processingTimeoutMs`; zero disables it. Manual expiration
 uses inclusive `elapsed >= inactivityPeriod`. Explicit release is
 worker-agnostic, so deploy this unauthenticated core only on a trusted network.
 
-State is lost on process restart. Admin observation, health, configuration,
-CLI/environment parsing, listener creation, and process lifecycle belong to
-T-0065 and are intentionally absent here.
+## Standalone listener
+
+`DeliveryServer` owns a cleartext HTTP/2 listener with Inbox, Shard, Admin, and
+gRPC health services. Its default bind is local-only (`127.0.0.1:8484`):
+
+```ts
+import { DeliveryServer } from "@spine-ts/delivery-server";
+
+const server = new DeliveryServer({ port: 0 });
+await server.start();
+console.log(server.baseUrl);
+await server.close();
+```
+
+Options override environment values, which override the defaults. Configuration is
+read once during construction.
+
+| Option                     | Environment                | Default           |
+| -------------------------- | -------------------------- | ----------------- |
+| `host`                     | `HOST`                     | `127.0.0.1`       |
+| `port`                     | `PORT`                     | `8484`            |
+| `maxInboundMessageBytes`   | `MAX_INBOUND_MESSAGE_SIZE` | `4194304` bytes   |
+| `processingTimeoutSeconds` | `SHARD_PROCESSING_TIMEOUT` | `0` seconds (off) |
+
+Run `spine-delivery-server` to use the same listener with environment
+configuration. An explicit non-loopback host is an unauthenticated cleartext
+trusted-network deployment; it must not be exposed to the public Internet.
+For example, `HOST=10.0.0.5 spine-delivery-server` binds the configured
+trusted-network address and reports `http://10.0.0.5:<port>` after startup.
+The executable reports its configured URL only after it is listening and handles
+`SIGINT` and `SIGTERM` through the same one-shot shutdown. Embedded callers own
+their own process signal policy and should call `close()` themselves. Shutdown is
+terminal: it first becomes non-serving, rejects not-yet-admitted mutations,
+completes Admin subscriptions, and then closes the listener and its HTTP/2
+sessions. State is process-local and lost when the process stops.
+
+This package intentionally provides no durable recovery, Redis/Hazelcast mode,
+clustering, TLS, authentication/authorization, public-Internet hardening, CLI
+flags, dynamic configuration reload, health `Watch`, administration UI, or live
+TypeScript/JVM execution. The bounded Admin stream is machine-facing only.

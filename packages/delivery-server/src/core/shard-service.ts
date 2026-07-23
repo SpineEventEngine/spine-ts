@@ -19,6 +19,7 @@ export function createShardService(
   admission: MutationAdmission,
   now: () => number,
   processingTimeoutMs: number,
+  onTransition?: (shard: ShardIndex) => void,
 ): ServiceImpl<typeof ShardService> {
   return {
     pickShard: async (request, context) => {
@@ -33,6 +34,7 @@ export function createShardService(
           pickedAt - requiredWhenPicked(current) > processingTimeoutMs;
         if (current === undefined || stale) {
           state.setSession(shard, worker, pickedAt);
+          onTransition?.(shard);
           return create(LiquorPickUpOutcomeSchema, {
             value: {
               case: "pickedUp",
@@ -58,7 +60,9 @@ export function createShardService(
     releaseSession: async (request, context) => {
       const shard = requiredShard(request.shard);
       requiredWorker(request.worker);
-      await admission.run(context.signal, () => state.release(shard));
+      await admission.run(context.signal, () => {
+        if (state.release(shard) !== undefined) onTransition?.(shard);
+      });
       return {};
     },
     releaseSessions: async (request, context) => {
@@ -75,6 +79,7 @@ export function createShardService(
           const session = state.session(record.shard);
           if (session !== undefined && releasedAt - requiredWhenPicked(session) >= period) {
             state.release(record.shard);
+            onTransition?.(record.shard);
             released.push(
               create(ExpiredSessionSchema, {
                 shard: copyShard(session.shard),

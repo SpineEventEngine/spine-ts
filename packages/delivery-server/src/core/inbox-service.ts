@@ -14,12 +14,13 @@ import { copyMessage, shardKey } from "./wire-values.js";
 export function createInboxService(
   state: InMemoryDeliveryState,
   admission: MutationAdmission,
+  onMessageTransition?: (shard: ShardIndex, delta: 1 | -1) => void,
 ): ServiceImpl<typeof InboxService> {
   return {
     writeOne: async (request, context) => {
       const message = requiredMessage(request.message);
       await admission.run(context.signal, () => {
-        state.put(message);
+        if (state.put(message)) onMessageTransition?.(requiredShard(message.id?.index), 1);
       });
       return {};
     },
@@ -28,14 +29,15 @@ export function createInboxService(
       const messages = request.message.map(requiredMessage);
       ensureShard(messages, shard);
       await admission.run(context.signal, () => {
-        for (const message of messages) state.put(message);
+        for (const message of messages)
+          if (state.put(message)) onMessageTransition?.(requiredShard(message.id?.index), 1);
       });
       return {};
     },
     removeOne: async (request, context) => {
       const message = requiredMessage(request.message);
       await admission.run(context.signal, () => {
-        state.delete(message);
+        if (state.delete(message)) onMessageTransition?.(requiredShard(message.id?.index), -1);
       });
       return {};
     },
@@ -44,7 +46,8 @@ export function createInboxService(
       const messages = request.message.map(requiredMessage);
       ensureShard(messages, shard);
       await admission.run(context.signal, () => {
-        for (const message of messages) state.delete(message);
+        for (const message of messages)
+          if (state.delete(message)) onMessageTransition?.(requiredShard(message.id?.index), -1);
       });
       return {};
     },

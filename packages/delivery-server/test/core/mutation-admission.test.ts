@@ -51,4 +51,16 @@ describe("MutationAdmission", () => {
     await Promise.all(Array.from({ length: 100 }, () => admission.run(undefined, () => undefined)));
     await Promise.all(Array.from({ length: 100 }, () => admission.run(undefined, () => undefined)));
   });
+
+  it("rejects queued mutations after shutdown while retaining an already admitted commit", async () => {
+    const admission = new MutationAdmission();
+    const committed: string[] = [];
+    const queued = admission.run(undefined, () => committed.push("queued"));
+    admission.close();
+    await expect(queued).rejects.toMatchObject({ code: Code.Unavailable });
+    await expect(admission.run(undefined, () => committed.push("new"))).rejects.toMatchObject({
+      code: Code.Unavailable,
+    });
+    expect(committed).toEqual([]);
+  });
 });

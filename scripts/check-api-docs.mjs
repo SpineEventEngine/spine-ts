@@ -210,6 +210,8 @@ const expectedDeliveryServerExports = [
   "createInMemoryDeliveryServerCore",
   "InMemoryDeliveryServerCore",
   "InMemoryDeliveryServerCoreOptions",
+  "DeliveryServer",
+  "DeliveryServerOptions",
 ];
 const expectedStorageExports = [
   "EventStore",

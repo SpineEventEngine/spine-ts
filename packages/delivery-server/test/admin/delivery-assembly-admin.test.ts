@@ -1,0 +1,102 @@
+import { create } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { describe, expect, it } from "vitest";
+
+import {
+  PickUpShardSchema,
+  ReleaseShardSchema,
+  RemoveMessageSchema,
+  ShardStatus,
+  WriteMessageSchema,
+  type ShardInfoList,
+} from "@spine-ts/proto/delivery-server";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  ShardIndexSchema,
+  WorkerIdSchema,
+  type ShardIndex,
+} from "@spine-ts/proto/delivery";
+
+import { createDeliveryAssembly } from "../../src/server/assembly.js";
+
+const context = { signal: new AbortController().signal } as never;
+const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
+
+describe("delivery assembly Admin projection", () => {
+  it("tracks actual counts and retained shard state in deterministic complete snapshots", async () => {
+    const assembly = createDeliveryAssembly();
+    const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+    const firstMessage = message("first", first);
+    const missing = message("missing", first);
+
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
+    await assembly.inbox.writeOne(create(WriteMessageSchema, { message: firstMessage }), context);
+    await assembly.inbox.removeOne(create(RemoveMessageSchema, { message: missing }), context);
+    await assembly.shards.pickShard(create(PickUpShardSchema, { shard: second, worker }), context);
+    await assembly.shards.releaseSession(
+      create(ReleaseShardSchema, { shard: second, worker }),
+      context,
+    );
+
+    const snapshot = assembly.admin.getShardInfo(create(EmptySchema), context) as ShardInfoList;
+    expect(snapshot).toMatchObject({
+      shards: [
+        {
+          index: first,
+          status: ShardStatus.NOT_PICKED,
+          messages: 1,
+        },
+        {
+          index: second,
+          status: ShardStatus.NOT_PICKED,
+          messages: 0,
+        },
+      ],
+    });
+    expect(snapshot.shards[1]?.lastPicked).toBeDefined();
+  });
+
+  it("discards a real mutation before ACK eligibility and publishes the later complete count", async () => {
+    const assembly = createDeliveryAssembly();
+    const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const iterator = assembly.admin
+      .subscribeToShardUpdates(create(EmptySchema), context)
+      [Symbol.asyncIterator]();
+
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("before", only) }),
+      context,
+    );
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { value: { case: "created", value: true } },
+    });
+    const later = iterator.next();
+    await assembly.inbox.writeOne(
+      create(WriteMessageSchema, { message: message("after", only) }),
+      context,
+    );
+    await expect(later).resolves.toMatchObject({
+      value: {
+        value: {
+          case: "update",
+          value: {
+            index: only,
+            newStatus: ShardStatus.NOT_PICKED,
+            newMessagesCount: 2,
+          },
+        },
+      },
+    });
+    await iterator.return?.();
+  });
+});
+
+function message(uuid: string, shard: ShardIndex) {
+  return create(InboxMessageSchema, {
+    id: { uuid, index: shard },
+    whenReceived: { seconds: 0n, nanos: 0 },
+    status: InboxMessageStatus.TO_DELIVER,
+  });
+}

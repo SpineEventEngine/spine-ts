@@ -3,12 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "In-memory simple delivery-server core.",
+  "description": "In-memory delivery server core and standalone Node HTTP/2 lifecycle.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "bin": {
+    "spine-delivery-server": "./dist/bin/spine-delivery-server.js"
   },
   "files": [
     "dist",
@@ -17,6 +20,7 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
     "@spine-ts/proto": "workspace:*"
   }
 }

@@ -13,12 +13,15 @@ export class InMemoryDeliveryState {
   readonly messages: Map<string, InboxMessage> = new Map<string, InboxMessage>();
   readonly shards: Map<string, ShardRecord> = new Map<string, ShardRecord>();
 
-  put(message: InboxMessage): void {
-    this.messages.set(messageKey(message), copyMessage(message));
+  put(message: InboxMessage): boolean {
+    const key = messageKey(message);
+    const inserted = !this.messages.has(key);
+    this.messages.set(key, copyMessage(message));
+    return inserted;
   }
 
-  delete(message: InboxMessage): void {
-    this.messages.delete(messageKey(message));
+  delete(message: InboxMessage): boolean {
+    return this.messages.delete(messageKey(message));
   }
 
   session(shard: ShardIndex): ShardRecord | undefined {
