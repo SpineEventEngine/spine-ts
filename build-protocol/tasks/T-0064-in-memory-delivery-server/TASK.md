@@ -1,6 +1,6 @@
 # T-0064: In-Memory Delivery Simple-Server Core
 
-Status: Verified; ready to commit
+Status: Complete; integrated, post-merge verified, and pushed
 
 Branch: `task/T-0064-in-memory-delivery-server`
 
@@ -243,3 +243,11 @@ the delivery client, storage adapters, Redis, or Hazelcast.
   cancellation, timing boundaries, and bounded resources.
 - Final security: N/A for this packet unless a security-critical blocker is
   discovered; the final trusted-network/security boundary remains T-0067.
+
+## Closure
+
+Task endpoint `96f7cc31` is pushed on
+`origin/task/T-0064-in-memory-delivery-server`, fast-forwarded into `main`, and
+post-merge verified on the identical tree. The post-merge gate passed 8 focused
+files / 48 tests, generated-build and tooling typechecks, cleanup enforcement,
+and diff hygiene. T-0065 is the next Wave 1 packet.
