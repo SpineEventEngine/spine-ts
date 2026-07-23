@@ -1,6 +1,7 @@
 import { inboxStorageAccess } from "./inbox-storage.js";
 import {
   deliveryAccess,
+  deliveryOperationFence,
   type Delivery,
   type DeliveryDrainOutcome,
   type DeliveryEpochSlice,
@@ -23,6 +24,7 @@ export class DeliveryLoop {
   readonly #onMessage: OnDeliveryMessage;
   readonly #onStarted: (() => void) | undefined;
   readonly #operation: DeliveryOperationOptions | undefined;
+  readonly #completeAdmittedEmptyEpoch: boolean;
   readonly #admission = new DeliveryAdmissionSweep();
   #epoch: DeliveryEpoch | undefined;
   #progress = loopProgress();
@@ -45,6 +47,7 @@ export class DeliveryLoop {
     this.#onMessage = options.onMessage;
     this.#onStarted = options.onStarted;
     this.#operation = options.operation;
+    this.#completeAdmittedEmptyEpoch = options.completeAdmittedEmptyEpoch ?? false;
     deliveryLoopInternals.set(this, { progress: () => this.#progress });
     Object.freeze(this);
   }
@@ -82,7 +85,8 @@ export class DeliveryLoop {
   async #runLoop(): Promise<DeliveryLoopRun> {
     this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
-    const admission = await this.#admitEpoch(summary);
+    const operationFence = deliveryOperationFence(this.#operation);
+    const admission = await this.#admitEpoch(summary, operationFence);
     if (admission !== undefined) {
       return admission;
     }
@@ -100,7 +104,10 @@ export class DeliveryLoop {
     }
   }
 
-  async #admitEpoch(summary: DeliveryLoopSummary): Promise<DeliveryLoopRun | undefined> {
+  async #admitEpoch(
+    summary: DeliveryLoopSummary,
+    operationFence: ReturnType<typeof deliveryOperationFence>,
+  ): Promise<DeliveryLoopRun | undefined> {
     if (this.#epoch === undefined) {
       this.#progress = loopProgress();
       this.#epoch = await DeliveryEpoch.admit(
@@ -110,7 +117,12 @@ export class DeliveryLoop {
         this.#operation,
       );
     }
-    return this.#isStopped() ? this.#finish(summary, terminalTransition("STOPPED")) : undefined;
+    if (this.#isStopped()) return this.#finish(summary, terminalTransition("STOPPED"));
+    if (this.#completeAdmittedEmptyEpoch && this.#epoch.empty) {
+      operationFence.requireActive();
+      return this.#finish(summary, terminalTransition("IDLE", true));
+    }
+    return undefined;
   }
 
   #recordOutcome(summary: DeliveryLoopSummary, outcome: DeliveryDrainOutcome): void {
@@ -260,6 +272,8 @@ export interface DeliveryLoopOptions {
   readonly operation?: DeliveryOperationOptions;
   /** Optional package-owned observation after successful shard pickup. */
   readonly onStarted?: () => void;
+  /** @internal Complete an admitted empty epoch without acquiring shard ownership. */
+  readonly completeAdmittedEmptyEpoch?: boolean;
 }
 
 /** Delivery loop stop reason. */
@@ -388,6 +402,10 @@ class DeliveryEpoch {
 
   get nextAdmissionAfter(): InboxReadContinuation | undefined {
     return this.#nextAdmissionAfter;
+  }
+
+  get empty(): boolean {
+    return this.#messages.length === 0;
   }
 
   advance(next: number): void {

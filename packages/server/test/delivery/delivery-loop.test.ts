@@ -22,6 +22,25 @@ import {
 import { oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 
 describe("DeliveryLoop", () => {
+  it("completes a controlled empty admission without acquiring the shard", async () => {
+    const delivery = createDelivery();
+    const loop = new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      onMessage: () => undefined,
+      completeAdmittedEmptyEpoch: true,
+    });
+
+    await expect(loop.run()).resolves.toMatchObject({
+      status: "IDLE",
+      runs: 0,
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    });
+  });
+
   it("excludes normally ordered callback writes from the admitted epoch", async () => {
     const delivery = createDelivery();
     const loop = new DeliveryLoop({

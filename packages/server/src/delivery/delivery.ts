@@ -153,12 +153,13 @@ export class Delivery {
   async runControlled(
     options: import("./delivery-run-control.js").DeliveryControlledRun,
   ): Promise<DeliveryResult> {
-    return this.#run(options, { signal: options.signal });
+    return this.#run(options, { signal: options.signal }, true);
   }
 
   async #run(
     options: DeliveryRunOptions,
     operation?: DeliveryOperationOptions,
+    completeAdmittedEmptyEpoch = false,
   ): Promise<DeliveryResult> {
     if (options.shard !== undefined && options.shard.ofTotal !== this.strategy.shardCount) {
       throw new Error("Delivery run shard total must equal the configured strategy shard count.");
@@ -176,6 +177,7 @@ export class Delivery {
       limit: this.pageSize,
       onMessage: options.onMessage,
       ...(operation === undefined ? {} : { operation }),
+      ...(completeAdmittedEmptyEpoch ? { completeAdmittedEmptyEpoch: true } : {}),
       onStarted: () => {
         if (!started) {
           this.#monitor?.onStarted?.(shard);
@@ -1380,7 +1382,8 @@ interface DeliveryOperationFence {
   requireActive(): void;
 }
 
-function deliveryOperationFence(
+/** @internal Create one operation fence whose deadline starts at admission. */
+export function deliveryOperationFence(
   options: DeliveryOperationOptions | undefined,
 ): DeliveryOperationFence {
   const deadline =

@@ -5,18 +5,28 @@ import {
   DeliveryBuilder,
   DeliveryShutdownTimeoutError,
   DeliverySupervisor,
+  type DeliveryShardUpdate,
   type DeliverySupervisorOptions,
   type Delivery,
   type DeliveryRunOptions,
   ShardIndex,
+  ShardedWorkRegistry,
   UniformAcrossAllShards,
 } from "../../src/index.js";
 import type {
   DeliveryInbox,
+  DeliveryInboxWork,
   DeliveryOperationOptions,
+  DeliveryWorkSession,
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
-import type { InboxMessage } from "../../src/delivery/inbox.js";
+import type {
+  InboxMessage,
+  InboxMessageId,
+  InboxMessageInput,
+  InboxReadOptions,
+  InboxWriteResult,
+} from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
   it.each([
@@ -161,6 +171,194 @@ describe("DeliverySupervisor", () => {
     await supervisor.whenIdle();
 
     expect(calls).toBe(2);
+    await supervisor.close();
+  });
+
+  it.each(["notification-before-snapshot", "snapshot-before-notification"] as const)(
+    "coalesces %s into one owned non-empty generation",
+    async (ordering) => {
+      const fixture = realDeliveryFixture();
+      const shard = ShardIndex.single();
+      await fixture.receive("first", 1n, shard);
+      const first = fixture.inbox.pauseAfter(1);
+      const snapshot = Promise.withResolvers<readonly DeliveryShardUpdate[]>();
+      const supervisor = fixture.supervisor({
+        shardSnapshot: () =>
+          ordering === "notification-before-snapshot"
+            ? snapshot.promise
+            : Promise.resolve([pendingUpdate(shard)]),
+      });
+
+      const starting = supervisor.start();
+      if (ordering === "notification-before-snapshot") {
+        await Promise.resolve();
+        supervisor.notify(shard);
+        await first.started.promise;
+        snapshot.resolve([pendingUpdate(shard)]);
+      } else {
+        await first.started.promise;
+        supervisor.notify(shard);
+      }
+      first.resume.resolve(undefined);
+      await starting;
+      await supervisor.whenIdle();
+
+      expect(fixture.inbox.admissions).toBe(2);
+      expect(fixture.registry.pickups).toEqual([shard.key()]);
+      expect(fixture.registry.releases).toEqual([shard.key()]);
+      expect(fixture.delivered).toEqual(["first"]);
+      await supervisor.close();
+    },
+  );
+
+  it("bounds a same-shard notification storm to one empty successor admission", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    await fixture.receive("storm", 1n, shard);
+    const first = fixture.inbox.pauseAfter(1);
+    const supervisor = fixture.supervisor();
+
+    await supervisor.start();
+    supervisor.notify(shard);
+    await first.started.promise;
+    for (let index = 0; index < 100; index += 1) supervisor.notify(shard);
+    first.resume.resolve(undefined);
+    await supervisor.whenIdle();
+
+    expect(fixture.inbox.admissions).toBe(2);
+    expect(fixture.registry.pickups).toHaveLength(1);
+    expect(fixture.registry.releases).toHaveLength(1);
+    expect(fixture.delivered).toEqual(["storm"]);
+    await supervisor.close();
+  });
+
+  it("retains a row arriving after the first admission for its queued generation", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    await fixture.receive("first", 1n, shard);
+    const first = fixture.inbox.pauseAfter(1);
+    const supervisor = fixture.supervisor();
+
+    await supervisor.start();
+    supervisor.notify(shard);
+    await first.started.promise;
+    supervisor.notify(shard);
+    await fixture.receive("after-first-admission", 2n, shard);
+    first.resume.resolve(undefined);
+    await supervisor.whenIdle();
+
+    expect(fixture.inbox.admissions).toBe(2);
+    expect(fixture.registry.pickups).toHaveLength(2);
+    expect(fixture.registry.releases).toHaveLength(2);
+    expect(fixture.delivered).toEqual(["first", "after-first-admission"]);
+    await supervisor.close();
+  });
+
+  it("retains a row arriving during empty admission immediately before completion", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    await fixture.receive("first", 1n, shard);
+    const first = fixture.inbox.pauseAfter(1);
+    const empty = fixture.inbox.pauseAfter(2);
+    const supervisor = fixture.supervisor();
+
+    await supervisor.start();
+    supervisor.notify(shard);
+    await first.started.promise;
+    supervisor.notify(shard);
+    first.resume.resolve(undefined);
+    await empty.started.promise;
+    await fixture.receive("during-empty-admission", 2n, shard);
+    supervisor.notify(shard);
+    empty.resume.resolve(undefined);
+    await supervisor.whenIdle();
+
+    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.registry.pickups).toHaveLength(2);
+    expect(fixture.registry.releases).toHaveLength(2);
+    expect(fixture.delivered).toEqual(["first", "during-empty-admission"]);
+    await supervisor.close();
+  });
+
+  it("rescans real overflowed work after retained pending capacity clears", async () => {
+    const fixture = realDeliveryFixture(3);
+    const endpoint = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    fixture.onMessage = async (signalId) => {
+      if (signalId !== "zero") return;
+      firstStarted.resolve(undefined);
+      await endpoint.promise;
+    };
+    for (let index = 0; index < 3; index += 1) {
+      await fixture.receive(
+        ["zero", "one", "two"][index] ?? "unused",
+        BigInt(index + 1),
+        newShard(index),
+      );
+    }
+    let snapshots = 0;
+    const supervisor = fixture.supervisor(
+      {
+        shardSnapshot: () => {
+          snapshots += 1;
+          return Promise.resolve(snapshots === 1 ? [] : [pendingUpdate(newShard(2))]);
+        },
+      },
+      { concurrency: 1, pendingLimit: 1 },
+    );
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await firstStarted.promise;
+    supervisor.notify(newShard(1));
+    supervisor.notify(newShard(2));
+    endpoint.resolve(undefined);
+    await supervisor.whenIdle();
+
+    expect(snapshots).toBe(2);
+    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.registry.pickups).toEqual(["0/3", "1/3", "2/3"]);
+    expect(fixture.registry.releases).toEqual(["0/3", "1/3", "2/3"]);
+    expect(fixture.delivered).toEqual(["zero", "one", "two"]);
+    await supervisor.close();
+  });
+
+  it("fences close during empty admission without ownership or completion", async () => {
+    const fixture = realDeliveryFixture();
+    const empty = fixture.inbox.pauseAfter(1);
+    const supervisor = fixture.supervisor();
+
+    await supervisor.start();
+    supervisor.notify(ShardIndex.single());
+    await empty.started.promise;
+    const closing = supervisor.close({ graceMs: 0 });
+    empty.resume.resolve(undefined);
+
+    await expect(closing).rejects.toBeInstanceOf(DeliveryShutdownTimeoutError);
+    expect(fixture.registry.pickups).toEqual([]);
+    expect(fixture.registry.releases).toEqual([]);
+    expect(fixture.completions).toBe(0);
+  });
+
+  it("settles one failed empty successor admission without spinning", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    await fixture.receive("first", 1n, shard);
+    const first = fixture.inbox.pauseAfter(1);
+    fixture.inbox.failAt = 2;
+    const supervisor = fixture.supervisor();
+
+    await supervisor.start();
+    supervisor.notify(shard);
+    await first.started.promise;
+    supervisor.notify(shard);
+    first.resume.resolve(undefined);
+    await supervisor.whenIdle();
+
+    expect(fixture.inbox.admissions).toBe(2);
+    expect(fixture.registry.pickups).toHaveLength(1);
+    expect(fixture.registry.releases).toHaveLength(1);
+    expect(fixture.delivered).toEqual(["first"]);
     await supervisor.close();
   });
 
@@ -631,6 +829,182 @@ describe("DeliverySupervisor", () => {
     });
   });
 });
+
+function realDeliveryFixture(shardCount = 1): RealDeliveryFixture {
+  return new RealDeliveryFixture(shardCount);
+}
+
+class RealDeliveryFixture {
+  readonly context = { name: `real-supervisor-${crypto.randomUUID()}`, multitenant: false };
+  readonly storageFactory = new InMemoryStorageFactory();
+  readonly inbox: AdmissionInbox;
+  readonly registry: ObservedRegistry;
+  readonly delivery: Delivery;
+  readonly delivered: string[] = [];
+  onMessage: ((signalId: string) => Promise<void>) | undefined;
+  completions = 0;
+
+  constructor(shardCount: number) {
+    const seedDelivery = new DeliveryBuilder()
+      .withContext(this.context)
+      .withStorageFactory(this.storageFactory)
+      .withNode("seed-node")
+      .build();
+    this.inbox = new AdmissionInbox(seedDelivery.inbox);
+    this.registry = new ObservedRegistry(
+      new ShardedWorkRegistry({ context: this.context, storageFactory: this.storageFactory }),
+    );
+    this.delivery = new DeliveryBuilder()
+      .withContext(this.context)
+      .withStorageFactory(this.storageFactory)
+      .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
+      .withInbox(this.inbox)
+      .withWorkRegistry(this.registry)
+      .withMonitor({
+        onCompleted: () => {
+          this.completions += 1;
+        },
+      })
+      .withNode("worker-node")
+      .build();
+  }
+
+  supervisor(
+    source: Partial<DeliverySupervisorOptions["source"]> = {},
+    bounds: Partial<Omit<DeliverySupervisorOptions, "source" | "delivery" | "onMessage">> = {},
+  ): DeliverySupervisor {
+    return new DeliverySupervisor({
+      source: {
+        shardSnapshot: source.shardSnapshot ?? (() => Promise.resolve([])),
+        observeShardUpdates: source.observeShardUpdates ?? (() => emptyUpdates()),
+        releaseExpired: source.releaseExpired ?? (() => Promise.resolve([])),
+      },
+      delivery: this.delivery,
+      onMessage: async (message) => {
+        this.delivered.push(message.signalId);
+        await this.onMessage?.(message.signalId);
+      },
+      ...bounds,
+    });
+  }
+
+  async receive(signalId: string, version: bigint, shard: ShardIndex): Promise<void> {
+    await this.inbox.receive({
+      inboxId: { targetId: "target", targetTypeUrl: "type.example.dev/Target" },
+      signalId,
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-23T12:00:00.000Z"),
+      version,
+    });
+  }
+}
+
+class AdmissionInbox implements DeliveryInbox {
+  readonly sessionKind = "LEASED" as const;
+  admissions = 0;
+  failAt: number | undefined;
+  readonly #delegate: DeliveryInbox;
+  readonly #pauses = new Map<number, AdmissionPause>();
+
+  constructor(delegate: DeliveryInbox) {
+    this.#delegate = delegate;
+  }
+
+  pauseAfter(admission: number): AdmissionPause {
+    const pause = {
+      started: Promise.withResolvers<undefined>(),
+      resume: Promise.withResolvers<undefined>(),
+    };
+    this.#pauses.set(admission, pause);
+    return pause;
+  }
+
+  receive(input: InboxMessageInput, options?: DeliveryOperationOptions): Promise<InboxWriteResult> {
+    return this.#delegate.receive(input, options);
+  }
+
+  async read(
+    shard: ShardIndex,
+    options?: InboxReadOptions & DeliveryOperationOptions,
+  ): Promise<readonly InboxMessage[]> {
+    this.admissions += 1;
+    if (this.admissions === this.failAt) throw new Error("admission failed");
+    const messages = await this.#delegate.read(shard, options);
+    const pause = this.#pauses.get(this.admissions);
+    if (pause !== undefined) {
+      pause.started.resolve(undefined);
+      await pause.resume.promise;
+    }
+    return messages;
+  }
+
+  readMessage(
+    id: InboxMessageId,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.#delegate.readMessage(id, options);
+  }
+
+  begin(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<DeliveryInboxWork | undefined> {
+    return this.#delegate.begin(message, session, options);
+  }
+}
+
+interface AdmissionPause {
+  readonly started: PromiseWithResolvers<undefined>;
+  readonly resume: PromiseWithResolvers<undefined>;
+}
+
+class ObservedRegistry implements DeliveryWorkRegistry {
+  readonly sessionKind = "LEASED" as const;
+  readonly pickups: string[] = [];
+  readonly releases: string[] = [];
+  readonly #delegate: ShardedWorkRegistry;
+
+  constructor(delegate: ShardedWorkRegistry) {
+    this.#delegate = delegate;
+  }
+
+  async pickUp(
+    shard: ShardIndex,
+    node: string,
+    options?: DeliveryOperationOptions,
+  ): Promise<DeliveryWorkSession | undefined> {
+    void options;
+    const session = await this.#delegate.pickUp(shard, node);
+    if (session !== undefined) this.pickups.push(shard.key());
+    return session;
+  }
+
+  async renew(
+    session: Extract<DeliveryWorkSession, { kind: "LEASED" }>,
+    options?: DeliveryOperationOptions,
+  ): Promise<Extract<DeliveryWorkSession, { kind: "LEASED" }> | undefined> {
+    void options;
+    return this.#delegate.renew(session);
+  }
+
+  async release(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    void options;
+    if (session.kind !== "LEASED") throw new Error("Observed registry requires a leased session.");
+    const released = await this.#delegate.release(session);
+    if (released) this.releases.push(session.shard.key());
+    return released;
+  }
+}
+
+function pendingUpdate(shard: ShardIndex): DeliveryShardUpdate {
+  return { shard, status: "NOT_PICKED", messages: 1 };
+}
 
 function supervisorFor(
   delivery: {
