@@ -31,13 +31,17 @@ export class ShardedWorkRegistry {
 
   /** Open a shard registry over one storage context. */
   constructor(options: ShardedWorkRegistryOptions) {
-    this.#context = options.context;
+    this.#context = copyStorageContext(options.context);
     this.#storageFactory = options.storageFactory;
     this.#leaseMs = requireDeliveryLeaseMs(
       "ShardedWorkRegistry",
       options.leaseMs ?? defaultShardLeaseMs,
     );
     this.#now = options.now ?? (() => new Date());
+    registryConfigs.set(this, {
+      context: this.#context,
+      storageFactory: this.#storageFactory,
+    });
     Object.freeze(this);
   }
 
@@ -195,6 +199,35 @@ export interface ShardedWorkRegistryOptions {
   readonly now?: () => Date;
 }
 
+interface RegistryConfig {
+  readonly context: StorageContext;
+  readonly storageFactory: StorageFactory;
+}
+
+const registryConfigs = new WeakMap<ShardedWorkRegistry, RegistryConfig>();
+
+interface ShardedWorkRegistryAccess {
+  matches(
+    registry: ShardedWorkRegistry,
+    context: StorageContext,
+    storageFactory: StorageFactory,
+  ): boolean;
+}
+
+/** @internal Builder-only registry storage-alignment checks. */
+export const shardedWorkRegistryAccess: ShardedWorkRegistryAccess = Object.freeze({
+  matches(
+    registry: ShardedWorkRegistry,
+    context: StorageContext,
+    storageFactory: StorageFactory,
+  ): boolean {
+    const configured = registryConfigs.get(registry);
+    return (
+      configured?.storageFactory === storageFactory && sameContext(configured.context, context)
+    );
+  },
+});
+
 interface StoredShardSession {
   readonly key: string;
   readonly id: string;
@@ -228,6 +261,23 @@ function readSession(record: Any, expectedKey?: string): ShardSession {
     stored.node,
     storedDate(stored.pickedUpAtMs, "Shard pickup time"),
     storedDate(stored.expiresAtMs, "Shard expiry time"),
+  );
+}
+
+function copyStorageContext(context: StorageContext): StorageContext {
+  const tenantId = context.tenantId;
+  return Object.freeze({
+    name: context.name,
+    multitenant: context.multitenant,
+    ...(tenantId === undefined ? {} : { tenantId }),
+  });
+}
+
+function sameContext(first: StorageContext, second: StorageContext): boolean {
+  return (
+    first.name === second.name &&
+    first.multitenant === second.multitenant &&
+    first.tenantId === second.tenantId
   );
 }
 

@@ -213,6 +213,69 @@ Current slice exposes:
   removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
   handlers are ordinary generated reactor handlers with current transaction
   semantics, not event-sourcing import/applier work;
+
+### Public delivery runs
+
+`DeliveryBuilder` assembles one immutable local delivery view. Omitted storage
+and node values resolve from `ServerEnvironment.instance()`; fully explicit
+storage and node configuration does not resolve or lock the singleton.
+
+```ts
+import { DeliveryBuilder } from "@spine-ts/server";
+
+const delivery = new DeliveryBuilder().build();
+
+await delivery.run({
+  onMessage(message) {
+    // Deliver the supported durable row to framework-owned endpoint wiring.
+  },
+});
+```
+
+Configure every local seam explicitly when the application owns them. A
+supplied registry must use the exact same context and storage-factory instance.
+Multi-shard strategies require an explicit run shard.
+
+```ts
+import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { DeliveryBuilder, ShardedWorkRegistry, UniformAcrossAllShards } from "@spine-ts/server";
+
+const context = { name: "Tasks", multitenant: false };
+const storageFactory = new InMemoryStorageFactory();
+const workRegistry = new ShardedWorkRegistry({ context, storageFactory });
+const strategy = UniformAcrossAllShards.forNumber(4);
+const delivery = new DeliveryBuilder()
+  .withContext(context)
+  .withStorageFactory(storageFactory)
+  .withWorkRegistry(workRegistry)
+  .withStrategy(strategy)
+  .withMonitor({
+    onPage(page) {
+      return page.failed === 0;
+    },
+  })
+  .withPageSize(250)
+  .withBatchSize(20)
+  .withNode("worker-a")
+  .build();
+
+await delivery.run({
+  shard: strategy.shardFor("task-42", "type.example.dev/Task"),
+  onMessage(message) {
+    // Deliver through framework-owned endpoint wiring.
+  },
+});
+```
+
+One `run()` owns one finite local shard drain. It observes normal concurrent
+pickup as `SKIPPED`, releases every acquired session, and returns frozen
+primitive page summaries. Page size is bounded by the storage maximum of 1,000;
+batch size is bounded at 1,000 retained summaries. `onStarted` runs only after
+exclusive pickup. `onPage`, `onFailure`, and `onCompleted` run after release;
+returning `false` from `onPage` yields `STOPPED`. Hook exceptions propagate from
+`run()`, and no later hook runs, but acquired sessions remain reusable. This is
+not a production scheduler, retry policy, catch-up API, or remote topology.
+
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;

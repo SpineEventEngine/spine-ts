@@ -44,6 +44,16 @@ export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export { type DeliveryEndpointMessage } from "./delivery/delivery.js";
 export {
+  DeliveryBuilder,
+  type Delivery,
+  type DeliveryMonitor,
+  type DeliveryPage,
+  type DeliveryResult,
+  type DeliveryRunOptions,
+  type DeliveryStrategy,
+  UniformAcrossAllShards,
+} from "./delivery/delivery-builder.js";
+export {
   Inbox,
   type DeliveryLabel,
   type DeliveryStatus,

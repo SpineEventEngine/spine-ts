@@ -20,6 +20,7 @@ export class DeliveryLoop {
   readonly #limit: number | undefined;
   readonly #maxFailures: number;
   readonly #onMessage: OnDeliveryMessage;
+  readonly #onStarted: (() => void) | undefined;
   readonly #admission = new DeliveryAdmissionSweep();
   #epoch: DeliveryEpoch | undefined;
   #progress = loopProgress();
@@ -40,6 +41,7 @@ export class DeliveryLoop {
       maxDeliveryLoopFailures,
     );
     this.#onMessage = options.onMessage;
+    this.#onStarted = options.onStarted;
     deliveryLoopInternals.set(this, { progress: () => this.#progress });
     Object.freeze(this);
   }
@@ -188,6 +190,7 @@ export class DeliveryLoop {
         ...(this.#epoch !== undefined || this.#resume === undefined
           ? {}
           : { resume: this.#resume }),
+        ...(this.#onStarted === undefined ? {} : { onStarted: this.#onStarted }),
       },
     );
   }
@@ -244,6 +247,8 @@ export interface DeliveryLoopOptions {
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: OnDeliveryMessage;
+  /** Optional package-owned observation after successful shard pickup. */
+  readonly onStarted?: () => void;
 }
 
 /** Delivery loop stop reason. */

@@ -9,6 +9,7 @@ import {
   type DeliveryFailureStage,
 } from "./delivery-attempts.js";
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
+import { DeliveryLoop, type DeliveryLoopRun } from "./delivery-loop.js";
 import {
   Inbox,
   InboxMessageError,
@@ -21,6 +22,13 @@ import { requireDeliveryLeaseMs } from "./delivery-lease.js";
 import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
+import type {
+  DeliveryMonitor,
+  DeliveryPage,
+  DeliveryResult,
+  DeliveryRunOptions,
+  DeliveryStrategy,
+} from "./delivery-builder.js";
 
 /** Delivery owner for inbox storage and shard registry. */
 export class Delivery {
@@ -28,6 +36,20 @@ export class Delivery {
   readonly #leaseMs: number;
   readonly #now: () => Date;
   readonly #storageFactory: StorageFactory;
+
+  /** Immutable storage namespace selected for this delivery. */
+  readonly context: StorageContext;
+  /** Immutable storage factory selected for this delivery. */
+  readonly storageFactory: StorageFactory;
+  /** Immutable target-to-shard strategy selected for this delivery. */
+  readonly strategy: DeliveryStrategy;
+  /** Node identity selected for finite local runs. */
+  readonly node: string;
+  /** Positive accepted-work bound for one public delivery page. */
+  readonly pageSize: number;
+  /** Positive page bound for one public finite local run. */
+  readonly batchSize: number;
+  readonly #monitor: DeliveryMonitor | undefined;
 
   /** Durable inbox facade. */
   readonly inbox: Inbox;
@@ -38,27 +60,37 @@ export class Delivery {
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
-    this.#context = options.context;
+    const context = copyStorageContext(options.context);
+    this.#context = context;
     this.#leaseMs = requireDeliveryLeaseMs("Delivery", options.leaseMs ?? defaultShardLeaseMs);
     this.#now = options.now ?? (() => new Date());
     this.#storageFactory = options.storageFactory;
+    this.context = context;
+    this.storageFactory = options.storageFactory;
+    this.strategy = options.strategy ?? singleShardStrategy;
+    this.node = options.node ?? "local";
+    this.pageSize = options.pageSize ?? defaultPageSize;
+    this.batchSize = options.batchSize ?? defaultBatchSize;
+    this.#monitor = options.monitor;
     this.inbox = new Inbox(
       new InboxStorage({
-        context: options.context,
+        context,
         storageFactory: options.storageFactory,
         now: this.#now,
       }),
     );
     this.attempts = new DeliveryAttempts({
-      context: options.context,
+      context,
       storageFactory: options.storageFactory,
     });
-    this.shards = new ShardedWorkRegistry({
-      context: options.context,
-      storageFactory: options.storageFactory,
-      leaseMs: this.#leaseMs,
-      now: this.#now,
-    });
+    this.shards =
+      options.workRegistry ??
+      new ShardedWorkRegistry({
+        context,
+        storageFactory: options.storageFactory,
+        leaseMs: this.#leaseMs,
+        now: this.#now,
+      });
     deliveryDrainers.set(this, (shard, options, controls) => this.#drain(shard, options, controls));
     Object.freeze(this);
   }
@@ -104,6 +136,62 @@ export class Delivery {
     return outcome.run;
   }
 
+  /** Run one shard through the configured finite local page boundary. */
+  async run(options: DeliveryRunOptions): Promise<DeliveryResult> {
+    if (options.shard !== undefined && options.shard.ofTotal !== this.strategy.shardCount) {
+      throw new Error("Delivery run shard total must equal the configured strategy shard count.");
+    }
+    if (options.shard === undefined && this.strategy.shardCount > 1) {
+      throw new Error("Delivery run requires an explicit shard for a multi-shard strategy.");
+    }
+    const shard = options.shard ?? ShardIndex.single();
+    const pages: DeliveryPage[] = [];
+    let started = false;
+    const loop = new DeliveryLoop({
+      delivery: this,
+      shard,
+      node: this.node,
+      limit: this.pageSize,
+      onMessage: options.onMessage,
+      onStarted: () => {
+        if (!started) {
+          this.#monitor?.onStarted?.(shard);
+          started = true;
+        }
+      },
+    });
+    for (let index = 0; index < this.batchSize; index += 1) {
+      const loopRun = await loop.run();
+      const page = publicPage(loopRun);
+      pages.push(page);
+      if (loopRun.status === "SKIPPED") {
+        this.#monitor?.onSkipped?.(shard);
+        return this.#complete("SKIPPED", pages);
+      }
+      const continueRun = this.#monitor?.onPage?.(page);
+      if (page.failed > 0) {
+        this.#monitor?.onFailure?.(page);
+        return this.#complete("FAILED", pages);
+      }
+      if (continueRun === false) {
+        return this.#complete("STOPPED", pages);
+      }
+      if (loopRun.status === "STOPPED") {
+        return this.#complete("STOPPED", pages);
+      }
+      if (loopRun.status === "IDLE" && loopRun.processed < inboxStorageAccess.maxReadLimit) {
+        return this.#complete("COMPLETED", pages);
+      }
+    }
+    return this.#complete("PAUSED", pages);
+  }
+
+  #complete(status: DeliveryResult["status"], pages: readonly DeliveryPage[]): DeliveryResult {
+    const result = Object.freeze({ status, pages: Object.freeze([...pages]) });
+    this.#monitor?.onCompleted?.(result);
+    return result;
+  }
+
   async #drain(
     shard: ShardIndex,
     options: DeliveryDrainOptions,
@@ -128,6 +216,7 @@ export class Delivery {
     );
 
     try {
+      controls.onStarted?.();
       if (controls.epoch !== undefined) {
         return await this.#drainAdmittedMessages(
           scope.inbox,
@@ -675,18 +764,12 @@ export class Delivery {
         now: this.#now,
       }),
     );
-    const shards = new ShardedWorkRegistry({
-      context,
-      storageFactory: this.#storageFactory,
-      leaseMs: this.#leaseMs,
-      now: this.#now,
-    });
     const attempts = new DeliveryAttempts({
       context,
       storageFactory: this.#storageFactory,
     });
 
-    return Object.freeze({ inbox, attempts, shards });
+    return Object.freeze({ inbox, attempts, shards: this.shards });
   }
 
   #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
@@ -704,6 +787,18 @@ export interface DeliveryOptions {
   readonly leaseMs?: number;
   /** Optional clock used for delivery timing decisions such as lease and dedup expiry. */
   readonly now?: () => Date;
+  /** Optional public builder-selected work registry. */
+  readonly workRegistry?: ShardedWorkRegistry;
+  /** Optional public builder-selected target strategy. */
+  readonly strategy?: DeliveryStrategy;
+  /** Optional finite-run monitor. */
+  readonly monitor?: DeliveryMonitor;
+  /** Optional public builder-selected page size. */
+  readonly pageSize?: number;
+  /** Optional public builder-selected batch size. */
+  readonly batchSize?: number;
+  /** Optional public builder-selected pickup node. */
+  readonly node?: string;
 }
 
 /** Options for one direct delivery shard drain. */
@@ -720,6 +815,7 @@ interface DeliveryDrainControls {
   readonly resume?: DeliveryDrainCursor;
   readonly maxFailures?: number;
   readonly epoch?: DeliveryEpochSlice;
+  readonly onStarted?: () => void;
 }
 
 /** @internal Framework-only access to loop-private delivery controls. */
@@ -740,6 +836,22 @@ type DeliveryDrainer = (
 ) => Promise<DeliveryDrainOutcome>;
 
 const deliveryDrainers = new WeakMap<Delivery, DeliveryDrainer>();
+const defaultPageSize = 100;
+const defaultBatchSize = 100;
+const singleShardStrategy: DeliveryStrategy = Object.freeze({
+  shardCount: 1,
+  shardFor: () => ShardIndex.single(),
+});
+
+function publicPage(run: DeliveryLoopRun): DeliveryPage {
+  return Object.freeze({
+    status: run.status,
+    processed: run.processed,
+    accepted: run.accepted,
+    delivered: run.delivered,
+    failed: run.failed,
+  });
+}
 
 /** @internal Framework-only access to loop-private delivery controls. */
 export const deliveryAccess: DeliveryAccess = Object.freeze({
@@ -1490,6 +1602,18 @@ function snapshotStorageContext(context: StorageContext): StorageContext {
     name: context.name,
     multitenant: true,
     tenantId,
+  });
+}
+
+function copyStorageContext(context: StorageContext): StorageContext {
+  if (!context.multitenant) {
+    return Object.freeze({ name: context.name, multitenant: false });
+  }
+  const tenantId = context.tenantId;
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    ...(tenantId === undefined ? {} : { tenantId }),
   });
 }
 

@@ -385,13 +385,22 @@ finite primitive or single-field Protobuf message aggregate IDs, route
 consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
-Durable-delivery exports include `DeliveryEndpointMessage`,
-`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
-`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-`InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`,
-`InboxStorage`, `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`,
-`ShardIndex`, `ShardSession`, `ShardedWorkRegistry`, and
-`ShardedWorkRegistryOptions`. This slice persists inbox messages and shard
+Durable-delivery exports include the builder-owned `Delivery` interface,
+`DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`, `DeliveryPage`,
+`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`,
+`UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
+`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
+`InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
+`ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.
+`DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and finite
+page/batch bounds. Page size is limited to the storage maximum of 1,000 and
+batch size to 1,000 retained primitive summaries. A multi-shard strategy exposes
+its cardinality and requires an explicit run shard. The returned public view has
+no constructor, direct drain, exact-message drain, attempt history, or shard
+registry. A public finite `Delivery.run()` observes pages, normal already-owned
+pickup, failures, and completion without adding a production scheduler, retry
+policy, catch-up facility, or remote topology. This slice persists inbox messages and shard
 lease records through `StorageFactory` / `RecordStorage`, deduplicates live
 inbox writes durably by `(signalId, inboxId)` through small internal guard
 records, and keeps shard ordering metadata on each message with receive time

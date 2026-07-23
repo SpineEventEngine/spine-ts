@@ -748,6 +748,62 @@ cleanup. No automatic retry scheduler or monitor revisits that row. Durable
 handoff records the work, but it is not an autonomous eventual-delivery
 guarantee.
 
+For a finite local drain, use environment storage and node defaults:
+
+```ts
+import { DeliveryBuilder } from "@spine-ts/server";
+
+const delivery = new DeliveryBuilder().build();
+
+const result = await delivery.run({
+  onMessage(message) {
+    // Dispatch through framework-owned endpoint wiring.
+  },
+});
+```
+
+Or supply a fully explicit local configuration. The registry context and
+factory must match delivery storage, and a multi-shard run names its shard:
+
+```ts
+import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { DeliveryBuilder, ShardedWorkRegistry, UniformAcrossAllShards } from "@spine-ts/server";
+
+const context = { name: "Tasks", multitenant: false };
+const storageFactory = new InMemoryStorageFactory();
+const strategy = UniformAcrossAllShards.forNumber(4);
+const delivery = new DeliveryBuilder()
+  .withContext(context)
+  .withStorageFactory(storageFactory)
+  .withWorkRegistry(new ShardedWorkRegistry({ context, storageFactory }))
+  .withStrategy(strategy)
+  .withMonitor({
+    onPage(page) {
+      return page.failed === 0;
+    },
+  })
+  .withPageSize(250)
+  .withBatchSize(20)
+  .withNode("worker-a")
+  .build();
+
+await delivery.run({
+  shard: strategy.shardFor("task-42", "type.example.dev/Task"),
+  onMessage(message) {
+    // Dispatch through framework-owned endpoint wiring.
+  },
+});
+```
+
+`result` contains frozen ordered primitive page summaries without messages,
+payload bytes, dates, or errors. Page size is at most 1,000 and batch size is at
+most 1,000 summaries. `onStarted` follows successful pickup; an already-owned
+run calls `onSkipped` and then `onCompleted` with `SKIPPED`. Page/failure and
+terminal hooks run after release. Returning `false` from `onPage` yields
+`STOPPED`. Any hook exception rejects `run()`, prevents later hooks, and leaves
+an acquired shard reusable. This is deliberately not a scheduler, supervisor,
+retry policy, catch-up facility, or remote topology.
+
 The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and
