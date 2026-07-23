@@ -17,11 +17,16 @@ import {
   type InboxReadContinuation,
 } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
-import type { ClaimedInboxMessage, InboxClaim } from "./inbox-claim.js";
 import { requireDeliveryLeaseMs } from "./delivery-lease.js";
 import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
-import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
+import { ShardedWorkRegistry } from "./sharded-work-registry.js";
+import type {
+  DeliveryInbox,
+  DeliveryInboxWork,
+  DeliveryWorkRegistry,
+  DeliveryWorkSession,
+} from "./delivery-ports.js";
 import type {
   DeliveryMonitor,
   DeliveryPage,
@@ -52,11 +57,11 @@ export class Delivery {
   readonly #monitor: DeliveryMonitor | undefined;
 
   /** Durable inbox facade. */
-  readonly inbox: Inbox;
+  readonly inbox: DeliveryInbox;
   /** Internal retained delivery attempt history. */
   readonly attempts: DeliveryAttempts;
   /** Storage-backed shard registry. */
-  readonly shards: ShardedWorkRegistry;
+  readonly shards: DeliveryWorkRegistry;
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
@@ -72,13 +77,15 @@ export class Delivery {
     this.pageSize = options.pageSize ?? defaultPageSize;
     this.batchSize = options.batchSize ?? defaultBatchSize;
     this.#monitor = options.monitor;
-    this.inbox = new Inbox(
-      new InboxStorage({
-        context,
-        storageFactory: options.storageFactory,
-        now: this.#now,
-      }),
-    );
+    this.inbox =
+      options.inbox ??
+      new Inbox(
+        new InboxStorage({
+          context,
+          storageFactory: options.storageFactory,
+          now: this.#now,
+        }),
+      );
     this.attempts = new DeliveryAttempts({
       context,
       storageFactory: options.storageFactory,
@@ -204,15 +211,13 @@ export class Delivery {
     if (session === undefined) {
       return deliveryDrainOutcome(deliveryRun("SKIPPED", 0, 0, 0, 0, []));
     }
-    const active = new ActiveClaim();
+    const active = new ActiveWork();
     const lease = keepShardLease(
       scope.shards,
       session,
       this.#leaseMs,
       () => this.#now().getTime(),
-      {
-        onRenewClaim: (next) => active.renew(scope.inbox.storage, next),
-      },
+      { onRenewWork: (next) => active.renew(next) },
     );
 
     try {
@@ -249,12 +254,12 @@ export class Delivery {
   }
 
   async #drainAdmittedMessages(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     attempts: DeliveryAttempts,
     limit: number,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
     epoch: DeliveryEpochSlice,
     maxFailures: number | undefined,
   ): Promise<DeliveryDrainOutcome> {
@@ -294,13 +299,13 @@ export class Delivery {
   }
 
   async #drainAvailableMessages(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     attempts: DeliveryAttempts,
     shard: ShardIndex,
     limit: number,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
     cursor: DeliveryDrainCursor,
     maxFailures: number | undefined,
   ): Promise<DeliveryDrainOutcome> {
@@ -341,7 +346,7 @@ export class Delivery {
   }
 
   async #drainPendingPage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     attempts: DeliveryAttempts,
     progress: DrainProgress,
     scan: DeliveryScanState,
@@ -349,7 +354,7 @@ export class Delivery {
     messages: readonly InboxMessage[],
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
     limit: number,
     maxFailures: number | undefined,
   ): Promise<DeliveryDrainOutcome | undefined> {
@@ -385,7 +390,7 @@ export class Delivery {
   }
 
   async #readPendingDeliveryPage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     shard: ShardIndex,
     limit: number,
     after: InboxReadContinuation | undefined,
@@ -424,15 +429,13 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
-    const active = new ActiveClaim();
+    const active = new ActiveWork();
     const lease = keepShardLease(
       scope.shards,
       session,
       this.#leaseMs,
       () => this.#now().getTime(),
-      {
-        onRenewClaim: (next) => active.renew(scope.inbox.storage, next),
-      },
+      { onRenewWork: (next) => active.renew(next) },
     );
 
     try {
@@ -460,7 +463,7 @@ export class Delivery {
   }
 
   async #readPendingMessage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     id: InboxMessage["id"],
     shard: ShardIndex,
   ): Promise<InboxMessage | undefined> {
@@ -477,12 +480,12 @@ export class Delivery {
   }
 
   async #drainExactMessage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     attempts: DeliveryAttempts,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
   ): Promise<DeliveryRun> {
     if (!isEndpointLabel(message.label)) {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
@@ -521,31 +524,31 @@ export class Delivery {
   }
 
   async #deliverMessage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     message: DeliveryEndpointMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
   ): Promise<DeliveryMessageResult> {
     let stage: DeliveryFailureStage = "CLAIM";
 
     try {
-      const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
-      if (claimed === undefined) {
+      const work = await this.#beginMessageDelivery(inbox, message, lease);
+      if (work === undefined) {
         return { kind: "SKIPPED" };
       }
 
-      active.set(claimed);
+      active.set(work);
       stage = "LEASE";
-      await this.#synchronizeActiveClaim(inbox, lease, active);
+      await this.#synchronizeActiveWork(lease, active);
       stage = "ENDPOINT";
-      await this.#invokeEndpoint(claimed, onMessage, lease, active);
+      await this.#invokeEndpoint(work.message, onMessage, lease, active);
       stage = "STATUS_UPDATE";
-      await this.#markActiveDelivered(inbox, message, lease, active);
+      await this.#completeActiveWork(message, lease, active);
 
       return { kind: "DELIVERED" };
     } catch (error) {
-      const cleanup = await this.#clearFailedClaim(inbox, error, active);
+      const cleanup = await this.#clearFailedWork(error, active);
       const failedStage = cleanup.cleanupFailed
         ? "CLEANUP"
         : deliveryFailureStage(stage, active.callbackAccepted());
@@ -554,7 +557,7 @@ export class Delivery {
         kind: "FAILED" as const,
         accepted: active.callbackAccepted(),
         error: cleanup.error,
-        node: lease.session().node,
+        node: sessionNode(lease.session()),
         stage: failedStage,
         reason: deliveryFailureReason(failedStage),
       });
@@ -564,30 +567,30 @@ export class Delivery {
   }
 
   async #markExhaustedDelivered(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     message: InboxMessage,
     retry: DeliveryRetryDecision,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
   ): Promise<DeliveryMessageResult> {
     const failure: { stage: DeliveryFailureStage } = { stage: "CLAIM" };
 
     try {
-      const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
-      if (claimed === undefined) {
+      const work = await this.#beginMessageDelivery(inbox, message, lease);
+      if (work === undefined) {
         return { kind: "SKIPPED" };
       }
 
-      active.set(claimed);
+      active.set(work);
       failure.stage = "LEASE";
-      await this.#synchronizeActiveClaim(inbox, lease, active);
-      await this.#markActiveDelivered(inbox, message, lease, active, () => {
+      await this.#synchronizeActiveWork(lease, active);
+      await this.#completeActiveWork(message, lease, active, () => {
         failure.stage = "STATUS_UPDATE";
       });
 
       return { kind: "DELIVERED" };
     } catch (error) {
-      const cleanup = await this.#clearFailedClaim(inbox, error, active);
+      const cleanup = await this.#clearFailedWork(error, active);
       const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : failure.stage;
       const failureError =
         failedStage === "STATUS_UPDATE" ? retryExhaustedMarkFailure(retry) : cleanup.error;
@@ -596,7 +599,7 @@ export class Delivery {
         kind: "FAILED" as const,
         accepted: false,
         error: failureError,
-        node: lease.session().node,
+        node: sessionNode(lease.session()),
         stage: failedStage,
         reason: deliveryFailureReason(failedStage),
       });
@@ -615,70 +618,58 @@ export class Delivery {
     }
   }
 
-  async #claimMessageForDelivery(
-    inbox: Inbox,
+  async #beginMessageDelivery(
+    inbox: DeliveryInbox,
     message: InboxMessage,
     lease: ShardLeaseKeeper,
-  ): Promise<ClaimedInboxMessage | undefined> {
+  ): Promise<DeliveryInboxWork | undefined> {
     lease.requireActive();
-
-    return inboxStorageAccess.claim(inbox.storage, message, lease.session());
+    return inbox.begin(message, lease.session());
   }
 
-  async #synchronizeActiveClaim(
-    inbox: Inbox,
-    lease: ShardLeaseKeeper,
-    active: ActiveClaim,
-  ): Promise<void> {
+  async #synchronizeActiveWork(lease: ShardLeaseKeeper, active: ActiveWork): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
-    await active.synchronize(inbox.storage, lease.session());
+    await active.synchronize(lease.session());
   }
 
   async #invokeEndpoint(
-    message: ClaimedInboxMessage,
+    message: InboxMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
   ): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
     requireEndpointLabel(message.label);
     active.markCallbackAccepted();
-    await onMessage(endpointMessage(message));
+    await onMessage(endpointSnapshot(message));
     active.markCallbackSucceeded();
   }
 
-  async #markActiveDelivered(
-    inbox: Inbox,
+  async #completeActiveWork(
     message: InboxMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
     onFinalize?: () => void,
   ): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
     onFinalize?.();
 
-    const marked = await active.finalize((current) =>
-      inboxStorageAccess.markDelivered(inbox.storage, current),
-    );
-    if (marked === undefined) {
+    const completed = await active.complete();
+    if (!completed) {
       throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
     }
   }
 
-  async #clearFailedClaim(
-    inbox: Inbox,
-    error: unknown,
-    active: ActiveClaim,
-  ): Promise<DeliveryErrorState> {
+  async #clearFailedWork(error: unknown, active: ActiveWork): Promise<DeliveryErrorState> {
     if (active.callbackSucceeded()) {
       return Object.freeze({ error, cleanupFailed: false });
     }
 
     try {
-      await active.clearStored(inbox.storage);
+      await active.abandon();
 
       return Object.freeze({ error, cleanupFailed: false });
     } catch (clearError) {
@@ -690,13 +681,13 @@ export class Delivery {
   }
 
   async #tryDrainMessage(
-    inbox: Inbox,
+    inbox: DeliveryInbox,
     attempts: DeliveryAttempts,
     progress: DrainProgress,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
-    active: ActiveClaim,
+    active: ActiveWork,
   ): Promise<void> {
     if (!progress.observe(message)) {
       return;
@@ -757,19 +748,12 @@ export class Delivery {
 
   #drainScope(): DeliveryScope {
     const context = snapshotStorageContext(this.#context);
-    const inbox = new Inbox(
-      new InboxStorage({
-        context,
-        storageFactory: this.#storageFactory,
-        now: this.#now,
-      }),
-    );
     const attempts = new DeliveryAttempts({
       context,
       storageFactory: this.#storageFactory,
     });
 
-    return Object.freeze({ inbox, attempts, shards: this.shards });
+    return Object.freeze({ inbox: this.inbox, attempts, shards: this.shards });
   }
 
   #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
@@ -788,7 +772,9 @@ export interface DeliveryOptions {
   /** Optional clock used for delivery timing decisions such as lease and dedup expiry. */
   readonly now?: () => Date;
   /** Optional public builder-selected work registry. */
-  readonly workRegistry?: ShardedWorkRegistry;
+  readonly workRegistry?: DeliveryWorkRegistry;
+  /** Optional server-owned inbox port. */
+  readonly inbox?: DeliveryInbox;
   /** Optional public builder-selected target strategy. */
   readonly strategy?: DeliveryStrategy;
   /** Optional finite-run monitor. */
@@ -943,17 +929,17 @@ interface ShardLeaseKeeper {
   readonly awaitRenewal: () => Promise<void>;
   readonly close: () => Promise<void>;
   readonly requireActive: () => void;
-  readonly session: () => ShardSession;
+  readonly session: () => DeliveryWorkSession;
 }
 
 interface ShardLeaseRenewalOptions {
-  readonly onRenewClaim: (session: ShardSession) => Promise<void>;
+  readonly onRenewWork: (session: DeliveryWorkSession) => Promise<void>;
 }
 
 interface DeliveryScope {
-  readonly inbox: Inbox;
+  readonly inbox: DeliveryInbox;
   readonly attempts: DeliveryAttempts;
-  readonly shards: ShardedWorkRegistry;
+  readonly shards: DeliveryWorkRegistry;
 }
 
 /** @internal Cursor used only by the package-local delivery loop access path. */
@@ -1204,12 +1190,24 @@ function drainProgress(): DrainProgress {
 }
 
 function keepShardLease(
-  shards: ShardedWorkRegistry,
-  session: ShardSession,
+  shards: DeliveryWorkRegistry,
+  session: DeliveryWorkSession,
   leaseMs: number,
   nowMs: () => number,
   options: ShardLeaseRenewalOptions,
 ): ShardLeaseKeeper {
+  if (session.kind === "EXCLUSIVE") {
+    return Object.freeze({
+      awaitRenewal: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+      requireActive: () => undefined,
+      session: () => session,
+    });
+  }
+  if (shards.renew === undefined) {
+    throw new Error("Leased delivery sessions require registry renewal.");
+  }
+  const renew = shards.renew.bind(shards);
   let current = session;
   let failed: unknown;
   let renewing: Promise<void> | undefined;
@@ -1219,15 +1217,14 @@ function keepShardLease(
         return;
       }
 
-      renewing = shards
-        .renew(current)
+      renewing = renew(current)
         .then(async (next) => {
           if (next === undefined) {
             failed = new Error("Shard lease was lost.");
 
             return;
           }
-          await options.onRenewClaim(next);
+          await options.onRenewWork(next);
           current = next;
         })
         .catch((error: unknown) => {
@@ -1267,8 +1264,12 @@ function keepShardLease(
   });
 }
 
-class ActiveClaim {
-  #claimed: ClaimedInboxMessage | undefined;
+function sessionNode(session: DeliveryWorkSession): string {
+  return session.kind === "LEASED" ? session.node : "exclusive";
+}
+
+class ActiveWork {
+  #work: DeliveryInboxWork | undefined;
   #callbackAccepted = false;
   #callbackSucceeded = false;
   #lock: Promise<void> = Promise.resolve();
@@ -1282,34 +1283,32 @@ class ActiveClaim {
   }
 
   clear(): void {
-    this.#claimed = undefined;
+    this.#work = undefined;
     this.#callbackAccepted = false;
     this.#callbackSucceeded = false;
   }
 
-  async clearStored(storage: InboxStorage): Promise<void> {
+  async abandon(): Promise<void> {
     await this.#locked(async () => {
-      const current = this.#claimed;
-      this.#claimed = undefined;
-      await clearActiveClaim(storage, current);
+      const current = this.#work;
+      if (current !== undefined) {
+        await current.abandon();
+        this.#work = undefined;
+      }
     });
   }
 
-  async finalize<T>(
-    callback: (message: ClaimedInboxMessage) => Promise<T | undefined>,
-  ): Promise<T | undefined> {
+  async complete(): Promise<boolean> {
     return this.#locked(async () => {
-      const current = this.#claimed;
+      const current = this.#work;
       if (current === undefined) {
-        throw new Error("Inbox claim was lost.");
+        throw new Error("Inbox work was lost.");
       }
-
-      const result = await callback(current);
-      if (result !== undefined) {
-        this.#claimed = undefined;
+      const completed = await current.complete();
+      if (completed) {
+        this.#work = undefined;
       }
-
-      return result;
+      return completed;
     });
   }
 
@@ -1321,45 +1320,27 @@ class ActiveClaim {
     this.#callbackSucceeded = true;
   }
 
-  async renew(storage: InboxStorage, session: ShardSession): Promise<void> {
-    await this.#locked(async () => {
-      const current = this.#claimed;
-      if (current === undefined) {
-        return;
-      }
-      if (claimMatchesSession(current.claim, session)) {
-        return;
-      }
-
-      const renewed = await inboxStorageAccess.renew(storage, current, session);
-      if (renewed === undefined) {
-        throw new Error("Inbox claim was lost.");
-      }
-      this.#claimed = renewed;
-    });
-  }
-
-  set(message: ClaimedInboxMessage): void {
-    this.#claimed = message;
+  set(work: DeliveryInboxWork): void {
+    this.#work = work;
     this.#callbackAccepted = false;
     this.#callbackSucceeded = false;
   }
 
-  async synchronize(storage: InboxStorage, session: ShardSession): Promise<void> {
+  async renew(session: DeliveryWorkSession): Promise<void> {
     await this.#locked(async () => {
-      const current = this.#claimed;
-      if (current === undefined) {
-        throw new Error("Inbox claim was lost.");
+      if (this.#work !== undefined) {
+        await this.#work.synchronize(session);
       }
-      if (claimMatchesSession(current.claim, session)) {
-        return;
-      }
+    });
+  }
 
-      const renewed = await inboxStorageAccess.renew(storage, current, session);
-      if (renewed === undefined) {
-        throw new Error("Inbox claim was lost.");
+  async synchronize(session: DeliveryWorkSession): Promise<void> {
+    await this.#locked(async () => {
+      const current = this.#work;
+      if (current === undefined) {
+        throw new Error("Inbox work was lost.");
       }
-      this.#claimed = renewed;
+      await current.synchronize(session);
     });
   }
 
@@ -1377,18 +1358,6 @@ class ActiveClaim {
       release();
     }
   }
-}
-
-function claimMatchesSession(claim: InboxClaim, session: ShardSession): boolean {
-  return (
-    claim.id === session.id &&
-    claim.node === session.node &&
-    claim.expiresAt.getTime() === session.expiresAt.getTime()
-  );
-}
-
-function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {
-  return endpointSnapshot(message);
 }
 
 function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
@@ -1542,20 +1511,6 @@ function leaseError(error: unknown): Error {
   return error instanceof Error
     ? error
     : new Error("Shard lease renewal failed.", { cause: error });
-}
-
-async function clearActiveClaim(
-  storage: InboxStorage,
-  message: ClaimedInboxMessage | undefined,
-): Promise<void> {
-  if (message === undefined) {
-    return;
-  }
-
-  const cleared = await inboxStorageAccess.clear(storage, message);
-  if (cleared === undefined) {
-    throw new Error("Framework cleanup did not clear the pending row.");
-  }
 }
 
 function claimClearFailure(deliveryError: unknown, clearError: unknown): AggregateError {

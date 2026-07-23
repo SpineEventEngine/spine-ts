@@ -31,7 +31,7 @@ exclusions, not commitments to a future policy or implementation.
 - Node.js engine target: Node 24 LTS or newer.
 - TypeScript module target: ESM-first `NodeNext`.
 - Package boundaries: `packages/proto`, `packages/client`, `packages/core`, `packages/server`,
-  `packages/transport`, `packages/storage`, `packages/storage-datastore`,
+  `packages/delivery-client`, `packages/transport`, `packages/storage`, `packages/storage-datastore`,
   `packages/storage-rdbms`, and `packages/testing`.
 - Example boundary: `examples/todo`.
 - Copied Spine proto contracts live under `proto/`, with source provenance in

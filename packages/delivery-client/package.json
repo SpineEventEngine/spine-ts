@@ -1,0 +1,24 @@
+{
+  "name": "@spine-ts/delivery-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node delivery-server client facade.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
+    "@spine-ts/proto": "workspace:*",
+    "@spine-ts/server": "workspace:*"
+  }
+}

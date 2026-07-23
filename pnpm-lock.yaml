@@ -170,6 +170,24 @@ importers:
         specifier: workspace:*
         version: link:../proto
 
+  packages/delivery-client:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@connectrpc/connect':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
+      '@spine-ts/server':
+        specifier: workspace:*
+        version: link:../server
+
   packages/proto:
     dependencies:
       '@bufbuild/protobuf':

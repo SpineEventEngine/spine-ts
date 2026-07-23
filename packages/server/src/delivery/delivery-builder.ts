@@ -2,7 +2,7 @@ import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
-import type { Inbox } from "./inbox.js";
+import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import { inboxStorageAccess } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
@@ -121,7 +121,7 @@ export interface Delivery {
   /** Maximum retained page summaries per finite run, from 1 through 1000. */
   readonly batchSize: number;
   /** Durable inbox facade. */
-  readonly inbox: Inbox;
+  readonly inbox: DeliveryInbox;
   /** Run one finite local shard delivery. */
   run(options: DeliveryRunOptions): Promise<DeliveryResult>;
 }
@@ -130,7 +130,8 @@ export interface Delivery {
 export class DeliveryBuilder {
   #context: StorageContext | undefined;
   #storageFactory: StorageFactory | undefined;
-  #workRegistry: ShardedWorkRegistry | undefined;
+  #workRegistry: DeliveryWorkRegistry | undefined;
+  #inbox: DeliveryInbox | undefined;
   #strategy: DeliveryStrategy | undefined;
   #monitor: DeliveryMonitor | undefined;
   #pageSize: number | undefined;
@@ -150,8 +151,14 @@ export class DeliveryBuilder {
   }
 
   /** Configure the registry used for exclusive shard pickup. */
-  withWorkRegistry(workRegistry: ShardedWorkRegistry): this {
+  withWorkRegistry(workRegistry: DeliveryWorkRegistry): this {
     this.#workRegistry = workRegistry;
+    return this;
+  }
+
+  /** Configure an inbox port instead of the local durable inbox default. */
+  withInbox(inbox: DeliveryInbox): this {
+    this.#inbox = inbox;
     return this;
   }
 
@@ -202,16 +209,20 @@ export class DeliveryBuilder {
       node ??= environment.nodeId;
     }
     if (
-      this.#workRegistry !== undefined &&
+      this.#workRegistry instanceof ShardedWorkRegistry &&
       !shardedWorkRegistryAccess.matches(this.#workRegistry, context, storageFactory)
     ) {
       throw new Error("Delivery work registry must use the delivery storage context and factory.");
     }
     const workRegistry = this.#workRegistry ?? new ShardedWorkRegistry({ context, storageFactory });
+    const inboxSessionKind = this.#inbox?.sessionKind ?? "LEASED";
+    if (inboxSessionKind !== workRegistry.sessionKind)
+      throw new Error("Delivery inbox and work registry session kinds must match.");
     const core = new CoreDelivery({
       context,
       storageFactory,
       workRegistry,
+      ...(this.#inbox === undefined ? {} : { inbox: this.#inbox }),
       strategy,
       ...(this.#monitor === undefined ? {} : { monitor: this.#monitor }),
       pageSize: this.#pageSize ?? defaultPageSize,
@@ -229,7 +240,7 @@ class BuiltDelivery implements Delivery {
   readonly node: string;
   readonly pageSize: number;
   readonly batchSize: number;
-  readonly inbox: Inbox;
+  readonly inbox: DeliveryInbox;
   readonly #core: CoreDelivery;
 
   constructor(core: CoreDelivery) {

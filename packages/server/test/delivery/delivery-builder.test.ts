@@ -17,6 +17,135 @@ afterEach(async () => {
 });
 
 describe("DeliveryBuilder", () => {
+  it("runs through supplied exclusive inbox and registry ports without renewal", async () => {
+    const shard = ShardIndex.single();
+    const message = {
+      id: { value: "message", shard },
+      inboxId: { targetId: "id", targetTypeUrl: "type" },
+      signalId: "signal",
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+      whenReceived: new Date(),
+      version: 1n,
+    };
+    let completed = 0;
+    let released = 0;
+    let renewed = 0;
+    const work = {
+      message,
+      synchronize: () => Promise.resolve(),
+      complete: () => Promise.resolve(++completed > 0),
+      abandon: () => Promise.resolve(),
+    };
+    const inbox = {
+      sessionKind: "EXCLUSIVE" as const,
+      receive: () => Promise.resolve({ outcome: "WRITTEN" as const, message }),
+      read: () => Promise.resolve([message]),
+      readMessage: () => Promise.resolve(message),
+      begin: () => Promise.resolve(work),
+    };
+    const registry = {
+      sessionKind: "EXCLUSIVE" as const,
+      pickUp: () => Promise.resolve({ kind: "EXCLUSIVE" as const, shard }),
+      renew: () => Promise.resolve(((renewed += 1), undefined)),
+      release: () => Promise.resolve(((released += 1), true)),
+    };
+    const seen: string[] = [];
+    const result = await new DeliveryBuilder()
+      .withStorageFactory(new InMemoryStorageFactory())
+      .withInbox(inbox)
+      .withWorkRegistry(registry)
+      .build()
+      .run({
+        onMessage: (value) => {
+          seen.push(value.signalId);
+        },
+      });
+    expect(result.status).toBe("COMPLETED");
+    expect(seen).toEqual(["signal"]);
+    expect(completed).toBe(1);
+    expect(released).toBe(1);
+    expect(renewed).toBe(0);
+  });
+  it("accepts a supplied structural inbox port", () => {
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: () => Promise.reject(new Error("not used")),
+      read: () => Promise.resolve([]),
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+
+    expect(new DeliveryBuilder().withInbox(inbox).build().inbox).toBe(inbox);
+  });
+  it("fails fast when supplied inbox and registry session kinds differ", () => {
+    const inbox = {
+      sessionKind: "EXCLUSIVE" as const,
+      receive: () => Promise.reject(new Error("not used")),
+      read: () => Promise.resolve([]),
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+    const registry = {
+      sessionKind: "LEASED" as const,
+      pickUp: () => Promise.resolve(undefined),
+      release: () => Promise.resolve(false),
+    };
+
+    expect(() => new DeliveryBuilder().withInbox(inbox).withWorkRegistry(registry).build()).toThrow(
+      "Delivery inbox and work registry session kinds must match.",
+    );
+  });
+  it("compares each supplied port with the resolved local default session kind", () => {
+    const remoteInbox = {
+      sessionKind: "EXCLUSIVE" as const,
+      receive: () => Promise.reject(new Error("not used")),
+      read: () => Promise.resolve([]),
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+    const remoteRegistry = {
+      sessionKind: "EXCLUSIVE" as const,
+      pickUp: () => Promise.resolve(undefined),
+      release: () => Promise.resolve(false),
+    };
+
+    expect(() => new DeliveryBuilder().withInbox(remoteInbox).build()).toThrow(
+      "Delivery inbox and work registry session kinds must match.",
+    );
+    expect(() => new DeliveryBuilder().withWorkRegistry(remoteRegistry).build()).toThrow(
+      "Delivery inbox and work registry session kinds must match.",
+    );
+    expect(() =>
+      new DeliveryBuilder().withInbox({ ...remoteInbox, sessionKind: "LEASED" }).build(),
+    ).not.toThrow();
+    expect(() =>
+      new DeliveryBuilder().withWorkRegistry({ ...remoteRegistry, sessionKind: "LEASED" }).build(),
+    ).not.toThrow();
+  });
+  it("rejects either direction of supplied session-kind mismatch and accepts a matching pair", () => {
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: () => Promise.reject(new Error("not used")),
+      read: () => Promise.resolve([]),
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+    const exclusiveRegistry = {
+      sessionKind: "EXCLUSIVE" as const,
+      pickUp: () => Promise.resolve(undefined),
+      release: () => Promise.resolve(false),
+    };
+    const leasedRegistry = { ...exclusiveRegistry, sessionKind: "LEASED" as const };
+
+    expect(() =>
+      new DeliveryBuilder().withInbox(inbox).withWorkRegistry(exclusiveRegistry).build(),
+    ).toThrow("Delivery inbox and work registry session kinds must match.");
+    expect(() =>
+      new DeliveryBuilder().withInbox(inbox).withWorkRegistry(leasedRegistry).build(),
+    ).not.toThrow();
+  });
   it("uses the singleton storage and node defaults for one immutable delivery", () => {
     const storageFactory = new InMemoryStorageFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });

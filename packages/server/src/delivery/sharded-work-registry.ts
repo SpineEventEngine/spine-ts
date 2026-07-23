@@ -24,6 +24,8 @@ const casRetryLimit = 8;
  * topology around these pickup/renew/release operations.
  */
 export class ShardedWorkRegistry {
+  /** Local registry pickups create renewable leased sessions. */
+  readonly sessionKind = "LEASED" as const;
   readonly #context: StorageContext;
   readonly #leaseMs: number;
   readonly #now: () => Date;
@@ -170,6 +172,8 @@ export class ShardedWorkRegistry {
 
 /** One active shard pickup session. */
 export class ShardSession {
+  /** This local session carries a renewable lease. */
+  readonly kind = "LEASED" as const;
   /** Create a shard session snapshot. */
   constructor(
     /** Unique pickup session identifier. */

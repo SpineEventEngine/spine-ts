@@ -181,6 +181,31 @@ const expectedClientExports = [
   "le",
   "lt",
 ];
+const expectedDeliveryClientExports = [
+  "DeliveryClient",
+  "DeliveryClientOptions",
+  "DeliveryFindOneOptions",
+  "DeliveryMutationOptions",
+  "DeliveryOperationOutcomeUnknownError",
+  "DeliveryPagingError",
+  "DeliveryProtocolError",
+  "DeliveryQuarantineError",
+  "DeliveryReadPageOptions",
+  "DeliveryShardObservationError",
+  "DeliveryShardObservationOverflowError",
+  "DeliveryShardObservationStream",
+  "DeliveryWorkerId",
+  "MAX_DELIVERY_BATCH_MESSAGES",
+  "MAX_INBOX_PAYLOAD_BYTES",
+  "MAX_DELIVERY_RPC_BYTES",
+  "ReleasedShardSession",
+  "RemoteInbox",
+  "RemoteShardObservation",
+  "RemoteShardSession",
+  "RemoteWorkRegistry",
+  "RemovalQuarantine",
+  "RemovalQuarantineRecord",
+];
 const expectedStorageExports = [
   "EventStore",
   "EventRollback",
@@ -299,6 +324,12 @@ const expectedServerExports = [
   "ReadCatchUpResult",
   "Delivery",
   "DeliveryBuilder",
+  "DeliveryInbox",
+  "DeliveryInboxWork",
+  "DeliveryWorkRegistry",
+  "DeliveryWorkSession",
+  "ExclusiveDeliveryWorkSession",
+  "LeasedDeliveryWorkSession",
   "DeliveryEndpointMessage",
   "DeliveryLabel",
   "DeliveryMonitor",
@@ -480,6 +511,7 @@ const expectedServerExports = [
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const clientIndexPath = join("packages", "client", "src", "index.ts");
+const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
@@ -519,6 +551,7 @@ const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client/src");
+const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -826,6 +859,7 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
+const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
@@ -838,6 +872,15 @@ const missingDeclaredClientExports = expectedClientExports.filter(
 );
 const unexpectedClientExports = declaredClientExports.filter(
   (name) => !expectedClientExports.includes(name),
+);
+const missingDeliveryClientExports = expectedDeliveryClientExports.filter(
+  (name) => !deliveryClientModuleNames.has(name),
+);
+const missingDeclaredDeliveryClientExports = expectedDeliveryClientExports.filter(
+  (name) => !declaredDeliveryClientExports.includes(name),
+);
+const unexpectedDeliveryClientExports = declaredDeliveryClientExports.filter(
+  (name) => !expectedDeliveryClientExports.includes(name),
 );
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -920,6 +963,22 @@ if (missingDeclaredClientExports.length > 0) {
 if (unexpectedClientExports.length > 0) {
   console.error(
     `@spine-ts/client root exports changed without updating docs expectations: ${unexpectedClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeliveryClientExports.length > 0 || missingDeclaredDeliveryClientExports.length > 0) {
+  console.error(
+    "@spine-ts/delivery-client is missing expected exports: " +
+      [...missingDeliveryClientExports, ...missingDeclaredDeliveryClientExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeliveryClientExports.length > 0) {
+  console.error(
+    "@spine-ts/delivery-client exports changed without updating docs expectations: " +
+      unexpectedDeliveryClientExports.join(", "),
   );
   process.exit(1);
 }
@@ -1123,6 +1182,7 @@ console.log(
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports`,
     `${expectedCoreExports.length} expected @spine-ts/core exports`,
     `${expectedClientExports.length} expected @spine-ts/client exports`,
+    `${expectedDeliveryClientExports.length} expected @spine-ts/delivery-client exports`,
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
     `${expectedTransportExports.length} expected @spine-ts/transport exports`,

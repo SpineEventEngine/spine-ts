@@ -42,6 +42,14 @@ export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
+export type {
+  DeliveryInbox,
+  DeliveryInboxWork,
+  DeliveryWorkRegistry,
+  DeliveryWorkSession,
+  ExclusiveDeliveryWorkSession,
+  LeasedDeliveryWorkSession,
+} from "./delivery/delivery-ports.js";
 export { type DeliveryEndpointMessage } from "./delivery/delivery.js";
 export {
   DeliveryBuilder,

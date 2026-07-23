@@ -15,6 +15,7 @@ import {
   type OnDeliveryMessage,
 } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { Inbox } from "../../src/delivery/inbox.js";
 import { InboxMessageError, ShardIndex, ShardSession, type InboxMessage } from "../../src/index.js";
 import {
   blockDedupFinalizeOnce,
@@ -173,7 +174,7 @@ describe("Delivery worker", () => {
       await vi.advanceTimersByTimeAsync(500);
 
       const competingClaim = await inboxStorageAccess.claim(
-        second.inbox.storage,
+        localInbox(second).storage,
         stored,
         new ShardSession(
           "competing-message-owner",
@@ -446,7 +447,7 @@ describe("Delivery worker", () => {
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-claimed", 1n);
     const claimed = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       stored,
       new ShardSession(
         "message-owner",
@@ -487,7 +488,7 @@ describe("Delivery worker", () => {
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-expired-claim", 1n);
     const claimed = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       stored,
       new ShardSession(
         "message-owner",
@@ -533,7 +534,7 @@ describe("Delivery worker", () => {
     const unavailable = await seed(delivery, "signal-unavailable-head", 1n);
     await seed(delivery, "signal-available-tail", 2n);
     const claimed = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       unavailable,
       new ShardSession(
         "message-owner",
@@ -587,7 +588,7 @@ describe("Delivery worker", () => {
 
     for (const message of unavailable) {
       const claimed = await inboxStorageAccess.claim(
-        delivery.inbox.storage,
+        localInbox(delivery).storage,
         message,
         new ShardSession(
           `message-owner-${message.signalId}`,
@@ -1221,7 +1222,7 @@ describe("Delivery worker", () => {
     const message = await seed(delivery, "signal-exhausted-claimed", 1n);
     await recordFailures(delivery, message, deliveryAttemptCapacity);
     const claim = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       message,
       new ShardSession(
         "competing-message-owner",
@@ -1968,7 +1969,7 @@ describe("Delivery worker", () => {
     await seed(delivery, "signal-catch-up-skip", 2n, "CATCH_UP");
     await seed(delivery, "signal-success", 3n);
     await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       unavailable,
       new ShardSession(
         "message-owner",
@@ -2272,7 +2273,7 @@ describe("Delivery worker", () => {
     const shard = ShardIndex.single();
     const message = await seed(delivery, "signal-expiry-during-read", 1n);
     const claimed = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       message,
       new ShardSession(
         "message-owner",
@@ -2359,7 +2360,7 @@ describe("Delivery worker", () => {
 
     for (const message of unavailable) {
       const claimed = await inboxStorageAccess.claim(
-        delivery.inbox.storage,
+        localInbox(delivery).storage,
         message,
         new ShardSession(
           `message-owner-${message.signalId}`,
@@ -2465,7 +2466,7 @@ describe("Delivery worker", () => {
 
     for (const message of head) {
       const claimed = await inboxStorageAccess.claim(
-        delivery.inbox.storage,
+        localInbox(delivery).storage,
         message,
         new ShardSession(
           `message-owner-${message.signalId}`,
@@ -2661,13 +2662,13 @@ describe("Delivery worker", () => {
     const deliveredRows = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
 
     await expect(
-      delivery.inbox.markDelivered(deliveredRows[0] ?? delivered),
+      localInbox(delivery).markDelivered(deliveredRows[0] ?? delivered),
     ).resolves.toMatchObject({
       signalId: "signal-delivered",
       status: "DELIVERED",
     });
     await expect(
-      delivery.inbox.markDelivered(
+      localInbox(delivery).markDelivered(
         Object.freeze({
           ...(deliveredRows[0] ?? delivered),
           signalId: "signal-forged",
@@ -2685,8 +2686,8 @@ describe("Delivery worker", () => {
       version: 2n,
     });
 
-    await expect(delivery.inbox.markDelivered(scheduled.message)).resolves.toBeUndefined();
-    await expect(delivery.inbox.markDelivered(missingMessage())).resolves.toBeUndefined();
+    await expect(localInbox(delivery).markDelivered(scheduled.message)).resolves.toBeUndefined();
+    await expect(localInbox(delivery).markDelivered(missingMessage())).resolves.toBeUndefined();
   });
 
   it("rejects public markDelivered snapshots with internal claim metadata", async () => {
@@ -2696,10 +2697,10 @@ describe("Delivery worker", () => {
     });
     const stored = await seed(delivery, "signal-mark-claim", 1n);
 
-    await expect(delivery.inbox.markDelivered(withClaim(stored))).rejects.toBeInstanceOf(
+    await expect(localInbox(delivery).markDelivered(withClaim(stored))).rejects.toBeInstanceOf(
       InboxMessageError,
     );
-    await expect(delivery.inbox.markDelivered(withClaim(stored))).rejects.toThrow(
+    await expect(localInbox(delivery).markDelivered(withClaim(stored))).rejects.toThrow(
       "Inbox message claim is internal.",
     );
     await expect(
@@ -2934,7 +2935,7 @@ describe("Delivery worker", () => {
       version: 99n,
     });
 
-    await expect(delivery.inbox.markDelivered(forged)).resolves.toBeUndefined();
+    await expect(localInbox(delivery).markDelivered(forged)).resolves.toBeUndefined();
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-original", status: "TO_DELIVER" },
     ]);
@@ -3660,6 +3661,11 @@ function missingMessage(): InboxMessage {
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version: 99n,
   });
+}
+
+/** These tests construct only the local inbox implementation. */
+function localInbox(delivery: Delivery): Inbox {
+  return delivery.inbox as Inbox;
 }
 
 function withClaim(message: InboxMessage): InboxMessage {

@@ -10,6 +10,7 @@ import {
 import { deliveryAttemptCapacity } from "../../src/delivery/delivery-attempts.js";
 import { DeliveryLoop, deliveryLoopAccess } from "../../src/delivery/delivery-loop.js";
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
+import { Inbox } from "../../src/delivery/inbox.js";
 import { ShardSession, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
@@ -188,13 +189,13 @@ describe("DeliveryLoop", () => {
       delivered: 2,
       failed: 0,
     });
-    await expect(delivery.inbox.markDelivered(deliveredBeforeDrain)).resolves.toMatchObject({
+    await expect(localInbox(delivery).markDelivered(deliveredBeforeDrain)).resolves.toMatchObject({
       signalId: "signal-now-delivered",
       status: "DELIVERED",
     });
     await expect(
       inboxStorageAccess.claim(
-        delivery.inbox.storage,
+        localInbox(delivery).storage,
         claimedBeforeDrain,
         new ShardSession(
           "competing-message-owner",
@@ -451,7 +452,7 @@ describe("DeliveryLoop", () => {
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-row-claimed", 1n);
     const claimed = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       stored,
       new ShardSession(
         "message-owner",
@@ -652,7 +653,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual([]);
 
     for (const message of pending) {
-      await expect(delivery.inbox.markDelivered(message)).resolves.toMatchObject({
+      await expect(localInbox(delivery).markDelivered(message)).resolves.toMatchObject({
         id: message.id,
         status: "DELIVERED",
       });
@@ -691,7 +692,7 @@ describe("DeliveryLoop", () => {
 
     const claimedHead = await seed(delivery, "signal-now-supported", 1n);
     const claim = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       claimedHead,
       new ShardSession(
         "message-owner",
@@ -754,7 +755,7 @@ describe("DeliveryLoop", () => {
 
     const claimedHead = await seed(delivery, "signal-cleared-head", 1n);
     const claim = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       claimedHead,
       new ShardSession(
         "message-owner",
@@ -825,7 +826,7 @@ describe("DeliveryLoop", () => {
 
     const claimedHead = await seed(delivery, "signal-cleared-head", 1n);
     const claim = await inboxStorageAccess.claim(
-      delivery.inbox.storage,
+      localInbox(delivery).storage,
       claimedHead,
       new ShardSession(
         "message-owner",
@@ -899,7 +900,7 @@ describe("DeliveryLoop", () => {
 
     race.clearSkippedRows = async () => {
       for (const message of pending.slice(0, 1_001)) {
-        await delivery.inbox.markDelivered(message);
+        await localInbox(delivery).markDelivered(message);
       }
     };
 
@@ -950,7 +951,7 @@ describe("DeliveryLoop", () => {
 
     race.clearSkippedRows = async () => {
       for (const message of pending.slice(0, 1_000)) {
-        await delivery.inbox.markDelivered(message);
+        await localInbox(delivery).markDelivered(message);
       }
     };
 
@@ -1030,7 +1031,7 @@ describe("DeliveryLoop", () => {
   it("rejects a non-pending row in a retained epoch", async () => {
     const delivery = createDelivery();
     const pending = await seed(delivery, "signal-stale-retained-status", 1n);
-    const delivered = await delivery.inbox.markDelivered(pending);
+    const delivered = await localInbox(delivery).markDelivered(pending);
     if (delivered === undefined) {
       throw new Error("Expected the seeded row to be marked delivered.");
     }
@@ -1472,6 +1473,11 @@ function createDelivery(storageFactory: StorageFactory = new InMemoryStorageFact
     context: { name: "Tasks", multitenant: false },
     storageFactory,
   });
+}
+
+/** These tests construct only the local inbox implementation. */
+function localInbox(delivery: Delivery): Inbox {
+  return delivery.inbox as Inbox;
 }
 
 async function expectIdleWithoutDelivery(loop: DeliveryLoop): Promise<void> {

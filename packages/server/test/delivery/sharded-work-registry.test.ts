@@ -33,16 +33,16 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(1, 4);
 
-    const session = await first.shards.pickUp(shard, "node-a");
+    const session = await localShards(first).pickUp(shard, "node-a");
     if (session === undefined) {
       throw new Error("Expected first shard pickup to create a session.");
     }
 
     expect(session.node).toBe("node-a");
-    await expect(second.shards.pickUp(shard, "node-b")).resolves.toBeUndefined();
-    await expect(first.shards.release(session)).resolves.toBe(true);
+    await expect(localShards(second).pickUp(shard, "node-b")).resolves.toBeUndefined();
+    await expect(localShards(first).release(session)).resolves.toBe(true);
 
-    await expect(second.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(second).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
     });
@@ -66,9 +66,9 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const firstSession = await first.shards.pickUp(shard, "node-a");
+    const firstSession = await localShards(first).pickUp(shard, "node-a");
     secondNow.value = new Date("2026-07-02T09:10:01.000Z");
-    const secondSession = await second.shards.pickUp(shard, "node-b");
+    const secondSession = await localShards(second).pickUp(shard, "node-b");
 
     expect(firstSession?.node).toBe("node-a");
     expect(secondSession).toMatchObject({
@@ -88,7 +88,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const firstSession = await delivery.shards.pickUp(shard, "node-a");
+    const firstSession = await localShards(delivery).pickUp(shard, "node-a");
     if (firstSession === undefined) {
       throw new Error("Expected first shard pickup to create a session.");
     }
@@ -97,7 +97,7 @@ describe("ShardedWorkRegistry", () => {
       now.value = new Date("2026-07-02T09:11:01.001Z");
     };
 
-    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(delivery).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
       pickedUpAt: new Date("2026-07-02T09:11:01.001Z"),
@@ -123,14 +123,14 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const session = await first.shards.pickUp(shard, "node-a");
+    const session = await localShards(first).pickUp(shard, "node-a");
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
     firstNow.value = new Date("2026-07-02T09:12:01.001Z");
 
-    await expect(first.shards.renew(session)).resolves.toBeUndefined();
-    await expect(second.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(first).renew(session)).resolves.toBeUndefined();
+    await expect(localShards(second).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
     });
@@ -147,7 +147,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await localShards(delivery).pickUp(shard, "node-a");
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
@@ -155,7 +155,7 @@ describe("ShardedWorkRegistry", () => {
       now.value = new Date("2026-07-02T09:13:01.001Z");
     };
 
-    await expect(delivery.shards.renew(session)).resolves.toBeUndefined();
+    await expect(localShards(delivery).renew(session)).resolves.toBeUndefined();
   });
 
   it("does not release a delayed shard session after expiry", async () => {
@@ -169,14 +169,14 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await localShards(delivery).pickUp(shard, "node-a");
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
     now.value = new Date("2026-07-02T09:14:01.001Z");
 
-    await expect(delivery.shards.release(session)).resolves.toBe(false);
-    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(delivery).release(session)).resolves.toBe(false);
+    await expect(localShards(delivery).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
     });
@@ -193,7 +193,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
 
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await localShards(delivery).pickUp(shard, "node-a");
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
@@ -201,8 +201,8 @@ describe("ShardedWorkRegistry", () => {
       now.value = new Date("2026-07-02T09:15:01.001Z");
     };
 
-    await expect(delivery.shards.release(session)).resolves.toBe(false);
-    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(delivery).release(session)).resolves.toBe(false);
+    await expect(localShards(delivery).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
     });
@@ -300,14 +300,14 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:20:00.000Z"),
     });
     const shard = new ShardIndex(0, 1);
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await localShards(delivery).pickUp(shard, "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
     await expect(
-      delivery.shards.release(
+      localShards(delivery).release(
         new ShardSession(
           "other-session",
           session.shard,
@@ -318,7 +318,7 @@ describe("ShardedWorkRegistry", () => {
       ),
     ).resolves.toBe(false);
     await expect(
-      delivery.shards.release(
+      localShards(delivery).release(
         new ShardSession(
           session.id,
           session.shard,
@@ -328,8 +328,8 @@ describe("ShardedWorkRegistry", () => {
         ),
       ),
     ).resolves.toBe(false);
-    await expect(delivery.shards.release(session)).resolves.toBe(true);
-    await expect(delivery.shards.release(session)).resolves.toBe(false);
+    await expect(localShards(delivery).release(session)).resolves.toBe(true);
+    await expect(localShards(delivery).release(session)).resolves.toBe(false);
   });
 
   it("returns undefined when renewing a missing shard session", async () => {
@@ -340,7 +340,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(
-      delivery.shards.renew(
+      localShards(delivery).renew(
         new ShardSession(
           "missing-session",
           new ShardIndex(0, 1),
@@ -358,14 +358,14 @@ describe("ShardedWorkRegistry", () => {
       storageFactory: new InMemoryStorageFactory(),
       now: () => new Date("2026-07-02T09:22:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
     await expect(
-      delivery.shards.renew(
+      localShards(delivery).renew(
         new ShardSession(
           "other-session",
           session.shard,
@@ -376,7 +376,7 @@ describe("ShardedWorkRegistry", () => {
       ),
     ).resolves.toBeUndefined();
     await expect(
-      delivery.shards.renew(
+      localShards(delivery).renew(
         new ShardSession(
           session.id,
           session.shard,
@@ -397,12 +397,12 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession({
       typeUrl: "type.spine-ts.dev/internal/WrongShardSessionRecord",
       value: Buffer.from("{}"),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -410,7 +410,7 @@ describe("ShardedWorkRegistry", () => {
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: Buffer.from("[]", "utf8"),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -429,7 +429,7 @@ describe("ShardedWorkRegistry", () => {
         "utf8",
       ),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -448,7 +448,7 @@ describe("ShardedWorkRegistry", () => {
         "utf8",
       ),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -467,7 +467,7 @@ describe("ShardedWorkRegistry", () => {
         "utf8",
       ),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -486,7 +486,7 @@ describe("ShardedWorkRegistry", () => {
         "utf8",
       ),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
 
@@ -494,7 +494,7 @@ describe("ShardedWorkRegistry", () => {
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: Buffer.from("{", "utf8"),
     });
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
   });
@@ -508,13 +508,13 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: Buffer.concat([Buffer.from("{", "utf8"), Buffer.alloc(512 * 1024)]),
     });
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
   });
 
   it("fails closed when stored shard sessions contain invalid UTF-8", async () => {
@@ -526,7 +526,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: invalidUtf8JsonBytes(
@@ -543,7 +543,7 @@ describe("ShardedWorkRegistry", () => {
       ),
     });
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
   });
@@ -557,13 +557,13 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeRawStoredSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: undefined as unknown as Uint8Array,
     } as unknown as Any);
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
   });
@@ -577,7 +577,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeRawSession({
       get typeUrl() {
         throw new Error("type URL getter failed");
@@ -585,10 +585,10 @@ describe("ShardedWorkRegistry", () => {
       value: Buffer.from("{}", "utf8"),
     } as unknown as Any);
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
   });
 
   it("classifies malformed stored shard-session type URL fields as storage corruption", async () => {
@@ -600,16 +600,16 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeRawSession({
       typeUrl: 123,
       value: Buffer.from("{}", "utf8"),
     } as unknown as Any);
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
   });
 
   it("classifies non-byte stored shard-session values as storage corruption", async () => {
@@ -621,16 +621,16 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeRawSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: "not bytes",
     } as unknown as Any);
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/value must/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(/value must/i);
   });
 
   it("classifies shard-session value accessor failures as storage corruption", async () => {
@@ -642,7 +642,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeRawSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       get value() {
@@ -650,10 +650,12 @@ describe("ShardedWorkRegistry", () => {
       },
     } as unknown as Any);
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/value is invalid/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(
+      /value is invalid/i,
+    );
   });
 
   it("classifies shard-session value clone failures during pickup as storage corruption", async () => {
@@ -666,9 +668,9 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:35:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toBeInstanceOf(
-      DeliveryStorageCorruptionError,
-    );
+    await expect(
+      localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a"),
+    ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
   it("classifies corrupt stored shard-session coordinates as storage corruption", async () => {
@@ -680,7 +682,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: Buffer.from(
@@ -697,7 +699,7 @@ describe("ShardedWorkRegistry", () => {
       ),
     });
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
   });
@@ -711,7 +713,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession({
       typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
       value: Buffer.from(
@@ -728,10 +730,10 @@ describe("ShardedWorkRegistry", () => {
       ),
     });
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/session id/i);
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toThrow(/session id/i);
   });
 
   it("rejects oversized shard nodes before building a session record", async () => {
@@ -741,7 +743,7 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:36:00.000Z"),
     });
 
-    const pickUp = delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(20 * 1024));
+    const pickUp = localShards(delivery).pickUp(new ShardIndex(0, 1), oversizedText(20 * 1024));
 
     await expect(pickUp).rejects.toThrow(/node/i);
     await expect(pickUp).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
@@ -756,7 +758,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession(
       storedSessionRecord("1/2", "session-1", "node-a", {
         pickedUpAtMs: Date.parse("2026-07-02T09:36:30.000Z"),
@@ -764,7 +766,7 @@ describe("ShardedWorkRegistry", () => {
       }),
     );
 
-    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).pickUp(shard, "node-a")).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
   });
@@ -778,7 +780,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession(
       storedSessionRecord("1/2", "other-session", "node-b", {
         pickedUpAtMs: Date.parse("2026-07-02T09:37:30.000Z"),
@@ -787,7 +789,7 @@ describe("ShardedWorkRegistry", () => {
     );
 
     await expect(
-      delivery.shards.release(
+      localShards(delivery).release(
         new ShardSession("session-1", shard, "node-a", new Date(1), new Date(2)),
       ),
     ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
@@ -802,7 +804,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 1);
 
-    await delivery.shards.pickUp(shard, "seed-node");
+    await localShards(delivery).pickUp(shard, "seed-node");
     storageFactory.writeStoredSession(
       storedSessionRecord("0/1", "session-1", "node-a", {
         pickedUpAtMs: Date.parse("2026-07-02T09:37:30.000Z"),
@@ -810,7 +812,7 @@ describe("ShardedWorkRegistry", () => {
       }),
     );
 
-    const pickup = delivery.shards.pickUp(shard, "node-a");
+    const pickup = localShards(delivery).pickUp(shard, "node-a");
 
     await expect(pickup).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     await expect(pickup).rejects.toThrow(/expiry time/i);
@@ -834,10 +836,10 @@ describe("ShardedWorkRegistry", () => {
     const shard = new ShardIndex(0, 1);
     const tenantA = createDelivery();
 
-    const first = await tenantA.shards.pickUp(shard, "node-a");
+    const first = await localShards(tenantA).pickUp(shard, "node-a");
     tenantId = "tenant-b";
     const tenantB = createDelivery();
-    const second = await tenantB.shards.pickUp(shard, "node-b");
+    const second = await localShards(tenantB).pickUp(shard, "node-b");
 
     expect(first?.node).toBe("node-a");
     expect(second?.node).toBe("node-b");
@@ -897,7 +899,7 @@ describe("ShardedWorkRegistry", () => {
       now: (() => "2026-07-02T09:45:00.000Z") as unknown as () => Date,
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+    await expect(localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
       "Shard pickup time is invalid.",
     );
 
@@ -918,7 +920,7 @@ describe("ShardedWorkRegistry", () => {
         })("2026-07-02T09:45:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+    await expect(localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
       "Shard pickup time is invalid.",
     );
 
@@ -934,7 +936,7 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:45:00.000Z"),
     });
 
-    const indexRejection = await delivery.shards
+    const indexRejection = await localShards(delivery)
       .pickUp(
         {
           get index() {
@@ -948,7 +950,7 @@ describe("ShardedWorkRegistry", () => {
         () => undefined,
         (error: unknown) => error,
       );
-    const totalRejection = await delivery.shards
+    const totalRejection = await localShards(delivery)
       .pickUp(
         {
           index: 0,
@@ -985,7 +987,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(
-      delivery.shards.pickUp(undefined as unknown as ShardIndex, "node-a"),
+      localShards(delivery).pickUp(undefined as unknown as ShardIndex, "node-a"),
     ).rejects.toThrow("Shard index is invalid.");
 
     expect(storageFactory.opens).toBe(0);
@@ -1001,7 +1003,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(
-      delivery.shards.pickUp({ index: "0", ofTotal: 1 } as unknown as ShardIndex, "node-a"),
+      localShards(delivery).pickUp({ index: "0", ofTotal: 1 } as unknown as ShardIndex, "node-a"),
     ).rejects.toThrow(/finite integer/);
 
     expect(storageFactory.opens).toBe(0);
@@ -1017,7 +1019,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(
-      delivery.shards.pickUp({ index: 0, ofTotal: 0 } as unknown as ShardIndex, "node-a"),
+      localShards(delivery).pickUp({ index: 0, ofTotal: 0 } as unknown as ShardIndex, "node-a"),
     ).rejects.toThrow("Shard index is invalid.");
 
     expect(storageFactory.opens).toBe(0);
@@ -1036,14 +1038,18 @@ describe("ShardedWorkRegistry", () => {
       key: () => "0/2",
     });
 
-    const session = await delivery.shards.pickUp(fakeShard, "node-a");
+    const session = await localShards(delivery).pickUp(fakeShard, "node-a");
 
     expect(session).toMatchObject({
       node: "node-a",
       shard: new ShardIndex(1, 2),
     });
-    await expect(delivery.shards.pickUp(new ShardIndex(1, 2), "node-b")).resolves.toBeUndefined();
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 2), "node-c")).resolves.toMatchObject({
+    await expect(
+      localShards(delivery).pickUp(new ShardIndex(1, 2), "node-b"),
+    ).resolves.toBeUndefined();
+    await expect(
+      localShards(delivery).pickUp(new ShardIndex(0, 2), "node-c"),
+    ).resolves.toMatchObject({
       node: "node-c",
       shard: new ShardIndex(0, 2),
     });
@@ -1059,7 +1065,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     try {
-      const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+      const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
       expect(session).toMatchObject({
         node: "node-a",
@@ -1078,13 +1084,13 @@ describe("ShardedWorkRegistry", () => {
       storageFactory: new RetryingStorageFactory({ failReleaseOnce: true }),
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.release(session)).resolves.toBe(true);
+    await expect(localShards(delivery).release(session)).resolves.toBe(true);
   });
 
   it("retries shard renewal when compare-and-set loses one race", async () => {
@@ -1094,13 +1100,13 @@ describe("ShardedWorkRegistry", () => {
       storageFactory,
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.renew(session)).resolves.toMatchObject({
+    await expect(localShards(delivery).renew(session)).resolves.toMatchObject({
       id: session.id,
       node: "node-a",
       shard: new ShardIndex(0, 1),
@@ -1115,7 +1121,7 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+    await expect(localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
       /shard pickup could not be completed due to concurrent changes/i,
     );
   });
@@ -1126,13 +1132,13 @@ describe("ShardedWorkRegistry", () => {
       storageFactory: new RetryingStorageFactory({ failReleaseAlways: true }),
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.release(session)).rejects.toThrow(
+    await expect(localShards(delivery).release(session)).rejects.toThrow(
       /shard release could not be completed due to concurrent changes/i,
     );
   });
@@ -1143,13 +1149,13 @@ describe("ShardedWorkRegistry", () => {
       storageFactory: new RetryingStorageFactory({ failRenewAlways: true }),
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.renew(session)).rejects.toThrow(
+    await expect(localShards(delivery).renew(session)).rejects.toThrow(
       /shard renewal could not be completed due to concurrent changes/i,
     );
   });
@@ -1164,7 +1170,7 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+    await expect(localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
       /shard pickup storage failed/i,
     );
     expect(storageFactory.createAttempts).toBe(1);
@@ -1180,9 +1186,9 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toBeInstanceOf(
-      DeliveryStorageCorruptionError,
-    );
+    await expect(
+      localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a"),
+    ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     expect(storageFactory.createAttempts).toBe(1);
   });
 
@@ -1195,13 +1201,15 @@ describe("ShardedWorkRegistry", () => {
       storageFactory,
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.renew(session)).rejects.toThrow(/shard renewal storage failed/i);
+    await expect(localShards(delivery).renew(session)).rejects.toThrow(
+      /shard renewal storage failed/i,
+    );
     expect(storageFactory.renewAttempts).toBe(1);
   });
 
@@ -1214,13 +1222,15 @@ describe("ShardedWorkRegistry", () => {
       storageFactory,
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.release(session)).rejects.toThrow(/shard release storage failed/i);
+    await expect(localShards(delivery).release(session)).rejects.toThrow(
+      /shard release storage failed/i,
+    );
     expect(storageFactory.releaseAttempts).toBe(1);
   });
 
@@ -1233,13 +1243,13 @@ describe("ShardedWorkRegistry", () => {
       storageFactory,
       now: () => new Date("2026-07-02T09:50:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
-    await expect(delivery.shards.release(session)).rejects.toBeInstanceOf(
+    await expect(localShards(delivery).release(session)).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
     expect(storageFactory.releaseAttempts).toBe(1);
@@ -1253,7 +1263,7 @@ describe("ShardedWorkRegistry", () => {
     });
     const shard = new ShardIndex(0, 2);
     const otherShard = new ShardIndex(1, 2);
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await localShards(delivery).pickUp(shard, "node-a");
     let shardReads = 0;
 
     if (session === undefined) {
@@ -1261,6 +1271,9 @@ describe("ShardedWorkRegistry", () => {
     }
 
     const driftingSession: ShardSession = {
+      get kind() {
+        return session.kind;
+      },
       get id() {
         return session.id;
       },
@@ -1279,8 +1292,8 @@ describe("ShardedWorkRegistry", () => {
       },
     };
 
-    await expect(delivery.shards.release(driftingSession)).resolves.toBe(true);
-    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+    await expect(localShards(delivery).release(driftingSession)).resolves.toBe(true);
+    await expect(localShards(delivery).pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
     });
@@ -1292,21 +1305,21 @@ describe("ShardedWorkRegistry", () => {
       storageFactory: new InMemoryStorageFactory(),
       now: () => new Date("2026-07-02T09:54:00.000Z"),
     });
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+    const session = await localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a");
 
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
 
     await expect(
-      delivery.shards.release({
+      localShards(delivery).release({
         get shard() {
           throw new Error("session shard getter failed");
         },
       } as unknown as ShardSession),
     ).rejects.toThrow("Shard session is invalid.");
     await expect(
-      delivery.shards.release({
+      localShards(delivery).release({
         shard: session.shard,
         get id() {
           throw new Error("session id getter failed");
@@ -1315,7 +1328,7 @@ describe("ShardedWorkRegistry", () => {
       } as unknown as ShardSession),
     ).rejects.toThrow("Shard session is invalid.");
     await expect(
-      delivery.shards.release({
+      localShards(delivery).release({
         shard: session.shard,
         id: session.id,
         get node() {
@@ -1332,12 +1345,12 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:54:00.000Z"),
     });
 
-    await expect(delivery.shards.renew(undefined as unknown as ShardSession)).rejects.toThrow(
+    await expect(localShards(delivery).renew(undefined as unknown as ShardSession)).rejects.toThrow(
       "Shard session is invalid.",
     );
-    await expect(delivery.shards.release(undefined as unknown as ShardSession)).rejects.toThrow(
-      "Shard session is invalid.",
-    );
+    await expect(
+      localShards(delivery).release(undefined as unknown as ShardSession),
+    ).rejects.toThrow("Shard session is invalid.");
   });
 
   it("passes multitenant shard contexts through to storage validation", async () => {
@@ -1347,11 +1360,16 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:55:00.000Z"),
     });
 
-    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+    await expect(localShards(delivery).pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
       /tenantId/,
     );
   });
 });
+
+/** These tests construct only the local storage-backed work registry. */
+function localShards(delivery: Delivery): ShardedWorkRegistry {
+  return delivery.shards as ShardedWorkRegistry;
+}
 
 class CorruptibleStorageFactory extends StorageFactory {
   readonly #records = new Map<string, Message>();
