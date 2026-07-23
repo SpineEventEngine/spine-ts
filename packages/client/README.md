@@ -27,7 +27,7 @@ Protobuf-ES module; replace it with the real module that exports the command
 schema.
 
 To observe immediate events caused by a command, pass one or more generated
-event schemas. Subscription and activation complete before posting. The
+event schemas. Subscribe completes and the activation consumer attaches before posting. The
 accepted result exposes one bounded, single-consumer `AsyncIterable`; cancel it
 when enough events have arrived:
 
@@ -55,6 +55,58 @@ up observation automatically. Successful observation remains caller-owned.
 Remote cancellation is internally bounded to one second. Explicit `cancel()`
 reports cleanup failure; `Client.close()` completes owned-session shutdown and
 then reports any cleanup failures it collected.
+
+Projection state and event topics use the same request scope. Creation resolves
+only after the server has accepted `Subscribe` and the activation consumer has
+locally issued its first read. This is not a remote wire acknowledgement;
+asynchronous activation failures reject iterator reads. Both handles are bounded, single-consumer async iterables;
+an overflow is terminal and triggers remote cancellation. State topics support
+IDs, equality predicates, nested `all()` / `either()` groups, and a field mask.
+Range predicates, ordering, and limits are query-only. Event topics currently
+accept only an abort signal because the frozen TS service accepts no event
+criteria or mask.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client, ProjectionColumn, all, either, eq } from "@spine-ts/client";
+import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
+import { TaskIdSchema, TaskListSchema } from "@example/tasks-proto/task_list_pb";
+import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
+
+const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const states = await subscriptionClient
+  .onBehalfOf("alice")
+  .subscribeToState(TaskListSchema, TaskIdSchema, {
+    ids: [create(TaskIdSchema, { value: "list-1" })],
+    where: all(eq(TaskListColumns.archived, false), either(eq(TaskListColumns.deleted, false))),
+    mask: ["id", "openTaskCount"],
+  });
+for await (const update of states) {
+  if (update.kind === "state") console.log(update.state);
+  else console.log("no longer matches", update.id);
+  await states.cancel();
+}
+
+const events = await subscriptionClient.asGuest().subscribeToEvents(TaskCreatedSchema);
+for await (const { message, context } of events) {
+  console.log(message, context);
+  await events.cancel();
+}
+await subscriptionClient.close();
+```
+
+Pass an `AbortSignal` in either subscription options object to stop it without
+awaiting the handle, or call and await `cancel()` to observe remote cleanup
+failure. Each handle buffers at most 32 decoded updates. The 33rd update ends
+the handle with `ClientProtocolError` and starts remote cancellation; updates
+are never silently discarded. A normally completed remote stream is simply
+terminal—the frozen wire contract cannot distinguish a normal completion from
+server-side overflow. Active updates are not replayed or reconnected after a
+disconnect, so query current state before resubscribing. A `noLongerMatching`
+state update identifies an entity that previously matched the criteria but no
+longer does. `connectTo()` closes its owned HTTP/2 session in `close()`, while
+`usingTransport()` never closes the caller-owned transport.
 
 `post()` and `query()` return `ok`, `error`, or `rejection` for valid service
 responses. Network and deadline failures remain Connect errors. Caller abort

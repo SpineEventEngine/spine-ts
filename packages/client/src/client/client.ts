@@ -1,10 +1,10 @@
-import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, equals, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Transport } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { randomUUID } from "node:crypto";
-import { deriveTypeUrl, packCommand, unpackAny, type MessageSchema } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -15,16 +15,27 @@ import {
   type Status,
   type TenantId,
   type Version,
+  type EventContext,
 } from "@spine-ts/proto";
 import {
   CommandService,
   QuerySchema,
   QueryService,
   SubscriptionService,
+  SubscriptionSchema,
+  IdFilterSchema,
+  TargetFiltersSchema,
   TopicSchema,
   type Query,
   type Subscription,
+  type SubscriptionUpdate,
+  type TargetFilters,
+  type Topic,
 } from "@spine-ts/proto/client";
+import type { ProjectionPredicate } from "../query/projection-query.js";
+import { ProjectionQuery } from "../query/projection-query.js";
+import { ProjectionColumn } from "../projection/projection-column.js";
+import { BoundedStream, stopped } from "./bounded-stream.js";
 
 /** A valid application-level command or query outcome. */
 export type ClientOutcome =
@@ -75,6 +86,70 @@ export interface CommandEvent {
   readonly message: Message;
   readonly context: Message;
 }
+
+/** A decoded state update from a Projection subscription. */
+export type StateSubscriptionUpdate<Schema extends MessageSchema, IdSchema extends MessageSchema> =
+  | Readonly<{ readonly kind: "state"; readonly state: DeepReadonly<MessageShape<Schema>> }>
+  | Readonly<{
+      readonly kind: "noLongerMatching";
+      readonly id: DeepReadonly<MessageShape<IdSchema>>;
+    }>;
+
+/** A cancellable, bounded stream of Projection state updates. */
+export interface StateSubscription<
+  Schema extends MessageSchema,
+  IdSchema extends MessageSchema,
+> extends AsyncIterable<StateSubscriptionUpdate<Schema, IdSchema>> {
+  /** End local iteration immediately and idempotently cancel the remote subscription. */
+  cancel(): Promise<void>;
+}
+
+/** A decoded event and the immutable context in which it was emitted. */
+export interface SubscriptionEvent<Schema extends MessageSchema> {
+  readonly message: DeepReadonly<MessageShape<Schema>>;
+  readonly context: DeepReadonly<EventContext>;
+}
+
+type DeepReadonly<Value> = Value extends (...arguments_: never[]) => unknown
+  ? Value
+  : Value extends Uint8Array
+    ? ReadonlyBytes
+    : Value extends readonly (infer Item)[]
+      ? readonly DeepReadonly<Item>[]
+      : Value extends object
+        ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+        : Value;
+
+interface ReadonlyBytes extends Iterable<number> {
+  readonly [index: number]: number;
+  readonly length: number;
+  slice(start?: number, end?: number): ReadonlyBytes;
+  subarray(start?: number, end?: number): ReadonlyBytes;
+}
+
+/** A cancellable, bounded stream of events. */
+export interface EventSubscription<Schema extends MessageSchema> extends AsyncIterable<
+  SubscriptionEvent<Schema>
+> {
+  /** End local iteration immediately and idempotently cancel the remote subscription. */
+  cancel(): Promise<void>;
+}
+
+/** Criteria supported by frozen Projection-state topic subscriptions. */
+export interface StateSubscriptionOptions<
+  Schema extends MessageSchema,
+  IdSchema extends MessageSchema,
+> extends ClientOperationOptions {
+  readonly ids?: readonly MessageShape<IdSchema>[];
+  readonly where?: ProjectionPredicate<ProjectionColumn<Schema>>;
+  readonly mask?: readonly StateFieldName<Schema>[];
+}
+
+type StateFieldName<Schema extends MessageSchema> = Exclude<
+  keyof MessageShape<Schema>,
+  "$typeName" | "$unknown"
+> &
+  string;
 
 /** Options for creating a client. */
 export interface ClientOptions {
@@ -154,6 +229,31 @@ export interface ClientRequest {
     queryOrBuilder: Query | { build(): Query },
     options?: ClientOperationOptions,
   ): Promise<ClientQueryOutcome<Schema>>;
+  /**
+   * Activate one bounded, single-consumer Projection-state stream.
+   *
+   * The generated ID schema decodes `noLongerMatching` IDs. Options accept IDs,
+   * equality predicates, a top-level mask, and an abort signal. Creation waits
+   * after the activation consumer is locally attached; asynchronous activation
+   * failures reject iterator reads. `cancel()` is idempotent and reports remote cleanup failure.
+   */
+  subscribeToState<Schema extends MessageSchema, IdSchema extends MessageSchema>(
+    stateSchema: Schema,
+    idSchema: IdSchema,
+    options?: StateSubscriptionOptions<Schema, IdSchema>,
+  ): Promise<StateSubscription<Schema, IdSchema>>;
+  /**
+   * Activate one bounded, single-consumer decoded event stream.
+   *
+   * The abort signal terminates locally and starts remote cleanup. Creation
+   * returns after the activation consumer is locally attached, without claiming
+   * a remote wire acknowledgement. Later activation failures reject iterator reads.
+   * `cancel()` is idempotent and reports cleanup failure.
+   */
+  subscribeToEvents<Schema extends MessageSchema>(
+    eventSchema: Schema,
+    options?: ClientOperationOptions,
+  ): Promise<EventSubscription<Schema>>;
 }
 
 class Request implements ClientRequest {
@@ -251,6 +351,42 @@ class Request implements ClientRequest {
     });
   }
 
+  async subscribeToState<Schema extends MessageSchema, IdSchema extends MessageSchema>(
+    stateSchema: Schema,
+    idSchema: IdSchema,
+    options: StateSubscriptionOptions<Schema, IdSchema> = {},
+  ): Promise<StateSubscription<Schema, IdSchema>> {
+    validateSubscriptionMask(stateSchema, options.mask);
+    return this.#owner.run(options.signal, (signal) =>
+      TopicStream.start(this.#owner, {
+        schema: stateSchema,
+        context: this.#context(),
+        signal,
+        callerSignal: options.signal,
+        mask: options.mask,
+        filters: stateSubscriptionFilters(stateSchema, idSchema, options),
+        decode: (update) => decodeStateUpdates(update, stateSchema, idSchema),
+        name: "state subscription",
+      }),
+    );
+  }
+
+  async subscribeToEvents<Schema extends MessageSchema>(
+    eventSchema: Schema,
+    options: ClientOperationOptions = {},
+  ): Promise<EventSubscription<Schema>> {
+    return this.#owner.run(options.signal, (signal) =>
+      TopicStream.start(this.#owner, {
+        schema: eventSchema,
+        context: this.#context(),
+        signal,
+        callerSignal: options.signal,
+        decode: (update) => decodeEventUpdates(update, eventSchema),
+        name: "event subscription",
+      }),
+    );
+  }
+
   #context(): ActorContext {
     return create(ActorContextSchema, {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
@@ -264,7 +400,7 @@ class ClientOwner {
   readonly transport: Transport;
   readonly #onCloseTransport: (() => void) | undefined;
   readonly #operations = new Map<AbortController, Promise<unknown>>();
-  readonly #events = new Set<CommandEventStream>();
+  readonly #activeStreams = new Set<CancellableStream>();
   readonly #lateCleanup = new Set<Promise<void>>();
   readonly #trackedCleanup = new WeakSet<Promise<void>>();
   readonly #closingCleanup = new WeakSet<Promise<void>>();
@@ -304,7 +440,7 @@ class ClientOwner {
     this.#state = "closing";
     const operations = [...this.#operations];
     for (const [operation] of operations) operation.abort();
-    const events = [...this.#events];
+    const events = [...this.#activeStreams];
     const cleanup = events.map((event) => event.cancel());
     for (const promise of cleanup) this.#closingCleanup.add(promise);
     this.#closing = this.finishClose(
@@ -336,12 +472,12 @@ class ClientOwner {
     throwFailures(failures, "Client cleanup failed.");
   }
 
-  addEvents(events: CommandEventStream): void {
-    this.#events.add(events);
+  addStream(stream: CancellableStream): void {
+    this.#activeStreams.add(stream);
   }
 
-  removeEvents(events: CommandEventStream): void {
-    this.#events.delete(events);
+  removeStream(stream: CancellableStream): void {
+    this.#activeStreams.delete(stream);
   }
 
   trackLateCleanup(cleanup: Promise<void>): void {
@@ -375,23 +511,13 @@ class CommandEventStream implements CommandEvents {
   readonly #owner: ClientOwner;
   readonly #commandId: string | undefined;
   readonly #schemas: readonly MessageSchema[];
-  readonly #controller = new AbortController();
-  readonly #queue: CommandEvent[] = [];
+  readonly #stream = new BoundedStream<CommandEvent>(
+    EVENT_QUEUE_LIMIT,
+    () => new ClientProtocolError("command events allow only one iterator consumer."),
+    () => new ClientProtocolError("a command event read is already pending."),
+  );
   readonly #subscriptions: Subscription[] = [];
   readonly #consumers = new Set<Promise<void>>();
-  readonly #abortListeners: { readonly signal: AbortSignal; readonly listener: () => void }[] = [];
-  readonly #stopped: Promise<typeof STREAM_STOPPED>;
-  #stop!: () => void;
-  #waiter:
-    | {
-        readonly resolve: (result: IteratorResult<CommandEvent>) => void;
-        readonly reject: (error: unknown) => void;
-      }
-    | undefined;
-  #terminal: Readonly<{ readonly error?: Error }> | undefined;
-  #iteratorClaimed = false;
-  #cancelling: Promise<void> | undefined;
-  #closed = false;
 
   private constructor(
     owner: ClientOwner,
@@ -401,11 +527,6 @@ class CommandEventStream implements CommandEvents {
     this.#owner = owner;
     this.#commandId = commandId;
     this.#schemas = schemas;
-    this.#stopped = new Promise((resolve) => {
-      this.#stop = () => {
-        resolve(STREAM_STOPPED);
-      };
-    });
   }
 
   static async start(
@@ -417,7 +538,7 @@ class CommandEventStream implements CommandEvents {
     callerSignal: AbortSignal | undefined,
   ): Promise<CommandEventStream> {
     const events = new CommandEventStream(owner, commandId, schemas);
-    owner.addEvents(events);
+    owner.addStream(events);
     events.listenForAbort(signal);
     if (callerSignal !== undefined) events.listenForAbort(callerSignal);
     try {
@@ -442,9 +563,9 @@ class CommandEventStream implements CommandEvents {
         target: { type: deriveTypeUrl(schema), criterion: { case: "includeAll", value: true } },
         context,
       }),
-      { signal: this.#controller.signal },
+      { signal: this.#stream.controller.signal },
     );
-    if (this.#closed) {
+    if (this.#stream.closed) {
       const cleanup = this.cancelRemote(subscription);
       this.#owner.trackLateCleanup(cleanup);
       await cleanup.catch(() => undefined);
@@ -452,23 +573,14 @@ class CommandEventStream implements CommandEvents {
     }
     this.#subscriptions.push(subscription);
     const consuming = this.consume(
-      service.activate(subscription, { signal: this.#controller.signal }),
+      service.activate(subscription, { signal: this.#stream.controller.signal }),
     );
     this.#consumers.add(consuming);
     void consuming.finally(() => this.#consumers.delete(consuming));
   }
 
   cancel(): Promise<void> {
-    if (this.#cancelling !== undefined) return this.#cancelling;
-    this.#closed = true;
-    this.finish();
-    this.#stop();
-    this.#controller.abort();
-    for (const { signal, listener } of this.#abortListeners.splice(0)) {
-      signal.removeEventListener("abort", listener);
-    }
-    this.#cancelling = this.finishCancellation();
-    return this.#cancelling;
+    return this.#stream.cancel(() => this.finishCancellation(), false);
   }
 
   async finishCancellation(): Promise<void> {
@@ -479,7 +591,7 @@ class CommandEventStream implements CommandEvents {
       ]);
       throwFailures(rejectedReasons(results), "Command-event cleanup failed.");
     } finally {
-      this.#owner.removeEvents(this);
+      this.#owner.removeStream(this);
     }
   }
 
@@ -502,11 +614,7 @@ class CommandEventStream implements CommandEvents {
   }
 
   [Symbol.asyncIterator](): AsyncIterator<CommandEvent> {
-    if (this.#iteratorClaimed) {
-      throw new ClientProtocolError("command events allow only one iterator consumer.");
-    }
-    this.#iteratorClaimed = true;
-    return { next: () => this.next() };
+    return this.#stream.iterator();
   }
 
   async consume(
@@ -514,21 +622,21 @@ class CommandEventStream implements CommandEvents {
   ): Promise<void> {
     const iterator = updates[Symbol.asyncIterator]();
     try {
-      while (!this.#closed) {
-        const next = await Promise.race([iterator.next(), this.#stopped]);
-        if (next === STREAM_STOPPED) return;
+      while (!this.#stream.closed) {
+        const next = await this.#stream.race(iterator.next());
+        if (next === stopped) return;
         if (next.done) break;
         const update = next.value;
         if (update.update.case !== "eventUpdates") continue;
         for (const event of update.update.value.event) this.push(event);
       }
-      if (!this.#closed) {
-        this.finish();
+      if (!this.#stream.closed) {
+        this.#stream.finish();
         this.cancelInBackground();
       }
     } catch (error) {
-      if (!this.#closed) {
-        this.finish(error);
+      if (!this.#stream.closed) {
+        this.#stream.finish(error, false);
         this.cancelInBackground();
       }
     }
@@ -552,48 +660,15 @@ class CommandEventStream implements CommandEvents {
       message: deepClone(schema, message),
       context: deepFreeze(cloneMessage(context)),
     });
-    const waiter = this.#waiter;
-    if (waiter !== undefined) {
-      this.#waiter = undefined;
-      waiter.resolve({ done: false, value: item });
-    } else if (this.#queue.length < EVENT_QUEUE_LIMIT) {
-      this.#queue.push(item);
-    } else {
+    if (!this.#stream.push(item)) {
       const error = new ClientProtocolError("command event buffer overflowed.");
-      this.finish(error);
+      this.#stream.finish(error, false);
       this.cancelInBackground();
     }
   }
 
-  next(): Promise<IteratorResult<CommandEvent>> {
-    const queued = this.#queue.shift();
-    if (queued !== undefined) return Promise.resolve({ done: false, value: queued });
-    if (this.#terminal !== undefined) {
-      return this.#terminal.error === undefined
-        ? Promise.resolve({ done: true, value: undefined })
-        : Promise.reject(this.#terminal.error);
-    }
-    if (this.#waiter !== undefined) {
-      return Promise.reject(new ClientProtocolError("a command event read is already pending."));
-    }
-    return new Promise((resolve, reject) => {
-      this.#waiter = { resolve, reject };
-    });
-  }
-
-  finish(error?: unknown): void {
-    if (this.#terminal !== undefined) return;
-    const failure = error === undefined ? undefined : asError(error);
-    this.#terminal = failure === undefined ? Object.freeze({}) : Object.freeze({ error: failure });
-    const waiter = this.#waiter;
-    this.#waiter = undefined;
-    if (waiter === undefined) return;
-    if (failure === undefined) waiter.resolve({ done: true, value: undefined });
-    else waiter.reject(failure);
-  }
-
   assertOpen(abortReason: unknown): void {
-    if (this.#closed || this.#terminal !== undefined) {
+    if (this.#stream.closed || this.#stream.terminal) {
       if (abortReason !== undefined) throw asError(abortReason);
       throw new ClientProtocolError("command event activation ended before posting.");
     }
@@ -603,8 +678,7 @@ class CommandEventStream implements CommandEvents {
     const listener = () => {
       this.cancelInBackground();
     };
-    this.#abortListeners.push({ signal, listener });
-    signal.addEventListener("abort", listener, { once: true });
+    this.#stream.listen(signal, listener);
   }
 
   private cancelInBackground(): void {
@@ -612,10 +686,380 @@ class CommandEventStream implements CommandEvents {
   }
 }
 
+interface CancellableStream {
+  cancel(): Promise<void>;
+}
+
+interface TopicStreamInput<Value> {
+  readonly schema: MessageSchema;
+  readonly context: ActorContext;
+  readonly signal: AbortSignal;
+  readonly callerSignal: AbortSignal | undefined;
+  readonly decode: (update: SubscriptionUpdate) => readonly Value[];
+  readonly name: string;
+  readonly filters?: TargetFilters | undefined;
+  readonly mask?: readonly string[] | undefined;
+}
+
+/** Shared bounded lifecycle for public state and event topics. */
+class TopicStream<Value> implements AsyncIterable<Value>, CancellableStream {
+  readonly #owner: ClientOwner;
+  readonly #decode: (update: SubscriptionUpdate) => readonly Value[];
+  readonly #name: string;
+  readonly #stream: BoundedStream<Value>;
+  #subscription: Subscription | undefined;
+  #consumer: Promise<void> | undefined;
+
+  private constructor(owner: ClientOwner, input: TopicStreamInput<Value>) {
+    this.#owner = owner;
+    this.#decode = input.decode;
+    this.#name = input.name;
+    this.#stream = new BoundedStream(
+      EVENT_QUEUE_LIMIT,
+      () => new ClientProtocolError(`${input.name} allows only one iterator consumer.`),
+      () => new ClientProtocolError(`a ${input.name} read is already pending.`),
+    );
+  }
+
+  static async start<Value>(
+    owner: ClientOwner,
+    input: TopicStreamInput<Value>,
+  ): Promise<TopicStream<Value>> {
+    const stream = new TopicStream(owner, input);
+    owner.addStream(stream);
+    const abort = () => {
+      stream.cancelInBackground();
+    };
+    stream.listenForAbort(input.signal, abort);
+    if (input.callerSignal !== undefined) stream.listenForAbort(input.callerSignal, abort);
+    try {
+      const service = createClient(SubscriptionService, owner.transport);
+      const topic = create(TopicSchema, {
+        id: { value: `t-${randomUUID()}` },
+        target: {
+          type: deriveTypeUrl(input.schema),
+          criterion:
+            input.filters === undefined
+              ? { case: "includeAll", value: true }
+              : { case: "filters", value: input.filters },
+        },
+        ...(input.mask === undefined || input.mask.length === 0
+          ? {}
+          : { fieldMask: { paths: [...input.mask] } }),
+        context: input.context,
+      });
+      const subscription = await service.subscribe(topic, {
+        signal: stream.#stream.controller.signal,
+      });
+      stream.#subscription = subscription;
+      validateSubscription(subscription, topic);
+      if (stream.#stream.closed) {
+        const cleanup = stream.cancelSubscription(subscription);
+        owner.trackLateCleanup(cleanup);
+        await cleanup.catch(() => undefined);
+        throw (
+          input.callerSignal?.reason ??
+          input.signal.reason ??
+          new ClientProtocolError(`${input.name} activation ended.`)
+        );
+      }
+      const updates = service.activate(subscription, { signal: stream.#stream.controller.signal });
+      const iterator = updates[Symbol.asyncIterator]();
+      const first = iterator.next();
+      const attachment = await observeLocalAttachment(first);
+      if (attachment.kind === "error") throw attachment.error;
+      stream.#consumer = stream.consume(iterator, first);
+      return stream;
+    } catch (error) {
+      const cleanup = stream.cancel();
+      owner.trackLateCleanup(cleanup);
+      await cleanup.catch(() => undefined);
+      throw error;
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<Value> {
+    return this.#stream.iterator();
+  }
+
+  cancel(): Promise<void> {
+    return this.#stream.cancel(async () => {
+      try {
+        const work: Promise<unknown>[] = [];
+        if (this.#subscription !== undefined)
+          work.push(this.cancelSubscription(this.#subscription));
+        if (this.#consumer !== undefined) work.push(this.#consumer);
+        const results = await Promise.allSettled(work);
+        throwFailures(rejectedReasons(results), `${this.#name} cleanup failed.`);
+      } finally {
+        this.#owner.removeStream(this);
+      }
+    });
+  }
+
+  private async consume(
+    iterator: AsyncIterator<SubscriptionUpdate>,
+    first: Promise<IteratorResult<SubscriptionUpdate>>,
+  ): Promise<void> {
+    let pending = first;
+    try {
+      while (!this.#stream.closed) {
+        const next = await this.#stream.race(pending);
+        if (next === stopped) return;
+        if (next.done) break;
+        validateUpdateSubscription(next.value, this.#subscription);
+        for (const value of this.#decode(next.value)) {
+          if (!this.push(value)) return;
+        }
+        pending = iterator.next();
+      }
+      if (!this.#stream.closed) {
+        this.#stream.finish(undefined, false);
+        this.#stream.removeListeners();
+        this.#owner.removeStream(this);
+      }
+    } catch (error) {
+      if (!this.#stream.closed) {
+        this.#stream.finish(error);
+        this.#stream.removeListeners();
+        this.cancelInBackground();
+      }
+    }
+  }
+
+  private push(value: Value): boolean {
+    if (this.#stream.push(value)) return true;
+    this.#stream.finish(new ClientProtocolError(`${this.#name} buffer overflowed.`));
+    this.cancelInBackground();
+    return false;
+  }
+
+  private async cancelSubscription(subscription: Subscription): Promise<void> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = new ClientProtocolError("subscription cancellation timed out.");
+        controller.abort(error);
+        reject(error);
+      }, SUBSCRIPTION_CANCEL_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([
+        createClient(SubscriptionService, this.#owner.transport).cancel(subscription, {
+          signal: controller.signal,
+        }),
+        timeout,
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  private cancelInBackground(): void {
+    this.#owner.trackLateCleanup(this.cancel());
+  }
+
+  private listenForAbort(signal: AbortSignal, onAbort: () => void): void {
+    this.#stream.listen(signal, onAbort);
+  }
+}
+
+function stateSubscriptionFilters<Schema extends MessageSchema, IdSchema extends MessageSchema>(
+  schema: Schema,
+  idSchema: IdSchema,
+  options: StateSubscriptionOptions<Schema, IdSchema>,
+): TargetFilters | undefined {
+  const predicate = options.where;
+  const columns = predicate === undefined ? {} : subscriptionPredicateColumns(predicate);
+  const query = ProjectionQuery.select({
+    schema,
+    columns: columns as never,
+    context: create(ActorContextSchema),
+  });
+  if (predicate !== undefined) query.where(predicate as never);
+  const built = query.build();
+  const compiled =
+    built.target?.criterion.case === "filters"
+      ? clone(TargetFiltersSchema, built.target.criterion.value)
+      : create(TargetFiltersSchema);
+  if (options.ids !== undefined && options.ids.length > 0) {
+    compiled.idFilter = create(IdFilterSchema, {
+      id: options.ids.map((id) => packAny(idSchema, id)),
+    });
+  }
+  return compiled.idFilter === undefined && compiled.filter.length === 0 ? undefined : compiled;
+}
+
+function subscriptionPredicateColumns(
+  predicate: ProjectionPredicate,
+): Record<string, ProjectionColumn> {
+  const result: Record<string, ProjectionColumn> = {};
+  const visited = new WeakSet<object>();
+  const pending: { readonly predicate: ProjectionPredicate; readonly depth: number }[] = [
+    { predicate, depth: 0 },
+  ];
+  let count = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) break;
+    if (visited.has(current.predicate)) {
+      throw new TypeError("Subscription predicate must not contain cycles.");
+    }
+    visited.add(current.predicate);
+    count += 1;
+    if (count > SUBSCRIPTION_MAX_PREDICATE_NODES) {
+      throw new TypeError(
+        `Subscription predicate exceeds maximum node count ${String(SUBSCRIPTION_MAX_PREDICATE_NODES)}.`,
+      );
+    }
+    if (current.depth > SUBSCRIPTION_MAX_PREDICATE_DEPTH) {
+      throw new TypeError(
+        `Subscription predicate exceeds maximum depth ${String(SUBSCRIPTION_MAX_PREDICATE_DEPTH)}.`,
+      );
+    }
+    if (current.predicate.kind === "comparison") {
+      if (current.predicate.operator !== "equal") {
+        throw new TypeError("Subscription predicates support equality comparisons only.");
+      }
+      result[current.predicate.column.name] = current.predicate.column;
+      continue;
+    }
+    if (current.predicate.predicates.length === 0) {
+      throw new TypeError(`${current.predicate.kind.toUpperCase()} predicate must not be empty.`);
+    }
+    for (const child of current.predicate.predicates) {
+      pending.push({ predicate: child, depth: current.depth + 1 });
+    }
+  }
+  return result;
+}
+
+function validateSubscriptionMask(
+  schema: MessageSchema,
+  mask: readonly string[] | undefined,
+): void {
+  if (mask === undefined) return;
+  for (const path of mask) {
+    if (
+      schema.fields.find((field) => field.name === path || field.localName === path) === undefined
+    ) {
+      throw new TypeError(`Subscription mask path "${path}" is not a state field.`);
+    }
+  }
+}
+
+function decodeStateUpdates<Schema extends MessageSchema, IdSchema extends MessageSchema>(
+  update: SubscriptionUpdate,
+  schema: Schema,
+  idSchema: IdSchema,
+): readonly StateSubscriptionUpdate<Schema, IdSchema>[] {
+  validateSubscriptionUpdateResponse(update);
+  if (update.update.case !== "entityUpdates") {
+    throw new ClientProtocolError("state subscription received a non-entity update.");
+  }
+  return update.update.value.update.flatMap<StateSubscriptionUpdate<Schema, IdSchema>>((entry) => {
+    if (entry.kind.case === "state") {
+      const state = unpackAny(entry.kind.value, schema);
+      if (state === undefined)
+        throw new ClientProtocolError("subscription state does not match its requested schema.");
+      return [
+        Object.freeze({
+          kind: "state" as const,
+          state: deepClone(schema, state) as DeepReadonly<MessageShape<Schema>>,
+        }),
+      ];
+    }
+    if (entry.kind.case === "noLongerMatching") {
+      const id = entry.id === undefined ? undefined : unpackAny(entry.id, idSchema);
+      if (id === undefined)
+        throw new ClientProtocolError(
+          "subscription no-longer-matching ID does not match its requested schema.",
+        );
+      return [
+        Object.freeze({
+          kind: "noLongerMatching" as const,
+          id: deepClone(idSchema, id) as DeepReadonly<MessageShape<IdSchema>>,
+        }),
+      ];
+    }
+    throw new ClientProtocolError("subscription state update kind is missing or invalid.");
+  });
+}
+
+function decodeEventUpdates<Schema extends MessageSchema>(
+  update: SubscriptionUpdate,
+  schema: Schema,
+): readonly SubscriptionEvent<Schema>[] {
+  validateSubscriptionUpdateResponse(update);
+  if (update.update.case !== "eventUpdates") {
+    throw new ClientProtocolError("event subscription received a non-event update.");
+  }
+  return update.update.value.event.flatMap((event) => {
+    const message = event.message === undefined ? undefined : unpackAny(event.message, schema);
+    if (message === undefined) {
+      throw new ClientProtocolError("subscription event does not match its requested schema.");
+    }
+    if (event.context === undefined)
+      throw new ClientProtocolError("subscription event context is missing.");
+    return [
+      Object.freeze({
+        message: deepClone(schema, message) as DeepReadonly<MessageShape<Schema>>,
+        context: deepFreeze(cloneMessage(event.context)),
+      }),
+    ];
+  });
+}
+
+function validateSubscription(subscription: Subscription, topic: Topic): void {
+  if (subscription.id?.value.length === 0 || subscription.id === undefined) {
+    throw new ClientProtocolError("subscription ID is missing or invalid.");
+  }
+  if (subscription.topic === undefined || !equals(TopicSchema, subscription.topic, topic)) {
+    throw new ClientProtocolError("subscription topic does not match the submitted topic.");
+  }
+}
+
+function validateUpdateSubscription(
+  update: SubscriptionUpdate,
+  subscription: Subscription | undefined,
+): void {
+  if (subscription === undefined || update.subscription === undefined) {
+    throw new ClientProtocolError("subscription update identity is missing.");
+  }
+  if (!equals(SubscriptionSchema, update.subscription, subscription)) {
+    throw new ClientProtocolError(
+      "subscription update identity does not match the accepted subscription.",
+    );
+  }
+}
+
+function validateSubscriptionUpdateResponse(update: SubscriptionUpdate): void {
+  if (update.response?.status?.status.case !== "ok") {
+    throw new ClientProtocolError("subscription update response is missing or not OK.");
+  }
+}
+
+async function observeLocalAttachment<Value>(
+  first: Promise<IteratorResult<Value>>,
+): Promise<
+  | Readonly<{ readonly kind: "pending" }>
+  | Readonly<{ readonly kind: "error"; readonly error: unknown }>
+> {
+  const failure = first.then(
+    () => new Promise<never>(() => undefined),
+    (error: unknown) => Promise.resolve(Object.freeze({ kind: "error" as const, error })),
+  );
+  let boundary = Promise.resolve();
+  for (let turn = 0; turn < 4; turn += 1) boundary = boundary.then(() => undefined);
+  return Promise.race([failure, boundary.then(() => Object.freeze({ kind: "pending" as const }))]);
+}
+
 const EVENT_QUEUE_LIMIT = 32;
+const SUBSCRIPTION_MAX_PREDICATE_DEPTH = 64;
+const SUBSCRIPTION_MAX_PREDICATE_NODES = 10_000;
 /** One-second bound prevents a caller-owned transport from deadlocking cleanup. */
 const SUBSCRIPTION_CANCEL_TIMEOUT_MS = 1_000;
-const STREAM_STOPPED = Symbol("stream stopped");
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
