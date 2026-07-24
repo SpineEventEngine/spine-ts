@@ -1088,7 +1088,10 @@ class MemoryDatastoreClient {
   }[] = [];
   saveCalls = 0;
   runQueryCalls = 0;
+  getCalls = 0;
   failSaveCall: number | undefined;
+  deleteCalls = 0;
+  failDeleteCall: number | undefined;
   readonly entities = new Map<string, Record<string, unknown>>();
   lastQuery: MemoryQuery | undefined;
   lastGetOptions: MemoryReadOptions | undefined;
@@ -1109,6 +1112,7 @@ class MemoryDatastoreClient {
     key: MemoryKey,
     options?: MemoryReadOptions,
   ): Promise<[Record<string | symbol, unknown> | undefined]> {
+    this.getCalls += 1;
     this.lastGetOptions = options;
     const entity = this.entities.get(keyString(key));
     return Promise.resolve(
@@ -1138,8 +1142,9 @@ class MemoryDatastoreClient {
     return Promise.resolve([]);
   }
 
-  delete(key: MemoryKey): Promise<[]> {
-    this.entities.delete(keyString(key));
+  delete(key: MemoryKey | readonly MemoryKey[]): Promise<[]> {
+    const keys: readonly MemoryKey[] = Array.isArray(key) ? key : [key];
+    for (const value of keys) this.entities.delete(keyString(value));
     return Promise.resolve([]);
   }
 
@@ -1152,20 +1157,67 @@ class MemoryDatastoreClient {
   runQuery(
     query: MemoryQuery,
     options?: MemoryReadOptions,
-  ): Promise<[Record<string | symbol, unknown>[]]> {
+  ): Promise<
+    [
+      Record<string | symbol, unknown>[],
+      { readonly endCursor: Buffer; readonly moreResults: string },
+    ]
+  > {
     this.runQueryCalls += 1;
     this.lastRunQueryOptions = options;
     const entities = [...this.entities.entries()].map(([serializedKey, entity]) => ({
       ...decodeProviderIntegers(entity, options),
-      [this.KEY]: JSON.parse(serializedKey) as unknown as MemoryKey,
+      [this.KEY]: memoryKey(serializedKey),
     }));
-    const offset = query.offsetValue ?? 0;
+    const offset =
+      query.startCursor === undefined
+        ? (query.offsetValue ?? 0)
+        : Number(query.startCursor.toString());
     const end = query.limitValue === undefined ? undefined : offset + query.limitValue;
-    return Promise.resolve([entities.slice(offset, end)]);
+    const page = entities.slice(offset, end);
+    const next = offset + page.length;
+    return Promise.resolve([
+      page,
+      {
+        endCursor: Buffer.from(String(next)),
+        moreResults: next < entities.length ? "MORE_RESULTS_AFTER_LIMIT" : "NO_MORE_RESULTS",
+      },
+    ]);
   }
 
   transaction(): MemoryTransaction {
     return new MemoryTransaction(this);
+  }
+}
+
+class MemoryTransaction {
+  readonly #writes: { key: MemoryKey; data: Record<string, unknown> }[] = [];
+  readonly #deletes: MemoryKey[] = [];
+  constructor(private readonly client: MemoryDatastoreClient) {}
+  run(): Promise<[]> {
+    return Promise.resolve([]);
+  }
+  get(
+    key: MemoryKey,
+    options?: MemoryReadOptions,
+  ): Promise<[Record<string | symbol, unknown> | undefined]> {
+    this.client.lastTransactionGetOptions = options;
+    return this.client.get(key, options);
+  }
+  save(entity: { key: MemoryKey; data: Record<string, unknown> }): void {
+    this.#writes.push(entity);
+  }
+  delete(key: MemoryKey): void {
+    this.#deletes.push(key);
+  }
+  commit(): Promise<[]> {
+    for (const key of this.#deletes) this.client.entities.delete(keyString(key));
+    for (const entity of this.#writes)
+      this.client.entities.set(keyString(entity.key), encodeProviderNumbers(entity.data));
+    return Promise.resolve([]);
+  }
+  rollback(): Promise<[]> {
+    return Promise.resolve([]);
   }
 }
 
@@ -1174,63 +1226,26 @@ class MemoryQuery {
   readonly orders: unknown[][] = [];
   limitValue: number | undefined;
   offsetValue: number | undefined;
-
+  startCursor: Buffer | string | undefined;
   filter(...input: unknown[]): this {
     this.filters.push(input);
     return this;
   }
-
   order(...input: unknown[]): this {
     this.orders.push(input);
     return this;
   }
-
   limit(value: number): this {
     this.limitValue = value;
     return this;
   }
-
   offset(value: number): this {
     this.offsetValue = value;
     return this;
   }
-}
-
-class MemoryTransaction {
-  readonly #writes: { key: MemoryKey; data: Record<string, unknown> }[] = [];
-  readonly #deletes: MemoryKey[] = [];
-
-  constructor(private readonly client: MemoryDatastoreClient) {}
-
-  run(): Promise<[]> {
-    return Promise.resolve([]);
-  }
-
-  get(
-    key: MemoryKey,
-    options?: MemoryReadOptions,
-  ): Promise<[Record<string | symbol, unknown> | undefined]> {
-    this.client.lastTransactionGetOptions = options;
-    return this.client.get(key, options);
-  }
-
-  save(entity: { key: MemoryKey; data: Record<string, unknown> }): void {
-    this.#writes.push(entity);
-  }
-
-  delete(key: MemoryKey): void {
-    this.#deletes.push(key);
-  }
-
-  commit(): Promise<[]> {
-    for (const key of this.#deletes) this.client.entities.delete(keyString(key));
-    for (const entity of this.#writes)
-      this.client.entities.set(keyString(entity.key), encodeProviderNumbers(entity.data));
-    return Promise.resolve([]);
-  }
-
-  rollback(): Promise<[]> {
-    return Promise.resolve([]);
+  start(cursor: Buffer | string): this {
+    this.startCursor = cursor;
+    return this;
   }
 }
 
@@ -1238,13 +1253,15 @@ interface MemoryKey {
   readonly namespace?: string;
   readonly path: [string, string];
 }
-
 interface MemoryReadOptions {
   readonly wrapNumbers?: boolean;
 }
-
 function keyString(key: MemoryKey): string {
   return JSON.stringify([key.namespace, ...key.path]);
+}
+function memoryKey(serialized: string): MemoryKey {
+  const [namespace, kind, id] = JSON.parse(serialized) as [string | null, string, string];
+  return namespace === null ? { path: [kind, id] } : { namespace, path: [kind, id] };
 }
 
 function isDatastoreInt(value: unknown): boolean {

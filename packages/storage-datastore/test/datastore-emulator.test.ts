@@ -1,7 +1,9 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { Datastore } from "@google-cloud/datastore";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { Datastore, type Query } from "@google-cloud/datastore";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory } from "../src/index.js";
@@ -9,6 +11,173 @@ import { DatastoreStorageFactory } from "../src/index.js";
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
+  it("binds and retains entity history across independent real clients", async () => {
+    const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-ts-datastore-emulator";
+    const name = uniqueStorageName("EntityHistory");
+    const input: EntityStorageInput<string, StringValue> = {
+      context: { name, multitenant: false },
+      id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+      layout: "emulator-v1",
+      stateSchema: StringValueSchema,
+      storageKey: "tasks.Task:current",
+    };
+    const firstClient = new Datastore({ projectId });
+    const secondClient = new Datastore({ projectId });
+    const first = new DatastoreStorageFactory({ client: firstClient }).createEntityStorage(input);
+    const second = new DatastoreStorageFactory({ client: secondClient }).createEntityStorage(input);
+    const timestamp = (seconds: number) => create(TimestampSchema, { seconds: BigInt(seconds) });
+
+    try {
+      await Promise.all([
+        first.states.append({
+          entityId: "task",
+          state: create(StringValueSchema, { value: "1" }),
+          version: 1n,
+          createdAt: timestamp(1),
+        }),
+        second.states.append({
+          entityId: "task",
+          state: create(StringValueSchema, { value: "1" }),
+          version: 1n,
+          createdAt: timestamp(1),
+        }),
+      ]);
+      await first.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "2" }),
+        version: 2n,
+        createdAt: timestamp(2),
+      });
+      await first.events.append({
+        entityId: "task",
+        event: create(EventSchema, { id: create(EventIdSchema, { value: "emulator-event" }) }),
+        producerVersion: 2n,
+        createdAt: timestamp(2),
+      });
+      await first.states.trim("task", 1);
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "2" }]);
+      await expect(second.events.backward("task", 1)).resolves.toMatchObject([
+        { id: { value: "emulator-event" } },
+      ]);
+      const incompatible = new DatastoreStorageFactory({
+        client: new Datastore({ projectId }),
+      }).createEntityStorage({ ...input, layout: "emulator-v2" });
+      await expect(incompatible.current.read("task")).rejects.toThrow("incompatible");
+
+      const entered = deferred<undefined>();
+      const appendReady = deferred<undefined>();
+      const release = deferred<undefined>();
+      const transaction = firstClient.transaction.bind(firstClient);
+      const appendTransaction = secondClient.transaction.bind(secondClient);
+      let transactionCount = 0;
+      let held = false;
+      let appendHeld = false;
+      firstClient.transaction = () => {
+        transactionCount += 1;
+        const value = transaction();
+        const commit = value.commit.bind(value);
+        value.commit = async () => {
+          if (!held) {
+            held = true;
+            entered.resolve(undefined);
+            await release.promise;
+          }
+          return commit();
+        };
+        return value;
+      };
+      secondClient.transaction = () => {
+        const value = appendTransaction();
+        const commit = value.commit.bind(value);
+        value.commit = async () => {
+          if (!appendHeld) {
+            appendHeld = true;
+            appendReady.resolve(undefined);
+            await release.promise;
+          }
+          return commit();
+        };
+        return value;
+      };
+      const trim = first.states.trim("task", 0);
+      await entered.promise;
+      const append = second.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "3" }),
+        version: 3n,
+        createdAt: timestamp(3),
+      });
+      await appendReady.promise;
+      release.resolve(undefined);
+      await Promise.all([trim, append]);
+      expect(transactionCount).toBeGreaterThanOrEqual(2);
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "3" }]);
+      await expect(
+        second.events.append({
+          entityId: "other-task",
+          event: create(EventSchema, { id: create(EventIdSchema, { value: "emulator-event" }) }),
+          producerVersion: 2n,
+          createdAt: timestamp(2),
+        }),
+      ).rejects.toThrow("divergent");
+
+      first.close();
+      await expect(
+        first.states.append({
+          entityId: "task",
+          state: create(StringValueSchema, { value: "closed" }),
+          version: 4n,
+          createdAt: timestamp(4),
+        }),
+      ).rejects.toThrow("closed");
+      await second.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "4" }),
+        version: 4n,
+        createdAt: timestamp(4),
+      });
+      for (let version = 5; version <= 132; version += 1) {
+        await second.states.append({
+          entityId: "task",
+          state: create(StringValueSchema, { value: String(version) }),
+          version: BigInt(version),
+          createdAt: timestamp(version),
+        });
+      }
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "132" }]);
+      await expect(second.states.backward("task", 129)).resolves.toHaveLength(129);
+      const runQuery = secondClient.runQuery.bind(secondClient);
+      const queries: Query[] = [];
+      const capturedClient = secondClient as unknown as {
+        runQuery: (query: Query, options?: unknown) => Promise<unknown>;
+      };
+      capturedClient.runQuery = async (query, options) => {
+        queries.push(query);
+        return runQuery(query, options as never) as Promise<unknown>;
+      };
+      await expect(second.states.stateAt("task", timestamp(132))).resolves.toMatchObject({
+        value: "132",
+      });
+      const stateAtQuery = queries.at(-1);
+      expect(stateAtQuery).toBeDefined();
+      expect(stateAtQuery?.kinds).toEqual(["$SpineEntityStateOrder"]);
+      expect(stateAtQuery?.filters).toHaveLength(2);
+      expect(stateAtQuery?.filters.map(({ name, op }) => ({ name, op }))).toEqual([
+        { name: "__key__", op: "HAS_ANCESTOR" },
+        { name: "$spineStateAt", op: ">=" },
+      ]);
+      expect(stateAtQuery?.orders).toEqual([{ name: "$spineStateAt", sign: "+" }]);
+      expect(stateAtQuery?.limitVal).toBe(1);
+    } finally {
+      await Promise.all([
+        second.states.truncate(timestamp(133)),
+        second.events.truncate(timestamp(133)),
+      ]);
+      first.close();
+      second.close();
+    }
+  }, 30_000);
+
   it("stores and removes a record through the configured emulator", async () => {
     const factory = DatastoreStorageFactory.create({
       projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-ts-datastore-emulator",
@@ -309,6 +478,14 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     }
   });
 });
+
+function deferred<T>(): { readonly promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
 
 let storageSequence = 0;
 
