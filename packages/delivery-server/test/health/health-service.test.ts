@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   HealthCheckRequestSchema,
   HealthCheckResponse_ServingStatus,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import { create } from "@bufbuild/protobuf";
 
 import { createHealthService } from "../../src/health/health-service.js";

@@ -1,5 +1,5 @@
-import type { Event } from "@spine-ts/proto";
-import type { MessageSchema } from "@spine-ts/core";
+import type { Event } from "@spine-event-engine/proto";
+import type { MessageSchema } from "@spine-event-engine/core";
 
 /**
  * Small multicast event-dispatch seam for bus and repository adapters.

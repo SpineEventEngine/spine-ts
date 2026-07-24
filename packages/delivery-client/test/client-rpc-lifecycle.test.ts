@@ -1,17 +1,17 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
-import { ShardIndex } from "@spine-ts/server";
+import { ShardIndex } from "@spine-event-engine/server";
 import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
   ReadMessagesSinceTimeSchema,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
   InboxMessageSchema,
   ShardIndexSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,

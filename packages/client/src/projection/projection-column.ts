@@ -6,7 +6,7 @@ import {
   type MessageShape,
 } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { column, entity, EntityOption_Kind, type Version } from "@spine-ts/proto";
+import { column, entity, EntityOption_Kind, type Version } from "@spine-event-engine/proto";
 import { classifyProjectionField } from "../../codegen/projection-field-classification.mjs";
 
 /** Operators available for every Projection column. */

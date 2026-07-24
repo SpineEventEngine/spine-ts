@@ -1,9 +1,9 @@
-# @spine-ts/server
+# @spine-event-engine/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
 metadata, standard decorator metadata adapters, aggregate latest-state/event
 journal storage, the first command/event bus seam, and the first runtime routing
-plan seam over `@spine-ts/transport` contracts, plus the first direct
+plan seam over `@spine-event-engine/transport` contracts, plus the first direct
 storage-backed `Stand` slice for latest entity state point/list reads and
 in-process update subscriptions, and a small local `Server` lifecycle owner for
 real Connect/gRPC-compatible services.
@@ -222,7 +222,7 @@ forged lookalikes are rejected even when they copy an internal method shape,
 because only builder-created identities carry the private controlled
 capability. Its source has the same `shardSnapshot`,
 `observeShardUpdates`, and `releaseExpired` operations as
-`@spine-ts/delivery-client`; the server package does not import that client
+`@spine-event-engine/delivery-client`; the server package does not import that client
 package. `start()` takes an initial snapshot and keeps one bounded recovery
 timer. Notifications for an active shard coalesce to one follow-up run, while
 pending distinct shards are bounded. `close()` stops admission and aborts
@@ -249,7 +249,7 @@ and node values resolve from `ServerEnvironment.instance()`; fully explicit
 storage and node configuration does not resolve or lock the singleton.
 
 ```ts
-import { DeliveryBuilder } from "@spine-ts/server";
+import { DeliveryBuilder } from "@spine-event-engine/server";
 
 const delivery = new DeliveryBuilder().build();
 
@@ -265,8 +265,12 @@ supplied registry must use the exact same context and storage-factory instance.
 Multi-shard strategies require an explicit run shard.
 
 ```ts
-import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { DeliveryBuilder, ShardedWorkRegistry, UniformAcrossAllShards } from "@spine-ts/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import {
+  DeliveryBuilder,
+  ShardedWorkRegistry,
+  UniformAcrossAllShards,
+} from "@spine-event-engine/server";
 
 const context = { name: "Tasks", multitenant: false };
 const storageFactory = new InMemoryStorageFactory();
@@ -390,7 +394,7 @@ not a production scheduler, retry policy, catch-up API, or remote topology.
   `Ack`, buses, filters, storage, dispatch, services, or transport.
 
 The package manifest also exports
-`@spine-ts/server/internal/generated-handler-registry` solely so generated
+`@spine-event-engine/server/internal/generated-handler-registry` solely so generated
 registry source can import the `GeneratedHandlerRegistry` type it must satisfy.
 That subpath is generated-artifact-only and package-internal: application code
 must not import it. It is not part of the package root or root TypeDoc API.
@@ -400,7 +404,7 @@ generated Protobuf package; substitute that package's actual import name.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Aggregate, Assign, BoundedContext, React, Subscribe } from "@spine-ts/server";
+import { Aggregate, Assign, BoundedContext, React, Subscribe } from "@spine-event-engine/server";
 import type { CreateTask, TaskCreated } from "@example/tasks-proto";
 import { TaskCreatedSchema, TaskStateSchema } from "@example/tasks-proto";
 
@@ -567,7 +571,7 @@ instances. When readiness is present, it derives command topics plus one
 competing-consumer command-worker ID from command readiness and event
 topics plus fan-out subscriptions and event-worker IDs from
 subscriber/reactor/application readiness. Without readiness, the corresponding
-command or event plan is empty. It returns immutable `@spine-ts/transport`
+command or event plan is empty. It returns immutable `@spine-event-engine/transport`
 topics, subscriptions, planner-local worker IDs, and small server-owned route
 descriptors. Those public route descriptors contain planner-local route and
 worker IDs, sanitized message full type names/type URLs, stable receiver
@@ -593,7 +597,7 @@ handle is idempotent and closes registered transport handles before closing the
 runtime. The binding does not own the transport, choose endpoint names, expose
 ZeroMQ types, supervise processes, retry failures, store events, or create a
 server/environment owner. Local IPC deployments may supply the adapter-scoped
-`createZeroMqTransport()` from `@spine-ts/transport/zeromq`, but the
+`createZeroMqTransport()` from `@spine-event-engine/transport/zeromq`, but the
 server API continues to depend only on `SignalTransport`.
 
 ## Single-Process Runtime Kernel
@@ -603,7 +607,7 @@ intake kernel underneath command/event buses and later delivery,
 process-supervision, and service-hosting runtime parts:
 
 ```ts
-import { SingleProcessServerRuntime } from "@spine-ts/server";
+import { SingleProcessServerRuntime } from "@spine-event-engine/server";
 
 const runtime = new SingleProcessServerRuntime();
 
@@ -649,7 +653,7 @@ Use `SignalMetadata` when framework code or advanced local callers need a small
 shared policy for generated Spine command/event metadata:
 
 ```ts
-import { FixedClock, SignalIds, SignalMetadata } from "@spine-ts/server";
+import { FixedClock, SignalIds, SignalMetadata } from "@spine-event-engine/server";
 
 const metadata = new SignalMetadata({
   clock: new FixedClock(new Date("2026-07-09T10:11:12.345Z")),
@@ -688,7 +692,7 @@ whether a signal was accepted for future asynchronous runtime work or failed
 immediately at the intake edge:
 
 ```ts
-import { acceptSignalIntake, failSignalIntake } from "@spine-ts/server";
+import { acceptSignalIntake, failSignalIntake } from "@spine-event-engine/server";
 
 const accepted = acceptSignalIntake("command");
 accepted.status; // "accepted"
@@ -734,7 +738,7 @@ import {
   SingleProcessServerRuntime,
   createRoutingPlan,
   defineEntityHandlers,
-} from "@spine-ts/server";
+} from "@spine-event-engine/server";
 import { CreateTaskSchema, TaskCreatedSchema, TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
@@ -778,7 +782,7 @@ buses, repositories, storage, services, or transport endpoints.
 Create a bounded-context shell through the JVM-familiar entry points:
 
 ```ts
-import { BoundedContext } from "@spine-ts/server";
+import { BoundedContext } from "@spine-event-engine/server";
 
 const tasks = BoundedContext.singleTenant("Tasks").build();
 const customers = BoundedContext.multitenant("Customers").build();
@@ -803,9 +807,13 @@ already-packed framework envelopes. Ordinary application handlers return
 generated domain messages and do not construct these envelopes.
 
 ```ts
-import type { Command, Event } from "@spine-ts/proto";
-import { BoundedContext, type CommandDispatcher, type EventDispatcher } from "@spine-ts/server";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import type { Command, Event } from "@spine-event-engine/proto";
+import {
+  BoundedContext,
+  type CommandDispatcher,
+  type EventDispatcher,
+} from "@spine-event-engine/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 declare const commandDispatcher: CommandDispatcher;
 declare const eventDispatcher: EventDispatcher;
@@ -898,8 +906,8 @@ caller-owned generated fixture values.
 ```ts
 import type { MessageShape } from "@bufbuild/protobuf";
 import { TaskIdSchema, TaskStateSchema } from "@example/tasks-proto";
-import type { Version } from "@spine-ts/proto";
-import type { BoundedContext } from "@spine-ts/server";
+import type { Version } from "@spine-event-engine/proto";
+import type { BoundedContext } from "@spine-event-engine/server";
 
 declare const tasks: BoundedContext;
 declare const taskState: MessageShape<typeof TaskStateSchema>;
@@ -1048,7 +1056,7 @@ entity package; substitute its actual package name.
 
 ```ts
 import { TaskAggregate } from "@example/tasks-domain";
-import { BoundedContext, Server } from "@spine-ts/server";
+import { BoundedContext, Server } from "@spine-event-engine/server";
 
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
@@ -1078,10 +1086,10 @@ transport; deployments configure the singleton before the first server is
 constructed:
 
 ```ts
-import type { BoundedContext } from "@spine-ts/server";
-import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
-import type { SignalTransport } from "@spine-ts/transport";
+import type { BoundedContext } from "@spine-event-engine/server";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+import type { SignalTransport } from "@spine-event-engine/transport";
 
 declare const tasks: BoundedContext;
 declare const durableStorageFactory: StorageFactory;
@@ -1108,7 +1116,7 @@ configured facilities: closing an individual server never closes them; call
 `BoundedContextBuilder` values; builders added through `Server` use
 `ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
 more specific local factory first. Tests import
-`resetServerEnvironmentForTest` from `@spine-ts/server/testing`, await it, and
+`resetServerEnvironmentForTest` from `@spine-event-engine/server/testing`, await it, and
 then reconfigure through `when(...).use(...)`; reset is intentionally absent
 from the package root.
 
@@ -1167,7 +1175,7 @@ state and metadata without introducing repository/runtime behavior:
 
 ```ts
 import type { MessageShape } from "@bufbuild/protobuf";
-import { Entity } from "@spine-ts/server";
+import { Entity } from "@spine-event-engine/server";
 import { TaskStateSchema } from "@example/tasks-proto";
 
 declare const taskState: MessageShape<typeof TaskStateSchema>;
@@ -1225,7 +1233,7 @@ readonly `entityFamily` property returning `"aggregate"`, `"projection"`, or
 the right OOP family type for repositories and built contexts:
 
 ```ts
-import { Aggregate } from "@spine-ts/server";
+import { Aggregate } from "@spine-event-engine/server";
 import { TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
@@ -1243,7 +1251,7 @@ Use `Repository` to describe that one entity constructor owns one
 descriptor-backed state schema:
 
 ```ts
-import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
+import { Aggregate, BoundedContext, Repository } from "@spine-event-engine/server";
 import { TaskStateSchema } from "@example/tasks-proto";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
@@ -1318,7 +1326,7 @@ repositories:
 
 ```ts
 import type { MessageShape } from "@bufbuild/protobuf";
-import { validateEntityStateTransition } from "@spine-ts/server";
+import { validateEntityStateTransition } from "@spine-event-engine/server";
 import { TaskStateSchema } from "@example/tasks-proto";
 
 declare const previous: MessageShape<typeof TaskStateSchema> | undefined;
@@ -1339,7 +1347,7 @@ The validator derives `(set_once)` fields from `describeEntityMetadata()`.
 Creation transitions where `previous === undefined` may initialize supported
 set-once fields. Once a previous state exists, each supported set-once field
 must remain equal in the proposed next state. Violations are returned through
-the `@spine-ts/core` transition validation facade as repo-local
+the `@spine-event-engine/core` transition validation facade as repo-local
 `spine.validation.*` messages, carry the `fieldPath`, and do not include raw
 previous or next values. Repeated, map-valued, and explicit optional
 `(set_once)` fields are not supported in this slice, matching the JVM generation

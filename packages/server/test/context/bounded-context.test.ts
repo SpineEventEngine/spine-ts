@@ -8,7 +8,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, packEvent } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -21,7 +21,7 @@ import {
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   InMemoryRecordStorage,
@@ -29,7 +29,7 @@ import {
   type RecordStorage,
   type StorageContext,
   StorageFactory,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {

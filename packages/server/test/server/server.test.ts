@@ -1,13 +1,13 @@
 import * as http2 from "node:http2";
 
 import { create, type Message } from "@bufbuild/protobuf";
-import { CommandSchema } from "@spine-ts/proto";
+import { CommandSchema } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import type {
   PublishTransportHandler,
   PublishTransportOperation,
@@ -17,8 +17,8 @@ import type {
   TransportSignalKind,
   TransportSubscription,
   TransportSubscriptionHandle,
-} from "@spine-ts/transport";
-import { createTransportSubscription, createTransportTopic } from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
+import { createTransportSubscription, createTransportTopic } from "@spine-event-engine/transport";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {

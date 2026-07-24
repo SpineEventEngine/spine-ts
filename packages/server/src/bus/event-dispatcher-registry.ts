@@ -1,4 +1,4 @@
-import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
+import { deriveTypeUrl, type MessageSchema } from "@spine-event-engine/core";
 
 import type { EventDispatcher } from "./event-dispatcher.js";
 

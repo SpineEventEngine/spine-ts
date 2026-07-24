@@ -4,9 +4,9 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
-import { deriveTypeUrl } from "@spine-ts/core";
-import { EventSchema, type Command, type Event, type TenantId } from "@spine-ts/proto";
-import { SPI_type, internal_all, internal_type } from "@spine-ts/proto";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import { EventSchema, type Command, type Event, type TenantId } from "@spine-event-engine/proto";
+import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -15,7 +15,7 @@ import {
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";

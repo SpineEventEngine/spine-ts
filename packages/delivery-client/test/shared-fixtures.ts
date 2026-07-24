@@ -1,9 +1,9 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
-import { type InboxMessage, ShardIndex } from "@spine-ts/server";
-import { CommandSchema, EventSchema } from "@spine-ts/proto";
-import { OptionalInboxMessageSchema } from "@spine-ts/proto/delivery-server";
+import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
+import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { OptionalInboxMessageSchema } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
   InboxLabel,
@@ -12,7 +12,7 @@ import {
   InboxMessageStatus,
   InboxSignalIdSchema,
   ShardIndexSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 import type { RemovalQuarantine, RemovalQuarantineRecord } from "../src/index.js";
 import { vi } from "vitest";
 

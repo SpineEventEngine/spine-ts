@@ -1,14 +1,14 @@
-# `@spine-ts/storage-rdbms`
+# `@spine-event-engine/storage-rdbms`
 
-`@spine-ts/storage-rdbms` is the private-workspace, MySQL-first durable
-implementation of the provider-neutral `@spine-ts/storage` `StorageFactory`
+`@spine-event-engine/storage-rdbms` is the private-workspace, MySQL-first durable
+implementation of the provider-neutral `@spine-event-engine/storage` `StorageFactory`
 port. MySQL 8.4.10 with mysql2 3.23.1 is the tested engine. PostgreSQL is a
 future possibility, not a supported configuration or compatibility claim.
 
 ## Create and close a factory
 
 ```ts
-import { MysqlStorageFactory } from "@spine-ts/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const factory = await MysqlStorageFactory.create({
   url: process.env.MYSQL_URL!,
@@ -81,7 +81,7 @@ text.
 
 ```sh
 SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' \
-  pnpm --filter @spine-ts/storage-rdbms test:mysql
+  pnpm --filter @spine-event-engine/storage-rdbms test:mysql
 ```
 
 The opt-in test creates only the two adapter tables and removes them afterward.

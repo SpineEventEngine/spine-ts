@@ -8,7 +8,7 @@ import {
   Server,
   Subscribe,
   type RunningServer,
-} from "@spine-ts/server";
+} from "@spine-event-engine/server";
 
 import {
   type CreateProject,

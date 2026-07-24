@@ -1,7 +1,7 @@
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
-import { EventSchema, type Event } from "@spine-ts/proto";
+import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-event-engine/core";
+import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
   EventStore,
   RecordColumn,
@@ -9,7 +9,7 @@ import {
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";

@@ -3,7 +3,12 @@ import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
-import { AdminService, Health, InboxService, ShardService } from "@spine-ts/proto/delivery-server";
+import {
+  AdminService,
+  Health,
+  InboxService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 import { createHealthService } from "../health/health-service.js";
 import { createDeliveryAssembly } from "./assembly.js";
 import { resolveConfiguration } from "./config.js";

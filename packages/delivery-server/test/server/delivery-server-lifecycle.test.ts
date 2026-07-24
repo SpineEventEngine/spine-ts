@@ -4,7 +4,7 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { describe, expect, it } from "vitest";
 
-import { AdminService } from "@spine-ts/proto/delivery-server";
+import { AdminService } from "@spine-event-engine/proto/delivery-server";
 
 import { DeliveryServer } from "../../src/index.js";
 

@@ -2,7 +2,7 @@ import process from "node:process";
 
 import { runDatastoreOrdersLoad, datastoreOrdersLoadLevels } from "../src/load-runner.js";
 import { startDatastoreOrdersServer } from "../src/index.js";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 const requestedUsers = Number.parseInt(process.env.SPINE_DATASTORE_ORDERS_LOAD_USERS ?? "10", 10);
 if (!datastoreOrdersLoadLevels.includes(requestedUsers as 10 | 100 | 1000))

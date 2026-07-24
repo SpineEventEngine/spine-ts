@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
-import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory } from "../src/index.js";

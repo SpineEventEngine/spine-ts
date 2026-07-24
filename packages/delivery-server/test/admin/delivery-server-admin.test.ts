@@ -13,14 +13,14 @@ import {
   ShardStatus,
   WriteMessageSchema,
   type SubscriptionResponse,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
   type ShardIndex,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import { DeliveryServer } from "../../src/index.js";
 

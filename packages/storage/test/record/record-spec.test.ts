@@ -2,8 +2,8 @@ import { create } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import type { Event } from "@spine-ts/proto";
-import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import type { Event } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { RecordColumn, RecordSpec } from "../../src/index.js";

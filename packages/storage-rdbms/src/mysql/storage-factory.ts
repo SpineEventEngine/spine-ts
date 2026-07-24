@@ -17,7 +17,7 @@ import {
   type RecordSpec,
   type StorageContext,
   type StorageQueryCapabilities,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "./value-codec.js";
 

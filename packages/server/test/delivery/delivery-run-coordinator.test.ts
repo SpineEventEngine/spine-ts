@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import type { DeliveryLoopProgress, DeliveryLoopRun } from "../../src/delivery/delivery-loop.js";

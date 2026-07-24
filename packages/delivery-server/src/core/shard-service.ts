@@ -7,8 +7,8 @@ import {
   ShardAlreadyPickedUpSchema,
   ShardPickedUpSchema,
   ShardService,
-} from "@spine-ts/proto/delivery-server";
-import type { ShardIndex, WorkerId } from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery-server";
+import type { ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { MutationAdmission } from "./mutation-admission.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";

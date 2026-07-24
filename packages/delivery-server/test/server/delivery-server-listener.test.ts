@@ -6,9 +6,18 @@ import { Code, createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AdminService, Health, InboxService, ShardService } from "@spine-ts/proto/delivery-server";
-import { CommandSchema } from "@spine-ts/proto";
-import { InboxLabel, InboxMessageSchema, InboxMessageStatus } from "@spine-ts/proto/delivery";
+import {
+  AdminService,
+  Health,
+  InboxService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
+import { CommandSchema } from "@spine-event-engine/proto";
+import {
+  InboxLabel,
+  InboxMessageSchema,
+  InboxMessageStatus,
+} from "@spine-event-engine/proto/delivery";
 
 import { DeliveryServer } from "../../src/index.js";
 

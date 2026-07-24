@@ -13,8 +13,8 @@ import {
   type ObservedClientOutcome,
   type StateSubscription,
   type StateSubscriptionOptions,
-} from "@spine-ts/client";
-import { packEvent, type MessageSchema } from "@spine-ts/core";
+} from "@spine-event-engine/client";
+import { packEvent, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventContextSchema,
@@ -24,14 +24,14 @@ import {
   ZoneIdSchema,
   type TenantId,
   type ZoneId,
-} from "@spine-ts/proto";
-import type { Query } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto";
+import type { Query } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   type BoundedContextBuilder,
   Server,
   type RunningServer,
-} from "@spine-ts/server";
+} from "@spine-event-engine/server";
 import { randomUUID } from "node:crypto";
 
 /** Fixed configuration for one runner-neutral BlackBox session. */

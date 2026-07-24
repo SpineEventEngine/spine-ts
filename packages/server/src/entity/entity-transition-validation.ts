@@ -3,13 +3,13 @@ import {
   type TransitionValidationResult,
   type TransitionValidationRule,
   validateTransition,
-} from "@spine-ts/core";
+} from "@spine-event-engine/core";
 import {
   type ConstraintViolation,
   ConstraintViolationSchema,
   FieldPathSchema,
   TemplateStringSchema,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 import {
   describeEntityMetadata,
@@ -49,7 +49,7 @@ const transitionRulesBySchema = new WeakMap<
  * server rules.
  *
  * The validator currently enforces descriptor-derived `(set_once)` fields,
- * delegates result shaping to `@spine-ts/core` `validateTransition()`, and does
+ * delegates result shaping to `@spine-event-engine/core` `validateTransition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
  * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
  * are unsupported in this slice and fail closed with field-specific violations.

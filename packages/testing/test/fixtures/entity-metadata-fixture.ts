@@ -1,4 +1,4 @@
-/** Local descriptor fixture for @spine-ts/testing black-box tests. */
+/** Local descriptor fixture for @spine-event-engine/testing black-box tests. */
 export const testingDescriptorSetBase64 = [
   "CoIdChplbnRpdHktbWV0YWRhdGEvbWFpbi5wcm90bxoTc3BpbmUvb3B0aW9ucy5wcm90byKLAQoPUHJvamVjdGlvblN0YXRl",
   "EhQKAmlkGAEgASgJQgSAhiQBUgJpZBIYCgRuYW1lGAIgASgJQgTwhyQBUgRuYW1lEiAKCHByaW9yaXR5GAMgASgFQgTwhyQB",

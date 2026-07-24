@@ -14,9 +14,9 @@ pnpm typecheck:build
 Run one independent-user loopback scenario:
 
 ```bash
-SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --filter @spine-ts/example-datastore-orders load
-SPINE_DATASTORE_ORDERS_LOAD_USERS=100 pnpm --filter @spine-ts/example-datastore-orders load
-SPINE_DATASTORE_ORDERS_LOAD_USERS=1000 pnpm --filter @spine-ts/example-datastore-orders load
+SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --filter @spine-event-engine/example-datastore-orders load
+SPINE_DATASTORE_ORDERS_LOAD_USERS=100 pnpm --filter @spine-event-engine/example-datastore-orders load
+SPINE_DATASTORE_ORDERS_LOAD_USERS=1000 pnpm --filter @spine-event-engine/example-datastore-orders load
 ```
 
 Each user is an independent asynchronous command/query/subscription actor with

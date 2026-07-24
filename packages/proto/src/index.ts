@@ -152,7 +152,7 @@ export { SPI_type, internal_all, internal_type } from "../generated/spine/option
  *
  * The package root intentionally avoids broad generated re-exports. Runtime
  * metadata registries, validation facades, and `Any` packing helpers live in
- * `@spine-ts/core` or later runtime packages.
+ * `@spine-event-engine/core` or later runtime packages.
  */
 export type {
   ActorContext,

@@ -1,6 +1,6 @@
 /* global Buffer, URL, setTimeout */
 
-import { BoundedContext } from "@spine-ts/server";
+import { BoundedContext } from "@spine-event-engine/server";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -8,21 +8,21 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packEvent } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
   TenantIdSchema,
   ZoneIdSchema,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   QuerySchema,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/client";
-import { Aggregate, Projection, Repository, defineEntityHandlers } from "@spine-ts/server";
+} from "@spine-event-engine/proto/client";
+import { Aggregate, Projection, Repository, defineEntityHandlers } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
 
 const testingDescriptorSetBase64 = [

@@ -75,7 +75,7 @@ describe("rejection companion generator", () => {
       name: "TaskAlreadyDoneSchema",
     });
     expect(output.imports).toContainEqual({
-      from: "@spine-ts/core",
+      from: "@spine-event-engine/core",
       name: "createRejectionThrowable",
       typeOnly: false,
     });

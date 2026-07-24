@@ -92,7 +92,7 @@ that application source file. The final property-access lines illustrate the
 inferred column API and are not part of that source file:
 
 ```ts
-import { ProjectionColumn } from "@spine-ts/client";
+import { ProjectionColumn } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
@@ -116,7 +116,7 @@ The high-level Query API targets Projections only. Aggregate and Process Manager
 high-level factories remain deferred until Wave 2; their existing low-level ID
 paths are unchanged.
 The repository's `proto:generate` workflow runs the
-`protoc-gen-spine-projection-columns` executable shipped by `@spine-ts/client`
+`protoc-gen-spine-projection-columns` executable shipped by `@spine-event-engine/client`
 after Protobuf-ES for every example target. Installed projects can add that bin
 as a local plugin in their Buf generation template.
 
@@ -191,7 +191,7 @@ import {
   Projection,
   React,
   Subscribe,
-} from "@spine-ts/server";
+} from "@spine-event-engine/server";
 import {
   NotifyOwnerSchema,
   OwnerNotificationRequestedSchema,
@@ -298,7 +298,7 @@ transactions yourself. Application handlers return only generated domain message
 
 ```ts
 import { clone, create } from "@bufbuild/protobuf";
-import { Assign, Aggregate } from "@spine-ts/server";
+import { Assign, Aggregate } from "@spine-event-engine/server";
 import {
   RenameTaskRejectedSchema,
   TaskIdSchema,
@@ -333,7 +333,7 @@ the application, then point the context at the trusted compiled application or
 package root that contains `generated/handler/generated-handler-registry.js`.
 
 ```ts
-import { BoundedContext } from "@spine-ts/server";
+import { BoundedContext } from "@spine-event-engine/server";
 import { TaskAggregate, TaskListProjection, TaskWorkflowProcess } from "@example/tasks-domain";
 
 export const tasksBuilder = BoundedContext.singleTenant("Tasks")
@@ -359,9 +359,9 @@ selection requires `NODE_ENV=production` to be set before the first
 and then requires both storage and transport.
 
 ```ts
-import type { StorageFactory } from "@spine-ts/storage";
-import type { SignalTransport } from "@spine-ts/transport";
-import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+import type { SignalTransport } from "@spine-event-engine/transport";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
 import { tasksBuilder } from "@example/tasks-domain";
 
 // Start this process with NODE_ENV=production.
@@ -416,7 +416,7 @@ Protobuf-ES modules.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-ts/client";
+import { Client } from "@spine-event-engine/client";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
@@ -454,8 +454,18 @@ state masks, repeated ordering, and positive limits:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, ProjectionQuery, all, either, eq, ge, gt, le, lt } from "@spine-ts/client";
-import { ActorContextSchema } from "@spine-ts/proto";
+import {
+  Client,
+  ProjectionQuery,
+  all,
+  either,
+  eq,
+  ge,
+  gt,
+  le,
+  lt,
+} from "@spine-event-engine/client";
+import { ActorContextSchema } from "@spine-event-engine/proto";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 
@@ -554,7 +564,7 @@ Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, ProjectionColumn, all, eq } from "@spine-ts/client";
+import { Client, ProjectionColumn, all, eq } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
@@ -601,7 +611,7 @@ fixtures targeting a registered state schema, then use the three clients.
 ```ts
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { QueryService, SubscriptionService } from "@spine-ts/proto/client";
+import { QueryService, SubscriptionService } from "@spine-event-engine/proto/client";
 
 const transport = createGrpcTransport({ baseUrl: running.baseUrl });
 const queries = createClient(QueryService, transport);
@@ -661,7 +671,7 @@ errors remain non-OK acknowledgements with their existing error contracts.
 
 ## 10. Test the real paths
 
-`@spine-ts/testing` provides `BlackBox`, a runner-neutral local test boundary.
+`@spine-event-engine/testing` provides `BlackBox`, a runner-neutral local test boundary.
 `await BlackBox.from(contextOrBuilder, options)` starts an ephemeral server and
 uses the public client API, so the same test works under Node's test runner or
 Vitest. It owns the client, server, and any subscriptions created by its scopes;
@@ -675,7 +685,7 @@ message fixtures from the consumer test-support package.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { BlackBox } from "@spine-ts/testing";
+import { BlackBox } from "@spine-event-engine/testing";
 import { taskListQuery, tasksContext } from "@example/tasks-test-support";
 import { CreateTaskSchema } from "../generated/acme/tasks/v1/task_commands_pb.js";
 import { TaskCreatedSchema } from "../generated/acme/tasks/v1/task_events_pb.js";
@@ -751,7 +761,7 @@ guarantee.
 For a finite local drain, use environment storage and node defaults:
 
 ```ts
-import { DeliveryBuilder } from "@spine-ts/server";
+import { DeliveryBuilder } from "@spine-event-engine/server";
 
 const delivery = new DeliveryBuilder().build();
 
@@ -766,8 +776,12 @@ Or supply a fully explicit local configuration. The registry context and
 factory must match delivery storage, and a multi-shard run names its shard:
 
 ```ts
-import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { DeliveryBuilder, ShardedWorkRegistry, UniformAcrossAllShards } from "@spine-ts/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import {
+  DeliveryBuilder,
+  ShardedWorkRegistry,
+  UniformAcrossAllShards,
+} from "@spine-event-engine/server";
 
 const context = { name: "Tasks", multitenant: false };
 const storageFactory = new InMemoryStorageFactory();
@@ -813,7 +827,7 @@ health services; each application machine owns its own `DeliveryClient`,
 at-least-once local endpoint delivery, not shared application-state storage.
 
 ```ts
-import { DeliveryServer } from "@spine-ts/delivery-server";
+import { DeliveryServer } from "@spine-event-engine/delivery-server";
 
 const server = new DeliveryServer({
   host: "10.0.0.5",
@@ -872,8 +886,8 @@ import {
   RemoteInbox,
   RemoteWorkRegistry,
   type RemovalQuarantine,
-} from "@spine-ts/delivery-client";
-import { DeliveryBuilder, DeliverySupervisor } from "@spine-ts/server";
+} from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
 
 // Run this independently on application machine A and application machine B.
 const source = DeliveryClient.connectTo("http://10.0.0.5:8484");
@@ -919,7 +933,7 @@ before closing the source client or storage it uses. Any forged delivery
 lookalike is rejected, even if it copies an internal method shape, because only
 builder-created identities carry the private controlled capability.
 `DeliveryClient` is structurally compatible with the supervisor source;
-`@spine-ts/server` does not depend on `@spine-ts/delivery-client`.
+`@spine-event-engine/server` does not depend on `@spine-event-engine/delivery-client`.
 
 Built context environments create and start one supervisor for each exact
 storage/context/tenant runtime. Initial attachment recovery remains in the
@@ -934,8 +948,8 @@ import {
   RemoteInbox,
   RemoteWorkRegistry,
   type RemovalQuarantine,
-} from "@spine-ts/delivery-client";
-import { DeliveryBuilder, DeliverySupervisor } from "@spine-ts/server";
+} from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
 // Caller-owned durable storage; an in-memory Map is not restart-safe here.
@@ -1000,7 +1014,7 @@ excludes Redis, Hazelcast, durable delivery-server persistence, and live
 TypeScript/JVM compatibility (Wave 3). It exposes no public scheduler or
 internal run-control API.
 
-The ZeroMQ adapter is available only at `@spine-ts/transport/zeromq` for local
+The ZeroMQ adapter is available only at `@spine-event-engine/transport/zeromq` for local
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and
 keep the canonical directory beneath a non-attacker-writable parent. POSIX
@@ -1020,8 +1034,8 @@ production multi-process topology.
 
 ## 12. Develop with Google Cloud Datastore
 
-`@spine-ts/storage-datastore` is an optional implementation of the public
-`@spine-ts/storage` port. It uses the official Google Cloud Datastore client
+`@spine-event-engine/storage-datastore` is an optional implementation of the public
+`@spine-event-engine/storage` port. It uses the official Google Cloud Datastore client
 against Google Cloud Datastore or Firestore in Datastore mode; it does not use
 Firestore Native APIs. The adapter belongs at server/context composition. Keep
 domain handlers, aggregates, process managers, and projections dependent on
@@ -1046,7 +1060,7 @@ applicable client/resource lifecycle in its own shutdown path.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
-import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const client = new Datastore({ projectId: "orders-development" });
 const storageFactory = new DatastoreStorageFactory({ client });
@@ -1057,7 +1071,7 @@ of constructing the client; it does not establish an adapter credential policy
 or invoke client teardown:
 
 ```ts
-import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const storageFactory = DatastoreStorageFactory.create({
   projectId: "orders-development",
@@ -1079,8 +1093,8 @@ keeps its domain topology provider-neutral and creates the adapter only at this
 composition boundary.
 
 ```ts
-import { BoundedContext } from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
+import { BoundedContext } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 import { TaskAggregate, TaskListProjection, TaskWorkflowProcess } from "@example/tasks-domain";
 
 export function tasksBuilder(storageFactory: StorageFactory) {
@@ -1139,7 +1153,7 @@ There is no unlimited setting and no adapter-specific generic cursor API.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
-import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const boundedStorageFactory = new DatastoreStorageFactory({
   client: new Datastore({ projectId: "orders-development" }),
@@ -1183,7 +1197,7 @@ then point the official client at it:
 gcloud emulators firestore start --database-mode=datastore-mode --host-port=127.0.0.1:8081
 DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
   DATASTORE_PROJECT_ID=orders-emulator \
-  pnpm --filter @spine-ts/storage-datastore test:emulator
+  pnpm --filter @spine-event-engine/storage-datastore test:emulator
 ```
 
 The adapter's emulator suite uses unique kinds and removes only its own data;
@@ -1193,7 +1207,7 @@ credential-gated cloud smoke check, select a disposable configured project:
 
 ```sh
 DATASTORE_CLOUD_TEST=1 DATASTORE_PROJECT_ID=orders-smoke \
-  pnpm --filter @spine-ts/storage-datastore test:cloud
+  pnpm --filter @spine-event-engine/storage-datastore test:cloud
 ```
 
 The smoke test creates one unique kind and removes its record in `finally`.
@@ -1201,12 +1215,12 @@ It is evidence for that credential/project combination only. Emulator and cloud
 smoke execution do not prove production composite-index deployment, all
 transaction limits, all cloud consistency behavior, resilience under provider
 outages, or a Firestore Native integration. See the
-[`@spine-ts/storage-datastore` README](../packages/storage-datastore/README.md)
+[`@spine-event-engine/storage-datastore` README](../packages/storage-datastore/README.md)
 for the adapter contract and its current verification commands.
 
 ## 13. Develop with MySQL RDBMS storage
 
-`@spine-ts/storage-rdbms` is the workspace's MySQL-first durable
+`@spine-event-engine/storage-rdbms` is the workspace's MySQL-first durable
 `StorageFactory` adapter (tested with MySQL 8.4.10/mysql2 3.23.1). PostgreSQL
 is not supported.
 
@@ -1217,7 +1231,7 @@ options are `url`, `connectionLimit`, `connectTimeoutMs`, and TLS `ca`, `cert`,
 `key`, and `rejectUnauthorized`. Create and always close its owned pool:
 
 ```ts
-import { MysqlStorageFactory } from "@spine-ts/storage-rdbms";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const url = process.env.MYSQL_URL;
 if (url === undefined || url.trim().length === 0) throw new Error("MYSQL_URL is required.");
@@ -1270,8 +1284,8 @@ The domain stays provider-neutral. Supply the factory at context/environment
 assembly, never from a handler:
 
 ```ts
-import { BoundedContext } from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
+import { BoundedContext } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 
 function orders(storage: StorageFactory) {
   return BoundedContext.singleTenant("Orders").withStorageFactory(storage);
@@ -1296,7 +1310,7 @@ supplied slot even when the body has another logical ID.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 const spec = new RecordSpec({
   schema: StringValueSchema,
@@ -1335,7 +1349,7 @@ the same rejecting promise.
 ### Lifecycle, verification, and future engines
 
 Run the opt-in disposable-database proof with
-`SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' pnpm --filter @spine-ts/storage-rdbms test:mysql`.
+`SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' pnpm --filter @spine-event-engine/storage-rdbms test:mysql`.
 It creates and removes only the adapter tables; do not log credentials.
 
 ## Further reading

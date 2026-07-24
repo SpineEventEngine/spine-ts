@@ -89,11 +89,11 @@ export function generateProjectionColumnCompanions(schema) {
     const output = schema.generateFile(`${file.name}_columns.ts`);
     const defineColumns = output.import(
       "defineGeneratedProjectionColumns",
-      "@spine-ts/client/codegen",
+      "@spine-event-engine/client/codegen",
     );
     const definitionType = output.import(
       "ProjectionColumnDefinition",
-      "@spine-ts/client/codegen",
+      "@spine-event-engine/client/codegen",
       true,
     );
     output.preamble(file);

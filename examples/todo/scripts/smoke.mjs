@@ -8,8 +8,8 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, packCommand } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   QueryIdSchema,
@@ -17,8 +17,8 @@ import {
   QueryService,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/client";
-import { SignalMetadata } from "@spine-ts/server";
+} from "@spine-event-engine/proto/client";
+import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";

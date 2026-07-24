@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory, type StorageContext } from "@spine-ts/storage";
+import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {

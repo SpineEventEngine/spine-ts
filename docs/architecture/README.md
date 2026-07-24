@@ -11,7 +11,7 @@ Architecture documentation starts from the build protocol and specification docu
 ## Proto Contract Boundary
 
 The `proto/` tree now contains the first verbatim copied Spine contract
-closures. `@spine-ts/proto` compiles those contracts and exposes a curated root
+closures. `@spine-event-engine/proto` compiles those contracts and exposes a curated root
 API with Protobuf-ES schemas, descriptors, message types, enum descriptors, enum
 values, and custom options. This boundary is intentionally contract-only:
 
@@ -27,8 +27,8 @@ values, and custom options. This boundary is intentionally contract-only:
 
 ## Core Metadata Registry
 
-`@spine-ts/core` owns runtime lookup policy over generated schemas. The first
-registry slice consumes curated exports from `@spine-ts/proto`, derives type
+`@spine-event-engine/core` owns runtime lookup policy over generated schemas. The first
+registry slice consumes curated exports from `@spine-event-engine/proto`, derives type
 URLs from descriptor file options, and exposes immutable metadata by full type
 name, type URL, and schema identity.
 
@@ -58,7 +58,7 @@ transport topics.
 
 ## Core Validation Facade
 
-`@spine-ts/core` owns the validation interface exposed to framework users.
+`@spine-event-engine/core` owns the validation interface exposed to framework users.
 Single-message validation is delegated to
 `@spine-event-engine/validation-ts@2.0.0-snapshot.4`, pinned by D-0029, but
 callers use `validateMessage()` and `checkValid()` from core. This keeps the
@@ -88,7 +88,7 @@ so later rules still run deterministically.
 
 ## Core Envelope Construction
 
-`@spine-ts/core` owns the Spine-aware `Any` packing seam. `packAny()` derives
+`@spine-event-engine/core` owns the Spine-aware `Any` packing seam. `packAny()` derives
 the canonical type URL with `deriveTypeUrl(schema)` and serializes the payload
 with Protobuf-ES `toBinary()`. The implementation intentionally does not call
 Buf `anyPack()` directly for Spine domain payloads because that helper emits the
@@ -122,14 +122,14 @@ workflow.
 
 ## Server Entity Metadata
 
-`@spine-ts/server` now owns the first descriptor-derived entity metadata layer,
+`@spine-event-engine/server` now owns the first descriptor-derived entity metadata layer,
 following D-0034, the first explicit handler metadata layer, following D-0035,
 the caller-owned handler registry, following D-0036, the first standard
 decorator adapter, following D-0037, and built-in set-once transition
 validation, following D-0038. It also owns the first thin entity-family marker
 classes over the transactional entity shell. The package consumes curated
-option exports from `@spine-ts/proto` and delegates transition result shaping
-to `@spine-ts/core`.
+option exports from `@spine-event-engine/proto` and delegates transition result shaping
+to `@spine-event-engine/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -323,7 +323,7 @@ async-local transaction state, or start transport.
 
 ## Server Bounded-Context Shell
 
-`@spine-ts/server` now exposes the first bounded-context assembly shell for
+`@spine-event-engine/server` now exposes the first bounded-context assembly shell for
 server metadata. It follows the Spine JVM entry points closely while keeping
 the implementation boundary deliberately smaller than the eventual runtime.
 
@@ -599,7 +599,7 @@ separately.
 
 ## Storage Boundary
 
-`@spine-ts/storage` now owns a smaller record-storage seam. The package exports
+`@spine-event-engine/storage` now owns a smaller record-storage seam. The package exports
 `StorageFactory` with one mandatory adapter method,
 `createRecordStorage(context, spec)`, plus `RecordStorage`, `RecordSpec`,
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
@@ -724,8 +724,8 @@ stores, and durable production storage adapters remain open production gaps.
 
 ## Transport Boundary
 
-`@spine-ts/transport` now owns the first adapter-agnostic routing contract for
-local multi-process work. The package does not import `@spine-ts/server`
+`@spine-event-engine/transport` now owns the first adapter-agnostic routing contract for
+local multi-process work. The package does not import `@spine-event-engine/server`
 runtime code or expose ZeroMQ through its root API. It defines immutable value
 objects and interfaces that later adapters can implement:
 
@@ -750,7 +750,7 @@ tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
-`@spine-ts/transport/zeromq` subpath exposes exactly
+`@spine-event-engine/transport/zeromq` subpath exposes exactly
 `createZeroMqAdapterConfig`, `createZeroMqTransport`, `ZeroMqAdapterConfig`,
 `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
 `ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket

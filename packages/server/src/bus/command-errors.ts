@@ -1,10 +1,10 @@
 import { create } from "@bufbuild/protobuf";
-import { createValidationError } from "@spine-ts/core";
+import { createValidationError } from "@spine-event-engine/core";
 import {
   ConstraintViolationSchema,
   TemplateStringSchema,
   type ValidationError,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 /** Error raised when a command envelope payload fails command-bus validation. */
 export class CommandValidationError extends Error {

@@ -11,7 +11,7 @@ function resolveEntrypoint(specifier: string) {
   );
 }
 
-describe("@spine-ts/proto package entrypoints", () => {
+describe("@spine-event-engine/proto package entrypoints", () => {
   it("exposes only the curated root and Wave 1 contract groups", () => {
     const packageJson = JSON.parse(
       readFileSync(resolve("packages/proto/package.json"), "utf8"),
@@ -24,17 +24,17 @@ describe("@spine-ts/proto package entrypoints", () => {
 
   it("resolves every supported package entrypoint and rejects private paths", () => {
     for (const supported of [
-      "@spine-ts/proto",
-      "@spine-ts/proto/client",
-      "@spine-ts/proto/delivery",
-      "@spine-ts/proto/delivery-server",
+      "@spine-event-engine/proto",
+      "@spine-event-engine/proto/client",
+      "@spine-event-engine/proto/delivery",
+      "@spine-event-engine/proto/delivery-server",
     ]) {
       expect(resolveEntrypoint(supported).status, supported).toBe(0);
     }
 
     for (const privatePath of [
-      "@spine-ts/proto/generated/spine/core/command_pb.js",
-      "@spine-ts/proto/runtime",
+      "@spine-event-engine/proto/generated/spine/core/command_pb.js",
+      "@spine-event-engine/proto/runtime",
     ]) {
       const result = resolveEntrypoint(privatePath);
       expect(result.status, privatePath).toBe(1);
@@ -49,7 +49,7 @@ describe("@spine-ts/proto package entrypoints", () => {
       "examples/todo/scripts/smoke.mjs",
     ]) {
       const contents = readFileSync(resolve(consumerPath), "utf8");
-      expect(contents, consumerPath).not.toContain("@spine-ts/proto/generated/");
+      expect(contents, consumerPath).not.toContain("@spine-event-engine/proto/generated/");
     }
   });
 });

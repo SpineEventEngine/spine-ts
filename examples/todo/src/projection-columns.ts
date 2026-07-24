@@ -1,4 +1,4 @@
-import { ProjectionColumn, type ProjectionColumns } from "@spine-ts/client";
+import { ProjectionColumn, type ProjectionColumns } from "@spine-event-engine/client";
 
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";

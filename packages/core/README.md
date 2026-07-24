@@ -1,4 +1,4 @@
-# @spine-ts/core
+# @spine-event-engine/core
 
 Core runtime metadata APIs for Spine TS.
 
@@ -22,12 +22,12 @@ The type registry slice includes:
 - descriptor metadata for the registered schema, declaring file, first field,
   and file option access; and
 - a read-only default `spineCoreRegistry` lookup view containing the curated
-  Spine schemas exported by `@spine-ts/proto`, including the core
+  Spine schemas exported by `@spine-event-engine/proto`, including the core
   command/event envelope and actor/tenant/user/version context contracts.
 
 ```ts
-import { FieldPathSchema } from "@spine-ts/proto";
-import { deriveTypeUrl, spineCoreRegistry } from "@spine-ts/core";
+import { FieldPathSchema } from "@spine-event-engine/proto";
+import { deriveTypeUrl, spineCoreRegistry } from "@spine-event-engine/core";
 
 const typeUrl = deriveTypeUrl(FieldPathSchema);
 const metadata = spineCoreRegistry.getByTypeUrl(typeUrl);
@@ -46,13 +46,13 @@ descriptors establish.
 
 ## Validation
 
-Framework users validate single Protobuf messages through `@spine-ts/core`, not
+Framework users validate single Protobuf messages through `@spine-event-engine/core`, not
 through the upstream validation package:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { validateMessage, checkValid, ValidationException } from "@spine-ts/core";
-import { CommandSchema } from "@spine-ts/proto";
+import { validateMessage, checkValid, ValidationException } from "@spine-event-engine/core";
+import { CommandSchema } from "@spine-event-engine/proto";
 
 const command = create(CommandSchema, {});
 const result = validateMessage(CommandSchema, command);
@@ -78,7 +78,7 @@ try {
 
 `validateMessage()` returns a structured result with repo-local
 `spine.validation.ConstraintViolation` and `spine.validation.ValidationError`
-message data from `@spine-ts/proto`. `checkValid()` uses the same validation
+message data from `@spine-event-engine/proto`. `checkValid()` uses the same validation
 path and throws `ValidationException` when violations are present.
 Validation details are safe by default: the facade omits raw invalid
 `fieldValue` data, redacts every upstream or transition-rule placeholder value
@@ -129,8 +129,8 @@ the default `type.googleapis.com/...` prefix.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { packAny, unpackAny } from "@spine-ts/core";
-import { FieldPathSchema } from "@spine-ts/proto";
+import { packAny, unpackAny } from "@spine-event-engine/core";
+import { FieldPathSchema } from "@spine-event-engine/proto";
 
 const payload = create(FieldPathSchema, { fieldName: ["task", "title"] });
 const any = packAny(FieldPathSchema, payload);
@@ -153,12 +153,12 @@ Low-level framework and test-fixture code can use `packCommand()` and
 The following block is intentionally a non-executable call-shape fragment. It
 requires caller-owned `commandId` (`CommandId`), `commandContext`
 (`CommandContext`), `eventId` (`EventId`), and `eventContext` (`EventContext`)
-messages from `@spine-ts/proto`, plus consumer-generated `CreateTaskSchema` and
+messages from `@spine-event-engine/proto`, plus consumer-generated `CreateTaskSchema` and
 `TaskCreatedSchema` values and their corresponding `payload` and `taskCreated`
 messages.
 
 ```ts
-import { packCommand, packEvent } from "@spine-ts/core";
+import { packCommand, packEvent } from "@spine-event-engine/core";
 
 const command = packCommand({
   id: commandId,

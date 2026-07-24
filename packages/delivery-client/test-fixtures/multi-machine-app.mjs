@@ -1,14 +1,14 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "@spine-ts/delivery-client";
-import { CommandSchema } from "@spine-ts/proto";
+import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "@spine-event-engine/delivery-client";
+import { CommandSchema } from "@spine-event-engine/proto";
 import process from "node:process";
 import {
   DeliveryBuilder,
   DeliverySupervisor,
   ShardIndex,
   UniformAcrossAllShards,
-} from "@spine-ts/server";
+} from "@spine-event-engine/server";
 
 export function createMultiMachineApplication({ baseUrl, node }) {
   const client = DeliveryClient.connectTo(baseUrl, {

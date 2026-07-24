@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 
 import {

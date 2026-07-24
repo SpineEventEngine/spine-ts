@@ -1,9 +1,9 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { packEvent } from "@spine-ts/core";
-import { ActorContextSchema, EventContextSchema, EventIdSchema } from "@spine-ts/proto";
-import type { CommandDispatcher, EventDispatcher } from "@spine-ts/server";
-import { BoundedContext, Projection, Repository, Server } from "@spine-ts/server";
+import { packEvent } from "@spine-event-engine/core";
+import { ActorContextSchema, EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
+import type { CommandDispatcher, EventDispatcher } from "@spine-event-engine/server";
+import { BoundedContext, Projection, Repository, Server } from "@spine-event-engine/server";
 import { describe, expect, it } from "vitest";
 
 import { Client, ProjectionColumn, ProjectionQuery, eq } from "../src/index.js";

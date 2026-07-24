@@ -4,7 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
-import { packCommand, packEvent } from "@spine-ts/core";
+import { packCommand, packEvent } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -16,7 +16,7 @@ import {
   file_spine_options,
   UserIdSchema,
   VersionSchema,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import type {
   PublishTransportHandler,
   PublishTransportOperation,
@@ -26,7 +26,7 @@ import type {
   TransportSignalKind,
   TransportSubscription,
   TransportSubscriptionHandle,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 import { describe, expect, it } from "vitest";
 
 import {

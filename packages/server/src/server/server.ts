@@ -2,7 +2,7 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import type { StorageFactory } from "@spine-ts/storage";
+import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
   BoundedContext,

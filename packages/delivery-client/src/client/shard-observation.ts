@@ -1,4 +1,4 @@
-import type { SubscriptionResponse } from "@spine-ts/proto/delivery-server";
+import type { SubscriptionResponse } from "@spine-event-engine/proto/delivery-server";
 
 import {
   DeliveryProtocolError,

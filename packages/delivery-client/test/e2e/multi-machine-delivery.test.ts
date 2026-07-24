@@ -8,7 +8,7 @@ import {
   HealthCheckRequestSchema,
   HealthCheckResponse_ServingStatus,
   ShardStatus,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import { spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { createServer } from "node:net";

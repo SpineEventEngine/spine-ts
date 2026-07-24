@@ -26,7 +26,7 @@ import {
   VersionSchema,
   type_url_prefix,
   type ActorContext,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
   CompositeFilter_CompositeOperator,
@@ -42,7 +42,7 @@ import {
   TargetSchema,
   type CompositeFilter,
   type Query,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 
 import {
   ProjectionColumn,

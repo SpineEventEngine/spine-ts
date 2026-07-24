@@ -4,15 +4,19 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { CommandSchema, UserIdSchema } from "@spine-ts/proto";
-import { CommandService } from "@spine-ts/proto/client";
-import { TargetFiltersSchema, TargetSchema } from "@spine-ts/proto/client";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
-import { TopicIdSchema, TopicSchema, type SubscriptionUpdate } from "@spine-ts/proto/client";
-import { SubscriptionService } from "@spine-ts/proto/client";
-import { SignalMetadata } from "@spine-ts/server";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { CommandService } from "@spine-event-engine/proto/client";
+import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
+import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
+import {
+  TopicIdSchema,
+  TopicSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
+import { SubscriptionService } from "@spine-event-engine/proto/client";
+import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateProjectSchema } from "../generated/spine/example/project_management/v1/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/example/project_management/v1/read_models_pb.js";

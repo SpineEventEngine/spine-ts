@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {

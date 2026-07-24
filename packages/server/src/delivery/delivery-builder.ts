@@ -1,4 +1,4 @@
-import type { StorageContext, StorageFactory } from "@spine-ts/storage";
+import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";

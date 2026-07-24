@@ -286,10 +286,10 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { packCommand, packEvent } from "@spine-ts/core";',
-        'import { EventIdSchema, type Command, type Event } from "@spine-ts/proto";',
+        'import { packCommand, packEvent } from "@spine-event-engine/core";',
+        'import { EventIdSchema, type Command, type Event } from "@spine-event-engine/proto";',
         "import { Apply, Assign, Command, React, Subscribe,",
-        '  materializeDecoratedEntityHandlers } from "@spine-ts/server";',
+        '  materializeDecoratedEntityHandlers } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -352,7 +352,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { defineEntityHandlers } from "@spine-ts/server";',
+        'import { defineEntityHandlers } from "@spine-event-engine/server";',
         "",
         "class DemoAggregate {}",
         "defineEntityHandlers(DemoAggregate);",
@@ -375,7 +375,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as server from "@spine-ts/server";',
+        'import * as server from "@spine-event-engine/server";',
         "",
         "class DemoAggregate {}",
         "server.defineEntityHandlers(DemoAggregate);",
@@ -398,7 +398,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { defineEntityHandlers as defineHandlers } from "@spine-ts/server";',
+        'import { defineEntityHandlers as defineHandlers } from "@spine-event-engine/server";',
         "",
         "class DemoAggregate {}",
         "defineHandlers(DemoAggregate);",
@@ -421,7 +421,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as server from "@spine-ts/server";',
+        'import * as server from "@spine-event-engine/server";',
         "",
         "const { defineEntityHandlers: defineHandlers } = server;",
         "class DemoAggregate {}",
@@ -446,7 +446,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import Server = require("@spine-ts/server");',
+        'import Server = require("@spine-event-engine/server");',
         "import DefineHandlers = Server.defineEntityHandlers;",
         "",
         "class DemoAggregate {}",
@@ -495,7 +495,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Subscribe } from "@spine-ts/server";',
+        'import { Assign, Subscribe } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -526,7 +526,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command, React, Subscribe } from "@spine-ts/server";',
+        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -587,7 +587,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command, React, Subscribe } from "@spine-ts/server";',
+        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
         'import type { NotifyOwner, TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -631,7 +631,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command, React, Subscribe } from "@spine-ts/server";',
+        'import { Assign, Command, React, Subscribe } from "@spine-event-engine/server";',
         'import type { NotifyOwner, TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "interface CommandContext {",
@@ -683,9 +683,9 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type * as Proto from "@spine-ts/proto";',
-        'import type { Command as FrameworkCommand, Event as FrameworkEvent } from "@spine-ts/proto";',
-        'import { Assign, Command, React } from "@spine-ts/server";',
+        'import type * as Proto from "@spine-event-engine/proto";',
+        'import type { Command as FrameworkCommand, Event as FrameworkEvent } from "@spine-event-engine/proto";',
+        'import { Assign, Command, React } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "type LegacyEvent = FrameworkEvent;",
@@ -725,13 +725,13 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
         "  @Assign",
-        '  assignTask(command: TaskCommand): import("@spine-ts/proto").Event {',
-        '    return command as import("@spine-ts/proto").Event;',
+        '  assignTask(command: TaskCommand): import("@spine-event-engine/proto").Event {',
+        '    return command as import("@spine-event-engine/proto").Event;',
         "  }",
         "}",
         "",
@@ -744,7 +744,7 @@ describe("check-cleanup-rules", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("handler return type spine proto Event");
-    expect(result.stderr).not.toContain('import("@spine-ts/proto").Event');
+    expect(result.stderr).not.toContain('import("@spine-event-engine/proto").Event');
   });
 
   it("rejects chained import-equals framework envelope aliases", () => {
@@ -752,8 +752,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
-        'import type Proto = require("@spine-ts/proto");',
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type Proto = require("@spine-event-engine/proto");',
         "import type LegacyEvent = Proto.Event;",
         "import type FrameworkEvent = LegacyEvent;",
         'import type { TaskCommand } from "../generated/example_pb.js";',
@@ -781,8 +781,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
-        'import type { Event as FrameworkEvent } from "@spine-ts/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type { Event as FrameworkEvent } from "@spine-event-engine/proto";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "function localScope(): void {",
@@ -816,8 +816,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type { Event } from "@spine-ts/proto";',
-        'import { Assign } from "@spine-ts/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -845,8 +845,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type { Command, Event } from "@spine-ts/proto";',
-        'import { Assign, Command as OnCommand, React } from "@spine-ts/server";',
+        'import type { Command, Event } from "@spine-event-engine/proto";',
+        'import { Assign, Command as OnCommand, React } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "type LegacyReturns = Event | undefined;",
@@ -895,8 +895,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type { Event } from "@spine-ts/proto";',
-        'import { Assign } from "@spine-ts/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         ...aliases,
@@ -928,7 +928,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         ...aliases,
@@ -957,12 +957,12 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { packEvent as emit } from "@spine-ts/core";',
-        'import * as core from "@spine-ts/core";',
-        'import { EventIdSchema as EID } from "@spine-ts/proto";',
-        'import * as proto from "@spine-ts/proto";',
-        'import { materializeDecoratedEntityHandlers as materialize } from "@spine-ts/server";',
-        'import * as server from "@spine-ts/server";',
+        'import { packEvent as emit } from "@spine-event-engine/core";',
+        'import * as core from "@spine-event-engine/core";',
+        'import { EventIdSchema as EID } from "@spine-event-engine/proto";',
+        'import * as proto from "@spine-event-engine/proto";',
+        'import { materializeDecoratedEntityHandlers as materialize } from "@spine-event-engine/server";',
+        'import * as server from "@spine-event-engine/server";',
         "",
         "emit({});",
         "core.packCommand({});",
@@ -990,8 +990,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as core from "@spine-ts/core";',
-        'import * as proto from "@spine-ts/proto";',
+        'import * as core from "@spine-event-engine/core";',
+        'import * as proto from "@spine-event-engine/proto";',
         "",
         "const emit = core.packEvent;",
         "const eid = proto.EventIdSchema;",
@@ -1019,8 +1019,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as core from "@spine-ts/core";',
-        'import * as proto from "@spine-ts/proto";',
+        'import * as core from "@spine-event-engine/core";',
+        'import * as proto from "@spine-event-engine/proto";',
         "",
         "const container = { core, proto };",
         "const { core: heldCore, proto: heldProto } = container;",
@@ -1073,8 +1073,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { GeneratedRegistryDiscovery } from "@spine-ts/server";',
-        'import type { EntityHandlersMetadata, HandlerMetadataRegistry } from "@spine-ts/server";',
+        'import { GeneratedRegistryDiscovery } from "@spine-event-engine/server";',
+        'import type { EntityHandlersMetadata, HandlerMetadataRegistry } from "@spine-event-engine/server";',
         "",
         "type LocalMetadata = EntityHandlersMetadata;",
         "type LocalRegistry = HandlerMetadataRegistry;",
@@ -1100,7 +1100,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as server from "@spine-ts/server";',
+        'import * as server from "@spine-event-engine/server";',
         "",
         'const Discovery = server["GeneratedRegistryDiscovery"];',
         'const Registry = server["HandlerMetadataRegistry"];',
@@ -1126,9 +1126,9 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import * as core from "@spine-ts/core";',
-        'import * as proto from "@spine-ts/proto";',
-        'import * as server from "@spine-ts/server";',
+        'import * as core from "@spine-event-engine/core";',
+        'import * as proto from "@spine-event-engine/proto";',
+        'import * as server from "@spine-event-engine/server";',
         "",
         "const c = core;",
         "const p = proto;",
@@ -1159,8 +1159,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign as LegacyAssign } from "@spine-ts/server";',
-        'import * as spine from "@spine-ts/server";',
+        'import { Assign as LegacyAssign } from "@spine-event-engine/server";',
+        'import * as spine from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1222,7 +1222,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type { Assign } from "@spine-ts/server";',
+        'import type { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function Assign(_schema: unknown) {",
@@ -1252,7 +1252,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function localScope(): void {",
@@ -1288,7 +1288,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function localScope(Assign: (schema: unknown) => unknown): void {",
@@ -1320,8 +1320,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign as SpineAssign } from "@spine-ts/server";',
-        'import type { Event } from "@spine-ts/proto";',
+        'import { Assign as SpineAssign } from "@spine-event-engine/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "const Assign = SpineAssign;",
@@ -1350,8 +1350,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign as SpineAssign } from "@spine-ts/server";',
-        'import type { Event } from "@spine-ts/proto";',
+        'import { Assign as SpineAssign } from "@spine-event-engine/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "const decorators = { Assign: SpineAssign };",
@@ -1380,8 +1380,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign as SpineAssign } from "@spine-ts/server";',
-        'import type { Event } from "@spine-ts/proto";',
+        'import { Assign as SpineAssign } from "@spine-event-engine/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "const decorators = { Assign: SpineAssign };",
@@ -1411,8 +1411,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { type packEvent } from "@spine-ts/core";',
-        'import { Assign } from "@spine-ts/server";',
+        'import { type packEvent } from "@spine-event-engine/core";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "type PackEventType = typeof packEvent;",
@@ -1442,7 +1442,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command } from "@spine-ts/server";',
+        'import { Assign, Command } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "type Event = string;",
@@ -1476,7 +1476,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1507,7 +1507,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, React } from "@spine-ts/server";',
+        'import { Assign, React } from "@spine-event-engine/server";',
         'import type { CreateTask, TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1538,7 +1538,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type { CreateTask, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoProcess {",
@@ -1569,7 +1569,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type { CreateTaskView, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoProcess {",
@@ -1595,7 +1595,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, Command } from "@spine-ts/server";',
+        'import { Assign, Command } from "@spine-event-engine/server";',
         'import type { NotifyOwner, TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "type Created = TaskCreated;",
@@ -1629,7 +1629,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import { TaskCompleted } from "../generated/example_pb.js";',
         'import type * as Todo from "../generated/example_pb.js";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
@@ -1662,8 +1662,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type { Event } from "@spine-ts/proto";',
-        'import { Assign } from "@spine-ts/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "function localScope(): void {",
@@ -1697,7 +1697,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "function localScope(): void {",
@@ -1731,7 +1731,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1757,7 +1757,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1783,8 +1783,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import type * as Proto from "@spine-ts/proto";',
-        'import { Assign } from "@spine-ts/server";',
+        'import type * as Proto from "@spine-event-engine/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -1810,8 +1810,8 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
-        'import type { Event } from "@spine-ts/proto";',
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type { Event } from "@spine-event-engine/proto";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "namespace Hidden {",
@@ -1841,7 +1841,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "",
         "type A = B;",
@@ -1870,7 +1870,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign, React } from "@spine-ts/server";',
+        'import { Assign, React } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -1919,7 +1919,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -1952,7 +1952,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -1986,7 +1986,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2021,7 +2021,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2054,7 +2054,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2086,7 +2086,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2121,7 +2121,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2159,7 +2159,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2191,7 +2191,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type { NotifyOwner, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2222,7 +2222,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type * as Todo from "../generated/example_pb.js";',
         'import type { CreateTask, NotifyOwner, ShipTask, TaskCommand } from "../generated/example_pb.js";',
         "",
@@ -2274,7 +2274,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2312,7 +2312,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2347,7 +2347,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2381,7 +2381,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type { NotifyOwner, TaskCreated } from "../generated/example_pb.js";',
         "",
         "class DemoProcess {",
@@ -2407,7 +2407,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -2435,7 +2435,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -2461,7 +2461,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2493,7 +2493,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2525,7 +2525,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function requireTarget(value: string): string {",
@@ -2560,7 +2560,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2592,7 +2592,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "function validate(value: string): void {",
@@ -2704,7 +2704,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/view.tsx"),
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "class ViewAggregate {",
         "  @Assign(TaskCommand)",
@@ -2718,7 +2718,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/route.mts"),
       [
-        'import { Apply } from "@spine-ts/server";',
+        'import { Apply } from "@spine-event-engine/server";',
         'import type { TaskCreated } from "../generated/example_pb.js";',
         "class RouteAggregate {",
         "  @Apply",
@@ -2732,7 +2732,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import { Command } from "@spine-ts/server";',
+        'import { Command } from "@spine-event-engine/server";',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "class StateAggregate {",
         "  @Command(TaskCommand)",
@@ -2760,8 +2760,8 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import Server = require("@spine-ts/server");',
-        'import Proto = require("@spine-ts/proto");',
+        'import Server = require("@spine-event-engine/server");',
+        'import Proto = require("@spine-event-engine/proto");',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "class StateAggregate {",
         "  @Server.Assign(TaskCommand)",
@@ -2788,8 +2788,8 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import { Assign } from "@spine-ts/server";',
-        'import type Proto = require("@spine-ts/proto");',
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type Proto = require("@spine-event-engine/proto");',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "class StateAggregate {",
         "  @Assign",
@@ -2815,8 +2815,8 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import { Assign } from "@spine-ts/server";',
-        'import type Proto = require("@spine-ts/proto");',
+        'import { Assign } from "@spine-event-engine/server";',
+        'import type Proto = require("@spine-event-engine/proto");',
         "import type LegacyEvent = Proto.Event;",
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "class StateAggregate {",
@@ -2843,8 +2843,8 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import Server = require("@spine-ts/server");',
-        'import Proto = require("@spine-ts/proto");',
+        'import Server = require("@spine-event-engine/server");',
+        'import Proto = require("@spine-event-engine/proto");',
         "import Assign = Server.Assign;",
         "import LegacyEvent = Proto.Event;",
         "import Materialize = Server.materializeDecoratedEntityHandlers;",
@@ -2878,8 +2878,8 @@ describe("check-cleanup-rules", () => {
       [
         "import Assign = Server.Assign;",
         "import LegacyEvent = Proto.Event;",
-        'import Server = require("@spine-ts/server");',
-        'import Proto = require("@spine-ts/proto");',
+        'import Server = require("@spine-event-engine/server");',
+        'import Proto = require("@spine-event-engine/proto");',
         'import type { TaskCommand } from "../generated/example_pb.js";',
         "class StateAggregate {",
         "  @Assign(TaskCommand)",
@@ -2906,9 +2906,9 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import Core = require("@spine-ts/core");',
-        'import Server = require("@spine-ts/server");',
-        'import Proto = require("@spine-ts/proto");',
+        'import Core = require("@spine-event-engine/core");',
+        'import Server = require("@spine-event-engine/server");',
+        'import Proto = require("@spine-event-engine/proto");',
         "import C = Core;",
         "import S = Server;",
         "import P = Proto;",
@@ -2942,7 +2942,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/todo/src/state.cts"),
       [
-        'import Server = require("@spine-ts/server");',
+        'import Server = require("@spine-event-engine/server");',
         "import Alias = Server.Assign;",
         "import Alias = Server.Command;",
         'import type { TaskCommand, TaskCreated } from "../generated/example_pb.js";',
@@ -2970,7 +2970,7 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       join(repoRoot, "examples/group/todo/src/index.ts"),
       [
-        'import { Assign } from "@spine-ts/server";',
+        'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "class NestedAggregate {",
         "  @Assign(TaskCommand)",

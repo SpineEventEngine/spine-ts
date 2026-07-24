@@ -11,7 +11,7 @@ import {
   FileDescriptorSetSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packEvent } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -20,7 +20,7 @@ import {
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   EventStore,
   InMemoryRecordStorage,
@@ -28,7 +28,7 @@ import {
   RecordStorage,
   type RecordSpec,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { AggregateStorage } from "../../src/index.js";

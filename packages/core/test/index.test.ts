@@ -23,7 +23,7 @@ import {
   VersionSchema,
   file_spine_options,
   type_url_prefix,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
@@ -261,7 +261,7 @@ describe("RejectionThrowable", () => {
   });
 });
 
-describe("@spine-ts/core type registry", () => {
+describe("@spine-event-engine/core type registry", () => {
   it("derives type URLs from Spine file type_url_prefix options", () => {
     expect(deriveTypeUrl(FieldPathSchema)).toBe("type.spine.io/spine.base.FieldPath");
     expect(deriveTypeUrl(ValidationErrorSchema)).toBe(
@@ -479,7 +479,7 @@ describe("@spine-ts/core type registry", () => {
   });
 });
 
-describe("@spine-ts/core validation facade", () => {
+describe("@spine-event-engine/core validation facade", () => {
   it("narrows result invariants for valid and invalid validation outcomes", () => {
     const validResult: MessageValidationResult = validateMessage(ValidationErrorSchema, {
       $typeName: "spine.validation.ValidationError",
@@ -706,7 +706,7 @@ describe("@spine-ts/core validation facade", () => {
   });
 });
 
-describe("@spine-ts/core envelope packing", () => {
+describe("@spine-event-engine/core envelope packing", () => {
   it("keeps packing for schemas without a Spine option on the default canonical URL", () => {
     const packed = packAny(AnySchema, create(AnySchema));
 

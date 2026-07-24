@@ -58,7 +58,7 @@ interface ProtoSourceManifest {
   }[];
 }
 
-describe("@spine-ts/proto", () => {
+describe("@spine-event-engine/proto", () => {
   it("verifies the copied Spine proto source manifest checksums", () => {
     const manifest = JSON.parse(
       readFileSync(resolve("proto/spine-sources.json"), "utf8"),

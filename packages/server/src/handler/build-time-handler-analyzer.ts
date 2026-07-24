@@ -1046,12 +1046,12 @@ function recordImportDeclaration(
     return;
   }
   if (
-    moduleSpecifier === "@spine-ts/server" &&
+    moduleSpecifier === "@spine-event-engine/server" &&
     statement.importClause?.phaseModifier !== ts.SyntaxKind.TypeKeyword
   ) {
     recordServerImport(bindings, state);
   }
-  if (moduleSpecifier === "@spine-ts/proto") {
+  if (moduleSpecifier === "@spine-event-engine/proto") {
     recordProtoImport(bindings, state);
   }
   if (isGeneratedModule(moduleSpecifier)) {

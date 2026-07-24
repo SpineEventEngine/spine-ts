@@ -9,7 +9,7 @@ import {
   InternetDomainSchema,
   TenantIdSchema,
   type TenantId,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { EventStore, InMemoryStorageFactory } from "../../src/index.js";

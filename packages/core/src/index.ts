@@ -42,7 +42,7 @@ import {
   type_url_prefix,
   type ConstraintViolation,
   type ValidationError,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
 const REDACTED_VALIDATION_DETAIL = "[redacted]";

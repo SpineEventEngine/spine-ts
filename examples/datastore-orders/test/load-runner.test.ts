@@ -7,14 +7,14 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { packAny, unpackAny } from "@spine-ts/core";
-import { AckSchema } from "@spine-ts/proto";
-import { ResponseSchema, StatusSchema } from "@spine-ts/proto";
-import { type Query, QueryResponseSchema } from "@spine-ts/proto/client";
-import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-ts/proto/client";
-import { CommandService } from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
-import { SubscriptionService } from "@spine-ts/proto/client";
+import { packAny, unpackAny } from "@spine-event-engine/core";
+import { AckSchema } from "@spine-event-engine/proto";
+import { ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
+import { type Query, QueryResponseSchema } from "@spine-event-engine/proto/client";
+import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
+import { CommandService } from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
+import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { datastoreOrdersLoadLevels, runDatastoreOrdersLoad } from "../src/load-runner.js";
@@ -25,7 +25,7 @@ describe("datastore-orders load runner", () => {
     const modulePath = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
     expect(existsSync(modulePath)).toBe(true);
     const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const { InMemoryStorageFactory } = await import("@spine-ts/storage");
+    const { InMemoryStorageFactory } = await import("@spine-event-engine/storage");
     const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
       host: "127.0.0.1",
       port: 0,
@@ -65,7 +65,7 @@ describe("datastore-orders load runner", () => {
 
   it("reports zero throughput when the real gRPC load completes within one clock tick", async () => {
     const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const { InMemoryStorageFactory } = await import("@spine-ts/storage");
+    const { InMemoryStorageFactory } = await import("@spine-event-engine/storage");
     const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
       host: "127.0.0.1",
       port: 0,

@@ -1,13 +1,13 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   type RecordQuery,
   type RecordSpec,
   RecordStorage,
   StorageFactory,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import {
   dedupRecordSpec,

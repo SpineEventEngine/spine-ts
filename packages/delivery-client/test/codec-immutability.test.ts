@@ -1,10 +1,10 @@
 import { create } from "@bufbuild/protobuf";
-import { ShardIndex } from "@spine-ts/server";
+import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxMessageIdSchema,
   InboxMessageSchema,
   ShardIndexSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 import {
   DeliveryClient,

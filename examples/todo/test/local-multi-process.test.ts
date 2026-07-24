@@ -9,20 +9,23 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   QueryResponseSchema,
   QuerySchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
-import { TargetFiltersSchema, TargetSchema } from "@spine-ts/proto/client";
-import { SignalMetadata } from "@spine-ts/server";
-import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+} from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
+import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
+import { SignalMetadata } from "@spine-event-engine/server";
+import { createTransportTopic, type SignalTransport } from "@spine-event-engine/transport";
+import {
+  createZeroMqAdapterConfig,
+  createZeroMqTransport,
+} from "@spine-event-engine/transport/zeromq";
 import { describe, expect, it, vi } from "vitest";
 
 import { CreateTaskSchema } from "../generated/spine/example/todo/v1/task_commands_pb.js";

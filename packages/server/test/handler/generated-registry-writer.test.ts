@@ -30,7 +30,8 @@ describe("generated registry writer", () => {
 
     expect(source).toBe(
       [
-        'import type { GeneratedHandlerRegistry } from "@spine-ts/server/internal/generated-handler-registry";',
+        "import type { GeneratedHandlerRegistry } from " +
+          '"@spine-event-engine/server/internal/generated-handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
         'import { CreateTaskSchema, RenameTaskSchema } from "../spine/example/todo/v1/task_commands_pb.js";',
@@ -160,12 +161,12 @@ describe("generated registry writer", () => {
       },
       {
         outputFile,
-        registryModuleSpecifier: "@spine-ts/server\u2029with\nbreak",
+        registryModuleSpecifier: "@spine-event-engine/server\u2029with\nbreak",
       },
     );
 
     expect(source).toContain(
-      'import type { GeneratedHandlerRegistry } from "@spine-ts/server\\u2029with\\nbreak";',
+      'import type { GeneratedHandlerRegistry } from "@spine-event-engine/server\\u2029with\\nbreak";',
     );
     expect(source).toContain('methodName: "create\\u2028\\"task\\"\\nnext",');
   });
@@ -750,14 +751,19 @@ function createCompileFixture(): string {
 
   mkdirSync(join(repoRoot, "packages/demo/generated/handler"), { recursive: true });
   mkdirSync(join(repoRoot, "packages/demo/src"), { recursive: true });
-  mkdirSync(join(repoRoot, "node_modules/@spine-ts/server/internal"), { recursive: true });
+  mkdirSync(join(repoRoot, "node_modules/@spine-event-engine/server/internal"), {
+    recursive: true,
+  });
   mkdirSync(join(repoRoot, "node_modules/@acme/generated"), { recursive: true });
   writeFileSync(
     join(repoRoot, "packages/demo/src/task-aggregate.ts"),
     ["export class TaskAggregate {", "  createTask(): void {}", "}", ""].join("\n"),
   );
   writeFileSync(
-    join(repoRoot, "node_modules/@spine-ts/server/internal/generated-handler-registry.d.ts"),
+    join(
+      repoRoot,
+      "node_modules/@spine-event-engine/server/internal/generated-handler-registry.d.ts",
+    ),
     [
       "export interface GeneratedHandlerRegistry {",
       "  readonly version: 1;",

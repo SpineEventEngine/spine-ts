@@ -3,9 +3,9 @@
 TypeDoc is the canonical API documentation generator for this repository.
 
 Current status: the generated TypeDoc reference contains the curated
-`@spine-ts/proto` root API for copied Spine contracts, the `@spine-ts/core`
-metadata/type registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata, the `@spine-ts/client` Projection-column
+`@spine-event-engine/proto` root API for copied Spine contracts, the `@spine-event-engine/core`
+metadata/type registry and validation facade APIs, the first `@spine-event-engine/server`
+descriptor-derived entity metadata, the `@spine-event-engine/client` Projection-column
 registration model, context-owned `Repository` registration,
 set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
@@ -13,13 +13,13 @@ kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
 command/query/subscription services with durable inactive subscription recovery
 over the same storage factory, a small local `Server` lifecycle owner for real
-Connect/gRPC-compatible services, the first `@spine-ts/transport`
-contracts, the first `@spine-ts/storage` contracts, and the minimal
-`@spine-ts/testing` BlackBox test boundary, optional Datastore storage, and
+Connect/gRPC-compatible services, the first `@spine-event-engine/transport`
+contracts, the first `@spine-event-engine/storage` contracts, and the minimal
+`@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
-The reference has 13 entry points, including `@spine-ts/delivery-client` and
-`@spine-ts/delivery-server`. The latter is a listener-free, in-memory simple
+The reference has 13 entry points, including `@spine-event-engine/delivery-client` and
+`@spine-event-engine/delivery-server`. The latter is a listener-free, in-memory simple
 server core; constructing a replacement core intentionally loses its state.
 The delivery client facade owns curated delivery-server Inbox/Shard/Admin operations and remote
 delivery ports; generated delivery RPC clients remain internal.
@@ -28,8 +28,8 @@ Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
 validation, core signal envelope, actor/tenant/user/version context, time, net,
 and UI language contracts. Separately from that generated root reference, the
-package supports imports from `@spine-ts/proto/client`,
-`@spine-ts/proto/delivery`, and `@spine-ts/proto/delivery-server`. Those curated
+package supports imports from `@spine-event-engine/proto/client`,
+`@spine-event-engine/proto/delivery`, and `@spine-event-engine/proto/delivery-server`. Those curated
 wire-contract subpaths are package exports, not TypeDoc entrypoints. Arbitrary
 `generated/**` paths and delivery runtime helpers are intentionally not public
 APIs. The frozen source manifest pins each copied source to an upstream commit
@@ -368,7 +368,7 @@ close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
-`@spine-ts/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
+`@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
 `BlackBoxScope`, `BlackBoxTimeoutError`, and `BlackBoxClosedError`. `BlackBox`
 starts an owned ephemeral `Server` from a built context or builder and provides
 immutable guest/actor scopes over the public client contract. It supports
@@ -568,7 +568,7 @@ least one emitted schema; `@React` records may return generated event messages
 or explicit `void` with no emitted schemas. `@Subscribe` records return
 explicit `void` and declare no emitted schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
-The exported `@spine-ts/server/internal/generated-handler-registry` subpath
+The exported `@spine-event-engine/server/internal/generated-handler-registry` subpath
 exists only to give that generated registry source its required type-only
 `GeneratedHandlerRegistry` import. It is a generated-artifact/package-internal
 entry point, not an application import, package-root API, or TypeDoc entry.
@@ -645,7 +645,7 @@ Runtime routing exports include `createRoutingPlan()`,
 `DeferredRoutingSeam`. The planner requires a built
 `BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
 `EventRegistrationReadiness` instances, and derives immutable
-`@spine-ts/transport` topics, subscriptions, and planner-local worker IDs plus
+`@spine-event-engine/transport` topics, subscriptions, and planner-local worker IDs plus
 small sanitized route descriptors. Command routing produces one planner-local
 command-worker competing-consumer subscription over registered command topics.
 Event routing produces fan-out subscriptions and event-worker IDs
@@ -792,7 +792,7 @@ values, retry policy, durable storage, runtime handler invocation, or server
 runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
-adapter-scoped `@spine-ts/transport/zeromq` subpath exports exactly
+adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
 `createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
 `ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
 `ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
@@ -818,7 +818,7 @@ import {
   isTransportTopicKind,
   type RequestTransportOperation,
   type TransportTopic,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 
 function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
   if (isTransportOperationKind(operation, "command")) {
@@ -873,13 +873,13 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON and verifies nine expected
-entry points in the API model: `@spine-ts/proto`, `@spine-ts/core`,
-`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`,
-`@spine-ts/storage-rdbms`, `@spine-ts/transport`,
-`@spine-ts/transport/zeromq`, and `@spine-ts/testing`. The
-`@spine-ts/transport/zeromq` entry point has its own exact-six-public-export
+entry points in the API model: `@spine-event-engine/proto`, `@spine-event-engine/core`,
+`@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`,
+`@spine-event-engine/storage-rdbms`, `@spine-event-engine/transport`,
+`@spine-event-engine/transport/zeromq`, and `@spine-event-engine/testing`. The
+`@spine-event-engine/transport/zeromq` entry point has its own exact-six-public-export
 gate. It also checks
-`@spine-ts/server`, `@spine-ts/storage`, `@spine-ts/storage-datastore`, and
-`@spine-ts/storage-rdbms` root exports against source
+`@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, and
+`@spine-event-engine/storage-rdbms` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

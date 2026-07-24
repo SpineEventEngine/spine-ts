@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { RecordSpec } from "@spine-ts/storage";
+import { RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory } from "../src/index.js";

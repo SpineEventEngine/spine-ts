@@ -136,7 +136,7 @@ describe("Projection column companion generator", () => {
 
     expect(generatedFiles).toEqual(["spine/example/todo/v1/task_list_columns.ts"]);
     expect(output.imports).toContainEqual({
-      from: "@spine-ts/client/codegen",
+      from: "@spine-event-engine/client/codegen",
       name: "defineGeneratedProjectionColumns",
     });
     const source = output.printed.flat().join("");

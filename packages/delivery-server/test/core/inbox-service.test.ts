@@ -2,7 +2,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
-import { CommandSchema } from "@spine-ts/proto";
+import { CommandSchema } from "@spine-event-engine/proto";
 import {
   ReadMessagesSinceTimeSchema,
   OptionalInboxMessageSchema,
@@ -11,13 +11,13 @@ import {
   RemoveMessagesSchema,
   WriteMessagesSchema,
   WriteMessageSchema,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import { createInMemoryDeliveryServerCore } from "../../src/index.js";
 

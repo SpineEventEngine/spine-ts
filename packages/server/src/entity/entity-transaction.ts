@@ -1,5 +1,5 @@
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
-import { ConstraintViolationSchema, type ConstraintViolation } from "@spine-ts/proto";
+import { ConstraintViolationSchema, type ConstraintViolation } from "@spine-event-engine/proto";
 
 import type { DescriptorMessageSchema } from "./entity-metadata.js";
 import {

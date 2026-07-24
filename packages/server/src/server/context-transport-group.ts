@@ -1,4 +1,4 @@
-import type { SignalTransport } from "@spine-ts/transport";
+import type { SignalTransport } from "@spine-event-engine/transport";
 
 import type { BoundedContext } from "../context/bounded-context.js";
 import { ContextTransport, contextTransportAccess } from "../runtime/context-transport.js";

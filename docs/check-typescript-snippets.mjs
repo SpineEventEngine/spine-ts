@@ -54,7 +54,7 @@ function checkSpineImports(code, containingFile, document, line) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
       continue;
     const specifier = statement.moduleSpecifier.text;
-    if (!specifier.startsWith("@spine-ts/")) continue;
+    if (!specifier.startsWith("@spine-event-engine/")) continue;
     const bindings = statement.importClause?.namedBindings;
     if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
     const exported = exportsFor(specifier);

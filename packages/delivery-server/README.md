@@ -1,4 +1,4 @@
-# @spine-ts/delivery-server
+# @spine-event-engine/delivery-server
 
 `createInMemoryDeliveryServerCore()` provides the in-memory simple-server Inbox
 and Shard handlers for caller-owned router registration. This low-level core
@@ -7,8 +7,8 @@ the same package also exports the standalone `DeliveryServer` described below.
 
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
-import { InboxService, ShardService } from "@spine-ts/proto/delivery-server";
-import { createInMemoryDeliveryServerCore } from "@spine-ts/delivery-server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import { createInMemoryDeliveryServerCore } from "@spine-event-engine/delivery-server";
 
 const core = createInMemoryDeliveryServerCore({
   processingTimeoutMs: 30_000,
@@ -47,7 +47,7 @@ worker-agnostic, so deploy this unauthenticated core only on a trusted network.
 gRPC health services. Its default bind is local-only (`127.0.0.1:8484`):
 
 ```ts
-import { DeliveryServer } from "@spine-ts/delivery-server";
+import { DeliveryServer } from "@spine-event-engine/delivery-server";
 
 const server = new DeliveryServer({ port: 0 });
 await server.start();

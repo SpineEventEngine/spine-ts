@@ -1,4 +1,4 @@
-import type { Command, Event } from "@spine-ts/proto";
+import type { Command, Event } from "@spine-event-engine/proto";
 
 /** Transport-owned signal kinds for local routing contracts. */
 export type TransportSignalKind = "command" | "event" | "query" | "subscription" | "system";

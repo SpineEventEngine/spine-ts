@@ -1,10 +1,10 @@
 import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
 import type {
   SignalTransport,
   TransportSubscription,
   TransportSubscriptionHandle,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 import {
   acceptSignalIntake,
   failSignalIntake,

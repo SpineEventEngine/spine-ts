@@ -1,9 +1,9 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ValidationErrorSchema } from "@spine-ts/proto";
+import { ValidationErrorSchema } from "@spine-event-engine/proto";
 
-describe("@spine-ts/core validation facade upstream boundary", () => {
+describe("@spine-event-engine/core validation facade upstream boundary", () => {
   afterEach(() => {
     vi.doUnmock("@spine-event-engine/validation-ts");
     vi.resetModules();

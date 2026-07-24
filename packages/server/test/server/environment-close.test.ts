@@ -1,5 +1,5 @@
-import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
-import type { SignalTransport } from "@spine-ts/transport";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
+import type { SignalTransport } from "@spine-event-engine/transport";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";

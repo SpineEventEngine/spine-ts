@@ -12,8 +12,8 @@ import type {
   InboxMessageInput,
   InboxReadOptions,
   InboxWriteResult,
-} from "@spine-ts/server";
-import { ShardIndex } from "@spine-ts/server";
+} from "@spine-event-engine/server";
+import { ShardIndex } from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../client/client.js";
 import {

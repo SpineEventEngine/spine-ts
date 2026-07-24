@@ -1,5 +1,5 @@
 import type { ServiceImpl } from "@connectrpc/connect";
-import { InboxService, ShardService } from "@spine-ts/proto/delivery-server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 
 import { createInboxService } from "./inbox-service.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
