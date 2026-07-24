@@ -1164,8 +1164,8 @@ export async function verifyEntitySchema(connection: PoolConnection): Promise<vo
     const row = actual.get(column);
     if (
       row?.column_type !== expected.mysqlType ||
-      row?.is_nullable !== entityExpectedNullability() ||
-      row?.extra.toLowerCase() !== (expected.autoIncrement === true ? "auto_increment" : "")
+      row.is_nullable !== entityExpectedNullability() ||
+      row.extra.toLowerCase() !== (expected.autoIncrement === true ? "auto_increment" : "")
     )
       throw new MysqlStorageSchemaError(`MySQL entity schema is incompatible at ${column}.`);
   }
