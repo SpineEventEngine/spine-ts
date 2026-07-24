@@ -8,15 +8,29 @@ import { canonicalStorageScope } from "../storage/canonical-scope.js";
 import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
+import { MemoryEntityStorageFactory, type EntityStorageInput } from "./in-memory-entity-history.js";
 
 /** In-memory factory for record storages and framework delegates such as the event store. */
 export class InMemoryStorageFactory extends StorageFactory {
   readonly #backend: InMemoryStorageBackend;
+  readonly #entities: MemoryEntityStorageFactory;
 
   /** Create a factory with a fresh backend, or deliberately share `backend`. */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     super();
     this.#backend = backend;
+    this.#entities = new MemoryEntityStorageFactory(backend);
+  }
+
+  /**
+   * Open the internal latest-state/history seam used by framework repositories.
+   *
+   * This is deliberately not exported from the root storage API. Provider
+   * adapters expose the same structural method for the server runtime.
+   */
+  createEntityStorage(input: unknown): unknown {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    return this.#entities.create(input as EntityStorageInput<unknown, Message>);
   }
 
   protected onCreateRecordStorage<I, R extends Message>(

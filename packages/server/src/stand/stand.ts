@@ -14,6 +14,10 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
+import type {
+  EntityRecordStorage,
+  EntityStorageInput,
+} from "@spine-event-engine/storage/internal/entity-history";
 
 /** Options for constructing a direct read-side Stand. */
 export interface StandOptions {
@@ -35,8 +39,10 @@ export interface StandRegisterOptions {
 export interface StandUpdateOptions {
   /** Tenant slice for multitenant stands. */
   readonly tenantId?: string;
-  /** Version associated with the updated state in this Stand instance's in-memory map. */
+  /** Version persisted with the updated state. */
   readonly version?: Version;
+  /** Durable entity lifecycle. Internal repository callers supply this from the entity transaction. */
+  readonly lifecycle?: { readonly archived: boolean; readonly deleted: boolean };
 }
 
 /** Tenant metadata accepted when reading one entity state. */
@@ -49,7 +55,7 @@ export interface StandReadOptions {
 export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
   /** Latest entity state. */
   readonly state: MessageShape<Schema>;
-  /** Version from this Stand instance's in-memory, process-local metadata map when supplied. */
+  /** Durable version supplied with the latest update. */
   readonly version?: Version;
 }
 
@@ -120,15 +126,17 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
 /**
  * Direct read-side access point for storage-backed entity states and updates.
  *
- * Entity states are stored through the configured `StorageFactory`. Version
- * metadata is held in this `Stand` instance's in-memory, process-local map and
- * is not persisted by the current slice.
+ * Entity states remain queryable through the configured record store while the
+ * shared entity-record seam durably owns their version and lifecycle metadata.
  */
 export class Stand {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
   readonly #registrations = new Map<string, Registration>();
-  readonly #versions = new Map<string, Version>();
+  readonly #entityHandles = new Map<
+    string,
+    { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
+  >();
   readonly #inFlight = new Set<Promise<void>>();
   #closing = false;
   #closed = false;
@@ -195,11 +203,11 @@ export class Stand {
       const storage = this.#openStorage(registration, tenantId);
 
       try {
-        const stored = await storage.read(id);
-        if (stored === undefined) {
+        const stored = await this.#openCurrent(registration, tenantId).read(id);
+        if (stored === undefined || stored.deleted) {
           return undefined;
         }
-        return this.#readResult(registration, stored as MessageShape<Schema>, tenantId);
+        return this.#currentResult(registration, stored);
       } finally {
         storage.close();
       }
@@ -231,9 +239,10 @@ export class Stand {
 
       try {
         const stored = await storage.queryEntries(query);
-        return stored.map((entry) =>
-          this.#readResult(registration, entry.record as MessageShape<Schema>, tenantId, entry.id),
+        const results = await Promise.all(
+          stored.map((entry) => this.#readResult(registration, tenantId, entry.id, query.mask)),
         );
+        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.close();
       }
@@ -255,11 +264,14 @@ export class Stand {
       const storage = this.#openStorage(registration, tenantId);
       try {
         const stored = usesSystemPlan(plan)
-          ? await this.#querySystemPlan(registration, storage, plan, tenantId)
+          ? await this.#querySystemPlan(registration, storage, tenantId, plan)
           : await storage.queryPlanEntries(plan);
-        return stored.map((entry) =>
-          this.#readResult(registration, entry.record as MessageShape<Schema>, tenantId, entry.id),
+        const results = await Promise.all(
+          stored.map((entry) =>
+            this.#readResult(registration, tenantId, entry.id, plan.mask?.paths),
+          ),
         );
+        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.close();
       }
@@ -271,8 +283,8 @@ export class Stand {
   async #querySystemPlan(
     registration: Registration,
     storage: RecordStorage<unknown, Message>,
-    plan: NormalizedQueryPlan<unknown>,
     tenantId: string | undefined,
+    plan: NormalizedQueryPlan<unknown>,
   ): Promise<readonly { readonly id: unknown; readonly record: Message }[]> {
     StorageQueryPolicy.validate(plan, {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
@@ -284,17 +296,23 @@ export class Stand {
     if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
       throw new QueryCandidateLimitError(plan.candidateLimit);
     }
-    const entries = candidates.map((entry) => {
-      const materialized = registration.recordSpec.materialize(entry.record);
-      const version = this.#versions.get(versionKey(registration.typeUrl, tenantId, entry.id));
-      return {
+    const currentEntries = await Promise.all(
+      candidates.map(async (entry) => ({
         id: entry.id,
+        current: await this.#openCurrent(registration, tenantId).read(entry.id),
+      })),
+    );
+    const entries = currentEntries.flatMap(({ id, current }) => {
+      if (current === undefined || current.deleted) return [];
+      const materialized = registration.recordSpec.materialize(current.state);
+      return {
+        id,
         record: materialized.record,
         columns: new Map([
           ...materialized.columns,
-          ["version", version ?? create(VersionSchema)],
-          ["archived", false],
-          ["deleted", false],
+          ["version", create(VersionSchema, { number: Number(current.version) })],
+          ["archived", current.archived],
+          ["deleted", current.deleted],
         ]),
       };
     });
@@ -305,7 +323,7 @@ export class Stand {
   }
 
   /**
-   * Clear all stored states and process-local version metadata for one known state schema.
+   * Clear all stored states and durable version metadata for one known state schema.
    *
    * `BoundedContext.catchUpReadSide()` uses this to reset one projection state
    * type before replay for the selected tenant slice.
@@ -320,10 +338,21 @@ export class Stand {
 
       try {
         const ids = await storage.index();
+        const current = this.#openCurrent(registration, tenantId);
         for (const id of ids) {
+          const state = await storage.read(id);
+          if (state !== undefined) {
+            const stored = await current.read(id);
+            await current.write({
+              id,
+              state,
+              version: stored?.version ?? 0n,
+              archived: stored?.archived ?? false,
+              deleted: true,
+            });
+          }
           await storage.delete(id);
         }
-        this.#clearVersions(registration.typeUrl, tenantId);
         return ids.length;
       } finally {
         storage.close();
@@ -351,18 +380,23 @@ export class Stand {
       const previousStateObservable = this.#hasTenantSubscribers(registration, tenantId);
 
       try {
+        const current = this.#openCurrent(registration, tenantId);
         if (previousStateObservable) {
           previousState = (await storage.read(id)) as MessageShape<Schema> | undefined;
         }
+        // The query index is deliberately a temporary first write. A later
+        // current-record failure leaves only a non-authoritative index row;
+        // all reads resolve through current and therefore filter it out.
         await storage.write(stateCopy);
+        await current.write({
+          id,
+          state: stateCopy,
+          version: BigInt(options.version?.number ?? 0),
+          archived: options.lifecycle?.archived ?? false,
+          deleted: options.lifecycle?.deleted ?? false,
+        });
       } finally {
         storage.close();
-      }
-      const key = versionKey(registration.typeUrl, tenantId, id);
-      if (options.version === undefined) {
-        this.#versions.delete(key);
-      } else {
-        this.#versions.set(key, clone(VersionSchema, options.version));
       }
       this.#notify(registration, {
         id,
@@ -417,10 +451,13 @@ export class Stand {
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
-    this.#versions.clear();
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
+    for (const handle of this.#entityHandles.values()) {
+      handle.close();
+    }
+    this.#entityHandles.clear();
     this.#closed = true;
   }
 
@@ -448,17 +485,66 @@ export class Stand {
     );
   }
 
-  #readResult<Schema extends MessageSchema>(
+  #openCurrent(
+    registration: Registration,
+    tenantId: string | undefined,
+  ): EntityRecordStorage<unknown, Message> {
+    const key = `${registration.typeUrl}\u0000${tenantId ?? ""}`;
+    const existing = this.#entityHandles.get(key);
+    if (existing !== undefined) return existing.current;
+    const handle = openEntityStorage(this.#storageFactory, {
+      context: this.#storageContext(tenantId),
+      id: {
+        clone: (id) => structuredClone(id),
+        fingerprint: `${registration.schema.typeName}:stand-id:v1`,
+        key: idKey,
+      },
+      layout: "spine-ts.stand.entity-record.v1",
+      stateSchema: registration.schema,
+      storageKey: `${registration.schema.typeName}:stand`,
+    });
+    this.#entityHandles.set(key, handle);
+    return handle.current;
+  }
+
+  async #readResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
-    state: MessageShape<Schema>,
     tenantId: string | undefined,
     idOverride?: unknown,
-  ): StandReadResult<Schema> {
-    const id = idOverride ?? registration.recordSpec.idValueIn(state);
-    const version = this.#versions.get(versionKey(registration.typeUrl, tenantId, id));
+    maskPaths?: readonly string[],
+  ): Promise<StandReadResult<Schema> | undefined> {
+    const id = idOverride;
+    if (id === undefined) return undefined;
+    const current = await this.#openCurrent(registration, tenantId).read(id);
+    if (current === undefined || current.deleted) return undefined;
+    const version =
+      current.version === 0n
+        ? undefined
+        : create(VersionSchema, { number: Number(current.version) });
 
     return Object.freeze({
-      state: clone(registration.schema, state),
+      state: Object.assign(
+        create(registration.schema),
+        RecordMask.apply(
+          clone(registration.schema, current.state as MessageShape<Schema>),
+          maskPaths,
+        ),
+      ),
+      ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
+    });
+  }
+
+  #currentResult<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    current: { readonly state: Message; readonly version: bigint; readonly deleted: boolean },
+  ): StandReadResult<Schema> | undefined {
+    if (current.deleted) return undefined;
+    const version =
+      current.version === 0n
+        ? undefined
+        : create(VersionSchema, { number: Number(current.version) });
+    return Object.freeze({
+      state: clone(registration.schema, current.state as MessageShape<Schema>),
       ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
     });
   }
@@ -529,16 +615,6 @@ export class Stand {
     }
 
     return tenantId;
-  }
-
-  #clearVersions(typeUrl: string, tenantId: string | undefined): void {
-    const prefix = `${typeUrl}\n${tenantId ?? ""}\n`;
-
-    for (const key of this.#versions.keys()) {
-      if (key.startsWith(prefix)) {
-        this.#versions.delete(key);
-      }
-    }
   }
 
   #storageContext(tenantId: string | undefined): StorageContext {
@@ -651,10 +727,6 @@ function isSystemColumn(column: string): boolean {
   return column === "version" || column === "archived" || column === "deleted";
 }
 
-function versionKey(typeUrl: string, tenantId: string | undefined, id: unknown): string {
-  return `${typeUrl}\n${tenantId ?? ""}\n${idKey(id)}`;
-}
-
 function idKey(id: unknown): string {
   if (
     typeof id === "string" ||
@@ -666,6 +738,26 @@ function idKey(id: unknown): string {
   }
 
   return `json:${JSON.stringify(id)}`;
+}
+
+interface EntityStorageFactory {
+  createEntityStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): {
+    readonly current: EntityRecordStorage<I, S>;
+    close(): void;
+  };
+}
+
+function openEntityStorage<I, S extends Message>(
+  factory: StorageFactory,
+  input: EntityStorageInput<I, S>,
+): { readonly current: EntityRecordStorage<I, S>; close(): void } {
+  const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
+  if (candidate.createEntityStorage === undefined) {
+    throw new Error("StorageFactory does not provide the required entity-record storage seam.");
+  }
+  return candidate.createEntityStorage(input);
 }
 
 function cloneStorageContext(context: StorageContext): StorageContext {

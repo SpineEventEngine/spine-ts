@@ -1,6 +1,6 @@
-import { clone, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type {
   EntityEventHistoryPort,
@@ -418,7 +418,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     id: I,
     depth: number,
     from?: bigint,
-  ): Promise<readonly S[]> {
+  ): Promise<readonly EntityStateHistoryRecord<I, S>[]> {
     depthCheck(depth);
     await this.ready(scope);
     let c: PoolConnection | undefined;
@@ -426,12 +426,23 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     try {
       c = await this.connections.acquire();
       const [r] = await c.execute<StateRow[]>(
-        `SELECT payload FROM spine_ts_entity_states
+        `SELECT version,seconds,nanos,payload FROM spine_ts_entity_states
          WHERE scope_key=? AND entity_key=? ${from === undefined ? "" : "AND version < ?"}
          ORDER BY version DESC, seconds DESC, nanos DESC LIMIT ${String(depth)}`,
         from === undefined ? [scope, key(this.input, id)] : [scope, key(this.input, id), from],
       );
-      return Object.freeze(r.map((x) => Object.freeze(decode(this.input.stateSchema, x.payload))));
+      return Object.freeze(
+        r.map((x) =>
+          Object.freeze({
+            entityId: this.input.id.clone(id),
+            state: Object.freeze(decode(this.input.stateSchema, x.payload)),
+            version: BigInt(x.version),
+            createdAt: Object.freeze(
+              create(TimestampSchema, { seconds: BigInt(x.seconds), nanos: x.nanos }),
+            ),
+          }),
+        ),
+      );
     } catch (error) {
       failure =
         error instanceof MysqlStorageDataError || isClosedError(error) ? error : operationError();

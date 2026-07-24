@@ -1,5 +1,5 @@
-import { clone, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type {
@@ -24,6 +24,7 @@ const eventId = "$spine.event.id";
 const stateBackward = "$spineBackward";
 const stateAt = "$spineStateAt";
 const stateReference = "$spineStateRef";
+const stateRevision = "$spineStateRevision";
 const fixedKinds = {
   metadata: "$SpineEntityScope",
   entity: "$SpineEntity",
@@ -317,7 +318,11 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       appendState(this.codec, id, key, orderKey, cutKey, record.version, record.createdAt, data),
     );
   }
-  async backward(entityId: I, depth: number, startingFromVersion?: bigint): Promise<readonly S[]> {
+  async backward(
+    entityId: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityStateHistoryRecord<I, S>[]> {
     requireDepth(depth);
     if (startingFromVersion !== undefined) providerInteger(startingFromVersion);
     const id = this.codec.id(entityId);
@@ -325,7 +330,19 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       const markers = await stateMarkers(this.codec, id, depth, startingFromVersion);
       const rows = await stateRows(this.codec, id, markers);
       return Object.freeze(
-        rows.map((value) => Object.freeze(this.codec.decodeState(value[payload]))),
+        rows.map((value) =>
+          Object.freeze({
+            entityId: this.codec.cloneId(entityId),
+            state: Object.freeze(this.codec.decodeState(value[payload])),
+            version: integer(value[version]),
+            createdAt: Object.freeze(
+              create(TimestampSchema, {
+                seconds: integer(value[createdSeconds]),
+                nanos: Number(integer(value[createdNanos])),
+              }),
+            ),
+          }),
+        ),
       );
     });
   }
@@ -444,6 +461,7 @@ async function appendState<I, S extends Message>(
           [stateBackward]: stateOrderToken(itemVersion, time, true),
           [stateAt]: stateOrderToken(itemVersion, time, false),
           [stateReference]: signedAscending(itemVersion),
+          [stateRevision]: providerInteger(integer(next.revision)),
         },
       });
       transaction.insert({
@@ -647,17 +665,27 @@ async function trimStates<I, S extends Message>(
   id: string,
   keep: number,
 ): Promise<void> {
-  for (;;) {
-    const changed = await retainStateChunk(codec, id, keep);
-    if (!changed) return;
+  const plan = await stateTrimPlan(codec, id, keep);
+  if (plan === undefined) return;
+  codec.requireOpen();
+  while (plan.remaining > 0n) {
+    const chunk = await retainStateChunk(codec, id, plan);
+    plan.remaining -= BigInt(chunk.removed);
+    plan.after = chunk.after;
+    if (chunk.scanned === 0) return;
     codec.requireOpen();
   }
 }
-async function retainStateChunk<I, S extends Message>(
+interface StateTrimPlan {
+  readonly revision: bigint;
+  remaining: bigint;
+  after: ReturnType<Datastore["key"]> | undefined;
+}
+async function stateTrimPlan<I, S extends Message>(
   codec: EntityCodec<I, S>,
   id: string,
   keep: number,
-): Promise<boolean> {
+): Promise<StateTrimPlan | undefined> {
   const rootKey = codec.entityKey(id);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const transaction = codec.client.transaction();
@@ -666,18 +694,63 @@ async function retainStateChunk<I, S extends Message>(
       const root = first(await transaction.get(rootKey));
       if (root === undefined || integer(root.stateCount) <= BigInt(keep)) {
         await transaction.rollback();
-        return false;
+        return undefined;
       }
-      const limit = Math.min(8, Number(integer(root.stateCount) - BigInt(keep)));
+      const marker = entities(
+        await transaction.runQuery(
+          codec
+            .markerQuery("stateOrder", id)
+            .order("__key__")
+            .select(["__key__", stateRevision])
+            .limit(1),
+        ),
+      )[0];
+      if (marker === undefined)
+        throw new Error("Datastore entity root has state retention without an order marker.");
+      stateMarkerRevision(marker);
+      const remaining = integer(root.stateCount) - BigInt(keep);
+      await transaction.rollback();
+      return { revision: integer(root.revision), remaining, after: undefined };
+    } catch (error) {
+      await transaction.rollback().catch(() => undefined);
+      if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+      throw error;
+    }
+  }
+  throw new Error("Datastore state trim planning retry limit was reached.");
+}
+async function retainStateChunk<I, S extends Message>(
+  codec: EntityCodec<I, S>,
+  id: string,
+  plan: StateTrimPlan,
+): Promise<{
+  readonly removed: number;
+  readonly scanned: number;
+  readonly after: ReturnType<Datastore["key"]> | undefined;
+}> {
+  const rootKey = codec.entityKey(id);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const transaction = codec.client.transaction();
+    try {
+      await transaction.run();
+      const root = first(await transaction.get(rootKey));
+      if (root === undefined) {
+        await transaction.rollback();
+        return { removed: 0, scanned: 0, after: plan.after };
+      }
+      integer(root.stateCount);
+      const limit = Math.min(8, Number(plan.remaining));
       const query = codec
         .markerQuery("stateOrder", id)
         .order("__key__")
-        .select("__key__")
+        .select(["__key__", stateRevision])
         .limit(limit);
+      if (plan.after !== undefined) query.filter("__key__", ">", plan.after);
       const markers = entities(await transaction.runQuery(query));
       let removed = 0;
       for (const marker of markers) {
         const info = stateMarker(marker, codec.client);
+        if (stateMarkerRevision(marker) > plan.revision) continue;
         const stateKey = codec.stateKey(id, info.version);
         if (first(await transaction.get(stateKey)) !== undefined) {
           transaction.delete(stateKey);
@@ -688,7 +761,12 @@ async function retainStateChunk<I, S extends Message>(
       }
       if (removed > 0) transaction.save({ key: rootKey, data: nextEntityRoot(root, -removed) });
       await transaction.commit();
-      return markers.length > 0;
+      const last = markers.at(-1);
+      return {
+        removed,
+        scanned: markers.length,
+        after: last === undefined ? plan.after : keyOf(last, codec.client),
+      };
     } catch (error) {
       await transaction.rollback().catch(() => undefined);
       if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
@@ -795,6 +873,11 @@ function stateMarker(
       nanos: Number.parseInt(nanosToken, 16),
     } as Timestamp,
   };
+}
+function stateMarkerRevision(value: Record<string, unknown>): bigint {
+  if (value[stateRevision] === undefined)
+    throw new Error("Datastore state marker has no causal revision.");
+  return integer(value[stateRevision]);
 }
 function cutMarker(
   value: Record<string, unknown>,

@@ -210,7 +210,6 @@ describe("@spine-event-engine/server", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "Aggregate",
-        "AggregateStorage",
         "Apply",
         "Assign",
         "BoundedContext",

@@ -90,10 +90,9 @@ latest persisted state load, traceability event-journal append, latest-state
 write, or stored-event dispatch. Transition validation failures from the
 framework-owned aggregate command transaction continue to surface as
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details. Legacy/internal aggregate-history validation failures remain internal
-and are sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry
-aggregate loading uses the latest persisted state rather than replaying stored
-events. Dispatcher-thrown `ValidationException` values and other unexpected
+details. Legacy/internal validation failures remain internal and are sanitized
+as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading uses the
+latest persisted state. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
@@ -202,8 +201,10 @@ changes, not repository storage policy.
 classes over `TransactionalEntity` with the same `<Id, Schema, Version>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
 They do not add public transaction mutators, repositories, dispatch, aggregate
-event history, snapshots, subscriptions, command posting, query clients,
-storage, buses, or lifecycle events.
+event-history access, snapshots, subscriptions, command posting, query clients,
+storage, buses, or lifecycle events. Aggregates and Process Managers do add the
+protected, repository-bound event-history methods documented below;
+Projections intentionally do not.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
@@ -229,9 +230,10 @@ calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can
 load or create one aggregate, invoke one assignee in a framework-owned
-transaction, pack and store returned domain events, persist the latest managed
-state through `AggregateStorage`, and then queue already-stored events for
-event-bus delivery without appending them again. Process-manager repositories
+transaction, persist the latest managed state, append the optional state history
+and diagnostic event journal, then store returned domain events in the framework
+event store before queueing them for event-bus delivery without appending them
+again. Process-manager repositories
 also participate in those adapters: command assignees are invoked from the
 command bus through a durable process-manager inbox handoff. The current local
 runtime drains that inbox immediately, requires tenant-safe replay in
@@ -262,9 +264,8 @@ and entity ID, can return caller-supplied version metadata through
 `queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
 `clear(schema, options?)`, and delivers direct in-process update notifications.
-Version metadata is process-local and in-memory only in the current `Stand`;
-the latest state record is storage-backed, but the state-to-version metadata
-map is not persisted.
+`Stand` reads durable version and lifecycle metadata from the authoritative
+current entity record alongside the latest state.
 Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
 require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
@@ -380,17 +381,13 @@ Construction validates tenant, zone, `timeoutMs`, and `intervalMs` before a
 context builder is built or server/client resources are acquired. Timing
 values and per-`eventually()` overrides must be positive integers; invalid
 overrides fail before the first read.
-`AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
-`AggregateHistory`, `AggregateId`, `PrimitiveId`, and `MessageId` form the
-low-level aggregate persistence seam. It writes latest persisted state through
-`StorageFactory`/`RecordStorage`, appends events through the storage event store
-as a traceability journal, and retains history reads for legacy/internal
-compatibility. Ordinary generated-registry repository loading uses the latest
-persisted state and does not rely on snapshot-plus-replay loading. It validates
-finite primitive or single-field Protobuf message aggregate IDs, route
-consistency, and aggregate version order before storage. It does not implement
-handler invocation, delivery, catch-up, read-side indexing, subscriptions,
-system events, or aggregate repository caching.
+Repository execution uses shared entity current-record storage. Aggregates
+restore the latest persisted state directly and append emitted events to a
+separate diagnostic journal; neither is an event-reconstruction or snapshot
+facility. `EventStore` remains the independent delivery journal. The repository
+does not expose low-level persistence handles, handler invocation, delivery,
+catch-up, read-side indexing, subscriptions, system events, or aggregate
+repository caching.
 Durable-delivery exports include the builder-owned `Delivery` interface,
 `DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`, `DeliveryPage`,
 `DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`,

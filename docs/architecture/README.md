@@ -283,9 +283,9 @@ step. When authentic explicit handler metadata is supplied, repositories now
 calculate command/event routes and bounded-context assembly registers internal
 dispatcher adapters for those routes. Aggregate repositories can then load or
 create one aggregate, invoke one assignee in a framework-owned transaction,
-pack and store returned domain events, persist the latest managed state through
-`AggregateStorage`, and queue already-stored events for event-bus delivery
-without a second append. The TypeScript seam still omits public `create`,
+persist the latest current state, optional state history and diagnostic event
+journal, store returned domain events, and queue already-stored events for
+event-bus delivery without a second append. The TypeScript seam still omits public `create`,
 `find`, `store`, record conversion APIs,
 entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
 lifecycle, and transport.
@@ -363,9 +363,8 @@ known generated state schemas, latest-state `RecordStorage`, direct
 read/update methods, versioned point reads, storage-backed queries through
 `Stand.queryVersioned()`, storage-order list reads through
 `Stand.readAllVersioned()`, and deterministic in-process subscription handles
-with explicit `unsubscribe()`. Its version metadata map is process-local and
-in-memory only; latest state records go through storage, but state-to-version
-metadata is not persisted by this slice. It preserves read-side/write-side segregation by
+with explicit `unsubscribe()`. Its authoritative durable current records persist
+latest state, version metadata, and lifecycle flags. It preserves read-side/write-side segregation by
 remaining the query/subscription facade over read-side state. Built bounded
 contexts may update it internally when repository event dispatch invokes
 projection subscribers, but application code still does not receive a
@@ -483,9 +482,8 @@ framework-owned `EntityTransaction.commit()` for transition validation. When
 that transaction is rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
 details before traceability events or latest state are stored. Legacy/internal
-aggregate-history replay or validation failures remain internal and are
-sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading
-uses the latest persisted state instead of replaying stored events.
+validation failures remain internal and are sanitized as `COMMAND_POST_ERROR`;
+ordinary generated-registry aggregate loading uses the latest persisted state.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces remain outside the verified local/example slice:
@@ -634,11 +632,10 @@ return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which
 preserves byte arrays used by packed Protobuf `Any` payloads.
 
-Aggregate latest-state and traceability event-journal storage is available
-through the current `AggregateStorage` seam. Its history-read API remains
-legacy/internal compatibility support; ordinary generated-registry aggregate
-loading uses the latest persisted state rather than snapshot-plus-replay
-loading. The framework now persists durable inbox rows through `RecordStorage`,
+Aggregate latest-state, optional state history, and traceability event-journal
+storage use the shared entity-storage provider seam. Aggregate loading uses the
+latest persisted state; it never reconstructs state by snapshot-plus-replay.
+The framework now persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
 with durable shard leases, and uses bounded internal replay for local
 framework-owned shard draining. A replay run picks up, renews, and releases its

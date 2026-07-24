@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MemoryEntityEventHistory,
+  MemoryEntityRecordStorage,
   InMemoryEntityHistory,
   MemoryEntityStorageFactory,
 } from "../../src/memory/in-memory-entity-history.js";
@@ -13,6 +14,40 @@ import { InMemoryStorageBackend } from "../../src/index.js";
 import { assertEntityHistoryConformance } from "../../src/internal/entity-history.js";
 
 describe("InMemoryEntityHistory", () => {
+  it("rejects blank entity layout and ID fingerprints", () => {
+    const factory = new MemoryEntityStorageFactory();
+    expect(() => factory.create({ ...entityStorageInput(), layout: " " })).toThrow(/non-blank/);
+    expect(() =>
+      factory.create({
+        ...entityStorageInput(),
+        id: {
+          clone: (id: string) => id,
+          fingerprint: " ",
+          key: (id: string) => id,
+        },
+      }),
+    ).toThrow(/non-blank/);
+  });
+
+  it("uses isolated default current-record storage and ID cloning", async () => {
+    const storage = new MemoryEntityRecordStorage({
+      stateSchema: StringValueSchema,
+      idKey: (id: string) => id,
+    });
+    await expect(storage.read("missing")).resolves.toBeUndefined();
+    await storage.write({
+      id: "task",
+      state: createString("current"),
+      version: 1n,
+      archived: false,
+      deleted: false,
+    });
+    await expect(storage.read("task")).resolves.toMatchObject({
+      id: "task",
+      state: { value: "current" },
+    });
+  });
+
   it("passes the shared adapter conformance fixture", async () => {
     const factory = new MemoryEntityStorageFactory();
     await assertEntityHistoryConformance({
@@ -238,12 +273,36 @@ describe("InMemoryEntityHistory", () => {
     });
 
     await expect(history.backward("task-1", 2)).resolves.toMatchObject([
-      { value: "second" },
-      { value: "first" },
+      { state: { value: "second" } },
+      { state: { value: "first" } },
     ]);
     await expect(history.stateAt("task-1", timestamp(1))).resolves.toMatchObject({
       value: "first",
     });
+  });
+
+  it("returns independently cloned versioned state-history records", async () => {
+    const history = new InMemoryEntityHistory({
+      stateSchema: StringValueSchema,
+      idKey: (id: { value: string }) => id.value,
+    });
+    const entityId = { value: "task" };
+    await history.append({
+      entityId,
+      state: create(StringValueSchema, { value: "first" }),
+      version: 5n,
+      createdAt: timestamp(7),
+    });
+
+    const [record] = await history.backward(entityId, 1);
+    expect(record).toMatchObject({
+      entityId: { value: "task" },
+      state: { value: "first" },
+      version: 5n,
+      createdAt: { seconds: 7n, nanos: 0 },
+    });
+    expect(record?.entityId).not.toBe(entityId);
+    expect(record?.createdAt).not.toBe((await history.backward(entityId, 1))[0]?.createdAt);
   });
 
   it("makes identical retries no-ops and excludes the continuation version", async () => {
@@ -265,7 +324,9 @@ describe("InMemoryEntityHistory", () => {
       state: create(StringValueSchema, { value: "two" }),
       createdAt: timestamp(2),
     });
-    await expect(history.backward("task", 2, 2n)).resolves.toMatchObject([{ value: "one" }]);
+    await expect(history.backward("task", 2, 2n)).resolves.toMatchObject([
+      { state: { value: "one" } },
+    ]);
     await expect(
       history.append({ ...first, state: create(StringValueSchema, { value: "changed" }) }),
     ).rejects.toThrow(/divergent/);
@@ -282,8 +343,8 @@ describe("InMemoryEntityHistory", () => {
 
     await expect(history.stateAt("task", timestamp(5))).resolves.toMatchObject({ value: "2" });
     await expect(history.backward("task", 10, 3n)).resolves.toMatchObject([
-      { value: "2" },
-      { value: "1" },
+      { state: { value: "2" } },
+      { state: { value: "1" } },
     ]);
   });
 
@@ -384,9 +445,9 @@ describe("InMemoryEntityHistory", () => {
     }
 
     await expect(states.backward("task", 3)).resolves.toMatchObject([
-      { value: "250" },
-      { value: "249" },
-      { value: "248" },
+      { state: { value: "250" } },
+      { state: { value: "249" } },
+      { state: { value: "248" } },
     ]);
     await expect(states.backward("task", 500)).resolves.toHaveLength(250);
     await expect(events.backward("task", 3)).resolves.toMatchObject([
@@ -495,7 +556,21 @@ describe("InMemoryEntityHistory", () => {
       records,
     });
     await resumed.trim("task", 1);
-    await expect(resumed.backward("task", 3)).resolves.toMatchObject([{ value: "3" }]);
+    await expect(resumed.backward("task", 3)).resolves.toMatchObject([{ state: { value: "3" } }]);
+  });
+
+  it("trims only the selected entity when another entity is present", async () => {
+    const history = new InMemoryEntityHistory({
+      stateSchema: StringValueSchema,
+      idKey: (id: string) => id,
+    });
+    await history.append(stateRecord(1));
+    await history.append({ ...stateRecord(2), entityId: "other" });
+
+    await history.trim("task", 0);
+
+    await expect(history.backward("task", 1)).resolves.toEqual([]);
+    await expect(history.backward("other", 1)).resolves.toMatchObject([{ state: { value: "2" } }]);
   });
 
   it("resumes event truncation after a completed deletion chunk fails", async () => {
@@ -600,8 +675,8 @@ describe("InMemoryEntityHistory", () => {
     await trim;
     await append;
     await expect(history.backward("task", 2)).resolves.toMatchObject([
-      { value: "3" },
-      { value: "2" },
+      { state: { value: "3" } },
+      { state: { value: "2" } },
     ]);
   });
 
@@ -625,7 +700,7 @@ describe("InMemoryEntityHistory", () => {
     await history.append(stateRecord(2));
     selection.resolve(undefined);
     await truncate;
-    await expect(history.backward("task", 2)).resolves.toMatchObject([{ value: "2" }]);
+    await expect(history.backward("task", 2)).resolves.toMatchObject([{ state: { value: "2" } }]);
 
     await history.truncate(timestamp(2));
     await expect(history.backward("task", 2)).resolves.toEqual([]);
@@ -725,11 +800,11 @@ describe("InMemoryEntityHistory", () => {
     await history.trim("task", 5);
 
     await expect(history.backward("task", 10)).resolves.toMatchObject([
-      { value: "17" },
-      { value: "16" },
-      { value: "15" },
-      { value: "14" },
-      { value: "13" },
+      { state: { value: "17" } },
+      { state: { value: "16" } },
+      { state: { value: "15" } },
+      { state: { value: "14" } },
+      { state: { value: "13" } },
     ]);
     expect(chunks).toBe(4);
   });

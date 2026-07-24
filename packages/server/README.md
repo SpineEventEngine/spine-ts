@@ -56,7 +56,7 @@ Current slice exposes:
   only through core `isRejectionThrowable()`. It handles them after aggregate
   or process-manager rollback, schedules one rejection event for independent
   EventBus posting, and completes process-manager inbox delivery. The rejected
-  draft, produced output, aggregate history, snapshot, state, lifecycle, and
+  draft, produced output, aggregate state history, current state, lifecycle, and
   entity version are not persisted. Rejection-event post failures are retained
   in `storedEventDispatchFailures()` without changing command completion.
   Build-time analysis treats descriptor-verified top-level messages from
@@ -123,13 +123,12 @@ Current slice exposes:
   custom `addCommandDispatcher()` registration; transition-validation
   rejections from the framework-owned aggregate command transaction surface as
   `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-  details, while legacy/internal aggregate-history validation failures remain
-  internal and sanitized as `COMMAND_POST_ERROR`;
+  details; other internal execution failures remain sanitized as
+  `COMMAND_POST_ERROR`;
   and
-- `AggregateStorage` for the current finite primitive or single-field
-  Protobuf message `AggregateId` latest-state and traceability event-journal
-  seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
-  `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
+- shared entity current-record storage for every entity kind, with an Aggregate
+  diagnostic event journal separate from normal `EventStore` delivery; the
+  repository owns canonical entity-ID handling;
   and
 - `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the current durable delivery
@@ -865,9 +864,8 @@ execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced
 traceability events or latest state; the validation details remain the
 framework transaction / `validateEntityStateTransition()` result.
-Legacy/internal aggregate-history replay failures remain internal and are
-sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate
-loading uses the latest persisted state instead of replaying stored events.
+Ordinary generated-registry aggregate loading uses the latest persisted state
+instead of replaying stored events.
 Dispatcher-thrown `ValidationException` values and other unexpected command-bus
 failures remain sanitized as `COMMAND_POST_ERROR`.
 Aggregate command completion resolves after traceability event-journal append
@@ -939,13 +937,11 @@ tenant stands reject tenant options. `queryVersioned()` accepts the storage
 offsets applied after sorting and before limits, stable continuations after
 sorted row keys, and positive limits;
 `readAllVersioned()` is the no-filter convenience path. Both return
-`StandReadResult` entries in deterministic storage query order and reuse the
-same caller-supplied version metadata as point reads. Stand version metadata is
-process-local and in-memory only; the current slice persists latest state
-records through storage, but not the side-map that associates those states with
-versions. Direct subscriptions are deterministic in-process callbacks and must
-be cleaned up explicitly. `clear(schema, options?)` deletes the stored rows and
-process-local version metadata for one registered state schema and is the
+`StandReadResult` entries in deterministic storage query order from one durable
+current record, including its state, version, and lifecycle. Direct
+subscriptions are deterministic in-process callbacks and must be cleaned up
+explicitly. `clear(schema, options?)` tombstones the durable current records
+and removes query-index rows for one registered state schema; it is the
 framework-owned reset step used by `catchUpReadSide()`.
 
 `catchUpReadSide(options?)` is intentionally narrow: it replays only
@@ -1242,8 +1238,10 @@ class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
 The family marker classes inherit identity, metadata, cloned snapshots,
 lifecycle accessors, `changed`, and protected transaction helpers from
 `TransactionalEntity`. They do not add public transaction mutators, command
-posting, event history, snapshots, subscriptions, query clients, process
-workflow execution, handler invocation, storage, buses, or lifecycle events.
+posting, event-history access, snapshots, subscriptions, query clients,
+process workflow execution, handler invocation, storage, buses, or lifecycle
+events. Aggregates and Process Managers expose protected, repository-bound
+event-history methods; Projections intentionally do not.
 
 ## Repository Identity
 

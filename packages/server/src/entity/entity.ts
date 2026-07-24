@@ -1,5 +1,11 @@
-import { clone, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
-import { type ConstraintViolation, ValidationErrorSchema } from "@spine-event-engine/proto";
+import { clone, fromBinary, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  type ConstraintViolation,
+  type Event,
+  ValidationErrorSchema,
+} from "@spine-event-engine/proto";
+import type { EntityEventStorage, EntityStateHistoryStorage } from "@spine-event-engine/storage";
 
 import {
   describeEntityMetadata,
@@ -276,6 +282,89 @@ export abstract class Entity<
       this.#lifecycleFlagsChanged = true;
     }
   }
+
+  /**
+   * Reads the newest retained state at or before `time`.
+   *
+   * This diagnostic facility is repository-bound and is not a remote API.
+   */
+  protected stateAt(time: Timestamp): Promise<Readonly<MessageShape<Schema>> | undefined> {
+    return entityHistoryAccess.stateAt(this, time) as Promise<
+      Readonly<MessageShape<Schema>> | undefined
+    >;
+  }
+
+  /** Reads retained states in descending version order. */
+  protected stateHistoryBackward(
+    depth: number,
+  ): Promise<readonly Readonly<MessageShape<Schema>>[]> {
+    return entityHistoryAccess.states(this, depth) as Promise<
+      readonly Readonly<MessageShape<Schema>>[]
+    >;
+  }
+
+  /** Application-managed state-history retention. */
+  protected stateHistoryStorage(): EntityStateHistoryStorage<Id, MessageShape<Schema>> {
+    return entityHistoryAccess.stateMaintenance(this) as EntityStateHistoryStorage<
+      Id,
+      MessageShape<Schema>
+    >;
+  }
+}
+
+interface BoundEntityHistory {
+  readonly stateAt: (time: Timestamp) => Promise<unknown>;
+  readonly states: (depth: number) => Promise<readonly unknown[]>;
+  readonly events: (depth: number) => Promise<readonly Readonly<Event>[]>;
+  readonly stateMaintenance: EntityStateHistoryStorage<unknown, Message>;
+  readonly eventMaintenance: EntityEventStorage<unknown>;
+}
+
+const boundEntityHistories = new WeakMap<object, BoundEntityHistory>();
+
+interface EntityHistoryAccess {
+  bind(entity: object, binding: BoundEntityHistory): void;
+  stateAt(entity: object, time: Timestamp): Promise<unknown>;
+  states(entity: object, depth: number): Promise<readonly unknown[]>;
+  events(entity: object, depth: number): Promise<readonly Readonly<Event>[]>;
+  stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message>;
+  eventMaintenance(entity: object): EntityEventStorage<unknown>;
+}
+
+/** @internal Repository-only history binding. */
+export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
+  bind(entity: object, binding: BoundEntityHistory): void {
+    boundEntityHistories.set(entity, binding);
+  },
+  stateAt(entity: object, time: Timestamp): Promise<unknown> {
+    return requireEntityHistory(entity).stateAt(time);
+  },
+  states(entity: object, depth: number): Promise<readonly unknown[]> {
+    return requireEntityHistory(entity).states(requireHistoryDepth(depth));
+  },
+  events(entity: object, depth: number): Promise<readonly Readonly<Event>[]> {
+    return requireEntityHistory(entity).events(requireHistoryDepth(depth));
+  },
+  stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message> {
+    return requireEntityHistory(entity).stateMaintenance;
+  },
+  eventMaintenance(entity: object): EntityEventStorage<unknown> {
+    return requireEntityHistory(entity).eventMaintenance;
+  },
+});
+
+function requireEntityHistory(entity: object): BoundEntityHistory {
+  const binding = boundEntityHistories.get(entity);
+  if (binding === undefined)
+    throw new Error("Entity history is available only from repository execution.");
+  return binding;
+}
+
+function requireHistoryDepth(depth: number): number {
+  if (!Number.isSafeInteger(depth) || depth <= 0) {
+    throw new RangeError("Entity history depth must be a positive safe integer.");
+  }
+  return depth;
 }
 
 /**
@@ -555,8 +644,9 @@ function isMissingTransaction(error: unknown): boolean {
  * Abstract aggregate family marker over the common transactional entity shell.
  *
  * This class intentionally adds only stable family identity. It does not add
- * command dispatch, event history, snapshots, repositories, idempotency guards,
- * or handler invocation.
+ * command dispatch, snapshots, repositories, idempotency guards, or handler
+ * invocation. Repository-bound diagnostic event-history reads are declared
+ * below for the Aggregate family.
  */
 export abstract class Aggregate<
   Id,
@@ -570,6 +660,24 @@ export abstract class Aggregate<
   constructor(options: EntityOptions<Id, Schema, Version>) {
     super(options);
     defineEntityFamilyMarker(this, "aggregate");
+  }
+
+  /** Reads retained diagnostic events in descending producer-version order. */
+  protected eventHistoryBackward(depth: number): Promise<readonly Readonly<Event>[]> {
+    return entityHistoryAccess.events(this, depth);
+  }
+
+  /** Tests retained diagnostic events in descending producer-version order. */
+  protected async eventHistoryContains(
+    depth: number,
+    predicate: (event: Readonly<Event>) => boolean,
+  ): Promise<boolean> {
+    return (await this.eventHistoryBackward(depth)).some(predicate);
+  }
+
+  /** Application-managed diagnostic event-history retention. */
+  protected eventStorage(): EntityEventStorage<Id> {
+    return entityHistoryAccess.eventMaintenance(this) as EntityEventStorage<Id>;
   }
 }
 
@@ -614,6 +722,24 @@ export abstract class ProcessManager<
   constructor(options: EntityOptions<Id, Schema, Version>) {
     super(options);
     defineEntityFamilyMarker(this, "process-manager");
+  }
+
+  /** Reads retained diagnostic events when this repository enabled Process Manager event history. */
+  protected eventHistoryBackward(depth: number): Promise<readonly Readonly<Event>[]> {
+    return entityHistoryAccess.events(this, depth);
+  }
+
+  /** Tests retained diagnostic events when this repository enabled Process Manager event history. */
+  protected async eventHistoryContains(
+    depth: number,
+    predicate: (event: Readonly<Event>) => boolean,
+  ): Promise<boolean> {
+    return (await this.eventHistoryBackward(depth)).some(predicate);
+  }
+
+  /** Application-managed Process Manager diagnostic event-history retention. */
+  protected eventStorage(): EntityEventStorage<Id> {
+    return entityHistoryAccess.eventMaintenance(this) as EntityEventStorage<Id>;
   }
 }
 

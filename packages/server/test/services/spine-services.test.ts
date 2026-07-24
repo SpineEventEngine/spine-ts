@@ -263,46 +263,33 @@ class TransitionViolatingTaskAggregate extends Aggregate<
   bigint
 > {
   assignTask(command: AggregateState) {
-    return createAggregateEvent("event-transition-invalid", command.id, command.name);
-  }
-
-  applyTask(event: AggregateState): void {
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
+          id: `${command.id}-changed`,
+          name: command.name,
+          archived: command.archived,
         }),
       ),
     );
-    this.commitTransaction();
+    return createAggregateEvent("event-transition-invalid", command.id, command.name);
   }
 }
 
 class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregate {
   override assignTask(command: AggregateState) {
-    return createAggregateEvent("event-transition-rollback", command.id, command.name);
-  }
-
-  override applyTask(event: AggregateState): void {
-    this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
+          id: `${command.id}-changed`,
+          name: command.name,
+          archived: command.archived,
         }),
       ),
     );
-    const result = this.commitTransaction();
-    if (result.status === "rejected") {
-      this.rollbackTransaction();
-    }
+    return createAggregateEvent("event-transition-rollback", command.id, command.name);
   }
 }
 
@@ -6154,10 +6141,7 @@ function createTransitionViolatingRepository(): Repository<
   const handlers = defineEntityHandlers(
     TransitionViolatingTaskAggregate,
     AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
   );
 
   return new Repository({
@@ -6173,10 +6157,7 @@ function createRollingBackTransitionRepository(): Repository<
   const handlers = defineEntityHandlers(
     RollingBackTransitionTaskAggregate,
     AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
   );
 
   return new Repository({
@@ -6492,7 +6473,7 @@ function createEventSubscriptionContext(name: string, storageFactory: StorageFac
     .build();
 }
 
-class SeededSubscriptionStorageFactory extends StorageFactory {
+class SeededSubscriptionStorageFactory extends InMemoryStorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #seededRecords = new Map<string, Any>();
   readonly #subscriptionContextName: string;
@@ -6625,7 +6606,7 @@ class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 }
 
-class FaultingSubscriptionStorageFactory extends StorageFactory {
+class FaultingSubscriptionStorageFactory extends InMemoryStorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #subscriptionContextName: string;
   compareAndSetError: Error | undefined;

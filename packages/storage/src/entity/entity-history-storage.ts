@@ -27,7 +27,11 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
   S
 > {
   append(record: EntityStateHistoryRecord<I, S>): Promise<void>;
-  backward(entityId: I, depth: number, startingFromVersion?: bigint): Promise<readonly S[]>;
+  backward(
+    entityId: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityStateHistoryRecord<I, S>[]>;
   stateAt(entityId: I, time: Timestamp): Promise<S | undefined>;
 }
 

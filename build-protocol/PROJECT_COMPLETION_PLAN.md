@@ -6,7 +6,8 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0070D/T-0070R provider entity/history adapters
+Active implementation frontier: T-0072 generic Entity Query DSL and Wave 2
+closure
 
 ## Purpose
 
@@ -57,9 +58,12 @@ opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
 Wave 1. The human subsequently started Wave 1; T-0053 through T-0067 are
 implemented, reviewed, integrated, post-merge verified, and remotely
 synchronized at their closure boundaries. The Wave 2 Q&A and T-0068 planning
-are complete. The human started autonomous execution on 2026-07-24; T-0069 is
-the active implementation frontier and work follows the accepted plan unless a
-genuine protocol blocker appears.
+are complete. The human started autonomous execution on 2026-07-24; T-0069,
+T-0070, T-0070D, and T-0070R are implemented, reviewed, integrated,
+post-merge verified, and remotely synchronized. T-0071 is implemented,
+reviewed, and ready for integration. T-0072 is the next implementation
+frontier and work follows the accepted plan unless a genuine protocol blocker
+appears.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

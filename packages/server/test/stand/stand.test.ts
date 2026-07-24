@@ -8,8 +8,10 @@ import {
   InMemoryStorageFactory,
   RecordStorage,
   type RecordSpec,
+  type NormalizedQueryPlan,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -266,6 +268,76 @@ describe("Stand", () => {
     ]);
   });
 
+  it("evaluates system predicates and ordering from durable current metadata", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+    await stand.update(ProjectionStateSchema, createState("task-old", "Old"), {
+      version: create(VersionSchema, { number: 1 }),
+      lifecycle: { archived: false, deleted: false },
+    });
+    await stand.update(ProjectionStateSchema, createState("task-archived", "Archived"), {
+      version: create(VersionSchema, { number: 3 }),
+      lifecycle: { archived: true, deleted: false },
+    });
+    await stand.update(ProjectionStateSchema, createState("task-active", "Active"), {
+      version: create(VersionSchema, { number: 2 }),
+      lifecycle: { archived: false, deleted: false },
+    });
+
+    const plan: NormalizedQueryPlan<unknown> = {
+      predicate: {
+        kind: "all",
+        predicates: [
+          {
+            kind: "comparison",
+            column: "version",
+            operator: "greaterOrEqual",
+            value: create(VersionSchema, { number: 2 }),
+          },
+          { kind: "comparison", column: "deleted", operator: "equal", value: false },
+        ],
+      },
+      order: [{ column: "version", direction: "desc" }],
+    };
+
+    await expect(stand.queryPlanVersioned(ProjectionStateSchema, plan)).resolves.toEqual([
+      {
+        state: createState("task-archived", "Archived"),
+        version: create(VersionSchema, { number: 3 }),
+      },
+      {
+        state: createState("task-active", "Active"),
+        version: create(VersionSchema, { number: 2 }),
+      },
+    ]);
+  });
+
+  it("returns one authoritative current state and version when the query index is stale", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+    await stand.update(ProjectionStateSchema, createState("task-stale", "Indexed old"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await writeStandCurrent(storageFactory, createState("task-stale", "Current new"), 9n, {
+      archived: true,
+      deleted: false,
+    });
+
+    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([
+      {
+        state: createState("task-stale", "Current new"),
+        version: create(VersionSchema, { number: 9 }),
+      },
+    ]);
+  });
+
   it("clears stored entity states and their version metadata for one registered type", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -316,7 +388,7 @@ describe("Stand", () => {
     ]);
   });
 
-  it("clears process-local version metadata when an update has no version", async () => {
+  it("clears durable version metadata when an update has no version", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -331,6 +403,43 @@ describe("Stand", () => {
     await expect(stand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
       state: createState("task-1", "Second"),
     });
+  });
+
+  it("reads a durable current state without exposing a zero version", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+    await writeStandCurrent(storageFactory, createState("task-zero-version", "Current"), 0n, {
+      archived: false,
+      deleted: false,
+    });
+
+    await expect(stand.readVersioned(ProjectionStateSchema, "task-zero-version")).resolves.toEqual({
+      state: createState("task-zero-version", "Current"),
+    });
+  });
+
+  it("keeps deleted durable current records invisible to direct reads", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+    await writeStandCurrent(storageFactory, createState("task-deleted-current", "Deleted"), 4n, {
+      archived: false,
+      deleted: true,
+    });
+
+    await expect(
+      stand.read(ProjectionStateSchema, "task-deleted-current"),
+    ).resolves.toBeUndefined();
+    await expect(
+      stand.readVersioned(ProjectionStateSchema, "task-deleted-current"),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects updates whose registered ID field is absent from the state", async () => {
@@ -392,6 +501,56 @@ describe("Stand", () => {
     expect(secondDeliveries).toBe(0);
   });
 
+  it("restores the durable version through a later Stand instance", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    first.register(ProjectionStateSchema);
+    await first.update(ProjectionStateSchema, createState("task-versioned", "Persisted"), {
+      version: create(VersionSchema, { number: 9 }),
+    });
+    await first.close();
+
+    const restarted = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    restarted.register(ProjectionStateSchema);
+
+    await expect(restarted.readVersioned(ProjectionStateSchema, "task-versioned")).resolves.toEqual(
+      {
+        state: createState("task-versioned", "Persisted"),
+        version: create(VersionSchema, { number: 9 }),
+      },
+    );
+  });
+
+  it("keeps a cleared record unavailable after a later Stand instance opens", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    first.register(ProjectionStateSchema);
+    await first.update(ProjectionStateSchema, createState("task-cleared", "Before clear"), {
+      version: create(VersionSchema, { number: 4 }),
+    });
+    await first.clear(ProjectionStateSchema);
+    await first.close();
+
+    const restarted = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    restarted.register(ProjectionStateSchema);
+
+    await expect(
+      restarted.readVersioned(ProjectionStateSchema, "task-cleared"),
+    ).resolves.toBeUndefined();
+  });
+
   it("delivers to a snapshot when subscribers mutate subscriptions during delivery", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -438,6 +597,24 @@ describe("Stand", () => {
 
     expect(storageFactory.storages).toHaveLength(2);
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+  });
+
+  it("reuses one entity-storage handle per scope and closes it on Stand close", async () => {
+    const storageFactory = new EntityHandleCountingFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.readVersioned(ProjectionStateSchema, "task-1");
+    await stand.readAllVersioned(ProjectionStateSchema);
+
+    expect(storageFactory.openedEntityHandles).toBe(1);
+    expect(storageFactory.closedEntityHandles).toBe(0);
+    await stand.close();
+    expect(storageFactory.closedEntityHandles).toBe(1);
   });
 
   it("closes the storage handle after successful list reads", async () => {
@@ -627,6 +804,49 @@ function createState(id: string, name: string): ProjectionState {
   });
 }
 
+async function writeStandCurrent(
+  factory: InMemoryStorageFactory,
+  state: ProjectionState,
+  version: bigint,
+  lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+): Promise<void> {
+  const input: EntityStorageInput<string, ProjectionState> = {
+    context: { name: "Tasks", multitenant: false },
+    id: {
+      clone: (id) => id,
+      fingerprint: `${ProjectionStateSchema.typeName}:stand-id:v1`,
+      key: (id) => `string:${id}`,
+    },
+    layout: "spine-ts.stand.entity-record.v1",
+    stateSchema: ProjectionStateSchema,
+    storageKey: `${ProjectionStateSchema.typeName}:stand`,
+  };
+  const storage = factory.createEntityStorage(input) as {
+    readonly current: {
+      write(record: {
+        readonly id: string;
+        readonly state: ProjectionState;
+        readonly version: bigint;
+        readonly archived: boolean;
+        readonly deleted: boolean;
+      }): Promise<void>;
+    };
+    close(): void;
+  };
+
+  try {
+    await storage.current.write({
+      id: state.id,
+      state,
+      version,
+      archived: lifecycle.archived,
+      deleted: lifecycle.deleted,
+    });
+  } finally {
+    storage.close();
+  }
+}
+
 class ClosingStorageFactory extends InMemoryStorageFactory {
   readonly storages: RecordStorage<unknown, Message>[] = [];
 
@@ -667,5 +887,23 @@ class CountingReadStorageFactory extends InMemoryStorageFactory {
     };
 
     return storage;
+  }
+}
+
+class EntityHandleCountingFactory extends InMemoryStorageFactory {
+  openedEntityHandles = 0;
+  closedEntityHandles = 0;
+
+  override createEntityStorage(input: unknown): unknown {
+    const handle = super.createEntityStorage(input) as { close(): void } & Record<string, unknown>;
+    this.openedEntityHandles++;
+    const close = handle.close.bind(handle);
+    return Object.freeze({
+      ...handle,
+      close: () => {
+        this.closedEntityHandles++;
+        close();
+      },
+    });
   }
 }

@@ -68,8 +68,8 @@ one cross-storage transaction.
 `trim` and `truncate` select/delete fixed 128-row key-only chunks; neither
 offers an unbounded scan or generic cursor. A trim commit failure has an unknown
 outcome: completed chunks remain durable, no internal retry runs, and the caller
-must retry. Truncate captures an initial strict-time, provider-generated
-write-order cutoff, so it does not chase rows appended after that capture; each delete chunk is transactional,
+must retry. Truncate captures an initial monotonic `write_order` cutoff, so it
+does not chase rows appended after that capture; each delete chunk is transactional,
 but a failed/unknown chunk outcome likewise requires caller retry. Closing a
 history handle rejects subsequent operations. PostgreSQL support is future-only.
 

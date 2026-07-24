@@ -185,7 +185,11 @@ vi.mock("mysql2/promise", () => ({
                 ];
               return [truncateSelections.shift() ?? [], []];
             }
-            if (sql.includes("SELECT payload") || sql.includes("SELECT seconds,nanos,payload")) {
+            if (
+              sql.includes("SELECT payload") ||
+              sql.includes("SELECT seconds,nanos,payload") ||
+              sql.includes("SELECT version,seconds,nanos,payload")
+            ) {
               return [operationRows, []];
             }
             if (sql.startsWith("SELECT entity_key,producer_version,seconds,nanos,payload")) {
@@ -355,6 +359,43 @@ describe("MysqlStorageFactory", () => {
       expect(storage.current).toBeDefined();
       expect(storage.states).toBeDefined();
       expect(storage.events).toBeDefined();
+    } finally {
+      await factory.close();
+    }
+  });
+  it("rejects invalid entity-history scope configuration before provider access", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_history_scope_validation",
+    });
+    const baseline = connectionAcquires;
+    try {
+      expect(() => factory.createEntityStorage({ ...entityHistoryInput(), layout: " " })).toThrow(
+        /non-blank/,
+      );
+      expect(() =>
+        factory.createEntityStorage({
+          ...entityHistoryInput(),
+          id: {
+            clone: (id: string) => id,
+            fingerprint: " ",
+            key: (id: string) => id,
+          },
+        }),
+      ).toThrow(/non-blank/);
+      for (const tenantId of [undefined, " "]) {
+        expect(() =>
+          factory.createEntityStorage({
+            ...entityHistoryInput(),
+            context: {
+              name: "History",
+              multitenant: true,
+              ...(tenantId === undefined ? {} : { tenantId }),
+            },
+          }),
+        ).toThrow(/tenantId/);
+      }
+      expect(connectionAcquires).toBe(baseline);
     } finally {
       await factory.close();
     }
@@ -1372,7 +1413,7 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createEntityStorage(entityHistoryInput());
     await storage.current.read("warm");
-    operationRows = [{ payload: "not-bytes" }];
+    operationRows = [{ payload: "not-bytes", version: 1n, seconds: 0n, nanos: 0 }];
     releaseFailureAt = releases + 2;
     await expect(storage.states.backward("task", 1)).rejects.toBeInstanceOf(MysqlStorageDataError);
     await factory.close();
@@ -1508,7 +1549,7 @@ describe("MysqlStorageFactory", () => {
   });
 
   it.each([
-    ["state backward", "SELECT payload FROM spine_ts_entity_states"],
+    ["state backward", "SELECT version,seconds,nanos,payload FROM spine_ts_entity_states"],
     ["event backward", "SELECT payload FROM spine_ts_entity_events"],
     ["state at", "SELECT payload FROM spine_ts_entity_states"],
     ["state truncate", "SELECT write_order FROM spine_ts_entity_states"],
@@ -1543,7 +1584,16 @@ describe("MysqlStorageFactory", () => {
       url: "mysql://spine:secret@localhost:3306/spine_packet_entity_data_failure",
     });
     const storage = factory.createEntityStorage(entityHistoryInput());
-    operationRows = [{ payload: "not-bytes", version: 1n, archived: 0, deleted: 0 }];
+    operationRows = [
+      {
+        payload: "not-bytes",
+        version: 1n,
+        seconds: 0n,
+        nanos: 0,
+        archived: 0,
+        deleted: 0,
+      },
+    ];
 
     await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageDataError);
     await expect(storage.states.backward("task", 1)).rejects.toBeInstanceOf(MysqlStorageDataError);

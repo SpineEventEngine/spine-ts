@@ -249,12 +249,14 @@ const expectedStorageExports = [
   "StorageQueryPolicy",
 ];
 const expectedDatastoreStorageExports = [
+  "DatastoreEntityStorageHandle",
   "DatastoreQueryLimitError",
   "DatastoreStorageFactory",
   "DatastoreStorageFactoryInput",
   "DatastoreStorageOptions",
 ];
 const expectedRdbmsStorageExports = [
+  "MysqlEntityStorageHandle",
   "MysqlStorageConfigurationError",
   "MysqlStorageConnectionError",
   "MysqlStorageDataError",
@@ -302,11 +304,6 @@ const expectedTestingExports = [
 ];
 const expectedServerExports = [
   "Aggregate",
-  "AggregateId",
-  "AggregateHistory",
-  "AggregateSnapshot",
-  "AggregateStorage",
-  "AggregateStorageOptions",
   "Apply",
   "Assign",
   "BaseHandlerMetadata",

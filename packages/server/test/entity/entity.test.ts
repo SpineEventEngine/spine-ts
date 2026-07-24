@@ -1,7 +1,12 @@
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  TimestampSchema,
+  type Timestamp,
+} from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-event-engine/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -19,6 +24,10 @@ import {
   type EntityOptions,
   type TransactionalEntityScopeOperation,
 } from "../../src/index.js";
+import { entityHistoryAccess } from "../../src/entity/entity.js";
+
+// @ts-expect-error EntityStorageInput is an internal repository/runtime seam, not a root storage export.
+import type { EntityStorageInput } from "@spine-event-engine/storage";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -46,6 +55,27 @@ interface NestedRevisionMetadata extends RevisionMetadata {
 interface SizedRevisionMetadata {
   readonly revision: number;
   readonly size: number;
+}
+
+/** Compile-only negative declaration fixtures for intentionally absent APIs. */
+function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
+  // @ts-expect-error Projection deliberately has no event-history API.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  void projection.eventHistoryBackward(1);
+  // @ts-expect-error Projection deliberately has no event-history predicate.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  void projection.eventHistoryContains(1, () => true);
+  // @ts-expect-error Projection deliberately has no event-history maintenance API.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  void projection.eventStorage();
+  // @ts-expect-error The removed maintenance spelling is not a protected API.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  void projection.eventHistoryStorage();
+  // @ts-expect-error AggregateStorage was removed from the root server API.
+  void serverRoot.AggregateStorage;
+  // @ts-expect-error ReplayError was removed from the root server API.
+  void serverRoot.ReplayError;
+  void (null as unknown as EntityStorageInput);
 }
 
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
@@ -214,6 +244,33 @@ class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, Revi
   commitForTest(): ReturnType<TestAggregate["commitTransaction"]> {
     return this.commitTransaction();
   }
+
+  historyStatesForTest(depth: number) {
+    return this.stateHistoryBackward(depth);
+  }
+
+  stateAtForTest(time: Timestamp) {
+    return this.stateAt(time);
+  }
+
+  historyEventsForTest(depth: number) {
+    return this.eventHistoryBackward(depth);
+  }
+
+  stateHistoryMaintenanceForTest() {
+    return this.stateHistoryStorage();
+  }
+
+  eventHistoryMaintenanceForTest() {
+    return this.eventStorage();
+  }
+
+  eventHistoryContainsForTest(
+    depth: number,
+    predicate: (event: Readonly<import("@spine-event-engine/proto").Event>) => boolean,
+  ) {
+    return this.eventHistoryContains(depth, predicate);
+  }
 }
 
 class TestProjection extends Projection<string, typeof ProjectionStateSchema, RevisionMetadata> {}
@@ -222,7 +279,15 @@ class TestProcessManager extends ProcessManager<
   string,
   typeof ProjectionStateSchema,
   RevisionMetadata
-> {}
+> {
+  historyEventsForTest(depth: number) {
+    return this.eventHistoryBackward(depth);
+  }
+
+  eventHistoryMaintenanceForTest() {
+    return this.eventStorage();
+  }
+}
 
 describe("entities", () => {
   it("exports the common entity base class from the server root", () => {
@@ -1083,5 +1148,98 @@ describe("entities", () => {
     expectTypeOf<PublicAggregateTransactionOperations>().toBeNever();
     expectTypeOf<PublicProjectionTransactionOperations>().toBeNever();
     expectTypeOf<PublicProcessManagerTransactionOperations>().toBeNever();
+  });
+
+  it("keeps the per-family history declarations protected and readonly", () => {
+    expectTypeOf<ReturnType<TestAggregate["stateAtForTest"]>>().toEqualTypeOf<
+      Promise<Readonly<ProjectionState> | undefined>
+    >();
+    expectTypeOf<ReturnType<TestAggregate["historyStatesForTest"]>>().toEqualTypeOf<
+      Promise<readonly Readonly<ProjectionState>[]>
+    >();
+    expectTypeOf<ReturnType<TestAggregate["historyEventsForTest"]>>().toEqualTypeOf<
+      Promise<readonly Readonly<import("@spine-event-engine/proto").Event>[]>
+    >();
+    expectTypeOf<ReturnType<TestProcessManager["historyEventsForTest"]>>().toEqualTypeOf<
+      Promise<readonly Readonly<import("@spine-event-engine/proto").Event>[]>
+    >();
+    expectTypeOf<Parameters<TestAggregate["eventHistoryContainsForTest"]>[1]>().toEqualTypeOf<
+      (event: Readonly<import("@spine-event-engine/proto").Event>) => boolean
+    >();
+    expectTypeOf<TestAggregate>().not.toHaveProperty("stateHistoryBackward");
+    expectTypeOf<TestAggregate>().not.toHaveProperty("eventHistoryBackward");
+    expectTypeOf<TestProjection>().not.toHaveProperty("eventHistoryBackward");
+    expectTypeOf<TestProjection>().not.toHaveProperty("eventStorage");
+    expectTypeOf<ReturnType<TestAggregate["stateHistoryMaintenanceForTest"]>>().toHaveProperty(
+      "trim",
+    );
+    expectTypeOf<ReturnType<TestAggregate["stateHistoryMaintenanceForTest"]>>().toHaveProperty(
+      "truncate",
+    );
+    expectTypeOf<ReturnType<TestAggregate["eventHistoryMaintenanceForTest"]>>().toHaveProperty(
+      "truncate",
+    );
+    expectTypeOf<ReturnType<TestAggregate["eventHistoryMaintenanceForTest"]>>().not.toHaveProperty(
+      "trim",
+    );
+    expectTypeOf<ReturnType<TestProcessManager["eventHistoryMaintenanceForTest"]>>().toHaveProperty(
+      "truncate",
+    );
+
+    void verifyHistoryDeclarationAbsence;
+    void TimestampSchema;
+  });
+
+  it("rejects protected history reads outside repository execution", () => {
+    const aggregate = new TestAggregate({
+      id: "task-history-unbound",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const processManager = new TestProcessManager({
+      id: "pm-history-unbound",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(() => aggregate.stateAtForTest(create(TimestampSchema))).toThrow(
+      "Entity history is available only from repository execution.",
+    );
+    expect(() => aggregate.historyStatesForTest(1)).toThrow(
+      "Entity history is available only from repository execution.",
+    );
+    expect(() => aggregate.historyEventsForTest(1)).toThrow(
+      "Entity history is available only from repository execution.",
+    );
+    expect(() => processManager.historyEventsForTest(1)).toThrow(
+      "Entity history is available only from repository execution.",
+    );
+  });
+
+  it("rejects invalid protected history depths before repository access", () => {
+    const aggregate = new TestAggregate({
+      id: "task-history-depth",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    entityHistoryAccess.bind(aggregate, {
+      stateAt: () => Promise.resolve(undefined),
+      states: () => Promise.resolve([]),
+      events: () => Promise.resolve([]),
+      stateMaintenance: undefined as never,
+      eventMaintenance: undefined as never,
+    });
+
+    for (const depth of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => aggregate.historyStatesForTest(depth)).toThrow(
+        "Entity history depth must be a positive safe integer.",
+      );
+      expect(() => aggregate.historyEventsForTest(depth)).toThrow(
+        "Entity history depth must be a positive safe integer.",
+      );
+    }
   });
 });

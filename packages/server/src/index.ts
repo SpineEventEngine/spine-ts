@@ -214,13 +214,6 @@ export {
   type RuntimeTransportBindingInput,
 } from "./runtime/runtime-transport.js";
 
-export {
-  AggregateStorage,
-  type AggregateId,
-  type AggregateHistory,
-  type AggregateSnapshot,
-  type AggregateStorageOptions,
-} from "./repository/aggregate-storage.js";
 export { type MessageId, type PrimitiveId } from "./repository/primitive-id.js";
 
 export {
