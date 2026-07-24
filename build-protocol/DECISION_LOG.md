@@ -4604,3 +4604,113 @@ Consequences:
   Wave 3 tests run.
 - Existing low-level Aggregate and Process Manager ID queries remain; their
   new high-level Query/column guarantees are intentionally absent until Wave 2.
+
+## D-0100: Match JVM Recent-History Semantics In Wave 2
+
+Status: Accepted
+
+Date: 2026-07-24
+
+Task: Wave 2 planning
+
+Decision:
+
+- Add recent state history to Projection, Aggregate, and Process Manager
+  repositories. Recording is opt-in and off by default for every entity kind.
+- Add recent event history to Aggregates and Process Managers. Aggregate event
+  history is always recorded; Process Manager event history is opt-in and off
+  by default. Rejection events are not recorded.
+- Expose history through the entity and repository facilities corresponding to
+  Spine JVM. Do not invent a remote history-query service. High-level client
+  queries continue to return current entity state.
+- Use idiomatic asynchronous TypeScript entity APIs corresponding to
+  `stateAt(time)`, `stateHistoryBackward(depth)`,
+  `eventHistoryBackward(depth)`, and
+  `eventHistoryContains(depth, predicate)`. Returned history collections are
+  immutable and newest first.
+- Preserve JVM visibility: the current unfinished dispatch is excluded, while
+  earlier completed dispatches in the same delivery batch are immediately
+  visible.
+- Implement the JVM runtime enable/disable behavior for state-history
+  recording. Document prominently that the facility is not designed as a
+  routine runtime control and should normally be configured when constructing
+  the repository.
+- Retain history until the application performs explicit maintenance. Provide
+  JVM-equivalent per-entity `trim(entityId, keepMostRecent)` and global
+  `truncate(olderThan)` operations consistently across in-memory, Datastore,
+  and RDBMS storage.
+- Include the opt-in double-dispatch guard with configurable inspection depth.
+  Process Managers require event-history recording when the guard is enabled.
+- Generalize the Projection-specific column and Query DSL into an entity Query
+  DSL covering Projections, Aggregates, and Process Managers. Remove
+  Projection-specific public query/column terminology rather than retaining
+  deprecated aliases.
+- Storage contracts, persisted layouts, public APIs, examples, and tests may
+  change atomically without migration or backward-compatibility machinery.
+- Replace TS Aggregate snapshot and stored-event reconstruction with the common
+  latest-state entity-record model used by Projection and Process Manager.
+  Aggregate emitted events remain in a separate diagnostic/recent journal and
+  are never a state-reconstruction source.
+- State history is appended after every successful logical store, without a
+  cross-storage atomicity guarantee. Immediate latest-state persistence may
+  precede history; batched history may precede the deferred latest-state
+  flush; partial failures do not roll back already-written rows.
+
+Reasoning:
+
+- These choices preserve current Spine JVM behavior and concepts while adapting
+  storage access to asynchronous Node APIs.
+- Entity-local history is distinct from the client Query service. Conflating
+  the two would introduce a remote product surface that does not exist in Spine
+  JVM and was not requested.
+- Explicit maintenance keeps retention policy in the application domain and
+  avoids hidden dispatch-path queries or speculative limits.
+- There are no real-world Spine TS deployments requiring a deprecation or data
+  migration cycle.
+
+Consequences:
+
+- Wave 2 planning must cover the shared entity-history model, every supported
+  storage adapter, repository configuration and maintenance, Aggregate and
+  Process Manager event journals, the double-dispatch guard, the generalized
+  Query DSL, generated columns, client/server query execution, documentation,
+  and behavior-focused tests.
+- Live TS/JVM compatibility execution remains deferred to Wave 3. Wave 2 uses
+  source and descriptor analysis rather than claiming cross-runtime evidence.
+- Delivery/inbox replay remains independent and must not be removed with
+  Aggregate reconstruction replay.
+
+## D-0101: Publish Every Spine TS Package Under `@spine-event-engine`
+
+Status: Accepted
+
+Date: 2026-07-24
+
+Task: Wave 2 planning
+
+Decision:
+
+- Rename every Spine TS workspace package from `@spine-ts/<name>` to
+  `@spine-event-engine/<name>`.
+- Update package manifests, workspace dependencies, TypeScript and generated
+  imports, examples, scripts, documentation, API inventories, and validation
+  gates atomically. Do not retain `@spine-ts/*` compatibility packages or
+  aliases.
+- Keep pnpm as the repository package manager. “NPM group” in this decision
+  means the published package scope, not a switch from pnpm to the npm CLI.
+
+Reasoning:
+
+- All Spine framework packages should use the organization-wide
+  `@spine-event-engine` publication namespace.
+- With no real-world consumers, a single atomic rename is clearer and cheaper
+  than maintaining two scopes or a deprecation bridge.
+
+Consequences:
+
+- The rename is a Wave 2 prerequisite because new history/query packages,
+  imports, and documentation must not introduce additional `@spine-ts/*`
+  references.
+- Verification must mechanically reject remaining live `@spine-ts/`
+  references while allowing historical build-protocol evidence to remain
+  unchanged where rewriting it would falsify repository history.

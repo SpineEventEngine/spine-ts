@@ -6,7 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: none; Wave 2 awaits its required human Q&A and approved plan
+Active implementation frontier: T-0069 package namespace cutover
 
 ## Purpose
 
@@ -56,17 +56,22 @@ The accepted initial release remains complete. On `2026-07-22`, the human
 opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
 Wave 1. The human subsequently started Wave 1; T-0053 through T-0067 are
 implemented, reviewed, integrated, post-merge verified, and remotely
-synchronized at their closure boundaries. Wave 2 must not start before its
-required human Q&A and approved plan.
+synchronized at their closure boundaries. The Wave 2 Q&A and T-0068 planning
+are complete. The human started autonomous execution on 2026-07-24; T-0069 is
+the active implementation frontier and work follows the accepted plan unless a
+genuine protocol blocker appears.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a
   singleton `ServerEnvironment`, JVM-parity `Delivery`, a delivery client, and
   the in-memory `delivery-server/simple-server` gRPC topology including its
   machine-facing `AdminService`.
-- **Wave 2:** recent state/event history and the resulting high-level Aggregate
-  and Process Manager query parity. A separate Q&A and approved plan are
-  required before execution.
+- **Wave 2:** the `@spine-event-engine/*` package-scope cutover; shared
+  latest-state storage for Aggregate, Projection, and Process Manager; removal
+  of Aggregate snapshot/event reconstruction; recent state/event history and
+  the double-dispatch guard; and generic Entity columns and Query parity. The
+  approved execution plan is
+  `build-protocol/planning/WAVE_2_JVM_PARITY_PLAN.md`.
 - **Wave 3:** packaging/deployment and live bidirectional TS/JVM delivery-server
   compatibility tests. A separate Q&A and approved plan are required.
 - **Wave 4:** human-facing delivery administration, including the unresolved
