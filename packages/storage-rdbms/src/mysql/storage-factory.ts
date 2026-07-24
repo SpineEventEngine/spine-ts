@@ -18,8 +18,15 @@ import {
   type StorageContext,
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "./value-codec.js";
+import {
+  MysqlEntityStorage,
+  type MysqlEntityConnectionProvider,
+  type MysqlEntityStorageHandle,
+  entityHistorySchema,
+} from "./entity-history.js";
 
 const recordsTable = "`spine_ts_records`";
 const columnsTable = "`spine_ts_columns`";
@@ -87,6 +94,29 @@ const expectedIndexes = new Map<string, readonly string[]>([
 const expectedForeignKey = ["scope_key", "tenant_key", "slot_key"] as const;
 const expectedNullability = "NO";
 
+function entityExpectedNullability(): string {
+  return entityHistorySchema.columnNullable ? "YES" : "NO";
+}
+function entityTableNames(): readonly string[] {
+  return entityHistorySchema.tables.map((table) => table.name);
+}
+
+function entityColumnExpectations() {
+  return new Map(
+    entityHistorySchema.tables.flatMap((table) =>
+      table.columns.map((column) => [`${table.name}.${column.name}`, column] as const),
+    ),
+  );
+}
+
+function entityIndexExpectations() {
+  return new Map(
+    entityHistorySchema.tables.flatMap((table) =>
+      table.indexes.map((index) => [`${table.name}.${index.name}`, index] as const),
+    ),
+  );
+}
+
 /** Explicit connection and pool settings for the owned MySQL adapter pool. */
 export interface MysqlStorageOptions {
   /** Complete MySQL connection URL, including an explicit database name. */
@@ -151,7 +181,10 @@ export class MysqlStorageFactory extends StorageFactory {
   readonly #lifecycle = new MysqlPoolLifecycle();
   #closePromise: Promise<void> | undefined;
 
-  private constructor(pool: Pool) {
+  private constructor(
+    pool: Pool,
+    private readonly database: string,
+  ) {
     super();
     this.#pool = pool;
   }
@@ -173,7 +206,7 @@ export class MysqlStorageFactory extends StorageFactory {
         : { connectTimeout: options.connectTimeoutMs }),
       ...(options.tls === undefined ? {} : { ssl: options.tls }),
     });
-    const factory = new MysqlStorageFactory(pool);
+    const factory = new MysqlStorageFactory(pool, decodeURIComponent(url.pathname.slice(1)));
 
     try {
       await factory.initialize();
@@ -206,6 +239,74 @@ export class MysqlStorageFactory extends StorageFactory {
     });
     this.#handles.add(handle);
     return handle;
+  }
+
+  /**
+   * Creates a provider/framework-owned history bundle that its recipient may close independently.
+   *
+   * The factory closes all live bundles during shutdown. MySQL is the only
+   * implementation; PostgreSQL support is future work.
+   */
+  createEntityStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): MysqlEntityStorageHandle<I, S> {
+    this.#lifecycle.assertOpen();
+    const handle = new MysqlEntityStorage(
+      input,
+      this.entityConnections(),
+      this.database,
+      verifyEntitySchema,
+      () => this.#handles.delete(handle),
+    );
+    this.#handles.add(handle);
+    return handle;
+  }
+
+  /** Admits entity connections and settles their lifecycle lease exactly once. */
+  private entityConnections(): MysqlEntityConnectionProvider {
+    const lifecycle = this.#lifecycle;
+    const pool = this.#pool;
+    const leases = new WeakMap<PoolConnection, { release(): void; destroy(): void }>();
+    return {
+      async acquire() {
+        lifecycle.admit();
+        try {
+          const connection = await pool.getConnection();
+          let settled = false;
+          const settle = () => {
+            if (settled) return;
+            settled = true;
+            lifecycle.release();
+          };
+          leases.set(connection, {
+            release: () => {
+              try {
+                connection.release();
+              } finally {
+                settle();
+              }
+            },
+            destroy: () => {
+              try {
+                connection.destroy();
+              } finally {
+                settle();
+              }
+            },
+          });
+          return connection;
+        } catch (error) {
+          lifecycle.release();
+          throw error;
+        }
+      },
+      release(connection) {
+        leases.get(connection)?.release();
+      },
+      destroy(connection) {
+        leases.get(connection)?.destroy();
+      },
+    };
   }
 
   private async initialize(): Promise<void> {
@@ -242,6 +343,10 @@ class MysqlPoolLifecycle {
   admit(): void {
     if (this.#closing) throw new MysqlStorageOperationError();
     this.#active += 1;
+  }
+
+  assertOpen(): void {
+    if (this.#closing) throw new MysqlStorageOperationError();
   }
 
   release(): void {
@@ -1043,6 +1148,72 @@ async function verifySchema(connection: PoolConnection): Promise<void> {
   await verifyForeignKey(connection);
 }
 
+/** Verifies the fixed lazy entity-history schema before it receives rows. */
+export async function verifyEntitySchema(connection: PoolConnection): Promise<void> {
+  const entityTables = entityTableNames();
+  const expectedEntityColumns = entityColumnExpectations();
+  const expectedEntityIndexes = entityIndexExpectations();
+  const names = entityTables.map((table) => `'${table}'`).join(", ");
+  const [columns] = await connection.query<SchemaColumn[]>(
+    `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, COLUMN_TYPE AS column_type,
+            IS_NULLABLE AS is_nullable, EXTRA AS extra FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name IN (${names})`,
+  );
+  const actual = new Map(columns.map((row) => [`${row.table_name}.${row.column_name}`, row]));
+  for (const [column, expected] of expectedEntityColumns) {
+    const row = actual.get(column);
+    if (
+      row?.column_type !== expected.mysqlType ||
+      row?.is_nullable !== entityExpectedNullability() ||
+      row?.extra.toLowerCase() !== (expected.autoIncrement === true ? "auto_increment" : "")
+    )
+      throw new MysqlStorageSchemaError(`MySQL entity schema is incompatible at ${column}.`);
+  }
+  if (actual.size !== expectedEntityColumns.size)
+    throw new MysqlStorageSchemaError("MySQL entity schema has unexpected columns.");
+  const [tables] = await connection.query<SchemaTable[]>(
+    `SELECT TABLE_NAME AS table_name, ENGINE AS engine FROM information_schema.tables
+     WHERE table_schema = DATABASE() AND table_name IN (${names})`,
+  );
+  if (
+    tables.length !== entityTables.length ||
+    tables.some((table) => table.engine?.toLowerCase() !== entityHistorySchema.engine.toLowerCase())
+  )
+    throw new MysqlStorageSchemaError("MySQL entity tables must use InnoDB.");
+  const [indexes] = await connection.query<SchemaIndex[]>(
+    `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, SEQ_IN_INDEX AS seq_in_index,
+            COLUMN_NAME AS column_name, NON_UNIQUE AS non_unique, COLLATION AS collation
+     FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name IN (${names})
+     ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
+  );
+  const actualIndexes = new Map<string, SchemaIndex[]>();
+  for (const row of indexes) {
+    const name = `${row.table_name}.${row.index_name}`;
+    const rowsForIndex = actualIndexes.get(name) ?? [];
+    if (row.seq_in_index !== rowsForIndex.length + 1)
+      throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${name}.`);
+    rowsForIndex.push(row);
+    actualIndexes.set(name, rowsForIndex);
+  }
+  if (actualIndexes.size !== expectedEntityIndexes.size)
+    throw new MysqlStorageSchemaError("MySQL entity schema has unexpected indexes.");
+  for (const [index, expected] of expectedEntityIndexes) {
+    const rows = actualIndexes.get(index);
+    if (
+      rows?.length !== expected.columns.length ||
+      rows.some(
+        (row, position) =>
+          row.column_name !== expected.columns[position]?.name ||
+          row.non_unique !== (expected.primary === true || expected.unique === true ? 0 : 1) ||
+          row.collation?.toUpperCase() !==
+            (expected.columns[position].direction === "DESC" ? "D" : "A"),
+      )
+    )
+      throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${index}.`);
+  }
+}
+
 async function verifyIndexes(connection: PoolConnection): Promise<void> {
   const [rows] = await connection.query<SchemaIndex[]>(
     `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name,
@@ -1118,6 +1289,7 @@ interface SchemaColumn extends RowDataPacket {
   readonly column_type: string;
   readonly column_default: string | null;
   readonly is_nullable: string;
+  readonly extra: string;
 }
 
 interface SchemaTable extends RowDataPacket {
@@ -1130,6 +1302,8 @@ interface SchemaIndex extends RowDataPacket {
   readonly index_name: string;
   readonly seq_in_index: number;
   readonly column_name: string;
+  readonly non_unique: number;
+  readonly collation: string | null;
 }
 
 interface SchemaForeignKey extends RowDataPacket {
