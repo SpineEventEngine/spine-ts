@@ -1,12 +1,12 @@
 # Delivery client
 
-`@spine-ts/delivery-client` is the Node facade for the frozen JVM delivery-server
+`@spine-event-engine/delivery-client` is the Node facade for the frozen JVM delivery-server
 gRPC API. It is for trusted networks only: it adds no authentication or
 authorization. JVM live-server compatibility testing is deferred to Wave 3.
 
 ```ts
-import { DeliveryClient } from "@spine-ts/delivery-client";
-import { ShardIndex } from "@spine-ts/server";
+import { DeliveryClient } from "@spine-event-engine/delivery-client";
+import { ShardIndex } from "@spine-event-engine/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080", {
   pageSize: 100,
@@ -45,7 +45,7 @@ reconcile writes/removals with `FIND_MESSAGE`, and shard changes with
 and a bounded deadline.
 
 ```ts
-import type { InboxMessage } from "@spine-ts/server";
+import type { InboxMessage } from "@spine-event-engine/server";
 
 const controller = new AbortController();
 async function mutate(message: InboxMessage) {
@@ -67,8 +67,12 @@ Recovered `REMOVING` work reconciles/removes without replaying a callback; recov
 work remains fail-closed for operator resolution.
 
 ```ts
-import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "@spine-ts/delivery-client";
-import { DeliveryBuilder } from "@spine-ts/server";
+import {
+  DeliveryClient,
+  RemoteInbox,
+  RemoteWorkRegistry,
+} from "@spine-event-engine/delivery-client";
+import { DeliveryBuilder } from "@spine-event-engine/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
 // Implement this with a caller-owned durable store. It must be capacity-bounded
@@ -108,7 +112,7 @@ Admin observation requires exactly one ACK, has a bounded buffer, and reconnects
 only within configured limits; call `cancel()` when finished.
 
 ```ts
-import { DeliveryClient } from "@spine-ts/delivery-client";
+import { DeliveryClient } from "@spine-event-engine/delivery-client";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
 const snapshot = await client.shardSnapshot();
@@ -128,8 +132,8 @@ and no worker-conditional release, so a later worker must not release a stale
 session.
 
 ```ts
-import { DeliveryClient, DeliveryOutcomeUnknownError } from "@spine-ts/delivery-client";
-import { ShardIndex, type InboxMessage } from "@spine-ts/server";
+import { DeliveryClient, DeliveryOutcomeUnknownError } from "@spine-event-engine/delivery-client";
+import { ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
 
@@ -161,5 +165,5 @@ results, quarantine exact-snapshot checks, or internal state. It limits decoded 
 to 100 messages; pages are limited to 1,000 messages (100 by default).
 Its `shardSnapshot()`, `observeShardUpdates()`, and
 `releaseExpired(inactivityMs, options?)` methods also satisfy the structural
-source consumed by `DeliverySupervisor` in `@spine-ts/server`; no server-side
+source consumed by `DeliverySupervisor` in `@spine-event-engine/server`; no server-side
 dependency on this package is required.

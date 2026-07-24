@@ -4,7 +4,7 @@ import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
 import { Publisher, Reply, Request, Subscriber } from "zeromq";
 

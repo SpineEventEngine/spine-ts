@@ -8,9 +8,14 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { packAny, packEvent } from "@spine-ts/core";
-import { EventContextSchema, EventIdSchema, UserIdSchema, VersionSchema } from "@spine-ts/proto";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { packAny, packEvent } from "@spine-event-engine/core";
+import {
+  EventContextSchema,
+  EventIdSchema,
+  UserIdSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { AggregateStorage } from "../../src/index.js";

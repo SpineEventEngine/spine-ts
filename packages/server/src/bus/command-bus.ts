@@ -1,6 +1,6 @@
 import { clone } from "@bufbuild/protobuf";
-import { ValidationException, checkValid, unpackAny } from "@spine-ts/core";
-import { CommandSchema, type Command } from "@spine-ts/proto";
+import { ValidationException, checkValid, unpackAny } from "@spine-event-engine/core";
+import { CommandSchema, type Command } from "@spine-event-engine/proto";
 
 import {
   runtimeAccess,

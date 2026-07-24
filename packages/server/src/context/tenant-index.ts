@@ -1,7 +1,7 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-ts/storage";
+import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
 
 type TenantMode = "single-tenant" | "multitenant";
 type TenantRecord = Message<"google.protobuf.StringValue"> & { value: string };

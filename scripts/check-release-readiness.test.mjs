@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  collectLegacyNamespaceReferences,
   collectMarkdownRelativeLinks,
   collectRuntimeExportSpecifiers,
   runReleaseReadiness,
@@ -79,6 +80,39 @@ describe("check-release-readiness", () => {
       }),
     ).toThrow("fixture setup failed");
     expect(existsSync(repoRoot)).toBe(false);
+  });
+
+  it("finds an old package scope in a live tracked source file", () => {
+    withTempRepository((repoRoot) => {
+      mkdirSync(join(repoRoot, "packages", "runtime", "src"), { recursive: true });
+      writeFileSync(
+        join(repoRoot, "packages", "runtime", "src", "index.ts"),
+        `export { ready } from "${"@spine-" + "ts/"}core";\n`,
+      );
+      execFileSync("git", ["add", "packages/runtime/src/index.ts"], { cwd: repoRoot });
+
+      expect(collectLegacyNamespaceReferences(repoRoot)).toEqual([
+        `packages/runtime/src/index.ts:1: export { ready } from "${"@spine-" + "ts/"}core";`,
+      ]);
+    });
+  });
+
+  it("rejects a legacy package scope before accepting an otherwise valid runtime package", () => {
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot);
+      mkdirSync(join(repoRoot, "packages", "runtime", "src"), { recursive: true });
+      writeFileSync(
+        join(repoRoot, "packages", "runtime", "src", "index.ts"),
+        `export { ready } from "${"@spine-" + "ts/"}core";\n`,
+      );
+      execFileSync("git", ["add", "packages/runtime"], { cwd: repoRoot });
+
+      expect(() => runReleaseReadiness(repoRoot)).toThrow(
+        `Legacy package namespace: packages/runtime/src/index.ts:1: export { ready } from "${
+          "@spine-" + "ts/"
+        }core";`,
+      );
+    });
   });
 
   it("enumerates fixed and both generated Proto wildcard export spellings", () => {

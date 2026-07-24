@@ -7,19 +7,19 @@ import {
 } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
-import { CommandSchema, EventSchema } from "@spine-ts/proto";
+import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxService,
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxLabel,
   InboxMessageSchema,
   InboxMessageStatus,
   type InboxMessage,
   type ShardIndex,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import { MutationAdmission } from "./mutation-admission.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";

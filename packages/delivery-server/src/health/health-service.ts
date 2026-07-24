@@ -1,5 +1,8 @@
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
-import { Health, HealthCheckResponse_ServingStatus } from "@spine-ts/proto/delivery-server";
+import {
+  Health,
+  HealthCheckResponse_ServingStatus,
+} from "@spine-event-engine/proto/delivery-server";
 
 const known = new Set([
   "",

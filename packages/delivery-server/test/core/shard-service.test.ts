@@ -6,8 +6,8 @@ import {
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
   ReleaseShardSchema,
-} from "@spine-ts/proto/delivery-server";
-import { ShardIndexSchema, WorkerIdSchema } from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery-server";
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
 import { createInMemoryDeliveryServerCore } from "../../src/index.js";
 

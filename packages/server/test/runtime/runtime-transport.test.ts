@@ -7,14 +7,14 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl } from "@spine-ts/core";
+import { deriveTypeUrl } from "@spine-event-engine/core";
 import {
   CommandSchema,
   EventSchema,
   file_spine_options,
   type Command,
   type Event,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   type PublishTransportHandler,
   type PublishTransportOperation,
@@ -24,8 +24,11 @@ import {
   type TransportSignalKind,
   type TransportSubscription,
   type TransportSubscriptionHandle,
-} from "@spine-ts/transport";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+} from "@spine-event-engine/transport";
+import {
+  createZeroMqAdapterConfig,
+  createZeroMqTransport,
+} from "@spine-event-engine/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 

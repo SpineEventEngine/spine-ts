@@ -1,4 +1,4 @@
-# @spine-ts/client
+# @spine-event-engine/client
 
 Node client facade and descriptor-backed Projection query foundations for Spine.
 
@@ -13,7 +13,7 @@ work is finished; it is idempotent and rejects work started after close begins.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-ts/client";
+import { Client } from "@spine-event-engine/client";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 
 const client = Client.connectTo("http://127.0.0.1:8080", {
@@ -34,8 +34,8 @@ configuration; it is still copied at construction:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-ts/client";
-import { TenantIdSchema, ZoneIdSchema } from "@spine-ts/proto";
+import { Client } from "@spine-event-engine/client";
+import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 
 const client = Client.connectTo("http://127.0.0.1:8080", {
   tenant: create(TenantIdSchema, { kind: { case: "value", value: "tasks" } }),
@@ -92,7 +92,7 @@ criteria or mask.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, ProjectionColumn, all, either, eq } from "@spine-ts/client";
+import { Client, ProjectionColumn, all, either, eq } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
@@ -168,8 +168,8 @@ import {
   gt,
   le,
   lt,
-} from "@spine-ts/client";
-import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
+} from "@spine-event-engine/client";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
@@ -224,8 +224,8 @@ foreign columns, wrong value/operator pairs, and unknown mask fields.
 the same generated schema used to build the query:
 
 ```ts
-import { unpackAny } from "@spine-ts/core";
-import type { QueryResponse } from "@spine-ts/proto/client";
+import { unpackAny } from "@spine-event-engine/core";
+import type { QueryResponse } from "@spine-event-engine/proto/client";
 
 declare const response: QueryResponse;
 
@@ -238,7 +238,7 @@ const states = response.message.map(({ state }) => {
 ```
 
 Generated sources obtain their definition constructor from the dedicated
-`@spine-ts/client/codegen` subpath. Application code should import only the
+`@spine-event-engine/client/codegen` subpath. Application code should import only the
 resulting generated definition and the root Projection API.
 
 The package also installs `protoc-gen-spine-projection-columns` for Buf-based

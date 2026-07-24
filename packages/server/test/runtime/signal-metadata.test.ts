@@ -5,7 +5,13 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
+import {
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -18,7 +24,7 @@ import {
   OriginSchema,
   TenantIdSchema,
   UserIdSchema,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { FixedClock, SignalIds, SignalMetadata } from "../../src/runtime/signal-metadata.js";

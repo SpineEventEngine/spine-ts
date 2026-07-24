@@ -1,5 +1,5 @@
 {
-  "name": "@spine-ts/transport",
+  "name": "@spine-event-engine/transport",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -20,7 +20,7 @@
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
-    "@spine-ts/proto": "workspace:*",
+    "@spine-event-engine/proto": "workspace:*",
     "zeromq": "6.5.0"
   }
 }

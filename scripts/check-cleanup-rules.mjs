@@ -539,13 +539,13 @@ function recordImportDeclaration(statement, state) {
     return;
   }
 
-  if (moduleName === "@spine-ts/core") {
+  if (moduleName === "@spine-event-engine/core") {
     recordCoreImport(clause, state);
   }
-  if (moduleName === "@spine-ts/server") {
+  if (moduleName === "@spine-event-engine/server") {
     recordServerImport(clause, state);
   }
-  if (moduleName === "@spine-ts/proto") {
+  if (moduleName === "@spine-event-engine/proto") {
     recordProtoImport(clause, state);
   }
   if (isGeneratedModule(moduleName)) {
@@ -655,13 +655,13 @@ function recordImportEqualsDeclaration(statement, state) {
   const moduleName = externalModuleName(statement.moduleReference);
   const valueImport = !statement.isTypeOnly;
 
-  if (moduleName === "@spine-ts/core" && valueImport) {
+  if (moduleName === "@spine-event-engine/core" && valueImport) {
     state.coreNamespaces.add(statement.name.text);
   }
-  if (moduleName === "@spine-ts/server" && valueImport) {
+  if (moduleName === "@spine-event-engine/server" && valueImport) {
     state.serverNamespaces.add(statement.name.text);
   }
-  if (moduleName === "@spine-ts/proto") {
+  if (moduleName === "@spine-event-engine/proto") {
     state.protoNamespaces.add(statement.name.text);
   }
 
@@ -1297,7 +1297,7 @@ function importTypeEnvelopeLabel(typeNode) {
   if (
     !ts.isLiteralTypeNode(argument) ||
     !ts.isStringLiteral(argument.literal) ||
-    argument.literal.text !== "@spine-ts/proto"
+    argument.literal.text !== "@spine-event-engine/proto"
   ) {
     return undefined;
   }

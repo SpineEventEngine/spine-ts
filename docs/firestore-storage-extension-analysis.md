@@ -13,7 +13,7 @@ current TS storage port.
 
 ## Proposed module
 
-Create `@spine-ts/storage-datastore`, depending on `@spine-ts/storage` and the
+Create `@spine-event-engine/storage-datastore`, depending on `@spine-event-engine/storage` and the
 official Google Cloud Datastore Node client. It implements `StorageFactory` and
 `RecordStorage` without changing the storage package’s public contracts. It
 targets Firestore in Datastore mode through the Datastore client API; it does
@@ -63,7 +63,7 @@ Mapping proposal:
    this package.
 2. Export only `DatastoreStorageFactory`, its narrowly typed construction
    options, and documented emulator helpers if tests require them. Do not
-   re-export Google client types from `@spine-ts/storage`.
+   re-export Google client types from `@spine-event-engine/storage`.
 3. Add a composition example showing the application selects
    `new DatastoreStorageFactory({ client })` through the existing
    `withStorageFactory()` port and can replace it with
@@ -158,7 +158,7 @@ and full entity paths are redacted from thrown adapter errors.
 - Firestore adapter passes record CRUD, query, tenant isolation, continuation/offset,
   uniqueness, CAS race, batch, retry, close, and malformed-record tests;
 - emulator tests are repeatable and real-cloud tests are explicitly opt-in;
-- no Firestore dependency or adapter type leaks into `@spine-ts/storage`;
+- no Firestore dependency or adapter type leaks into `@spine-event-engine/storage`;
 - package README documents indexes, consistency, limits, credentials, emulator,
   failure semantics, and unsupported query features;
 - JVM source mapping and any intentional incompatibilities are recorded in a

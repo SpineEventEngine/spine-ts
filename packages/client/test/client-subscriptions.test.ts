@@ -11,7 +11,7 @@ import {
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   EntityUpdatesSchema,
   QueryResponseSchema,
@@ -21,8 +21,8 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
   type Subscription,
-} from "@spine-ts/proto/client";
-import { packAny } from "@spine-ts/core";
+} from "@spine-event-engine/proto/client";
+import { packAny } from "@spine-event-engine/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { Client, ProjectionColumn } from "../src/index.js";

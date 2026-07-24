@@ -8,8 +8,8 @@ import {
   ShardStatus,
   SubscriptionResponseSchema,
   type SubscriptionResponse,
-} from "@spine-ts/proto/delivery-server";
-import type { ShardIndex } from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery-server";
+import type { ShardIndex } from "@spine-event-engine/proto/delivery";
 
 import type { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
 import { MAX_DELIVERY_RESPONSE_SHARDS } from "../core/limits.js";

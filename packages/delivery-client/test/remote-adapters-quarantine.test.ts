@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { DeliveryBuilder, ShardIndex } from "@spine-ts/server";
+import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "../../storage/src/index.js";
 import {
   LiquorPickUpOutcomeSchema,
@@ -8,14 +8,14 @@ import {
   PageOfMessagesSchema,
   ShardAlreadyPickedUpSchema,
   ShardPickedUpSchema,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxLabel,
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 import {
   DeliveryClient,

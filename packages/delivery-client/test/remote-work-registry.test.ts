@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { ShardIndex } from "@spine-ts/server";
+import { ShardIndex } from "@spine-event-engine/server";
 import {
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
@@ -11,8 +11,8 @@ import {
   ReleaseShardSchema,
   ShardAlreadyPickedUpSchema,
   ShardPickedUpSchema,
-} from "@spine-ts/proto/delivery-server";
-import { ShardIndexSchema, WorkerIdSchema } from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery-server";
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 import {
   DeliveryClient,

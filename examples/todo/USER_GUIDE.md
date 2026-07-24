@@ -14,7 +14,7 @@ the package. Both generated and compiled directories are ignored.
 Start the process with:
 
 ```bash
-pnpm --filter @spine-ts/example-todo start
+pnpm --filter @spine-event-engine/example-todo start
 ```
 
 It creates a local `http://127.0.0.1:8080` server over one in-memory bounded
@@ -31,7 +31,7 @@ their bare `@Assign` and `@Subscribe` decorators: they do not manually register
 handler schemas.
 
 For application behavior tests, prefer `await BlackBox.from(await createTodoContext())`
-from `@spine-ts/testing`. Use `asGuest()` or `onBehalfOf()` for a fixed actor,
+from `@spine-event-engine/testing`. Use `asGuest()` or `onBehalfOf()` for a fixed actor,
 post generated command messages, query `TaskListSchema`, and use
 `blackBox.eventually()` for projection visibility. Close the BlackBox in
 `finally`; it owns its local listener, client session, and uncancelled typed
@@ -41,7 +41,7 @@ Vitest without raw Connect or private server types.
 ## Post commands and inspect acknowledgements
 
 Use generated schemas and public clients. The checked-in `pnpm --filter
-@spine-ts/example-todo smoke` program is the executable CreateTask example: it
+@spine-event-engine/example-todo smoke` program is the executable CreateTask example: it
 owns an `Http2SessionManager`, bounds the command and eventual query, checks an
 OK acknowledgement, and aborts its session in `finally`.
 
@@ -73,11 +73,11 @@ following complete ESM client factors the shared client, target, read, and
 decode setup while executing all-row, exact-ID, and declared-column queries.
 First run `pnpm typecheck:build` from the repository root, then save the module
 as `examples/todo/scripts/query-client.mjs`. Start `pnpm --filter
-@spine-ts/example-todo start` in terminal one. In terminal two, seed one open
+@spine-event-engine/example-todo start` in terminal one. In terminal two, seed one open
 task and copy the task ID printed after `to-do smoke ok:`:
 
 ```bash
-pnpm --filter @spine-ts/example-todo smoke
+pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
 Pass that complete ID as `SPINE_TODO_TASK_ID` when running the saved query
@@ -85,7 +85,7 @@ module from the repository root. For example, replace `smoke-...` below with
 the ID just printed:
 
 ```bash
-SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-ts/example-todo exec node scripts/query-client.mjs
+SPINE_TODO_TASK_ID='smoke-...' pnpm --filter @spine-event-engine/example-todo exec node scripts/query-client.mjs
 ```
 
 The exact-ID result must contain the seeded row, and the module enforces that
@@ -106,8 +106,8 @@ import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -121,8 +121,8 @@ import {
   ResponseFormatSchema,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/client";
-import { SignalMetadata } from "@spine-ts/server";
+} from "@spine-event-engine/proto/client";
+import { SignalMetadata } from "@spine-event-engine/server";
 
 import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
 
@@ -291,11 +291,11 @@ For a live view, create a `Topic` with the same `TaskList` target, subscribe,
 and activate the returned subscription. First run `pnpm typecheck:build` from
 the repository root, then save this complete ESM module as
 `examples/todo/scripts/subscription-client.mjs`. With `pnpm --filter
-@spine-ts/example-todo start` running in another terminal, execute it from the
+@spine-event-engine/example-todo start` running in another terminal, execute it from the
 repository root with:
 
 ```bash
-pnpm --filter @spine-ts/example-todo exec node scripts/subscription-client.mjs
+pnpm --filter @spine-event-engine/example-todo exec node scripts/subscription-client.mjs
 ```
 
 It starts the iterator read before posting the command, applies the delivery
@@ -322,8 +322,8 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
@@ -331,8 +331,8 @@ import {
   TargetSchema,
   TopicIdSchema,
   TopicSchema,
-} from "@spine-ts/proto/client";
-import { SignalMetadata } from "@spine-ts/server";
+} from "@spine-event-engine/proto/client";
+import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";

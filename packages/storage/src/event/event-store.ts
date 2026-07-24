@@ -1,6 +1,6 @@
 import { clone } from "@bufbuild/protobuf";
-import type { Event, EventId, TenantId } from "@spine-ts/proto";
-import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
 import { RecordColumn } from "../record/record-column.js";
 import type { RecordQuery } from "../record/record-query.js";

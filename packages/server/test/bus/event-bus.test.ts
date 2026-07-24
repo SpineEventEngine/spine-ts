@@ -3,7 +3,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packEvent } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -12,8 +12,12 @@ import {
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
-import { EventStore, InMemoryStorageFactory, type OnEventAccepted } from "@spine-ts/storage";
+} from "@spine-event-engine/proto";
+import {
+  EventStore,
+  InMemoryStorageFactory,
+  type OnEventAccepted,
+} from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";

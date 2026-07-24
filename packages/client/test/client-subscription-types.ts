@@ -1,6 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { UserIdSchema } from "@spine-ts/proto";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
 import type {
   ProjectionColumn,

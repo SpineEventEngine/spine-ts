@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import type { Event, EventId } from "@spine-ts/proto";
-import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import type { Event, EventId } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import {

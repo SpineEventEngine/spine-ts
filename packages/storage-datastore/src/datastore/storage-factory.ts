@@ -5,7 +5,7 @@ import {
   type RecordSpec,
   StorageFactory,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
 

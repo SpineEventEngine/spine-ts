@@ -5,6 +5,36 @@ import { fileURLToPath } from "node:url";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultImportTimeoutMs = 10_000;
+const legacyNamespace = "@spine-" + "ts/";
+
+function trackedLiveFiles(repoRoot) {
+  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter(
+      (path) =>
+        path.length > 0 && !path.startsWith("build-protocol/") && path !== "human-review-1-jul.md",
+    )
+    .sort();
+}
+
+export function collectLegacyNamespaceReferences(repoRoot = defaultRepoRoot) {
+  const references = [];
+
+  for (const path of trackedLiveFiles(repoRoot)) {
+    const lines = readFileSync(join(repoRoot, path), "utf8").split("\n");
+
+    for (const [index, line] of lines.entries()) {
+      if (line.includes(legacyNamespace)) {
+        references.push(`${path}:${index + 1}: ${line}`);
+      }
+    }
+  }
+
+  return references;
+}
 
 function packageDirectories(repoRoot) {
   const packagesRoot = join(repoRoot, "packages");
@@ -297,6 +327,9 @@ export function runReleaseReadiness(
   const exports = collectRuntimeExportSpecifiers(repoRoot);
   const links = collectMarkdownRelativeLinks(repoRoot);
   const failures = [
+    ...collectLegacyNamespaceReferences(repoRoot).map(
+      (reference) => `Legacy package namespace: ${reference}`,
+    ),
     ...validateImports(repoRoot, exports, importTimeoutMs),
     ...validateLinks(repoRoot, links),
   ];

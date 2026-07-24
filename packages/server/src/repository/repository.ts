@@ -9,7 +9,7 @@ import {
   unpackAny,
   type MessageSchema,
   type RejectionThrowable,
-} from "@spine-ts/core";
+} from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandSchema,
@@ -21,8 +21,8 @@ import {
   type TenantId,
   type Version,
   VersionSchema,
-} from "@spine-ts/proto";
-import type { StorageContext, StorageFactory } from "@spine-ts/storage";
+} from "@spine-event-engine/proto";
+import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";

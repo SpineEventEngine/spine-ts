@@ -4,8 +4,8 @@ import process from "node:process";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packEvent } from "@spine-ts/core";
-import { EventContextSchema, EventIdSchema, file_spine_options } from "@spine-ts/proto";
+import { packEvent } from "@spine-event-engine/core";
+import { EventContextSchema, EventIdSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   Aggregate,
   BoundedContext,
@@ -15,9 +15,9 @@ import {
   EnvironmentType,
   ServerEnvironment,
   defineEntityHandlers,
-} from "@spine-ts/server";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+} from "@spine-event-engine/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 

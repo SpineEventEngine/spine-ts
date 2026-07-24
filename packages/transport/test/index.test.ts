@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -18,7 +18,7 @@ import {
   isTransportTopicKind,
 } from "../src/index.js";
 
-describe("@spine-ts/transport", () => {
+describe("@spine-event-engine/transport", () => {
   it("creates copy-safe topics with deterministic routing keys", () => {
     const semanticTags = ["tenant", "event", "tenant"] as const;
     const topic = createTransportTopic({

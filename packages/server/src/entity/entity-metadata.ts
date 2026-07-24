@@ -10,7 +10,7 @@ import {
   every_is,
   is,
   set_once,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 /** Protobuf-ES message schema accepted by the server descriptor metadata APIs. */
 export type DescriptorMessageSchema = GenMessage<Message>;

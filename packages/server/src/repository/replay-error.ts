@@ -1,4 +1,4 @@
-import type { ValidationError } from "@spine-ts/proto";
+import type { ValidationError } from "@spine-event-engine/proto";
 
 /** Error raised when stored aggregate history cannot be replayed safely. */
 export class ReplayError extends Error {

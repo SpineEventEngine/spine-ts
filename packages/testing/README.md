@@ -1,14 +1,14 @@
-# @spine-ts/testing
+# @spine-event-engine/testing
 
-`BlackBox` starts one ephemeral local `@spine-ts/server` server and exposes one
-public `@spine-ts/client` session. It is runner-neutral: use it from Node's
+`BlackBox` starts one ephemeral local `@spine-event-engine/server` server and exposes one
+public `@spine-event-engine/client` session. It is runner-neutral: use it from Node's
 test runner, Vitest, or another assertion library.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { ProjectionColumn, ProjectionQuery } from "@spine-ts/client";
-import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
-import { BlackBox } from "@spine-ts/testing";
+import { ProjectionColumn, ProjectionQuery } from "@spine-event-engine/client";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { BlackBox } from "@spine-event-engine/testing";
 import { createTasksContext } from "@example/tasks-test-support";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";

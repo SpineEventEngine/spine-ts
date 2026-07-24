@@ -1,4 +1,4 @@
-# @spine-ts/transport
+# @spine-event-engine/transport
 
 Adapter-agnostic transport contracts for signal routing, with a same-host
 ZeroMQ IPC adapter on an explicit subpath.
@@ -13,14 +13,14 @@ Current scope:
 - publish/request operation contracts plus handler callback types;
 - async close behavior for transport implementations; and
 - an adapter-scoped ZeroMQ local IPC implementation available from the
-  `@spine-ts/transport/zeromq` subpath.
+  `@spine-event-engine/transport/zeromq` subpath.
 
-`@spine-ts/server` can bind command/event runtime routes to any implementation
+`@spine-event-engine/server` can bind command/event runtime routes to any implementation
 of this `SignalTransport` contract, but this package still does not import
 server runtime code or expose a concrete production adapter from its root API.
 
 This package pins the maintained official `zeromq@6.5.0` package for local IPC.
-The adapter-scoped `@spine-ts/transport/zeromq` subpath exports exactly
+The adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
 `createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
 `ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
 `ZeroMqTransportOptions`. The package root remains adapter-agnostic. ZeroMQ
@@ -28,7 +28,7 @@ socket classes, endpoint strings,
 multipart frames, native binding types, broker processes, participant lifecycle
 values, worker registrations, delivery attempts/results, retry policy, durable
 delivery, and handler materialization are not exported from the public transport
-API. Delivery and inbox concepts are implemented in `@spine-ts/server`;
+API. Delivery and inbox concepts are implemented in `@spine-event-engine/server`;
 participant lifecycle, broker supervision, retained retry history,
 remote/multi-host transport, and production health policy are initial-release
 exclusions; this documentation makes no future-policy commitment.
@@ -81,7 +81,7 @@ import {
   isTransportTopicKind,
   type PublishTransportOperation,
   type TransportTopic,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 
 function onTransportOperation(operation: PublishTransportOperation<{ readonly id: string }>): void {
   if (isTransportOperationKind(operation, "event")) {

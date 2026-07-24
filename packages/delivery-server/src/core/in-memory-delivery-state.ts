@@ -1,5 +1,5 @@
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { InboxMessage, ShardIndex, WorkerId } from "@spine-ts/proto/delivery";
+import type { InboxMessage, ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { type DeliveryStateLimits, resolveStateLimits } from "./limits.js";
 import { copyMessage, copyShard, copyWorker, messageKey, shardKey } from "./wire-values.js";

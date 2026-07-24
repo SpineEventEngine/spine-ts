@@ -1,5 +1,5 @@
-import type { Command } from "@spine-ts/proto";
-import type { MessageSchema } from "@spine-ts/core";
+import type { Command } from "@spine-event-engine/proto";
+import type { MessageSchema } from "@spine-event-engine/core";
 
 /**
  * Small unicast command-dispatch seam for bus and repository adapters.

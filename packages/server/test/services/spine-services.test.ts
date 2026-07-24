@@ -27,7 +27,7 @@ import {
   packEvent,
   type MessageSchema,
   unpackAny,
-} from "@spine-ts/core";
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -47,8 +47,8 @@ import {
   ValidationErrorSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
-import { CommandService } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto";
+import { CommandService } from "@spine-event-engine/proto/client";
 import {
   type CompositeFilter,
   CompositeFilter_CompositeOperator,
@@ -57,7 +57,7 @@ import {
   FilterSchema,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 import {
   OrderBySchema,
   OrderBy_Direction,
@@ -66,9 +66,9 @@ import {
   ResponseFormatSchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
-import { SubscriptionService } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
+import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
   type Subscription,
   type SubscriptionUpdate,
@@ -77,9 +77,9 @@ import {
   SubscriptionSchema,
   TopicIdSchema,
   TopicSchema,
-} from "@spine-ts/proto/client";
-import type { Ack } from "@spine-ts/proto";
-import type { Response } from "@spine-ts/proto";
+} from "@spine-event-engine/proto/client";
+import type { Ack } from "@spine-event-engine/proto";
+import type { Response } from "@spine-event-engine/proto";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -90,7 +90,7 @@ import {
   type RecordQuery,
   type RecordSpec,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import {

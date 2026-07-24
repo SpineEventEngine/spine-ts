@@ -3,8 +3,8 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Transport } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 
-import type { InboxMessage, InboxMessageId } from "@spine-ts/server";
-import { ShardIndex } from "@spine-ts/server";
+import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
+import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxService,
   AdminService,
@@ -22,8 +22,8 @@ import {
   ReleaseShardSchema,
   WriteMessageSchema,
   WriteMessagesSchema,
-} from "@spine-ts/proto/delivery-server";
-import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery-server";
+import { InboxMessageIdSchema, ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 import {
   DeliveryOutcomeUnknownError,
   MAX_DELIVERY_RPC_BYTES,

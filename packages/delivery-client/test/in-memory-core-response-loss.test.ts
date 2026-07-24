@@ -1,8 +1,8 @@
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
-import { InboxService, ShardService } from "@spine-ts/proto/delivery-server";
-import { ShardIndex } from "@spine-ts/server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import { ShardIndex } from "@spine-event-engine/server";
 import { createInMemoryDeliveryServerCore } from "../../delivery-server/src/index.js";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { domainMessage } from "./shared-fixtures.js";

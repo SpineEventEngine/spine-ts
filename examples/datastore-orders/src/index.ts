@@ -8,9 +8,12 @@ import {
   Server,
   Subscribe,
   type RunningServer,
-} from "@spine-ts/server";
-import type { StorageFactory } from "@spine-ts/storage";
-import { DatastoreStorageFactory, type DatastoreStorageOptions } from "@spine-ts/storage-datastore";
+} from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+import {
+  DatastoreStorageFactory,
+  type DatastoreStorageOptions,
+} from "@spine-event-engine/storage-datastore";
 
 import {
   type CreateOrder,

@@ -10,7 +10,13 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
+import {
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type Command as SpineCommand,
@@ -31,8 +37,8 @@ import {
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
-import type { UserId } from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
+import type { UserId } from "@spine-event-engine/proto";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
 import {
@@ -46,7 +52,7 @@ import {
   RecordStorage,
   type RecordSpec,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {

@@ -9,7 +9,7 @@ import type {
   TransportSignalKind,
   TransportSubscription,
   TransportSubscriptionHandle,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Server } from "../../src/index.js";

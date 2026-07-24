@@ -9,7 +9,7 @@ import {
   TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { packAny } from "@spine-ts/core";
+import { packAny } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -30,7 +30,7 @@ import {
   UserIdSchema,
   type Version,
   VersionSchema,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 export interface Clock {
   now(): Date;

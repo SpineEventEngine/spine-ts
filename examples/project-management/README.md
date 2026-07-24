@@ -16,10 +16,10 @@ pnpm typecheck:build
 Run the bounded local scenario at one of the supported independent-user levels:
 
 ```bash
-SPINE_PROJECT_LOAD_USERS=10 pnpm --filter @spine-ts/example-project-management load
-SPINE_PROJECT_LOAD_USERS=25 pnpm --filter @spine-ts/example-project-management load
-SPINE_PROJECT_LOAD_USERS=50 pnpm --filter @spine-ts/example-project-management load
-SPINE_PROJECT_LOAD_USERS=100 pnpm --filter @spine-ts/example-project-management load
+SPINE_PROJECT_LOAD_USERS=10 pnpm --filter @spine-event-engine/example-project-management load
+SPINE_PROJECT_LOAD_USERS=25 pnpm --filter @spine-event-engine/example-project-management load
+SPINE_PROJECT_LOAD_USERS=50 pnpm --filter @spine-event-engine/example-project-management load
+SPINE_PROJECT_LOAD_USERS=100 pnpm --filter @spine-event-engine/example-project-management load
 ```
 
 Each asynchronous user owns a local HTTP/2 session and subscription. It creates

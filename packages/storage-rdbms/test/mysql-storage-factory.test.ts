@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
 import {

@@ -2,8 +2,8 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl } from "@spine-ts/core";
-import { CommandSchema, EventSchema, file_spine_options } from "@spine-ts/proto";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 

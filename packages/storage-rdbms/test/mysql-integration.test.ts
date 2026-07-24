@@ -1,7 +1,7 @@
 import { createPool, type RowDataPacket } from "mysql2/promise";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {

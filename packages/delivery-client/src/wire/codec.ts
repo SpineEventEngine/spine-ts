@@ -1,16 +1,16 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 
-import type { InboxMessage, InboxMessageId } from "@spine-ts/server";
-import { ShardIndex } from "@spine-ts/server";
-import { CommandSchema, EventSchema } from "@spine-ts/proto";
+import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
+import { ShardIndex } from "@spine-event-engine/server";
+import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   type ExpiredSession,
   type ShardInfo,
   type ShardInfoUpdate,
   type ShardPickedUp,
   ShardStatus,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
   InboxLabel,
@@ -23,7 +23,7 @@ import {
   type ShardIndex as WireShardIndex,
   type WorkerId,
   WorkerIdSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import {
   DeliveryProtocolError,

@@ -756,7 +756,7 @@ function handlerFixtureSource(
   const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
   const versionType = entityBase === "Aggregate" ? "bigint" : "number";
   return `
-    import { Aggregate, Assign, Command, Projection, React, Subscribe } from "@spine-ts/server";
+    import { Aggregate, Assign, Command, Projection, React, Subscribe } from "@spine-event-engine/server";
     import { ${stateSchema} } from "../generated/${stateModule}.js";
     ${imports}
 
@@ -874,8 +874,8 @@ function fileDescriptor(
 }
 
 const validTaskSource = `
-  import { Aggregate, Assign as HandleCommand, Command, Subscribe } from "@spine-ts/server";
-  import * as server from "@spine-ts/server";
+  import { Aggregate, Assign as HandleCommand, Command, Subscribe } from "@spine-event-engine/server";
+  import * as server from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/spine/example/todo/v1/task_commands_pb.js";
   import * as events from "../generated/spine/example/todo/v1/task_events_pb.js";
@@ -904,7 +904,7 @@ const validTaskSource = `
 `;
 
 const neutralCommandSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -918,7 +918,7 @@ const neutralCommandSource = `
 `;
 
 const neutralEventSource = `
-  import { Projection, Subscribe } from "@spine-ts/server";
+  import { Projection, Subscribe } from "@spine-event-engine/server";
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/domain_pb.js";
 
@@ -931,7 +931,7 @@ const neutralEventSource = `
 `;
 
 const misleadingCommandPathSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -945,7 +945,7 @@ const misleadingCommandPathSource = `
 `;
 
 const mixedDescriptorSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type AuditRecord } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -959,7 +959,7 @@ const mixedDescriptorSource = `
 `;
 
 const forgedDescriptorSource = `
-  import { Aggregate, Assign, Subscribe } from "@spine-ts/server";
+  import { Aggregate, Assign, Subscribe } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -978,7 +978,7 @@ const forgedDescriptorSource = `
 `;
 
 const badDescriptorSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/missing_pb.js";
   import { type RenameTask } from "../generated/malformed_pb.js";
@@ -998,7 +998,7 @@ const badDescriptorSource = `
 `;
 
 const sourcePreferenceSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/domain_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1012,7 +1012,7 @@ const sourcePreferenceSource = `
 `;
 
 const neutralStateSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/state_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1026,7 +1026,7 @@ const neutralStateSource = `
 `;
 
 const localEntitySource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1040,7 +1040,7 @@ const localEntitySource = `
 `;
 
 const namedExportSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1056,7 +1056,7 @@ const namedExportSource = `
 `;
 
 const defaultExportSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1070,7 +1070,7 @@ const defaultExportSource = `
 `;
 
 const cyclicAliasSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { type TaskCreated } from "../generated/events_pb.js";
 
   type StateA = StateB;
@@ -1089,7 +1089,7 @@ const cyclicAliasSource = `
 `;
 
 const invalidGeneratedSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type TaskCreatd, type MissingSchemaCommand } from "../generated/commands_pb.js";
   import { type AuditRecord } from "../generated/audit_pb.js";
@@ -1114,7 +1114,7 @@ const invalidGeneratedSource = `
 `;
 
 const typeOnlySchemaSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated, type TaskRenamed } from "../generated/events_pb.js";
@@ -1133,7 +1133,7 @@ const typeOnlySchemaSource = `
 `;
 
 const invalidRoleSource = `
-  import { Aggregate, Assign, Command, React } from "@spine-ts/server";
+  import { Aggregate, Assign, Command, React } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1157,8 +1157,8 @@ const invalidRoleSource = `
 `;
 
 const oddballSource = `
-  import * as spine from "@spine-ts/server";
-  import * as proto from "@spine-ts/proto";
+  import * as spine from "@spine-event-engine/server";
+  import * as proto from "@spine-event-engine/proto";
   import * as commands from "../generated/commands_pb";
   import * as events from "../generated/events_pb";
   import { TaskSchema as StateSchema } from "../generated/task_pb.js";
@@ -1200,8 +1200,8 @@ const oddballSource = `
 `;
 
 const edgeSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
-  import * as Proto from "@spine-ts/proto";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
+  import * as Proto from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1252,7 +1252,7 @@ const edgeSource = `
 `;
 
 const malformedSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1264,7 +1264,7 @@ const malformedSource = `
 `;
 
 const noEmissionSource = `
-  import { Projection, React } from "@spine-ts/server";
+  import { Projection, React } from "@spine-event-engine/server";
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
@@ -1277,7 +1277,7 @@ const noEmissionSource = `
 `;
 
 const voidEmissionSource = `
-  import { Aggregate, Assign, Command } from "@spine-ts/server";
+  import { Aggregate, Assign, Command } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1296,7 +1296,7 @@ const voidEmissionSource = `
 `;
 
 const emptyTupleReactSource = `
-  import { Projection, React } from "@spine-ts/server";
+  import { Projection, React } from "@spine-event-engine/server";
   import { TaskListSchema } from "../generated/task_list_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
 
@@ -1310,7 +1310,7 @@ const emptyTupleReactSource = `
 `;
 
 const stringNameSource = `
-  import { Aggregate, Assign } from "@spine-ts/server";
+  import { Aggregate, Assign } from "@spine-event-engine/server";
   import { TaskSchema } from "../generated/task_pb.js";
   import { type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";
@@ -1324,8 +1324,8 @@ const stringNameSource = `
 `;
 
 const invalidSource = `
-  import { Aggregate, Apply, Assign, Command, Subscribe } from "@spine-ts/server";
-  import { type Event } from "@spine-ts/proto";
+  import { Aggregate, Apply, Assign, Command, Subscribe } from "@spine-event-engine/server";
+  import { type Event } from "@spine-event-engine/proto";
   import { TaskSchema } from "../generated/task_pb.js";
   import { CreateTaskSchema, type CreateTask } from "../generated/commands_pb.js";
   import { type TaskCreated } from "../generated/events_pb.js";

@@ -1,4 +1,4 @@
-import type { ValidationError } from "@spine-ts/proto";
+import type { ValidationError } from "@spine-event-engine/proto";
 
 /** Error raised when aggregate command execution rejects a state transition. */
 export class TransitionValidationError extends Error {

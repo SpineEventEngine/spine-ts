@@ -1,10 +1,10 @@
-import { deriveTypeUrl } from "@spine-ts/core";
+import { deriveTypeUrl } from "@spine-event-engine/core";
 import {
   createTransportSubscription,
   createTransportTopic,
   type TransportSubscription,
   type TransportTopic,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 import { BoundedContext, type BoundedContextSnapshot } from "../context/bounded-context.js";
 import {
   CommandRegistrationReadiness,

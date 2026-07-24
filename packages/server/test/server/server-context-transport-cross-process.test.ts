@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc, type GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packCommand, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packCommand, packEvent } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -17,14 +17,14 @@ import {
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
-import { SignalMetadata } from "@spine-ts/server";
-import { createTransportTopic, type SignalTransport } from "@spine-ts/transport";
+} from "@spine-event-engine/proto";
+import { SignalMetadata } from "@spine-event-engine/server";
+import { createTransportTopic, type SignalTransport } from "@spine-event-engine/transport";
 import {
   createZeroMqAdapterConfig,
   createZeroMqTransport,
   type ZeroMqTransportOptions,
-} from "@spine-ts/transport/zeromq";
+} from "@spine-event-engine/transport/zeromq";
 import { describe, expect, it } from "vitest";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";

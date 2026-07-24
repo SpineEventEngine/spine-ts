@@ -20,14 +20,14 @@ The build regenerates the ignored Protobuf and handler-registry artifacts under
 In terminal one, start the local server:
 
 ```bash
-pnpm --filter @spine-ts/example-todo start
+pnpm --filter @spine-event-engine/example-todo start
 ```
 
 It listens on `http://127.0.0.1:8080`. In terminal two, post one generated
 `CreateTask` command and wait for its projected `TaskList` row:
 
 ```bash
-pnpm --filter @spine-ts/example-todo smoke
+pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
 Set `SPINE_TODO_BASE_URL` when the server uses another local address. Stop the
@@ -42,7 +42,7 @@ pnpm vitest run examples/todo/test/local-multi-process.test.ts
 ```
 
 The black-box suite covers real loopback command, query, and subscription
-behavior through `@spine-ts/testing` `BlackBox`, which is equally usable from
+behavior through `@spine-event-engine/testing` `BlackBox`, which is equally usable from
 Node's test runner and Vitest. The local multi-process suite proves a bounded
 same-host fixture; it is not an application CLI. Managed sandboxes can reject
 loopback or local IPC binding with `EPERM`; rerun those native tests where

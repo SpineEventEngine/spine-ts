@@ -24,8 +24,8 @@ import {
   UInt32ValueSchema,
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import type { MessageSchema } from "@spine-ts/core";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
+import type { MessageSchema } from "@spine-event-engine/core";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   type Command,
@@ -34,19 +34,27 @@ import {
   type TenantId,
   ValidationErrorSchema,
   VersionSchema,
-} from "@spine-ts/proto";
-import { ErrorSchema } from "@spine-ts/proto";
-import { CommandService } from "@spine-ts/proto/client";
-import type { CompositeFilter, Filter, Target, TargetFilters } from "@spine-ts/proto/client";
-import { CompositeFilter_CompositeOperator, Filter_Operator } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto";
+import { ErrorSchema } from "@spine-event-engine/proto";
+import { CommandService } from "@spine-event-engine/proto/client";
+import type {
+  CompositeFilter,
+  Filter,
+  Target,
+  TargetFilters,
+} from "@spine-event-engine/proto/client";
+import {
+  CompositeFilter_CompositeOperator,
+  Filter_Operator,
+} from "@spine-event-engine/proto/client";
 import {
   EntityStateWithVersionSchema,
   OrderBy_Direction,
   QueryResponseSchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
 import {
   EntityStateUpdateSchema,
   EntityUpdatesSchema,
@@ -58,10 +66,15 @@ import {
   type Subscription,
   type SubscriptionUpdate,
   type Topic,
-} from "@spine-ts/proto/client";
-import { SubscriptionService } from "@spine-ts/proto/client";
-import { AckSchema, type Ack } from "@spine-ts/proto";
-import { ResponseSchema, StatusSchema, type Response, type Status } from "@spine-ts/proto";
+} from "@spine-event-engine/proto/client";
+import { SubscriptionService } from "@spine-event-engine/proto/client";
+import { AckSchema, type Ack } from "@spine-event-engine/proto";
+import {
+  ResponseSchema,
+  StatusSchema,
+  type Response,
+  type Status,
+} from "@spine-event-engine/proto";
 import {
   RecordMask,
   type NormalizedComparisonOperator,
@@ -70,7 +83,7 @@ import {
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { CommandValidationError } from "../bus/command-errors.js";

@@ -1,7 +1,7 @@
-# @spine-ts/storage
+# @spine-event-engine/storage
 
 Small JVM-like storage seam for Spine TS runtime records. Its root API is
-independent of `@spine-ts/server`; server runtime code composes this seam rather
+independent of `@spine-event-engine/server`; server runtime code composes this seam rather
 than widening it with delivery or service behavior.
 
 The package owns the current storage layer:
@@ -28,7 +28,7 @@ One `RecordSpec` cannot declare the same `RecordColumn` name twice. Its
 constructor rejects duplicate names before any storage adapter receives the
 specification.
 
-The package stays independent of `@spine-ts/server`. Storage scoping uses a
+The package stays independent of `@spine-event-engine/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
 `tenantId`.
 
@@ -40,7 +40,7 @@ optional `either`, nested-predicate, ordering, mask, and limit features. The
 shared policy rejects malformed or unsupported plans before provider execution;
 `RecordStorage.queryPlan()` then applies the shared complete evaluator for
 nested predicates, repeated ordering, the stable ID tie-breaker, masks, and
-limits. Application query construction remains in `@spine-ts/client`.
+limits. Application query construction remains in `@spine-event-engine/client`.
 Framework callers may set `candidateLimit` to bound provider materialization
 independently of the semantic result limit. Providers fetch at most one
 sentinel row beyond that bound, and `RecordStorage` raises
@@ -64,8 +64,8 @@ first when available, then Protobuf-ES `clone(schema, message)`, and finally
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { EventIdSchema, EventSchema } from "@spine-ts/proto";
-import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-ts/storage";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 const factory = new InMemoryStorageFactory();
 const spec = new RecordSpec({

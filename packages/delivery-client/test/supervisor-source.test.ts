@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import type { DeliverySource } from "@spine-ts/server";
+import type { DeliverySource } from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../src/index.js";
 

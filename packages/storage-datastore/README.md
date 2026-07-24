@@ -1,7 +1,7 @@
-# @spine-ts/storage-datastore
+# @spine-event-engine/storage-datastore
 
-`@spine-ts/storage-datastore` is an optional Google Cloud Datastore adapter for
-the provider-neutral `@spine-ts/storage` port. It targets Firestore in
+`@spine-event-engine/storage-datastore` is an optional Google Cloud Datastore adapter for
+the provider-neutral `@spine-event-engine/storage` port. It targets Firestore in
 Datastore mode through the official Datastore client; it does not use Firestore
 Native APIs.
 
@@ -11,7 +11,7 @@ client when its factory or a storage handle closes.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
-import { DatastoreStorageFactory } from "@spine-ts/storage-datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const factory = new DatastoreStorageFactory({
   client: new Datastore({ projectId: "my-project" }),
@@ -70,7 +70,7 @@ running Firestore emulator in Datastore mode:
 ```sh
 gcloud emulators firestore start --database-mode=datastore-mode --host-port=127.0.0.1:8081
 DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
-  pnpm --filter @spine-ts/storage-datastore test:emulator
+  pnpm --filter @spine-event-engine/storage-datastore test:emulator
 ```
 
 Set `DATASTORE_PROJECT_ID` to override the disposable emulator project ID.
@@ -85,7 +85,7 @@ default:
 
 ```sh
 DATASTORE_CLOUD_TEST=1 DATASTORE_PROJECT_ID=my-test-project \
-  pnpm --filter @spine-ts/storage-datastore test:cloud
+  pnpm --filter @spine-event-engine/storage-datastore test:cloud
 ```
 
 Use an explicit Google credential configuration supported by the official

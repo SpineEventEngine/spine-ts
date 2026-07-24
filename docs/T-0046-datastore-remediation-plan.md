@@ -6,7 +6,7 @@ re-review is in progress.
 ## Purpose
 
 This plan captures review findings discovered after the first implementation of
-`@spine-ts/storage-datastore`, the JVM comparison at
+`@spine-event-engine/storage-datastore`, the JVM comparison at
 `gcloud-jvm` commit `f4ade19d8bf7666447f068607426475cda485afe`, and the
 questions raised during review. It supersedes the query, identity, emulator,
 documentation, and example-coverage portions of the earlier implementation

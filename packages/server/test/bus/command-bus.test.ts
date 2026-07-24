@@ -2,7 +2,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -10,7 +10,7 @@ import {
   CommandIdSchema,
   UserIdSchema,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 

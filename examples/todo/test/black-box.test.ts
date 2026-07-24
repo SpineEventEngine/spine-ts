@@ -2,8 +2,8 @@ import { create, type MessageShape } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
-import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { UserIdSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -11,7 +11,7 @@ import {
   FilterSchema,
   TargetFiltersSchema,
   TargetSchema,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 import {
   EntityStateWithVersionSchema,
   QueryIdSchema,
@@ -19,14 +19,18 @@ import {
   QuerySchema,
   type Query,
   type QueryResponse,
-} from "@spine-ts/proto/client";
-import { CommandService } from "@spine-ts/proto/client";
-import { QueryService } from "@spine-ts/proto/client";
-import { TopicIdSchema, TopicSchema, type SubscriptionUpdate } from "@spine-ts/proto/client";
-import { SubscriptionService } from "@spine-ts/proto/client";
-import { type StateSubscriptionUpdate, type SubscriptionEvent } from "@spine-ts/client";
-import { SignalMetadata } from "@spine-ts/server";
-import { BlackBox, type BlackBoxScope } from "@spine-ts/testing";
+} from "@spine-event-engine/proto/client";
+import { CommandService } from "@spine-event-engine/proto/client";
+import { QueryService } from "@spine-event-engine/proto/client";
+import {
+  TopicIdSchema,
+  TopicSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
+import { SubscriptionService } from "@spine-event-engine/proto/client";
+import { type StateSubscriptionUpdate, type SubscriptionEvent } from "@spine-event-engine/client";
+import { SignalMetadata } from "@spine-event-engine/server";
+import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +66,7 @@ afterEach(async () => {
   ownedBlackBoxes.clear();
 });
 
-describe("@spine-ts/example-todo", () => {
+describe("@spine-event-engine/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
     ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));

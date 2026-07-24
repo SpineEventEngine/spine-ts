@@ -4,7 +4,13 @@ import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Transport } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { randomUUID } from "node:crypto";
-import { deriveTypeUrl, packAny, packCommand, unpackAny, type MessageSchema } from "@spine-ts/core";
+import {
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  unpackAny,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -18,7 +24,7 @@ import {
   type ZoneId,
   type Version,
   type EventContext,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   CommandService,
   QuerySchema,
@@ -33,7 +39,7 @@ import {
   type SubscriptionUpdate,
   type TargetFilters,
   type Topic,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 import type { ProjectionPredicate } from "../query/projection-query.js";
 import { ProjectionQuery } from "../query/projection-query.js";
 import { ProjectionColumn } from "../projection/projection-column.js";
@@ -651,7 +657,7 @@ class CommandEventStream implements CommandEvents {
   }
 
   async consume(
-    updates: AsyncIterable<import("@spine-ts/proto/client").SubscriptionUpdate>,
+    updates: AsyncIterable<import("@spine-event-engine/proto/client").SubscriptionUpdate>,
   ): Promise<void> {
     const iterator = updates[Symbol.asyncIterator]();
     try {
@@ -675,7 +681,7 @@ class CommandEventStream implements CommandEvents {
     }
   }
 
-  push(event: import("@spine-ts/proto").Event): void {
+  push(event: import("@spine-event-engine/proto").Event): void {
     const context = event.context;
     if (context === undefined) return;
     // `originId` preserves a frozen wire field whose generated accessor is deprecated.

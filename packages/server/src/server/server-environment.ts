@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import type {
   PublishTransportHandler,
   PublishTransportOperation,
@@ -8,7 +8,7 @@ import type {
   TransportSignalKind,
   TransportSubscription,
   TransportSubscriptionHandle,
-} from "@spine-ts/transport";
+} from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
 import {

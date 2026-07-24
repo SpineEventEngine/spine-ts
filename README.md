@@ -37,18 +37,18 @@ registration or handler materialization, and broader production verification.
 - Example boundary: `examples/todo`.
 - Copied Spine proto contracts live under `proto/`, with source provenance in
   `proto/spine-sources.json`.
-- `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
+- `@spine-event-engine/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
-- `@spine-ts/client` owns the Node command, Projection-query, and subscription
+- `@spine-event-engine/client` owns the Node command, Projection-query, and subscription
   facade, plus descriptor-backed typed Projection columns and Query DSL.
-- `@spine-ts/delivery-server` provides the in-memory simple-server core and a
+- `@spine-event-engine/delivery-server` provides the in-memory simple-server core and a
   standalone cleartext HTTP/2 listener with Inbox, Shard, Admin, and health
   services. State is lost on restart; it is trusted-network infrastructure,
   not a public-Internet or durable deployment.
-- `@spine-ts/core` owns type metadata, validation, and envelope helpers;
-  `@spine-ts/server` owns bounded-context, service, lifecycle, and durable
-  handoff behavior; `@spine-ts/storage` owns record storage; and
-  `@spine-ts/transport` owns adapter-neutral transport contracts plus its
+- `@spine-event-engine/core` owns type metadata, validation, and envelope helpers;
+  `@spine-event-engine/server` owns bounded-context, service, lifecycle, and durable
+  handoff behavior; `@spine-event-engine/storage` owns record storage; and
+  `@spine-event-engine/transport` owns adapter-neutral transport contracts plus its
   adapter-scoped same-host ZeroMQ subpath; Datastore and MySQL RDBMS adapters
   implement the same storage port without deployment/resilience guarantees.
 - Package tests live outside package source under `packages/<package>/test`.
@@ -63,8 +63,8 @@ registration or handler materialization, and broader production verification.
 - `pnpm docs:check`
 - `pnpm vitest run examples/todo/test/black-box.test.ts`
 - `pnpm vitest run examples/todo/test/local-multi-process.test.ts`
-- `pnpm --filter @spine-ts/example-todo start`
-- `pnpm --filter @spine-ts/example-todo smoke`
+- `pnpm --filter @spine-event-engine/example-todo start`
+- `pnpm --filter @spine-event-engine/example-todo smoke`
 - `pnpm lint`
 - `pnpm verify`
 - `pnpm docs:api`

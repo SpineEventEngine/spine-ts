@@ -3,15 +3,15 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
-import { packAny } from "@spine-ts/core";
+import { packAny } from "@spine-event-engine/core";
 import {
   AckSchema,
   CommandIdSchema,
   ResponseSchema,
   StatusSchema,
   type Command,
-} from "@spine-ts/proto";
-import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto";
+import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";

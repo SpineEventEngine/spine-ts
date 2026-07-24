@@ -9,14 +9,14 @@ import {
   ShardStatus,
   WriteMessageSchema,
   type ShardInfoList,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
   type ShardIndex,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import { createDeliveryAssembly } from "../../src/server/assembly.js";
 

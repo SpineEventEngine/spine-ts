@@ -972,42 +972,43 @@ const unexpectedZeroMqExports = declaredZeroMqExports.filter(
 
 if (missingExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/proto exports: ${missingExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/proto exports: ${missingExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingCoreExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/core exports: ${missingCoreExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/core exports: ${missingCoreExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingClientExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/client exports: ${missingClientExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/client exports: ${missingClientExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingDeclaredClientExports.length > 0) {
   console.error(
-    `@spine-ts/client root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
+    `@spine-event-engine/client root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (unexpectedClientExports.length > 0) {
   console.error(
-    `@spine-ts/client root exports changed without updating docs expectations: ${unexpectedClientExports.join(", ")}`,
+    "@spine-event-engine/client root exports changed without updating docs expectations: " +
+      unexpectedClientExports.join(", "),
   );
   process.exit(1);
 }
 
 if (missingDeliveryClientExports.length > 0 || missingDeclaredDeliveryClientExports.length > 0) {
   console.error(
-    "@spine-ts/delivery-client is missing expected exports: " +
+    "@spine-event-engine/delivery-client is missing expected exports: " +
       [...missingDeliveryClientExports, ...missingDeclaredDeliveryClientExports].join(", "),
   );
   process.exit(1);
@@ -1015,21 +1016,21 @@ if (missingDeliveryClientExports.length > 0 || missingDeclaredDeliveryClientExpo
 
 if (unexpectedDeliveryClientExports.length > 0) {
   console.error(
-    "@spine-ts/delivery-client exports changed without updating docs expectations: " +
+    "@spine-event-engine/delivery-client exports changed without updating docs expectations: " +
       unexpectedDeliveryClientExports.join(", "),
   );
   process.exit(1);
 }
 if (missingDeliveryServerExports.length > 0 || missingDeclaredDeliveryServerExports.length > 0) {
   console.error(
-    "@spine-ts/delivery-server is missing expected exports: " +
+    "@spine-event-engine/delivery-server is missing expected exports: " +
       [...missingDeliveryServerExports, ...missingDeclaredDeliveryServerExports].join(", "),
   );
   process.exit(1);
 }
 if (unexpectedDeliveryServerExports.length > 0) {
   console.error(
-    "@spine-ts/delivery-server exports changed without updating docs expectations: " +
+    "@spine-event-engine/delivery-server exports changed without updating docs expectations: " +
       unexpectedDeliveryServerExports.join(", "),
   );
   process.exit(1);
@@ -1037,28 +1038,29 @@ if (unexpectedDeliveryServerExports.length > 0) {
 
 if (missingServerExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/server exports: ${missingServerExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/server exports: ${missingServerExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingDeclaredServerExports.length > 0) {
   console.error(
-    `@spine-ts/server root is missing expected exports: ${missingDeclaredServerExports.join(", ")}`,
+    `@spine-event-engine/server root is missing expected exports: ${missingDeclaredServerExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (unexpectedServerExports.length > 0) {
   console.error(
-    `@spine-ts/server root exports changed without updating docs expectations: ${unexpectedServerExports.join(", ")}`,
+    "@spine-event-engine/server root exports changed without updating docs expectations: " +
+      unexpectedServerExports.join(", "),
   );
   process.exit(1);
 }
 
 if (forbiddenDeclaredServerExports.length > 0 || forbiddenDocumentedServerExports.length > 0) {
   console.error(
-    "@spine-ts/server must not expose internal scheduler/run-control API: " +
+    "@spine-event-engine/server must not expose internal scheduler/run-control API: " +
       [...forbiddenDeclaredServerExports, ...forbiddenDocumentedServerExports].join(", "),
   );
   process.exit(1);
@@ -1066,14 +1068,14 @@ if (forbiddenDeclaredServerExports.length > 0 || forbiddenDocumentedServerExport
 
 if (missingStorageExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/storage exports: ${missingStorageExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingDeclaredStorageExports.length > 0) {
   console.error(
-    `@spine-ts/storage root is missing expected exports: ${missingDeclaredStorageExports.join(
+    `@spine-event-engine/storage root is missing expected exports: ${missingDeclaredStorageExports.join(
       ", ",
     )}`,
   );
@@ -1082,14 +1084,15 @@ if (missingDeclaredStorageExports.length > 0) {
 
 if (unexpectedStorageExports.length > 0) {
   console.error(
-    `@spine-ts/storage root exports changed without updating docs expectations: ${unexpectedStorageExports.join(", ")}`,
+    "@spine-event-engine/storage root exports changed without updating docs expectations: " +
+      unexpectedStorageExports.join(", "),
   );
   process.exit(1);
 }
 
 if (missingDatastoreStorageExports.length > 0) {
   console.error(
-    "TypeDoc JSON is missing expected @spine-ts/storage-datastore exports: " +
+    "TypeDoc JSON is missing expected @spine-event-engine/storage-datastore exports: " +
       missingDatastoreStorageExports.join(", "),
   );
   process.exit(1);
@@ -1097,7 +1100,7 @@ if (missingDatastoreStorageExports.length > 0) {
 
 if (missingDeclaredDatastoreStorageExports.length > 0) {
   console.error(
-    "@spine-ts/storage-datastore root is missing expected exports: " +
+    "@spine-event-engine/storage-datastore root is missing expected exports: " +
       missingDeclaredDatastoreStorageExports.join(", "),
   );
   process.exit(1);
@@ -1105,7 +1108,7 @@ if (missingDeclaredDatastoreStorageExports.length > 0) {
 
 if (unexpectedDatastoreStorageExports.length > 0) {
   console.error(
-    "@spine-ts/storage-datastore root exports changed without updating docs expectations: " +
+    "@spine-event-engine/storage-datastore root exports changed without updating docs expectations: " +
       unexpectedDatastoreStorageExports.join(", "),
   );
   process.exit(1);
@@ -1113,7 +1116,7 @@ if (unexpectedDatastoreStorageExports.length > 0) {
 
 if (missingRdbmsStorageExports.length > 0) {
   console.error(
-    "TypeDoc JSON is missing expected @spine-ts/storage-rdbms exports: " +
+    "TypeDoc JSON is missing expected @spine-event-engine/storage-rdbms exports: " +
       missingRdbmsStorageExports.join(", "),
   );
   process.exit(1);
@@ -1121,7 +1124,7 @@ if (missingRdbmsStorageExports.length > 0) {
 
 if (missingDeclaredRdbmsStorageExports.length > 0) {
   console.error(
-    "@spine-ts/storage-rdbms root is missing expected exports: " +
+    "@spine-event-engine/storage-rdbms root is missing expected exports: " +
       missingDeclaredRdbmsStorageExports.join(", "),
   );
   process.exit(1);
@@ -1129,7 +1132,7 @@ if (missingDeclaredRdbmsStorageExports.length > 0) {
 
 if (unexpectedRdbmsStorageExports.length > 0) {
   console.error(
-    "@spine-ts/storage-rdbms root exports changed without updating docs expectations: " +
+    "@spine-event-engine/storage-rdbms root exports changed without updating docs expectations: " +
       unexpectedRdbmsStorageExports.join(", "),
   );
   process.exit(1);
@@ -1137,14 +1140,14 @@ if (unexpectedRdbmsStorageExports.length > 0) {
 
 if (missingTransportExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/transport exports: ${missingTransportExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/transport exports: ${missingTransportExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingZeroMqExports.length > 0) {
   console.error(
-    "TypeDoc JSON is missing expected @spine-ts/transport/zeromq exports: " +
+    "TypeDoc JSON is missing expected @spine-event-engine/transport/zeromq exports: " +
       missingZeroMqExports.join(", "),
   );
   process.exit(1);
@@ -1152,7 +1155,7 @@ if (missingZeroMqExports.length > 0) {
 
 if (missingZeroMqDeclarations.length > 0) {
   console.error(
-    "@spine-ts/transport/zeromq root is missing expected exports: " +
+    "@spine-event-engine/transport/zeromq root is missing expected exports: " +
       missingZeroMqDeclarations.join(", "),
   );
   process.exit(1);
@@ -1160,7 +1163,7 @@ if (missingZeroMqDeclarations.length > 0) {
 
 if (unexpectedZeroMqExports.length > 0) {
   console.error(
-    "@spine-ts/transport/zeromq exports changed without updating docs expectations: " +
+    "@spine-event-engine/transport/zeromq exports changed without updating docs expectations: " +
       unexpectedZeroMqExports.join(", "),
   );
   process.exit(1);
@@ -1168,14 +1171,14 @@ if (unexpectedZeroMqExports.length > 0) {
 
 if (missingTestingExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-ts/testing exports: ${missingTestingExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/testing exports: ${missingTestingExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingDeclaredTestingExports.length > 0) {
   console.error(
-    `@spine-ts/testing root is missing expected exports: ${missingDeclaredTestingExports.join(
+    `@spine-event-engine/testing root is missing expected exports: ${missingDeclaredTestingExports.join(
       ", ",
     )}`,
   );
@@ -1184,14 +1187,15 @@ if (missingDeclaredTestingExports.length > 0) {
 
 if (unexpectedTestingExports.length > 0) {
   console.error(
-    `@spine-ts/testing root exports changed without updating docs expectations: ${unexpectedTestingExports.join(", ")}`,
+    "@spine-event-engine/testing root exports changed without updating docs expectations: " +
+      unexpectedTestingExports.join(", "),
   );
   process.exit(1);
 }
 
 if (forbiddenMatches.length > 0) {
   console.error(
-    `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
+    `TypeDoc JSON exposes removed or non-public @spine-event-engine/server API surface: ${[
       ...new Set(forbiddenMatches),
     ].join(", ")}`,
   );
@@ -1211,7 +1215,7 @@ const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
 
 if (forbiddenStorageTypeDocNameMatches.length > 0) {
   console.error(
-    `TypeDoc JSON exposes internal or removed @spine-ts/storage symbols: ${[
+    `TypeDoc JSON exposes internal or removed @spine-event-engine/storage symbols: ${[
       ...new Set(forbiddenStorageTypeDocNameMatches),
     ].join(", ")}`,
   );
@@ -1220,7 +1224,7 @@ if (forbiddenStorageTypeDocNameMatches.length > 0) {
 
 if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
   console.error(
-    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${[
+    `TypeDoc JSON exposes internal @spine-event-engine/server repository type machinery: ${[
       ...forbiddenTypeDocNameMatches,
       ...forbiddenTypeDocPatternMatches,
     ].join(", ")}`,
@@ -1232,23 +1236,23 @@ const protoIndexSource = readFileSync(protoIndexPath, "utf8");
 
 if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
   console.error(
-    "@spine-ts/proto root must not use broad generated re-exports; expose curated aliases instead.",
+    "@spine-event-engine/proto root must not use broad generated re-exports; expose curated aliases instead.",
   );
   process.exit(1);
 }
 
 console.log(
   [
-    `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports`,
-    `${expectedCoreExports.length} expected @spine-ts/core exports`,
-    `${expectedClientExports.length} expected @spine-ts/client exports`,
-    `${expectedDeliveryClientExports.length} expected @spine-ts/delivery-client exports`,
-    `${expectedDeliveryServerExports.length} expected @spine-ts/delivery-server exports`,
-    `${expectedServerExports.length} expected @spine-ts/server exports`,
-    `${expectedStorageExports.length} expected @spine-ts/storage exports`,
-    `${expectedTransportExports.length} expected @spine-ts/transport exports`,
-    `${expectedZeroMqExports.length} expected @spine-ts/transport/zeromq exports`,
-    `${expectedTestingExports.length} expected @spine-ts/testing exports.`,
+    `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
+    `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
+    `${expectedClientExports.length} expected @spine-event-engine/client exports`,
+    `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
+    `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
+    `${expectedServerExports.length} expected @spine-event-engine/server exports`,
+    `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
+    `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,
+    `${expectedZeroMqExports.length} expected @spine-event-engine/transport/zeromq exports`,
+    `${expectedTestingExports.length} expected @spine-event-engine/testing exports.`,
   ].join(", "),
 );
 

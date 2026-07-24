@@ -1,4 +1,4 @@
-# @spine-ts/proto
+# @spine-event-engine/proto
 
 Generated Protobuf-ES TypeScript for copied Spine Protobuf definitions.
 
@@ -16,9 +16,9 @@ The package root exposes a curated core Spine proto intake set:
 - Minimal transitive support contracts from `spine.time`, `spine.net`, and
   `spine.ui` required by the core context messages.
 
-The only supported public imports are `@spine-ts/proto`,
-`@spine-ts/proto/client`, `@spine-ts/proto/delivery`, and
-`@spine-ts/proto/delivery-server`. Arbitrary generated paths and generated
+The only supported public imports are `@spine-event-engine/proto`,
+`@spine-event-engine/proto/client`, `@spine-event-engine/proto/delivery`, and
+`@spine-event-engine/proto/delivery-server`. Arbitrary generated paths and generated
 runtime helper APIs are deliberately private. The latter prevents a wire intake
 task from claiming the unavailable delivery runtime behavior.
 

@@ -1,6 +1,6 @@
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
-import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
-import { VersionSchema, type Version } from "@spine-ts/proto";
+import { deriveTypeUrl, type MessageSchema } from "@spine-event-engine/core";
+import { VersionSchema, type Version } from "@spine-event-engine/proto";
 import {
   RecordColumn,
   RecordMask,
@@ -12,8 +12,8 @@ import {
   type RecordQuery,
   type RecordStorage,
   type StorageContext,
-} from "@spine-ts/storage";
-import type { StorageFactory } from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
+import type { StorageFactory } from "@spine-event-engine/storage";
 
 /** Options for constructing a direct read-side Stand. */
 export interface StandOptions {

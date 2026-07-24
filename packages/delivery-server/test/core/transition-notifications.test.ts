@@ -8,13 +8,13 @@ import {
   RemoveMessageSchema,
   WriteMessagesSchema,
   WriteMessageSchema,
-} from "@spine-ts/proto/delivery-server";
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageSchema,
   InboxMessageStatus,
   ShardIndexSchema,
   WorkerIdSchema,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
 import { createInboxService } from "../../src/core/inbox-service.js";

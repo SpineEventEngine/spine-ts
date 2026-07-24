@@ -10,7 +10,7 @@ import {
   StorageFactory,
 } from "../src/index.js";
 
-describe("@spine-ts/storage", () => {
+describe("@spine-event-engine/storage", () => {
   it("re-exports the public storage seam from the package root", () => {
     expect(EventStore).toBeTypeOf("function");
     expect(InMemoryRecordStorage).toBeTypeOf("function");

@@ -6,7 +6,7 @@ import {
   type InboxMessage,
   type ShardIndex,
   type WorkerId,
-} from "@spine-ts/proto/delivery";
+} from "@spine-event-engine/proto/delivery";
 
 export function shardKey(shard: ShardIndex): string {
   return `${String(shard.index)}/${String(shard.ofTotal)}`;

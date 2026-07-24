@@ -1,7 +1,7 @@
 import { clone } from "@bufbuild/protobuf";
-import type { MessageSchema } from "@spine-ts/core";
-import { EventSchema, type Event } from "@spine-ts/proto";
-import type { EventStore } from "@spine-ts/storage";
+import type { MessageSchema } from "@spine-event-engine/core";
+import { EventSchema, type Event } from "@spine-event-engine/proto";
+import type { EventStore } from "@spine-event-engine/storage";
 
 import {
   runtimeAccess,

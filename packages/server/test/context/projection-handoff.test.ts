@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";

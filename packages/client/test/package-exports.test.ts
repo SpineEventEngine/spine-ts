@@ -6,12 +6,12 @@ import * as clientRoot from "../dist/index.js";
 import { defineGeneratedProjectionColumns } from "../dist/codegen/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
 
-describe("@spine-ts/client built exports", () => {
+describe("@spine-event-engine/client built exports", () => {
   it("keeps public declarations independent of server, test, and wire implementation types", () => {
     const declarations = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
     for (const forbidden of [
-      "@spine-ts/server",
-      "@spine-ts/testing",
+      "@spine-event-engine/server",
+      "@spine-event-engine/testing",
       "vitest",
       "jest",
       "test-fixtures",

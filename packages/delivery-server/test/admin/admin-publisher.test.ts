@@ -3,7 +3,7 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
-import { ShardIndexSchema } from "@spine-ts/proto/delivery";
+import { ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 
 import { createAdminPublisher } from "../../src/admin/admin-service.js";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";

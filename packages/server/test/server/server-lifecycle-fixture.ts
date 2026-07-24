@@ -7,20 +7,20 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packAny, packEvent } from "@spine-ts/core";
+import { packAny, packEvent } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 import {
   BoundedContext,
   EnvironmentType,

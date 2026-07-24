@@ -5,7 +5,7 @@ import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
 import { fromBinary, isMessage, toBinary } from "@bufbuild/protobuf";
-import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
+import { CommandSchema, EventSchema, type Command, type Event } from "@spine-event-engine/proto";
 import { Publisher, Reply, Request, Subscriber, type Socket, type MessageLike } from "zeromq";
 
 import type {

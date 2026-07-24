@@ -1,4 +1,4 @@
-import { ShardIndex } from "@spine-ts/server";
+import { ShardIndex } from "@spine-event-engine/server";
 
 /**
  * Stable public worker identity represented by the frozen `WorkerId` wire type.

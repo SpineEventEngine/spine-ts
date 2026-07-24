@@ -1,7 +1,10 @@
 import { create } from "@bufbuild/protobuf";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { InboxService, OptionalInboxMessageSchema } from "@spine-ts/proto/delivery-server";
-import { ShardIndex } from "@spine-ts/server";
+import {
+  InboxService,
+  OptionalInboxMessageSchema,
+} from "@spine-event-engine/proto/delivery-server";
+import { ShardIndex } from "@spine-event-engine/server";
 import * as http2 from "node:http2";
 import { afterEach, describe, expect, it } from "vitest";
 

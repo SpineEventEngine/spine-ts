@@ -1,7 +1,11 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { InboxMessageSchema, ShardIndexSchema, WorkerIdSchema } from "@spine-ts/proto/delivery";
+import {
+  InboxMessageSchema,
+  ShardIndexSchema,
+  WorkerIdSchema,
+} from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
 

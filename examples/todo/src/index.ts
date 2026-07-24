@@ -7,8 +7,8 @@ import {
   Server,
   Subscribe,
   type RunningServer,
-} from "@spine-ts/server";
-import type { EventContext } from "@spine-ts/proto";
+} from "@spine-event-engine/server";
+import type { EventContext } from "@spine-event-engine/proto";
 
 import {
   type CompleteTask,

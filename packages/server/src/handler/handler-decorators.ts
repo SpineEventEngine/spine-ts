@@ -35,7 +35,7 @@ export type HandlerMethodValue<
   Return = unknown,
 > = (this: This, ...parameters: Parameters) => Return;
 
-const handlerDecoratorMetadataKey = Symbol("@spine-ts/server.handlerDecorators");
+const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
 const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
 
 /**

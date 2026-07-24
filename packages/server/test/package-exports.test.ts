@@ -2,12 +2,12 @@ import { execFileSync } from "node:child_process";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import * as serverRoot from "@spine-ts/server";
-import { resetServerEnvironmentForTest } from "@spine-ts/server/testing";
+import * as serverRoot from "@spine-event-engine/server";
+import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 
-type RootExports = typeof import("@spine-ts/server");
+type RootExports = typeof import("@spine-event-engine/server");
 
-describe("@spine-ts/server package exports", () => {
+describe("@spine-event-engine/server package exports", () => {
   it("keeps reset out of the root declaration and runtime export", () => {
     expect("resetServerEnvironmentForTest" in serverRoot).toBe(false);
     expectTypeOf<
@@ -21,8 +21,8 @@ describe("@spine-ts/server package exports", () => {
       [
         "--input-type=module",
         "--eval",
-        `import * as root from "@spine-ts/server";
-         import { resetServerEnvironmentForTest as reset } from "@spine-ts/server/testing";
+        `import * as root from "@spine-event-engine/server";
+         import { resetServerEnvironmentForTest as reset } from "@spine-event-engine/server/testing";
          await reset();
          const first = root.ServerEnvironment.instance();
          await reset();
@@ -50,8 +50,8 @@ describe("@spine-ts/server package exports", () => {
       [
         "--input-type=module",
         "--eval",
-        `import * as root from "@spine-ts/server";
-         import { resetServerEnvironmentForTest as reset } from "@spine-ts/server/testing";
+        `import * as root from "@spine-event-engine/server";
+         import { resetServerEnvironmentForTest as reset } from "@spine-event-engine/server/testing";
          const initialType = root.Environment.instance().type;
          await reset();
          const environment = root.ServerEnvironment.instance();

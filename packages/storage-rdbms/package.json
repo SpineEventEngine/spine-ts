@@ -1,5 +1,5 @@
 {
-  "name": "@spine-ts/storage-rdbms",
+  "name": "@spine-event-engine/storage-rdbms",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
-    "@spine-ts/storage": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*",
     "mysql2": "3.23.1"
   }
 }

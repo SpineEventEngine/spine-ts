@@ -16,7 +16,7 @@ import {
   column,
   entity,
   file_spine_options,
-} from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
 
 export enum FixtureStatus {
   UNSPECIFIED = 0,

@@ -5,8 +5,8 @@ import {
   StringValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
-import { packAny, unpackAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { packAny, unpackAny } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
 export type PrimitiveId = string | number | boolean;
 

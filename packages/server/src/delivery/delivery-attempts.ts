@@ -6,7 +6,7 @@ import {
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
-} from "@spine-ts/storage";
+} from "@spine-event-engine/storage";
 
 import type { DeliveryEndpointMessage } from "./delivery.js";
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";

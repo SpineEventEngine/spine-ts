@@ -1,5 +1,5 @@
 import { clone, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
-import { type ConstraintViolation, ValidationErrorSchema } from "@spine-ts/proto";
+import { type ConstraintViolation, ValidationErrorSchema } from "@spine-event-engine/proto";
 
 import {
   describeEntityMetadata,

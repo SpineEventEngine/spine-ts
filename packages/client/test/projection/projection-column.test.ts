@@ -1,6 +1,6 @@
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { Version } from "@spine-ts/proto";
+import type { Version } from "@spine-event-engine/proto";
 
 import {
   AggregateStateSchema,

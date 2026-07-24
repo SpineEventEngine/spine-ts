@@ -3,10 +3,10 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 
-import { EnvironmentType, Server, ServerEnvironment } from "@spine-ts/server";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
+import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
+import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 
-import { createTodoContext } from "@spine-ts/example-todo";
+import { createTodoContext } from "@spine-event-engine/example-todo";
 
 const ipcDirectory = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_IPC_DIRECTORY");
 const adapterIdentity = requiredEnvironment("SPINE_TODO_MULTI_PROCESS_ADAPTER_IDENTITY");

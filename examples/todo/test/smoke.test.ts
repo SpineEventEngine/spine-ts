@@ -1,7 +1,10 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny } from "@spine-ts/core";
-import { EntityStateWithVersionSchema, QueryResponseSchema } from "@spine-ts/proto/client";
+import { deriveTypeUrl, packAny } from "@spine-event-engine/core";
+import {
+  EntityStateWithVersionSchema,
+  QueryResponseSchema,
+} from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";

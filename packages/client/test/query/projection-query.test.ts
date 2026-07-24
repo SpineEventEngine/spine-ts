@@ -1,13 +1,13 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { UInt32ValueSchema } from "@bufbuild/protobuf/wkt";
-import { ActorContextSchema, UserIdSchema, VersionSchema } from "@spine-ts/proto";
+import { ActorContextSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   Filter_Operator,
   OrderBy_Direction,
   QuerySchema,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
 import {

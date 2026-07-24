@@ -17,18 +17,18 @@ import {
   ZoneIdSchema,
   VersionSchema,
   type Command,
-} from "@spine-ts/proto";
-import { QuerySchema, TopicSchema } from "@spine-ts/proto/client";
-import { AckSchema } from "@spine-ts/proto";
+} from "@spine-event-engine/proto";
+import { QuerySchema, TopicSchema } from "@spine-event-engine/proto/client";
+import { AckSchema } from "@spine-event-engine/proto";
 import {
   EventUpdatesSchema,
   QueryResponseSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionUpdateSchema,
-} from "@spine-ts/proto/client";
+} from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
-import { packAny } from "@spine-ts/core";
+import { packAny } from "@spine-event-engine/core";
 
 import { Client, ProjectionQuery } from "../src/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
