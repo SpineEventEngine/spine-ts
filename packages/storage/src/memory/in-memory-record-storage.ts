@@ -10,15 +10,16 @@ import { TenantRecords } from "./tenant-records.js";
 
 /** In-memory record storage with per-tenant slices when the context is multitenant. */
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
-  readonly #tenantRecords: Map<string, TenantRecords<I, R>>;
+  readonly #records: () => TenantRecords<I, R>;
 
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
-    tenantRecords: Map<string, TenantRecords<I, R>> = new Map<string, TenantRecords<I, R>>(),
+    tenantRecords?: () => TenantRecords<I, R>,
   ) {
     super(context, recordSpec);
-    this.#tenantRecords = tenantRecords;
+    const localTenants = new Map<string, TenantRecords<I, R>>();
+    this.#records = tenantRecords ?? (() => this.localRecords(localTenants));
   }
 
   protected deleteRecord(id: I): Promise<boolean> {
@@ -73,12 +74,16 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   private records(): TenantRecords<I, R> {
+    return this.#records();
+  }
+
+  private localRecords(tenantRecords: Map<string, TenantRecords<I, R>>): TenantRecords<I, R> {
     const tenantKey = this.tenantKey();
-    let records = this.#tenantRecords.get(tenantKey);
+    let records = tenantRecords.get(tenantKey);
 
     if (records === undefined) {
       records = new TenantRecords<I, R>();
-      this.#tenantRecords.set(tenantKey, records);
+      tenantRecords.set(tenantKey, records);
     }
 
     return records;

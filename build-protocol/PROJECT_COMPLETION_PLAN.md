@@ -6,7 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0069 package namespace cutover
+Active implementation frontier: T-0070D/T-0070R provider entity/history adapters
 
 ## Purpose
 

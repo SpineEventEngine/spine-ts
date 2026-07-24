@@ -1678,6 +1678,8 @@ function rejectRegisteredRepository(repository: RepositoryView): void {
 function createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<unknown, Message> {
   return new RecordSpec<unknown, Message>({
     schema: snapshot.stateSchema,
+    storageKey: `${snapshot.stateSchema.typeName}:current`,
+    idKind: "string",
     extractId: (record) => readRecordId(record, snapshot),
     columns: repositoryColumns(snapshot),
   });
@@ -1685,7 +1687,12 @@ function createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<
 
 function repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
   return snapshot.metadata.columns.map(
-    (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
+    (field) =>
+      new RecordColumn(
+        field.name,
+        (record) => readRecordField(record, field.localName),
+        "protobuf",
+      ),
   );
 }
 

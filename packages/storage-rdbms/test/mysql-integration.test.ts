@@ -149,9 +149,15 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+          new RecordColumn<StringValue, string>(
+            "group",
+            (record) => record.value.slice(0, 1),
+            "string",
+          ),
         ],
       }),
     );
@@ -170,7 +176,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const factory = await MysqlStorageFactory.create({ url });
     factories.push(factory);
     const context = { name: "TenantTasks", multitenant: true, tenantId: "one" };
-    const spec = new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value });
+    const spec = new RecordSpec({
+      schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
     const first = factory.createRecordStorage(context, spec);
     const second = factory.createRecordStorage(context, spec);
 
@@ -203,7 +214,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     ]);
     const storage = factory.createRecordStorage(
       { name: "CanonicalIds", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => ids.get(record.value) }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => ids.get(record.value),
+      }),
     );
     for (const [value, id] of ids) {
       await storage.write(create(StringValueSchema, { value }));
@@ -224,11 +240,15 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     factories.push(factory);
     const oldColumns = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record: StringValue): string => record.value,
-      columns: [new RecordColumn("old", () => "old")],
+      columns: [new RecordColumn("old", () => "old", "string")],
     });
     const newColumns = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => record.value,
     });
     const oldStorage = factory.createRecordStorage(
@@ -272,14 +292,20 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       { name: "Rollback", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: () => "constant-slot",
         columns: [
-          new RecordColumn("value", (record: StringValue) => {
-            if (record.value === "min") return -(1n << 63n);
-            if (record.value === "max") return (1n << 63n) - 1n;
-            if (record.value === "string") return "x".repeat(256);
-            return "old-column";
-          }),
+          new RecordColumn(
+            "value",
+            (record: StringValue) => {
+              if (record.value === "min") return -(1n << 63n);
+              if (record.value === "max") return (1n << 63n) - 1n;
+              if (record.value === "string") return "x".repeat(256);
+              return "old-column";
+            },
+            "string-or-bigint",
+          ),
         ],
       }),
     );
@@ -297,8 +323,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         { name: "Rollback", multitenant: false },
         new RecordSpec({
           schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
           extractId: () => "constant-slot",
-          columns: [new RecordColumn("reject", () => "new-column")],
+          columns: [new RecordColumn("reject", () => "new-column", "string")],
         }),
       );
       await expect(
@@ -337,7 +365,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const context = { name: "Malformed", multitenant: false };
     const storage = factory.createRecordStorage(
       context,
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     await storage.write(create(StringValueSchema, { value: "bad" }));
     const pool = createPool({ uri: url });
@@ -364,17 +397,24 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       { name: "Queries", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record: StringValue) => `slot-${record.value}`,
         columns: [
           new RecordColumn<StringValue, string>(
             "state",
             (record) => record.value.split(":")[0] ?? "",
+            "string",
           ),
-          new RecordColumn<StringValue, number>("priority", (record) =>
-            Number(record.value.split(":")[1]),
+          new RecordColumn<StringValue, number>(
+            "priority",
+            (record) => Number(record.value.split(":")[1]),
+            "number",
           ),
-          new RecordColumn<StringValue, boolean | string>("mixed", (record) =>
-            record.value.startsWith("boolean:") ? true : "open",
+          new RecordColumn<StringValue, boolean | string>(
+            "mixed",
+            (record) => (record.value.startsWith("boolean:") ? true : "open"),
+            "boolean-or-string",
           ),
         ],
       }),
@@ -467,14 +507,19 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     factories.push(factory);
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record: StringValue) => `slot-${record.value}`,
       columns: [
         new RecordColumn<StringValue, string>(
           "group",
           (record) => record.value.split(":")[0] ?? "",
+          "string",
         ),
-        new RecordColumn<StringValue, number>("rank", (record) =>
-          Number(record.value.split(":")[1]),
+        new RecordColumn<StringValue, number>(
+          "rank",
+          (record) => Number(record.value.split(":")[1]),
+          "number",
         ),
       ],
     });
@@ -507,8 +552,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       mutableTenant,
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: () => "shared-slot",
-        columns: [new RecordColumn<StringValue, number>("rank", () => 1)],
+        columns: [new RecordColumn<StringValue, number>("rank", () => 1, "number")],
       }),
     );
     await tenantStorage.write(create(StringValueSchema, { value: "tenant-a-payload" }));
@@ -530,8 +577,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       { name: "PacketFour", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record: StringValue) => record.value.slice(0, 1),
-        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("value", (record) => record.value, "string"),
+        ],
       }),
     );
     await storage.writeAll(
@@ -558,6 +609,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     factories.push(factory);
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record: StringValue) => record.value,
     });
     const first = factory.createRecordStorage({ name: "CasRace", multitenant: false }, spec);
@@ -593,7 +646,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     factories.push(factory);
     const storage = factory.createRecordStorage(
       { name: "CloseRace", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const controlPool = createPool({ uri: url, connectionLimit: 2 });
     const lock = await controlPool.getConnection();
@@ -629,7 +687,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       expect(() =>
         factory.createRecordStorage(
           { name: "CloseRace", multitenant: false },
-          new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+          new RecordSpec({
+            schema: StringValueSchema,
+            storageKey: "StringValueSchema:legacy",
+            idKind: "string",
+            extractId: (record) => record.value,
+          }),
         ),
       ).toThrow("StorageFactory is closed");
       await Promise.resolve();
@@ -657,8 +720,12 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       { name: "BatchRollback", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value.slice(0, 1),
-        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("value", (record) => record.value, "string"),
+        ],
       }),
     );
     await storage.write(create(StringValueSchema, { value: "a-old" }));

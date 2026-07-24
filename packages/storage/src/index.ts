@@ -1,5 +1,10 @@
 export { EventStore, type EventRollback, type OnEventAccepted } from "./event/event-store.js";
+export type {
+  EntityEventStorage,
+  EntityStateHistoryStorage,
+} from "./entity/entity-history-storage.js";
 export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
+export { InMemoryStorageBackend } from "./memory/in-memory-storage-backend.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
 export { StorageQueryPolicy } from "./query/query-policy.js";
 export { QueryCandidateLimitError, StorageQueryEvaluator } from "./query/query-execution.js";

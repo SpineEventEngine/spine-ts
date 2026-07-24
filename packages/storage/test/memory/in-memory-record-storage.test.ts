@@ -25,9 +25,15 @@ describe("InMemoryRecordStorage", () => {
       { name: "QueryConformance", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+          new RecordColumn<StringValue, string>(
+            "group",
+            (record) => record.value.slice(0, 1),
+            "string",
+          ),
         ],
       }),
     );
@@ -483,7 +489,9 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.query({ offset: 1.5 })).rejects.toThrow(/non-negative/);
 
     const multitenant = createStorage({ name: "Tasks", multitenant: true });
-    await expect(multitenant.query()).rejects.toThrow(/tenantId/);
+    await expect(multitenant.query()).rejects.toThrow(
+      'Multitenant storage "Tasks" requires context.tenantId.',
+    );
 
     storage.close();
     expect(storage.isOpen()).toBe(false);
@@ -492,11 +500,37 @@ describe("InMemoryRecordStorage", () => {
     );
   });
 
+  it("keeps local single-tenant rows and rejects invalid local multitenant contexts on use", async () => {
+    const singleTenant = new InMemoryRecordStorage(
+      { name: "Local", multitenant: false },
+      createSpec(),
+    );
+    await singleTenant.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n));
+    await expect(
+      singleTenant.read(create(EventIdSchema, { value: "event-1" })),
+    ).resolves.toMatchObject({
+      id: { value: "event-1" },
+    });
+
+    for (const tenantId of [undefined, ""]) {
+      const context = {
+        name: "Local",
+        multitenant: true,
+        ...(tenantId === undefined ? {} : { tenantId }),
+      };
+      const storage = new InMemoryRecordStorage(context, createSpec());
+      await expect(storage.query()).rejects.toThrow(
+        'Multitenant storage "Local" requires context.tenantId.',
+      );
+    }
+  });
+
   it("does not persist earlier records when later materialization fails", async () => {
     const storage = new InMemoryStorageFactory().createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec<EventId, Event>({
+      new RecordSpec({
         schema: EventSchema,
+        storageKey: "EventSchema:legacy",
         idSchema: EventIdSchema,
         extractId: (event) => {
           if (event.id?.value === "event-2") {
@@ -509,7 +543,7 @@ describe("InMemoryRecordStorage", () => {
 
           return event.id;
         },
-        columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl)],
+        columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string")],
       }),
     );
 
@@ -666,10 +700,12 @@ function createLookupEvents(ids: readonly string[]) {
 }
 
 function createLookupStorage(values: Record<string, unknown>) {
+  const kinds = [...new Set(Object.values(values).map(valueKind))].sort().join("-");
   return new InMemoryStorageFactory().createRecordStorage(
     { name: "Tasks", multitenant: false },
-    new RecordSpec<EventId, Event>({
+    new RecordSpec({
       schema: EventSchema,
+      storageKey: `EventSchema:lookup-${kinds}`,
       idSchema: EventIdSchema,
       extractId: (event) => {
         if (event.id === undefined) {
@@ -678,9 +714,18 @@ function createLookupStorage(values: Record<string, unknown>) {
 
         return event.id;
       },
-      columns: [new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"])],
+      columns: [
+        new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"], kinds),
+      ],
     }),
   );
+}
+
+function valueKind(value: unknown): string {
+  if (value === null) return "null";
+  if (value instanceof Uint8Array) return "bytes";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
 }
 
 function collisionProneObject(value: string) {
@@ -740,8 +785,9 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
 }
 
 function createSpec() {
-  return new RecordSpec<EventId, Event>({
+  return new RecordSpec({
     schema: EventSchema,
+    storageKey: "EventSchema:legacy",
     idSchema: EventIdSchema,
     extractId: (event) => {
       if (event.id === undefined) {
@@ -751,9 +797,13 @@ function createSpec() {
       return event.id;
     },
     columns: [
-      new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl),
-      new RecordColumn<Event>("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n),
-      new RecordColumn<Event>("nanos", (event) => event.context?.timestamp?.nanos ?? 0),
+      new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string"),
+      new RecordColumn<Event>(
+        "timestamp",
+        (event) => event.context?.timestamp?.seconds ?? 0n,
+        "int64",
+      ),
+      new RecordColumn<Event>("nanos", (event) => event.context?.timestamp?.nanos ?? 0, "number"),
     ],
   });
 }

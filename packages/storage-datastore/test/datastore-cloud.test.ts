@@ -16,7 +16,12 @@ describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
     const id = `cloud-smoke-${String(Date.now())}`;
     const storage = factory.createRecordStorage(
       { name: `T0046Cloud${String(Date.now())}`, multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const record = create(StringValueSchema, { value: id });
 

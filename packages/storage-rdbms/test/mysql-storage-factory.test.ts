@@ -171,9 +171,15 @@ describe("MysqlStorageFactory", () => {
       { name: "QueryConformance", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+          new RecordColumn<StringValue, string>(
+            "group",
+            (record) => record.value.slice(0, 1),
+            "string",
+          ),
         ],
       }),
     );
@@ -225,7 +231,12 @@ describe("MysqlStorageFactory", () => {
     });
     const handle = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const firstClose = factory.close();
     const secondClose = factory.close();
@@ -257,11 +268,21 @@ describe("MysqlStorageFactory", () => {
     });
     const first = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const live = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     first.close();
@@ -273,7 +294,12 @@ describe("MysqlStorageFactory", () => {
     expect(() =>
       factory.createRecordStorage(
         { name: "Tasks", multitenant: false },
-        new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        new RecordSpec({
+          schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
       ),
     ).toThrow("StorageFactory is closed");
     await closed;
@@ -303,7 +329,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     let releaseExecute: (() => void) | undefined;
     let enteredExecute: (() => void) | undefined;
@@ -337,7 +368,12 @@ describe("MysqlStorageFactory", () => {
     expect(() =>
       factory.createRecordStorage(
         { name: "Tasks", multitenant: false },
-        new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        new RecordSpec({
+          schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
       ),
     ).toThrow("StorageFactory is closed");
     releaseExecute?.();
@@ -356,7 +392,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
     let acquisitionPending = false;
@@ -515,7 +556,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     operationRows = [{ payload: "not-bytes" }];
@@ -534,25 +580,42 @@ describe("MysqlStorageFactory", () => {
     expect(() =>
       factory.createRecordStorage(
         { name: "x".repeat(600), multitenant: false },
-        new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        new RecordSpec({
+          schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
       ),
     ).toThrow("too large");
     const tenantStorage = factory.createRecordStorage(
       { name: "Tasks", multitenant: true, tenantId: " " },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     await expect(tenantStorage.read("slot")).rejects.toBeInstanceOf(MysqlStorageConfigurationError);
     const oversizedSlotStorage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     await expect(oversizedSlotStorage.read("x".repeat(768))).rejects.toThrow("too large");
     const oversizedColumnStorage = factory.createRecordStorage(
       { name: "Columns", multitenant: false },
-      new RecordSpec<string, StringValue>({
+      new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record: StringValue): string => record.value,
-        columns: [new RecordColumn<StringValue, string>("x".repeat(256), () => "value")],
+        columns: [new RecordColumn<StringValue, string>("x".repeat(256), () => "value", "string")],
       }),
     );
     await expect(
@@ -560,10 +623,12 @@ describe("MysqlStorageFactory", () => {
     ).rejects.toThrow("too large");
     const oversizedValueStorage = factory.createRecordStorage(
       { name: "Values", multitenant: false },
-      new RecordSpec<string, StringValue>({
+      new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record: StringValue): string => record.value,
-        columns: [new RecordColumn<StringValue, string>("value", () => "x".repeat(257))],
+        columns: [new RecordColumn<StringValue, string>("value", () => "x".repeat(257), "string")],
       }),
     );
     await expect(
@@ -582,8 +647,10 @@ describe("MysqlStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue, string>("state", () => "open")],
+        columns: [new RecordColumn<StringValue, string>("state", () => "open", "string")],
       }),
     );
 
@@ -615,8 +682,12 @@ describe("MysqlStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue, string>("state", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("state", (record) => record.value, "string"),
+        ],
       }),
     );
 
@@ -651,8 +722,12 @@ describe("MysqlStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue, string>("state", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("state", (record) => record.value, "string"),
+        ],
       }),
     );
 
@@ -689,7 +764,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     await storage.queryPlan({
@@ -711,7 +791,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
 
@@ -729,8 +814,12 @@ describe("MysqlStorageFactory", () => {
       { name: "Batch", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue, string>("value", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("value", (record) => record.value, "string"),
+        ],
       }),
     );
     connectionAcquires = 0;
@@ -753,7 +842,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Batch", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     calls.length = 0;
     connectionAcquires = 0;
@@ -792,7 +886,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Batch", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     commits = 0;
@@ -828,7 +927,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Batch", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     commits = 0;
@@ -856,7 +960,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Batch", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     commits = 0;
@@ -882,7 +991,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Cas", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     commits = 0;
@@ -913,7 +1027,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Cas", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     rollbacks = 0;
@@ -943,7 +1062,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Cas", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     transactionStarts = 0;
     rollbacks = 0;
@@ -970,7 +1094,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Cas", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const expected = create(StringValueSchema, { value: "expected" });
     transactionStarts = 0;
@@ -1009,8 +1138,12 @@ describe("MysqlStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue, string>("state", (record) => record.value)],
+        columns: [
+          new RecordColumn<StringValue, string>("state", (record) => record.value, "string"),
+        ],
       }),
     );
     calls.length = 0;
@@ -1042,7 +1175,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const payload = create(StringValueSchema, { value: "ready" });
     const encodedPayload = new Uint8Array([10, 5, 114, 101, 97, 100, 121]);
@@ -1064,7 +1202,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     calls.length = 0;
     operationRows = [];
@@ -1113,7 +1256,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
 
@@ -1161,7 +1309,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const expected = create(StringValueSchema, { value: "expected" });
 
@@ -1182,7 +1335,12 @@ describe("MysqlStorageFactory", () => {
     const context = { name: "Tasks", multitenant: true, tenantId: "blue" };
     const storage = factory.createRecordStorage(
       context,
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     calls.length = 0;
     await storage.queryEntries({
@@ -1208,14 +1366,24 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     storage.close();
     storage.close();
     expect(storage.isOpen()).toBe(false);
     const writable = factory.createRecordStorage(
       { name: "Writable", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     executeFailure = (sql) =>
       sql.startsWith("INSERT INTO `spine_ts_records`") ? new Error("lost") : undefined;
@@ -1233,7 +1401,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Bounds", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
 
@@ -1279,7 +1452,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Bounds", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
 
@@ -1323,7 +1501,12 @@ describe("MysqlStorageFactory", () => {
     });
     const storage = factory.createRecordStorage(
       { name: "Bounds", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     connectionAcquires = 0;
 

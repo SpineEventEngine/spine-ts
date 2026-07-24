@@ -15,6 +15,8 @@ export interface TenantIndex {
 
 const tenantRecordSpec = new RecordSpec<string, TenantRecord>({
   schema: StringValueSchema,
+  storageKey: "spine.server.Tenant:current",
+  idKind: "string",
   extractId: (record) => record.value,
 });
 

@@ -11,9 +11,11 @@ The package owns the current storage layer:
 - `RecordSpec` describes identified Protobuf records and query columns;
 - `RecordStorage` stores, reads, deletes, and queries those records;
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
-  adapter, with storage objects from the same factory and `RecordSpec` instance
-  sharing one process-local backing record set per context name, tenant mode,
-  and tenant ID while returning independently closeable handles;
+  adapter. Each factory created without an `InMemoryStorageBackend` owns an
+  isolated process-local backend; independently constructed factories share
+  only when they receive the same explicit backend token. Compatible opens in
+  one backend return independently closeable handles over the same logical
+  records;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`
@@ -31,6 +33,39 @@ specification.
 The package stays independent of `@spine-event-engine/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
 `tenantId`.
+
+## Shared entity records and diagnostic history
+
+The provider-only entity-history SPI supplies the shared contract that later
+repository and provider work uses for entity persistence. `EntityRecord<I, S>`
+is the one latest-state shape for Aggregate, Projection, and Process Manager
+storage: it contains the canonical ID, Protobuf state, version, and
+archived/deleted lifecycle flags. `EntityRecordStorage` reads and writes that
+latest record.
+
+`EntityStateHistoryPort` and `EntityEventHistoryPort` are immutable history
+ports for repository/adapters. Reads are asynchronous and newest-first;
+`startingFromVersion` is an exclusive continuation boundary. State history
+also supports `stateAt`. Identical writes for the same state `(entity ID,
+version)` or event ID are retries and are no-ops; different content for that
+identity is rejected. State history exposes application-managed `trim` and
+time-based `truncate`; diagnostic event history exposes time-based `truncate`
+only. Maintenance is bounded and resumable, does not expose a generic cursor,
+and is close-aware. A state trim serializes with appends for that entity; a
+truncate processes its selected rows, so an eligible concurrent append is left
+for a later invocation.
+
+`entityStorageKey(stateType, purpose)` creates the closed `current`,
+`state-history`, and `event-history` physical purposes. Adapters scope these
+records by the canonical context, tenant, and purpose key and reject an
+incompatible compatibility fingerprint before accessing rows. The three
+purposes are separate and cannot share rows. `InMemoryEntityStorageFactory`
+is the adapter-conformance foundation, not a durable provider.
+
+These contracts do not yet configure repositories or expose entity/client
+history APIs; that cutover is deferred to T-0071. The diagnostic event journal
+is never an event-sourcing or reconstruction store: latest entity state remains
+the restoration source.
 
 ## Query Model
 
@@ -70,6 +105,7 @@ import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-event-e
 const factory = new InMemoryStorageFactory();
 const spec = new RecordSpec({
   schema: EventSchema,
+  storageKey: "EventSchema:legacy",
   idSchema: EventIdSchema,
   extractId: (event) => {
     if (event.id === undefined) {
@@ -78,7 +114,7 @@ const spec = new RecordSpec({
 
     return event.id;
   },
-  columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl)],
+  columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl, "string")],
 });
 const storage = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
 
@@ -90,9 +126,18 @@ await storage.write(
 ```
 
 `InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
-is multitenant. Storage objects opened by one `InMemoryStorageFactory` with the
-same `RecordSpec` instance, context name, tenant mode, and tenant ID share
-those process-local slices. The adapter is not durable across restarts. Custom
-adapters must make repeated `createRecordStorage(context, spec)` calls observe
-the same logical records while returning independently closeable storage
-handles.
+is multitenant. Every `InMemoryStorageFactory` created without an
+`InMemoryStorageBackend` owns a fresh, isolated in-memory backend. Pass the
+same root-exported `InMemoryStorageBackend` token to independently constructed
+record or adapter entity factories only when they must deliberately share
+compatible canonical scopes. The shared backend rejects an incompatible
+fingerprint before access, and closing one factory does not clear rows used by
+its siblings. The adapter is not durable across restarts. Custom adapters must
+make repeated `createRecordStorage(context, spec)` calls observe the same
+logical records while returning independently closeable storage handles.
+
+Every `RecordSpec` requires a stable, nonblank `storageKey` and exactly one ID
+descriptor: a Protobuf `idSchema` or a nonblank primitive `idKind`. Each
+`RecordColumn` also requires a nonblank `valueType` descriptor. These declared
+descriptors are inputs to the compatibility fingerprint, so adapters reject an
+incompatible layout before accessing rows.

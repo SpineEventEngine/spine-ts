@@ -209,12 +209,14 @@ type AttemptInput = Omit<StoredAttempt, "key" | "sequence">;
 
 const spec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
+  storageKey: "spine.delivery.Attempt:current",
+  idKind: "string",
   extractId: (record) => readStoredAttempt(record).key,
   columns: [
-    new RecordColumn("messageKey", (record) => readStoredAttempt(record).messageKey),
-    new RecordColumn("shard", (record) => readStoredAttempt(record).shard),
-    new RecordColumn("attemptedAt", (record) => readStoredAttempt(record).attemptedAtMs),
-    new RecordColumn("sequence", (record) => readStoredAttempt(record).sequence),
+    new RecordColumn("messageKey", (record) => readStoredAttempt(record).messageKey, "string"),
+    new RecordColumn("shard", (record) => readStoredAttempt(record).shard, "string"),
+    new RecordColumn("attemptedAt", (record) => readStoredAttempt(record).attemptedAtMs, "number"),
+    new RecordColumn("sequence", (record) => readStoredAttempt(record).sequence, "int64"),
   ],
 });
 

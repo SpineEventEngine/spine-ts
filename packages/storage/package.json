@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/entity-history": {
+      "types": "./dist/internal/entity-history.d.ts",
+      "default": "./dist/internal/entity-history.js"
     }
   },
   "files": [

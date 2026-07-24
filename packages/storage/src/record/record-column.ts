@@ -5,7 +5,12 @@ export class RecordColumn<R extends object, V = unknown> {
   constructor(
     readonly name: string,
     read: (record: R) => V,
+    /** Stable provider-visible value-kind descriptor for layout compatibility. */
+    readonly valueType: string,
   ) {
+    if (valueType.trim().length === 0) {
+      throw new Error("Storage record column requires a non-blank value type descriptor.");
+    }
     this.#read = read;
   }
 

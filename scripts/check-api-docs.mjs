@@ -216,6 +216,9 @@ const expectedDeliveryServerExports = [
 const expectedStorageExports = [
   "EventStore",
   "EventRollback",
+  "EntityEventStorage",
+  "EntityStateHistoryStorage",
+  "InMemoryStorageBackend",
   "InMemoryRecordStorage",
   "InMemoryStorageFactory",
   "OnEventAccepted",
