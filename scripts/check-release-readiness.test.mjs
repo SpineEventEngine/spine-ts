@@ -97,6 +97,16 @@ describe("check-release-readiness", () => {
     });
   });
 
+  it("ignores an untracked scratch file with a legacy package scope", () => {
+    withTempRepository((repoRoot) => {
+      writeRuntimePackage(repoRoot);
+      execFileSync("git", ["add", "packages/runtime"], { cwd: repoRoot });
+      writeFileSync(join(repoRoot, "scratch.md"), `Temporary note: ${"@spine-" + "ts/"}core\n`);
+
+      expect(() => runReleaseReadiness(repoRoot)).not.toThrow();
+    });
+  });
+
   it("rejects a legacy package scope before accepting an otherwise valid runtime package", () => {
     withTempRepository((repoRoot) => {
       writeRuntimePackage(repoRoot);
