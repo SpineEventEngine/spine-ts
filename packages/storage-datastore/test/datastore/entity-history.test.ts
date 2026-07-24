@@ -1,0 +1,740 @@
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { describe, expect, it } from "vitest";
+import {
+  assertEntityHistoryConformance,
+  type EntityStorageInput,
+} from "@spine-event-engine/storage/internal/entity-history";
+
+import { DatastoreStorageFactory } from "../../src/index.js";
+import { deferred, HistoryDatastoreBackend } from "./entity-history-fixture.js";
+
+const input = (layout = "entity-v1"): EntityStorageInput<string, StringValue> => ({
+  context: { name: "History", multitenant: false },
+  id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+  layout,
+  stateSchema: StringValueSchema,
+  storageKey: "tasks.Task:current",
+});
+
+describe("Datastore entity history", () => {
+  it("supplies the frozen current/state/event history SPI", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    await assertEntityHistoryConformance({
+      create: (entityInput: EntityStorageInput<string, StringValue>) =>
+        factory.createEntityStorage(entityInput),
+    });
+  });
+
+  it("binds compatible layouts and rejects incompatible reopen", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const first = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    await first.current.write({
+      id: "task",
+      state: create(StringValueSchema, { value: "state" }),
+      version: 1n,
+      archived: false,
+      deleted: false,
+    });
+    const incompatible = new DatastoreStorageFactory({
+      client: client as never,
+    }).createEntityStorage(input("other"));
+    await expect(incompatible.current.read("task")).rejects.toThrow("incompatible");
+  });
+
+  it("reads over 10k rows in newest-first order with exclusive continuation and finite depth", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    for (let index = 1; index <= 10_001; index += 1) await storage.states.append(state(index));
+    const before = client.queryCalls;
+    const reads = client.getCalls;
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "10001" }]);
+    expect(client.queryCalls - before).toBe(1);
+    expect(client.queryLimits.at(-1)).toBe(1);
+    expect(client.getCalls - reads).toBe(1);
+    const afterOne = client.queryCalls;
+    await expect(storage.states.backward("task", 127)).resolves.toHaveLength(127);
+    expect(client.queryCalls - afterOne).toBe(1);
+    expect(client.queryLimits.at(-1)).toBe(127);
+    const after127 = client.queryCalls;
+    await expect(storage.states.backward("task", 129)).resolves.toHaveLength(129);
+    expect(client.queryCalls - after127).toBe(2);
+    expect(client.queryLimits.slice(-2)).toEqual([128, 1]);
+    await expect(storage.states.backward("task", 2, 10_001n)).resolves.toMatchObject([
+      { value: "10000" },
+      { value: "9999" },
+    ]);
+    const beforeStateAt = client.queryCalls;
+    const beforeStateAtGet = client.getCalls;
+    await expect(storage.states.stateAt("task", time(10_001))).resolves.toMatchObject({
+      value: "10001",
+    });
+    expect(client.queryCalls - beforeStateAt).toBe(1);
+    expect(client.queryLimits.at(-1)).toBe(1);
+    expect(client.getCalls - beforeStateAtGet).toBe(1);
+  }, 30_000);
+
+  it("keeps exactly one newest state when trim crosses a history page", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    for (let index = 1; index <= 129; index += 1) await storage.states.append(state(index));
+    await storage.states.trim("task", 1);
+    await expect(storage.states.backward("task", 10)).resolves.toMatchObject([{ value: "129" }]);
+    const selections = client.queries.filter(
+      (query) =>
+        query.kind === "$SpineEntityStateOrder" &&
+        query.orders.some(([property]) => property === "__key__"),
+    );
+    expect(selections).not.toHaveLength(0);
+    expect(selections.every((query) => query.projection?.includes("__key__") === true)).toBe(true);
+    expect(selections.every((query) => (query.limitValue ?? 0) <= 8)).toBe(true);
+    expect(backend.maxTransactionGroups).toBeLessThanOrEqual(24);
+  });
+
+  it("resumes 257-state trim after a committed chunk failure while retaining the requested count", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    for (let index = 1; index <= 257; index += 1) await storage.states.append(state(index));
+    backend.failDeleteAt = 2;
+    await expect(storage.states.trim("task", 1)).rejects.toThrow("delete group failed");
+    backend.failDeleteAt = undefined;
+    await storage.states.trim("task", 1);
+    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([{ value: "257" }]);
+  });
+
+  it("expects a fixed truncate boundary to retain a concurrent later state and event", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    await storage.events.append(historyEvent("old", "task"));
+    const held = deferred<undefined>();
+    backend.heldDelete = held;
+    const truncate = storage.states.truncate(time(2));
+    await Promise.resolve();
+    const append = storage.states.append(state(2));
+    held.resolve(undefined);
+    await Promise.all([truncate, append]);
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "2" }]);
+  });
+
+  it("uses provider conflict/retry for independent-client append versus trim", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const firstClient = backend.client();
+    const first = new DatastoreStorageFactory({ client: firstClient as never }).createEntityStorage(
+      input(),
+    ).states;
+    const second = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input()).states;
+    await first.append(state(1));
+    await Promise.all([first.trim("task", 0), second.append(state(2))]);
+    expect(firstClient.transactionCalls).toBeGreaterThan(0);
+  });
+
+  it("captures event truncate high-water so a later eligible event survives", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.events.append(historyEvent("old", "task"));
+    const held = deferred<undefined>();
+    backend.heldDelete = held;
+    const truncate = storage.events.truncate(time(2));
+    await Promise.resolve();
+    const append = storage.events.append(historyEvent("later", "task"));
+    held.resolve(undefined);
+    await Promise.all([truncate, append]);
+    await expect(storage.events.backward("task", 2)).resolves.toMatchObject([
+      { id: { value: "later" } },
+    ]);
+  });
+
+  it("leaves the sibling handle usable when closed during a held chunk", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const left = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    const right = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    for (let index = 1; index <= 129; index += 1) await left.states.append(state(index));
+    const held = deferred<undefined>();
+    backend.heldDelete = held;
+    const trim = left.states.trim("task", 0);
+    await Promise.resolve();
+    left.close();
+    held.resolve(undefined);
+    await expect(trim).rejects.toThrow("closed");
+    await expect(right.current.read("task")).resolves.toBeUndefined();
+  });
+
+  it("orders equal event version/time ties by canonical UTF-8 ID descending", async () => {
+    const storage = new DatastoreStorageFactory({
+      client: new HistoryDatastoreBackend().client() as never,
+    }).createEntityStorage(input());
+    await storage.events.append(historyEvent("\uE000", "task"));
+    await storage.events.append(historyEvent("\u{10000}", "task"));
+    await expect(storage.events.backward("task", 2)).resolves.toMatchObject([
+      { id: { value: "\u{10000}" } },
+      { id: { value: "\uE000" } },
+    ]);
+  });
+
+  it("keeps event continuation exclusive across an equal producer-version prefix", async () => {
+    const storage = new DatastoreStorageFactory({
+      client: new HistoryDatastoreBackend().client() as never,
+    }).createEntityStorage(input());
+    await storage.events.append(historyEvent("first", "task"));
+    await storage.events.append({ ...historyEvent("second", "task"), createdAt: time(2) });
+    await expect(storage.events.backward("task", 2, 1n)).resolves.toEqual([]);
+  });
+
+  it("preserves history root retention state after a current write", async () => {
+    const storage = new DatastoreStorageFactory({
+      client: new HistoryDatastoreBackend().client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    await storage.states.append(state(2));
+    await storage.current.write({
+      id: "task",
+      state: create(StringValueSchema, { value: "current" }),
+      version: 2n,
+      archived: false,
+      deleted: false,
+    });
+    await storage.states.trim("task", 1);
+    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([{ value: "2" }]);
+  });
+
+  it("makes state and event retry identity immutable, including event correlation", async () => {
+    const storage = new DatastoreStorageFactory({
+      client: new HistoryDatastoreBackend().client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    await storage.states.append(state(1));
+    await expect(
+      storage.states.append({
+        ...state(1),
+        state: create(StringValueSchema, { value: "changed" }),
+      }),
+    ).rejects.toThrow("divergent");
+    const event = historyEvent("event", "task");
+    await storage.events.append(event);
+    await storage.events.append(event);
+    await expect(storage.events.append(historyEvent("event", "other"))).rejects.toThrow(
+      "divergent",
+    );
+  });
+
+  it("retries an independent-client state append race with one immutable marker set", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const firstClient = backend.client();
+    const secondClient = backend.client();
+    const first = new DatastoreStorageFactory({ client: firstClient as never }).createEntityStorage(
+      input(),
+    );
+    const second = new DatastoreStorageFactory({
+      client: secondClient as never,
+    }).createEntityStorage(input());
+    await first.current.read("task");
+    await second.current.read("task");
+    const before = firstClient.transactionCalls + secondClient.transactionCalls;
+
+    await Promise.all([first.states.append(state(1)), second.states.append(state(1))]);
+
+    expect(firstClient.transactionCalls + secondClient.transactionCalls).toBeGreaterThan(
+      before + 2,
+    );
+    expect(countKinds(backend, "$SpineEntityState")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityStateOrder")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityStateCut")).toBe(1);
+    expect(root(backend, "task")).toMatchObject({
+      stateCount: { value: "1" },
+      revision: { value: "1" },
+    });
+  });
+
+  it("rejects a divergent state race after persisting one canonical state", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const first = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    const second = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+
+    const results = await Promise.allSettled([
+      first.states.append(state(1)),
+      second.states.append({ ...state(1), state: create(StringValueSchema, { value: "changed" }) }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(countKinds(backend, "$SpineEntityState")).toBe(1);
+  });
+
+  it("reopens an event append after an applied commit and preserves global identity", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.current.read("task");
+    backend.failCommitAppliedOnce = true;
+
+    await expect(storage.events.append(historyEvent("once", "task"))).resolves.toBeUndefined();
+
+    expect(countKinds(backend, "$SpineEntityEvent")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityEventOrder")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityEventCut")).toBe(1);
+    expect(root(backend, "task")).toMatchObject({ revision: { value: "1" } });
+    await expect(storage.events.append(historyEvent("once", "other"))).rejects.toThrow("divergent");
+  });
+
+  it("rejects an independent-client divergent event-ID race with one global marker set", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const first = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    const second = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+
+    const results = await Promise.allSettled([
+      first.events.append(historyEvent("shared", "task")),
+      second.events.append(historyEvent("shared", "other")),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(countKinds(backend, "$SpineEntityEvent")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityEventOrder")).toBe(1);
+    expect(countKinds(backend, "$SpineEntityEventCut")).toBe(1);
+  });
+
+  it("rejects invalid signed-64 and timestamp input before a provider RPC", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    await expect(storage.states.append({ ...state(1), version: 1n << 63n })).rejects.toThrow(
+      "signed 64-bit",
+    );
+    await expect(
+      storage.states.stateAt("task", { seconds: 1n, nanos: -1 } as never),
+    ).rejects.toThrow("timestamp");
+    expect(client.getCalls + client.saveCalls + client.queryCalls).toBe(0);
+  });
+
+  it("rejects a state-order marker without its immutable state identity", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    const stateIdentity = [...backend.entities.keys()].find((serialized) =>
+      (JSON.parse(serialized) as [unknown, readonly string[]])[1].includes("$SpineEntityState"),
+    );
+    if (stateIdentity === undefined) throw new Error("Expected state identity.");
+    backend.entities.delete(stateIdentity);
+
+    await expect(storage.states.backward("task", 1)).rejects.toThrow("state identity");
+  });
+
+  it("atomically rejects an incompatible concurrent first binding", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const first = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input("first"));
+    const second = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input("second"));
+
+    const results = await Promise.allSettled([
+      first.current.read("task"),
+      second.current.read("task"),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
+
+  it("persists only the fixed history kind allowlist", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+
+    await storage.current.write({
+      id: "dynamic-id",
+      state: create(StringValueSchema, { value: "state" }),
+      version: 1n,
+      archived: false,
+      deleted: false,
+    });
+
+    await storage.states.append(state(1));
+    await storage.events.append(historyEvent("event", "dynamic-id"));
+
+    const paths = [...backend.entities.keys()].map(
+      (serialized) => (JSON.parse(serialized) as [unknown, readonly string[]])[1],
+    );
+    expect(
+      new Set(paths.flatMap((path) => path.filter((part) => part.startsWith("$Spine")))),
+    ).toEqual(
+      new Set([
+        "$SpineEntityScope",
+        "$SpineEntity",
+        "$SpineEntityCurrent",
+        "$SpineEntityState",
+        "$SpineEntityStateOrder",
+        "$SpineEntityStateCut",
+        "$SpineEntityEvent",
+        "$SpineEntityEventOrder",
+        "$SpineEntityEventCut",
+      ]),
+    );
+    expect(paths.find((path) => path.includes("$SpineEntityCurrent"))).toHaveLength(4);
+    expect(paths.find((path) => path.includes("$SpineEntityState"))).toHaveLength(4);
+    expect(paths.find((path) => path.includes("$SpineEntityStateOrder"))).toHaveLength(4);
+    expect(paths.find((path) => path.includes("$SpineEntityEventOrder"))).toHaveLength(4);
+  });
+
+  it("uses shared canonical scope bytes and collision-free fixed root names", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const single = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    const multitenant = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage({
+      ...input(),
+      context: { name: "History", multitenant: true, tenantId: "a:b" },
+    });
+    await single.current.read("a:b");
+    await multitenant.current.read("a:b");
+
+    const names = [...backend.entities.keys()].map(
+      (serialized) => (JSON.parse(serialized) as [unknown, readonly string[]])[1][1],
+    );
+    expect(names).toContain(
+      Buffer.from("7:History:13:single-tenant:18:tasks.Task:current", "utf8").toString("hex"),
+    );
+    expect(new Set(names)).toHaveLength(2);
+  });
+
+  it("rejects oversize encoded key tokens before binding RPCs", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+
+    await expect(storage.current.read("x".repeat(1_501))).rejects.toThrow("1,500-byte");
+    expect(client.getCalls + client.saveCalls + client.queryCalls + client.transactionCalls).toBe(
+      0,
+    );
+  });
+
+  it("leaves a compatible sibling usable after closing one handle", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const left = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    const right = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+
+    left.close();
+
+    await expect(
+      right.current.write({
+        id: "task",
+        state: create(StringValueSchema, { value: "state" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects invalid configuration and operation boundaries before provider work", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+
+    expect(() => factory.createEntityStorage(input("   "))).toThrow("non-blank");
+    expect(() =>
+      factory.createEntityStorage({
+        ...input(),
+        context: { name: "History", multitenant: true },
+      }),
+    ).toThrow("tenantId");
+    const storage = factory.createEntityStorage(input());
+    await expect(storage.states.backward("task", 0)).rejects.toThrow("positive safe integer");
+    await expect(storage.states.trim("task", -1)).rejects.toThrow("non-negative safe integer");
+    await expect(
+      storage.events.append({
+        ...historyEvent("event", "task"),
+        event: create(EventSchema),
+      }),
+    ).rejects.toThrow("event ID");
+    expect(client.getCalls + client.saveCalls + client.queryCalls + client.transactionCalls).toBe(
+      0,
+    );
+  });
+
+  it("uses tenant namespaces for marker and maintenance queries", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage({
+      ...input(),
+      context: { name: "History", multitenant: true, tenantId: "tenant-a" },
+    });
+    await storage.states.append(state(1));
+    await storage.states.backward("task", 1);
+    await storage.states.truncate(time(2));
+
+    expect(client.queries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "$SpineEntityStateOrder" }),
+        expect.objectContaining({ kind: "$SpineEntityStateCut" }),
+      ]),
+    );
+    expect(
+      [...backend.entities.keys()].every((serialized) =>
+        serialized.startsWith(JSON.stringify(["tenant-a"]).slice(0, -1)),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns empty point-in-time and maintenance results without creating history", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+
+    await expect(storage.states.stateAt("task", time(1))).resolves.toBeUndefined();
+    await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
+    await expect(storage.events.backward("task", 1)).resolves.toEqual([]);
+    await expect(storage.states.trim("task", 0)).resolves.toBeUndefined();
+    await expect(storage.events.truncate(time(1))).resolves.toBeUndefined();
+  });
+
+  it("rejects corrupt state and event order markers before returning history", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    await storage.events.append(historyEvent("event", "task"));
+    const stateMarker = entryForKind(backend, "$SpineEntityStateOrder");
+    const eventMarker = entryForKind(backend, "$SpineEntityEventOrder");
+    stateMarker.data.$spineStateRef = "not-a-state-reference";
+    eventMarker.data["$spine.event.id"] = "";
+
+    await expect(storage.states.backward("task", 1)).rejects.toThrow("state identity reference");
+    await expect(storage.events.backward("task", 1)).rejects.toThrow("event identity reference");
+  });
+
+  it("rejects malformed durable order and cut-marker keys during maintenance", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    corruptMarkerKey(backend, "$SpineEntityStateOrder", "malformed-order-marker");
+
+    await expect(storage.states.trim("task", 0)).rejects.toThrow("state marker has an invalid key");
+
+    const cuts = new HistoryDatastoreBackend();
+    const cutStorage = new DatastoreStorageFactory({
+      client: cuts.client() as never,
+    }).createEntityStorage(input());
+    await cutStorage.states.append(state(1));
+    corruptMarkerKey(cuts, "$SpineEntityStateCut", (current) =>
+      current.split(".").slice(0, -1).join("."),
+    );
+
+    await expect(cutStorage.states.truncate(time(2))).rejects.toThrow(
+      "history cut marker has an invalid key",
+    );
+  });
+
+  it("rejects a paged marker response that omits its required continuation cursor", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    for (let index = 1; index <= 129; index += 1) await storage.states.append(state(index));
+    const runQuery = client.runQuery.bind(client);
+    client.runQuery = async (query) => {
+      const [rows, info] = await runQuery(query);
+      if (query.kind === "$SpineEntityStateOrder" && rows.length === 128)
+        return [rows, { ...info, endCursor: undefined as never }];
+      return [rows, info];
+    };
+
+    await expect(storage.states.backward("task", 129)).rejects.toThrow("did not return a cursor");
+  });
+
+  it("rejects an event pagination response that omits its required continuation cursor", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    for (let index = 1; index <= 129; index += 1)
+      await storage.events.append({
+        ...historyEvent(`event-${String(index)}`, "task"),
+        createdAt: time(index),
+      });
+    const runQuery = client.runQuery.bind(client);
+    client.runQuery = async (query) => {
+      const [rows, info] = await runQuery(query);
+      if (query.kind === "$SpineEntityEventOrder" && rows.length === 128)
+        return [rows, { ...info, endCursor: undefined as never }];
+      return [rows, info];
+    };
+
+    await expect(storage.events.backward("task", 129)).rejects.toThrow("did not return a cursor");
+  });
+
+  it("retries a state trim after a provider conflict", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    await storage.states.append(state(1));
+    let conflicts = 1;
+    const transaction = client.transaction.bind(client);
+    client.transaction = () => {
+      const value = transaction();
+      const commit = value.commit.bind(value);
+      value.commit = async () => {
+        if (conflicts > 0) {
+          conflicts -= 1;
+          throw Object.assign(new Error("transaction aborted"), { code: 10 });
+        }
+        return commit();
+      };
+      return value;
+    };
+
+    await storage.states.trim("task", 0);
+
+    await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
+    expect(client.transactionCalls).toBeGreaterThanOrEqual(3);
+  });
+
+  it("reopens a failed binding and accepts a state append whose commit was applied", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    let bindingFailure = true;
+    const transaction = client.transaction.bind(client);
+    client.transaction = () => {
+      const value = transaction();
+      const commit = value.commit.bind(value);
+      value.commit = async () => {
+        if (bindingFailure) {
+          bindingFailure = false;
+          throw new Error("binding connection closed");
+        }
+        return commit();
+      };
+      return value;
+    };
+    await expect(storage.current.read("task")).rejects.toThrow("binding connection closed");
+    await expect(storage.current.read("task")).resolves.toBeUndefined();
+    backend.failCommitAppliedOnce = true;
+
+    await expect(storage.states.append(state(1))).resolves.toBeUndefined();
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "1" }]);
+  });
+});
+
+function time(seconds: number) {
+  return create(TimestampSchema, { seconds: BigInt(seconds), nanos: 0 });
+}
+function state(version: number) {
+  return {
+    entityId: "task",
+    state: create(StringValueSchema, { value: String(version) }),
+    version: BigInt(version),
+    createdAt: time(version),
+  };
+}
+function historyEvent(id: string, entityId: string) {
+  return {
+    entityId,
+    event: create(EventSchema, { id: create(EventIdSchema, { value: id }) }),
+    producerVersion: 1n,
+    createdAt: time(1),
+  };
+}
+function countKinds(backend: HistoryDatastoreBackend, kind: string): number {
+  return [...backend.entities.keys()].filter((serialized) =>
+    (JSON.parse(serialized) as [unknown, readonly string[]])[1].includes(kind),
+  ).length;
+}
+function root(backend: HistoryDatastoreBackend, entityId: string): Record<string, unknown> {
+  const entry = [...backend.entities.entries()].find(([serialized]) => {
+    const path = (JSON.parse(serialized) as [unknown, readonly string[]])[1];
+    return (
+      path[0] === "$SpineEntity" &&
+      path.length === 2 &&
+      path[1]?.includes(Buffer.from(entityId).toString("hex"))
+    );
+  });
+  if (entry === undefined) throw new Error("Expected an entity root.");
+  return entry[1].data;
+}
+function entryForKind(
+  backend: HistoryDatastoreBackend,
+  kind: string,
+): { readonly data: Record<string, unknown>; readonly revision: number } {
+  const entry = [...backend.entities.entries()].find(([serialized]) =>
+    (JSON.parse(serialized) as [unknown, readonly string[]])[1].includes(kind),
+  );
+  if (entry === undefined) throw new Error(`Expected ${kind} marker.`);
+  return entry[1];
+}
+function corruptMarkerKey(
+  backend: HistoryDatastoreBackend,
+  kind: string,
+  name: string | ((current: string) => string),
+): void {
+  const entry = [...backend.entities.entries()].find(([serialized]) =>
+    (JSON.parse(serialized) as [string | undefined, readonly string[]])[1].includes(kind),
+  );
+  if (entry === undefined) throw new Error(`Expected ${kind} marker.`);
+  const [serialized, value] = entry;
+  const [namespace, path] = JSON.parse(serialized) as [string | undefined, string[]];
+  const current = path.at(-1);
+  if (current === undefined) throw new Error(`Expected ${kind} marker name.`);
+  path[path.length - 1] = typeof name === "string" ? name : name(current);
+  backend.entities.delete(serialized);
+  backend.entities.set(JSON.stringify([namespace, path]), value);
+}

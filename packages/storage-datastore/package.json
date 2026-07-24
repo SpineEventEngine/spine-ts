@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "index.yaml"
   ],
   "scripts": {
     "test:emulator": "node scripts/verify-emulator-config.mjs && pnpm --config.verify-deps-before-run=false exec vitest --root ../.. run packages/storage-datastore/test/datastore-emulator.test.ts",
@@ -21,6 +22,7 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@google-cloud/datastore": "10.1.1",
+    "@spine-event-engine/proto": "workspace:*",
     "@spine-event-engine/storage": "workspace:*"
   }
 }

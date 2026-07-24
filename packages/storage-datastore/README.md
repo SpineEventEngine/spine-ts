@@ -34,6 +34,93 @@ required by your actual combinations of equality filters and sort order before
 using those queries in production. `writeAll()` groups at most 500 mutations;
 a later group failure can leave earlier groups persisted.
 
+## Entity history provider seam
+
+`DatastoreStorageFactory.createEntityStorage()` is the framework's supported
+provider seam for the frozen internal entity-history input. It is not a remote
+history API. A returned handle binds its layout before access and can be closed
+independently without closing the injected Google client or sibling handles.
+State and event history reads are immutable, asynchronous, newest first, and
+have finite depth; no unlimited history scan or generic cursor is exposed.
+
+State retention (`trim`) and state/event `truncate` are application-managed.
+They operate in bounded provider work and may leave already completed chunks
+durable if a later chunk fails; retry is therefore required to resume cleanup.
+Current-record writes and separate history calls are deliberately not one
+cross-call transaction. Retrying an immutable state version or event ID with
+identical content is safe; divergent content is rejected.
+
+Framework/provider code supplies the frozen input and uses the structural
+handle; application clients do not receive a history route:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+
+const input: EntityStorageInput<string, StringValue> = {
+  context: { name: "Tasks", multitenant: false },
+  id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+  layout: "tasks-v1",
+  stateSchema: StringValueSchema,
+  storageKey: "tasks.Task:current",
+};
+const history = factory.createEntityStorage(input);
+const createdAt = create(TimestampSchema, { seconds: 1n });
+await history.current.write({
+  id: "task",
+  state: create(StringValueSchema),
+  version: 1n,
+  archived: false,
+  deleted: false,
+});
+await history.states.append({
+  entityId: "task",
+  state: create(StringValueSchema),
+  version: 1n,
+  createdAt,
+});
+await history.events.append({
+  entityId: "task",
+  event: create(EventSchema, { id: create(EventIdSchema, { value: "e1" }) }),
+  producerVersion: 1n,
+  createdAt,
+});
+await history.states.trim("task", 20);
+await history.states.truncate(createdAt);
+await history.events.truncate(createdAt);
+```
+
+The handle persists one canonical length-delimited scope (context, tenant mode,
+and storage key) plus a compatibility fingerprint before current/history
+access. It uses only fixed `$SpineEntity*` kinds: scope binding, entity root,
+current/state/state-order children, and state/event identity, order, and cut
+roots. The entity root serializes immutable append and retention through a
+state count and revision. Multitenant scope also selects the Datastore
+namespace. Indexed tokens are limited to 1,500 bytes and completed keys to
+6 KiB before an RPC.
+
+Binding and immutable append are bounded transactions. Trim reads the root
+count and deletes at most eight oldest key-only state-order selections per
+transaction; truncate captures one cut-key high-water mark, then removes at
+most eight stable cut keys per transaction. A completed chunk remains durable
+after a later failure, so callers retry the operation. Code-10 contention retry
+is bounded; divergent retries, malformed durable rows, and closed handles are
+surfaced. History reads select markers, stop at requested depth, and point-look
+up only selected immutable rows.
+
+Deploy the fixed entity-history indexes before enabling this seam:
+
+```sh
+gcloud datastore indexes create packages/storage-datastore/index.yaml
+gcloud datastore indexes list
+```
+
+Wait until both indexes report `SERVING`. Pre-remediation dynamic history rows
+are not migrated or read: use an empty namespace/project or explicitly remove
+only task-owned old data when making this migration-free layout change.
+
 Storage-slot IDs use one private reversible canonical encoding for Datastore
 keys, stored metadata, ID filters, continuations, and returned entries. It
 preserves `undefined`, `bigint`, arrays, and object IDs independent of object
@@ -81,7 +168,10 @@ emulator. It does not prove production composite-index deployment, transaction
 limits, or all cloud consistency behavior.
 
 The cloud smoke test is deliberately credential-gated and never runs by
-default:
+default. Emulator evidence covers only the configured local binary; it does
+not prove production index deployment, provider transaction limits, or cloud
+consistency. Cloud evidence is claimed only after this command succeeds against
+a disposable project with the history indexes deployed and `SERVING`:
 
 ```sh
 DATASTORE_CLOUD_TEST=1 DATASTORE_PROJECT_ID=my-test-project \
