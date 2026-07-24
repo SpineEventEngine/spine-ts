@@ -59,7 +59,7 @@ for a later invocation.
 `state-history`, and `event-history` physical purposes. Adapters scope these
 records by the canonical context, tenant, and purpose key and reject an
 incompatible compatibility fingerprint before accessing rows. The three
-purposes are separate and cannot share rows. `InMemoryEntityStorageFactory`
+purposes are separate and cannot share rows. `MemoryEntityStorageFactory`
 is the adapter-conformance foundation, not a durable provider.
 
 These contracts do not yet configure repositories or expose entity/client

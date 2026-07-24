@@ -324,3 +324,12 @@ findings against the T-0070 diff.
   `gpt-5.6-luna`, medium.
 - All canonical review concerns are clean. Final security remains N/A because
   T-0070 adds no external trust boundary or credential/transport surface.
+
+## Post-merge mechanical disposition — 2026-07-24
+
+- The semantic-name and empty-class lint findings are deterministic mechanical
+  findings, corrected without changing storage behavior or the end-user root
+  API. They do not reopen a specialist concern.
+- The unrelated tracked Wave 1 security table received formatting only.
+- Generated typecheck, lint/cleanup, format, focused storage tests, TypeDoc,
+  Proto checks, release readiness, and diff hygiene all pass after correction.

@@ -5,7 +5,7 @@ import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageFactory } from "../storage/storage-factory.js";
 import { canonicalStorageScope } from "../storage/canonical-scope.js";
-import { bindInMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 
@@ -34,7 +34,7 @@ export class InMemoryStorageFactory extends StorageFactory {
   ): TenantRecords<I, R> {
     const scope = canonicalStorageScope(context, recordSpec.storageKey);
     const fingerprint = recordSpec.compatibilityFingerprint;
-    return bindInMemoryBackendScope(
+    return bindMemoryBackendScope(
       this.#backend,
       scope,
       fingerprint,
