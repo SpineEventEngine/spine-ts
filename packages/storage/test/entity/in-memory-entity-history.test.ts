@@ -31,6 +31,8 @@ describe("InMemoryEntityHistory", () => {
 
   it("uses isolated default current-record storage and ID cloning", async () => {
     const storage = new MemoryEntityRecordStorage({
+      columns: [],
+      extractId: () => "task",
       stateSchema: StringValueSchema,
       idKey: (id: string) => id,
     });
@@ -52,6 +54,7 @@ describe("InMemoryEntityHistory", () => {
     const factory = new MemoryEntityStorageFactory();
     await assertEntityHistoryConformance({
       create: (input) => factory.create(input),
+      reopen: (input) => factory.create(input),
     });
   });
 
@@ -103,6 +106,8 @@ describe("InMemoryEntityHistory", () => {
     const input = {
       context: { name: "Tasks", multitenant: false },
       id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      extractId: () => "task",
+      columns: [],
       layout: "entity-v1",
       stateSchema: StringValueSchema,
       storageKey: "tasks.Task:current",
@@ -843,6 +848,8 @@ function entityStorageInput(
   return {
     context: { name: "Tasks", multitenant: false },
     id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+    extractId: () => "task",
+    columns: [],
     layout: "entity-v1",
     stateSchema: StringValueSchema,
     storageKey: "tasks.Task:current",

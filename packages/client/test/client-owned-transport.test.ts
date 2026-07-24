@@ -14,7 +14,7 @@ import {
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
+import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
 const session = vi.hoisted<{ aborts: number; timeline: string[]; transport: unknown }>(() => ({
   aborts: 0,

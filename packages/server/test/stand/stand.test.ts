@@ -6,6 +6,7 @@ import { deriveTypeUrl } from "@spine-event-engine/core";
 import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
+  RecordColumn,
   RecordStorage,
   type RecordSpec,
   type NormalizedQueryPlan,
@@ -191,7 +192,7 @@ describe("Stand", () => {
       tenantId: "tenant-a",
     });
 
-    expect(storageFactory.readCount).toBe(1);
+    expect(storageFactory.readCount).toBe(0);
   });
 
   it("returns undefined when a known state has no stored entity", async () => {
@@ -584,7 +585,7 @@ describe("Stand", () => {
     expect(deliveries).toEqual(["first", "late"]);
   });
 
-  it("closes storage handles opened for reads and updates", async () => {
+  it("does not open a legacy record-storage index for reads and updates", async () => {
     const storageFactory = new ClosingStorageFactory();
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -595,8 +596,7 @@ describe("Stand", () => {
     await stand.update(ProjectionStateSchema, createState("task-1", "First"));
     await stand.read(ProjectionStateSchema, "task-1");
 
-    expect(storageFactory.storages).toHaveLength(2);
-    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
   it("reuses one entity-storage handle per scope and closes it on Stand close", async () => {
@@ -617,7 +617,7 @@ describe("Stand", () => {
     expect(storageFactory.closedEntityHandles).toBe(1);
   });
 
-  it("closes the storage handle after successful list reads", async () => {
+  it("does not open a legacy record-storage index for list reads", async () => {
     const storageFactory = new ClosingStorageFactory();
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -628,11 +628,10 @@ describe("Stand", () => {
     await stand.update(ProjectionStateSchema, createState("task-1", "First"));
     await stand.readAllVersioned(ProjectionStateSchema);
 
-    expect(storageFactory.storages).toHaveLength(2);
-    expect(storageFactory.storages[1]?.isOpen()).toBe(false);
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
-  it("closes the storage handle when list reads reject", async () => {
+  it("does not route list reads through a rejecting legacy record-storage index", async () => {
     const storageFactory = new RejectingQueryStorageFactory();
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -640,10 +639,8 @@ describe("Stand", () => {
     });
     stand.register(ProjectionStateSchema);
 
-    await expect(stand.readAllVersioned(ProjectionStateSchema)).rejects.toThrow("query failed");
-
-    expect(storageFactory.storages).toHaveLength(1);
-    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
+    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([]);
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
   it("keeps multitenant state and subscribers isolated by tenant", async () => {
@@ -814,12 +811,21 @@ async function writeStandCurrent(
     context: { name: "Tasks", multitenant: false },
     id: {
       clone: (id) => id,
-      fingerprint: `${ProjectionStateSchema.typeName}:stand-id:v1`,
+      fingerprint: `${ProjectionStateSchema.typeName}:entity-id:id:v1`,
       key: (id) => `string:${id}`,
     },
-    layout: "spine-ts.stand.entity-record.v1",
+    columns: ProjectionStateSchema.fields.map(
+      (field) =>
+        new RecordColumn(
+          field.localName,
+          (record) => (record as Record<string, unknown>)[field.localName],
+          "protobuf",
+        ),
+    ),
+    extractId: (state) => state.id,
+    layout: "spine-ts.entity-record.v2",
     stateSchema: ProjectionStateSchema,
-    storageKey: `${ProjectionStateSchema.typeName}:stand`,
+    storageKey: `${ProjectionStateSchema.typeName}:current`,
   };
   const storage = factory.createEntityStorage(input) as {
     readonly current: {

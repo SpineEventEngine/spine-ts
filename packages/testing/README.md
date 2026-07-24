@@ -6,7 +6,7 @@ test runner, Vitest, or another assertion library.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { ProjectionColumn, ProjectionQuery } from "@spine-event-engine/client";
+import { EntityColumn, EntityQuery } from "@spine-event-engine/client";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { BlackBox } from "@spine-event-engine/testing";
 import { createTasksContext } from "@example/tasks-test-support";
@@ -17,8 +17,8 @@ import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
 const taskId = create(TaskIdSchema, { value: "task-1" });
-const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
-const taskListQuery = ProjectionQuery.select({
+const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
+const taskListQuery = EntityQuery.select({
   schema: TaskListSchema,
   columns: TaskListColumns,
   context: create(ActorContextSchema, {
@@ -59,7 +59,7 @@ try {
 
 The `@example/*` modules are a complete consumer-substitution pattern: the
 application owns `createTasksContext()`, its generated Protobuf-ES schemas, and
-its generated Projection column definition. Replace those paths with the
+its generated Entity column definition. Replace those paths with the
 corresponding modules in the application under test. A scope can also inject a
 generated event directly with `postEvent(EventSchema, eventMessage)`.
 

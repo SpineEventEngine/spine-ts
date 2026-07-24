@@ -23,7 +23,12 @@ import {
   type Version,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { EventStore, type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  EventStore,
+  RecordColumn,
+  type StorageContext,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -53,6 +58,7 @@ import {
   type EntityMetadata,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
+import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 import {
   CommandRegistrationReadiness,
   type CommandRegistrationReadinessLookup,
@@ -2517,17 +2523,19 @@ function entityStorageInput(
   repository: RepositoryView,
   context: StorageContext,
 ): EntityStorageInput<unknown, Message> {
-  return {
+  return entityStorageDescriptor(
     context,
-    id: {
-      clone: (id) => structuredClone(id),
-      fingerprint: `${repository.stateFullTypeName}:repository-id:v1`,
-      key: (id) => canonicalEntityIdKey(id),
-    },
-    layout: "spine-ts.repository.entity-record.v1",
-    stateSchema: repository.stateSchema,
-    storageKey: `${repository.stateFullTypeName}:entity`,
-  };
+    repository.stateSchema,
+    repository.idField.localName,
+    repository.metadata.columns.map(
+      (field) =>
+        new RecordColumn(
+          field.name,
+          (state) => (state as Record<string, unknown>)[field.localName],
+          "protobuf",
+        ),
+    ),
+  );
 }
 
 function readHistoryConfiguration(

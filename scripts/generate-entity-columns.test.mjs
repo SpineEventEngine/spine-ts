@@ -2,18 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import {
   columnComparison,
-  generateProjectionColumnCompanions,
+  generateEntityColumnCompanions,
   isColumnField,
-  projectionMessages,
+  entityMessages,
   resolveSpineOptionDescriptors,
-} from "../packages/client/codegen/generate-projection-columns.mjs";
+} from "../packages/client/codegen/generate-entity-columns.mjs";
 import { column, entity } from "../packages/proto/src/index.ts";
 import {
   AggregateStateSchema,
   ProjectionStateSchema,
   projectionFieldWithRawColumnOption,
   projectionSchemaWithRawEntityOption,
-} from "../packages/client/test-fixtures/projection-column-fixtures.ts";
+  ProcessManagerStateSchema,
+} from "../packages/client/test-fixtures/entity-column-fixtures.ts";
 
 const columnOption = {
   $unknown: [{ no: column.number, wireType: 0, data: new Uint8Array([1]) }],
@@ -25,16 +26,16 @@ const spineOptions = resolveSpineOptionDescriptors({
 const scalarBool = 8;
 const scalarString = 9;
 
-describe("Projection column companion generator", () => {
-  it("selects only top-level Projection messages and annotated fields", () => {
+describe("Entity column companion generator", () => {
+  it("selects top-level Aggregate, Projection, and Process Manager messages with annotated fields", () => {
     const nested = { ...ProjectionStateSchema, parent: ProjectionStateSchema };
 
     expect(
-      projectionMessages(
-        { messages: [ProjectionStateSchema, AggregateStateSchema, nested] },
+      entityMessages(
+        { messages: [ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema, nested] },
         spineOptions,
       ),
-    ).toEqual([ProjectionStateSchema]);
+    ).toEqual([ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema]);
     expect(isColumnField(ProjectionStateSchema.field.title, spineOptions)).toBe(true);
     expect(isColumnField(ProjectionStateSchema.field.note, spineOptions)).toBe(false);
   });
@@ -51,7 +52,7 @@ describe("Projection column companion generator", () => {
     );
   });
 
-  it("derives the Projection kind number from the entity option enum descriptor", () => {
+  it("discovers entity kinds from the entity option enum descriptor", () => {
     const remappedEntity = {
       ...entity,
       message: {
@@ -76,8 +77,8 @@ describe("Projection column companion generator", () => {
       resolveSpineOptionDescriptors({
         allFiles: [{}],
         typesInFile: () => [remappedEntity, column],
-      }).projectionKind,
-    ).toBe(77);
+      }).entity,
+    ).toBe(remappedEntity);
   });
 
   it("maps descriptor kinds to deterministic comparison families", () => {
@@ -103,9 +104,9 @@ describe("Projection column companion generator", () => {
 
   it("rejects truncated or trailing custom-option payloads", () => {
     const malformedEntity = projectionSchemaWithRawEntityOption(bytes(4, 8, 2));
-    expect(() => projectionMessages({ messages: [malformedEntity] }, spineOptions)).toThrow();
+    expect(() => entityMessages({ messages: [malformedEntity] }, spineOptions)).toThrow();
     const trailingEntity = projectionSchemaWithRawEntityOption(bytes(3, 8, 2, 0));
-    expect(() => projectionMessages({ messages: [trailingEntity] }, spineOptions)).toThrow();
+    expect(() => entityMessages({ messages: [trailingEntity] }, spineOptions)).toThrow();
     expect(() =>
       isColumnField(projectionFieldWithRawColumnOption(bytes(0x80)), spineOptions),
     ).toThrow();
@@ -115,7 +116,7 @@ describe("Projection column companion generator", () => {
     const output = generatedOutput();
     const generatedFiles = [];
 
-    generateProjectionColumnCompanions({
+    generateEntityColumnCompanions({
       allFiles: [{}],
       typesInFile: () => [entity, column],
       files: [
@@ -125,7 +126,7 @@ describe("Projection column companion generator", () => {
             name: "spine/example/todo/v1/task_list.proto",
             dependency: ["spine/options.proto"],
           },
-          messages: [ProjectionStateSchema],
+          messages: [AggregateStateSchema, ProjectionStateSchema, ProcessManagerStateSchema],
         },
       ],
       generateFile(name) {
@@ -137,17 +138,19 @@ describe("Projection column companion generator", () => {
     expect(generatedFiles).toEqual(["spine/example/todo/v1/task_list_columns.ts"]);
     expect(output.imports).toContainEqual({
       from: "@spine-event-engine/client/codegen",
-      name: "defineGeneratedProjectionColumns",
+      name: "defineGeneratedEntityColumns",
     });
     const source = output.printed.flat().join("");
     expect(source).toContain("ProjectionStateColumnDefinition");
+    expect(source).toContain("AggregateStateColumnDefinition");
+    expect(source).toContain("ProcessManagerStateColumnDefinition");
     expect(source).toContain('"title"');
     expect(source).not.toContain('"note"');
   });
 
-  it("does not create a companion for files without Projections", () => {
+  it("does not create a companion for files without queryable entities", () => {
     const generatedFiles = [];
-    generateProjectionColumnCompanions({
+    generateEntityColumnCompanions({
       allFiles: [{}],
       typesInFile: () => [entity, column],
       files: [{ name: "acme/messages", proto: { name: "acme/messages.proto" }, messages: [] }],

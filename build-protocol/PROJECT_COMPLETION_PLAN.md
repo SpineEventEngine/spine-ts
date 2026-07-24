@@ -6,8 +6,7 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0072 generic Entity Query DSL and Wave 2
-closure
+Active implementation frontier: T-0072 integration and Wave 2 durable closure
 
 ## Purpose
 
@@ -63,6 +62,12 @@ T-0070, T-0070D, T-0070R, and T-0071 are implemented, reviewed, integrated,
 post-merge verified, and remotely synchronized. T-0072 is the active
 implementation frontier and work follows the accepted plan unless a genuine
 protocol blocker appears.
+
+T-0072 generic Entity query/codegen and durable current-record implementation
+is complete, all specialist and final security reviews are clean, and the full
+native gate passes with 90.02% branch coverage. It is awaiting task commit,
+integration, post-merge verification, and remote synchronization; Wave 2 is not
+durably closed until those boundaries succeed.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

@@ -1,10 +1,10 @@
-import { ProjectionColumn, type ProjectionColumns } from "@spine-event-engine/client";
+import { EntityColumn, type EntityColumns } from "@spine-event-engine/client";
 
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
 /** Typed query columns generated for the to-do TaskList Projection. */
-export const TaskListColumns: ProjectionColumns<
+export const TaskListColumns: EntityColumns<
   typeof TaskListSchema,
   (typeof TaskListColumnDefinition)["entries"]
-> = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+> = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);

@@ -25,13 +25,13 @@ import {
 import { packAny } from "@spine-event-engine/core";
 import { describe, expect, it, vi } from "vitest";
 
-import { Client, ProjectionColumn } from "../src/index.js";
-import { defineGeneratedProjectionColumns } from "../src/codegen/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
+import { Client, EntityColumn } from "../src/index.js";
+import { defineGeneratedEntityColumns } from "../src/codegen/index.js";
+import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
-const subscriptionColumns = ProjectionColumn.register(
+const subscriptionColumns = EntityColumn.register(
   ProjectionStateSchema,
-  defineGeneratedProjectionColumns(ProjectionStateSchema, {
+  defineGeneratedEntityColumns(ProjectionStateSchema, {
     title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
     priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
     status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },

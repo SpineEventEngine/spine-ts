@@ -1,4 +1,4 @@
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { Version } from "@spine-event-engine/proto";
 
@@ -11,18 +11,18 @@ import {
   ProcessManagerStateSchema,
   ProjectionStateSchema,
   type Owner,
-} from "../../test-fixtures/projection-column-fixtures.js";
+} from "../../test-fixtures/entity-column-fixtures.js";
 import {
-  ProjectionColumn,
-  type ProjectionColumnOperator,
-  type ProjectionColumnValue,
-  type ProjectionEqualityOperator,
-  type ProjectionOrderingOperator,
+  EntityColumn,
+  type EntityColumnOperator,
+  type EntityColumnValue,
+  type EntityEqualityOperator,
+  type EntityOrderingOperator,
 } from "../../src/index.js";
-import { defineGeneratedProjectionColumns } from "../../src/codegen/index.js";
-import { classifyProjectionField } from "../../codegen/projection-field-classification.mjs";
+import { defineGeneratedEntityColumns } from "../../src/codegen/index.js";
+import { classifyEntityField } from "../../codegen/entity-field-classification.mjs";
 
-const definition = defineGeneratedProjectionColumns(ProjectionStateSchema, {
+const definition = defineGeneratedEntityColumns(ProjectionStateSchema, {
   title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
   priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
   status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },
@@ -36,7 +36,7 @@ const definition = defineGeneratedProjectionColumns(ProjectionStateSchema, {
   sequence: { field: ProjectionStateSchema.field.sequence, comparison: "ordering" as const },
 });
 
-describe("ProjectionColumn", () => {
+describe("EntityColumn", () => {
   it("prevents descriptor mutation before and after registration", () => {
     const field = definition.entries.title.field;
     const originalLocalName = field.localName;
@@ -46,7 +46,7 @@ describe("ProjectionColumn", () => {
     expect(changedBeforeRegistration).toBe(false);
     expect(Object.isFrozen(field)).toBe(true);
 
-    const columns = ProjectionColumn.register(ProjectionStateSchema, definition);
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
     const originalName = field.name;
     const changedAfterRegistration = Reflect.set(field, "name", "tampered");
     if (changedAfterRegistration) Reflect.set(field, "name", originalName);
@@ -66,7 +66,7 @@ describe("ProjectionColumn", () => {
     expect(changedBeforeRegistration).toBe(false);
     expect(Object.isFrozen(ownerMessage)).toBe(true);
 
-    const columns = ProjectionColumn.register(ProjectionStateSchema, definition);
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
     const options = definition.entries.title.field.proto.options;
     if (options === undefined) throw new Error("Title fixture must declare field options.");
     const originalDeprecated = options.deprecated;
@@ -86,7 +86,7 @@ describe("ProjectionColumn", () => {
       field: ProjectionStateSchema.field.title,
       comparison: "ordering" as const,
     };
-    const generated = defineGeneratedProjectionColumns(ProjectionStateSchema, { title });
+    const generated = defineGeneratedEntityColumns(ProjectionStateSchema, { title });
 
     expect(generated.entries.title).not.toBe(title);
     expect(Object.isFrozen(generated.entries)).toBe(true);
@@ -99,7 +99,7 @@ describe("ProjectionColumn", () => {
   });
 
   it("registers declared and system columns with matching runtime metadata", () => {
-    const columns = ProjectionColumn.register(ProjectionStateSchema, definition);
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
 
     expect(Object.keys(columns)).toEqual([
       "title",
@@ -168,11 +168,11 @@ describe("ProjectionColumn", () => {
   });
 
   it("keeps metadata immutable and column identities stable by schema", () => {
-    const first = ProjectionColumn.register(ProjectionStateSchema, definition);
-    const second = ProjectionColumn.register(ProjectionStateSchema, definition);
-    const equivalent = ProjectionColumn.register(
+    const first = EntityColumn.register(ProjectionStateSchema, definition);
+    const second = EntityColumn.register(ProjectionStateSchema, definition);
+    const equivalent = EntityColumn.register(
       ProjectionStateSchema,
-      defineGeneratedProjectionColumns(ProjectionStateSchema, { ...definition.entries }),
+      defineGeneratedEntityColumns(ProjectionStateSchema, { ...definition.entries }),
     );
 
     expect(first).toBe(second);
@@ -184,14 +184,28 @@ describe("ProjectionColumn", () => {
     expect(Object.isFrozen(first.title.operators)).toBe(true);
   });
 
+  it("rejects direct construction and revalidates uncaptured runtime definitions", () => {
+    expect(() => {
+      Reflect.construct(EntityColumn, []);
+    }).toThrow("Entity columns can only be constructed during registration.");
+
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
+    const uncaptured = { entries: definition.entries } as never;
+    expect(EntityColumn.register(ProjectionStateSchema, uncaptured)).toBe(columns);
+
+    expect(() =>
+      EntityColumn.register(StringValueSchema, { entries: {} } as never),
+    ).toThrow('Entity column schema "google.protobuf.StringValue" must declare Entity kind.');
+  });
+
   it("preserves declared value and operator types for generated metadata", () => {
-    const columns = ProjectionColumn.register(ProjectionStateSchema, definition);
-    type TitleValue = ProjectionColumnValue<typeof columns.title>;
-    type PriorityValue = ProjectionColumnValue<typeof columns.priority>;
-    type StatusValue = ProjectionColumnValue<typeof columns.status>;
-    type DueValue = ProjectionColumnValue<typeof columns.dueAt>;
-    type OwnerValue = ProjectionColumnValue<typeof columns.owner>;
-    type SequenceValue = ProjectionColumnValue<typeof columns.sequence>;
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
+    type TitleValue = EntityColumnValue<typeof columns.title>;
+    type PriorityValue = EntityColumnValue<typeof columns.priority>;
+    type StatusValue = EntityColumnValue<typeof columns.status>;
+    type DueValue = EntityColumnValue<typeof columns.dueAt>;
+    type OwnerValue = EntityColumnValue<typeof columns.owner>;
+    type SequenceValue = EntityColumnValue<typeof columns.sequence>;
 
     expectTypeOf<TitleValue>().toEqualTypeOf<string>();
     expectTypeOf<PriorityValue>().toEqualTypeOf<number>();
@@ -199,17 +213,17 @@ describe("ProjectionColumn", () => {
     expectTypeOf<DueValue>().toEqualTypeOf<Timestamp | undefined>();
     expectTypeOf<OwnerValue>().toEqualTypeOf<Owner | undefined>();
     expectTypeOf<SequenceValue>().toEqualTypeOf<bigint>();
-    expectTypeOf<ProjectionColumnValue<typeof columns.version>>().toEqualTypeOf<Version>();
-    expectTypeOf<ProjectionColumnValue<typeof columns.archived>>().toEqualTypeOf<boolean>();
+    expectTypeOf<EntityColumnValue<typeof columns.version>>().toEqualTypeOf<Version>();
+    expectTypeOf<EntityColumnValue<typeof columns.archived>>().toEqualTypeOf<boolean>();
     expectTypeOf<
-      ProjectionColumnOperator<typeof columns.title>
-    >().toEqualTypeOf<ProjectionOrderingOperator>();
+      EntityColumnOperator<typeof columns.title>
+    >().toEqualTypeOf<EntityOrderingOperator>();
     expectTypeOf<
-      ProjectionColumnOperator<typeof columns.status>
-    >().toEqualTypeOf<ProjectionEqualityOperator>();
+      EntityColumnOperator<typeof columns.status>
+    >().toEqualTypeOf<EntityEqualityOperator>();
     expectTypeOf<
-      ProjectionColumnOperator<typeof columns.version>
-    >().toEqualTypeOf<ProjectionOrderingOperator>();
+      EntityColumnOperator<typeof columns.version>
+    >().toEqualTypeOf<EntityOrderingOperator>();
 
     compare(columns.priority, "greaterThan", 10);
     compare(columns.status, "equal", FixtureStatus.OPEN);
@@ -223,28 +237,28 @@ describe("ProjectionColumn", () => {
     // @ts-expect-error unannotated schema fields are not generated columns.
     void columns.note;
     const compileTimeAssertions = (): void => {
-      ProjectionColumn.register(ProjectionStateSchema, {
+      EntityColumn.register(ProjectionStateSchema, {
         // @ts-expect-error application-authored unannotated fields are not generated definitions.
         note: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
       });
-      ProjectionColumn.register(ProjectionStateSchema, {
+      EntityColumn.register(ProjectionStateSchema, {
         // @ts-expect-error application-authored unknown fields are not generated definitions.
         unknown: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
       });
-      ProjectionColumn.register(ProjectionStateSchema, {
+      EntityColumn.register(ProjectionStateSchema, {
         // @ts-expect-error application-authored mismatched field metadata is not a generated definition.
         title: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
       });
       // @ts-expect-error arbitrary columns cannot be constructed by consumers.
-      void new ProjectionColumn();
+      void new EntityColumn();
     };
     void compileTimeAssertions;
   });
 
   it("uses the shared descriptor classifier for runtime column metadata", () => {
-    const columns = ProjectionColumn.register(ProjectionStateSchema, definition);
+    const columns = EntityColumn.register(ProjectionStateSchema, definition);
     for (const [localName, entry] of Object.entries(definition.entries)) {
-      const classified = classifyProjectionField(entry.field);
+      const classified = classifyEntityField(entry.field);
       expect(classified.supported).toBe(true);
       if (!classified.supported) continue;
       expect(columns[localName as keyof typeof columns]).toMatchObject({
@@ -257,18 +271,18 @@ describe("ProjectionColumn", () => {
 
   it("rejects incomplete, mismatched, and incorrectly classified definitions", () => {
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, {
+        defineGeneratedEntityColumns(ProjectionStateSchema, {
           ...definition.entries,
           title: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
         }),
       ),
     ).toThrow(/definition key "title" must reference field "title"/);
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, {
+        defineGeneratedEntityColumns(ProjectionStateSchema, {
           ...definition.entries,
           status: { field: ProjectionStateSchema.field.status, comparison: "ordering" },
         }),
@@ -277,24 +291,24 @@ describe("ProjectionColumn", () => {
     const { owner: _owner, ...missingOwner } = definition.entries;
     void _owner;
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, missingOwner),
+        defineGeneratedEntityColumns(ProjectionStateSchema, missingOwner),
       ),
     ).toThrow(/missing annotated field "owner"/);
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, {
+        defineGeneratedEntityColumns(ProjectionStateSchema, {
           ...definition.entries,
           note: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
         }),
       ),
     ).toThrow(/field "note" is not marked \(column\)/);
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, {
+        defineGeneratedEntityColumns(ProjectionStateSchema, {
           ...definition.entries,
           version: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
         } as never),
@@ -304,58 +318,56 @@ describe("ProjectionColumn", () => {
 
   it("rejects repeated, map, and oneof columns before query or storage work", () => {
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         InvalidRepeatedStateSchema,
-        // @ts-expect-error repeated descriptors cannot be generated Projection columns.
-        defineGeneratedProjectionColumns(InvalidRepeatedStateSchema, {
+        // @ts-expect-error repeated descriptors cannot be generated Entity columns.
+        defineGeneratedEntityColumns(InvalidRepeatedStateSchema, {
           tags: { field: InvalidRepeatedStateSchema.field.tags, comparison: "equality" },
         }),
       ),
     ).toThrow(/column "tags" must be singular; repeated and map fields are unsupported/);
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         InvalidMapStateSchema,
-        // @ts-expect-error map descriptors cannot be generated Projection columns.
-        defineGeneratedProjectionColumns(InvalidMapStateSchema, {
+        // @ts-expect-error map descriptors cannot be generated Entity columns.
+        defineGeneratedEntityColumns(InvalidMapStateSchema, {
           labels: { field: InvalidMapStateSchema.field.labels, comparison: "equality" },
         }),
       ),
     ).toThrow(/column "labels" must be singular; repeated and map fields are unsupported/);
     expect(() =>
-      ProjectionColumn.register(
+      EntityColumn.register(
         InvalidOneofStateSchema,
-        // @ts-expect-error oneof descriptors cannot be generated Projection columns.
-        defineGeneratedProjectionColumns(InvalidOneofStateSchema, {
+        // @ts-expect-error oneof descriptors cannot be generated Entity columns.
+        defineGeneratedEntityColumns(InvalidOneofStateSchema, {
           label: { field: InvalidOneofStateSchema.field.label, comparison: "ordering" },
         }),
       ),
     ).toThrow(/column "label" cannot belong to a oneof/);
   });
 
-  it("rejects Aggregate and Process Manager schemas from the Projection-only model", () => {
-    expect(() =>
-      ProjectionColumn.register(
-        AggregateStateSchema,
-        defineGeneratedProjectionColumns(AggregateStateSchema, {
-          title: { field: AggregateStateSchema.field.title, comparison: "ordering" },
-        }),
-      ),
-    ).toThrow(/schema "spine_ts\.client\.test\.AggregateState" must declare Projection kind/);
-    expect(() =>
-      ProjectionColumn.register(
-        ProcessManagerStateSchema,
-        defineGeneratedProjectionColumns(ProcessManagerStateSchema, {
-          title: { field: ProcessManagerStateSchema.field.title, comparison: "ordering" },
-        }),
-      ),
-    ).toThrow(/schema "spine_ts\.client\.test\.ProcessManagerState" must declare Projection kind/);
+  it("registers declared columns for Aggregate and Process Manager schemas", () => {
+    const aggregate = EntityColumn.register(
+      AggregateStateSchema,
+      defineGeneratedEntityColumns(AggregateStateSchema, {
+        title: { field: AggregateStateSchema.field.title, comparison: "ordering" },
+      }),
+    );
+    const processManager = EntityColumn.register(
+      ProcessManagerStateSchema,
+      defineGeneratedEntityColumns(ProcessManagerStateSchema, {
+        title: { field: ProcessManagerStateSchema.field.title, comparison: "ordering" },
+      }),
+    );
+    expect(aggregate.title.name).toBe("title");
+    expect(processManager.title.name).toBe("title");
   });
 });
 
-function compare<Column extends ProjectionColumn>(
+function compare<Column extends EntityColumn>(
   column: Column,
-  operator: ProjectionColumnOperator<Column>,
-  value: ProjectionColumnValue<Column>,
+  operator: EntityColumnOperator<Column>,
+  value: EntityColumnValue<Column>,
 ): void {
   void column;
   void operator;

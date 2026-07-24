@@ -45,19 +45,18 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import {
-  ProjectionColumn,
-  type ProjectionColumnOperator,
-  type ProjectionColumnValue,
-} from "../projection/projection-column.js";
+  EntityColumn,
+  type EntityColumnOperator,
+  type EntityColumnValue,
+} from "../entity/entity-column.js";
 
-type ProjectionColumnCollection<Schema extends GenMessage<Message>> = Readonly<
-  Record<string, ProjectionColumn<Schema>>
+type EntityColumnCollection<Schema extends GenMessage<Message>> = Readonly<
+  Record<string, EntityColumn<Schema>>
 >;
-type PredicateColumn<Predicate> =
-  Predicate extends ProjectionPredicate<infer Column> ? Column : never;
-type ColumnSchema<Column> = Column extends ProjectionColumn<infer Schema> ? Schema : never;
+type PredicateColumn<Predicate> = Predicate extends EntityPredicate<infer Column> ? Column : never;
+type ColumnSchema<Column> = Column extends EntityColumn<infer Schema> ? Schema : never;
 type ColumnName<Column> =
-  Column extends ProjectionColumn<GenMessage<Message>, infer Name> ? Name : never;
+  Column extends EntityColumn<GenMessage<Message>, infer Name> ? Name : never;
 
 const maximumPredicateDepth = 64;
 const maximumPredicateNodes = 10_000;
@@ -68,95 +67,95 @@ type StateName<Schema extends GenMessage<Message>> = Exclude<
 > &
   string;
 
-/** One typed leaf comparison in a Projection query predicate. */
-export interface ProjectionComparisonPredicate<Column extends ProjectionColumn = ProjectionColumn> {
+/** One typed leaf comparison in a Entity query predicate. */
+export interface EntityComparisonPredicate<Column extends EntityColumn = EntityColumn> {
   readonly kind: "comparison";
   readonly column: Column;
-  readonly operator: ProjectionColumnOperator<Column>;
-  readonly value: Exclude<ProjectionColumnValue<Column>, undefined>;
+  readonly operator: EntityColumnOperator<Column>;
+  readonly value: Exclude<EntityColumnValue<Column>, undefined>;
 }
 
-/** A nested conjunction or disjunction in a Projection query predicate. */
-export interface ProjectionGroup<Column extends ProjectionColumn = ProjectionColumn> {
+/** A nested conjunction or disjunction in a Entity query predicate. */
+export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
   readonly kind: "all" | "either";
-  readonly predicates: readonly ProjectionPredicate<Column>[];
+  readonly predicates: readonly EntityPredicate<Column>[];
 }
 
-/** Typed predicate accepted by the Projection query builder. */
-export type ProjectionPredicate<Column extends ProjectionColumn = ProjectionColumn> =
-  ProjectionComparisonPredicate<Column> | ProjectionGroup<Column>;
+/** Typed predicate accepted by the Entity query builder. */
+export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
+  EntityComparisonPredicate<Column> | EntityGroup<Column>;
 
-/** Create an equality predicate for a descriptor-backed Projection column. */
-export function eq<Column extends ProjectionColumn>(
+/** Create an equality predicate for a descriptor-backed Entity column. */
+export function eq<Column extends EntityColumn>(
   column: Column,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
-  return comparison(column, "equal" as ProjectionColumnOperator<Column>, value);
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
+  return comparison(column, "equal" as EntityColumnOperator<Column>, value);
 }
 
-/** Create a greater-than predicate for an ordered Projection column. */
-export function gt<Column extends ProjectionColumn>(
-  column: "greaterThan" extends ProjectionColumnOperator<Column> ? Column : never,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
-  return comparison(column, "greaterThan" as ProjectionColumnOperator<Column>, value);
+/** Create a greater-than predicate for an ordered Entity column. */
+export function gt<Column extends EntityColumn>(
+  column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
+  return comparison(column, "greaterThan" as EntityColumnOperator<Column>, value);
 }
 
-/** Create a less-than predicate for an ordered Projection column. */
-export function lt<Column extends ProjectionColumn>(
-  column: "lessThan" extends ProjectionColumnOperator<Column> ? Column : never,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
-  return comparison(column, "lessThan" as ProjectionColumnOperator<Column>, value);
+/** Create a less-than predicate for an ordered Entity column. */
+export function lt<Column extends EntityColumn>(
+  column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
+  return comparison(column, "lessThan" as EntityColumnOperator<Column>, value);
 }
 
-/** Create a greater-than-or-equal predicate for an ordered Projection column. */
-export function ge<Column extends ProjectionColumn>(
-  column: "greaterOrEqual" extends ProjectionColumnOperator<Column> ? Column : never,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
-  return comparison(column, "greaterOrEqual" as ProjectionColumnOperator<Column>, value);
+/** Create a greater-than-or-equal predicate for an ordered Entity column. */
+export function ge<Column extends EntityColumn>(
+  column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
+  return comparison(column, "greaterOrEqual" as EntityColumnOperator<Column>, value);
 }
 
-/** Create a less-than-or-equal predicate for an ordered Projection column. */
-export function le<Column extends ProjectionColumn>(
-  column: "lessOrEqual" extends ProjectionColumnOperator<Column> ? Column : never,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
-  return comparison(column, "lessOrEqual" as ProjectionColumnOperator<Column>, value);
+/** Create a less-than-or-equal predicate for an ordered Entity column. */
+export function le<Column extends EntityColumn>(
+  column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
+  return comparison(column, "lessOrEqual" as EntityColumnOperator<Column>, value);
 }
 
 /** Combine predicates conjunctively. */
-export function all<First extends ProjectionPredicate, Rest extends readonly ProjectionPredicate[]>(
+export function all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
   first: First,
   ...rest: Rest
-): ProjectionGroup<PredicateColumn<First | Rest[number]>> {
+): EntityGroup<PredicateColumn<First | Rest[number]>> {
   return group("all", first, rest);
 }
 
 /** Combine predicates disjunctively. */
-export function either<
-  First extends ProjectionPredicate,
-  Rest extends readonly ProjectionPredicate[],
->(first: First, ...rest: Rest): ProjectionGroup<PredicateColumn<First | Rest[number]>> {
+export function either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+  first: First,
+  ...rest: Rest
+): EntityGroup<PredicateColumn<First | Rest[number]>> {
   return group("either", first, rest);
 }
 
-/** Fluent builder that compiles typed Projection queries to the frozen wire contract. */
-export class ProjectionQueryBuilder<
+/** Fluent builder that compiles typed Entity queries to the frozen wire contract. */
+export class EntityQueryBuilder<
   Schema extends GenMessage<Message>,
-  Columns extends ProjectionColumnCollection<Schema>,
+  Columns extends EntityColumnCollection<Schema>,
 > {
   readonly #schema: Schema;
   readonly #context: ActorContext;
   readonly #columns: Columns;
   readonly #ids: unknown[] = [];
-  readonly #predicates: ProjectionPredicate[] = [];
+  readonly #predicates: EntityPredicate[] = [];
   readonly #mask: string[] = [];
-  readonly #order: { readonly column: ProjectionColumn; readonly direction: "asc" | "desc" }[] = [];
+  readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
   #limit: number | undefined;
 
-  /** @internal Construct through `ProjectionQuery.select()`. */
+  /** @internal Construct through `EntityQuery.select()`. */
   constructor(input: {
     readonly schema: Schema;
     readonly columns: Columns;
@@ -170,14 +169,14 @@ export class ProjectionQueryBuilder<
   /** Restrict the query to one or more entity IDs. */
   byId(...ids: readonly unknown[]): this {
     if (ids.length === 0 || ids.some((id) => id === undefined)) {
-      throw new TypeError("Projection query ID filter must not be empty.");
+      throw new TypeError("Entity query ID filter must not be empty.");
     }
     this.#ids.push(...ids);
     return this;
   }
 
   /** Add a typed predicate. Repeated calls are combined with `ALL`. */
-  where<Predicate extends ProjectionPredicate>(
+  where<Predicate extends EntityPredicate>(
     predicate: ColumnSchema<PredicateColumn<Predicate>> extends Schema
       ? ColumnName<PredicateColumn<Predicate>> extends keyof Columns
         ? Predicate
@@ -186,7 +185,7 @@ export class ProjectionQueryBuilder<
   ): this {
     if (this.#predicates.length >= maximumPredicateNodes) {
       throw new TypeError(
-        `Projection query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
+        `Entity query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
       );
     }
     this.#predicates.push(predicate);
@@ -198,7 +197,7 @@ export class ProjectionQueryBuilder<
     for (const path of paths) {
       const field = findField(this.#schema, path);
       if (field === undefined) {
-        throw new TypeError(`Projection query mask path "${path}" is not a state field.`);
+        throw new TypeError(`Entity query mask path "${path}" is not a state field.`);
       }
       this.#mask.push(field.name);
     }
@@ -206,8 +205,8 @@ export class ProjectionQueryBuilder<
   }
 
   /** Add one ordering clause in caller order. */
-  orderBy<Column extends ProjectionColumn<Schema>>(
-    column: "greaterThan" extends ProjectionColumnOperator<Column> ? Column : never,
+  orderBy<Column extends EntityColumn<Schema>>(
+    column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     direction: "asc" | "desc" = "asc",
   ): this {
     requireOwnedColumn(this.#schema, this.#columns, column);
@@ -218,7 +217,7 @@ export class ProjectionQueryBuilder<
   /** Bound the result count. A positive limit requires ordering. */
   limit(value: number): this {
     if (!Number.isSafeInteger(value) || value <= 0) {
-      throw new TypeError("Projection query limit must be a positive integer.");
+      throw new TypeError("Entity query limit must be a positive integer.");
     }
     this.#limit = value;
     return this;
@@ -227,7 +226,7 @@ export class ProjectionQueryBuilder<
   /** Compile this builder to the frozen `spine.client.Query` message. */
   build(): Query {
     if (this.#limit !== undefined && this.#order.length === 0) {
-      throw new TypeError("Projection query limit requires ordering.");
+      throw new TypeError("Entity query limit requires ordering.");
     }
     const filters = this.#filters();
     const format = this.#format();
@@ -248,7 +247,7 @@ export class ProjectionQueryBuilder<
   #filters() {
     const idField = this.#schema.fields[0];
     if (this.#ids.length > 0 && idField === undefined) {
-      throw new TypeError("Projection query target has no ID field.");
+      throw new TypeError("Entity query target has no ID field.");
     }
     const predicates = compileGroups(this.#predicates, this.#schema, this.#columns);
     if (this.#ids.length === 0 && predicates.length === 0) return undefined;
@@ -282,56 +281,56 @@ export class ProjectionQueryBuilder<
   }
 }
 
-/** Projection-only high-level query construction entrypoint. */
-export const ProjectionQuery: Readonly<{
+/** Entity-only high-level query construction entrypoint. */
+export const EntityQuery: Readonly<{
   select<
     Schema extends GenMessage<Message>,
-    Columns extends ProjectionColumnCollection<Schema>,
+    Columns extends EntityColumnCollection<Schema>,
   >(input: {
     readonly schema: Schema;
     readonly columns: Columns;
     readonly context: ActorContext;
-  }): ProjectionQueryBuilder<Schema, Columns>;
+  }): EntityQueryBuilder<Schema, Columns>;
 }> = Object.freeze({
   select<
     Schema extends GenMessage<Message>,
-    Columns extends ProjectionColumnCollection<Schema>,
+    Columns extends EntityColumnCollection<Schema>,
   >(input: {
     readonly schema: Schema;
     readonly columns: Columns;
     readonly context: ActorContext;
-  }): ProjectionQueryBuilder<Schema, Columns> {
-    return new ProjectionQueryBuilder(input);
+  }): EntityQueryBuilder<Schema, Columns> {
+    return new EntityQueryBuilder(input);
   },
 });
 
-function comparison<Column extends ProjectionColumn>(
+function comparison<Column extends EntityColumn>(
   column: Column,
-  operator: ProjectionColumnOperator<Column>,
-  value: Exclude<ProjectionColumnValue<Column>, undefined>,
-): ProjectionComparisonPredicate<Column> {
+  operator: EntityColumnOperator<Column>,
+  value: Exclude<EntityColumnValue<Column>, undefined>,
+): EntityComparisonPredicate<Column> {
   if (!(column.operators as readonly string[]).includes(operator)) {
-    throw new TypeError(`Projection column "${column.name}" does not support ${operator}.`);
+    throw new TypeError(`Entity column "${column.name}" does not support ${operator}.`);
   }
   requireValue(column, value);
   return Object.freeze({ kind: "comparison", column, operator, value });
 }
 
-function group<First extends ProjectionPredicate, Rest extends readonly ProjectionPredicate[]>(
+function group<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
   kind: "all" | "either",
   first: First,
   rest: Rest,
-): ProjectionGroup<PredicateColumn<First | Rest[number]>> {
+): EntityGroup<PredicateColumn<First | Rest[number]>> {
   return Object.freeze({
     kind,
     predicates: Object.freeze([first, ...rest]),
-  }) as ProjectionGroup<PredicateColumn<First | Rest[number]>>;
+  }) as EntityGroup<PredicateColumn<First | Rest[number]>>;
 }
 
 function compileGroups<Schema extends GenMessage<Message>>(
-  roots: readonly ProjectionPredicate[],
+  roots: readonly EntityPredicate[],
   schema: Schema,
-  columns: ProjectionColumnCollection<Schema>,
+  columns: EntityColumnCollection<Schema>,
 ): readonly CompositeFilter[] {
   const compiled = new WeakMap<object, CompiledPredicate>();
   const seen = new WeakSet<object>();
@@ -347,14 +346,13 @@ function compileGroups<Schema extends GenMessage<Message>>(
     const predicate = requirePredicate(current.predicate);
     if (current.expanded) {
       if (predicate.kind === "comparison") {
-        throw new TypeError("Projection query predicate compilation state is invalid.");
+        throw new TypeError("Entity query predicate compilation state is invalid.");
       }
       const simple = [];
       const nested = [];
       for (const child of predicate.predicates) {
         const childResult = compiled.get(child);
-        if (childResult === undefined)
-          throw new TypeError("Projection query predicate is incomplete.");
+        if (childResult === undefined) throw new TypeError("Entity query predicate is incomplete.");
         if (childResult.kind === "comparison") simple.push(childResult.filter);
         else nested.push(childResult.filter);
       }
@@ -371,12 +369,11 @@ function compileGroups<Schema extends GenMessage<Message>>(
       });
       continue;
     }
-    if (seen.has(predicate))
-      throw new TypeError("Projection query predicate must not contain cycles.");
+    if (seen.has(predicate)) throw new TypeError("Entity query predicate must not contain cycles.");
     seen.add(predicate);
     if (current.depth > maximumPredicateDepth) {
       throw new TypeError(
-        `Projection query predicate exceeds maximum depth ${String(maximumPredicateDepth)}.`,
+        `Entity query predicate exceeds maximum depth ${String(maximumPredicateDepth)}.`,
       );
     }
     if (predicate.kind === "comparison") {
@@ -389,14 +386,14 @@ function compileGroups<Schema extends GenMessage<Message>>(
     }
     if (scheduled + predicate.predicates.length > maximumPredicateNodes) {
       throw new TypeError(
-        `Projection query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
+        `Entity query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
       );
     }
     scheduled += predicate.predicates.length;
     pending.push({ ...current, expanded: true });
     for (let index = predicate.predicates.length - 1; index >= 0; index -= 1) {
       if (!Object.hasOwn(predicate.predicates, index)) {
-        throw new TypeError("Projection query predicate entries must be defined.");
+        throw new TypeError("Entity query predicate entries must be defined.");
       }
       pending.push({
         predicate: predicate.predicates[index],
@@ -407,7 +404,7 @@ function compileGroups<Schema extends GenMessage<Message>>(
   }
   return roots.map((root) => {
     const result = compiled.get(root);
-    if (result === undefined) throw new TypeError("Projection query predicate is incomplete.");
+    if (result === undefined) throw new TypeError("Entity query predicate is incomplete.");
     return result.kind === "group"
       ? result.filter
       : create(CompositeFilterSchema, {
@@ -427,27 +424,27 @@ type CompiledPredicate =
   | { readonly kind: "comparison"; readonly filter: ReturnType<typeof compileComparison> }
   | { readonly kind: "group"; readonly filter: CompositeFilter };
 
-function requirePredicate(value: unknown): ProjectionPredicate {
+function requirePredicate(value: unknown): EntityPredicate {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("Projection query predicate must be an object.");
+    throw new TypeError("Entity query predicate must be an object.");
   }
-  const predicate = value as Partial<ProjectionPredicate>;
+  const predicate = value as Partial<EntityPredicate>;
   if (predicate.kind === "comparison") {
-    if (!(predicate.column instanceof ProjectionColumn)) {
-      throw new TypeError("Projection query comparison column is required.");
+    if (!(predicate.column instanceof EntityColumn)) {
+      throw new TypeError("Entity query comparison column is required.");
     }
-    return predicate as ProjectionComparisonPredicate;
+    return predicate as EntityComparisonPredicate;
   }
   if (predicate.kind !== "all" && predicate.kind !== "either") {
-    throw new TypeError("Projection query predicate kind must be recognized.");
+    throw new TypeError("Entity query predicate kind must be recognized.");
   }
   if (!Array.isArray(predicate.predicates)) {
     throw new TypeError(`${predicate.kind.toUpperCase()} predicate predicates must be an array.`);
   }
-  return predicate as ProjectionGroup;
+  return predicate as EntityGroup;
 }
 
-function compileComparison(predicate: ProjectionComparisonPredicate) {
+function compileComparison(predicate: EntityComparisonPredicate) {
   return create(FilterSchema, {
     fieldPath: { fieldName: [predicate.column.name] },
     value: packColumn(predicate.column, predicate.value),
@@ -468,31 +465,30 @@ function wireOperator(operator: string): Filter_Operator {
     case "lessOrEqual":
       return Filter_Operator.LESS_OR_EQUAL;
     default:
-      throw new TypeError("Projection query comparison operator is not recognized.");
+      throw new TypeError("Entity query comparison operator is not recognized.");
   }
 }
 
-function packColumn(column: ProjectionColumn, value: unknown) {
+function packColumn(column: EntityColumn, value: unknown) {
   if (column.source === "system") {
     if (column.name === "version") return packMessage(VersionSchema, value as never);
     return packMessage(BoolValueSchema, create(BoolValueSchema, { value: value as boolean }));
   }
   if (column.descriptor === undefined) {
-    throw new TypeError("Projection query application column descriptor is required.");
+    throw new TypeError("Entity query application column descriptor is required.");
   }
   return packField(column.descriptor, value);
 }
 
-function packField(field: ProjectionColumn["descriptor"], value: unknown) {
-  if (field === undefined) throw new TypeError("Projection query field descriptor is required.");
+function packField(field: EntityColumn["descriptor"], value: unknown) {
+  if (field === undefined) throw new TypeError("Entity query field descriptor is required.");
   if (field.fieldKind === "message") {
     return packMessage(field.message as GenMessage<Message>, value as never);
   }
   if (field.fieldKind === "enum") {
     return packMessage(Int32ValueSchema, create(Int32ValueSchema, { value: value as number }));
   }
-  if (field.fieldKind !== "scalar")
-    throw new TypeError("Projection query field kind is unsupported.");
+  if (field.fieldKind !== "scalar") throw new TypeError("Entity query field kind is unsupported.");
   const schema = scalarSchema(field.scalar);
   return packMessage(schema, create(schema, { value } as never));
 }
@@ -526,18 +522,18 @@ function scalarSchema(scalar: ScalarType): GenMessage<Message> {
 
 function requireOwnedColumn<Schema extends GenMessage<Message>>(
   schema: Schema,
-  columns: ProjectionColumnCollection<Schema>,
-  column: ProjectionColumn,
+  columns: EntityColumnCollection<Schema>,
+  column: EntityColumn,
 ): void {
   if (
     column.schema !== schema ||
     !Object.values(columns).some((candidate) => candidate === column)
   ) {
-    throw new TypeError("Projection query column does not belong to the selected target.");
+    throw new TypeError("Entity query column does not belong to the selected target.");
   }
 }
 
-function requireValue(column: ProjectionColumn, value: unknown): void {
+function requireValue(column: EntityColumn, value: unknown): void {
   const valid =
     value !== undefined &&
     (column.valueKind === "message"
@@ -549,8 +545,7 @@ function requireValue(column: ProjectionColumn, value: unknown): void {
         : column.valueKind === "enum" || column.valueKind === "number"
           ? typeof value === "number" && Number.isFinite(value)
           : typeof value === column.valueKind);
-  if (!valid)
-    throw new TypeError(`Projection query value for "${column.name}" has the wrong type.`);
+  if (!valid) throw new TypeError(`Entity query value for "${column.name}" has the wrong type.`);
 }
 
 function findField(schema: GenMessage<Message>, name: string) {

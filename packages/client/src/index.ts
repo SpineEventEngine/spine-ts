@@ -1,18 +1,18 @@
 export {
-  ProjectionColumn,
-  type ProjectionColumnDefinition,
-  type ProjectionColumnDefinitionEntry,
-  type ProjectionColumnOperator,
-  type ProjectionColumnValue,
-  type ProjectionColumnValueKind,
-  type ProjectionColumns,
-  type ProjectionComparison,
-  type ProjectionEqualityOperator,
-  type ProjectionOrderingOperator,
-} from "./projection/projection-column.js";
+  EntityColumn,
+  type EntityColumnDefinition,
+  type EntityColumnDefinitionEntry,
+  type EntityColumnOperator,
+  type EntityColumnValue,
+  type EntityColumnValueKind,
+  type EntityColumns,
+  type EntityComparison,
+  type EntityEqualityOperator,
+  type EntityOrderingOperator,
+} from "./entity/entity-column.js";
 export {
-  ProjectionQuery,
-  ProjectionQueryBuilder,
+  EntityQuery,
+  EntityQueryBuilder,
   all,
   either,
   eq,
@@ -20,10 +20,10 @@ export {
   gt,
   le,
   lt,
-  type ProjectionComparisonPredicate,
-  type ProjectionGroup,
-  type ProjectionPredicate,
-} from "./query/projection-query.js";
+  type EntityComparisonPredicate,
+  type EntityGroup,
+  type EntityPredicate,
+} from "./query/entity-query.js";
 export {
   Client,
   ClientProtocolError,

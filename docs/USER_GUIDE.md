@@ -42,7 +42,7 @@ Use a stable package and `type_url_prefix`; model IDs as generated messages;
 and make each aggregate, process-manager, or projection state an entity. Put
 the route ID first in command and event messages. Apply Spine validation
 options to required fields, and mark immutable entity fields `set_once`.
-Projection query fields need the `column` option.
+Entity query fields need the `column` option.
 
 `task_state.proto` — IDs and entity states:
 
@@ -82,21 +82,21 @@ message TaskList {
 }
 ```
 
-### Projection columns
+### Entity columns
 
-Projection code generation emits a descriptor-backed definition next to the
+Entity code generation emits a descriptor-backed definition next to the
 state schema. Register that value once and reuse the returned immutable column
 collection. The imports and exported declaration below come from
-`examples/todo/src/projection-columns.ts`, so their relative paths resolve from
+`examples/todo/src/entity-columns.ts`, so their relative paths resolve from
 that application source file. The final property-access lines illustrate the
 inferred column API and are not part of that source file:
 
 ```ts
-import { ProjectionColumn } from "@spine-event-engine/client";
+import { EntityColumn } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
-export const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+export const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
 
 TaskListColumns.openTaskCount; // number, ordering operators
 TaskListColumns.version; // spine.core.Version, ordering operators
@@ -112,11 +112,10 @@ TaskListColumns.deleted; // boolean, equality only
 
 Repeated, map, and oneof fields are rejected. The root API does not let
 application code construct arbitrary string columns or authored definitions.
-The high-level Query API targets Projections only. Aggregate and Process Manager
-high-level factories remain deferred until Wave 2; their existing low-level ID
-paths are unchanged.
+The high-level Entity Query API targets the current state of Aggregates,
+Projections, and Process Managers. The low-level ID query paths are unchanged.
 The repository's `proto:generate` workflow runs the
-`protoc-gen-spine-projection-columns` executable shipped by `@spine-event-engine/client`
+`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client`
 after Protobuf-ES for every example target. Installed projects can add that bin
 as a local plugin in their Buf generation template.
 
@@ -445,7 +444,7 @@ deadline failures remain Connect errors, while caller abort rejects with the
 
 ## 8. Query and subscribe to state
 
-Use `ProjectionQuery` to compile descriptor-backed columns to the frozen
+Use `EntityQuery` to compile descriptor-backed columns to the frozen
 `spine.client.Query`, then pass that message to an immutable `Client` request
 scope. `Client.connectTo()` owns its Node HTTP/2 session; use
 `Client.usingTransport()` when the caller owns the Connect transport.
@@ -454,22 +453,12 @@ state masks, repeated ordering, and positive limits:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import {
-  Client,
-  ProjectionQuery,
-  all,
-  either,
-  eq,
-  ge,
-  gt,
-  le,
-  lt,
-} from "@spine-event-engine/client";
+import { Client, EntityQuery, all, either, eq, ge, gt, le, lt } from "@spine-event-engine/client";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 
-const taskListQuery = ProjectionQuery.select({
+const taskListQuery = EntityQuery.select({
   schema: TaskListSchema,
   columns: TaskListColumns,
   context: create(ActorContextSchema),
@@ -564,13 +553,13 @@ Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, ProjectionColumn, all, eq } from "@spine-event-engine/client";
+import { Client, EntityColumn, all, eq } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
-const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
 const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 const states = await subscriptionClient
   .onBehalfOf("alice")

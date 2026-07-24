@@ -3,7 +3,7 @@ import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 
 import * as clientRoot from "../src/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
+import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 import type {
   ClientObserveOptions,
   ClientOutcome,
@@ -17,10 +17,10 @@ import type {
 type ClientRoot = typeof import("../src/index.js");
 
 describe("@spine-event-engine/client", () => {
-  it("exports the public client facade alongside Projection query construction", () => {
+  it("exports the public client facade alongside Entity query construction", () => {
     expect(clientRoot.Client).toBeTypeOf("function");
     expect(clientRoot.ClientProtocolError).toBeTypeOf("function");
-    expect(clientRoot.ProjectionColumn).toBeTypeOf("function");
+    expect(clientRoot.EntityColumn).toBeTypeOf("function");
     expect("AggregateColumn" in clientRoot).toBe(false);
     expect("ProcessManagerColumn" in clientRoot).toBe(false);
     expectTypeOf<

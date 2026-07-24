@@ -164,8 +164,7 @@ export class SpineServices {
         const schema = repository.stateSchema;
         const typeUrl = deriveTypeUrl(schema);
         const declaredColumns = repository.metadata.columns.map((column) => column.name);
-        const systemColumns =
-          repository.entityFamily === "projection" ? ["version", "archived", "deleted"] : [];
+        const systemColumns = ["version", "archived", "deleted"];
         this.#stateRoutes.set(typeUrl, {
           allowedColumnNames: new Set([...declaredColumns, ...systemColumns]),
           columnFields: new Map(
@@ -1260,12 +1259,7 @@ function validateReadQuery(
       if (!target.criterion.value) {
         return invalidCriterionError();
       }
-      return route.entityFamily === "projection"
-        ? undefined
-        : {
-            type: "INVALID_QUERY",
-            message: "QueryService.Read include_all requires a projection target.",
-          };
+      return undefined;
     case "filters":
       return validateFilters(target.criterion.value, route);
     default:
@@ -1340,11 +1334,6 @@ function validateCompositeFilters(
       operator !== CompositeFilter_CompositeOperator.EITHER
     ) {
       return unsupportedFilterError("QueryService.Read composite operator must be ALL or EITHER.");
-    }
-    if (route.entityFamily !== "projection" && filter.filter.length > 0) {
-      return unsupportedFilterError(
-        "QueryService.Read column filters require a projection target.",
-      );
     }
     const simpleError = validateSimpleFilters(filter.filter, route);
     if (simpleError !== undefined) {

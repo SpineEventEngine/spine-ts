@@ -3,8 +3,8 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 import type {
-  ProjectionColumn,
-  ProjectionPredicate,
+  EntityColumn,
+  EntityPredicate,
   StateSubscriptionUpdate,
   StateSubscriptionOptions,
   SubscriptionEvent,
@@ -12,14 +12,10 @@ import type {
 import {
   AggregateStateSchema,
   ProjectionStateSchema,
-} from "../test-fixtures/projection-column-fixtures.js";
+} from "../test-fixtures/entity-column-fixtures.js";
 
-declare const projectionPredicate: ProjectionPredicate<
-  ProjectionColumn<typeof ProjectionStateSchema>
->;
-declare const aggregatePredicate: ProjectionPredicate<
-  ProjectionColumn<typeof AggregateStateSchema>
->;
+declare const projectionPredicate: EntityPredicate<EntityColumn<typeof ProjectionStateSchema>>;
+declare const aggregatePredicate: EntityPredicate<EntityColumn<typeof AggregateStateSchema>>;
 
 const valid: StateSubscriptionOptions<typeof ProjectionStateSchema, typeof UserIdSchema> = {
   ids: [],
