@@ -1,0 +1,9 @@
+indexes:
+  - kind: $SpineEntityStateOrder
+    ancestor: yes
+    properties:
+      - name: $spineBackward
+  - kind: $SpineEntityStateOrder
+    ancestor: yes
+    properties:
+      - name: $spineStateAt

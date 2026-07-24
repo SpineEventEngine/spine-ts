@@ -163,12 +163,12 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
-      '@spine-event-engine/validation-ts':
-        specifier: 2.0.0-snapshot.4
-        version: 2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)
       '@spine-event-engine/proto':
         specifier: workspace:*
         version: link:../proto
+      '@spine-event-engine/validation-ts':
+        specifier: 2.0.0-snapshot.4
+        version: 2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)
 
   packages/delivery-client:
     dependencies:
@@ -250,6 +250,9 @@ importers:
       '@google-cloud/datastore':
         specifier: 10.1.1
         version: 10.1.1
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage

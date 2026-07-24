@@ -6,8 +6,15 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import type {
+  EntityEventHistoryPort,
+  EntityRecordStorage,
+  EntityStateHistoryPort,
+  EntityStorageInput,
+} from "@spine-event-engine/storage/internal/entity-history";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DatastoreEntityStorage } from "./entity-history.js";
 
 /** Explicit Google Cloud client settings used to construct a Datastore adapter. */
 export type DatastoreStorageOptions = DatastoreOptions;
@@ -17,6 +24,23 @@ export interface DatastoreStorageFactoryInput {
   readonly client: Datastore;
   /** Maximum entities reconciled locally by one query; must be a positive finite integer. */
   readonly maxClientSideScan?: number;
+}
+
+/**
+ * Independently closeable Datastore entity-history provider handle.
+ *
+ * This structural framework/provider seam is not a remote history API. Closing
+ * it never closes the caller-injected Google client or sibling handles. Reads
+ * are finite and expose no cursor. Maintenance uses at most eight selected
+ * rows per transaction; completed chunks can persist after a later failure and
+ * callers retry. Identical immutable retries are safe; divergent content fails.
+ */
+export interface DatastoreEntityStorageHandle<I, S extends Message> {
+  readonly current: EntityRecordStorage<I, S>;
+  readonly states: EntityStateHistoryPort<I, S>;
+  readonly events: EntityEventHistoryPort<I>;
+  close(): void;
+  isOpen(): boolean;
 }
 
 /** A Google Cloud Datastore-backed implementation of the Spine TS storage port. */
@@ -36,6 +60,21 @@ export class DatastoreStorageFactory extends StorageFactory {
   /** Creates an adapter with caller-supplied Google Cloud client configuration. */
   static create(options: DatastoreStorageOptions): DatastoreStorageFactory {
     return new DatastoreStorageFactory({ client: new Datastore(options) });
+  }
+
+  /**
+   * Creates the supported framework/provider seam for one durable entity scope.
+   *
+   * This consumes the frozen internal storage input; it is not a remote history
+   * API. Each result is independently closeable, never closes the injected
+   * client, binds its layout before access, and does not make current and
+   * history calls atomic with one another.
+   */
+  createEntityStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): DatastoreEntityStorageHandle<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    return new DatastoreEntityStorage(input, this.#client);
   }
 
   protected onCreateRecordStorage<I, R extends Message>(

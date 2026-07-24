@@ -1188,6 +1188,26 @@ the adapter does not invoke client teardown for a client made by `create()`
 either. Arrange application shutdown so servers/contexts finish their own
 closure before the caller tears down any shared client/resource.
 
+### Entity-history provider seam
+
+`createEntityStorage()` returns the documented structural
+`DatastoreEntityStorageHandle`: `current`, `states`, `events`, `close()`, and
+`isOpen()`. It is a framework/provider seam for the frozen internal storage
+input, not a remote history API. Handles bind a canonical scope and compatible
+fingerprint before access, are independently closeable, and never own the
+injected client. Current writes and separate history calls are not one
+cross-call transaction.
+
+History uses fixed `$SpineEntity*` kinds and the checked-in two-index
+`index.yaml` deployment asset. Deploy it and wait for both indexes to become
+`SERVING` before history traffic. Immutable append, binding, and bounded
+retention are transactional; history reads stop at their requested depth,
+retention selects key-only chunks of at most eight rows, and truncate fixes one
+cut-key high-water boundary. Failed later chunks can leave earlier chunks
+durable, so callers retry. Existing dynamic history rows are not migrated: use
+an empty namespace/project or remove only task-owned prior data for this
+migration-free layout change.
+
 ### Emulator-first verification and limited cloud smoke
 
 Use the emulator for adapter development. Start Firestore in Datastore mode,
