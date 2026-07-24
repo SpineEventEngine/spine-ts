@@ -1,6 +1,8 @@
 import { createPool, type RowDataPacket } from "mysql2/promise";
+import { createHash } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -22,6 +24,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     try {
       await pool.query("DROP TABLE IF EXISTS `spine_ts_columns`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_records`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_events`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_states`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_current`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_specs`");
     } finally {
       await pool.end();
     }
@@ -33,6 +39,167 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     try {
       await pool.query("DROP TABLE IF EXISTS `spine_ts_columns`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_records`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_events`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_states`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_current`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_specs`");
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("reopens durable entity history and rejects an incompatible fingerprint before reads", async () => {
+    const input = {
+      context: { name: "T0070R Entity Integration", multitenant: false },
+      id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      layout: "entity-v1",
+      stateSchema: StringValueSchema,
+      storageKey: "integration.Task:current",
+    };
+    const first = await MysqlStorageFactory.create({ url });
+    factories.push(first);
+    const storage = first.createEntityStorage(input);
+    await storage.current.write({
+      id: "task",
+      state: create(StringValueSchema, { value: "current" }),
+      version: 2n,
+      archived: false,
+      deleted: false,
+    });
+    await storage.states.append({
+      entityId: "task",
+      state: create(StringValueSchema, { value: "state" }),
+      version: 2n,
+      createdAt: create(TimestampSchema, { seconds: 2n }),
+    });
+    for (let version = 3; version <= 132; version += 1) {
+      await storage.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: String(version) }),
+        version: BigInt(version),
+        createdAt: create(TimestampSchema, { seconds: BigInt(version) }),
+      });
+    }
+    await storage.events.append({
+      entityId: "task",
+      event: create(EventSchema, { id: create(EventIdSchema, { value: "event" }) }),
+      producerVersion: 2n,
+      createdAt: create(TimestampSchema, { seconds: 2n }),
+    });
+    await first.close();
+    const second = await MysqlStorageFactory.create({ url });
+    factories.push(second);
+    const reopened = second.createEntityStorage(input);
+    await expect(reopened.current.read("task")).resolves.toMatchObject({
+      state: { value: "current" },
+    });
+    const longHistory = await reopened.states.backward("task", 130);
+    expect(longHistory).toHaveLength(130);
+    expect(longHistory.slice(0, 2)).toMatchObject([{ value: "132" }, { value: "131" }]);
+    await expect(reopened.events.backward("task", 1)).resolves.toMatchObject([
+      { id: { value: "event" } },
+    ]);
+    const incompatible = second.createEntityStorage({ ...input, layout: "entity-v2" });
+    await expect(incompatible.current.read("task")).rejects.toThrow(/incompatible/i);
+  });
+
+  it("verifies the lazy entity schema and truncates only strict pre-boundary history", async () => {
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const storage = factory.createEntityStorage({
+      context: { name: "T0070R Entity Schema", multitenant: false },
+      id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      layout: "entity-v1",
+      stateSchema: StringValueSchema,
+      storageKey: "integration.EntitySchema:current",
+    });
+    await storage.states.append({
+      entityId: "task",
+      state: create(StringValueSchema, { value: "old" }),
+      version: 1n,
+      createdAt: create(TimestampSchema, { seconds: 1n }),
+    });
+    await storage.states.append({
+      entityId: "task",
+      state: create(StringValueSchema, { value: "boundary" }),
+      version: 2n,
+      createdAt: create(TimestampSchema, { seconds: 2n }),
+    });
+    await storage.events.append({
+      entityId: "task",
+      event: create(EventSchema, { id: create(EventIdSchema, { value: "old-event" }) }),
+      producerVersion: 1n,
+      createdAt: create(TimestampSchema, { seconds: 1n }),
+    });
+    await storage.events.append({
+      entityId: "task",
+      event: create(EventSchema, { id: create(EventIdSchema, { value: "boundary-event" }) }),
+      producerVersion: 2n,
+      createdAt: create(TimestampSchema, { seconds: 2n }),
+    });
+
+    await storage.states.truncate(create(TimestampSchema, { seconds: 2n }));
+    await storage.events.truncate(create(TimestampSchema, { seconds: 2n }));
+
+    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([
+      { value: "boundary" },
+    ]);
+    await expect(storage.events.backward("task", 2)).resolves.toMatchObject([
+      { id: { value: "boundary-event" } },
+    ]);
+    const pool = createPool({ uri: url });
+    try {
+      const [indexes] = await pool.query<EntityIndexMetadataRow[]>(
+        `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, COLUMN_NAME AS column_name,
+                NON_UNIQUE AS non_unique, COLLATION AS collation
+         FROM information_schema.statistics
+         WHERE table_schema = DATABASE()
+           AND table_name IN (
+             'spine_ts_entity_specs', 'spine_ts_entity_current',
+             'spine_ts_entity_states', 'spine_ts_entity_events'
+           )
+         ORDER BY table_name, index_name, seq_in_index`,
+      );
+      expect(indexes).toContainEqual(
+        expect.objectContaining({
+          table_name: "spine_ts_entity_states",
+          index_name: "spine_ts_entity_states_trim",
+          column_name: "version",
+        }),
+      );
+      expect(indexes).toContainEqual(
+        expect.objectContaining({
+          table_name: "spine_ts_entity_events",
+          index_name: "spine_ts_entity_events_read",
+          column_name: "event_key",
+          collation: "D",
+        }),
+      );
+      expect(indexes).toContainEqual(
+        expect.objectContaining({
+          table_name: "spine_ts_entity_states",
+          index_name: "spine_ts_entity_states_write_order",
+          column_name: "write_order",
+          non_unique: 0,
+        }),
+      );
+      expect(indexes).toContainEqual(
+        expect.objectContaining({
+          table_name: "spine_ts_entity_events",
+          index_name: "spine_ts_entity_events_write_order",
+          column_name: "write_order",
+          non_unique: 0,
+        }),
+      );
+      const [writeOrderColumns] = await pool.query<EntityColumnMetadataRow[]>(
+        `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, EXTRA AS extra
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name IN ('spine_ts_entity_states', 'spine_ts_entity_events')
+           AND column_name = 'write_order'`,
+      );
+      expect(writeOrderColumns).toHaveLength(2);
+      expect(writeOrderColumns.every((column) => column.extra === "auto_increment")).toBe(true);
     } finally {
       await pool.end();
     }
@@ -713,6 +880,92 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     }
   });
 
+  it("serializes independent entity trim and append with the provider user lock", async () => {
+    const input = {
+      context: { name: "T0070R lock integration", multitenant: false },
+      id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      layout: "entity-lock-v1",
+      stateSchema: StringValueSchema,
+      storageKey: "integration.LockTask:current",
+    };
+    const first = await MysqlStorageFactory.create({ url });
+    const second = await MysqlStorageFactory.create({ url });
+    factories.push(first, second);
+    const source = first.createEntityStorage(input);
+    const peer = second.createEntityStorage(input);
+    for (let version = 1; version <= 130; version += 1) {
+      await source.states.append({
+        entityId: "same",
+        state: create(StringValueSchema, { value: String(version) }),
+        version: BigInt(version),
+        createdAt: create(TimestampSchema, { seconds: BigInt(version) }),
+      });
+    }
+    const scope = CanonicalMysqlValue.encode(
+      [input.context.name, "single-tenant", input.storageKey],
+      512,
+    );
+    const entity = CanonicalMysqlValue.encode("same", 768);
+    const lockName = entityLockName(new URL(url).pathname.slice(1), scope, entity);
+    const controlPool = createPool({ uri: url });
+    const control = await controlPool.getConnection();
+    let committed = false;
+    try {
+      await control.beginTransaction();
+      await control.execute(
+        "SELECT version FROM spine_ts_entity_states WHERE scope_key=? AND entity_key=? AND version=? FOR UPDATE",
+        [scope, entity, 130n],
+      );
+      const trim = source.states.trim("same", 0);
+      await waitForUserLock(controlPool, lockName);
+      const append = peer.states.append({
+        entityId: "same",
+        state: create(StringValueSchema, { value: "retained" }),
+        version: 131n,
+        createdAt: create(TimestampSchema, { seconds: 131n }),
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const [before] = await controlPool.query<CountRow[]>(
+        "SELECT COUNT(*) AS count FROM spine_ts_entity_states WHERE scope_key=? AND entity_key=? AND version=?",
+        [scope, entity, 131n],
+      );
+      expect(before[0]?.count).toBe(0);
+      await control.commit();
+      committed = true;
+      await expect(trim).resolves.toBeUndefined();
+      await expect(append).resolves.toBeUndefined();
+      await expect(peer.states.backward("same", 1)).resolves.toMatchObject([{ value: "retained" }]);
+
+      const exact = {
+        entityId: "exact",
+        state: create(StringValueSchema, { value: "same" }),
+        version: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      };
+      await expect(
+        Promise.all([source.states.append(exact), peer.states.append(exact)]),
+      ).resolves.toEqual([undefined, undefined]);
+      await expect(
+        Promise.all([
+          source.states.append({
+            ...exact,
+            entityId: "divergent",
+            state: create(StringValueSchema, { value: "a" }),
+          }),
+          peer.states.append({
+            ...exact,
+            entityId: "divergent",
+            state: create(StringValueSchema, { value: "b" }),
+          }),
+        ]),
+      ).rejects.toThrow(/divergent/i);
+    } finally {
+      if (!committed) await control.rollback().catch(() => undefined);
+      control.release();
+      await controlPool.end();
+    }
+  });
+
   it("rolls a later batch column failure back without changing prior rows", async () => {
     const factory = await MysqlStorageFactory.create({ url });
     factories.push(factory);
@@ -796,8 +1049,32 @@ async function waitForBlockedInsert(pool: ReturnType<typeof createPool>): Promis
   throw new Error("The admitted MySQL write did not reach the server.");
 }
 
+async function waitForUserLock(pool: ReturnType<typeof createPool>, name: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [rows] = await pool.execute<LockOwnerRow[]>("SELECT IS_USED_LOCK(?) AS owner", [name]);
+    if (rows[0]?.owner !== null && rows[0]?.owner !== undefined) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error("The entity trim did not acquire its MySQL user lock.");
+}
+
+function entityLockName(database: string, scope: Uint8Array, entity: Uint8Array): string {
+  const hash = createHash("sha256")
+    .update(decodeURIComponent(database))
+    .update("\0")
+    .update(scope)
+    .update("\0")
+    .update(entity)
+    .digest("hex");
+  return `spine_ts_${hash.slice(0, 55)}`;
+}
+
 interface ProcessRow extends RowDataPacket {
   readonly info: string | null;
+}
+
+interface LockOwnerRow extends RowDataPacket {
+  readonly owner: number | null;
 }
 
 interface TableMetadataRow extends RowDataPacket {
@@ -820,6 +1097,20 @@ interface IndexMetadataRow extends RowDataPacket {
   readonly table_name: string;
   readonly index_name: string;
   readonly column_name: string;
+}
+
+interface EntityIndexMetadataRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly index_name: string;
+  readonly column_name: string;
+  readonly non_unique: number;
+  readonly collation: string | null;
+}
+
+interface EntityColumnMetadataRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly column_name: string;
+  readonly extra: string;
 }
 
 interface ForeignKeyMetadataRow extends RowDataPacket {

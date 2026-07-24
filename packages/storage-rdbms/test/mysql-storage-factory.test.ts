@@ -1,53 +1,95 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
+import { entityHistorySchema } from "../src/mysql/entity-history.js";
 import {
   assertQueryProviderConformance,
   queryProviderConformanceRecords,
 } from "../../storage/test/query/query-provider-conformance.js";
 
-const calls: { readonly sql: string; readonly values?: readonly unknown[] }[] = [];
+const calls: {
+  readonly connectionId: number;
+  readonly sql: string;
+  readonly values?: readonly unknown[];
+}[] = [];
 let endCalls = 0;
 let poolOptions: unknown;
 let operationError: Error | undefined;
 let operationRows: unknown[] = [];
 let connectionAcquires = 0;
+let connectionFailureAt: number | undefined;
+let queryFailure: ((sql: string) => Error | undefined) | undefined;
 let executeFailure: ((sql: string) => Error | undefined) | undefined;
 let commitFailure: Error | undefined;
+const commitResponses: (Error | undefined)[] = [];
 let rollbackFailure: Error | undefined;
 let transactionStarts = 0;
 let commits = 0;
 let rollbacks = 0;
 let releases = 0;
+let releaseFailureAt: number | undefined;
 let endFailure: Error | undefined;
 let executeGate: ((sql: string) => Promise<void>) | undefined;
 let endGate: Promise<void> | undefined;
 let onRelease: (() => void) | undefined;
 let getConnectionGate: (() => Promise<void>) | undefined;
+let nextConnectionId = 1;
+let destroys = 0;
+const userLocks = new Map<string, number>();
+const lockResponses: (number | null | Error)[] = [];
+const lockWaiters = new Map<string, (() => void)[]>();
+const trimSelections: unknown[][] = [];
+const truncateSelections: unknown[][] = [];
+const truncateRows: {
+  readonly table: "states" | "events";
+  readonly write_order: bigint;
+  readonly entity_key?: Uint8Array;
+  readonly event_key?: Uint8Array;
+  readonly version?: bigint;
+}[] = [];
+let afterTruncateCutoff: (() => void) | undefined;
+const entitySpecifications = new Map<string, Uint8Array>();
 
 vi.mock("mysql2/promise", () => ({
   createPool: vi.fn((options) => {
     poolOptions = options;
     return {
       async getConnection() {
+        const connectionId = nextConnectionId++;
         connectionAcquires += 1;
         await Promise.resolve();
         await getConnectionGate?.();
         if (connectError !== undefined) {
           throw connectError;
         }
+        if (connectionAcquires === connectionFailureAt) throw new Error("provider secret");
         return {
           async query(sql: string, values?: readonly unknown[]) {
             await Promise.resolve();
-            calls.push(values === undefined ? { sql } : { sql, values });
+            calls.push(
+              values === undefined ? { connectionId, sql } : { connectionId, sql, values },
+            );
+            const failure = queryFailure?.(sql);
+            if (failure !== undefined) throw failure;
+            if (sql.includes("information_schema.columns") && sql.includes("spine_ts_entity")) {
+              return [entitySchemaRows, []];
+            }
             if (sql.includes("information_schema.columns")) {
               return [schemaRows, []];
             }
+            if (sql.includes("information_schema.tables") && sql.includes("spine_ts_entity")) {
+              return [entityTableRows, []];
+            }
             if (sql.includes("information_schema.tables")) {
               return [tableRows, []];
+            }
+            if (sql.includes("information_schema.statistics") && sql.includes("spine_ts_entity")) {
+              return [entityIndexRows, []];
             }
             if (sql.includes("information_schema.statistics")) {
               return [indexRows, []];
@@ -60,13 +102,112 @@ vi.mock("mysql2/promise", () => ({
           },
           async execute(sql: string, values?: readonly unknown[]) {
             await Promise.resolve();
-            calls.push(values === undefined ? { sql } : { sql, values });
+            calls.push(
+              values === undefined ? { connectionId, sql } : { connectionId, sql, values },
+            );
             await executeGate?.(sql);
             const failure = executeFailure?.(sql);
             if (failure !== undefined) throw failure;
             if (operationError !== undefined) throw operationError;
-            if (sql.includes("SELECT payload")) {
+            if (sql.includes("GET_LOCK")) {
+              const scripted = lockResponses.shift();
+              if (scripted instanceof Error) throw scripted;
+              if (scripted !== undefined) return [[{ acquired: scripted }], []];
+              const name = String(values?.[0]);
+              const owner = userLocks.get(name);
+              if (owner === undefined || owner === connectionId) {
+                userLocks.set(name, connectionId);
+                return [[{ acquired: 1 }], []];
+              }
+              await new Promise<void>((resolve) => {
+                const waiters = lockWaiters.get(name) ?? [];
+                waiters.push(resolve);
+                lockWaiters.set(name, waiters);
+              });
+              userLocks.set(name, connectionId);
+              return [[{ acquired: 1 }], []];
+            }
+            if (sql.includes("RELEASE_LOCK")) {
+              const name = String(values?.[0]);
+              const released = userLocks.get(name) === connectionId ? 1 : 0;
+              if (released === 1) {
+                userLocks.delete(name);
+                lockWaiters.get(name)?.shift()?.();
+              }
+              return [[{ released }], []];
+            }
+            if (sql.startsWith("INSERT IGNORE INTO spine_ts_entity_specs")) {
+              const scope = fakeKey(values?.[0]);
+              const fingerprint = values?.[1];
+              if (fingerprint instanceof Uint8Array && !entitySpecifications.has(scope))
+                entitySpecifications.set(scope, fingerprint);
+              return [{ affectedRows: 1 }, []];
+            }
+            if (sql.startsWith("SELECT fingerprint FROM spine_ts_entity_specs")) {
+              const fingerprint = entitySpecifications.get(fakeKey(values?.[0]));
+              return [fingerprint === undefined ? [] : [{ fingerprint }], []];
+            }
+            if (sql.includes("SELECT version FROM spine_ts_entity_states")) {
+              return [trimSelections.shift() ?? [], []];
+            }
+            if (
+              sql.startsWith("SELECT write_order FROM spine_ts_entity_states") ||
+              sql.startsWith("SELECT write_order FROM spine_ts_entity_events")
+            ) {
+              const table = sql.includes("spine_ts_entity_states") ? "states" : "events";
+              const rows = truncateRows.filter((row) => row.table === table);
+              if (rows.length > 0) {
+                const write_order = rows.reduce((highest, row) =>
+                  row.write_order > highest.write_order ? row : highest,
+                ).write_order;
+                afterTruncateCutoff?.();
+                return [[{ write_order }], []];
+              }
+              return [truncateSelections.shift() ?? [], []];
+            }
+            if (
+              sql.startsWith("SELECT entity_key,version FROM spine_ts_entity_states") ||
+              sql.startsWith("SELECT event_key FROM spine_ts_entity_events")
+            ) {
+              const table = sql.includes("spine_ts_entity_states") ? "states" : "events";
+              const cutoff = BigInt(String(values?.at(-1)));
+              const rows = truncateRows.filter(
+                (row) => row.table === table && row.write_order <= cutoff,
+              );
+              if (rows.length > 0)
+                return [
+                  rows.map(({ entity_key, event_key, version }) => ({
+                    ...(entity_key === undefined ? {} : { entity_key }),
+                    ...(event_key === undefined ? {} : { event_key }),
+                    ...(version === undefined ? {} : { version }),
+                  })),
+                  [],
+                ];
+              return [truncateSelections.shift() ?? [], []];
+            }
+            if (sql.includes("SELECT payload") || sql.includes("SELECT seconds,nanos,payload")) {
               return [operationRows, []];
+            }
+            if (sql.startsWith("SELECT entity_key,producer_version,seconds,nanos,payload")) {
+              return [operationRows, []];
+            }
+            if (sql.startsWith("DELETE FROM spine_ts_entity_states") && truncateRows.length > 0) {
+              const entity = values?.[1];
+              const version = values?.[2];
+              const index = truncateRows.findIndex(
+                (row) =>
+                  row.table === "states" &&
+                  sameBytes(row.entity_key, entity) &&
+                  row.version === version,
+              );
+              if (index >= 0) truncateRows.splice(index, 1);
+            }
+            if (sql.startsWith("DELETE FROM spine_ts_entity_events") && truncateRows.length > 0) {
+              const event = values?.[1];
+              const index = truncateRows.findIndex(
+                (row) => row.table === "events" && sameBytes(row.event_key, event),
+              );
+              if (index >= 0) truncateRows.splice(index, 1);
             }
             return [{ affectedRows: 1 }, []];
           },
@@ -76,6 +217,8 @@ vi.mock("mysql2/promise", () => ({
           },
           commit() {
             commits += 1;
+            const scripted = commitResponses.shift();
+            if (scripted !== undefined) return Promise.reject(scripted);
             if (commitFailure !== undefined) return Promise.reject(commitFailure);
             return Promise.resolve();
           },
@@ -85,6 +228,19 @@ vi.mock("mysql2/promise", () => ({
             return Promise.resolve();
           },
           release() {
+            releases += 1;
+            if (releases === releaseFailureAt) throw new Error("provider secret");
+            onRelease?.();
+            return undefined;
+          },
+          destroy() {
+            destroys += 1;
+            for (const [name, owner] of userLocks) {
+              if (owner === connectionId) {
+                userLocks.delete(name);
+                lockWaiters.get(name)?.shift()?.();
+              }
+            }
             releases += 1;
             onRelease?.();
             return undefined;
@@ -159,9 +315,185 @@ const compatibleForeignKeyRows = [
   delete_rule: "CASCADE",
 }));
 let foreignKeyRows = compatibleForeignKeyRows;
+const entitySchemaRows = entityHistorySchema.tables.flatMap((table) =>
+  table.columns.map((column) => {
+    return {
+      table_name: table.name,
+      column_name: column.name,
+      column_type: column.mysqlType,
+      is_nullable: entityHistorySchema.columnNullable ? "YES" : "NO",
+      extra: column.autoIncrement === true ? "auto_increment" : "",
+    };
+  }),
+);
+const entityTableRows = entityHistorySchema.tables.map((table) => ({
+  table_name: table.name,
+  engine: entityHistorySchema.engine,
+}));
+const entityIndexRows = entityHistorySchema.tables.flatMap((table) =>
+  table.indexes.flatMap((index) =>
+    index.columns.map((column, position) => ({
+      table_name: table.name,
+      index_name: index.name,
+      column_name: column.name,
+      seq_in_index: position + 1,
+      non_unique: index.primary === true || index.unique === true ? 0 : 1,
+      collation: column.direction === "DESC" ? "D" : "A",
+    })),
+  ),
+);
 let connectError: Error | undefined;
 
 describe("MysqlStorageFactory", () => {
+  it("creates the frozen entity current/state/event history storage seam", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_history",
+    });
+    try {
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      expect(storage.current).toBeDefined();
+      expect(storage.states).toBeDefined();
+      expect(storage.events).toBeDefined();
+    } finally {
+      await factory.close();
+    }
+  });
+  it("fails closed before entity row access when the state identity key is malformed", async () => {
+    const saved = entityIndexRows.slice();
+    entityIndexRows.splice(
+      0,
+      entityIndexRows.length,
+      ...saved.filter(
+        (row) => row.index_name !== "PRIMARY" || row.table_name !== "spine_ts_entity_states",
+      ),
+    );
+    const { MysqlStorageFactory, MysqlStorageSchemaError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_schema",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    try {
+      await expect(storage.states.backward("task", 1)).rejects.toBeInstanceOf(
+        MysqlStorageSchemaError,
+      );
+      expect(calls.some((call) => call.sql.includes("spine_ts_entity_states WHERE"))).toBe(false);
+    } finally {
+      entityIndexRows.splice(0, entityIndexRows.length, ...saved);
+      await factory.close();
+    }
+  });
+  it.each([
+    [
+      "specification fingerprint column",
+      () => {
+        const row = entitySchemaRows.find(
+          (candidate) =>
+            candidate.table_name === "spine_ts_entity_specs" &&
+            candidate.column_name === "fingerprint",
+        );
+        if (row !== undefined) row.column_type = "varchar(1024)";
+      },
+    ],
+    [
+      "event read index",
+      () => {
+        const index = entityIndexRows.findIndex(
+          (row) =>
+            row.table_name === "spine_ts_entity_events" &&
+            row.index_name === "spine_ts_entity_events_read" &&
+            row.seq_in_index === 6,
+        );
+        if (index >= 0) entityIndexRows.splice(index, 1);
+      },
+    ],
+    [
+      "write-order auto-increment",
+      () => {
+        const row = entitySchemaRows.find((candidate) => candidate.column_name === "write_order");
+        if (row !== undefined) row.extra = "";
+      },
+    ],
+    [
+      "required column nullability",
+      () => {
+        const row = entitySchemaRows.find(
+          (candidate) =>
+            candidate.table_name === "spine_ts_entity_current" &&
+            candidate.column_name === "payload",
+        );
+        if (row !== undefined) row.is_nullable = "YES";
+      },
+    ],
+    [
+      "InnoDB engine",
+      () => {
+        const row = entityTableRows.find(
+          (candidate) => candidate.table_name === "spine_ts_entity_events",
+        );
+        if (row !== undefined) row.engine = "MyISAM";
+      },
+    ],
+    [
+      "write-order uniqueness",
+      () => {
+        const row = entityIndexRows.find((candidate) =>
+          candidate.index_name.endsWith("_write_order"),
+        );
+        if (row !== undefined) row.non_unique = 1;
+      },
+    ],
+    [
+      "event read ordering",
+      () => {
+        const row = entityIndexRows.find(
+          (candidate) =>
+            candidate.table_name === "spine_ts_entity_events" &&
+            candidate.index_name === "spine_ts_entity_events_read" &&
+            candidate.seq_in_index === 3,
+        );
+        if (row !== undefined) row.collation = "A";
+      },
+    ],
+  ])(
+    "fails closed before entity row access when %s metadata is malformed",
+    async (_name, corrupt) => {
+      const savedColumns = entitySchemaRows.map((row) => ({ ...row }));
+      const savedIndexes = entityIndexRows.map((row) => ({ ...row }));
+      const savedTables = entityTableRows.map((row) => ({ ...row }));
+      corrupt();
+      const { MysqlStorageFactory, MysqlStorageSchemaError } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_entity_schema",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      try {
+        await expect(storage.events.backward("task", 1)).rejects.toBeInstanceOf(
+          MysqlStorageSchemaError,
+        );
+        expect(calls.some((call) => call.sql.includes("spine_ts_entity_events WHERE"))).toBe(false);
+      } finally {
+        entitySchemaRows.splice(0, entitySchemaRows.length, ...savedColumns);
+        entityIndexRows.splice(0, entityIndexRows.length, ...savedIndexes);
+        entityTableRows.splice(0, entityTableRows.length, ...savedTables);
+        await factory.close();
+      }
+    },
+  );
+
+  it("rejects an invalid provider write-order cutoff as malformed data", async () => {
+    const { MysqlStorageDataError, MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_invalid_write_order",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    truncateSelections.push([{ write_order: 0n }]);
+
+    await expect(storage.states.truncate(create(TimestampSchema))).rejects.toBeInstanceOf(
+      MysqlStorageDataError,
+    );
+    await factory.close();
+  });
   it("conforms to the shared normalized query provider fixture", async () => {
     const { MysqlStorageFactory } = await import("../src/index.js");
     const factory = await MysqlStorageFactory.create({
@@ -208,18 +540,32 @@ describe("MysqlStorageFactory", () => {
     operationError = undefined;
     operationRows = [];
     connectionAcquires = 0;
+    connectionFailureAt = undefined;
+    queryFailure = undefined;
     executeFailure = undefined;
     commitFailure = undefined;
+    commitResponses.length = 0;
     rollbackFailure = undefined;
     transactionStarts = 0;
     commits = 0;
     rollbacks = 0;
     releases = 0;
+    releaseFailureAt = undefined;
     endFailure = undefined;
     executeGate = undefined;
     endGate = undefined;
     onRelease = undefined;
     getConnectionGate = undefined;
+    nextConnectionId = 1;
+    destroys = 0;
+    userLocks.clear();
+    lockResponses.length = 0;
+    lockWaiters.clear();
+    trimSelections.length = 0;
+    truncateSelections.length = 0;
+    truncateRows.length = 0;
+    afterTruncateCutoff = undefined;
+    entitySpecifications.clear();
     poolOptions = undefined;
   });
 
@@ -433,6 +779,776 @@ describe("MysqlStorageFactory", () => {
     await closing;
     expect(closeSettled).toBe(true);
     expect(endCalls).toBe(1);
+  });
+
+  it("drains an admitted entity-history acquisition before ending the pool", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_close",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    connectionAcquires = 0;
+    let releaseAcquisition: (() => void) | undefined;
+    getConnectionGate = () =>
+      new Promise<void>((resolve) => {
+        releaseAcquisition = resolve;
+      });
+
+    const operation = storage.current.read("pending");
+    await Promise.resolve();
+    expect(connectionAcquires).toBe(1);
+    const closing = factory.close();
+    await Promise.resolve();
+    expect(endCalls).toBe(0);
+
+    getConnectionGate = undefined;
+    releaseAcquisition?.();
+    await expect(operation).rejects.toThrow();
+    await expect(closing).resolves.toBeUndefined();
+    await expect(storage.current.read("later")).rejects.toThrow(/closed|operation/i);
+  });
+
+  it("rejects entity-history handle creation after factory close", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_closed",
+    });
+    await factory.close();
+    expect(() => factory.createEntityStorage(entityHistoryInput())).toThrow(
+      MysqlStorageOperationError,
+    );
+  });
+
+  it("requires a provider user lock before a state-history append mutation", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_lock_red",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    await expect(
+      storage.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "state" }),
+        version: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).resolves.toBeUndefined();
+    expect(calls.some((call) => call.sql.includes("GET_LOCK"))).toBe(true);
+    await factory.close();
+  });
+
+  it("keeps one connection from lock acquisition through an identical state retry", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_lock_connection",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_states")
+        ? Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" })
+        : undefined;
+    operationRows = [
+      {
+        seconds: 1n,
+        nanos: 0,
+        payload: toBinary(StringValueSchema, create(StringValueSchema, { value: "state" })),
+      },
+    ];
+    await expect(
+      storage.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "state" }),
+        version: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).resolves.toBeUndefined();
+    const protectedCalls = calls.filter((call) =>
+      /GET_LOCK|INSERT INTO spine_ts_entity_states|SELECT seconds,nanos,payload|RELEASE_LOCK/u.test(
+        call.sql,
+      ),
+    );
+    expect([...new Set(protectedCalls.map((call) => call.connectionId))]).toHaveLength(1);
+    expect(commits).toBe(1);
+    await factory.close();
+  });
+
+  it("does not compare a non-duplicate state append failure", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_lock_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_states")
+        ? new Error("provider secret")
+        : undefined;
+    await expect(
+      storage.states.append({
+        entityId: "task",
+        state: create(StringValueSchema, { value: "state" }),
+        version: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toThrow("could not complete");
+    expect(calls.some((call) => call.sql.includes("SELECT seconds,nanos,payload"))).toBe(false);
+    expect(rollbacks).toBe(1);
+    await factory.close();
+  });
+
+  it("does not look up an event after a non-duplicate append failure", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_event_append_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_events")
+        ? new Error("provider secret")
+        : undefined;
+
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event: create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) }),
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    expect(calls.some((call) => call.sql.startsWith("SELECT entity_key,producer_version"))).toBe(
+      false,
+    );
+    await factory.close();
+  });
+
+  it.each([0, null, Object.assign(new Error("deadlock"), { code: "ER_USER_LOCK_DEADLOCK" })])(
+    "does not mutate when GET_LOCK cannot be acquired",
+    async (response) => {
+      const { MysqlStorageFactory } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_entity_lock_unavailable",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      lockResponses.push(response);
+      await expect(
+        storage.states.append({
+          entityId: "task",
+          state: create(StringValueSchema, { value: "state" }),
+          version: 1n,
+          createdAt: create(TimestampSchema, { seconds: 1n }),
+        }),
+      ).rejects.toThrow("could not complete");
+      expect(transactionStarts).toBe(0);
+      expect(calls.some((call) => call.sql.startsWith("INSERT INTO spine_ts_entity_states"))).toBe(
+        false,
+      );
+      await factory.close();
+    },
+  );
+
+  it("retains a trim user lock across committed chunks while another entity proceeds", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const first = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_trim_lock",
+    });
+    const second = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_trim_lock",
+    });
+    const trimming = first.createEntityStorage(entityHistoryInput());
+    const appending = second.createEntityStorage(entityHistoryInput());
+    trimSelections.push([{ version: 2n }], [{ version: 1n }], []);
+    let releaseDelete: (() => void) | undefined;
+    const deleteEntered = new Promise<void>((resolve) => {
+      executeGate = async (sql) => {
+        if (!sql.startsWith("DELETE FROM spine_ts_entity_states") || releaseDelete !== undefined)
+          return;
+        resolve();
+        await new Promise<void>((unblock) => {
+          releaseDelete = unblock;
+        });
+      };
+    });
+    const trim = trimming.states.trim("same", 0);
+    await deleteEntered;
+    const waitingAppend = appending.states.append(stateRecord("same", 3n));
+    const otherAppend = appending.states.append(stateRecord("other", 1n));
+    await expect(otherAppend).resolves.toBeUndefined();
+    expect(
+      calls.some(
+        (call) =>
+          call.sql.startsWith("INSERT INTO spine_ts_entity_states") && call.values?.[2] === 3n,
+      ),
+    ).toBe(false);
+    releaseDelete?.();
+    await expect(trim).resolves.toBeUndefined();
+    await expect(waitingAppend).resolves.toBeUndefined();
+    const trimCalls = calls.filter((call) =>
+      /SELECT version FROM spine_ts_entity_states|DELETE FROM spine_ts_entity_states/u.test(
+        call.sql,
+      ),
+    );
+    expect(new Set(trimCalls.map((call) => call.connectionId)).size).toBe(1);
+    expect(commits).toBeGreaterThanOrEqual(3);
+    await Promise.all([first.close(), second.close()]);
+  });
+
+  it("destroys an entity connection when RELEASE_LOCK is uncertain and drains close once", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_release_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    const releasesBefore = releases;
+    executeFailure = (sql) =>
+      sql.includes("RELEASE_LOCK") ? new Error("release failed") : undefined;
+    await expect(storage.states.append(stateRecord("same", 1n))).resolves.toBeUndefined();
+    expect(destroys).toBe(1);
+    expect(releases - releasesBefore).toBe(3);
+    await expect(factory.close()).resolves.toBeUndefined();
+    expect(endCalls).toBe(1);
+  });
+
+  it("lets a gated trim chunk commit during close but starts no later selection", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_trim_close",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    trimSelections.push([{ version: 1n }], [{ version: 0n }]);
+    let unblock: (() => void) | undefined;
+    const entered = new Promise<void>((resolve) => {
+      executeGate = async (sql) => {
+        if (!sql.startsWith("DELETE FROM spine_ts_entity_states") || unblock !== undefined) return;
+        resolve();
+        await new Promise<void>((release) => {
+          unblock = release;
+        });
+      };
+    });
+    const trim = storage.states.trim("same", 0);
+    await entered;
+    const closing = factory.close();
+    expect(endCalls).toBe(0);
+    unblock?.();
+    await expect(trim).rejects.toThrow(/closed/i);
+    await expect(closing).resolves.toBeUndefined();
+    expect(
+      calls.filter((call) => call.sql.startsWith("SELECT version FROM spine_ts_entity_states")),
+    ).toHaveLength(1);
+    expect(commits).toBe(1);
+    expect(endCalls).toBe(1);
+  });
+
+  it("preserves committed trim chunks and requires a caller retry after an uncertain later commit", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_trim_resume",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    trimSelections.push([{ version: 3n }], [{ version: 2n }]);
+    commitResponses.push(undefined, new Error("commit outcome unknown"));
+    await expect(storage.states.trim("same", 1)).rejects.toThrow("could not complete");
+    expect(commits).toBe(2);
+    expect(rollbacks).toBe(1);
+    expect(
+      calls.filter((call) => call.sql.startsWith("SELECT version FROM spine_ts_entity_states")),
+    ).toHaveLength(2);
+
+    await expect(storage.states.append(stateRecord("same", 4n))).resolves.toBeUndefined();
+    trimSelections.push([{ version: 2n }], []);
+    await expect(storage.states.trim("same", 1)).resolves.toBeUndefined();
+    expect(
+      calls.filter((call) => call.sql.startsWith("DELETE FROM spine_ts_entity_states")),
+    ).toHaveLength(3);
+    await factory.close();
+  });
+
+  it(
+    "truncates state only through its captured strict-boundary high-water " +
+      "and resumes after a later commit failure",
+    async () => {
+      const { MysqlStorageFactory } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_state_truncate",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      const first = { entity_key: new Uint8Array([1]), version: 1n };
+      const cutoff = { write_order: 2n };
+      truncateSelections.push([cutoff], [first]);
+      commitResponses.push(undefined, new Error("unknown commit"));
+      const boundary = create(TimestampSchema, { seconds: 5n, nanos: 7 });
+      await expect(storage.states.truncate(boundary)).rejects.toThrow("could not complete");
+      const selects = calls.filter((call) =>
+        /SELECT write_order FROM spine_ts_entity_states|SELECT entity_key,version/u.test(call.sql),
+      );
+      expect(selects).toHaveLength(3);
+      expect(selects[0]?.sql).toContain("ORDER BY write_order DESC LIMIT 1");
+      expect(selects[1]?.sql).toContain("ORDER BY write_order LIMIT 128");
+      expect(selects[1]?.values?.at(-1)).toBe(cutoff.write_order);
+      expect(commits).toBe(2);
+      expect(rollbacks).toBe(1);
+      truncateSelections.push([{ write_order: 1n }], [first], []);
+      await expect(storage.states.truncate(boundary)).resolves.toBeUndefined();
+      expect(
+        calls.filter((call) => call.sql.startsWith("DELETE FROM spine_ts_entity_states")),
+      ).toHaveLength(2);
+      await factory.close();
+    },
+  );
+
+  it("uses an event-key high-water and strict timestamp predicate without chasing later keys", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_event_truncate",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    const highWater = { write_order: 9n };
+    truncateSelections.push([highWater], [{ event_key: new Uint8Array([1]) }], []);
+    const boundary = create(TimestampSchema, { seconds: 8n, nanos: 3 });
+    await expect(storage.events.truncate(boundary)).resolves.toBeUndefined();
+    const selects = calls.filter((call) =>
+      /SELECT write_order FROM spine_ts_entity_events|SELECT event_key/u.test(call.sql),
+    );
+    expect(selects).toHaveLength(3);
+    expect(selects[0]?.sql).toContain("write_order DESC LIMIT 1");
+    expect(selects[1]?.sql).toContain("write_order<=?");
+    expect(selects[1]?.values?.slice(-1)).toEqual([highWater.write_order]);
+    expect(selects[1]?.values?.slice(1, 4)).toEqual([8n, 8n, 3]);
+    await factory.close();
+  });
+
+  it.each([
+    ["state", "spine_ts_entity_states", { entity_key: new Uint8Array([1]), version: 1n }],
+    ["event", "spine_ts_entity_events", { event_key: new Uint8Array([1]) }],
+  ])(
+    "uses a provider write-order cutoff rather than identity-key order for %s truncate",
+    async (_name, table, key) => {
+      const { MysqlStorageFactory } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_write_order_truncate",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      const cutoff = 7n;
+      truncateSelections.push([{ write_order: cutoff }], [key], []);
+
+      const boundary = create(TimestampSchema, { seconds: 8n, nanos: 3 });
+      const operation =
+        table === "spine_ts_entity_states"
+          ? storage.states.truncate(boundary)
+          : storage.events.truncate(boundary);
+      await expect(operation).resolves.toBeUndefined();
+
+      const selections = calls.filter((call) => call.sql.includes(`FROM ${table}`));
+      expect(selections[0]?.sql).toContain("SELECT write_order");
+      expect(selections[0]?.sql).toContain("ORDER BY write_order DESC LIMIT 1");
+      expect(selections[1]?.sql).toContain("write_order<=?");
+      expect(selections[1]?.values?.at(-1)).toBe(cutoff);
+      await factory.close();
+    },
+  );
+
+  it.each([
+    [
+      "state",
+      { table: "states" as const, write_order: 5n, entity_key: new Uint8Array([9]), version: 1n },
+      { table: "states" as const, write_order: 6n, entity_key: new Uint8Array([1]), version: 1n },
+    ],
+    [
+      "event",
+      { table: "events" as const, write_order: 5n, event_key: new Uint8Array([9]) },
+      { table: "events" as const, write_order: 6n, event_key: new Uint8Array([1]) },
+    ],
+  ])(
+    "keeps a lexically lower eligible %s append after its write-order cutoff",
+    async (name, existing, late) => {
+      const { MysqlStorageFactory } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_write_order_race",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      truncateRows.push(existing);
+      afterTruncateCutoff = () => truncateRows.push(late);
+
+      const boundary = create(TimestampSchema, { seconds: 8n, nanos: 3 });
+      await expect(
+        name === "state" ? storage.states.truncate(boundary) : storage.events.truncate(boundary),
+      ).resolves.toBeUndefined();
+
+      const deletes = calls.filter((call) =>
+        call.sql.startsWith(`DELETE FROM spine_ts_entity_${name}s`),
+      );
+      expect(deletes).toHaveLength(1);
+      const existingKey = "entity_key" in existing ? existing.entity_key : existing.event_key;
+      const lateKey = "entity_key" in late ? late.entity_key : late.event_key;
+      expect(deletes[0]?.values).toContainEqual(existingKey);
+      expect(deletes[0]?.values).not.toContainEqual(lateKey);
+      await factory.close();
+    },
+  );
+
+  it("sanitizes duplicate event reconciliation acquisition and lookup failures", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_event_reconcile_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) => {
+      if (sql.startsWith("INSERT INTO spine_ts_entity_events"))
+        return Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" });
+      if (sql.startsWith("SELECT entity_key,producer_version")) return new Error("provider secret");
+      return undefined;
+    };
+
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event: create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) }),
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event: create(EventSchema, { id: create(EventIdSchema, { value: "event-2" }) }),
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.not.toThrow("provider secret");
+    await factory.close();
+  });
+
+  it("sanitizes current-read acquisition and cleanup failures after readiness", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_current_cleanup_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    await storage.current.read("warm");
+
+    connectionFailureAt = connectionAcquires + 2;
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    connectionFailureAt = undefined;
+    releaseFailureAt = releases + 2;
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await factory.close();
+  });
+
+  it.each([undefined, "   "])("rejects a missing or blank event ID before pool use", async (id) => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_event_id_validation",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    connectionAcquires = 0;
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event: create(EventSchema, {
+          id: id === undefined ? undefined : create(EventIdSchema, { value: id }),
+        }),
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema),
+      }),
+    ).rejects.toThrow("event ID");
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("uses exclusive history cursors and returns no state when no version matches", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_history_cursor",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    await expect(storage.states.stateAt("task", create(TimestampSchema))).resolves.toBeUndefined();
+    await storage.states.backward("task", 1, 3n);
+    await storage.events.backward("task", 1, 4n);
+    const state = calls.find((call) => call.sql.includes("AND version < ?"));
+    const event = calls.find((call) => call.sql.includes("AND producer_version < ?"));
+    expect(state?.values?.at(-1)).toBe(3n);
+    expect(event?.values?.at(-1)).toBe(4n);
+    await factory.close();
+  });
+
+  it("keeps entity handles idempotently closeable and scopes a tenant separately", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_scope",
+    });
+    const singleTenant = factory.createEntityStorage(entityHistoryInput());
+    const tenant = factory.createEntityStorage({
+      ...entityHistoryInput(),
+      context: { name: "History", multitenant: true, tenantId: "green" },
+    });
+    await singleTenant.current.read("task");
+    await tenant.current.read("task");
+    const scopes = calls
+      .filter((call) => call.sql.startsWith("INSERT IGNORE INTO spine_ts_entity_specs"))
+      .map((call) => call.values?.[0]);
+    expect(scopes).toHaveLength(2);
+    expect(scopes[0]).not.toEqual(scopes[1]);
+    singleTenant.close();
+    singleTenant.close();
+    expect(singleTenant.isOpen()).toBe(false);
+    await factory.close();
+  });
+
+  it("sanitizes a ready fingerprint cleanup-only failure", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_ready_cleanup_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    releaseFailureAt = releases + 2;
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await factory.close();
+  });
+
+  it("preserves an incompatible fingerprint when ready cleanup also fails", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_ready_fingerprint_precedence",
+    });
+    const first = factory.createEntityStorage(entityHistoryInput());
+    await first.current.read("warm");
+    const incompatible = factory.createEntityStorage({
+      ...entityHistoryInput(),
+      id: {
+        clone: (id: string) => id,
+        fingerprint: "other-string",
+        key: (id: string) => id,
+      },
+    });
+    releaseFailureAt = releases + 2;
+    await expect(incompatible.current.read("task")).rejects.toThrow(
+      "incompatible record specification",
+    );
+    await factory.close();
+  });
+
+  it("preserves an entity schema error when schema cleanup also fails", async () => {
+    const { MysqlStorageFactory, MysqlStorageSchemaError } = await import("../src/index.js");
+    const savedTables = entityTableRows.map((row) => ({ ...row }));
+    const events = entityTableRows.find((row) => row.table_name === "spine_ts_entity_events");
+    if (events !== undefined) events.engine = "MyISAM";
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_schema_cleanup_precedence",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    releaseFailureAt = releases + 1;
+    try {
+      await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageSchemaError);
+    } finally {
+      entityTableRows.splice(0, entityTableRows.length, ...savedTables);
+      await factory.close();
+    }
+  });
+
+  it.each(["state backward", "state at", "event backward"] as const)(
+    "sanitizes %s cleanup failure after readiness",
+    async (name) => {
+      const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_history_read_cleanup_failure",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      await storage.current.read("warm");
+      releaseFailureAt = releases + 2;
+      const operation =
+        name === "state backward"
+          ? storage.states.backward("task", 1)
+          : name === "state at"
+            ? storage.states.stateAt("task", create(TimestampSchema))
+            : storage.events.backward("task", 1);
+      await expect(operation).rejects.toBeInstanceOf(MysqlStorageOperationError);
+      await factory.close();
+    },
+  );
+
+  it("preserves a state backward data error when its cleanup also fails", async () => {
+    const { MysqlStorageDataError, MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_history_read_data_cleanup_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    await storage.current.read("warm");
+    operationRows = [{ payload: "not-bytes" }];
+    releaseFailureAt = releases + 2;
+    await expect(storage.states.backward("task", 1)).rejects.toBeInstanceOf(MysqlStorageDataError);
+    await factory.close();
+  });
+
+  it.each(["state append", "state trim", "state truncate", "event truncate"] as const)(
+    "sanitizes provider acquisition and release failures during %s",
+    async (name) => {
+      const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+      const factory = await MysqlStorageFactory.create({
+        url: "mysql://spine:secret@localhost:3306/spine_packet_entity_cleanup_failure",
+      });
+      const storage = factory.createEntityStorage(entityHistoryInput());
+      await storage.current.read("warm");
+      const operation = () =>
+        name === "state append"
+          ? storage.states.append(stateRecord("task", 1n))
+          : name === "state trim"
+            ? storage.states.trim("task", 0)
+            : name === "state truncate"
+              ? storage.states.truncate(create(TimestampSchema))
+              : storage.events.truncate(create(TimestampSchema));
+
+      connectionFailureAt = connectionAcquires + 2;
+      await expect(operation()).rejects.toBeInstanceOf(MysqlStorageOperationError);
+      connectionFailureAt = undefined;
+      releaseFailureAt = releases + 2;
+      await expect(operation()).rejects.toBeInstanceOf(MysqlStorageOperationError);
+      await factory.close();
+    },
+  );
+
+  it("sanitizes duplicate-event reconciliation acquisition and release failures", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_event_reconcile_cleanup_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    await storage.current.read("warm");
+    const event = create(EventSchema, { id: create(EventIdSchema, { value: "event-cleanup" }) });
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_events")
+        ? Object.assign(new Error("duplicate"), { code: "ER_DUP_ENTRY" })
+        : undefined;
+    connectionFailureAt = connectionAcquires + 3;
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event,
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    connectionFailureAt = undefined;
+    operationRows = [
+      {
+        entity_key: CanonicalMysqlValue.encode("task", 768),
+        producer_version: 1n,
+        seconds: 1n,
+        nanos: 0,
+        payload: toBinary(EventSchema, event),
+      },
+    ];
+    releaseFailureAt = releases + 3;
+    await expect(
+      storage.events.append({
+        entityId: "task",
+        event,
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await factory.close();
+  });
+
+  it.each([
+    ["DDL", (sql: string) => sql.startsWith("CREATE TABLE IF NOT EXISTS spine_ts_entity")],
+    ["entity metadata", (sql: string) => sql.includes("information_schema.columns")],
+  ])("sanitizes an entity %s provider failure before row access", async (_name, fail) => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_provider_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    queryFailure = (sql) => (fail(sql) ? new Error("provider secret") : undefined);
+
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(storage.current.read("task")).rejects.not.toThrow("provider secret");
+    expect(calls.some((call) => call.sql.includes("spine_ts_entity_current WHERE"))).toBe(false);
+    expect(releases).toBe(connectionAcquires);
+    await factory.close();
+  });
+
+  it.each([
+    [
+      "fingerprint insert",
+      (sql: string) => sql.startsWith("INSERT IGNORE INTO spine_ts_entity_specs"),
+    ],
+    [
+      "fingerprint lookup",
+      (sql: string) => sql.startsWith("SELECT fingerprint FROM spine_ts_entity_specs"),
+    ],
+  ])("sanitizes an entity %s provider failure before row access", async (_name, fail) => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_provider_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) => (fail(sql) ? new Error("provider secret") : undefined);
+
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(storage.current.read("task")).rejects.not.toThrow("provider secret");
+    expect(calls.some((call) => call.sql.includes("spine_ts_entity_current WHERE"))).toBe(false);
+    expect(releases).toBe(connectionAcquires);
+    await factory.close();
+  });
+
+  it("sanitizes an entity pool-acquisition failure before row access", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_provider_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    connectionAcquires = 0;
+    releases = 0;
+    connectError = new Error("provider secret");
+
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(storage.current.read("task")).rejects.not.toThrow("provider secret");
+    expect(calls.some((call) => call.sql.includes("spine_ts_entity_current WHERE"))).toBe(false);
+    expect(releases).toBe(0);
+    await factory.close();
+  });
+
+  it.each([
+    ["state backward", "SELECT payload FROM spine_ts_entity_states"],
+    ["event backward", "SELECT payload FROM spine_ts_entity_events"],
+    ["state at", "SELECT payload FROM spine_ts_entity_states"],
+    ["state truncate", "SELECT write_order FROM spine_ts_entity_states"],
+    ["event truncate", "SELECT write_order FROM spine_ts_entity_events"],
+  ])("sanitizes a provider failure from %s", async (name, sqlPrefix) => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_provider_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    executeFailure = (sql) =>
+      sql.startsWith(sqlPrefix) ? new Error("provider secret") : undefined;
+
+    const operation =
+      name === "state backward"
+        ? storage.states.backward("task", 1)
+        : name === "event backward"
+          ? storage.events.backward("task", 1)
+          : name === "state at"
+            ? storage.states.stateAt("task", create(TimestampSchema))
+            : name === "state truncate"
+              ? storage.states.truncate(create(TimestampSchema))
+              : storage.events.truncate(create(TimestampSchema));
+    await expect(operation).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(operation).rejects.not.toThrow("provider secret");
+    await factory.close();
+  });
+
+  it("preserves malformed entity current, state, and event payloads as data errors", async () => {
+    const { MysqlStorageDataError, MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_data_failure",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    operationRows = [{ payload: "not-bytes", version: 1n, archived: 0, deleted: 0 }];
+
+    await expect(storage.current.read("task")).rejects.toBeInstanceOf(MysqlStorageDataError);
+    await expect(storage.states.backward("task", 1)).rejects.toBeInstanceOf(MysqlStorageDataError);
+    await expect(storage.events.backward("task", 1)).rejects.toBeInstanceOf(MysqlStorageDataError);
+    await factory.close();
   });
 
   it("fails closed when a fixed table has an incompatible schema", async () => {
@@ -1524,4 +2640,59 @@ describe("MysqlStorageFactory", () => {
     expect(connectionAcquires).toBe(0);
     await factory.close();
   });
+
+  it("rejects invalid entity numeric values before readiness or pool acquisition", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_numbers",
+    });
+    const storage = factory.createEntityStorage(entityHistoryInput());
+    connectionAcquires = 0;
+    await expect(
+      storage.states.append({
+        ...stateRecord("task", 1n << 63n),
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      }),
+    ).rejects.toThrow(/64-bit/i);
+    await expect(
+      storage.states.append({
+        ...stateRecord("task", 1n),
+        createdAt: create(TimestampSchema, { seconds: 1n, nanos: 1_000_000_000 }),
+      }),
+    ).rejects.toThrow(/nanos/i);
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
 });
+
+function entityHistoryInput(): EntityStorageInput<string, StringValue> {
+  return {
+    context: { name: "History", multitenant: false },
+    id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+    layout: "entity-v1",
+    stateSchema: StringValueSchema,
+    storageKey: "history.Task:current",
+  };
+}
+
+function stateRecord(entityId: string, version: bigint) {
+  return {
+    entityId,
+    state: create(StringValueSchema, { value: `state-${version.toString()}` }),
+    version,
+    createdAt: create(TimestampSchema, { seconds: version }),
+  };
+}
+
+function fakeKey(value: unknown): string {
+  return value instanceof Uint8Array ? [...value].join(",") : String(value);
+}
+
+function sameBytes(left: Uint8Array | undefined, right: unknown): boolean {
+  return (
+    left instanceof Uint8Array &&
+    right instanceof Uint8Array &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}

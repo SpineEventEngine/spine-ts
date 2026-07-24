@@ -35,6 +35,44 @@ Compose it through `BoundedContextBuilder.withStorageFactory(factory)` or a
 one scope; a multitenant context requires a non-blank operation-time `tenantId`
 and isolates that tenant's rows.
 
+## Provider-only entity history
+
+`createEntityStorage(input)` is an internal-provider seam used by the later
+repository integration; it is not a remote or end-user history API. It supplies
+the frozen current-record, immutable state-history, and diagnostic event-history
+ports. The returned `MysqlEntityStorageHandle` is independently closeable by its
+provider/framework client; factory close also closes every live handle. MySQL
+creates private `spine_ts_entity_*` tables lazily on first access, then verifies
+their exact columns, InnoDB engine, primary keys, and required history indexes
+before it binds a fingerprint or accesses rows. Each length-safe canonical
+context/tenant/storage-key scope persists one compatibility fingerprint, so an
+incompatible ID codec, layout, or state type is rejected before rows are read or
+written—even from an independent factory.
+
+Reads clone Protobuf values, are newest-first, and use an exclusive state
+continuation. State rows are identified by canonical entity key plus version;
+event rows by event ID, with entity correlation stored separately. An identical
+retry for that durable identity succeeds; divergent content is rejected.
+Provider failures are reported through the adapter's sanitized operation errors,
+while malformed stored payloads and incompatible schemas retain their data/schema
+errors.
+
+State append and trim for one entity acquire a private, database-specific MySQL
+`GET_LOCK` on one connection. The lock remains held across every committed
+128-row trim chunk, so an append from another factory cannot interleave; a
+failed lock release poisons that connection rather than returning it to the
+pool. This coordination is only for one MySQL server (not cross-`mysqld`, NDB,
+or statement-based replication). Current-record and history operations are not
+one cross-storage transaction.
+
+`trim` and `truncate` select/delete fixed 128-row key-only chunks; neither
+offers an unbounded scan or generic cursor. A trim commit failure has an unknown
+outcome: completed chunks remain durable, no internal retry runs, and the caller
+must retry. Truncate captures an initial strict-time, provider-generated
+write-order cutoff, so it does not chase rows appended after that capture; each delete chunk is transactional,
+but a failed/unknown chunk outcome likewise requires caller retry. Closing a
+history handle rejects subsequent operations. PostgreSQL support is future-only.
+
 ## Record behavior
 
 The adapter stores deterministic Protobuf bytes in fixed private InnoDB tables
@@ -84,7 +122,7 @@ SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' \
   pnpm --filter @spine-event-engine/storage-rdbms test:mysql
 ```
 
-The opt-in test creates only the two adapter tables and removes them afterward.
+The opt-in test creates adapter-owned tables and removes them afterward.
 The account needs `CREATE TABLE IF NOT EXISTS` (including the FK/index),
 information-schema metadata reads, and transactional `SELECT`/`INSERT`/`UPDATE`/
 `DELETE`; precreating tables does not remove the adapter's create/verify step.

@@ -1304,10 +1304,11 @@ schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
 
 The storage package now defines adapter-facing current-record and history
 contracts. `EntityRecord` carries the canonical entity ID, state, version, and
-lifecycle flags for Aggregates, Projections, and Process Managers. Its physical
-scope uses the bounded context, tenant, state type, and the closed purpose key
-(`current`, `state-history`, or `event-history`); an incompatible storage
-fingerprint fails before rows are read or written.
+lifecycle flags for Aggregates, Projections, and Process Managers. The physical
+scope uses the bounded-context name, tenant mode/current tenant (or the fixed
+single-tenant marker), and the supplied storage key. The adapter then binds one
+fingerprint containing the ID codec, layout, and state type before rows are read
+or written; incompatible inputs fail before access.
 
 In-memory factories are isolated by default. To deliberately share compatible
 record or adapter entity scopes across independently constructed factories,
@@ -1317,13 +1318,18 @@ backend available to its siblings.
 
 State and diagnostic event history are asynchronous immutable journals. They
 read newest first; `startingFromVersion` is an exclusive read continuation
-boundary, not an append constraint. State
-history has `stateAt`, per-entity `trim`, and time-based `truncate`; event
-history has time-based `truncate`. Retries must be byte-for-byte equivalent
-for the existing identity or they fail rather than rewriting history. Retention
-work is bounded, resumable, and close-aware; a trim serializes with appends for
-the same entity, while a truncate leaves a concurrently appended eligible row
-for a later call.
+boundary, not an append constraint. State history has `stateAt`, per-entity
+`trim`, and time-based `truncate`; event history has time-based `truncate`.
+Retries must be byte-for-byte equivalent for the existing identity or they fail
+rather than rewriting history. Retention work is bounded, resumable, and
+close-aware. In the MySQL adapter, trim serializes with same-entity appends by
+using a database-specific `GET_LOCK` on one connection in the supported
+single-server topology. Truncate captures a strict-time provider write-order
+cutoff before it starts deleting 128-row chunks, so it does not chase rows
+appended after that capture—even if their timestamp is eligible. Each truncate chunk is
+transactional, but a failed/unknown commit or partial invocation requires the
+caller to retry; completed chunks remain durable. Current-record and history
+operations are not one cross-storage transaction.
 
 This is a provider/repository storage seam, not a client API or an
 application-level history feature yet. Repository configuration, protected

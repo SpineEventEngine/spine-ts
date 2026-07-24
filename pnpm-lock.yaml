@@ -259,6 +259,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage
