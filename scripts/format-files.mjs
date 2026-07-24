@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+import { lstatIfPresent } from "./generated-path-safety.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const generatedPathPattern = /^(?:packages\/[^/]+|examples\/[^/]+)\/generated\//u;
 const rootFilePattern = /^[^/]+\.(?:json|md|yaml|yml|mjs|ts)$/u;
@@ -43,9 +45,9 @@ export function selectFormatFiles(paths) {
   return paths.filter(isSupportedFormatPath).sort();
 }
 
-function trackedFiles() {
+export function trackedFiles(root = repoRoot, status = lstatIfPresent) {
   const result = spawnSync("git", ["ls-files", "-z"], {
-    cwd: repoRoot,
+    cwd: root,
     encoding: "utf8",
   });
 
@@ -61,7 +63,9 @@ function trackedFiles() {
     throw new Error(`Tracked file listing failed:\n${result.stderr}${result.stdout}`);
   }
 
-  return result.stdout.split("\0").filter((path) => path.length > 0);
+  return result.stdout
+    .split("\0")
+    .filter((path) => path.length > 0 && status(resolve(root, path)) !== undefined);
 }
 
 function runPrettier(mode, files) {

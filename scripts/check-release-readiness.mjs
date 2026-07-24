@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { lstatIfPresent } from "./generated-path-safety.mjs";
+
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultImportTimeoutMs = 10_000;
 const legacyNamespace = "@spine-" + "ts/";
@@ -15,7 +17,10 @@ function trackedLiveFiles(repoRoot) {
     .split("\n")
     .filter(
       (path) =>
-        path.length > 0 && !path.startsWith("build-protocol/") && path !== "human-review-1-jul.md",
+        path.length > 0 &&
+        lstatIfPresent(join(repoRoot, path)) !== undefined &&
+        !path.startsWith("build-protocol/") &&
+        path !== "human-review-1-jul.md",
     )
     .sort();
 }

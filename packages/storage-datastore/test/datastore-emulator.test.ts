@@ -17,6 +17,8 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     const input: EntityStorageInput<string, StringValue> = {
       context: { name, multitenant: false },
       id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+      extractId: () => "task",
+      columns: [],
       layout: "emulator-v1",
       stateSchema: StringValueSchema,
       storageKey: "tasks.Task:current",

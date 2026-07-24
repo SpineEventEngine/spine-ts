@@ -30,8 +30,8 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { packAny } from "@spine-event-engine/core";
 
-import { Client, ProjectionQuery } from "../src/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
+import { Client, EntityQuery } from "../src/index.js";
+import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
 describe("Client", () => {
   it("resolves the default zone once and retains the first resolution", async () => {
@@ -95,7 +95,7 @@ describe("Client", () => {
     );
     tenant.kind = { case: "value", value: "mutated-tenant" };
     zone.value = "mutated-zone";
-    const query = ProjectionQuery.select({
+    const query = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns: {} as never,
       context: create(ActorContextSchema),
@@ -322,7 +322,7 @@ describe("Client", () => {
         });
       }),
     );
-    const query = ProjectionQuery.select({
+    const query = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns: {} as never,
       context: create(ActorContextSchema, { actor: create(UserIdSchema, { value: "wrong" }) }),
@@ -893,7 +893,7 @@ describe("Client", () => {
         }),
       ),
     );
-    const query = ProjectionQuery.select({
+    const query = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns: {} as never,
       context: create(ActorContextSchema),

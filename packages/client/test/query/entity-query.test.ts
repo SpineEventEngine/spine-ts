@@ -10,27 +10,17 @@ import {
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
-import {
-  ProjectionColumn,
-  ProjectionQuery,
-  all,
-  either,
-  eq,
-  ge,
-  gt,
-  le,
-  lt,
-} from "../../src/index.js";
-import { defineGeneratedProjectionColumns } from "../../src/codegen/index.js";
+import { EntityColumn, EntityQuery, all, either, eq, ge, gt, le, lt } from "../../src/index.js";
+import { defineGeneratedEntityColumns } from "../../src/codegen/index.js";
 import {
   FixtureStatus,
   ProjectionStateSchema,
   ScalarProjectionStateSchema,
-} from "../../test-fixtures/projection-column-fixtures.js";
+} from "../../test-fixtures/entity-column-fixtures.js";
 
-const columns = ProjectionColumn.register(
+const columns = EntityColumn.register(
   ProjectionStateSchema,
-  defineGeneratedProjectionColumns(ProjectionStateSchema, {
+  defineGeneratedEntityColumns(ProjectionStateSchema, {
     title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
     priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
     status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },
@@ -47,9 +37,9 @@ const columns = ProjectionColumn.register(
 const context = create(ActorContextSchema, {
   actor: create(UserIdSchema, { value: "query-user" }),
 });
-const scalarColumns = ProjectionColumn.register(
+const scalarColumns = EntityColumn.register(
   ScalarProjectionStateSchema,
-  defineGeneratedProjectionColumns(ScalarProjectionStateSchema, {
+  defineGeneratedEntityColumns(ScalarProjectionStateSchema, {
     doubleValue: {
       field: ScalarProjectionStateSchema.field.doubleValue,
       comparison: "ordering" as const,
@@ -85,9 +75,9 @@ const scalarColumns = ProjectionColumn.register(
   }),
 );
 
-describe("ProjectionQuery", () => {
+describe("EntityQuery", () => {
   it("compiles IDs, nested predicates, masks, repeated ordering, and a limit", () => {
-    const query = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .byId("task-1", "task-2")
       .where(
         all(
@@ -143,7 +133,7 @@ describe("ProjectionQuery", () => {
   });
 
   it("compile-covers the documented ID and complete comparison-helper surface", () => {
-    const documented = ProjectionQuery.select({
+    const documented = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns,
       context,
@@ -165,29 +155,29 @@ describe("ProjectionQuery", () => {
 
   it("rejects invalid runtime limits and authored masks before wire compilation", () => {
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1).build(),
-    ).toThrow("Projection query limit requires ordering.");
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1).build(),
+    ).toThrow("Entity query limit requires ordering.");
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .mask("missing" as "title")
         .build(),
-    ).toThrow('Projection query mask path "missing" is not a state field.');
+    ).toThrow('Entity query mask path "missing" is not a state field.');
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(0),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(0),
     ).toThrow("positive integer");
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1.5),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).limit(1.5),
     ).toThrow("positive integer");
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(),
     ).toThrow("must not be empty");
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(undefined),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).byId(undefined),
     ).toThrow("must not be empty");
   });
 
   it("packs descriptor and system column value families", () => {
-    const query = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .where(
         all(
           eq(columns.active, false),
@@ -210,22 +200,22 @@ describe("ProjectionQuery", () => {
   });
 
   it("emits minimal include-all, ID-only, predicate-only, and order-only shapes", () => {
-    const includeAll = ProjectionQuery.select({
+    const includeAll = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns,
       context,
     }).build();
-    const idOnly = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const idOnly = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .byId("task-1")
       .build();
-    const predicateOnly = ProjectionQuery.select({
+    const predicateOnly = EntityQuery.select({
       schema: ProjectionStateSchema,
       columns,
       context,
     })
       .where(eq(columns.title, "A"))
       .build();
-    const orderOnly = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+    const orderOnly = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .orderBy(columns.title)
       .build();
 
@@ -239,7 +229,7 @@ describe("ProjectionQuery", () => {
   });
 
   it("packs every frozen numeric scalar family", () => {
-    const query = ProjectionQuery.select({
+    const query = EntityQuery.select({
       schema: ScalarProjectionStateSchema,
       columns: scalarColumns,
       context,
@@ -276,7 +266,7 @@ describe("ProjectionQuery", () => {
     const cyclic: { kind: "all"; predicates: unknown[] } = { kind: "all", predicates: [] };
     cyclic.predicates.push(cyclic);
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(cyclic as never)
         .build(),
     ).toThrow("must not contain cycles");
@@ -286,21 +276,21 @@ describe("ProjectionQuery", () => {
       deep = { kind: "all", predicates: [deep] };
     }
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(deep as never)
         .build(),
     ).toThrow("maximum depth 64");
 
     const wide = { kind: "all", predicates: new Array(10_001).fill(leaf) };
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
         .where(wide as never)
         .build(),
     ).toThrow("maximum node count 10000");
   });
 
   it("rejects more than 10000 distinct top-level predicates before build", () => {
-    const builder = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context });
+    const builder = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
     for (let index = 0; index < 10_000; index += 1) {
       builder.where(eq(columns.title, `Task ${String(index)}`));
     }
@@ -320,7 +310,7 @@ describe("ProjectionQuery", () => {
 
     for (const [predicate, expected] of malformed) {
       expect(() =>
-        ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
+        EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
           .where(predicate as never)
           .build(),
       ).toThrow(expected);
@@ -334,7 +324,7 @@ describe("ProjectionQuery", () => {
     } as unknown as typeof ProjectionStateSchema;
 
     expect(() =>
-      ProjectionQuery.select({ schema: schemaWithoutFields, columns: columns as never, context })
+      EntityQuery.select({ schema: schemaWithoutFields, columns: columns as never, context })
         .byId("task-1")
         .build(),
     ).toThrow("target has no ID field");
@@ -352,15 +342,13 @@ describe("ProjectionQuery", () => {
     const valid = eq(columns.title, "A");
     const forged = { ...valid, operator: "unknown" } as never;
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context })
-        .where(forged)
-        .build(),
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).where(forged).build(),
     ).toThrow("not recognized");
 
     const { title: omitted, ...withoutTitle } = columns;
     void omitted;
     expect(() =>
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns: withoutTitle, context })
+      EntityQuery.select({ schema: ProjectionStateSchema, columns: withoutTitle, context })
         .where(valid as never)
         .build(),
     ).toThrow("does not belong");
@@ -373,8 +361,8 @@ describe("ProjectionQuery", () => {
       // @ts-expect-error numeric columns reject string values.
       eq(columns.priority, "high");
       // @ts-expect-error masks accept only state field names.
-      ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context }).mask("missing");
-      const builder = ProjectionQuery.select({ schema: ProjectionStateSchema, columns, context });
+      EntityQuery.select({ schema: ProjectionStateSchema, columns, context }).mask("missing");
+      const builder = EntityQuery.select({ schema: ProjectionStateSchema, columns, context });
       // @ts-expect-error equality-only enum columns cannot be used for ordering.
       builder.orderBy(columns.status);
       // @ts-expect-error predicates from a different Projection cannot enter this builder.

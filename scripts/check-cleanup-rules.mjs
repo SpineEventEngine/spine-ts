@@ -4,6 +4,8 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
+import { lstatIfPresent } from "./generated-path-safety.mjs";
+
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const maxLineLength = 120;
 const maxSemanticComponents = 4;
@@ -271,7 +273,9 @@ function trackedFiles(repoRoot) {
     );
   }
 
-  return result.stdout.split("\0").filter(Boolean);
+  return result.stdout
+    .split("\0")
+    .filter((file) => file.length > 0 && lstatIfPresent(join(repoRoot, file)) !== undefined);
 }
 
 function packageDirs(repoRoot) {

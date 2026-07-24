@@ -13,6 +13,8 @@ import { deferred, HistoryDatastoreBackend } from "./entity-history-fixture.js";
 const input = (layout = "entity-v1"): EntityStorageInput<string, StringValue> => ({
   context: { name: "History", multitenant: false },
   id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+  extractId: () => "task",
+  columns: [],
   layout,
   stateSchema: StringValueSchema,
   storageKey: "tasks.Task:current",
@@ -25,6 +27,8 @@ describe("Datastore entity history", () => {
     await assertEntityHistoryConformance({
       create: (entityInput: EntityStorageInput<string, StringValue>) =>
         factory.createEntityStorage(entityInput),
+      reopen: (entityInput: EntityStorageInput<string, StringValue>) =>
+        factory.createEntityStorage(entityInput),
     });
   });
 
@@ -36,7 +40,7 @@ describe("Datastore entity history", () => {
     );
     await first.current.write({
       id: "task",
-      state: create(StringValueSchema, { value: "state" }),
+      state: create(StringValueSchema, { value: "dynamic-id" }),
       version: 1n,
       archived: false,
       deleted: false,
@@ -488,11 +492,11 @@ describe("Datastore entity history", () => {
     const backend = new HistoryDatastoreBackend();
     const storage = new DatastoreStorageFactory({
       client: backend.client() as never,
-    }).createEntityStorage(input());
+    }).createEntityStorage({ ...input(), extractId: (state) => state.value });
 
     await storage.current.write({
       id: "dynamic-id",
-      state: create(StringValueSchema, { value: "state" }),
+      state: create(StringValueSchema, { value: "dynamic-id" }),
       version: 1n,
       archived: false,
       deleted: false,

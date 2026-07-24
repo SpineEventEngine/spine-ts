@@ -3,6 +3,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import { assertCurrentQueryConformance } from "../../storage/src/entity/history-conformance.js";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
@@ -54,6 +55,17 @@ const truncateRows: {
 }[] = [];
 let afterTruncateCutoff: (() => void) | undefined;
 const entitySpecifications = new Map<string, Uint8Array>();
+const entityCurrent = new Map<
+  string,
+  {
+    readonly scope: Uint8Array;
+    readonly entity: Uint8Array;
+    readonly payload: Uint8Array;
+    readonly version: bigint;
+    readonly archived: boolean;
+    readonly deleted: boolean;
+  }
+>();
 
 vi.mock("mysql2/promise", () => ({
   createPool: vi.fn((options) => {
@@ -98,6 +110,33 @@ vi.mock("mysql2/promise", () => ({
               return [foreignKeyRows, []];
             }
             if (sql.includes("SELECT r.slot_key, r.payload")) return [operationRows, []];
+            if (
+              entityCurrent.size > 0 &&
+              sql.startsWith(
+                "SELECT payload, version, archived, deleted FROM spine_ts_entity_current",
+              )
+            ) {
+              const row = entityCurrent.get(`${fakeKey(values?.[0])}:${fakeKey(values?.[1])}`);
+              return [row === undefined ? [] : [row], []];
+            }
+            if (
+              entityCurrent.size > 0 &&
+              sql.includes("FROM spine_ts_entity_current WHERE scope_key=? AND deleted=0")
+            ) {
+              const scope = fakeKey(values?.[0]);
+              return [
+                [...entityCurrent.values()]
+                  .filter((row) => fakeKey(row.scope) === scope && !row.deleted)
+                  .map((row) => ({
+                    entity_key: row.entity,
+                    payload: row.payload,
+                    version: row.version,
+                    archived: row.archived,
+                    deleted: row.deleted,
+                  })),
+                [],
+              ];
+            }
             return [[], []];
           },
           async execute(sql: string, values?: readonly unknown[]) {
@@ -146,6 +185,54 @@ vi.mock("mysql2/promise", () => ({
             if (sql.startsWith("SELECT fingerprint FROM spine_ts_entity_specs")) {
               const fingerprint = entitySpecifications.get(fakeKey(values?.[0]));
               return [fingerprint === undefined ? [] : [{ fingerprint }], []];
+            }
+            if (
+              entityCurrent.size > 0 &&
+              sql.startsWith(
+                "SELECT payload, version, archived, deleted FROM spine_ts_entity_current",
+              )
+            ) {
+              const row = entityCurrent.get(`${fakeKey(values?.[0])}:${fakeKey(values?.[1])}`);
+              return [row === undefined ? [] : [row], []];
+            }
+            if (
+              entityCurrent.size > 0 &&
+              sql.includes("FROM spine_ts_entity_current WHERE scope_key=? AND deleted=0")
+            ) {
+              const scope = fakeKey(values?.[0]);
+              return [
+                [...entityCurrent.values()]
+                  .filter((row) => fakeKey(row.scope) === scope && !row.deleted)
+                  .map((row) => ({
+                    entity_key: row.entity,
+                    payload: row.payload,
+                    version: row.version,
+                    archived: row.archived,
+                    deleted: row.deleted,
+                  })),
+                [],
+              ];
+            }
+            if (sql.startsWith("INSERT INTO spine_ts_entity_current")) {
+              const scope = values?.[0];
+              const entity = values?.[1];
+              const payload = values?.[2];
+              if (
+                !(scope instanceof Uint8Array) ||
+                !(entity instanceof Uint8Array) ||
+                !(payload instanceof Uint8Array)
+              ) {
+                throw new Error("invalid current entity fixture row");
+              }
+              entityCurrent.set(`${fakeKey(scope)}:${fakeKey(entity)}`, {
+                scope,
+                entity,
+                payload,
+                version: BigInt(String(values?.[3])),
+                archived: Boolean(values?.[4]),
+                deleted: Boolean(values?.[5]),
+              });
+              return [{ affectedRows: 1 }, []];
             }
             if (sql.includes("SELECT version FROM spine_ts_entity_states")) {
               return [trimSelections.shift() ?? [], []];
@@ -359,6 +446,22 @@ describe("MysqlStorageFactory", () => {
       expect(storage.current).toBeDefined();
       expect(storage.states).toBeDefined();
       expect(storage.events).toBeDefined();
+    } finally {
+      await factory.close();
+    }
+  });
+  it("runs the shared durable current-query conformance contract", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_entity_current_conformance",
+    });
+    try {
+      await assertCurrentQueryConformance({
+        create: (input) =>
+          factory.createEntityStorage(input as unknown as EntityStorageInput<string, StringValue>),
+        reopen: (input) =>
+          factory.createEntityStorage(input as unknown as EntityStorageInput<string, StringValue>),
+      });
     } finally {
       await factory.close();
     }
@@ -607,6 +710,7 @@ describe("MysqlStorageFactory", () => {
     truncateRows.length = 0;
     afterTruncateCutoff = undefined;
     entitySpecifications.clear();
+    entityCurrent.clear();
     poolOptions = undefined;
   });
 
@@ -2719,6 +2823,8 @@ function entityHistoryInput(): EntityStorageInput<string, StringValue> {
   return {
     context: { name: "History", multitenant: false },
     id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+    extractId: () => "task",
+    columns: [],
     layout: "entity-v1",
     stateSchema: StringValueSchema,
     storageKey: "history.Task:current",

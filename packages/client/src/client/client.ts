@@ -40,9 +40,9 @@ import {
   type TargetFilters,
   type Topic,
 } from "@spine-event-engine/proto/client";
-import type { ProjectionPredicate } from "../query/projection-query.js";
-import { ProjectionQuery } from "../query/projection-query.js";
-import { ProjectionColumn } from "../projection/projection-column.js";
+import type { EntityPredicate } from "../query/entity-query.js";
+import { EntityQuery } from "../query/entity-query.js";
+import { EntityColumn } from "../entity/entity-column.js";
 import { BoundedStream, stopped } from "./bounded-stream.js";
 
 /** A valid application-level command or query outcome. */
@@ -56,7 +56,7 @@ export type ObservedClientOutcome =
   | Readonly<{ readonly kind: "ok"; readonly events: CommandEvents }>
   | Exclude<ClientOutcome, { readonly kind: "ok" }>;
 
-/** A successfully decoded Projection state and its server version. */
+/** A successfully decoded current Entity state and its server version. */
 export interface QueryState<Schema extends MessageSchema> {
   readonly state: DeepReadonly<MessageShape<Schema>>;
   readonly version: DeepReadonly<Version>;
@@ -149,7 +149,7 @@ export interface StateSubscriptionOptions<
   IdSchema extends MessageSchema,
 > extends ClientOperationOptions {
   readonly ids?: readonly MessageShape<IdSchema>[];
-  readonly where?: ProjectionPredicate<ProjectionColumn<Schema>>;
+  readonly where?: EntityPredicate<EntityColumn<Schema>>;
   readonly mask?: readonly StateFieldName<Schema>[];
 }
 
@@ -182,7 +182,7 @@ export class ClientProtocolError extends Error {
   }
 }
 
-/** Node-only entrypoint for Spine command and Projection-query calls. */
+/** Node-only entrypoint for Spine command and Entity current-state query calls. */
 export class Client {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
@@ -367,7 +367,7 @@ class Request implements ClientRequest {
     });
   }
 
-  /** Execute a frozen Projection query with this scope's actor context. */
+  /** Execute a current-state Entity query with this scope's actor context. */
   async query<Schema extends GenMessage<Message>>(
     stateSchema: Schema,
     queryOrBuilder: Query | { build(): Query },
@@ -911,7 +911,7 @@ function stateSubscriptionFilters<Schema extends MessageSchema, IdSchema extends
 ): TargetFilters | undefined {
   const predicate = options.where;
   const columns = predicate === undefined ? {} : subscriptionPredicateColumns(predicate);
-  const query = ProjectionQuery.select({
+  const query = EntityQuery.select({
     schema,
     columns: columns as never,
     context: create(ActorContextSchema),
@@ -930,12 +930,10 @@ function stateSubscriptionFilters<Schema extends MessageSchema, IdSchema extends
   return compiled.idFilter === undefined && compiled.filter.length === 0 ? undefined : compiled;
 }
 
-function subscriptionPredicateColumns(
-  predicate: ProjectionPredicate,
-): Record<string, ProjectionColumn> {
-  const result: Record<string, ProjectionColumn> = {};
+function subscriptionPredicateColumns(predicate: EntityPredicate): Record<string, EntityColumn> {
+  const result: Record<string, EntityColumn> = {};
   const visited = new WeakSet<object>();
-  const pending: { readonly predicate: ProjectionPredicate; readonly depth: number }[] = [
+  const pending: { readonly predicate: EntityPredicate; readonly depth: number }[] = [
     { predicate, depth: 0 },
   ];
   let count = 0;

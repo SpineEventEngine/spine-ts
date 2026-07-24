@@ -52,6 +52,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const input = {
       context: { name: "T0070R Entity Integration", multitenant: false },
       id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      extractId: () => "task",
+      columns: [],
       layout: "entity-v1",
       stateSchema: StringValueSchema,
       storageKey: "integration.Task:current",
@@ -112,6 +114,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const storage = factory.createEntityStorage({
       context: { name: "T0070R Entity Schema", multitenant: false },
       id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      extractId: () => "task",
+      columns: [],
       layout: "entity-v1",
       stateSchema: StringValueSchema,
       storageKey: "integration.EntitySchema:current",
@@ -887,6 +891,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     const input = {
       context: { name: "T0070R lock integration", multitenant: false },
       id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      extractId: () => "same",
+      columns: [],
       layout: "entity-lock-v1",
       stateSchema: StringValueSchema,
       storageKey: "integration.LockTask:current",

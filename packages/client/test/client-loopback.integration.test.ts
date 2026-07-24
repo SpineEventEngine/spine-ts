@@ -6,9 +6,9 @@ import type { CommandDispatcher, EventDispatcher } from "@spine-event-engine/ser
 import { BoundedContext, Projection, Repository, Server } from "@spine-event-engine/server";
 import { describe, expect, it } from "vitest";
 
-import { Client, ProjectionColumn, ProjectionQuery, eq } from "../src/index.js";
-import { defineGeneratedProjectionColumns } from "../src/codegen/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/projection-column-fixtures.js";
+import { Client, EntityColumn, EntityQuery, eq } from "../src/index.js";
+import { defineGeneratedEntityColumns } from "../src/codegen/index.js";
+import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
 describe("Client loopback", () => {
   it("receives a decoded state update through the public client subscription", async () => {
@@ -20,9 +20,9 @@ describe("Client loopback", () => {
     const server = await new Server({ contexts: [context] }).start();
     const client = Client.connectTo(server.baseUrl);
     try {
-      const columns = ProjectionColumn.register(
+      const columns = EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedProjectionColumns(ProjectionStateSchema, {
+        defineGeneratedEntityColumns(ProjectionStateSchema, {
           title: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
           priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
           status: { field: ProjectionStateSchema.field.status, comparison: "equality" },
@@ -132,7 +132,7 @@ describe("Client loopback", () => {
         );
       const queried = await client.asGuest().query(
         ProjectionStateSchema,
-        ProjectionQuery.select({
+        EntityQuery.select({
           schema: ProjectionStateSchema,
           columns: {} as never,
           context: create(ActorContextSchema),

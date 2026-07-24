@@ -1,6 +1,6 @@
 import type { DescField } from "@bufbuild/protobuf";
 
-export type ProjectionFieldClassification =
+export type EntityFieldClassification =
   | Readonly<{ supported: false; reason: "singular" | "oneof" }>
   | Readonly<{
       supported: true;
@@ -9,4 +9,4 @@ export type ProjectionFieldClassification =
       comparison: "equality" | "ordering";
     }>;
 
-export function classifyProjectionField(field: DescField): ProjectionFieldClassification;
+export function classifyEntityField(field: DescField): EntityFieldClassification;

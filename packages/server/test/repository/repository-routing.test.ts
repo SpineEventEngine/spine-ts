@@ -50,6 +50,7 @@ import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generate
 import {
   EventStore,
   InMemoryStorageFactory,
+  RecordColumn,
   RecordStorage,
   type RecordSpec,
   type StorageContext,
@@ -73,6 +74,8 @@ import {
 } from "../../src/index.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
+import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
+import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -1328,6 +1331,36 @@ class SplitRouteProcessManager extends ProcessManager<
 }
 
 describe("repository signal routing", () => {
+  it("derives stable current-record identity from every supported ID representation", () => {
+    const descriptor = entityStorageDescriptor(
+      { name: "Tasks", multitenant: false },
+      ProjectionStateSchema,
+      "id",
+      [],
+    );
+    const alternate = entityStorageDescriptor(
+      { name: "Tasks", multitenant: false },
+      ProjectionStateSchema,
+      "name",
+      [],
+    );
+    const structured = { value: "task-1" };
+
+    expect(
+      descriptor.extractId(create(ProjectionStateSchema, { id: "task-1", name: "First" })),
+    ).toBe("task-1");
+    expect(descriptor.storageKey).toBe(`${ProjectionStateSchema.typeName}:current`);
+    expect(descriptor.id.fingerprint).not.toBe(alternate.id.fingerprint);
+    expect(descriptor.id.key(null)).toBe("null");
+    expect(descriptor.id.key("task-1")).toBe("string:task-1");
+    expect(descriptor.id.key(1)).toBe("number:1");
+    expect(descriptor.id.key(false)).toBe("boolean:false");
+    expect(descriptor.id.key(1n)).toBe("bigint:1");
+    expect(descriptor.id.key(structured)).toBe('json:{"value":"task-1"}');
+    expect(descriptor.id.clone(structured)).toEqual(structured);
+    expect(descriptor.id.clone(structured)).not.toBe(structured);
+  });
+
   it("executes aggregate commands through a built bounded-context command bus", async () => {
     ExecutingTaskAggregate.reset();
     const factory = new InMemoryStorageFactory();
@@ -7221,17 +7254,20 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     readonly stateSchema: GenMessage<S>;
   }) {
     this.#factory = options.storageFactory;
-    this.#input = {
-      context: options.context,
-      id: {
-        clone: (id) => structuredClone(id),
-        fingerprint: `${options.stateSchema.typeName}:repository-id:v1`,
-        key: (id) => canonicalTestEntityIdKey(id),
-      },
-      layout: "spine-ts.repository.entity-record.v1",
-      stateSchema: options.stateSchema,
-      storageKey: `${options.stateSchema.typeName}:entity`,
-    };
+    const metadata = describeEntityMetadata(options.stateSchema);
+    this.#input = entityStorageDescriptor(
+      options.context,
+      options.stateSchema,
+      metadata.idField.localName,
+      metadata.columns.map(
+        (field) =>
+          new RecordColumn(
+            field.name,
+            (state) => (state as Record<string, unknown>)[field.localName],
+            "protobuf",
+          ),
+      ),
+    ) as unknown as EntityStorageInput<unknown, S>;
   }
 
   async readCurrent(id: unknown): Promise<
@@ -7341,19 +7377,6 @@ class CurrentRecordTestStorage<S extends Message = Message> {
       };
       close(): void;
     };
-  }
-}
-
-function canonicalTestEntityIdKey(id: unknown): string {
-  if (id === null) return "null";
-  switch (typeof id) {
-    case "string":
-    case "number":
-    case "boolean":
-    case "bigint":
-      return `${typeof id}:${String(id)}`;
-    default:
-      return `json:${JSON.stringify(id)}`;
   }
 }
 

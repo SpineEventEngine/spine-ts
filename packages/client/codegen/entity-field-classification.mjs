@@ -7,13 +7,13 @@ const scalarSfixed64 = 16;
 const scalarSint64 = 18;
 
 /**
- * Classify a Protobuf field for Projection-column generation and registration.
+ * Classify a Protobuf field for Entity-column generation and registration.
  *
  * This package-owned implementation is deliberately independent of generated
  * Spine descriptors so the protoc plugin can run while those descriptors are
  * themselves being generated.
  */
-export function classifyProjectionField(field) {
+export function classifyEntityField(field) {
   if (field.fieldKind === "list" || field.fieldKind === "map") {
     return { supported: false, reason: "singular" };
   }

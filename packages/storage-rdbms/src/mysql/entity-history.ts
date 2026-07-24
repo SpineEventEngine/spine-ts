@@ -11,6 +11,11 @@ import type {
   EntityStateHistoryRecord,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import {
+  StorageQueryEvaluator,
+  StorageQueryPolicy,
+  type NormalizedQueryPlan,
+} from "@spine-event-engine/storage";
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { createHash } from "node:crypto";
 
@@ -228,6 +233,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     this.current = {
       read: async (id) => this.readCurrent(scope, id),
       write: async (record) => this.writeCurrent(scope, record),
+      query: async (plan) => this.queryCurrent(scope, plan),
     };
     this.states = {
       append: async (record) => this.appendState(scope, record),
@@ -335,6 +341,9 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   private async writeCurrent(scope: Uint8Array, r: EntityRecord<I, S>): Promise<void> {
     signed64(r.version, "Current record version");
     key(this.input, r.id);
+    if (this.input.id.key(r.id) !== this.input.id.key(this.input.extractId(r.state))) {
+      throw new MysqlStorageDataError();
+    }
     await this.ready(scope);
     try {
       await this.exec(
@@ -355,6 +364,56 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       );
     } catch {
       throw operationError();
+    }
+  }
+  private async queryCurrent(scope: Uint8Array, plan: NormalizedQueryPlan<I>) {
+    StorageQueryPolicy.validate(plan, {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    });
+    const candidateLimit = plan.candidateLimit ?? 10_000;
+    await this.ready(scope);
+    let c: PoolConnection | undefined;
+    let failure: unknown;
+    try {
+      c = await this.connections.acquire();
+      const [rows] = await c.execute<CurrentRow[]>(
+        `SELECT entity_key,payload,version,archived,deleted
+         FROM spine_ts_entity_current WHERE scope_key=? AND deleted=0 LIMIT ${String(candidateLimit + 1)}`,
+        [scope],
+      );
+      if (rows.length > candidateLimit)
+        throw new Error(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);
+      return StorageQueryEvaluator.evaluate(
+        rows.map((row) => {
+          const state = decode(this.input.stateSchema, row.payload);
+          const id = this.input.id.clone(this.input.extractId(state));
+          if (!same(row.entity_key, key(this.input, id))) throw new MysqlStorageDataError();
+          const record = Object.freeze({
+            id: this.input.id.clone(id),
+            state: Object.freeze(state),
+            version: BigInt(row.version),
+            archived: Boolean(row.archived),
+            deleted: Boolean(row.deleted),
+          });
+          return {
+            id,
+            record,
+            columns: new Map<string, unknown>([
+              ...this.input.columns.map((column) => [column.name, column.valueIn(state)] as const),
+              ["version", record.version],
+              ["archived", record.archived],
+              ["deleted", record.deleted],
+            ]),
+          };
+        }),
+        plan,
+      );
+    } catch (error) {
+      failure = error instanceof MysqlStorageDataError ? error : operationError();
+      throw failure;
+    } finally {
+      if (c !== undefined) this.release(c, failure);
     }
   }
   private async appendState(scope: Uint8Array, r: EntityStateHistoryRecord<I, S>): Promise<void> {
@@ -768,6 +827,7 @@ const eventTruncate: EntityTruncateDescriptor = {
   deleteValues: (scope, key) => [scope, key.event_key],
 };
 interface CurrentRow extends RowDataPacket {
+  entity_key: Uint8Array;
   payload: Uint8Array;
   version: string | bigint;
   archived: number;

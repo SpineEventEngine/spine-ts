@@ -11,6 +11,11 @@ import type {
   EntityStateHistoryRecord,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import {
+  StorageQueryEvaluator,
+  StorageQueryPolicy,
+  type NormalizedQueryPlan,
+} from "@spine-event-engine/storage";
 
 const payload = "$spine.payload";
 const entity = "$spine.entity";
@@ -20,6 +25,7 @@ const createdNanos = "$spine.created.nanos";
 const archived = "$spine.archived";
 const deleted = "$spine.deleted";
 const historyKind = "$spine.history.kind";
+const scopeProperty = "$spine.scope";
 const eventId = "$spine.event.id";
 const stateBackward = "$spineBackward";
 const stateAt = "$spineStateAt";
@@ -85,6 +91,7 @@ class EntityCodec<I, S extends Message> {
     this.scope = tuple(input.context.name, tenant, input.storageKey);
     this.#gate = gate;
     this.#fingerprint = JSON.stringify({
+      columns: input.columns.map((column) => [column.name, column.valueType]),
       layout: input.layout,
       id: input.id.fingerprint,
       state: input.stateSchema.typeName,
@@ -163,6 +170,15 @@ class EntityCodec<I, S extends Message> {
           fixedKind,
         )
       : this.client.createQuery(fixedKind);
+  }
+  currentQuery(): ReturnType<Datastore["createQuery"]> {
+    const kind = fixedKinds.current;
+    return this.input.context.multitenant
+      ? this.client.createQuery(
+          requiredTenant(this.input.context.name, this.input.context.tenantId),
+          kind,
+        )
+      : this.client.createQuery(kind);
   }
   cutLowerBound(kind: "stateCut" | "eventCut"): ReturnType<Datastore["key"]> {
     return this.namedKey(fixedKinds[kind], hex(this.scope));
@@ -277,11 +293,17 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I, S> 
   async write(record: EntityRecord<I, S>): Promise<void> {
     providerInteger(record.version);
     const id = this.codec.id(record.id);
+    if (id !== this.codec.id(this.codec.input.extractId(record.state))) {
+      throw new Error("Entity current record ID does not match its state ID.");
+    }
     const key = this.codec.key("current", id);
     await this.codec.run(() =>
       this.codec.client.save({
         key,
         data: {
+          [scopeProperty]: this.codec.scope,
+          [entity]: id,
+          [historyKind]: "current",
           [payload]: Buffer.from(this.codec.state(record.state)),
           [version]: providerInteger(record.version),
           [archived]: record.archived,
@@ -290,6 +312,53 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I, S> 
         excludeFromIndexes: [payload],
       }),
     );
+  }
+  async query(plan: NormalizedQueryPlan<I>) {
+    StorageQueryPolicy.validate(plan, {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    });
+    const candidateLimit = plan.candidateLimit ?? 10_000;
+    return this.codec.run(async () => {
+      const query = this.codec
+        .currentQuery()
+        .filter(scopeProperty, "=", this.codec.scope)
+        .filter(historyKind, "=", "current")
+        .filter(deleted, "=", false)
+        .limit(candidateLimit + 1);
+      const rows = entities(await this.codec.client.runQuery(query, { wrapNumbers: true }));
+      if (rows.length > candidateLimit) {
+        throw new Error(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);
+      }
+      return StorageQueryEvaluator.evaluate(
+        rows.map((row) => {
+          const state = this.codec.decodeState(row[payload]);
+          const id = this.codec.cloneId(this.codec.input.extractId(state));
+          const expected = this.codec.id(id);
+          if (row[entity] !== expected)
+            throw new Error("Entity current record ID does not match its state ID.");
+          return {
+            id,
+            record: Object.freeze({
+              id: this.codec.cloneId(id),
+              state: Object.freeze(state),
+              version: integer(row[version]),
+              archived: row[archived] === true,
+              deleted: row[deleted] === true,
+            }),
+            columns: new Map<string, unknown>([
+              ...this.codec.input.columns.map(
+                (column) => [column.name, column.valueIn(state)] as const,
+              ),
+              ["version", integer(row[version])],
+              ["archived", row[archived] === true],
+              ["deleted", row[deleted] === true],
+            ]),
+          };
+        }),
+        plan,
+      );
+    });
   }
   close(): void {
     this.codec.close();

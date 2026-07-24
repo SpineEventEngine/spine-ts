@@ -4,7 +4,7 @@ import { createEcmaScriptPlugin, runNodeJs } from "@bufbuild/protoplugin";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import process from "node:process";
-import { classifyProjectionField } from "./projection-field-classification.mjs";
+import { classifyEntityField } from "./entity-field-classification.mjs";
 
 /** Resolve Spine option descriptors supplied in the protoc plugin request. */
 export function resolveSpineOptionDescriptors(schema) {
@@ -40,20 +40,24 @@ export function resolveSpineOptionDescriptors(schema) {
     throw new Error("The plugin request must include spine/options.proto descriptors.");
   }
   const kindField = entity.message.fields.find((field) => field.name === "kind");
-  const projection = kindField?.enum?.values.find((value) => value.name === "PROJECTION");
-  if (kindField?.fieldKind !== "enum" || projection === undefined) {
-    throw new Error("The Spine entity option descriptor must declare the PROJECTION kind.");
+  if (kindField?.fieldKind !== "enum") {
+    throw new Error("The Spine entity option descriptor must declare entity kinds.");
   }
-  return { entity, column, projectionKind: projection.number };
+  return { entity, column };
 }
 
-/** Return top-level Projection messages declared in a generated file. */
-export function projectionMessages(file, options) {
+/** Return top-level queryable entity messages declared in a generated file. */
+export function entityMessages(file, options) {
   return file.messages.filter(
     (message) =>
       message.parent === undefined &&
       hasOption(message, options.entity) &&
-      getOption(message, options.entity).kind === options.projectionKind,
+      ["AGGREGATE", "PROJECTION", "PROCESS_MANAGER"].includes(
+        options.entity.message.fields
+          .find((field) => field.name === "kind")
+          ?.enum?.values.find((value) => value.number === getOption(message, options.entity).kind)
+          ?.name,
+      ),
   );
 }
 
@@ -64,63 +68,63 @@ export function isColumnField(field, options) {
 
 /** Derive the generated comparison family from a Protobuf field descriptor. */
 export function columnComparison(field) {
-  const classification = classifyProjectionField(field);
+  const classification = classifyEntityField(field);
   if (!classification.supported) {
     throw new TypeError(
       classification.reason === "singular"
-        ? `Projection column "${field.localName}" must be singular; repeated and map fields are unsupported.`
-        : `Projection column "${field.localName}" cannot belong to a oneof.`,
+        ? `Entity column "${field.localName}" must be singular; repeated and map fields are unsupported.`
+        : `Entity column "${field.localName}" cannot belong to a oneof.`,
     );
   }
   return classification.comparison;
 }
 
-/** Generate one deterministic companion per source file containing Projections. */
-export function generateProjectionColumnCompanions(schema) {
+/** Generate one deterministic companion per source file containing queryable entities. */
+export function generateEntityColumnCompanions(schema) {
   const candidateFiles = schema.files.filter((file) =>
     (file.proto.dependency ?? []).includes("spine/options.proto"),
   );
   if (candidateFiles.length === 0) return;
   const options = resolveSpineOptionDescriptors(schema);
   for (const file of candidateFiles) {
-    const projections = projectionMessages(file, options);
-    if (projections.length === 0) continue;
+    const entities = entityMessages(file, options);
+    if (entities.length === 0) continue;
 
     const output = schema.generateFile(`${file.name}_columns.ts`);
     const defineColumns = output.import(
-      "defineGeneratedProjectionColumns",
+      "defineGeneratedEntityColumns",
       "@spine-event-engine/client/codegen",
     );
     const definitionType = output.import(
-      "ProjectionColumnDefinition",
+      "EntityColumnDefinition",
       "@spine-event-engine/client/codegen",
       true,
     );
     output.preamble(file);
 
-    for (const projection of projections) {
-      const projectionSchema = output.importSchema(projection);
-      const columnFields = projection.fields.filter((field) => isColumnField(field, options));
+    for (const entity of entities) {
+      const entitySchema = output.importSchema(entity);
+      const columnFields = entity.fields.filter((field) => isColumnField(field, options));
       output.print(
-        output.export("const", `${projection.name}ColumnDefinition`),
+        output.export("const", `${entity.name}ColumnDefinition`),
         ": ",
         definitionType,
         "<typeof ",
-        projectionSchema,
+        entitySchema,
         ", {",
       );
       for (const field of columnFields) {
         output.print(
           `  readonly ${JSON.stringify(field.localName)}: { readonly field: typeof `,
-          projectionSchema,
+          entitySchema,
           `.field[${JSON.stringify(field.localName)}]; readonly comparison: ${JSON.stringify(columnComparison(field))} };`,
         );
       }
-      output.print("}> = ", defineColumns, "(", projectionSchema, ", {");
+      output.print("}> = ", defineColumns, "(", entitySchema, ", {");
       for (const field of columnFields) {
         output.print(
           `  ${JSON.stringify(field.localName)}: { field: `,
-          projectionSchema,
+          entitySchema,
           `.field[${JSON.stringify(field.localName)}], comparison: ${JSON.stringify(columnComparison(field))} },`,
         );
       }
@@ -129,12 +133,12 @@ export function generateProjectionColumnCompanions(schema) {
   }
 }
 
-const projectionColumnPlugin = createEcmaScriptPlugin({
-  name: "protoc-gen-spine-projection-columns",
+const entityColumnPlugin = createEcmaScriptPlugin({
+  name: "protoc-gen-spine-entity-columns",
   version: "1.0.0",
-  generateTs: generateProjectionColumnCompanions,
+  generateTs: generateEntityColumnCompanions,
 });
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runNodeJs(projectionColumnPlugin);
+  runNodeJs(entityColumnPlugin);
 }

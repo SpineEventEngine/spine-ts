@@ -1,6 +1,6 @@
 # @spine-event-engine/client
 
-Node client facade and descriptor-backed Projection query foundations for Spine.
+Node client facade and descriptor-backed Entity query foundations for Spine.
 
 `Client.connectTo(url)` owns its HTTP/2 session; `Client.usingTransport(transport)`
 leaves a caller-supplied Connect transport open. A client defaults to the `guest`
@@ -80,7 +80,7 @@ Remote cancellation is internally bounded to one second. Explicit `cancel()`
 reports cleanup failure; `Client.close()` completes owned-session shutdown and
 then reports any cleanup failures it collected.
 
-Projection state and event topics use the same request scope. Creation resolves
+Entity state and event topics use the same request scope. Creation resolves
 only after the server has accepted `Subscribe` and the activation consumer has
 locally issued its first read. This is not a remote wire acknowledgement;
 asynchronous activation failures reject iterator reads. Both handles are bounded, single-consumer async iterables;
@@ -92,13 +92,13 @@ criteria or mask.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, ProjectionColumn, all, either, eq } from "@spine-event-engine/client";
+import { Client, EntityColumn, all, either, eq } from "@spine-event-engine/client";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
-const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
 const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 const states = await subscriptionClient
   .onBehalfOf("alice")
@@ -138,9 +138,9 @@ responses. Network and deadline failures remain Connect errors. Caller abort
 rejects with the `AbortSignal` reason. The facade throws `ClientProtocolError`
 when a successful wire response is malformed.
 
-Generated Projection metadata is registered with
-`ProjectionColumn.register(schema, generatedDefinition)`. Registration checks
-the Projection entity kind, exact `(column)` fields, descriptor identity,
+Generated Entity metadata is registered with
+`EntityColumn.register(schema, generatedDefinition)`. Registration checks
+an Entity kind, exact `(column)` fields, descriptor identity,
 singular/non-oneof shape, and descriptor-derived comparison family. The result
 is immutable and cached by schema identity.
 
@@ -150,17 +150,17 @@ and `deleted`. Strings, numeric scalars, `google.protobuf.Timestamp`, and
 other message fields support equality only.
 
 Application code cannot construct arbitrary columns or author generated
-definitions through the package root. `ProjectionQuery.select()` builds a
-Projection-only frozen `spine.client.Query`; Aggregate and Process Manager
-high-level factories remain deferred until Wave 2. Execute the built query with
+definitions through the package root. `EntityQuery.select()` builds the frozen
+`spine.client.Query` contract, which supports Aggregate, Projection, and
+Process Manager state schemas. Execute the built query with
 `ClientRequest.query()` as shown below.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
 import {
   Client,
-  ProjectionColumn,
-  ProjectionQuery,
+  EntityColumn,
+  EntityQuery,
   all,
   either,
   eq,
@@ -173,9 +173,9 @@ import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
-const TaskListColumns = ProjectionColumn.register(TaskListSchema, TaskListColumnDefinition);
+const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
 
-const query = ProjectionQuery.select({
+const query = EntityQuery.select({
   schema: TaskListSchema,
   columns: TaskListColumns,
   context: create(ActorContextSchema, {
@@ -213,7 +213,7 @@ by Spine TS. Replace `@example/tasks-proto/task_list_pb` with the consumer's
 generated Protobuf-ES module that exports `TaskListSchema`, and replace
 `@example/tasks-proto/task_list_columns` with its generated `*_columns.ts`
 companion, which exports `TaskListColumnDefinition`. The application owns the
-registered `TaskListColumns` collection created with `ProjectionColumn.register()`.
+registered `TaskListColumns` collection created with `EntityColumn.register()`.
 
 Repeated `orderBy()` calls preserve caller order; storage appends the entity ID
 tie-breaker. Missing values sort first ascending and last descending. A limit
@@ -239,8 +239,8 @@ const states = response.message.map(({ state }) => {
 
 Generated sources obtain their definition constructor from the dedicated
 `@spine-event-engine/client/codegen` subpath. Application code should import only the
-resulting generated definition and the root Projection API.
+resulting generated definition and the root Entity API.
 
-The package also installs `protoc-gen-spine-projection-columns` for Buf-based
+The package also installs `protoc-gen-spine-entity-columns` for Buf-based
 generation. Run it after Protobuf-ES with the same output directory so the
 `*_columns.ts` companions sit beside their generated message schemas.

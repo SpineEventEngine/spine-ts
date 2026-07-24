@@ -15,6 +15,9 @@ import type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.
 import type { StorageContext } from "../storage/storage.js";
 import { canonicalStorageScope } from "../storage/canonical-scope.js";
 import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { RecordColumn } from "../record/record-column.js";
+import { StorageQueryEvaluator } from "../query/query-execution.js";
+import { StorageQueryPolicy, type NormalizedQueryPlan } from "../query/query-policy.js";
 
 /** Shared in-memory entity-storage factory for adapter conformance. */
 export class MemoryEntityStorageFactory {
@@ -54,6 +57,8 @@ export class InMemoryEntityStorage<I, S extends Message> {
     this.current = new MemoryEntityRecordStorage({
       idKey: input.id.key,
       idClone: input.id.clone,
+      columns: input.columns,
+      extractId: input.extractId,
       stateSchema: input.stateSchema,
       records: backend.current as unknown as Map<string, EntityRecord<I, S>>,
     });
@@ -81,6 +86,10 @@ export class InMemoryEntityStorage<I, S extends Message> {
 export interface EntityStorageInput<I, S extends Message> {
   readonly context: StorageContext;
   readonly id: EntityIdCodec<I>;
+  /** Extract the canonical entity identifier from durable state. */
+  readonly extractId: (state: S) => I;
+  /** Descriptor-owned declared state columns; lifecycle columns are supplied by storage. */
+  readonly columns: readonly RecordColumn<S>[];
   readonly layout: string;
   readonly stateSchema: GenMessage<S>;
   readonly storageKey: string;
@@ -108,6 +117,7 @@ function entityFingerprint<I, S extends Message>(input: EntityStorageInput<I, S>
   return JSON.stringify({
     id: input.id.fingerprint,
     layout: input.layout,
+    columns: input.columns.map((column) => [column.name, column.valueType]),
     state: input.stateSchema.typeName,
   });
 }
@@ -118,17 +128,23 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
   readonly #idClone: (id: I) => I;
   readonly #records: Map<string, EntityRecord<I, S>>;
   readonly #stateSchema: GenMessage<S>;
+  readonly #extractId: (state: S) => I;
+  readonly #columns: readonly RecordColumn<S>[];
 
   constructor(input: {
     readonly stateSchema: GenMessage<S>;
     readonly idKey: (id: I) => string;
     readonly idClone?: (id: I) => I;
     readonly records?: Map<string, EntityRecord<I, S>>;
+    readonly extractId: (state: S) => I;
+    readonly columns: readonly RecordColumn<S>[];
   }) {
     this.#idKey = input.idKey;
     this.#idClone = input.idClone ?? cloneId;
     this.#stateSchema = input.stateSchema;
     this.#records = input.records ?? new Map<string, EntityRecord<I, S>>();
+    this.#extractId = input.extractId;
+    this.#columns = input.columns;
   }
 
   read(id: I): Promise<EntityRecord<I, S> | undefined> {
@@ -142,10 +158,60 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
 
   write(record: EntityRecord<I, S>): Promise<void> {
     return Promise.resolve().then(() => {
+      if (this.#idKey(record.id) !== this.#idKey(this.#extractId(record.state))) {
+        throw new Error("Entity current record ID does not match its state ID.");
+      }
       this.#records.set(
         this.#idKey(record.id),
         copyEntityRecord(record, this.#stateSchema, this.#idClone),
       );
+    });
+  }
+
+  query(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<
+    readonly import("../query/query-execution.js").NormalizedQueryEntry<I, EntityRecord<I, S>>[]
+  > {
+    return Promise.resolve().then(() => {
+      StorageQueryPolicy.validate(plan, {
+        comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+        features: ["either", "nested", "order", "mask", "limit"],
+      });
+      const limit = plan.candidateLimit ?? 10_000;
+      const candidates: EntityRecord<I, S>[] = [];
+      for (const record of this.#records.values()) {
+        if (record.deleted) continue;
+        candidates.push(record);
+        if (candidates.length > limit) break;
+      }
+      if (candidates.length > limit) {
+        throw new Error(`Storage query exceeded the candidate limit of ${String(limit)}.`);
+      }
+      const entries = candidates.flatMap((record) => {
+        const copied = copyEntityRecord(record, this.#stateSchema, this.#idClone);
+        if (this.#idKey(copied.id) !== this.#idKey(this.#extractId(copied.state))) {
+          throw new Error("Entity current record ID does not match its state ID.");
+        }
+        return copied.deleted
+          ? []
+          : [
+              {
+                id: copied.id,
+                record: copied,
+                columns: new Map<string, unknown>([
+                  ...this.#columns.map((column): readonly [string, unknown] => [
+                    column.name,
+                    column.valueIn(copied.state),
+                  ]),
+                  ["version", copied.version],
+                  ["archived", copied.archived],
+                  ["deleted", copied.deleted],
+                ]),
+              },
+            ];
+      });
+      return StorageQueryEvaluator.evaluate(entries, plan);
     });
   }
 }

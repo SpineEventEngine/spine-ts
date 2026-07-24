@@ -7,25 +7,25 @@ import {
 } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { column, entity, EntityOption_Kind, type Version } from "@spine-event-engine/proto";
-import { classifyProjectionField } from "../../codegen/projection-field-classification.mjs";
+import { classifyEntityField } from "../../codegen/entity-field-classification.mjs";
 
-/** Operators available for every Projection column. */
-export type ProjectionEqualityOperator = "equal";
+/** Operators available for every Entity column. */
+export type EntityEqualityOperator = "equal";
 
-/** Operators available for naturally ordered Projection column values. */
-export type ProjectionOrderingOperator =
-  ProjectionEqualityOperator | "greaterThan" | "lessThan" | "greaterOrEqual" | "lessOrEqual";
+/** Operators available for naturally ordered Entity column values. */
+export type EntityOrderingOperator =
+  EntityEqualityOperator | "greaterThan" | "lessThan" | "greaterOrEqual" | "lessOrEqual";
 
 /** Comparison family derived from a column's Protobuf field descriptor. */
-export type ProjectionComparison = "equality" | "ordering";
+export type EntityComparison = "equality" | "ordering";
 
 /** Runtime value category derived from a column's Protobuf field descriptor. */
-export type ProjectionColumnValueKind =
+export type EntityColumnValueKind =
   "bigint" | "boolean" | "bytes" | "enum" | "message" | "number" | "string";
 
 /** One generated column declaration paired with its descriptor. */
-export interface ProjectionColumnDefinitionEntry<
-  Comparison extends ProjectionComparison = ProjectionComparison,
+export interface EntityColumnDefinitionEntry<
+  Comparison extends EntityComparison = EntityComparison,
 > {
   readonly field: DescField;
   readonly comparison: Comparison;
@@ -54,23 +54,23 @@ type SupportedStateFieldName<Schema extends GenMessage<Message>> = Exclude<
   CollectionFieldName<Schema>
 >;
 
-type ProjectionColumnEntries = Readonly<Record<string, ProjectionColumnDefinitionEntry>>;
+type EntityColumnEntries = Readonly<Record<string, EntityColumnDefinitionEntry>>;
 type SupportedEntryConstraint<
   Schema extends GenMessage<Message>,
-  Entries extends ProjectionColumnEntries,
+  Entries extends EntityColumnEntries,
 > = Exclude<keyof Entries, SupportedStateFieldName<Schema>> extends never ? unknown : never;
 
 /**
- * Nominal descriptor-backed column metadata emitted next to a Projection schema.
+ * Nominal descriptor-backed column metadata emitted next to a Entity schema.
  *
  * The package root exports this type, but not its value constructor. Application
  * code therefore consumes generated metadata instead of authoring string keys.
  */
 declare const generatedDefinitionBrand: unique symbol;
 
-export interface ProjectionColumnDefinition<
+export interface EntityColumnDefinition<
   Schema extends GenMessage<Message>,
-  Entries extends ProjectionColumnEntries,
+  Entries extends EntityColumnEntries,
 > {
   readonly [generatedDefinitionBrand]: readonly [Schema, Entries];
   /** @internal Exact generated entries, validated again during registration. */
@@ -78,60 +78,58 @@ export interface ProjectionColumnDefinition<
 }
 
 /** @internal Construct metadata from generated code; not exported by the package root. */
-export function defineGeneratedProjectionColumns<
+export function defineGeneratedEntityColumns<
   Schema extends GenMessage<Message>,
-  const Entries extends ProjectionColumnEntries,
+  const Entries extends EntityColumnEntries,
 >(
   _schema: Schema,
   entries: Entries & SupportedEntryConstraint<NoInfer<Schema>, Entries>,
-): ProjectionColumnDefinition<Schema, Entries> {
+): EntityColumnDefinition<Schema, Entries> {
   const captured = captureDefinitionFacts(_schema, entries);
   const copiedEntries = Object.fromEntries(
-    (Object.entries(entries) as [string, ProjectionColumnDefinitionEntry][]).map(
-      ([name, entry]) => {
-        deepFreezeDescriptorGraph(entry.field);
-        return [name, Object.freeze({ field: entry.field, comparison: entry.comparison })];
-      },
-    ),
+    (Object.entries(entries) as [string, EntityColumnDefinitionEntry][]).map(([name, entry]) => {
+      deepFreezeDescriptorGraph(entry.field);
+      return [name, Object.freeze({ field: entry.field, comparison: entry.comparison })];
+    }),
   );
   const definition = Object.freeze({
     entries: Object.freeze(copiedEntries),
-  }) as unknown as ProjectionColumnDefinition<Schema, Entries>;
+  }) as unknown as EntityColumnDefinition<Schema, Entries>;
   capturedDefinitions.set(definition, captured);
   return definition;
 }
 
 type OperatorsFor<Entry> =
-  Entry extends ProjectionColumnDefinitionEntry<"ordering">
-    ? ProjectionOrderingOperator
-    : ProjectionEqualityOperator;
+  Entry extends EntityColumnDefinitionEntry<"ordering">
+    ? EntityOrderingOperator
+    : EntityEqualityOperator;
 
-/** Typed column collection returned for one generated Projection definition. */
-export type ProjectionColumns<
+/** Typed column collection returned for one generated Entity definition. */
+export type EntityColumns<
   Schema extends GenMessage<Message>,
-  Entries extends ProjectionColumnEntries,
+  Entries extends EntityColumnEntries,
 > = Readonly<
   {
-    [Name in keyof Entries & StateFieldName<Schema>]: ProjectionColumn<
+    [Name in keyof Entries & StateFieldName<Schema>]: EntityColumn<
       Schema,
       Name,
       MessageShape<Schema>[Name],
       OperatorsFor<Entries[Name]>
     >;
   } & {
-    readonly version: ProjectionColumn<Schema, "version", Version>;
-    readonly archived: ProjectionColumn<Schema, "archived", boolean, ProjectionEqualityOperator>;
-    readonly deleted: ProjectionColumn<Schema, "deleted", boolean, ProjectionEqualityOperator>;
+    readonly version: EntityColumn<Schema, "version", Version>;
+    readonly archived: EntityColumn<Schema, "archived", boolean, EntityEqualityOperator>;
+    readonly deleted: EntityColumn<Schema, "deleted", boolean, EntityEqualityOperator>;
   }
 >;
 
-/** Extract the value type carried by a Projection column. */
-export type ProjectionColumnValue<Column extends ProjectionColumn> =
-  Column extends ProjectionColumn<GenMessage<Message>, string, infer Value> ? Value : never;
+/** Extract the value type carried by a Entity column. */
+export type EntityColumnValue<Column extends EntityColumn> =
+  Column extends EntityColumn<GenMessage<Message>, string, infer Value> ? Value : never;
 
-/** Extract the legal operator union carried by a Projection column. */
-export type ProjectionColumnOperator<Column extends ProjectionColumn> =
-  Column extends ProjectionColumn<GenMessage<Message>, string, unknown, infer Operator>
+/** Extract the legal operator union carried by a Entity column. */
+export type EntityColumnOperator<Column extends EntityColumn> =
+  Column extends EntityColumn<GenMessage<Message>, string, unknown, infer Operator>
     ? Operator
     : never;
 
@@ -144,14 +142,14 @@ const orderingOperators = Object.freeze([
   "lessOrEqual",
 ] as const);
 const systemNames = new Set(["version", "archived", "deleted"]);
-interface CachedProjectionColumns {
+interface CachedEntityColumns {
   readonly definitions: WeakSet<object>;
   readonly columns: object;
 }
 
-const cache = new WeakMap<object, CachedProjectionColumns>();
-const projectionColumnConstructionToken = Symbol("ProjectionColumnConstructionToken");
-type FieldClassification = ReturnType<typeof classifyProjectionField>;
+const cache = new WeakMap<object, CachedEntityColumns>();
+const entityColumnConstructionToken = Symbol("EntityColumnConstructionToken");
+type FieldClassification = ReturnType<typeof classifyEntityField>;
 interface CapturedFieldFacts {
   readonly field: DescField;
   readonly parent: object;
@@ -162,26 +160,26 @@ interface CapturedFieldFacts {
 }
 interface CapturedDefinitionFacts {
   readonly schema: object;
-  readonly projection: boolean;
+  readonly entityKind: number | undefined;
   readonly annotated: ReadonlyMap<string, DescField>;
   readonly entries: ReadonlyMap<string, CapturedFieldFacts>;
 }
 const capturedDefinitions = new WeakMap<object, CapturedDefinitionFacts>();
 
 /**
- * An immutable, nominal, descriptor-backed Projection column.
+ * An immutable, nominal, descriptor-backed Entity column.
  *
  * Instances can only be obtained by registering generated metadata for a
- * Projection schema. This prevents consumers from constructing arbitrary
+ * Entity schema. This prevents consumers from constructing arbitrary
  * string columns that have no corresponding Protobuf declaration.
  */
-export class ProjectionColumn<
+export class EntityColumn<
   Schema extends GenMessage<Message> = GenMessage<Message>,
   Name extends string = string,
   Value = unknown,
-  Operator extends ProjectionOrderingOperator = ProjectionOrderingOperator,
+  Operator extends EntityOrderingOperator = EntityOrderingOperator,
 > {
-  declare private readonly projectionColumnBrand: [Value, Operator];
+  declare private readonly entityColumnBrand: [Value, Operator];
 
   /** Generated Protobuf schema that owns this column. */
   readonly schema: Schema;
@@ -189,16 +187,16 @@ export class ProjectionColumn<
   readonly name: string;
   /** Protobuf-ES property name, or the canonical system-column name. */
   readonly localName: Name;
-  /** Whether the column came from the state descriptor or Projection storage metadata. */
+  /** Whether the column came from the state descriptor or Entity storage metadata. */
   readonly source: "declared" | "system";
   /** Exact declared field descriptor; system columns have no state field. */
   readonly descriptor: DescField | undefined;
   /** Runtime value category derived from the descriptor. */
-  readonly valueKind: ProjectionColumnValueKind;
+  readonly valueKind: EntityColumnValueKind;
   /** Fully qualified message type for message-valued columns. */
   readonly messageType: string | undefined;
   /** Supported comparison family. */
-  readonly comparison: ProjectionComparison;
+  readonly comparison: EntityComparison;
   /** Exact operator set accepted for this column. */
   readonly operators: readonly Operator[];
 
@@ -209,15 +207,15 @@ export class ProjectionColumn<
       localName: Name;
       source: "declared" | "system";
       descriptor?: DescField;
-      valueKind: ProjectionColumnValueKind;
+      valueKind: EntityColumnValueKind;
       messageType?: string | undefined;
-      comparison: ProjectionComparison;
+      comparison: EntityComparison;
       operators: readonly Operator[];
     },
     token?: symbol,
   ) {
-    if (token !== projectionColumnConstructionToken) {
-      throw new TypeError("Projection columns can only be constructed during registration.");
+    if (token !== entityColumnConstructionToken) {
+      throw new TypeError("Entity columns can only be constructed during registration.");
     }
     this.schema = input.schema;
     this.name = input.name;
@@ -231,29 +229,26 @@ export class ProjectionColumn<
     Object.freeze(this);
   }
 
-  /** Validate and register generated Projection column metadata. */
-  static register<
-    Schema extends GenMessage<Message>,
-    const Entries extends ProjectionColumnEntries,
-  >(
+  /** Validate and register generated Entity column metadata. */
+  static register<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
     schema: Schema,
-    definition: ProjectionColumnDefinition<Schema, Entries>,
-  ): ProjectionColumns<Schema, Entries> {
+    definition: EntityColumnDefinition<Schema, Entries>,
+  ): EntityColumns<Schema, Entries> {
     const existing = cache.get(schema);
     if (existing?.definitions.has(definition) === true) {
-      return existing.columns as ProjectionColumns<Schema, Entries>;
+      return existing.columns as EntityColumns<Schema, Entries>;
     }
     const captured = capturedDefinitions.get(definition);
-    validateProjectionSchema(schema, captured);
+    validateEntitySchema(schema, captured);
     const declared = validateDefinition(schema, definition, captured);
     if (existing !== undefined) {
       existing.definitions.add(definition);
-      return existing.columns as ProjectionColumns<Schema, Entries>;
+      return existing.columns as EntityColumns<Schema, Entries>;
     }
 
-    const result: Record<string, ProjectionColumn> = {};
+    const result: Record<string, EntityColumn> = {};
     for (const [localName, field, fieldName, metadata] of declared) {
-      result[localName] = new ProjectionColumn(
+      result[localName] = new EntityColumn(
         {
           schema,
           name: fieldName,
@@ -265,10 +260,10 @@ export class ProjectionColumn<
           comparison: metadata.comparison,
           operators: operatorsFor(metadata.comparison),
         },
-        projectionColumnConstructionToken,
+        entityColumnConstructionToken,
       );
     }
-    result.version = new ProjectionColumn(
+    result.version = new EntityColumn(
       {
         schema,
         name: "version",
@@ -279,10 +274,10 @@ export class ProjectionColumn<
         comparison: "ordering",
         operators: orderingOperators,
       },
-      projectionColumnConstructionToken,
+      entityColumnConstructionToken,
     );
     for (const name of ["archived", "deleted"] as const) {
-      result[name] = new ProjectionColumn(
+      result[name] = new EntityColumn(
         {
           schema,
           name,
@@ -292,10 +287,10 @@ export class ProjectionColumn<
           comparison: "equality",
           operators: equalityOperators,
         },
-        projectionColumnConstructionToken,
+        entityColumnConstructionToken,
       );
     }
-    const columns = Object.freeze(result) as ProjectionColumns<Schema, Entries>;
+    const columns = Object.freeze(result) as EntityColumns<Schema, Entries>;
     cache.set(schema, {
       definitions: new WeakSet([definition]),
       columns,
@@ -305,30 +300,33 @@ export class ProjectionColumn<
 }
 
 type RuntimeMetadata = Readonly<{
-  valueKind: ProjectionColumnValueKind;
+  valueKind: EntityColumnValueKind;
   messageType?: string;
-  comparison: ProjectionComparison;
+  comparison: EntityComparison;
 }>;
 
-function validateProjectionSchema(
+function validateEntitySchema(
   schema: GenMessage<Message>,
   captured: CapturedDefinitionFacts | undefined,
 ): void {
-  const projection =
+  const entityKind =
     captured?.schema === schema
-      ? captured.projection
-      : hasOption(schema, entity) &&
-        getOption(schema, entity).kind === EntityOption_Kind.PROJECTION;
-  if (!projection) {
-    throw new TypeError(
-      `Projection column schema "${schema.typeName}" must declare Projection kind.`,
-    );
+      ? captured.entityKind
+      : hasOption(schema, entity)
+        ? getOption(schema, entity).kind
+        : undefined;
+  if (
+    entityKind !== EntityOption_Kind.AGGREGATE &&
+    entityKind !== EntityOption_Kind.PROJECTION &&
+    entityKind !== EntityOption_Kind.PROCESS_MANAGER
+  ) {
+    throw new TypeError(`Entity column schema "${schema.typeName}" must declare Entity kind.`);
   }
 }
 
 function validateDefinition(
   schema: GenMessage<Message>,
-  definition: ProjectionColumnDefinition<GenMessage<Message>, ProjectionColumnEntries>,
+  definition: EntityColumnDefinition<GenMessage<Message>, EntityColumnEntries>,
   captured: CapturedDefinitionFacts | undefined,
 ): readonly (readonly [string, DescField, string, RuntimeMetadata])[] {
   const facts =
@@ -338,27 +336,25 @@ function validateDefinition(
 
   for (const [localName, entry] of Object.entries(definition.entries) as [
     string,
-    ProjectionColumnDefinitionEntry | undefined,
+    EntityColumnDefinitionEntry | undefined,
   ][]) {
     if (systemNames.has(localName)) {
-      throw new TypeError(
-        `Projection column definition cannot replace system column "${localName}".`,
-      );
+      throw new TypeError(`Entity column definition cannot replace system column "${localName}".`);
     }
     if (entry === undefined) continue;
     const fieldFacts = facts.entries.get(localName) ?? captureFieldFacts(entry.field);
     if (fieldFacts.parent !== schema || fieldFacts.localName !== localName) {
       throw new TypeError(
-        `Projection column definition key "${localName}" must reference field "${localName}".`,
+        `Entity column definition key "${localName}" must reference field "${localName}".`,
       );
     }
     if (!fieldFacts.markedColumn) {
-      throw new TypeError(`Projection field "${localName}" is not marked (column).`);
+      throw new TypeError(`Entity field "${localName}" is not marked (column).`);
     }
     const metadata = describeField(fieldFacts);
     if (entry.comparison !== metadata.comparison) {
       throw new TypeError(
-        `Projection column "${localName}" requires ${metadata.comparison} comparison metadata.`,
+        `Entity column "${localName}" requires ${metadata.comparison} comparison metadata.`,
       );
     }
     annotated.delete(localName);
@@ -367,7 +363,7 @@ function validateDefinition(
 
   const missing = annotated.keys().next().value;
   if (missing !== undefined) {
-    throw new TypeError(`Projection column definition is missing annotated field "${missing}".`);
+    throw new TypeError(`Entity column definition is missing annotated field "${missing}".`);
   }
   return result;
 }
@@ -376,18 +372,18 @@ function describeField(field: CapturedFieldFacts): RuntimeMetadata {
   const metadata = field.classification;
   if (!metadata.supported && metadata.reason === "singular") {
     throw new TypeError(
-      `Projection column "${field.localName}" must be singular; repeated and map fields are unsupported.`,
+      `Entity column "${field.localName}" must be singular; repeated and map fields are unsupported.`,
     );
   }
   if (!metadata.supported) {
-    throw new TypeError(`Projection column "${field.localName}" cannot belong to a oneof.`);
+    throw new TypeError(`Entity column "${field.localName}" cannot belong to a oneof.`);
   }
   return metadata;
 }
 
 function captureDefinitionFacts(
   schema: GenMessage<Message>,
-  entries: ProjectionColumnEntries,
+  entries: EntityColumnEntries,
 ): CapturedDefinitionFacts {
   const annotated = new Map(
     schema.fields
@@ -400,8 +396,7 @@ function captureDefinitionFacts(
   }
   return Object.freeze({
     schema,
-    projection:
-      hasOption(schema, entity) && getOption(schema, entity).kind === EntityOption_Kind.PROJECTION,
+    entityKind: hasOption(schema, entity) ? getOption(schema, entity).kind : undefined,
     annotated,
     entries: capturedEntries,
   });
@@ -414,7 +409,7 @@ function captureFieldFacts(field: DescField): CapturedFieldFacts {
     localName: field.localName,
     name: field.name,
     markedColumn: hasOption(field, column) && getOption(field, column),
-    classification: Object.freeze(classifyProjectionField(field)),
+    classification: Object.freeze(classifyEntityField(field)),
   });
 }
 
@@ -441,7 +436,7 @@ function isObject(value: unknown): value is object {
 }
 
 function operatorsFor(
-  comparison: ProjectionComparison,
+  comparison: EntityComparison,
 ): typeof equalityOperators | typeof orderingOperators {
   return comparison === "ordering" ? orderingOperators : equalityOperators;
 }

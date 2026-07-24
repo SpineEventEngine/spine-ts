@@ -15,7 +15,7 @@ plugins:
       - import_extension=js
   - local:
       - node
-      - packages/client/codegen/generate-projection-columns.mjs
+      - packages/client/codegen/generate-entity-columns.mjs
     out: examples/todo/generated
     include_imports: true
     opt:

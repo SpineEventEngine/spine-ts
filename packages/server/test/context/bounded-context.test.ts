@@ -30,6 +30,7 @@ import {
   type StorageContext,
   StorageFactory,
 } from "@spine-event-engine/storage";
+import type { EntityRecordStorage } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -1485,37 +1486,34 @@ class DelayingStorageFactory extends InMemoryStorageFactory {
     this.#finishWrite?.();
   }
 
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new DelayingRecordStorage(context, recordSpec, {
-      beforeFirstWrite: async () => {
-        if (this.#delayed) {
-          return;
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: EntityRecordStorage<unknown, Message>;
+      readonly events: unknown;
+      readonly states: unknown;
+      close(): void;
+    };
+    const current = storage.current;
+    const delayedCurrent: EntityRecordStorage<unknown, Message> = {
+      read: (id) => current.read(id),
+      query: (plan) => current.query(plan),
+      write: async (record) => {
+        if (!this.#delayed) {
+          this.#delayed = true;
+          this.#startWrite?.();
+          await this.#writeFinished;
         }
-        this.#delayed = true;
-        this.#startWrite?.();
-        await this.#writeFinished;
+        await current.write(record);
       },
-    });
-  }
-}
-
-class DelayingRecordStorage<I, R extends Message> extends InMemoryRecordStorage<I, R> {
-  constructor(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    private readonly delay: { beforeFirstWrite(): Promise<void> },
-  ) {
-    super(context, recordSpec);
-  }
-
-  protected override async writeRecord(
-    record: ReturnType<RecordSpec<I, R>["materialize"]>,
-  ): Promise<void> {
-    await this.delay.beforeFirstWrite();
-    await super.writeRecord(record);
+    };
+    return {
+      current: delayedCurrent,
+      events: storage.events,
+      states: storage.states,
+      close: () => {
+        storage.close();
+      },
+    };
   }
 }
 

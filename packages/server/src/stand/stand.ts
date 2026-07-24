@@ -4,13 +4,8 @@ import { VersionSchema, type Version } from "@spine-event-engine/proto";
 import {
   RecordColumn,
   RecordMask,
-  RecordSpec,
-  QueryCandidateLimitError,
-  StorageQueryEvaluator,
-  StorageQueryPolicy,
+  RecordQuery,
   type NormalizedQueryPlan,
-  type RecordQuery,
-  type RecordStorage,
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -18,6 +13,7 @@ import type {
   EntityRecordStorage,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 
 /** Options for constructing a direct read-side Stand. */
 export interface StandOptions {
@@ -119,15 +115,14 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
   readonly schema: Schema;
   readonly typeUrl: string;
   readonly idField: string;
-  readonly recordSpec: RecordSpec<unknown, Message>;
+  readonly columns: readonly RecordColumn<Message>[];
   readonly subscribers: Set<Subscriber<Schema>>;
 }
 
 /**
  * Direct read-side access point for storage-backed entity states and updates.
  *
- * Entity states remain queryable through the configured record store while the
- * shared entity-record seam durably owns their version and lifecycle metadata.
+ * Entity states are queried through the shared durable current-record seam.
  */
 export class Stand {
   readonly #context: StorageContext;
@@ -166,7 +161,16 @@ export class Stand {
         schema,
         typeUrl,
         idField,
-        recordSpec: createStandRecordSpec(schema, idField, options.columns ?? []),
+        columns:
+          options.columns ??
+          schema.fields.map(
+            (field) =>
+              new RecordColumn(
+                field.localName,
+                (state) => (state as Record<string, unknown>)[field.localName],
+                "protobuf",
+              ),
+          ),
         subscribers: new Set<Subscriber>(),
       }),
     );
@@ -200,16 +204,12 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      const storage = this.#openStorage(registration, tenantId);
-
-      try {
+      {
         const stored = await this.#openCurrent(registration, tenantId).read(id);
         if (stored === undefined || stored.deleted) {
           return undefined;
         }
         return this.#currentResult(registration, stored);
-      } finally {
-        storage.close();
       }
     } finally {
       finish();
@@ -235,16 +235,14 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      const storage = this.#openStorage(registration, tenantId);
-
-      try {
-        const stored = await storage.queryEntries(query);
-        const results = await Promise.all(
-          stored.map((entry) => this.#readResult(registration, tenantId, entry.id, query.mask)),
+      {
+        const stored = await this.#openCurrent(registration, tenantId).query(
+          legacyQueryPlan(query),
+        );
+        const results = stored.map((entry) =>
+          this.#entryResult(registration, entry.record, query.mask),
         );
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
-      } finally {
-        storage.close();
       }
     } finally {
       finish();
@@ -261,65 +259,18 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      const storage = this.#openStorage(registration, tenantId);
-      try {
-        const stored = usesSystemPlan(plan)
-          ? await this.#querySystemPlan(registration, storage, tenantId, plan)
-          : await storage.queryPlanEntries(plan);
-        const results = await Promise.all(
-          stored.map((entry) =>
-            this.#readResult(registration, tenantId, entry.id, plan.mask?.paths),
-          ),
+      {
+        const stored = await this.#openCurrent(registration, tenantId).query(
+          normalizeSystemPlan(plan),
+        );
+        const results = stored.map((entry) =>
+          this.#entryResult(registration, entry.record, plan.mask?.paths),
         );
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
-      } finally {
-        storage.close();
       }
     } finally {
       finish();
     }
-  }
-
-  async #querySystemPlan(
-    registration: Registration,
-    storage: RecordStorage<unknown, Message>,
-    tenantId: string | undefined,
-    plan: NormalizedQueryPlan<unknown>,
-  ): Promise<readonly { readonly id: unknown; readonly record: Message }[]> {
-    StorageQueryPolicy.validate(plan, {
-      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
-    });
-    const candidates = await storage.queryEntries(
-      plan.candidateLimit === undefined ? {} : { limit: plan.candidateLimit + 1 },
-    );
-    if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
-      throw new QueryCandidateLimitError(plan.candidateLimit);
-    }
-    const currentEntries = await Promise.all(
-      candidates.map(async (entry) => ({
-        id: entry.id,
-        current: await this.#openCurrent(registration, tenantId).read(entry.id),
-      })),
-    );
-    const entries = currentEntries.flatMap(({ id, current }) => {
-      if (current === undefined || current.deleted) return [];
-      const materialized = registration.recordSpec.materialize(current.state);
-      return {
-        id,
-        record: materialized.record,
-        columns: new Map([
-          ...materialized.columns,
-          ["version", create(VersionSchema, { number: Number(current.version) })],
-          ["archived", current.archived],
-          ["deleted", current.deleted],
-        ]),
-      };
-    });
-    return StorageQueryEvaluator.evaluate(entries, plan).map((entry) => ({
-      id: entry.id,
-      record: RecordMask.apply(registration.recordSpec.cloneRecord(entry.record), plan.mask?.paths),
-    }));
   }
 
   /**
@@ -334,28 +285,17 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "clear");
       const tenantId = this.#tenantId(options.tenantId);
-      const storage = this.#openStorage(registration, tenantId);
-
-      try {
-        const ids = await storage.index();
+      {
+        const entries = await this.#openCurrent(registration, tenantId).query({
+          candidateLimit: 10_000,
+        });
+        const ids = entries.map((entry) => entry.id);
         const current = this.#openCurrent(registration, tenantId);
         for (const id of ids) {
-          const state = await storage.read(id);
-          if (state !== undefined) {
-            const stored = await current.read(id);
-            await current.write({
-              id,
-              state,
-              version: stored?.version ?? 0n,
-              archived: stored?.archived ?? false,
-              deleted: true,
-            });
-          }
-          await storage.delete(id);
+          const stored = await current.read(id);
+          if (stored !== undefined) await current.write({ ...stored, deleted: true });
         }
         return ids.length;
-      } finally {
-        storage.close();
       }
     } finally {
       finish();
@@ -375,19 +315,14 @@ export class Stand {
       const tenantId = this.#tenantId(options.tenantId);
       const stateCopy = clone(schema, state);
       const id = readStateId(stateCopy, registration);
-      const storage = this.#openStorage(registration, tenantId);
       let previousState: MessageShape<Schema> | undefined;
       const previousStateObservable = this.#hasTenantSubscribers(registration, tenantId);
 
-      try {
+      {
         const current = this.#openCurrent(registration, tenantId);
         if (previousStateObservable) {
-          previousState = (await storage.read(id)) as MessageShape<Schema> | undefined;
+          previousState = (await current.read(id))?.state as MessageShape<Schema> | undefined;
         }
-        // The query index is deliberately a temporary first write. A later
-        // current-record failure leaves only a non-authoritative index row;
-        // all reads resolve through current and therefore filter it out.
-        await storage.write(stateCopy);
         await current.write({
           id,
           state: stateCopy,
@@ -395,8 +330,6 @@ export class Stand {
           archived: options.lifecycle?.archived ?? false,
           deleted: options.lifecycle?.deleted ?? false,
         });
-      } finally {
-        storage.close();
       }
       this.#notify(registration, {
         id,
@@ -475,16 +408,6 @@ export class Stand {
     return registration as Registration<Schema>;
   }
 
-  #openStorage(
-    registration: Registration,
-    tenantId: string | undefined,
-  ): RecordStorage<unknown, Message> {
-    return this.#storageFactory.createRecordStorage(
-      this.#storageContext(tenantId),
-      registration.recordSpec,
-    );
-  }
-
   #openCurrent(
     registration: Registration,
     tenantId: string | undefined,
@@ -492,31 +415,25 @@ export class Stand {
     const key = `${registration.typeUrl}\u0000${tenantId ?? ""}`;
     const existing = this.#entityHandles.get(key);
     if (existing !== undefined) return existing.current;
-    const handle = openEntityStorage(this.#storageFactory, {
-      context: this.#storageContext(tenantId),
-      id: {
-        clone: (id) => structuredClone(id),
-        fingerprint: `${registration.schema.typeName}:stand-id:v1`,
-        key: idKey,
-      },
-      layout: "spine-ts.stand.entity-record.v1",
-      stateSchema: registration.schema,
-      storageKey: `${registration.schema.typeName}:stand`,
-    });
+    const handle = openEntityStorage(
+      this.#storageFactory,
+      entityStorageDescriptor(
+        this.#storageContext(tenantId),
+        registration.schema,
+        registration.idField,
+        registration.columns,
+      ),
+    );
     this.#entityHandles.set(key, handle);
     return handle.current;
   }
 
-  async #readResult<Schema extends MessageSchema>(
+  #entryResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
-    tenantId: string | undefined,
-    idOverride?: unknown,
+    current: { readonly state: Message; readonly version: bigint; readonly deleted: boolean },
     maskPaths?: readonly string[],
-  ): Promise<StandReadResult<Schema> | undefined> {
-    const id = idOverride;
-    if (id === undefined) return undefined;
-    const current = await this.#openCurrent(registration, tenantId).read(id);
-    if (current === undefined || current.deleted) return undefined;
+  ): StandReadResult<Schema> | undefined {
+    if (current.deleted) return undefined;
     const version =
       current.version === 0n
         ? undefined
@@ -538,15 +455,7 @@ export class Stand {
     registration: Registration<Schema>,
     current: { readonly state: Message; readonly version: bigint; readonly deleted: boolean },
   ): StandReadResult<Schema> | undefined {
-    if (current.deleted) return undefined;
-    const version =
-      current.version === 0n
-        ? undefined
-        : create(VersionSchema, { number: Number(current.version) });
-    return Object.freeze({
-      state: clone(registration.schema, current.state as MessageShape<Schema>),
-      ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
-    });
+    return this.#entryResult(registration, current);
   }
 
   #notify<Schema extends MessageSchema>(
@@ -645,25 +554,6 @@ export class Stand {
   }
 }
 
-function createStandRecordSpec(
-  schema: MessageSchema,
-  idField: string,
-  columns: readonly RecordColumn<Message>[],
-): RecordSpec<unknown, Message> {
-  return new RecordSpec<unknown, Message>({
-    schema,
-    storageKey: `${schema.typeName}:current`,
-    idKind: "string",
-    extractId: (record) =>
-      readStateId(record, {
-        idField,
-        schema,
-        typeUrl: deriveTypeUrl(schema),
-      }),
-    columns,
-  });
-}
-
 function createUpdate<Schema extends MessageSchema>(
   registration: Registration<Schema>,
   input: {
@@ -709,35 +599,58 @@ function cloneValue(value: unknown): unknown {
   return typeof value === "object" && value !== null ? structuredClone(value) : value;
 }
 
-function usesSystemPlan(plan: NormalizedQueryPlan<unknown>): boolean {
-  if (plan.order?.some((order) => isSystemColumn(order.column)) === true) return true;
-  const pending = plan.predicate === undefined ? [] : [plan.predicate];
-  while (pending.length > 0) {
-    const predicate = pending.pop();
-    if (predicate === undefined) break;
-    if (predicate.kind === "comparison" && isSystemColumn(predicate.column)) return true;
-    if (predicate.kind === "all" || predicate.kind === "either") {
-      pending.push(...predicate.predicates);
+function legacyQueryPlan(query: RecordQuery<unknown>): NormalizedQueryPlan<unknown> {
+  RecordQuery.validate(query);
+  if (query.after !== undefined) {
+    throw new Error("Stand query continuations require the normalized entity query API.");
+  }
+  const predicates = [
+    ...(query.ids === undefined ? [] : [{ kind: "ids" as const, ids: query.ids }]),
+    ...(query.filters ?? []).map((filter) => ({
+      kind: "comparison" as const,
+      column: filter.column,
+      operator: "equal" as const,
+      value: filter.value,
+    })),
+  ];
+  return {
+    ...(predicates.length === 0
+      ? {}
+      : {
+          predicate: predicates.length === 1 ? predicates[0] : { kind: "all" as const, predicates },
+        }),
+    ...(query.sort === undefined
+      ? {}
+      : {
+          order: query.sort
+            .map((sort) => ({ field: sort.field, direction: sort.direction ?? "asc" }))
+            .map(({ field, direction }) => ({ column: field, direction })),
+        }),
+    ...(query.mask === undefined ? {} : { mask: { paths: query.mask } }),
+    ...(query.limit === undefined ? {} : { limit: query.limit }),
+    candidateLimit: 10_000,
+  };
+}
+
+function normalizeSystemPlan(plan: NormalizedQueryPlan<unknown>): NormalizedQueryPlan<unknown> {
+  const normalize: (
+    predicate: NonNullable<NormalizedQueryPlan<unknown>["predicate"]>,
+  ) => NonNullable<NormalizedQueryPlan<unknown>["predicate"]> = (predicate) => {
+    if (predicate.kind === "comparison" && predicate.column === "version") {
+      const value = predicate.value;
+      return typeof value === "object" &&
+        value !== null &&
+        "number" in value &&
+        typeof value.number === "number"
+        ? { ...predicate, value: BigInt(value.number) }
+        : predicate;
     }
-  }
-  return false;
-}
-
-function isSystemColumn(column: string): boolean {
-  return column === "version" || column === "archived" || column === "deleted";
-}
-
-function idKey(id: unknown): string {
-  if (
-    typeof id === "string" ||
-    typeof id === "number" ||
-    typeof id === "boolean" ||
-    typeof id === "bigint"
-  ) {
-    return `${typeof id}:${id.toString()}`;
-  }
-
-  return `json:${JSON.stringify(id)}`;
+    if (predicate.kind === "all" || predicate.kind === "either") {
+      return { ...predicate, predicates: predicate.predicates.map(normalize) };
+    }
+    return predicate;
+  };
+  return plan.predicate === undefined ? plan : { ...plan, predicate: normalize(plan.predicate) };
 }
 
 interface EntityStorageFactory {

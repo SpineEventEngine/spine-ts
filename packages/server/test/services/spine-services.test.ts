@@ -442,7 +442,7 @@ describe("SpineServices", () => {
     }
   });
 
-  it("executes the complete Projection query contract over real gRPC", async () => {
+  it("executes the complete Entity query contract over real gRPC", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectionStateSchema,
@@ -640,60 +640,73 @@ describe("SpineServices", () => {
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
 
-  it("rejects include-all reads for non-projection routes", async () => {
+  it("reads all aggregate states through QueryService include-all queries", async () => {
     const context = createFakeContext({
       entityFamily: "aggregate",
       stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
-      readAllVersioned: () => {
-        throw new Error("include_all must not list aggregate state.");
-      },
+      readAllVersioned: () =>
+        Promise.resolve([{ state: createState("task-aggregate", "Aggregate") }]),
     });
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createIncludeAllQuery());
 
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read include_all requires a projection target.",
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-aggregate", "Aggregate"),
     );
   });
 
-  it("rejects non-projection include-all before multitenant tenant checks", async () => {
+  it("reads all process-manager states through QueryService include-all queries", async () => {
     const context = createFakeContext({
-      entityFamily: "aggregate",
-      isMultitenant: true,
+      entityFamily: "process-manager",
       stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
-      readAllVersioned: () => {
-        throw new Error("include_all must not list aggregate state.");
-      },
+      readAllVersioned: () =>
+        Promise.resolve([{ state: createState("task-pm", "Process manager") }]),
     });
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createIncludeAllQuery());
 
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read include_all requires a projection target.",
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-pm", "Process manager"),
     );
   });
 
-  it("rejects non-projection include-all before single-tenant tenant checks", async () => {
-    const context = createFakeContext({
-      entityFamily: "aggregate",
-      isMultitenant: false,
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
-      readAllVersioned: () => {
-        throw new Error("include_all must not list aggregate state.");
-      },
-    });
-    const handlers = registeredQueryHandlers(context);
-
-    const response = await handlers.read(createIncludeAllQuery("tenant-a"));
-
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read include_all requires a projection target.",
+  it("accepts declared and system-column filters for aggregate and process-manager routes", async () => {
+    const plans: unknown[] = [];
+    const handlers = (["aggregate", "process-manager"] as const).map((entityFamily) =>
+      registeredQueryHandlers(
+        createFakeContext({
+          entityFamily,
+          stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+          queryVersioned: (_schema, plan) => {
+            plans.push(plan);
+            return Promise.resolve([]);
+          },
+        }),
+      ),
     );
+    const queries = [
+      createColumnFilterQuery("name", packStringId("Entity")),
+      createColumnFilterQuery(
+        "archived",
+        packAny(BoolValueSchema, create(BoolValueSchema, { value: false })),
+      ),
+      createColumnFilterQuery(
+        "deleted",
+        packAny(BoolValueSchema, create(BoolValueSchema, { value: false })),
+      ),
+    ];
+    const responses = await Promise.all(
+      handlers.flatMap((handler) => queries.map((query) => handler.read(query))),
+    );
+
+    expect(responses.every((response) => response.response?.status?.status.case === "ok")).toBe(
+      true,
+    );
+    expect(plans).toHaveLength(6);
   });
 
   it("returns Spine error statuses for unsupported command and query targets", async () => {

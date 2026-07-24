@@ -39,8 +39,8 @@ registration or handler materialization, and broader production verification.
   `proto/spine-sources.json`.
 - `@spine-event-engine/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
-- `@spine-event-engine/client` owns the Node command, Projection-query, and subscription
-  facade, plus descriptor-backed typed Projection columns and Query DSL.
+- `@spine-event-engine/client` owns the Node command, Entity-query, and subscription
+  facade, plus descriptor-backed typed Entity columns and Query DSL.
 - `@spine-event-engine/delivery-server` provides the in-memory simple-server core and a
   standalone cleartext HTTP/2 listener with Inbox, Shard, Admin, and health
   services. State is lost on restart; it is trusted-network infrastructure,

@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Spine TS client-side Projection metadata and query foundations.",
+  "description": "Spine TS client-side Entity metadata and query foundations.",
   "bin": {
-    "protoc-gen-spine-projection-columns": "./codegen/generate-projection-columns.mjs"
+    "protoc-gen-spine-entity-columns": "./codegen/generate-entity-columns.mjs"
   },
   "exports": {
     ".": {
