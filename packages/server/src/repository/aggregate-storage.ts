@@ -495,10 +495,12 @@ const AggregateStorageLocks = Object.freeze({
 
 const snapshotRecordSpecValue = new RecordSpec<unknown, SnapshotRecord>({
   schema: AnySchema,
+  storageKey: "spine.server.AggregateSnapshot:legacy",
+  idKind: "string",
   extractId: (record) => readSnapshotRecord(record).aggregateId,
   columns: [
-    new RecordColumn("aggregateId", (record) => readSnapshotRecord(record).aggregateId),
-    new RecordColumn("version", (record) => readSnapshotRecord(record).version),
+    new RecordColumn("aggregateId", (record) => readSnapshotRecord(record).aggregateId, "string"),
+    new RecordColumn("version", (record) => readSnapshotRecord(record).version, "int64"),
   ],
 });
 

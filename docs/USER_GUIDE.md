@@ -1300,6 +1300,37 @@ fixed tables and fails closed on incompatible metadata; it has no migrations.
 A dedicated account needs CREATE TABLE IF NOT EXISTS (FK/index), information-
 schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
 
+### Shared entity storage foundation
+
+The storage package now defines adapter-facing current-record and history
+contracts. `EntityRecord` carries the canonical entity ID, state, version, and
+lifecycle flags for Aggregates, Projections, and Process Managers. Its physical
+scope uses the bounded context, tenant, state type, and the closed purpose key
+(`current`, `state-history`, or `event-history`); an incompatible storage
+fingerprint fails before rows are read or written.
+
+In-memory factories are isolated by default. To deliberately share compatible
+record or adapter entity scopes across independently constructed factories,
+pass the same root-exported `InMemoryStorageBackend` token; a mismatched
+fingerprint still fails before access, and closing one factory leaves the
+backend available to its siblings.
+
+State and diagnostic event history are asynchronous immutable journals. They
+read newest first; `startingFromVersion` is an exclusive read continuation
+boundary, not an append constraint. State
+history has `stateAt`, per-entity `trim`, and time-based `truncate`; event
+history has time-based `truncate`. Retries must be byte-for-byte equivalent
+for the existing identity or they fail rather than rewriting history. Retention
+work is bounded, resumable, and close-aware; a trim serializes with appends for
+the same entity, while a truncate leaves a concurrently appended eligible row
+for a later call.
+
+This is a provider/repository storage seam, not a client API or an
+application-level history feature yet. Repository configuration, protected
+entity history methods, and repository execution cutover are deferred to
+T-0071. The diagnostic event journal is not used to reconstruct Aggregate
+state; loading continues to use the current entity record.
+
 ### IDs, columns, transactions, and errors
 
 Only materialized column names and `id` are queryable. A name not materialized
@@ -1314,8 +1345,10 @@ import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 const spec = new RecordSpec({
   schema: StringValueSchema,
+  storageKey: "StringValueSchema:legacy",
+  idKind: "string",
   extractId: (record) => record.value.slice(0, 1),
-  columns: [new RecordColumn("state", (record) => record.value)],
+  columns: [new RecordColumn("state", (record) => record.value, "string")],
 });
 const records = factory.createRecordStorage({ name: "Orders", multitenant: false }, spec);
 await records.write(create(StringValueSchema, { value: "a-open" }));

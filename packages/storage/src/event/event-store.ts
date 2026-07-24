@@ -291,10 +291,11 @@ function contextKey(context: StorageContext): string {
 
 const eventSpec = new RecordSpec<EventId, Event>({
   schema: EventSchema,
+  storageKey: "spine.core.Event:event-store",
   idSchema: EventIdSchema,
   extractId: eventId,
   columns: [
-    new RecordColumn("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n),
-    new RecordColumn("typeUrl", (event) => event.message?.typeUrl),
+    new RecordColumn("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n, "int64"),
+    new RecordColumn("typeUrl", (event) => event.message?.typeUrl, "string"),
   ],
 });

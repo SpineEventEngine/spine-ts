@@ -32,6 +32,8 @@ export type DurableSubscriptionState =
 /** Storage spec for service-owned inactive subscription records. */
 export const durableSubscriptionRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
+  storageKey: "spine.server.Subscription:durable",
+  idKind: "string",
   extractId: (record) => DurableSubscriptionRecords.readState(record).id,
 });
 

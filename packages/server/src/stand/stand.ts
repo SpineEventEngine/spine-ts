@@ -576,6 +576,8 @@ function createStandRecordSpec(
 ): RecordSpec<unknown, Message> {
   return new RecordSpec<unknown, Message>({
     schema,
+    storageKey: `${schema.typeName}:current`,
+    idKind: "string",
     extractId: (record) =>
       readStateId(record, {
         idField,

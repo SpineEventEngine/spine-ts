@@ -123,23 +123,33 @@ const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
+  storageKey: "spine.delivery.Inbox:current",
+  idKind: "string",
   extractId: (record) => readStoredInboxMessage(record).key,
   columns: [
-    new RecordColumn("signalId", (record) => readStoredInboxMessage(record).signalId),
-    new RecordColumn("inbox", (record) => readStoredInboxMessage(record).inbox),
-    new RecordColumn("status", (record) => readStoredInboxMessage(record).status),
-    new RecordColumn("label", (record) => readStoredInboxMessage(record).label),
-    new RecordColumn("shard", (record) => readStoredInboxMessage(record).shard),
-    new RecordColumn("receivedAt", (record) => readStoredInboxMessage(record).whenReceivedMs),
-    new RecordColumn("version", (record) =>
-      parseStoredVersion(readStoredInboxMessage(record).version),
+    new RecordColumn("signalId", (record) => readStoredInboxMessage(record).signalId, "string"),
+    new RecordColumn("inbox", (record) => readStoredInboxMessage(record).inbox, "string"),
+    new RecordColumn("status", (record) => readStoredInboxMessage(record).status, "string"),
+    new RecordColumn("label", (record) => readStoredInboxMessage(record).label, "string"),
+    new RecordColumn("shard", (record) => readStoredInboxMessage(record).shard, "string"),
+    new RecordColumn(
+      "receivedAt",
+      (record) => readStoredInboxMessage(record).whenReceivedMs,
+      "number",
     ),
-    new RecordColumn("messageId", (record) => readStoredInboxMessage(record).id),
+    new RecordColumn(
+      "version",
+      (record) => parseStoredVersion(readStoredInboxMessage(record).version),
+      "int64",
+    ),
+    new RecordColumn("messageId", (record) => readStoredInboxMessage(record).id, "string"),
   ],
 });
 
 export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
+  storageKey: "spine.delivery.Deduplication:current",
+  idKind: "string",
   extractId: (record) => readStoredDedupRecord(record).key,
 });
 

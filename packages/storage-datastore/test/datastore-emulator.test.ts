@@ -16,7 +16,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     const name = uniqueStorageName("Crud");
     const storage = factory.createRecordStorage(
       { name, multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const record = create(StringValueSchema, { value: "emulator-record" });
 
@@ -36,6 +41,8 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     const name = uniqueStorageName("Canonical");
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => ({ label: record.value, optional: undefined, sequence: 7n }),
     });
     const first = factory.createRecordStorage(
@@ -72,10 +79,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       { name, multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue>("number", (record) => Number(record.value)),
-          new RecordColumn<StringValue>("integer", (record) => BigInt(record.value)),
+          new RecordColumn<StringValue>("number", (record) => Number(record.value), "number"),
+          new RecordColumn<StringValue>("integer", (record) => BigInt(record.value), "bigint"),
         ],
       }),
     );
@@ -122,7 +131,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       const bounded = new DatastoreStorageFactory({ client, maxClientSideScan: 1 });
       const boundedStorage = bounded.createRecordStorage(
         { name, multitenant: false },
-        new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        new RecordSpec({
+          schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
       );
       await expect(boundedStorage.queryEntries({})).rejects.toThrow("client-side scan limit of 1");
     } finally {
@@ -150,10 +164,20 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       { name, multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue>("integer", (record) => values.get(record.value) ?? 0n),
-          new RecordColumn<StringValue>("number", (record) => numbers.get(record.value) ?? 0),
+          new RecordColumn<StringValue>(
+            "integer",
+            (record) => values.get(record.value) ?? 0n,
+            "bigint",
+          ),
+          new RecordColumn<StringValue>(
+            "number",
+            (record) => numbers.get(record.value) ?? 0,
+            "number",
+          ),
         ],
       }),
     );
@@ -194,6 +218,8 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     const name = uniqueStorageName("BatchLifecycle");
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => record.value,
     });
     const storage = factory.createRecordStorage({ name, multitenant: false }, spec);
@@ -229,7 +255,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-ts-datastore-emulator",
     });
     const name = uniqueStorageName("Cas");
-    const spec = new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value });
+    const spec = new RecordSpec({
+      schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
     const first = factory.createRecordStorage({ name, multitenant: false }, spec);
     const second = factory.createRecordStorage({ name, multitenant: false }, spec);
 
@@ -251,7 +282,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     const name = uniqueStorageName("Malformed");
     const storage = new DatastoreStorageFactory({ client }).createRecordStorage(
       { name, multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const encodedId = JSON.stringify(["string", "malformed"]);
     const key = client.key({ path: [`${name}:google.protobuf.StringValue`, encodedId] });

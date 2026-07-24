@@ -744,16 +744,20 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
 `RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
-`InMemoryRecordStorage`, `EventStore`, and `OnEventAccepted`. `StorageFactory`
-owns one mandatory adapter seam, `createRecordStorage(context, spec)`.
+`InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
+`OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
+`StorageFactory` owns one mandatory adapter seam,
+`createRecordStorage(context, spec)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and simple field masks over cloned
 results. The in-memory adapter is process-local, tenant-aware through
-`StorageContext`, shared by factory, context name, tenant mode, tenant ID, and
-`RecordSpec` instance, and non-durable. Storage adapters must make repeated
-`createRecordStorage(context, spec)` calls observe the same logical records
-while returning independently closeable storage handles.
+`StorageContext`, and non-durable. A factory without an
+`InMemoryStorageBackend` owns an isolated backend; independently constructed
+factories deliberately share compatible canonical scopes only when supplied
+the same backend token. Storage adapters must make repeated
+`createRecordStorage(context, spec)` calls in one logical backend observe the
+same records while returning independently closeable storage handles.
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
 `RecordStorage.query()` and `RecordStorage.queryEntries()` also filter
@@ -764,6 +768,11 @@ returns logical record IDs derived from each record body through the
 `RecordSpec`.
 `RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
 before a factory or adapter receives the specification.
+It requires a stable, nonblank `storageKey` and exactly one ID descriptor:
+either Protobuf `idSchema` or a nonblank primitive `idKind`. Every
+`RecordColumn` requires a nonblank `valueType` descriptor. These declarations
+form the deterministic layout-compatibility fingerprint that adapters bind and
+check before row access.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was
@@ -862,6 +871,24 @@ ZeroMQ-backed command and event callback proof through the public
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
+
+### Storage identity and maintenance
+
+`@spine-event-engine/storage` requires a stable, nonblank `RecordSpec.storageKey`
+for every physical record layout. Providers bind its length-delimited context,
+tenant-mode, and storage-key scope to a deterministic compatibility fingerprint
+before accessing rows; an incompatible reopen fails before any read or write.
+`InMemoryStorageBackend` is a root-exported opaque token for deliberate
+in-memory sharing: factories constructed without one are isolated, while
+factories supplied the same token share only compatible canonical scopes.
+Closing one such factory does not clear the backend for its siblings.
+The public entity-history surface is deliberately limited to
+`EntityStateHistoryStorage` (`trim`, `truncate`) and `EntityEventStorage`
+(`truncate`). Entity row ports, purpose keys, and in-memory conformance seams
+remain internal provider implementation details until the repository/provider
+milestones freeze their SPI. Provider adapters use the explicitly marked
+`@spine-event-engine/storage/internal/entity-history` subpath; it is a narrow
+cross-package SPI, not an end-user root export.
 
 Run:
 

@@ -253,6 +253,8 @@ const defaultShardLeaseMs = 30_000;
 
 const shardSessionRecordSpec = new RecordSpec<string, Any>({
   schema: AnySchema,
+  storageKey: "spine.delivery.ShardSession:current",
+  idKind: "string",
   extractId: (record) => readStoredSession(record).key,
 });
 

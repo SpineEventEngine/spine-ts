@@ -16,9 +16,15 @@ describe("DatastoreStorageFactory", () => {
       { name: "QueryConformance", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue, string>("group", (record) => record.value.slice(0, 1)),
+          new RecordColumn<StringValue, string>(
+            "group",
+            (record) => record.value.slice(0, 1),
+            "string",
+          ),
         ],
       }),
     );
@@ -39,6 +45,8 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: {} as never });
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => record.value,
     });
     const context = { name: "Tasks", multitenant: false };
@@ -58,7 +66,12 @@ describe("DatastoreStorageFactory", () => {
     let clientCloseCalls = 0;
     Object.assign(client, { close: () => (clientCloseCalls += 1) });
     const factory = new DatastoreStorageFactory({ client: client as never });
-    const spec = new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value });
+    const spec = new RecordSpec({
+      schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
     const first = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     const second = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
 
@@ -81,6 +94,8 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
       }),
     );
@@ -101,6 +116,8 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
       }),
     );
@@ -117,18 +134,36 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const tenantStorage = factory.createRecordStorage(
       { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const missingTenantStorage = factory.createRecordStorage(
       { name: "Tasks", multitenant: true },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     const unsupportedColumnStorage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue>("unsupported", () => ({ value: "not-indexable" }))],
+        columns: [
+          new RecordColumn<StringValue>(
+            "unsupported",
+            () => ({ value: "not-indexable" }),
+            "object",
+          ),
+        ],
       }),
     );
 
@@ -149,6 +184,8 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
       }),
     );
@@ -174,6 +211,8 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
       }),
     );
@@ -196,7 +235,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     await expect(
@@ -220,8 +264,12 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue>("group", (record) => record.value.slice(0, 1))],
+        columns: [
+          new RecordColumn<StringValue>("group", (record) => record.value.slice(0, 1), "string"),
+        ],
       }),
     );
 
@@ -255,7 +303,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "a" }),
@@ -276,6 +329,8 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => ({ label: record.value, optional: undefined, sequence: 7n }),
     });
     const first = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
@@ -314,6 +369,8 @@ describe("DatastoreStorageFactory", () => {
     ]);
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => ids.get(record.value),
     });
     const first = factory.createRecordStorage({ name: "Kinds", multitenant: false }, spec);
@@ -342,7 +399,12 @@ describe("DatastoreStorageFactory", () => {
     };
     const storage = factory.createRecordStorage(
       { name: "Canonical", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => ids[record.value] }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => ids[record.value],
+      }),
     );
 
     await storage.writeAll(Object.keys(ids).map((value) => create(StringValueSchema, { value })));
@@ -361,10 +423,16 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "number",
         extractId: (record) => Number(record.value),
         columns: [
-          new RecordColumn<StringValue>("number", (record) => Number(record.value)),
-          new RecordColumn<StringValue>("indexedBigint", (record) => BigInt(record.value)),
+          new RecordColumn<StringValue>("number", (record) => Number(record.value), "number"),
+          new RecordColumn<StringValue>(
+            "indexedBigint",
+            (record) => BigInt(record.value),
+            "bigint",
+          ),
         ],
       }),
     );
@@ -407,8 +475,10 @@ describe("DatastoreStorageFactory", () => {
       { name: "Overflow", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue>("indexedBigint", () => 1n << 63n)],
+        columns: [new RecordColumn<StringValue>("indexedBigint", () => 1n << 63n, "bigint")],
       }),
     );
     const savesBeforeOverflow = client.saveCalls;
@@ -434,10 +504,20 @@ describe("DatastoreStorageFactory", () => {
     ]);
     const spec = new RecordSpec({
       schema: StringValueSchema,
+      storageKey: "StringValueSchema:legacy",
+      idKind: "string",
       extractId: (record) => record.value,
       columns: [
-        new RecordColumn<StringValue>("integer", (record) => values.get(record.value) ?? 0n),
-        new RecordColumn<StringValue>("number", (record) => numbers.get(record.value) ?? 0),
+        new RecordColumn<StringValue>(
+          "integer",
+          (record) => values.get(record.value) ?? 0n,
+          "bigint",
+        ),
+        new RecordColumn<StringValue>(
+          "number",
+          (record) => numbers.get(record.value) ?? 0,
+          "number",
+        ),
       ],
     });
     const storage = factory.createRecordStorage({ name: "Boundaries", multitenant: false }, spec);
@@ -477,8 +557,10 @@ describe("DatastoreStorageFactory", () => {
       { name: "Finite", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue>("number", () => Number.NaN)],
+        columns: [new RecordColumn<StringValue>("number", () => Number.NaN, "number")],
       }),
     );
 
@@ -497,7 +579,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "TypedIds", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => Number(record.value) }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => Number(record.value),
+      }),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "10" }),
@@ -524,7 +611,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never, maxClientSideScan: 1 });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "a" }),
@@ -552,8 +644,12 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value,
-        columns: [new RecordColumn<StringValue>("group", (record) => record.value.slice(0, 1))],
+        columns: [
+          new RecordColumn<StringValue>("group", (record) => record.value.slice(0, 1), "string"),
+        ],
       }),
     );
     await storage.writeAll([
@@ -643,6 +739,8 @@ describe("DatastoreStorageFactory", () => {
       { name: "Tasks", multitenant: false },
       new RecordSpec({
         schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
         extractId: (record) => record.value.slice(0, 1),
       }),
     );
@@ -662,7 +760,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     let rolledBack = false;
     Object.assign(client, {
@@ -692,7 +795,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     let transactionCalls = 0;
     Object.assign(client, {
@@ -746,7 +854,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
     let rollbackAttempts = 0;
     Object.assign(client, {
@@ -777,7 +890,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     client.putRaw("Tasks:google.protobuf.StringValue", "task-1", {
@@ -841,7 +959,12 @@ describe("DatastoreStorageFactory", () => {
       const client = new MemoryDatastoreClient();
       const storage = new DatastoreStorageFactory({ client: client as never }).createRecordStorage(
         { name: "MalformedIds", multitenant: false },
-        new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+        new RecordSpec({
+          schema: StringValueSchema,
+          storageKey: "StringValueSchema:legacy",
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
       );
       const id = `invalid-${String(index)}`;
       client.putRaw("MalformedIds:google.protobuf.StringValue", id, {
@@ -860,7 +983,12 @@ describe("DatastoreStorageFactory", () => {
     const factory = new DatastoreStorageFactory({ client: client as never });
     const storage = factory.createRecordStorage(
       { name: "Tasks", multitenant: false },
-      new RecordSpec({ schema: StringValueSchema, extractId: (record) => record.value }),
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:legacy",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
     );
 
     Object.assign(client, { get: () => Promise.resolve({ invalid: "response" }) });
