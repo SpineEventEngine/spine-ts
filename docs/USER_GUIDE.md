@@ -1322,7 +1322,7 @@ schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
 
 ### Shared entity storage foundation
 
-The storage package now defines adapter-facing current-record and history
+The storage package defines adapter-facing current-record and history
 contracts. `EntityRecord` carries the canonical entity ID, state, version, and
 lifecycle flags for Aggregates, Projections, and Process Managers. The physical
 scope uses the bounded-context name, tenant mode/current tenant (or the fixed
@@ -1344,18 +1344,64 @@ Retries must be byte-for-byte equivalent for the existing identity or they fail
 rather than rewriting history. Retention work is bounded, resumable, and
 close-aware. In the MySQL adapter, trim serializes with same-entity appends by
 using a database-specific `GET_LOCK` on one connection in the supported
-single-server topology. Truncate captures a strict-time provider write-order
+single-server topology. MySQL truncate captures its monotonic `write_order`
 cutoff before it starts deleting 128-row chunks, so it does not chase rows
 appended after that capture—even if their timestamp is eligible. Each truncate chunk is
 transactional, but a failed/unknown commit or partial invocation requires the
 caller to retry; completed chunks remain durable. Current-record and history
 operations are not one cross-storage transaction.
 
-This is a provider/repository storage seam, not a client API or an
-application-level history feature yet. Repository configuration, protected
-entity history methods, and repository execution cutover are deferred to
-T-0071. The diagnostic event journal is not used to reconstruct Aggregate
-state; loading continues to use the current entity record.
+This is a provider/repository storage seam, not a client API. Repository configuration, protected entity
+history methods, and repository execution now use this provider seam. State
+history is opt-in; Aggregate diagnostic event history is always retained, while
+Process Manager event history is opt-in and Projections have no event-history
+API. These are repository-bound diagnostic methods, not remote APIs. The
+diagnostic event journal is not used to reconstruct Aggregate state; loading
+continues to use the current entity record.
+
+#### Repository history and duplicate-dispatch configuration
+
+Configure history when the repository is constructed. `stateHistory` is off by
+default. Aggregate diagnostic events are retained unconditionally; Process
+Manager diagnostic events require `processManagerEventHistory: true`. A
+Projection has no event-history methods.
+
+```ts
+const orders = new Repository({
+  entityType: Order,
+  schema: OrderStateSchema,
+  handlers: orderHandlers,
+  stateHistory: true,
+  doubleDispatchGuard: { depth: 100 },
+});
+```
+
+Inside an entity handler, the repository binding provides `stateAt(time)` and
+`stateHistoryBackward(depth)`. Aggregates and enabled Process Managers also
+provide `eventHistoryBackward(depth)`, `eventHistoryContains(depth, predicate)`,
+and the protected maintenance accessors `stateHistoryStorage()` and
+`eventStorage()`. Depth is a positive safe integer. Results are fresh frozen
+snapshots; the continuation cache adds only complete version groups, uses an
+exclusive version continuation, and clears on a discontinuous append. A short
+provider read marks the retained history exhausted.
+
+`repository.setStateHistoryEnabled(boolean)` changes future append attempts.
+It exists for JVM parity and is not intended for routine request-time use.
+Writes are deliberately non-atomic. Aggregate stores write current state, then
+optional state history, then their diagnostic journal, framework event store,
+and asynchronous delivery. Process Managers write their Stand current state,
+then optional state history and diagnostic journal before follow-up delivery;
+Projections have no diagnostic event journal. Rejection events are excluded.
+A failure stops later writes, so callers must decide how to repair or retry a
+partial sequence.
+
+The optional guard is unavailable to Projections and Process Managers require
+`processManagerEventHistory: true`. It checks retained diagnostic events before
+dispatch and keeps a per-entity in-process completion window (100 by default).
+It is best effort: separate machines do not coordinate, failures before journal
+append remain retryable, and a later failure after journal append can make a
+retry appear duplicate. Do not use it as an exactly-once or cross-machine
+delivery protocol.
 
 ### IDs, columns, transactions, and errors
 

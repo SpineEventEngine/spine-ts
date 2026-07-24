@@ -62,10 +62,9 @@ incompatible compatibility fingerprint before accessing rows. The three
 purposes are separate and cannot share rows. `MemoryEntityStorageFactory`
 is the adapter-conformance foundation, not a durable provider.
 
-These contracts do not yet configure repositories or expose entity/client
-history APIs; that cutover is deferred to T-0071. The diagnostic event journal
-is never an event-sourcing or reconstruction store: latest entity state remains
-the restoration source.
+Repositories configure state/event history through the framework runtime; the
+diagnostic event journal is never an event-sourcing or reconstruction store:
+latest entity state remains the restoration source.
 
 ## Query Model
 

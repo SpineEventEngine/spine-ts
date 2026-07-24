@@ -95,7 +95,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     });
     const longHistory = await reopened.states.backward("task", 130);
     expect(longHistory).toHaveLength(130);
-    expect(longHistory.slice(0, 2)).toMatchObject([{ value: "132" }, { value: "131" }]);
+    expect(longHistory.slice(0, 2)).toMatchObject([
+      { state: { value: "132" } },
+      { state: { value: "131" } },
+    ]);
     await expect(reopened.events.backward("task", 1)).resolves.toMatchObject([
       { id: { value: "event" } },
     ]);
@@ -142,7 +145,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     await storage.events.truncate(create(TimestampSchema, { seconds: 2n }));
 
     await expect(storage.states.backward("task", 2)).resolves.toMatchObject([
-      { value: "boundary" },
+      { state: { value: "boundary" } },
     ]);
     await expect(storage.events.backward("task", 2)).resolves.toMatchObject([
       { id: { value: "boundary-event" } },
@@ -934,7 +937,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       committed = true;
       await expect(trim).resolves.toBeUndefined();
       await expect(append).resolves.toBeUndefined();
-      await expect(peer.states.backward("same", 1)).resolves.toMatchObject([{ value: "retained" }]);
+      await expect(peer.states.backward("same", 1)).resolves.toMatchObject([
+        { state: { value: "retained" } },
+      ]);
 
       const exact = {
         entityId: "exact",

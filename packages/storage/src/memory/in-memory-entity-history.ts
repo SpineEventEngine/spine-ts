@@ -70,6 +70,12 @@ export class InMemoryEntityStorage<I, S extends Message> {
       queue: backend.stateQueue,
     });
   }
+
+  /** Closes this independently owned provider handle without affecting siblings. */
+  close(): void {
+    this.events.close();
+    this.states.close();
+  }
 }
 
 export interface EntityStorageInput<I, S extends Message> {
@@ -292,14 +298,18 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     );
   }
 
-  backward(entityId: I, depth: number, startingFromVersion?: bigint): Promise<readonly S[]> {
+  backward(
+    entityId: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityStateHistoryRecord<I, S>[]> {
     return Promise.resolve().then(() => {
       this.requireOpen();
       requireDepth(depth);
       return Object.freeze(
         this.recordsFor(entityId, startingFromVersion)
           .slice(0, depth)
-          .map((record) => Object.freeze(clone(this.#stateSchema, record.state))),
+          .map((record) => Object.freeze(copyRecord(record, this.#stateSchema, this.#idClone))),
       );
     });
   }

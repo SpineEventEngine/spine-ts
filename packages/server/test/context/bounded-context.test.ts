@@ -1438,7 +1438,7 @@ describe("BoundedContext assembly", () => {
   });
 });
 
-class ObservingStorageFactory extends StorageFactory {
+class ObservingStorageFactory extends InMemoryStorageFactory {
   readonly creations: StorageCreation[] = [];
   readonly storages: RecordStorage<unknown, Message>[] = [];
   #creationCount = 0;
@@ -1450,7 +1450,7 @@ class ObservingStorageFactory extends StorageFactory {
     super();
   }
 
-  protected onCreateRecordStorage<I, R extends Message>(
+  protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
@@ -1464,7 +1464,7 @@ class ObservingStorageFactory extends StorageFactory {
   }
 }
 
-class DelayingStorageFactory extends StorageFactory {
+class DelayingStorageFactory extends InMemoryStorageFactory {
   readonly writeStarted: Promise<void>;
   #startWrite: (() => void) | undefined;
   #finishWrite: (() => void) | undefined;
@@ -1485,7 +1485,7 @@ class DelayingStorageFactory extends StorageFactory {
     this.#finishWrite?.();
   }
 
-  protected onCreateRecordStorage<I, R extends Message>(
+  protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {

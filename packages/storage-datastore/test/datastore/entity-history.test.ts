@@ -56,7 +56,9 @@ describe("Datastore entity history", () => {
     for (let index = 1; index <= 10_001; index += 1) await storage.states.append(state(index));
     const before = client.queryCalls;
     const reads = client.getCalls;
-    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "10001" }]);
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([
+      { state: { value: "10001" } },
+    ]);
     expect(client.queryCalls - before).toBe(1);
     expect(client.queryLimits.at(-1)).toBe(1);
     expect(client.getCalls - reads).toBe(1);
@@ -69,8 +71,8 @@ describe("Datastore entity history", () => {
     expect(client.queryCalls - after127).toBe(2);
     expect(client.queryLimits.slice(-2)).toEqual([128, 1]);
     await expect(storage.states.backward("task", 2, 10_001n)).resolves.toMatchObject([
-      { value: "10000" },
-      { value: "9999" },
+      { state: { value: "10000" } },
+      { state: { value: "9999" } },
     ]);
     const beforeStateAt = client.queryCalls;
     const beforeStateAtGet = client.getCalls;
@@ -90,14 +92,18 @@ describe("Datastore entity history", () => {
     );
     for (let index = 1; index <= 129; index += 1) await storage.states.append(state(index));
     await storage.states.trim("task", 1);
-    await expect(storage.states.backward("task", 10)).resolves.toMatchObject([{ value: "129" }]);
+    await expect(storage.states.backward("task", 10)).resolves.toMatchObject([
+      { state: { value: "129" } },
+    ]);
     const selections = client.queries.filter(
       (query) =>
         query.kind === "$SpineEntityStateOrder" &&
         query.orders.some(([property]) => property === "__key__"),
     );
     expect(selections).not.toHaveLength(0);
-    expect(selections.every((query) => query.projection?.includes("__key__") === true)).toBe(true);
+    expect(selections.every((query) => query.projection?.flat().includes("__key__") === true)).toBe(
+      true,
+    );
     expect(selections.every((query) => (query.limitValue ?? 0) <= 8)).toBe(true);
     expect(backend.maxTransactionGroups).toBeLessThanOrEqual(24);
   });
@@ -112,7 +118,9 @@ describe("Datastore entity history", () => {
     await expect(storage.states.trim("task", 1)).rejects.toThrow("delete group failed");
     backend.failDeleteAt = undefined;
     await storage.states.trim("task", 1);
-    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([{ value: "257" }]);
+    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([
+      { state: { value: "257" } },
+    ]);
   });
 
   it("expects a fixed truncate boundary to retain a concurrent later state and event", async () => {
@@ -129,10 +137,12 @@ describe("Datastore entity history", () => {
     const append = storage.states.append(state(2));
     held.resolve(undefined);
     await Promise.all([truncate, append]);
-    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "2" }]);
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([
+      { state: { value: "2" } },
+    ]);
   });
 
-  it("uses provider conflict/retry for independent-client append versus trim", async () => {
+  it("retains a later lower-version append when trim retries after a provider conflict", async () => {
     const backend = new HistoryDatastoreBackend();
     const firstClient = backend.client();
     const first = new DatastoreStorageFactory({ client: firstClient as never }).createEntityStorage(
@@ -142,8 +152,105 @@ describe("Datastore entity history", () => {
       client: backend.client() as never,
     }).createEntityStorage(input()).states;
     await first.append(state(1));
-    await Promise.all([first.trim("task", 0), second.append(state(2))]);
-    expect(firstClient.transactionCalls).toBeGreaterThan(0);
+    await first.append(state(2));
+    const entered = deferred<undefined>();
+    const release = deferred<undefined>();
+    const transaction = firstClient.transaction.bind(firstClient);
+    let held = false;
+    firstClient.transaction = () => {
+      const value = transaction();
+      const commit = value.commit.bind(value);
+      value.commit = async () => {
+        if (!held) {
+          held = true;
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return commit();
+      };
+      return value;
+    };
+
+    const trim = first.trim("task", 0);
+    await entered.promise;
+    await second.append(state(-1));
+    await second.append(state(0));
+    release.resolve(undefined);
+    await trim;
+
+    expect(firstClient.transactionCalls).toBeGreaterThanOrEqual(2);
+    await expect(second.backward("task", 2)).resolves.toMatchObject([
+      { state: { value: "0" } },
+      { state: { value: "-1" } },
+    ]);
+    expect(root(backend, "task")).toMatchObject({ stateCount: { value: "2" } });
+  });
+
+  it("retries a conflicted trim plan before selecting destructive chunks", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    await storage.states.append(state(1));
+    const transaction = client.transaction.bind(client);
+    let conflicts = 1;
+    client.transaction = () => {
+      const value = transaction();
+      const run = value.run.bind(value);
+      value.run = async () => {
+        if (conflicts > 0) {
+          conflicts -= 1;
+          throw Object.assign(new Error("transaction aborted"), { code: 10 });
+        }
+        return run();
+      };
+      return value;
+    };
+
+    await storage.states.trim("task", 0);
+
+    expect(client.transactionCalls).toBeGreaterThanOrEqual(3);
+    await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
+  });
+
+  it("rejects a trim closed after planning before its first destructive chunk", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    const sibling = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    const entered = deferred<undefined>();
+    const release = deferred<undefined>();
+    const transaction = client.transaction.bind(client);
+    let held = false;
+    client.transaction = () => {
+      const value = transaction();
+      const get = value.get.bind(value);
+      value.get = async (key) => {
+        if (!held) {
+          held = true;
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return get(key);
+      };
+      return value;
+    };
+
+    const trim = storage.states.trim("task", 0);
+    await entered.promise;
+    storage.close();
+    release.resolve(undefined);
+
+    await expect(trim).rejects.toThrow("closed");
+    await expect(sibling.states.backward("task", 1)).resolves.toMatchObject([
+      { state: { value: "1" } },
+    ]);
   });
 
   it("captures event truncate high-water so a later eligible event survives", async () => {
@@ -219,7 +326,9 @@ describe("Datastore entity history", () => {
       deleted: false,
     });
     await storage.states.trim("task", 1);
-    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([{ value: "2" }]);
+    await expect(storage.states.backward("task", 2)).resolves.toMatchObject([
+      { state: { value: "2" } },
+    ]);
   });
 
   it("makes state and event retry identity immutable, including event correlation", async () => {
@@ -554,6 +663,59 @@ describe("Datastore entity history", () => {
     await expect(storage.events.backward("task", 1)).rejects.toThrow("event identity reference");
   });
 
+  it("fails closed when a retained state marker has no causal revision", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    delete entryForKind(backend, "$SpineEntityStateOrder").data.$spineStateRevision;
+
+    await expect(storage.states.trim("task", 0)).rejects.toThrow("no causal revision");
+  });
+
+  it("fails closed when state retention has no order marker", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.states.append(state(1));
+    deleteEntriesForKind(backend, "$SpineEntityStateOrder");
+
+    await expect(storage.states.trim("task", 0)).rejects.toThrow(
+      "state retention without an order marker",
+    );
+  });
+
+  it("stops a planned trim if its durable root disappears before the first chunk", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+      input(),
+    );
+    await storage.states.append(state(1));
+    const transaction = client.transaction.bind(client);
+    let planning = true;
+    client.transaction = () => {
+      const value = transaction();
+      if (planning) {
+        planning = false;
+        const rollback = value.rollback.bind(value);
+        value.rollback = async () => {
+          const result = await rollback();
+          deleteEntityRoot(backend, "task");
+          return result;
+        };
+      }
+      return value;
+    };
+
+    await expect(storage.states.trim("task", 0)).resolves.toBeUndefined();
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([
+      { state: { value: "1" } },
+    ]);
+  });
+
   it("rejects malformed durable order and cut-marker keys during maintenance", async () => {
     const backend = new HistoryDatastoreBackend();
     const storage = new DatastoreStorageFactory({
@@ -618,6 +780,60 @@ describe("Datastore entity history", () => {
     await expect(storage.events.backward("task", 129)).rejects.toThrow("did not return a cursor");
   });
 
+  it("rejects malformed datastore paging metadata before returning partial state history", async () => {
+    const malformedResponses: readonly [
+      string,
+      (info: { readonly endCursor: Buffer; readonly moreResults: string }) => unknown,
+      string,
+    ][] = [
+      ["missing metadata", () => undefined, "did not return paging information"],
+      [
+        "invalid continuation cursor",
+        (info) => ({ ...info, endCursor: 1 }),
+        "invalid continuation cursor",
+      ],
+      [
+        "invalid continuation state",
+        (info) => ({ ...info, moreResults: 1 }),
+        "invalid continuation state",
+      ],
+    ];
+
+    for (const [, malformed, expected] of malformedResponses) {
+      const backend = new HistoryDatastoreBackend();
+      const client = backend.client();
+      const storage = new DatastoreStorageFactory({ client: client as never }).createEntityStorage(
+        input(),
+      );
+      await storage.states.append(state(1));
+      const runQuery = client.runQuery.bind(client);
+      client.runQuery = async (query) => {
+        const [rows, info] = await runQuery(query);
+        if (query.kind === "$SpineEntityStateOrder") return [rows, malformed(info)] as never;
+        return [rows, info];
+      };
+
+      await expect(storage.states.backward("task", 2)).rejects.toThrow(expected);
+    }
+  });
+
+  it("rejects a durable event-order marker whose event row has disappeared", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const storage = new DatastoreStorageFactory({
+      client: backend.client() as never,
+    }).createEntityStorage(input());
+    await storage.events.append(historyEvent("orphaned-event", "task"));
+    const [eventKey] = [...backend.entities.keys()].filter((serialized) =>
+      (JSON.parse(serialized) as [unknown, readonly string[]])[1].includes("$SpineEntityEvent"),
+    );
+    if (eventKey === undefined) throw new Error("Expected a durable event row.");
+    backend.entities.delete(eventKey);
+
+    await expect(storage.events.backward("task", 1)).rejects.toThrow(
+      "event marker references a missing event identity",
+    );
+  });
+
   it("retries a state trim after a provider conflict", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
@@ -671,7 +887,9 @@ describe("Datastore entity history", () => {
     backend.failCommitAppliedOnce = true;
 
     await expect(storage.states.append(state(1))).resolves.toBeUndefined();
-    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([{ value: "1" }]);
+    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([
+      { state: { value: "1" } },
+    ]);
   });
 });
 
@@ -710,6 +928,24 @@ function root(backend: HistoryDatastoreBackend, entityId: string): Record<string
   });
   if (entry === undefined) throw new Error("Expected an entity root.");
   return entry[1].data;
+}
+function deleteEntityRoot(backend: HistoryDatastoreBackend, entityId: string): void {
+  const serialized = [...backend.entities.keys()].find((candidate) => {
+    const path = (JSON.parse(candidate) as [unknown, readonly string[]])[1];
+    return (
+      path[0] === "$SpineEntity" &&
+      path.length === 2 &&
+      path[1]?.includes(Buffer.from(entityId).toString("hex"))
+    );
+  });
+  if (serialized === undefined) throw new Error("Expected an entity root.");
+  backend.entities.delete(serialized);
+}
+function deleteEntriesForKind(backend: HistoryDatastoreBackend, kind: string): void {
+  for (const serialized of backend.entities.keys()) {
+    const path = (JSON.parse(serialized) as [unknown, readonly string[]])[1];
+    if (path.includes(kind)) backend.entities.delete(serialized);
+  }
 }
 function entryForKind(
   backend: HistoryDatastoreBackend,

@@ -2,6 +2,7 @@ import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/pro
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  AnySchema,
   BoolValueSchema,
   DoubleValueSchema,
   FieldDescriptorProto_Label,
@@ -53,11 +54,11 @@ import {
   type RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   Aggregate,
-  AggregateStorage,
   BoundedContext,
   ProcessManager,
   Projection,
@@ -280,12 +281,12 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
 class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
-  static applierCalls = 0;
+  static directUpdateCalls = 0;
   static failure: Error | undefined;
 
   static reset(failure?: Error): void {
     this.assigneeCalls = 0;
-    this.applierCalls = 0;
+    this.directUpdateCalls = 0;
     this.failure = failure;
   }
 
@@ -295,6 +296,19 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
     if (ExecutingTaskAggregate.failure !== undefined) {
       throw ExecutingTaskAggregate.failure;
     }
+
+    const name = command.name === "Multi" ? "Multi two" : command.name;
+    ExecutingTaskAggregate.directUpdateCalls++;
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${name} (applied)`,
+          archived: true,
+        }),
+      ),
+    );
 
     if (command.name === "Multi") {
       return [
@@ -313,22 +327,6 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
         archived: false,
       }),
     });
-  }
-
-  applyTask(event: AggregateState): void {
-    ExecutingTaskAggregate.applierCalls++;
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: event.id,
-          name: `${event.name} (applied)`,
-          archived: true,
-        }),
-      ),
-    );
-    this.commitTransaction();
   }
 }
 
@@ -447,6 +445,55 @@ class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateS
     return create(AggregateStateSchema, {
       id: event.id,
       name: `${event.name} reacted event`,
+      archived: false,
+    });
+  }
+}
+
+class GuardedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static calls = 0;
+
+  static reset(): void {
+    this.calls = 0;
+  }
+
+  reactProjection(event: ProjectionState): void {
+    GuardedAggregate.calls++;
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: this.id,
+          name: `${event.name} (guarded)`,
+          archived: false,
+        }),
+      ),
+    );
+  }
+}
+
+class ProducingGuardedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static calls = 0;
+
+  static reset(): void {
+    this.calls = 0;
+  }
+
+  reactProjection(event: ProjectionState): AggregateState {
+    ProducingGuardedAggregate.calls++;
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: this.id,
+          name: `${event.name} (producing guarded)`,
+          archived: false,
+        }),
+      ),
+    );
+    return create(AggregateStateSchema, {
+      id: this.id,
+      name: `${event.name} produced`,
       archived: false,
     });
   }
@@ -617,133 +664,33 @@ class ValidatingProcessManager extends ProcessManager<
 
 class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState) {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: `${command.id}-changed`,
+          name: command.name,
+          archived: command.archived,
+        }),
+      ),
+    );
     return createAggregateEvent("event-transition-invalid", command.id, 0, command.name);
-  }
-
-  applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
-        }),
-      ),
-    );
-    this.commitTransaction();
-  }
-}
-
-class RollingBackTransitionAggregate extends TransitionViolatingAggregate {
-  override assignTask(command: AggregateState) {
-    return createAggregateEvent("event-transition-rollback", command.id, 0, command.name);
-  }
-
-  override applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
-        }),
-      ),
-    );
-    const result = this.commitTransaction();
-    if (result.status === "rejected") {
-      this.rollbackTransaction();
-    }
-  }
-}
-
-class RestartingTransitionAggregate extends TransitionViolatingAggregate {
-  override assignTask(command: AggregateState) {
-    return createAggregateEvent("event-transition-restart", command.id, 0, command.name);
-  }
-
-  override applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
-        }),
-      ),
-    );
-    const result = this.commitTransaction();
-    if (result.status === "rejected") {
-      this.rollbackTransaction();
-      this.startTransaction();
-    }
-  }
-}
-
-class MutatingRejectedAggregate extends TransitionViolatingAggregate {
-  override assignTask(command: AggregateState) {
-    return createAggregateEvent("event-transition-mutated", command.id, 0, command.name);
-  }
-
-  override applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
-        }),
-      ),
-    );
-    const result = this.commitTransaction();
-    if (result.status === "rejected") {
-      result.validation.error.constraintViolation.length = 0;
-    }
   }
 }
 
 class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
   override assignTask(command: AggregateState) {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: command.id,
+          name: `${command.name} recovered`,
+          archived: command.archived,
+        }),
+      ),
+    );
     return createAggregateEvent("event-transition-recovers", command.id, 0, command.name);
-  }
-
-  override applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: `${event.id}-changed`,
-          name: event.name,
-          archived: event.archived,
-        }),
-      ),
-    );
-    const result = this.commitTransaction();
-    if (result.status === "accepted") {
-      return;
-    }
-
-    this.rollbackTransaction();
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: event.id,
-          name: `${event.name} recovered`,
-          archived: event.archived,
-        }),
-      ),
-    );
-    this.commitTransaction();
   }
 }
 
@@ -753,62 +700,19 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
   assignTask(command: AggregateState): Promise<SpineEvent> {
     return new Promise((resolve) => {
       AsyncAssigneeAggregate.resolveCommand = (eventName) => {
+        this.update((draft) =>
+          Object.assign(
+            draft,
+            create(AggregateStateSchema, {
+              id: command.id,
+              name: `${eventName} (applied)`,
+              archived: command.archived,
+            }),
+          ),
+        );
         resolve(createAggregateEvent(`event-${eventName}`, command.id, 0, eventName));
       };
     });
-  }
-
-  applyTask(event: AggregateState): void {
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: event.id,
-          name: `${event.name} (applied)`,
-          archived: event.archived,
-        }),
-      ),
-    );
-    this.commitTransaction();
-  }
-}
-
-class AsyncApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  static started = createSignal();
-  static gate = createSignal();
-  static rejection: Error | undefined;
-
-  static reset(): void {
-    this.started = createSignal();
-    this.gate = createSignal();
-    this.rejection = undefined;
-  }
-
-  assignTask(command: AggregateState) {
-    return createAggregateEvent("event-async-applier", command.id, 0, command.name);
-  }
-
-  async applyTask(event: AggregateState): Promise<void> {
-    AsyncApplierAggregate.started.resolve();
-    await AsyncApplierAggregate.gate.promise;
-
-    if (AsyncApplierAggregate.rejection !== undefined) {
-      throw AsyncApplierAggregate.rejection;
-    }
-
-    this.startTransaction();
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AggregateStateSchema, {
-          id: event.id,
-          name: `${event.name} (async applied)`,
-          archived: event.archived,
-        }),
-      ),
-    );
-    this.commitTransaction();
   }
 }
 
@@ -1261,6 +1165,9 @@ class RoutingProcessManager extends ProcessManager<
         }),
       ),
     );
+    if (RoutingProcessManager.failure !== undefined) {
+      throw RoutingProcessManager.failure;
+    }
   }
 
   commandTask(event: ProjectionState): AggregateState {
@@ -1352,11 +1259,13 @@ class BlockingProcessManager extends ProcessManager<
 > {
   static startedCalls = 0;
   static completedCalls = 0;
+  static blockingId: string | undefined;
   static gate = createSignal();
 
   static reset(): void {
     this.startedCalls = 0;
     this.completedCalls = 0;
+    this.blockingId = undefined;
     this.gate = createSignal();
   }
 
@@ -1366,7 +1275,12 @@ class BlockingProcessManager extends ProcessManager<
 
   async reactTask(event: ProjectionState): Promise<void> {
     BlockingProcessManager.startedCalls++;
-    await BlockingProcessManager.gate.promise;
+    if (
+      BlockingProcessManager.blockingId === undefined ||
+      BlockingProcessManager.blockingId === this.id
+    ) {
+      await BlockingProcessManager.gate.promise;
+    }
     BlockingProcessManager.completedCalls++;
     this.update((draft) =>
       Object.assign(
@@ -1430,11 +1344,10 @@ describe("repository signal routing", () => {
       })
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1448,21 +1361,185 @@ describe("repository signal routing", () => {
     await completion;
 
     expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
     await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-TaskExec" } }]);
-    await expect(storage.readHistory("task-exec")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-exec",
-        version: 1n,
-        state: {
-          id: "task-exec",
-          name: "TaskExec (applied)",
-          archived: true,
-        },
-      },
-      events: [],
+    await expect(storage.readEvents("task-exec")).resolves.toMatchObject([
+      { id: { value: "event-TaskExec" } },
+    ]);
+    await expect(storage.readCurrent("task-exec")).resolves.toMatchObject({
+      entityId: "task-exec",
+      version: 1n,
+      state: { id: "task-exec", name: "TaskExec (applied)", archived: true },
     });
     expect(observed).toEqual(["event-TaskExec"]);
+  });
+
+  it("keeps state-history retention disabled by default across repository families", async () => {
+    const aggregateFactory = new InMemoryStorageFactory();
+    const aggregateContext = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(aggregateFactory)
+      .build();
+    const aggregateStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: aggregateFactory,
+      stateSchema: AggregateStateSchema,
+    });
+
+    try {
+      await aggregateContext
+        .commandBus()
+        .post(createAggregateCommand("command-history-default-aggregate", "history-aggregate"));
+      await expect(aggregateStorage.readStates("history-aggregate")).resolves.toEqual([]);
+    } finally {
+      await aggregateContext.close();
+    }
+
+    const projectionFactory = new InMemoryStorageFactory();
+    const projectionContext = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(projectionFactory)
+      .build();
+    const projectionStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: projectionFactory,
+      stateSchema: ProjectionStateSchema,
+    });
+
+    try {
+      await projectionContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-default-projection", "history-projection"));
+      await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
+    } finally {
+      await projectionContext.close();
+    }
+
+    const processManagerFactory = new InMemoryStorageFactory();
+    const processManagerContext = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .withStorageFactory(processManagerFactory)
+      .build();
+    const processManagerStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: processManagerFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+
+    try {
+      await processManagerContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-default-pm", "history-pm"));
+      await expect(processManagerStorage.readStates("history-pm")).resolves.toEqual([]);
+    } finally {
+      await processManagerContext.close();
+    }
+  });
+
+  it("retains state history while enabled and preserves existing rows after disablement", async () => {
+    const aggregateFactory = new InMemoryStorageFactory();
+    const aggregateRepository = createExecutingRepository();
+    aggregateRepository.setStateHistoryEnabled(true);
+    const aggregateContext = BoundedContext.singleTenant("Tasks")
+      .add(aggregateRepository)
+      .withStorageFactory(aggregateFactory)
+      .build();
+    const aggregateStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: aggregateFactory,
+      stateSchema: AggregateStateSchema,
+    });
+
+    try {
+      await aggregateContext
+        .commandBus()
+        .post(
+          createAggregateCommand(
+            "command-history-enabled-aggregate",
+            "history-aggregate",
+            "History first",
+          ),
+        );
+      aggregateRepository.setStateHistoryEnabled(false);
+      await aggregateContext
+        .commandBus()
+        .post(
+          createAggregateCommand(
+            "command-history-disabled-aggregate",
+            "history-aggregate",
+            "History second",
+          ),
+        );
+      await expect(aggregateStorage.readStates("history-aggregate")).resolves.toMatchObject([
+        { version: 1n, state: { name: "History first (applied)" } },
+      ]);
+    } finally {
+      await aggregateContext.close();
+    }
+
+    const projectionFactory = new InMemoryStorageFactory();
+    const projectionRepository = createExecutingProjectionRepository();
+    projectionRepository.setStateHistoryEnabled(true);
+    const projectionContext = BoundedContext.singleTenant("Tasks")
+      .add(projectionRepository)
+      .withStorageFactory(projectionFactory)
+      .build();
+    const projectionStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: projectionFactory,
+      stateSchema: ProjectionStateSchema,
+    });
+
+    try {
+      await projectionContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-enabled-projection", "history-projection"));
+      projectionRepository.setStateHistoryEnabled(false);
+      await projectionContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-disabled-projection", "history-projection"));
+      await expect(projectionStorage.readStates("history-projection")).resolves.toMatchObject([
+        { version: 1n, state: { name: "Task (projected)" } },
+      ]);
+    } finally {
+      await projectionContext.close();
+    }
+
+    const processManagerFactory = new InMemoryStorageFactory();
+    const processManagerRepository = createProcessManagerReactRepository();
+    processManagerRepository.setStateHistoryEnabled(true);
+    const processManagerContext = BoundedContext.singleTenant("Tasks")
+      .add(processManagerRepository)
+      .withStorageFactory(processManagerFactory)
+      .build();
+    const processManagerStorage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: processManagerFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+
+    try {
+      await processManagerContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-enabled-pm", "history-pm"));
+      processManagerRepository.setStateHistoryEnabled(false);
+      await processManagerContext
+        .eventBus()
+        .post(createProjectionEvent("event-history-disabled-pm", "history-pm"));
+      await expect(processManagerStorage.readStates("history-pm")).resolves.toMatchObject([
+        { version: 1n, state: { queue: "Task reacted" } },
+      ]);
+    } finally {
+      await processManagerContext.close();
+    }
+  });
+
+  it("rejects a non-boolean state-history switch before a storage provider is bound", () => {
+    const repository = createExecutingRepository();
+
+    expect(() => {
+      repository.setStateHistoryEnabled("enabled" as never);
+    }).toThrow("Repository state-history switch requires a boolean.");
   });
 
   it("packs aggregate-returned domain events and owns the aggregate transaction", async () => {
@@ -1472,11 +1549,10 @@ describe("repository signal routing", () => {
       .add(createManagedRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1491,17 +1567,10 @@ describe("repository signal routing", () => {
         context: { version: { number: 1 } },
       },
     ]);
-    await expect(storage.readHistory("task-managed")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-managed",
-        version: 1n,
-        state: {
-          id: "task-managed",
-          name: "Managed (assigned)",
-          archived: false,
-        },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-managed")).resolves.toMatchObject({
+      entityId: "task-managed",
+      version: 1n,
+      state: { id: "task-managed", name: "Managed (assigned)", archived: false },
     });
   });
 
@@ -1516,11 +1585,10 @@ describe("repository signal routing", () => {
       })
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1528,21 +1596,18 @@ describe("repository signal routing", () => {
     await context
       .commandBus()
       .post(createAggregateCommand("command-existing", "task-rejected", "Persisted"));
-    const historyBeforeRejection = await storage.readHistory("task-rejected");
+    const currentBeforeRejection = await storage.readCurrent("task-rejected");
     const eventsBeforeRejection = await eventStore.read();
 
-    expect(historyBeforeRejection).toEqual({
-      snapshot: {
-        aggregateId: "task-rejected",
-        state: create(AggregateStateSchema, {
-          id: "task-rejected",
-          name: "Persisted (assigned)",
-          archived: false,
-        }),
-        version: 1n,
-        lifecycle: { archived: false, deleted: false },
-      },
-      events: [],
+    expect(currentBeforeRejection).toEqual({
+      entityId: "task-rejected",
+      state: create(AggregateStateSchema, {
+        id: "task-rejected",
+        name: "Persisted (assigned)",
+        archived: false,
+      }),
+      version: 1n,
+      lifecycle: { archived: false, deleted: false },
     });
     expect(eventsBeforeRejection).toHaveLength(1);
 
@@ -1585,7 +1650,7 @@ describe("repository signal routing", () => {
     });
     expect(readReadableProducerId(event)).toBe("task-rejected");
     expect(event?.context?.version).toBeUndefined();
-    await expect(storage.readHistory("task-rejected")).resolves.toEqual(historyBeforeRejection);
+    await expect(storage.readCurrent("task-rejected")).resolves.toEqual(currentBeforeRejection);
     const [failure] = await waitForFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "command-rejected-1" } },
@@ -1594,7 +1659,7 @@ describe("repository signal routing", () => {
     ManagedTaskAggregate.reset();
   });
 
-  it("posts an applier-based aggregate rejection without applying or persisting output", async () => {
+  it("posts a rejected aggregate command without directly updating or persisting output", async () => {
     const rejection = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-applier-rejected" }),
     });
@@ -1604,11 +1669,10 @@ describe("repository signal routing", () => {
       .add(createExecutingRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1618,14 +1682,11 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-applier-rejected", "task-applier-rejected")),
     ).resolves.toBeUndefined();
 
-    expect(ExecutingTaskAggregate.applierCalls).toBe(0);
+    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(0);
     await expect(waitForStoredEvents(eventStore, 1)).resolves.toMatchObject([
       { id: { value: "command-applier-rejected-1" } },
     ]);
-    await expect(storage.readHistory("task-applier-rejected")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
+    await expect(storage.readCurrent("task-applier-rejected")).resolves.toBeUndefined();
     ExecutingTaskAggregate.reset();
   });
 
@@ -1769,11 +1830,10 @@ describe("repository signal routing", () => {
       })
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1824,17 +1884,10 @@ describe("repository signal routing", () => {
         }),
       }),
     });
-    await expect(storage.readHistory("task-reactor")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-reactor",
-        version: 1n,
-        state: {
-          id: "task-reactor",
-          name: "Task (reacted)",
-          archived: false,
-        },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-reactor")).resolves.toMatchObject({
+      entityId: "task-reactor",
+      version: 1n,
+      state: { id: "task-reactor", name: "Task (reacted)", archived: false },
     });
     await waitForCondition(() => observed.length === 1);
     expect(observed).toEqual(["event-reactor-source-1"]);
@@ -1972,40 +2025,16 @@ describe("repository signal routing", () => {
     expect(commands[0]?.id).toEqual(create(CommandIdSchema, { uuid: "event-command-close-1" }));
   });
 
-  it("rejects managed aggregate event reactors with unsnapshotted history", async () => {
-    const factory = new InMemoryStorageFactory();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-    await storage.appendEvents("task-reactor-history", [
-      createAggregateEvent("event-existing-unsnapshotted", "task-reactor-history", 1),
-    ]);
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .withStorageFactory(factory)
-      .build();
-
-    await expect(
-      context
-        .eventBus()
-        .post(createProjectionEvent("event-reactor-history", "task-reactor-history")),
-    ).rejects.toThrow("Managed aggregate history has unsnapshotted events.");
-  });
-
-  it("uses one dispatch version for multiple managed aggregate events", async () => {
+  it("assigns sequential producer versions to multiple direct aggregate events", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMultiManagedRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -2015,19 +2044,12 @@ describe("repository signal routing", () => {
 
     await expect(eventStore.read()).resolves.toMatchObject([
       { id: { value: "command-managed-multi-1" }, context: { version: { number: 1 } } },
-      { id: { value: "command-managed-multi-2" }, context: { version: { number: 1 } } },
+      { id: { value: "command-managed-multi-2" }, context: { version: { number: 2 } } },
     ]);
-    await expect(storage.readHistory("task-managed-multi")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-managed-multi",
-        version: 1n,
-        state: {
-          id: "task-managed-multi",
-          name: "Multi two (assigned)",
-          archived: false,
-        },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-managed-multi")).resolves.toMatchObject({
+      entityId: "task-managed-multi",
+      version: 2n,
+      state: { id: "task-managed-multi", name: "Multi two (assigned)", archived: false },
     });
   });
 
@@ -2045,7 +2067,7 @@ describe("repository signal routing", () => {
     await expect(eventStore.read()).resolves.toEqual([]);
   });
 
-  it("rejects framework event envelopes returned from managed aggregate handlers", async () => {
+  it("persists explicit framework event envelopes returned by managed aggregate handlers", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createEnvelopeManagedRepository())
@@ -2055,121 +2077,8 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
-    ).rejects.toThrow(/cannot pack event message "spine\.core\.Event"/);
-    await expect(eventStore.read()).resolves.toEqual([]);
-  });
-
-  it("does not append or dispatch managed aggregate events when snapshot writing fails", async () => {
-    const factory = new SnapshotFailingStorageFactory();
-    const observed: string[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-managed-fails", "task-managed-fails")),
-    ).rejects.toThrow("Cannot write aggregate snapshot.");
-
-    await expect(eventStore.read()).resolves.toEqual([]);
-    expect(observed).toEqual([]);
-  });
-
-  it("does not write managed aggregate snapshots when event append validation fails", async () => {
-    const factory = new InMemoryStorageFactory();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    await eventStore.append(createAggregateEvent("command-duplicate-1", "other-task", 1, "Other"));
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .withStorageFactory(factory)
-      .build();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-duplicate", "task-duplicate")),
-    ).rejects.toThrow("Aggregate event IDs must be unique before append.");
-
-    await expect(storage.readHistory("task-duplicate")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "command-duplicate-1" } },
-    ]);
-  });
-
-  it("does not write managed aggregate snapshots when event append storage fails", async () => {
-    const factory = new EventFailingFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .withStorageFactory(factory)
-      .build();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-append-fails", "task-append")),
-    ).rejects.toThrow("Cannot append aggregate event.");
-
-    await expect(storage.readHistory("task-append")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-  });
-
-  it("reports snapshot and rollback failures for multi-event managed aggregates", async () => {
-    const factory = new DeleteFailingFactory("command-rollback-2");
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createMultiManagedRepository())
-      .withStorageFactory(factory)
-      .build();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-rollback", "task-rollback")),
-    ).rejects.toMatchObject({
-      message: "Managed aggregate persistence failed and event rollback failed.",
-      errors: [
-        expect.objectContaining({ message: "Cannot write aggregate snapshot." }),
-        expect.objectContaining({ message: "Cannot delete aggregate event." }),
-      ],
-    });
-
-    await expect(storage.readHistory("task-rollback")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [{ id: { value: "command-rollback-2" }, context: { version: { number: 1 } } }],
-    });
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "command-rollback-2" } },
-    ]);
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-after-rollback", "task-rollback")),
-    ).rejects.toThrow("Managed aggregate history has unsnapshotted events.");
+    ).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "spoofed-event" } }]);
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
@@ -2186,7 +2095,7 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-after-registration-failure", "task-after-failure"));
 
     expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
   });
 
   it("keeps a reentrantly registered repository executable after failed outer cleanup", async () => {
@@ -2214,7 +2123,7 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-after-reentrant-failure", "task-reentrant"));
 
     expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
-    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+    expect(ExecutingTaskAggregate.directUpdateCalls).toBe(1);
   });
 
   it("persists array command output with sequential aggregate versions", async () => {
@@ -2224,11 +2133,10 @@ describe("repository signal routing", () => {
       .add(createExecutingRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
 
     await context.commandBus().post(createAggregateCommand("command-multi", "task-multi", "Multi"));
@@ -2239,17 +2147,10 @@ describe("repository signal routing", () => {
       { id: { value: "event-Multi-1" }, context: { version: { number: 1 } } },
       { id: { value: "event-Multi-2" }, context: { version: { number: 2 } } },
     ]);
-    await expect(storage.readHistory("task-multi")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-multi",
-        version: 2n,
-        state: {
-          id: "task-multi",
-          name: "Multi two (applied)",
-          archived: true,
-        },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-multi")).resolves.toMatchObject({
+      entityId: "task-multi",
+      version: 2n,
+      state: { id: "task-multi", name: "Multi two (applied)", archived: true },
     });
   });
 
@@ -2259,11 +2160,10 @@ describe("repository signal routing", () => {
       .add(createAsyncAssigneeRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
 
     const completion = context
@@ -2271,89 +2171,16 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-async", "task-async", "Async"));
 
     await Promise.resolve();
-    await expect(storage.readHistory("task-async")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
+    await expect(storage.readCurrent("task-async")).resolves.toBeUndefined();
 
     AsyncAssigneeAggregate.resolveCommand?.("Async");
     await completion;
 
-    await expect(storage.readHistory("task-async")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-async",
-        version: 1n,
-        state: { name: "Async (applied)" },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-async")).resolves.toMatchObject({
+      entityId: "task-async",
+      version: 1n,
+      state: { name: "Async (applied)" },
     });
-  });
-
-  it("awaits async aggregate event appliers before storing snapshots", async () => {
-    AsyncApplierAggregate.reset();
-    const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createAsyncApplierRepository())
-      .withStorageFactory(factory)
-      .build();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-    let completed = false;
-
-    const completion = context
-      .commandBus()
-      .post(createAggregateCommand("command-async-applier", "task-async-applier", "AsyncApplier"))
-      .then(() => {
-        completed = true;
-      });
-
-    await AsyncApplierAggregate.started.promise;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 0);
-    });
-
-    expect(completed).toBe(false);
-    await expect(storage.readHistory("task-async-applier")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-
-    AsyncApplierAggregate.gate.resolve();
-    await completion;
-
-    await expect(storage.readHistory("task-async-applier")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-async-applier",
-        version: 1n,
-        state: { name: "AsyncApplier (async applied)" },
-      },
-      events: [],
-    });
-  });
-
-  it("rejects aggregate command completion when an async event applier rejects", async () => {
-    AsyncApplierAggregate.reset();
-    AsyncApplierAggregate.rejection = new Error("async applier failed");
-    const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createAsyncApplierRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    const completion = context
-      .commandBus()
-      .post(createAggregateCommand("command-async-applier-fails", "task-async-applier-fails"));
-
-    await AsyncApplierAggregate.started.promise;
-    AsyncApplierAggregate.gate.resolve();
-
-    await expect(completion).rejects.toThrow("async applier failed");
-    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
@@ -2371,11 +2198,10 @@ describe("repository signal routing", () => {
       })
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -2386,12 +2212,9 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
 
     await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
-    await expect(storage.readHistory("task-dispatch")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-dispatch",
-        version: 1n,
-      },
-      events: [],
+    await expect(storage.readCurrent("task-dispatch")).resolves.toMatchObject({
+      entityId: "task-dispatch",
+      version: 1n,
     });
     await withTimeout(
       dispatchAttempted.promise,
@@ -2406,33 +2229,7 @@ describe("repository signal routing", () => {
     expect(failure?.error).not.toBe(dispatchFailure);
   });
 
-  it("dispatches appended events when snapshot writing fails but rejects command completion", async () => {
-    const factory = new SnapshotFailingStorageFactory();
-    const observed: string[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema],
-        dispatch: (event) => {
-          observed.push(event.id?.value ?? "missing");
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-snapshot-fails", "task-snapshot-fails")),
-    ).rejects.toThrow("Cannot write aggregate snapshot.");
-
-    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
-    expect(observed).toEqual(["event-Task"]);
-  });
-
-  it("does not block the outer command on nested commands posted from stored-event dispatch", async () => {
+  it("does not wait for stored-event dispatch when completing an outer command", async () => {
     const factory = new InMemoryStorageFactory();
     const nestedGate = createSignal();
     const nestedPosted = createSignal();
@@ -2477,7 +2274,7 @@ describe("repository signal routing", () => {
       });
 
     await nestedPosted.promise;
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(outerResolved).toBe(true);
 
     nestedGate.resolve();
@@ -2504,7 +2301,7 @@ describe("repository signal routing", () => {
     ]);
   });
 
-  it("rejects malformed aggregate command output before storage", async () => {
+  it("preserves a returned framework envelope without reconstructing aggregate state", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMalformedEventRepository())
@@ -2514,8 +2311,8 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
-    ).rejects.toThrow(/event.message.typeUrl/);
-    await expect(eventStore.read()).resolves.toEqual([]);
+    ).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-malformed" } }]);
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
@@ -2542,11 +2339,10 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
 
     await expect(
@@ -2559,156 +2355,7 @@ describe("repository signal routing", () => {
     });
 
     await expect(eventStore.read()).resolves.toEqual([]);
-    await expect(storage.readHistory("task-transition-invalid")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-  });
-
-  it("rejects rolled-back state-transition validation failures before storage", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createRollingBackTransitionRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-transition-rollback", "task-transition-rollback")),
-    ).rejects.toMatchObject({
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-      clientMessage: "Command state transition validation failed.",
-    });
-
-    await expect(eventStore.read()).resolves.toEqual([]);
-    await expect(storage.readHistory("task-transition-rollback")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-  });
-
-  it("rejects restarted transition failures before storage", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createRestartingTransitionRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-transition-restart", "task-transition-restart")),
-    ).rejects.toMatchObject({
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-      clientMessage: "Command state transition validation failed.",
-    });
-
-    await expect(eventStore.read()).resolves.toEqual([]);
-    await expect(storage.readHistory("task-transition-restart")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [],
-    });
-  });
-
-  it("protects transition validation details from handler mutation", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createMutatingRejectedRepository())
-      .build();
-
-    let rejection: unknown;
-    try {
-      await context
-        .commandBus()
-        .post(createAggregateCommand("command-transition-mutated", "task-transition-mutated"));
-    } catch (error) {
-      rejection = error;
-    }
-
-    expect(rejection).toMatchObject({
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-      clientMessage: "Command state transition validation failed.",
-    });
-    expect(readTransitionViolations(rejection)).toBeGreaterThan(0);
-  });
-
-  it("reports invalid stored history as aggregate replay failure", async () => {
-    const factory = new InMemoryStorageFactory();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createTransitionViolatingRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await storage.appendEvents("task-replay-invalid", [
-      createAggregateEvent("event-replay-invalid", "task-replay-invalid", 1, "BrokenHistory"),
-    ]);
-
-    let rejection: unknown;
-    try {
-      await context
-        .commandBus()
-        .post(createAggregateCommand("command-after-broken-history", "task-replay-invalid"));
-    } catch (error) {
-      rejection = error;
-    }
-
-    expect(rejection).toMatchObject({ name: "ReplayError" });
-    expect(rejection).not.toMatchObject({
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-    });
-    await expect(eventStore.read()).resolves.toHaveLength(1);
-  });
-
-  it("reports restarted replay failures as aggregate replay failure", async () => {
-    const factory = new InMemoryStorageFactory();
-    const storage = new AggregateStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
-    });
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createRestartingTransitionRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await storage.appendEvents("task-replay-restart", [
-      createAggregateEvent("event-replay-restart", "task-replay-restart", 1, "BrokenHistory"),
-    ]);
-
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-after-restart-history", "task-replay-restart")),
-    ).rejects.toMatchObject({ name: "ReplayError" });
-
-    await expect(eventStore.read()).resolves.toHaveLength(1);
-    await expect(storage.readHistory("task-replay-restart")).resolves.toMatchObject({
-      snapshot: undefined,
-      events: [{ id: { value: "event-replay-restart" } }],
-    });
+    await expect(storage.readCurrent("task-transition-invalid")).resolves.toBeUndefined();
   });
 
   it("clears rejected transition markers when a fresh transaction succeeds", async () => {
@@ -2717,11 +2364,10 @@ describe("repository signal routing", () => {
       .add(createRecoveringTransitionRepository())
       .withStorageFactory(factory)
       .build();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
 
     await expect(
@@ -2730,16 +2376,10 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-transition-recovers", "task-recovers")),
     ).resolves.toBeUndefined();
 
-    await expect(storage.readHistory("task-recovers")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "task-recovers",
-        version: 1n,
-        state: {
-          id: "task-recovers",
-          name: "Task recovered",
-        },
-      },
-      events: [],
+    await expect(storage.readCurrent("task-recovers")).resolves.toMatchObject({
+      entityId: "task-recovers",
+      version: 1n,
+      state: { id: "task-recovers", name: "Task recovered" },
     });
   });
 
@@ -2749,17 +2389,15 @@ describe("repository signal routing", () => {
       .add(createExecutingRepository())
       .withStorageFactory(factory)
       .build();
-    const tenantAStorage = new AggregateStorage({
+    const tenantAStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
-    const tenantBStorage = new AggregateStorage({
+    const tenantBStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
 
     await context
@@ -2769,19 +2407,15 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-tenant-b", "shared-task", "TenantB", "tenant-b"));
 
-    await expect(tenantAStorage.readHistory("shared-task")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "shared-task",
-        version: 1n,
-        state: { name: "TenantA (applied)" },
-      },
+    await expect(tenantAStorage.readCurrent("shared-task")).resolves.toMatchObject({
+      entityId: "shared-task",
+      version: 1n,
+      state: { name: "TenantA (applied)" },
     });
-    await expect(tenantBStorage.readHistory("shared-task")).resolves.toMatchObject({
-      snapshot: {
-        aggregateId: "shared-task",
-        version: 1n,
-        state: { name: "TenantB (applied)" },
-      },
+    await expect(tenantBStorage.readCurrent("shared-task")).resolves.toMatchObject({
+      entityId: "shared-task",
+      version: 1n,
+      state: { name: "TenantB (applied)" },
     });
   });
 
@@ -2814,14 +2448,13 @@ describe("repository signal routing", () => {
 
   it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
     const factory = new InMemoryStorageFactory();
-    const storage = new AggregateStorage({
+    const storage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
-      eventSchemas: [AggregateStateSchema],
     });
-    await storage.writeSnapshot({
-      aggregateId: "task-overflow",
+    await storage.writeCurrent({
+      entityId: "task-overflow",
       state: create(AggregateStateSchema, {
         id: "task-overflow",
         name: "Overflow",
@@ -3901,6 +3534,352 @@ describe("repository signal routing", () => {
     expect(later?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));
   });
 
+  it("guards each target of a multi-target Process Manager route independently", async () => {
+    SplitRouteProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createGuardedSplitPmRepo();
+    const routeEvent = repository.routeEvent.bind(repository);
+    Object.assign(repository, {
+      routeEvent(event: SpineEvent) {
+        return { ...routeEvent(event), entityIds: Object.freeze(["pm-one", "pm-two"]) };
+      },
+    });
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
+
+    const event = createProjectionEvent("event-pm-guarded-many", "pm-source");
+    await dispatcher.dispatch(event);
+    await dispatcher.dispatch(event);
+
+    expect(SplitRouteProcessManager.startedIds).toEqual(["pm-one", "pm-two"]);
+    expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
+  });
+
+  it("guards every routed Aggregate target with a durable marker after lane eviction", async () => {
+    GuardedAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createGuardedAggregateRepository();
+    const routeEvent = repository.routeEvent.bind(repository);
+    Object.assign(repository, {
+      routeEvent(event: SpineEvent) {
+        const entityIds =
+          event.id?.value === "event-aggregate-guarded-other"
+            ? ["aggregate-other"]
+            : ["aggregate-one", "aggregate-two"];
+        return { ...routeEvent(event), entityIds: Object.freeze(entityIds) };
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+
+    const event = createProjectionEvent("event-aggregate-guarded-many", "aggregate-source");
+    await dispatcher.dispatch(event);
+    await dispatcher.dispatch(
+      createProjectionEvent("event-aggregate-guarded-other", "aggregate-other"),
+    );
+    await dispatcher.dispatch(event);
+
+    expect(GuardedAggregate.calls).toBe(3);
+    const journal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    await expect(journal.readEvents("aggregate-one")).resolves.toMatchObject([
+      { id: { value: "event-aggregate-guarded-many.guard.string%3Aaggregate-one" } },
+    ]);
+    await expect(journal.readEvents("aggregate-two")).resolves.toMatchObject([
+      { id: { value: "event-aggregate-guarded-many.guard.string%3Aaggregate-two" } },
+    ]);
+    await context.close();
+  });
+
+  it("suppresses a multi-target producing Aggregate event after a fresh-runtime restart", async () => {
+    ProducingGuardedAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const event = createProjectionEvent("event-aggregate-restart", "aggregate-restart-source");
+
+    const firstRepository = createProducingGuardedAggregateRepository();
+    routeAggregateTargets(firstRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
+    const firstContext = BoundedContext.singleTenant("Tasks")
+      .add(firstRepository)
+      .withStorageFactory(factory)
+      .build();
+    const firstDispatcher = repositoryAccess.eventDispatcher(firstRepository);
+    if (firstDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    await firstDispatcher.dispatch(event);
+    await firstContext.close();
+
+    const journal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    await expect(journal.readEvents("aggregate-restart-one")).resolves.toHaveLength(2);
+    await expect(journal.readEvents("aggregate-restart-two")).resolves.toHaveLength(2);
+
+    const secondRepository = createProducingGuardedAggregateRepository();
+    routeAggregateTargets(secondRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
+    const secondContext = BoundedContext.singleTenant("Tasks")
+      .add(secondRepository)
+      .withStorageFactory(factory)
+      .build();
+    const secondDispatcher = repositoryAccess.eventDispatcher(secondRepository);
+    if (secondDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    await secondDispatcher.dispatch(event);
+
+    expect(ProducingGuardedAggregate.calls).toBe(2);
+    await expect(journal.readEvents("aggregate-restart-one")).resolves.toHaveLength(2);
+    await expect(journal.readEvents("aggregate-restart-two")).resolves.toHaveLength(2);
+    await secondContext.close();
+  });
+
+  it("closes guard probe handles for both entity kinds on success, duplicates, and failures", async () => {
+    const aggregateFactory = new CountingProbeStorageFactory();
+    const aggregateRepository = createGuardedAggregateRepository();
+    const aggregateContext = BoundedContext.singleTenant("Tasks")
+      .add(aggregateRepository)
+      .withStorageFactory(aggregateFactory)
+      .build();
+    const aggregateDispatcher = repositoryAccess.eventDispatcher(aggregateRepository);
+    if (aggregateDispatcher === undefined)
+      throw new Error("Expected an aggregate event dispatcher.");
+    const aggregateEvent = createProjectionEvent("event-aggregate-probe", "aggregate-probe");
+
+    await aggregateDispatcher.dispatch(aggregateEvent);
+    expect(aggregateFactory.closedProbes).toBe(1);
+    await aggregateDispatcher.dispatch(
+      createProjectionEvent("event-aggregate-probe-other", "aggregate-probe-other"),
+    );
+    expect(aggregateFactory.closedProbes).toBe(2);
+    await aggregateDispatcher.dispatch(aggregateEvent);
+    expect(aggregateFactory.closedProbes).toBe(3);
+    await aggregateContext.close();
+
+    const pmFactory = new CountingProbeStorageFactory();
+    const pmRepository = createGuardedProcessManagerReactRepository(1);
+    const pmContext = BoundedContext.singleTenant("Tasks")
+      .add(pmRepository)
+      .withStorageFactory(pmFactory)
+      .build();
+    const pmDispatcher = repositoryAccess.eventDispatcher(pmRepository);
+    if (pmDispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
+    const pmEvent = createProjectionEvent("event-pm-probe", "pm-probe");
+
+    await pmDispatcher.dispatch(pmEvent);
+    expect(pmFactory.closedProbes).toBe(1);
+    await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-other", "pm-probe-other"));
+    expect(pmFactory.closedProbes).toBe(2);
+    await pmDispatcher.dispatch(pmEvent);
+    expect(pmFactory.closedProbes).toBe(2);
+    await pmContext.close();
+
+    const failingFactory = new CountingProbeStorageFactory(true);
+    const failingRepository = createGuardedAggregateRepository();
+    const failingContext = BoundedContext.singleTenant("Tasks")
+      .add(failingRepository)
+      .withStorageFactory(failingFactory)
+      .build();
+    const failingDispatcher = repositoryAccess.eventDispatcher(failingRepository);
+    if (failingDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+
+    await expect(
+      failingDispatcher.dispatch(
+        createProjectionEvent("event-aggregate-probe-fail", "aggregate-probe-fail"),
+      ),
+    ).rejects.toThrow("guard probe read failed");
+    expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
+    await failingContext.close();
+  });
+
+  it("bounds guard lanes while a retained journal marker suppresses a duplicate after lane eviction", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createGuardedProcessManagerReactRepository(1);
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
+
+    const first = createProjectionEvent("event-guard-depth-first", "pm-guard-depth-first");
+    const second = createProjectionEvent("event-guard-depth-second", "pm-guard-depth-second");
+    await dispatcher.dispatch(first);
+    await dispatcher.dispatch(second);
+    await dispatcher.dispatch(first);
+
+    expect(RoutingProcessManager.eventCalls).toBe(2);
+    const journal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+    await expect(journal.readEvents("pm-guard-depth-first")).resolves.toMatchObject([
+      { id: { value: "event-guard-depth-first.guard.string%3Apm-guard-depth-first" } },
+    ]);
+    await expect(journal.readEvents("pm-guard-depth-second")).resolves.toMatchObject([
+      { id: { value: "event-guard-depth-second.guard.string%3Apm-guard-depth-second" } },
+    ]);
+  });
+
+  it("clears completed guard state on runtime rebind and consults the newly bound journal", async () => {
+    RoutingProcessManager.reset();
+    const repository = createGuardedProcessManagerReactRepository();
+    const firstFactory = new InMemoryStorageFactory();
+    const firstContext = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(firstFactory)
+      .build();
+    const event = createProjectionEvent("event-guard-rebind", "pm-guard-rebind");
+
+    const firstDispatcher = repositoryAccess.eventDispatcher(repository);
+    if (firstDispatcher === undefined)
+      throw new Error("Expected a process-manager event dispatcher.");
+    await firstDispatcher.dispatch(event);
+    await firstContext.close();
+
+    const secondFactory = new InMemoryStorageFactory();
+    const secondContext = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(secondFactory)
+      .build();
+    const secondDispatcher = repositoryAccess.eventDispatcher(repository);
+    if (secondDispatcher === undefined)
+      throw new Error("Expected a process-manager event dispatcher.");
+    await secondDispatcher.dispatch(event);
+    await secondDispatcher.dispatch(event);
+
+    expect(RoutingProcessManager.eventCalls).toBe(2);
+    const firstJournal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: firstFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+    const secondJournal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: secondFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+    await expect(firstJournal.readEvents("pm-guard-rebind")).resolves.toHaveLength(1);
+    await expect(secondJournal.readEvents("pm-guard-rebind")).resolves.toHaveLength(1);
+    await secondContext.close();
+  });
+
+  it("retries a pre-journal failure but treats a post-journal publication failure as duplicate", async () => {
+    const preJournalFactory = new InMemoryStorageFactory();
+    const preJournalRepository = createGuardedProcessManagerReactRepository();
+    RoutingProcessManager.reset(new Error("handler failed before journal"));
+    const preJournalContext = BoundedContext.singleTenant("Tasks")
+      .add(preJournalRepository)
+      .withStorageFactory(preJournalFactory)
+      .build();
+    const preJournalDispatcher = repositoryAccess.eventDispatcher(preJournalRepository);
+    if (preJournalDispatcher === undefined)
+      throw new Error("Expected a process-manager event dispatcher.");
+    const preJournalEvent = createProjectionEvent(
+      "event-guard-before-journal",
+      "pm-guard-before-journal",
+    );
+
+    await expect(preJournalDispatcher.dispatch(preJournalEvent)).rejects.toThrow(
+      "handler failed before journal",
+    );
+    const preJournal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: preJournalFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+    await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
+    RoutingProcessManager.reset();
+    await preJournalDispatcher.dispatch(preJournalEvent);
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toHaveLength(1);
+    await preJournalContext.close();
+
+    const postJournalFactory = new InMemoryStorageFactory();
+    const postJournalRepository = createGuardedProcessManagerCommandOnlyRepository();
+    let publicationAttempts = 0;
+    const postJournalContext = BoundedContext.singleTenant("Tasks")
+      .add(postJournalRepository)
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: () => {
+          publicationAttempts++;
+          return Promise.reject(new Error("publication failed after journal"));
+        },
+      })
+      .withStorageFactory(postJournalFactory)
+      .build();
+    const postJournalDispatcher = repositoryAccess.eventDispatcher(postJournalRepository);
+    if (postJournalDispatcher === undefined)
+      throw new Error("Expected a process-manager event dispatcher.");
+    const postJournalEvent = createProjectionEvent(
+      "event-guard-after-journal",
+      "pm-guard-after-journal",
+    );
+
+    RoutingProcessManager.reset();
+    await expect(postJournalDispatcher.dispatch(postJournalEvent)).rejects.toThrow(
+      "publication failed after journal",
+    );
+    await postJournalDispatcher.dispatch(postJournalEvent);
+    expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+    expect(publicationAttempts).toBe(1);
+    const postJournal = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: postJournalFactory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+    await expect(postJournal.readEvents("pm-guard-after-journal")).resolves.toMatchObject([
+      { id: { value: "event-guard-after-journal.guard.string%3Apm-guard-after-journal" } },
+    ]);
+    await postJournalContext.close();
+  });
+
+  it("runs unrelated guarded entity lanes concurrently", async () => {
+    BlockingProcessManager.reset();
+    BlockingProcessManager.blockingId = "pm-guard-lane-one";
+    const factory = new InMemoryStorageFactory();
+    const repository = createGuardedBlockingPmRepo();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const blockedRow = await storePmInboxEvent(
+      delivery,
+      createProjectionEvent("event-guard-lane-one", "pm-guard-lane-one"),
+      new Date("2026-07-24T19:00:00.000Z"),
+      1n,
+    );
+    const unrelatedRow = await storePmInboxEvent(
+      delivery,
+      createProjectionEvent("event-guard-lane-two", "pm-guard-lane-two"),
+      new Date("2026-07-24T19:00:01.000Z"),
+      2n,
+    );
+
+    const blocked = target.replay(blockedRow);
+    await waitForCondition(() => BlockingProcessManager.startedCalls === 1);
+    const unrelated = target.replay(unrelatedRow);
+
+    await waitForCondition(() => BlockingProcessManager.startedCalls === 2);
+    await expect(Promise.race([unrelated.then(() => "resolved"), delay(150)])).resolves.toBe(
+      "resolved",
+    );
+    BlockingProcessManager.release();
+    await expect(Promise.all([blocked, unrelated])).resolves.toEqual([undefined, undefined]);
+    expect(BlockingProcessManager.completedCalls).toBe(2);
+    await context.close();
+  });
+
   it("rejects invalid stored process-manager event rows before handler code", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -3968,6 +3947,29 @@ describe("repository signal routing", () => {
     );
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
+  });
+
+  it("guards repeated Process Manager inbox replay per target with the retained source event", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createGuardedProcessManagerReactRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const stored = await storePmInboxEvent(
+      delivery,
+      createProjectionEvent("event-pm-guarded-replay", "pm-guarded-replay"),
+      new Date("2026-07-08T09:05:30.000Z"),
+      1n,
+    );
+
+    await target.replay(stored);
+    await target.replay(stored);
+
+    expect(RoutingProcessManager.eventCalls).toBe(1);
   });
 
   it("executes process-manager event reactors and stores mutated state in Stand", async () => {
@@ -5076,6 +5078,151 @@ describe("repository signal routing", () => {
     expect(storedEvent?.id?.value).toBe("event-inbox");
   });
 
+  it("rejects malformed durable projection inbox rows before subscriber execution", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: factory,
+    });
+    const target = requireProjectionInboxTarget(repository);
+    const event = createProjectionEvent("event-projection-replay", "projection-replay", {
+      importTenantId: "tenant-a",
+    });
+    const valid = await storePmInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-24T21:20:00.000Z"),
+      1n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+    const { signal: ignoredSignal, ...missingSignal } = valid;
+    void ignoredSignal;
+    const tenantAOrigin = projectionEventOrigin({ importTenantId: "tenant-a" });
+    const undecodable = await storePmInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-24T21:20:01.000Z"),
+      2n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        signalId: "event-projection-replay-undecodable",
+        signal: create(AnySchema, {
+          typeUrl: deriveTypeUrl(EventSchema),
+          value: new Uint8Array([0]),
+        }),
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+    const invalidPayload = await storePmInboxEvent(
+      delivery,
+      packEvent({
+        id: create(EventIdSchema, { value: "event-projection-invalid-payload" }),
+        context: create(EventContextSchema, {
+          ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
+        }),
+        schema: ProjectionStateSchema,
+        message: create(ProjectionStateSchema, { id: "projection-replay", name: "Task" }),
+      }),
+      new Date("2026-07-24T21:20:02.000Z"),
+      3n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        signalId: "event-projection-replay-invalid-payload",
+        signal: packAny(
+          EventSchema,
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "event-projection-invalid-payload" }),
+            context: create(EventContextSchema, {
+              ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
+            }),
+            message: create(AnySchema, {
+              typeUrl: deriveTypeUrl(ProjectionStateSchema),
+              value: new Uint8Array([255]),
+            }),
+          }),
+          { validate: false },
+        ),
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+    const missingTenant = await storePmInboxEvent(
+      delivery,
+      createProjectionEvent("event-projection-missing-tenant", "projection-replay"),
+      new Date("2026-07-24T21:20:03.000Z"),
+      4n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        signalId: "event-projection-replay-missing-tenant",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+    const mismatchedTenant = await storePmInboxEvent(
+      delivery,
+      createProjectionEvent("event-projection-mismatched-tenant", "projection-replay", {
+        importTenantId: "tenant-b",
+      }),
+      new Date("2026-07-24T21:20:04.000Z"),
+      5n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        signalId: "event-projection-replay-mismatched-tenant",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+    const mismatchedTarget = await storePmInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-24T21:20:05.000Z"),
+      6n,
+      {
+        label: "UPDATE_SUBSCRIBER",
+        signalId: "event-projection-replay-mismatched-target",
+        targetId: "other-projection",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+    );
+
+    try {
+      await expect(target.replay({ ...valid, label: "REACT_UPON_EVENT" } as never)).rejects.toThrow(
+        'Projection inbox replay does not handle "REACT_UPON_EVENT" messages.',
+      );
+      await expect(target.replay(missingSignal as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay requires a readable stored event.",
+      );
+      await expect(target.replay(undecodable as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay requires a readable stored event.",
+      );
+      await expect(target.replay(invalidPayload as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay requires a readable event payload.",
+      );
+      await expect(target.replay(missingTenant as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay requires stored event tenant metadata.",
+      );
+      await expect(target.replay(mismatchedTenant as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay stored event tenant does not match.",
+      );
+      await expect(target.replay(mismatchedTarget as never, "tenant-a")).rejects.toThrow(
+        "Projection inbox replay stored target ID does not match the routed event.",
+      );
+
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+      await expect(
+        context.stand().read(ProjectionStateSchema, "projection-replay", { tenantId: "tenant-a" }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+
   it("deduplicates duplicate live projection delivery within the local retention window", async () => {
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
@@ -5887,7 +6034,6 @@ function createReactingProjectionRepository(): Repository<typeof ReactingTaskPro
 function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> {
   const handlers = defineEntityHandlers(ExecutingTaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
-    builder.apply(AggregateStateSchema, "applyTask"),
   ]);
 
   return new Repository({
@@ -5951,7 +6097,9 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
   });
 }
 
-function createGeneratedReactorRepository(): Repository<typeof GeneratedReactorAggregate> {
+function createGeneratedReactorRepository(
+  guarded = false,
+): Repository<typeof GeneratedReactorAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
     version: 1,
     entities: [
@@ -5975,6 +6123,66 @@ function createGeneratedReactorRepository(): Repository<typeof GeneratedReactorA
     entityType: GeneratedReactorAggregate,
     schema: AggregateStateSchema,
     handlers,
+    ...(guarded ? { doubleDispatchGuard: { depth: 1 } } : {}),
+  });
+}
+
+function createGuardedAggregateRepository(): Repository<typeof GuardedAggregate> {
+  const handlers = handlerMetadataAccess.defineArity(
+    GuardedAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactProjection")],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactProjection",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: GuardedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    doubleDispatchGuard: { depth: 1 },
+  });
+}
+
+function createProducingGuardedAggregateRepository(): Repository<typeof ProducingGuardedAggregate> {
+  const handlers = handlerMetadataAccess.defineArity(
+    ProducingGuardedAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactProjection")],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactProjection",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: ProducingGuardedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
+    doubleDispatchGuard: true,
+  });
+}
+
+function routeAggregateTargets(
+  repository: Repository<typeof ProducingGuardedAggregate>,
+  entityIds: readonly string[],
+): void {
+  const routeEvent = repository.routeEvent.bind(repository);
+  Object.assign(repository, {
+    routeEvent(event: SpineEvent) {
+      return { ...routeEvent(event), entityIds: Object.freeze([...entityIds]) };
+    },
   });
 }
 
@@ -6089,10 +6297,7 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
   const handlers = defineEntityHandlers(
     TransitionViolatingAggregate,
     AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
   );
 
   return new Repository({
@@ -6102,67 +6307,11 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
   });
 }
 
-function createRollingBackTransitionRepository(): Repository<
-  typeof RollingBackTransitionAggregate
-> {
-  const handlers = defineEntityHandlers(
-    RollingBackTransitionAggregate,
-    AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
-  );
-
-  return new Repository({
-    entityType: RollingBackTransitionAggregate,
-    schema: AggregateStateSchema,
-    handlers,
-  });
-}
-
-function createRestartingTransitionRepository(): Repository<typeof RestartingTransitionAggregate> {
-  const handlers = defineEntityHandlers(
-    RestartingTransitionAggregate,
-    AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
-  );
-
-  return new Repository({
-    entityType: RestartingTransitionAggregate,
-    schema: AggregateStateSchema,
-    handlers,
-  });
-}
-
-function createMutatingRejectedRepository(): Repository<typeof MutatingRejectedAggregate> {
-  const handlers = defineEntityHandlers(
-    MutatingRejectedAggregate,
-    AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
-  );
-
-  return new Repository({
-    entityType: MutatingRejectedAggregate,
-    schema: AggregateStateSchema,
-    handlers,
-  });
-}
-
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
   const handlers = defineEntityHandlers(
     RecoveringTransitionAggregate,
     AggregateStateSchema,
-    (builder) => [
-      builder.assign(AggregateStateSchema, "assignTask"),
-      builder.apply(AggregateStateSchema, "applyTask"),
-    ],
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
   );
 
   return new Repository({
@@ -6175,24 +6324,10 @@ function createRecoveringTransitionRepository(): Repository<typeof RecoveringTra
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
   const handlers = defineEntityHandlers(AsyncAssigneeAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
-    builder.apply(AggregateStateSchema, "applyTask"),
   ]);
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
-    schema: AggregateStateSchema,
-    handlers,
-  });
-}
-
-function createAsyncApplierRepository(): Repository<typeof AsyncApplierAggregate> {
-  const handlers = defineEntityHandlers(AsyncApplierAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-    builder.apply(AggregateStateSchema, "applyTask"),
-  ]);
-
-  return new Repository({
-    entityType: AsyncApplierAggregate,
     schema: AggregateStateSchema,
     handlers,
   });
@@ -6283,6 +6418,24 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
   });
 }
 
+function createGuardedProcessManagerReactRepository(
+  depth = 100,
+): Repository<typeof RoutingProcessManager> {
+  const handlers = defineEntityHandlers(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+    doubleDispatchGuard: { depth },
+  });
+}
+
 function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> {
   const handlers = defineEntityHandlers(
     InboxCheckingProcessManager,
@@ -6311,6 +6464,22 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   });
 }
 
+function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
+  const handlers = defineEntityHandlers(
+    BlockingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: BlockingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+    doubleDispatchGuard: true,
+  });
+}
+
 function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
   const handlers = defineEntityHandlers(
     SplitRouteProcessManager,
@@ -6322,6 +6491,21 @@ function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
     entityType: SplitRouteProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+  });
+}
+
+function createGuardedSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
+  const handlers = defineEntityHandlers(
+    SplitRouteProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+  return new Repository({
+    entityType: SplitRouteProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+    doubleDispatchGuard: true,
   });
 }
 
@@ -6396,6 +6580,32 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
     entityType: RoutingProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+  });
+}
+
+function createGuardedProcessManagerCommandOnlyRepository(): Repository<
+  typeof RoutingProcessManager
+> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.command(ProjectionStateSchema, "commandTask")],
+    [
+      {
+        kind: "command-reaction",
+        methodName: "commandTask",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    processManagerEventHistory: true,
+    doubleDispatchGuard: true,
   });
 }
 
@@ -6632,6 +6842,17 @@ function requireProcessManagerInboxTarget(repository: RepositoryView): {
   const target = repositoryAccess.processManagerInboxTarget(repository);
   if (target === undefined) {
     throw new Error("Expected a process-manager inbox target.");
+  }
+
+  return target;
+}
+
+function requireProjectionInboxTarget(repository: RepositoryView): {
+  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+} {
+  const target = repositoryAccess.projectionInboxTarget(repository);
+  if (target === undefined) {
+    throw new Error("Expected a projection inbox target.");
   }
 
   return target;
@@ -6877,13 +7098,6 @@ function readReadableProducerId(event: { readonly context?: unknown } | undefine
   );
 }
 
-function readTransitionViolations(error: unknown): number {
-  return (
-    (error as { readonly validationError?: { readonly constraintViolation?: readonly unknown[] } })
-      .validationError?.constraintViolation?.length ?? 0
-  );
-}
-
 function createSignal() {
   let resolve!: () => void;
   const promise = new Promise<void>((fulfill) => {
@@ -6996,47 +7210,150 @@ async function waitForFailure(
   return context.storedEventDispatchFailures();
 }
 
-class SnapshotFailingStorageFactory extends InMemoryStorageFactory {
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new SnapshotFailingRecordStorage(
-      context,
-      recordSpec,
-      super.onCreateRecordStorage(context, recordSpec),
-    );
+/** Test-only view of the shared current-record and diagnostic-event storage seam. */
+class CurrentRecordTestStorage<S extends Message = Message> {
+  readonly #factory: InMemoryStorageFactory;
+  readonly #input: EntityStorageInput<unknown, S>;
+
+  constructor(options: {
+    readonly context: StorageContext;
+    readonly storageFactory: InMemoryStorageFactory;
+    readonly stateSchema: GenMessage<S>;
+  }) {
+    this.#factory = options.storageFactory;
+    this.#input = {
+      context: options.context,
+      id: {
+        clone: (id) => structuredClone(id),
+        fingerprint: `${options.stateSchema.typeName}:repository-id:v1`,
+        key: (id) => canonicalTestEntityIdKey(id),
+      },
+      layout: "spine-ts.repository.entity-record.v1",
+      stateSchema: options.stateSchema,
+      storageKey: `${options.stateSchema.typeName}:entity`,
+    };
+  }
+
+  async readCurrent(id: unknown): Promise<
+    | {
+        readonly entityId: unknown;
+        readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
+        readonly state: S;
+        readonly version: bigint;
+      }
+    | undefined
+  > {
+    const storage = this.#open();
+    try {
+      const current = await storage.current.read(id);
+      return current === undefined
+        ? undefined
+        : {
+            entityId: current.id,
+            lifecycle: { archived: current.archived, deleted: current.deleted },
+            state: current.state,
+            version: current.version,
+          };
+    } finally {
+      storage.close();
+    }
+  }
+
+  async readEvents(id: unknown): Promise<readonly SpineEvent[]> {
+    const storage = this.#open();
+    try {
+      return await storage.events.backward(id, 10_000);
+    } finally {
+      storage.close();
+    }
+  }
+
+  async readStates(id: unknown): Promise<
+    readonly {
+      readonly entityId: unknown;
+      readonly state: S;
+      readonly version: bigint;
+    }[]
+  > {
+    const storage = this.#open();
+    try {
+      return await storage.states.backward(id, 10_000);
+    } finally {
+      storage.close();
+    }
+  }
+
+  async writeCurrent(current: {
+    readonly entityId: unknown;
+    readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
+    readonly state: S;
+    readonly version: bigint;
+  }): Promise<void> {
+    const storage = this.#open();
+    try {
+      await storage.current.write({
+        id: current.entityId,
+        state: current.state,
+        version: current.version,
+        archived: current.lifecycle.archived,
+        deleted: current.lifecycle.deleted,
+      });
+    } finally {
+      storage.close();
+    }
+  }
+
+  #open() {
+    return this.#factory.createEntityStorage(this.#input) as {
+      readonly current: {
+        read(id: unknown): Promise<
+          | {
+              readonly id: unknown;
+              readonly state: S;
+              readonly version: bigint;
+              readonly archived: boolean;
+              readonly deleted: boolean;
+            }
+          | undefined
+        >;
+        write(record: {
+          readonly id: unknown;
+          readonly state: S;
+          readonly version: bigint;
+          readonly archived: boolean;
+          readonly deleted: boolean;
+        }): Promise<void>;
+      };
+      readonly events: {
+        backward(id: unknown, depth: number): Promise<readonly SpineEvent[]>;
+      };
+      readonly states: {
+        backward(
+          id: unknown,
+          depth: number,
+        ): Promise<
+          readonly {
+            readonly entityId: unknown;
+            readonly state: S;
+            readonly version: bigint;
+          }[]
+        >;
+      };
+      close(): void;
+    };
   }
 }
 
-class EventFailingFactory extends InMemoryStorageFactory {
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new EventFailingStorage(
-      context,
-      recordSpec,
-      super.onCreateRecordStorage(context, recordSpec),
-    );
-  }
-}
-
-class DeleteFailingFactory extends InMemoryStorageFactory {
-  constructor(private readonly eventId: string) {
-    super();
-  }
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new DeleteFailingStorage(
-      context,
-      recordSpec,
-      super.onCreateRecordStorage(context, recordSpec),
-      this.eventId,
-    );
+function canonicalTestEntityIdKey(id: unknown): string {
+  if (id === null) return "null";
+  switch (typeof id) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      return `${typeof id}:${String(id)}`;
+    default:
+      return `json:${JSON.stringify(id)}`;
   }
 }
 
@@ -7052,6 +7369,70 @@ class ReentrantRegistrationStorageFactory extends InMemoryStorageFactory {
     const storage = super.onCreateRecordStorage(context, recordSpec);
     this.onCreate();
     return storage;
+  }
+}
+
+class CountingProbeStorageFactory extends InMemoryStorageFactory {
+  opened = 0;
+  closed = 0;
+  closedProbes = 0;
+
+  constructor(private readonly failRead = false) {
+    super();
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: unknown;
+      readonly states: unknown;
+      readonly events: {
+        append(record: {
+          readonly entityId: unknown;
+          readonly event: SpineEvent;
+          readonly producerVersion: bigint;
+          readonly createdAt: Message;
+        }): Promise<void>;
+        backward(
+          entityId: unknown,
+          depth: number,
+          startingFromVersion?: bigint,
+        ): Promise<readonly SpineEvent[]>;
+      };
+      close(): void;
+    };
+    this.opened++;
+    let closed = false;
+    let probed = false;
+
+    return {
+      current: storage.current,
+      states: storage.states,
+      events: {
+        append: (record: {
+          readonly entityId: unknown;
+          readonly event: SpineEvent;
+          readonly producerVersion: bigint;
+          readonly createdAt: Message;
+        }) => storage.events.append(record),
+        backward: (
+          entityId: unknown,
+          depth: number,
+          startingFromVersion?: bigint,
+        ): Promise<readonly SpineEvent[]> => {
+          probed = true;
+          if (this.failRead) return Promise.reject(new Error("guard probe read failed"));
+          return storage.events.backward(entityId, depth, startingFromVersion);
+        },
+      },
+      close: () => {
+        if (!closed) {
+          closed = true;
+          this.closed++;
+          if (probed) this.closedProbes++;
+        }
+        storage.close();
+      },
+    };
   }
 }
 
@@ -7115,157 +7496,5 @@ class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     this.operations.push("write");
     return this.delegate.write(record.record);
-  }
-}
-
-class SnapshotFailingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
-  constructor(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    private readonly delegate: RecordStorage<I, R>,
-  ) {
-    super(context, recordSpec);
-  }
-
-  protected deleteRecord(id: I): Promise<boolean> {
-    return this.delegate.delete(id);
-  }
-
-  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
-    return this.delegate.queryEntries(query);
-  }
-
-  protected readRecord(id: I): Promise<R | undefined> {
-    return this.delegate.read(id);
-  }
-
-  protected compareAndSetRecord(
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    return this.delegate.compareAndSet(id, expected?.record, next?.record);
-  }
-
-  protected writeAllRecords(
-    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
-  ): Promise<void> {
-    if (records.some((record) => record.record.$typeName === "google.protobuf.Any")) {
-      return Promise.reject(new Error("Cannot write aggregate snapshot."));
-    }
-    return this.delegate.writeAll(records.map((record) => record.record));
-  }
-
-  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    if (record.record.$typeName === "google.protobuf.Any") {
-      return Promise.reject(new Error("Cannot write aggregate snapshot."));
-    }
-    return this.delegate.write(record.record);
-  }
-}
-
-class EventFailingStorage<I, R extends Message> extends RecordStorage<I, R> {
-  constructor(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    private readonly delegate: RecordStorage<I, R>,
-  ) {
-    super(context, recordSpec);
-  }
-
-  protected deleteRecord(id: I): Promise<boolean> {
-    return this.delegate.delete(id);
-  }
-
-  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
-    return this.delegate.queryEntries(query);
-  }
-
-  protected readRecord(id: I): Promise<R | undefined> {
-    return this.delegate.read(id);
-  }
-
-  protected compareAndSetRecord(
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    return this.delegate.compareAndSet(id, expected?.record, next?.record);
-  }
-
-  protected writeAllRecords(
-    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
-  ): Promise<void> {
-    if (records.some((record) => record.record.$typeName === EventSchema.typeName)) {
-      return Promise.reject(new Error("Cannot append aggregate event."));
-    }
-    return this.delegate.writeAll(records.map((record) => record.record));
-  }
-
-  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    if (record.record.$typeName === EventSchema.typeName) {
-      return Promise.reject(new Error("Cannot append aggregate event."));
-    }
-    return this.delegate.write(record.record);
-  }
-}
-
-class DeleteFailingStorage<I, R extends Message> extends RecordStorage<I, R> {
-  constructor(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    private readonly delegate: RecordStorage<I, R>,
-    private readonly eventId: string,
-  ) {
-    super(context, recordSpec);
-  }
-
-  protected async deleteRecord(id: I): Promise<boolean> {
-    if (this.isTargetEvent(id)) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
-      throw new Error("Cannot delete aggregate event.");
-    }
-    return this.delegate.delete(id);
-  }
-
-  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
-    return this.delegate.queryEntries(query);
-  }
-
-  protected readRecord(id: I): Promise<R | undefined> {
-    return this.delegate.read(id);
-  }
-
-  protected compareAndSetRecord(
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    return this.delegate.compareAndSet(id, expected?.record, next?.record);
-  }
-
-  protected writeAllRecords(
-    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
-  ): Promise<void> {
-    if (records.some((record) => record.record.$typeName === "google.protobuf.Any")) {
-      return Promise.reject(new Error("Cannot write aggregate snapshot."));
-    }
-    return this.delegate.writeAll(records.map((record) => record.record));
-  }
-
-  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    if (record.record.$typeName === "google.protobuf.Any") {
-      return Promise.reject(new Error("Cannot write aggregate snapshot."));
-    }
-    return this.delegate.write(record.record);
-  }
-
-  private isTargetEvent(id: I): boolean {
-    return (
-      typeof id === "object" &&
-      id !== null &&
-      !Array.isArray(id) &&
-      Reflect.get(id, "value") === this.eventId
-    );
   }
 }

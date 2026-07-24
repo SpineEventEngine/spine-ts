@@ -55,7 +55,9 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         createdAt: timestamp(2),
       });
       await first.states.trim("task", 1);
-      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "2" }]);
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([
+        { state: { value: "2" } },
+      ]);
       await expect(second.events.backward("task", 1)).resolves.toMatchObject([
         { id: { value: "emulator-event" } },
       ]);
@@ -111,7 +113,9 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       release.resolve(undefined);
       await Promise.all([trim, append]);
       expect(transactionCount).toBeGreaterThanOrEqual(2);
-      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "3" }]);
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([
+        { state: { value: "3" } },
+      ]);
       await expect(
         second.events.append({
           entityId: "other-task",
@@ -144,7 +148,9 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
           createdAt: timestamp(version),
         });
       }
-      await expect(second.states.backward("task", 1)).resolves.toMatchObject([{ value: "132" }]);
+      await expect(second.states.backward("task", 1)).resolves.toMatchObject([
+        { state: { value: "132" } },
+      ]);
       await expect(second.states.backward("task", 129)).resolves.toHaveLength(129);
       const runQuery = secondClient.runQuery.bind(secondClient);
       const queries: Query[] = [];

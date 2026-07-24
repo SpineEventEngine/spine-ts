@@ -58,12 +58,27 @@ export async function assertEntityHistoryConformance(
   }
   const shortHistory = await storage.states.backward("task", 2);
   assert(
-    shortHistory[0]?.value === "120" && shortHistory[1]?.value === "119",
+    shortHistory[0]?.state.value === "120" && shortHistory[1]?.state.value === "119",
     "state history must be newest-first",
   );
   assert(
     (await storage.states.backward("task", 200, 120n)).length === 119,
     "state continuation must be exclusive",
+  );
+  const latestState = shortHistory[0];
+  assert(latestState.version === 120n, "state history must retain the exact version");
+  assert(
+    latestState.createdAt.seconds === 120n && latestState.createdAt.nanos === 0,
+    "state history must retain the exact timestamp",
+  );
+  const repeatedHistory = await storage.states.backward("task", 2);
+  const repeatedLatest = repeatedHistory[0];
+  assert(repeatedLatest !== undefined, "state history repeat read must return the latest record");
+  assert(
+    latestState !== repeatedLatest &&
+      latestState.state !== repeatedLatest.state &&
+      latestState.createdAt !== repeatedLatest.createdAt,
+    "state history reads must return independently cloned records",
   );
   assert(
     (await storage.states.stateAt("task", create(TimestampSchema, { seconds: 120n, nanos: 0 })))
