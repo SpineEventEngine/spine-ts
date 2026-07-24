@@ -155,3 +155,22 @@ integration but is not yet merged.
 - Typecheck, lint/cleanup, format, TypeDoc/API inventory, Proto integrity and
   generated cleanliness, and release readiness passed. Release readiness
   verified 19 package imports and 121 relative Markdown links.
+
+## Post-merge reliability re-review
+
+- Trigger: the first post-merge coverage gate exposed unhandled cancellation
+  rejections from a pending project-management subscription read after an
+  earlier protocol failure.
+- Existing role: `performance_reliability_reviewer`.
+- Expected model/reasoning: explicitly dispatched `gpt-5.6-terra` / `high`.
+- Scope: the focused `examples/project-management/src/load-runner.ts`
+  cancellation-observation correction and its exact full-coverage evidence.
+- Runtime metadata limitation: the Desktop surface exposes the immutable
+  configured role/profile but no independent child self-introspection.
+- Actual accepted metadata: existing `performance_reliability_reviewer`,
+  configured `gpt-5.6-terra` / `high`; independent runtime introspection is
+  unavailable.
+- Disposition: **CLEAN**. Immediate observation of the same pending promise
+  prevents cleanup-time unhandled rejection without changing the later awaited
+  error path. Earlier command/query failures remain failed users, iterator
+  return stays bounded, and no lifecycle or resource leak was found.

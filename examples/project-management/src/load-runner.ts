@@ -121,6 +121,7 @@ async function runUser(
       .activate(subscription, { signal: controller.signal })
       [Symbol.asyncIterator]();
     const firstUpdate = iterator.next();
+    void ignoreCancellation(firstUpdate);
     const submittedAt = performance.now();
     const acknowledgement = await withTimeout(
       commands.post(
@@ -247,6 +248,14 @@ function percentiles(values: readonly number[]): LatencyPercentiles {
 function percentile(sorted: readonly number[], ratio: number): number {
   if (sorted.length === 0) return 0;
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)] ?? 0;
+}
+
+async function ignoreCancellation(promise: Promise<unknown>): Promise<void> {
+  try {
+    await promise;
+  } catch {
+    // The pending subscription read can reject as expected during cleanup.
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
