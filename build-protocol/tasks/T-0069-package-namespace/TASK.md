@@ -26,7 +26,8 @@ one commit.
   scope when describing the cutover.
 - Keep pnpm and the existing workspace topology.
 - Add a deterministic release gate that rejects a live old-scope reference
-  outside the explicit historical-evidence boundary.
+  in committed/indexed repository artifacts outside the explicit
+  historical-evidence boundary; it must ignore untracked user scratch files.
 - Provide no compatibility alias, redirect package, `paths` mapping, or
   dual-scope export.
 - Prove package/export resolution, code generation, declarations, examples,

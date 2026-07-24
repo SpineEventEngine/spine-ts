@@ -95,3 +95,31 @@ mismatch or fallback was visible.
 | TypeScript and API compatibility | Clean        | Initial review found package/export/codegen contracts coherent.   |
 | Performance and reliability      | N/A          | Namespace and validation only; no runtime algorithm was changed.  |
 | Final security                   | N/A          | No trust boundary, secret, or authorization behavior was changed. |
+
+## Post-merge focused blocker
+
+- Post-merge verification found that the release gate included untracked files
+  through `git ls-files --others --exclude-standard`, allowing user-owned
+  scratch notes with historical scope text to fail release readiness.
+- The implementation correction limits the gate to `git ls-files --cached`,
+  preserving the existing `build-protocol/**` and `human-review-1-jul.md`
+  exclusions. A behavior-level fixture proves an untracked scratch Markdown
+  file is ignored, while the tracked legacy-source and entrypoint-rejection
+  tests remain effective.
+- Only style/maintainability is reopened: this changes deterministic scan
+  boundaries, not package identities, public declarations, or user guidance.
+
+## Post-merge Focused Review
+
+- Gate implementation: **Clean.** The reviewer confirmed that
+  `git ls-files --cached` limits validation to indexed repository artifacts,
+  untracked scratch files are ignored, and tracked legacy references still
+  fail through `runReleaseReadiness()` with path/line diagnostics.
+- One record-only **P2** found the work-log header still said `Complete` while
+  task/review records awaited focused review. The three durable statuses are
+  reconciled to `Complete` / `Clean` now that this review has returned.
+- Record-only status reconciliation is deterministic and does not reopen a
+  review lane.
+- The reviewer used the existing explicitly dispatched
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / `high` profile. Runtime
+  self-introspection was unavailable and no mismatch was visible.

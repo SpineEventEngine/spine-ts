@@ -8,7 +8,7 @@ const defaultImportTimeoutMs = 10_000;
 const legacyNamespace = "@spine-" + "ts/";
 
 function trackedLiveFiles(repoRoot) {
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+  return execFileSync("git", ["ls-files", "--cached"], {
     cwd: repoRoot,
     encoding: "utf8",
   })
