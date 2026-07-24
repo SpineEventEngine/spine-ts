@@ -193,9 +193,9 @@ describe("EntityColumn", () => {
     const uncaptured = { entries: definition.entries } as never;
     expect(EntityColumn.register(ProjectionStateSchema, uncaptured)).toBe(columns);
 
-    expect(() =>
-      EntityColumn.register(StringValueSchema, { entries: {} } as never),
-    ).toThrow('Entity column schema "google.protobuf.StringValue" must declare Entity kind.');
+    expect(() => EntityColumn.register(StringValueSchema, { entries: {} } as never)).toThrow(
+      'Entity column schema "google.protobuf.StringValue" must declare Entity kind.',
+    );
   });
 
   it("preserves declared value and operator types for generated metadata", () => {

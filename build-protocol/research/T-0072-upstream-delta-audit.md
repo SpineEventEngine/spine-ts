@@ -10,15 +10,15 @@ record, not evidence of live TS/JVM interoperability, which remains Wave 3.
 
 ## Disposition
 
-| JVM-facing concern | TypeScript disposition |
-| --- | --- |
+| JVM-facing concern        | TypeScript disposition                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Queryable entity families | Aggregate, Projection, and Process Manager state schemas generate `EntityColumn` definitions and execute through one current-record query seam. |
-| Current state authority | Durable current records own state, version, archived, and deleted values; no query index is authoritative. |
-| History | No remote history query is introduced. Local state/event history remains the existing provider-owned diagnostic seam. |
-| Query wire contract | `spine.client.Query` is unchanged and remains current-state-only. |
-| Legacy public names | Replaced atomically; no compatibility alias or migration reader is retained. |
-| Provider execution | Memory, Datastore, and MySQL use bounded candidates, decoded-state ID validation, and shared evaluation. |
-| Deferred work | Package publishing, deployment, and live JVM compatibility are Wave 3; human administration is Wave 4. |
+| Current state authority   | Durable current records own state, version, archived, and deleted values; no query index is authoritative.                                      |
+| History                   | No remote history query is introduced. Local state/event history remains the existing provider-owned diagnostic seam.                           |
+| Query wire contract       | `spine.client.Query` is unchanged and remains current-state-only.                                                                               |
+| Legacy public names       | Replaced atomically; no compatibility alias or migration reader is retained.                                                                    |
+| Provider execution        | Memory, Datastore, and MySQL use bounded candidates, decoded-state ID validation, and shared evaluation.                                        |
+| Deferred work             | Package publishing, deployment, and live JVM compatibility are Wave 3; human administration is Wave 4.                                          |
 
 ## Evidence
 

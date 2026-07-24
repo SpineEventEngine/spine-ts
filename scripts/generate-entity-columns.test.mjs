@@ -32,7 +32,14 @@ describe("Entity column companion generator", () => {
 
     expect(
       entityMessages(
-        { messages: [ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema, nested] },
+        {
+          messages: [
+            ProjectionStateSchema,
+            AggregateStateSchema,
+            ProcessManagerStateSchema,
+            nested,
+          ],
+        },
         spineOptions,
       ),
     ).toEqual([ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema]);

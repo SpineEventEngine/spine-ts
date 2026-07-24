@@ -8,13 +8,13 @@
 
 ## Consolidated correction dispositions
 
-| Lane | Finding | Disposition |
-| --- | --- | --- |
-| Reliability | Stand re-read rows after query evaluation, allowing update/delete interleaving to alter results. | Fixed: query entry records are now the result authority and deleted rows are excluded before evaluation order/limit. |
-| Reliability | Memory had unbounded default candidate materialization. | Fixed: 10,000 default and limit-plus-one iteration. |
-| API | Descriptor identity omitted selected ID field. | Fixed: the shared descriptor fingerprint includes the selected local ID field. |
-| Style/API | Residual internal projection-column names remained after the public rename. | Fixed in entity-column construction and generator names. |
-| Documentation | Generic-query/package wording lagged the all-three-kind behavior. | Updated in the T-0072 closure pass; API docs are mechanically checked. |
+| Lane          | Finding                                                                                          | Disposition                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Reliability   | Stand re-read rows after query evaluation, allowing update/delete interleaving to alter results. | Fixed: query entry records are now the result authority and deleted rows are excluded before evaluation order/limit. |
+| Reliability   | Memory had unbounded default candidate materialization.                                          | Fixed: 10,000 default and limit-plus-one iteration.                                                                  |
+| API           | Descriptor identity omitted selected ID field.                                                   | Fixed: the shared descriptor fingerprint includes the selected local ID field.                                       |
+| Style/API     | Residual internal projection-column names remained after the public rename.                      | Fixed in entity-column construction and generator names.                                                             |
+| Documentation | Generic-query/package wording lagged the all-three-kind behavior.                                | Updated in the T-0072 closure pass; API docs are mechanically checked.                                               |
 
 ## Mechanical evidence
 
@@ -97,11 +97,11 @@ integration but is not yet merged.
 
 ## Final affected-lane re-review disposition
 
-| Lane | Disposition | Evidence |
-| --- | --- | --- |
-| Style/maintainability | Accepted fixed. | Stand point reads now delegate to the same entry-result mapper used by queries; EntityColumn tests reside under `test/entity`. |
-| Documentation | Accepted fixed. | Query-facing Client TypeDoc, package/readme/guide wording, generated API inventory, and public test wording use generic Entity terminology. Subscription-specific Projection wording is intentionally retained. |
-| TypeScript/API | Accepted fixed. | `EntityRecordStorage.query()` remains required; the TypeDoc inventory now names the six Entity-prefixed exports; generated typecheck and Typedoc/API checks pass. |
+| Lane                    | Disposition     | Evidence                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Style/maintainability   | Accepted fixed. | Stand point reads now delegate to the same entry-result mapper used by queries; EntityColumn tests reside under `test/entity`.                                                                                                                                                                                                     |
+| Documentation           | Accepted fixed. | Query-facing Client TypeDoc, package/readme/guide wording, generated API inventory, and public test wording use generic Entity terminology. Subscription-specific Projection wording is intentionally retained.                                                                                                                    |
+| TypeScript/API          | Accepted fixed. | `EntityRecordStorage.query()` remains required; the TypeDoc inventory now names the six Entity-prefixed exports; generated typecheck and Typedoc/API checks pass.                                                                                                                                                                  |
 | Performance/reliability | Accepted fixed. | Query rows are authoritative (no Stand re-read); deleted records are removed before candidate accounting/evaluation in Memory, Datastore, and MySQL; shared Memory/Datastore conformance exercises current-query lifecycle/version/order/limit/tombstone behavior; MySQL factory regressions cover its durable current-query path. |
 
 - Final focused evidence: 348 tests passed across client/entity-codegen, Memory,

@@ -1,5 +1,8 @@
 import type { Message } from "@bufbuild/protobuf";
-import { entityStorageKey, type EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import {
+  entityStorageKey,
+  type EntityStorageInput,
+} from "@spine-event-engine/storage/internal/entity-history";
 import type { RecordColumn, StorageContext } from "@spine-event-engine/storage";
 
 import type { DescriptorMessageSchema } from "./entity-metadata.js";
