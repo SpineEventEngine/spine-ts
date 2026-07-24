@@ -1,12 +1,12 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Wave 1 complete
+Status: Initial release and post-release JVM parity Waves 1 and 2 complete
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0072 integration and Wave 2 durable closure
+Active implementation frontier: Wave 3 Q&A and planning require human initiation
 
 ## Purpose
 
@@ -57,17 +57,17 @@ opened a separate, four-wave JVM-parity program. T-0052 records and decomposes
 Wave 1. The human subsequently started Wave 1; T-0053 through T-0067 are
 implemented, reviewed, integrated, post-merge verified, and remotely
 synchronized at their closure boundaries. The Wave 2 Q&A and T-0068 planning
-are complete. The human started autonomous execution on 2026-07-24; T-0069,
-T-0070, T-0070D, T-0070R, and T-0071 are implemented, reviewed, integrated,
-post-merge verified, and remotely synchronized. T-0072 is the active
-implementation frontier and work follows the accepted plan unless a genuine
-protocol blocker appears.
+are complete. The human started autonomous execution on 2026-07-24; T-0069
+through T-0072 are implemented, reviewed, integrated, post-merge verified, and
+remotely synchronized. Wave 2 is durably closed. Wave 3 remains intentionally
+unstarted pending its separate human Q&A and approved plan.
 
 T-0072 generic Entity query/codegen and durable current-record implementation
-is complete, all specialist and final security reviews are clean, and the full
-native gate passes with 90.02% branch coverage. It is awaiting task commit,
-integration, post-merge verification, and remote synchronization; Wave 2 is not
-durably closed until those boundaries succeed.
+was committed as `608fb80a`, merged as `69d43c0a`, and corrected after
+post-merge verification as `74d0192a` and `bfa2418f`. All specialist and final
+security reviews are clean. The definitive full native gate on `bfa2418f`
+passes with 130 files / 2,466 tests and 90.02% branch coverage, and
+`origin/main` contains that verified endpoint.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

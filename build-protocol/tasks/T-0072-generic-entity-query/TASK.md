@@ -1,9 +1,9 @@
 # T-0072: Generic Entity Query DSL and Wave 2 Closure
 
-Status: Review accepted; ready for integration
+Status: Complete
 
-Implementation status: implemented, fully verified, and security-reviewed; not
-yet committed, merged, post-merge verified, or remotely synchronized.
+Implementation status: implemented, reviewed, committed, merged into `main`,
+post-merge verified, and remotely synchronized.
 
 ## Objective
 
@@ -132,4 +132,14 @@ data exposure, and the unchanged remote boundary.
   functions 94.47%, and lines 94.76%.
 - Typecheck, lint/cleanup, format, TypeDoc/API inventory, Proto
   source/descriptors/generated cleanliness, and release readiness passed.
-- Integration, post-merge verification, and remote synchronization remain.
+- Task commit: `608fb80a`.
+- Merge commit: `69d43c0a`.
+- Post-merge deterministic formatting correction: `74d0192a`.
+- Post-merge cancellation reliability correction: `bfa2418f`.
+- Definitive post-merge verification on `bfa2418f`: 130 files / 2,466 tests
+  passed; 3 files / 25 opt-in tests skipped; statements 94.08%, branches
+  90.02% (8,018/8,906), functions 94.47%, lines 94.76%.
+- Typecheck, lint/cleanup, format, TypeDoc/API inventory, Proto integrity and
+  generated cleanliness, and release readiness passed.
+- `task/T-0072-generic-entity-query` and the verified `main` endpoint are
+  pushed to `origin`. T-0072 and Wave 2 are durably closed.

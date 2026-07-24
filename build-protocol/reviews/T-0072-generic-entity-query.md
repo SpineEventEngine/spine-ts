@@ -174,3 +174,14 @@ integration but is not yet merged.
   prevents cleanup-time unhandled rejection without changing the later awaited
   error path. Earlier command/query failures remain failed users, iterator
   return stays bounded, and no lifecycle or resource leak was found.
+
+## Integration and closure disposition
+
+- Task commit `608fb80a` and merge commit `69d43c0a` are pushed.
+- Post-merge corrections `74d0192a` and `bfa2418f` are pushed to
+  `origin/main`.
+- Definitive full verification on `bfa2418f` is CLEAN: 130 files / 2,466
+  tests, 90.02% branch coverage, all deterministic docs/API/Proto/release
+  gates passed.
+- Every canonical concern and final security concern is accepted CLEAN. No
+  finding, exception, or blocker remains. T-0072 is durably closed.
