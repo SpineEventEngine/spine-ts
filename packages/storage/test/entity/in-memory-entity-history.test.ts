@@ -5,23 +5,23 @@ import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import {
-  InMemoryEntityEventHistory,
+  MemoryEntityEventHistory,
   InMemoryEntityHistory,
-  InMemoryEntityStorageFactory,
+  MemoryEntityStorageFactory,
 } from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryStorageBackend } from "../../src/index.js";
 import { assertEntityHistoryConformance } from "../../src/internal/entity-history.js";
 
 describe("InMemoryEntityHistory", () => {
   it("passes the shared adapter conformance fixture", async () => {
-    const factory = new InMemoryEntityStorageFactory();
+    const factory = new MemoryEntityStorageFactory();
     await assertEntityHistoryConformance({
       create: (input) => factory.create(input),
     });
   });
 
   it("orders producer events by version, time, and descending event ID", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (const id of ["a", "z", "b"])
       await events.append({
         entityId: "one",
@@ -63,8 +63,8 @@ describe("InMemoryEntityHistory", () => {
     ).rejects.toThrow(/divergent/);
   });
   it("isolates compatible scoped records across default factory backends", async () => {
-    const firstFactory = new InMemoryEntityStorageFactory();
-    const secondFactory = new InMemoryEntityStorageFactory();
+    const firstFactory = new MemoryEntityStorageFactory();
+    const secondFactory = new MemoryEntityStorageFactory();
     const input = {
       context: { name: "Tasks", multitenant: false },
       id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
@@ -85,8 +85,8 @@ describe("InMemoryEntityHistory", () => {
   });
   it("shares compatible entity rows and rejects mismatch with one backend token", async () => {
     const backend = new InMemoryStorageBackend();
-    const firstFactory = new InMemoryEntityStorageFactory(backend);
-    const secondFactory = new InMemoryEntityStorageFactory(backend);
+    const firstFactory = new MemoryEntityStorageFactory(backend);
+    const secondFactory = new MemoryEntityStorageFactory(backend);
     const input = entityStorageInput();
     const first = firstFactory.create(input);
     const second = secondFactory.create(input);
@@ -106,7 +106,7 @@ describe("InMemoryEntityHistory", () => {
     ).toThrow(/incompatible record specification/);
   });
   it("rejects an incompatible fingerprint before an independent handle can access rows", async () => {
-    const factory = new InMemoryEntityStorageFactory();
+    const factory = new MemoryEntityStorageFactory();
     const input = entityStorageInput();
     const first = factory.create(input);
     await first.current.write({
@@ -126,7 +126,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("length-delimits context, tenant, and purpose scopes without collisions", async () => {
-    const factory = new InMemoryEntityStorageFactory();
+    const factory = new MemoryEntityStorageFactory();
     const first = factory.create(
       entityStorageInput({
         context: { name: "ab", multitenant: true, tenantId: "c" },
@@ -175,7 +175,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("shares one explicit multitenant tenant scope without colliding with single-tenant storage", async () => {
-    const factory = new InMemoryEntityStorageFactory();
+    const factory = new MemoryEntityStorageFactory();
     const firstTenant = factory.create(
       entityStorageInput({
         context: { name: "TenantScopeTest", multitenant: true, tenantId: "tenant" },
@@ -204,7 +204,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("rejects missing and blank multitenant tenant IDs before opening entity storage", () => {
-    const factory = new InMemoryEntityStorageFactory();
+    const factory = new MemoryEntityStorageFactory();
     for (const tenantId of [undefined, "", " "]) {
       expect(() =>
         factory.create(
@@ -288,7 +288,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("orders event timestamp ties by descending canonical event-ID bytes", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (const id of ["\u{10000}", "\uE000"]) {
       await events.append({
         entityId: "task",
@@ -305,7 +305,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("orders one-, two-, three-, and four-byte UTF-8 event IDs canonically", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (const id of ["a", "é", "\uE000", "\u{10000}"]) {
       await events.append({
         entityId: "task",
@@ -324,7 +324,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("rejects missing and blank event IDs without retaining an event", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (const invalidEvent of [create(EventSchema), event(" ")]) {
       await expect(
         events.append({
@@ -339,7 +339,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("rejects an identical event retry correlated to another canonical entity", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     const record = {
       entityId: "task-a",
       event: event("event"),
@@ -352,7 +352,7 @@ describe("InMemoryEntityHistory", () => {
   });
 
   it("rejects every event-history operation after close", async () => {
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     events.close();
 
     await expect(
@@ -372,7 +372,7 @@ describe("InMemoryEntityHistory", () => {
       stateSchema: StringValueSchema,
       idKey: (id: string) => id,
     });
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (let version = 1; version <= 250; version++) {
       await states.append({ ...stateRecord(version), createdAt: timestamp(version) });
       await events.append({
@@ -413,7 +413,7 @@ describe("InMemoryEntityHistory", () => {
       stateSchema: StringValueSchema,
       idKey: (id: string) => id,
     });
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       await expect(history.trim("task", count)).rejects.toThrow(/non-negative safe integer/);
     }
@@ -428,7 +428,7 @@ describe("InMemoryEntityHistory", () => {
       stateSchema: StringValueSchema,
       idKey: (id: string) => id,
     });
-    const events = new InMemoryEntityEventHistory({ idKey: (id: string) => id });
+    const events = new MemoryEntityEventHistory({ idKey: (id: string) => id });
     await history.append(stateRecord(1));
     await events.append({
       entityId: "task",
@@ -501,7 +501,7 @@ describe("InMemoryEntityHistory", () => {
   it("resumes event truncation after a completed deletion chunk fails", async () => {
     let chunks = 0;
     const records = new Map<string, never>();
-    const events = new InMemoryEntityEventHistory({
+    const events = new MemoryEntityEventHistory({
       idKey: (id: string) => id,
       records,
       maintenance: {
@@ -520,13 +520,13 @@ describe("InMemoryEntityHistory", () => {
     }
 
     await expect(events.truncate(timestamp(4))).rejects.toThrow("injected");
-    const resumed = new InMemoryEntityEventHistory({ idKey: (id: string) => id, records });
+    const resumed = new MemoryEntityEventHistory({ idKey: (id: string) => id, records });
     await resumed.truncate(timestamp(4));
     await expect(resumed.backward("task", 1)).resolves.toEqual([]);
   });
 
   it("settles one event truncate chunk then stops when closed", async () => {
-    const events = new InMemoryEntityEventHistory({
+    const events = new MemoryEntityEventHistory({
       idKey: (id: string) => id,
       maintenance: {
         onChunk: () => {
@@ -634,7 +634,7 @@ describe("InMemoryEntityHistory", () => {
   it("keeps an eligible later-key event appended after truncate starts across multiple chunks", async () => {
     const firstChunk = deferred<undefined>();
     let chunks = 0;
-    const events = new InMemoryEntityEventHistory({
+    const events = new MemoryEntityEventHistory({
       idKey: (id: string) => id,
       maintenance: {
         batchSize: 1,
@@ -674,7 +674,7 @@ describe("InMemoryEntityHistory", () => {
   it("keeps a later canonical UTF-8 event key appended during multi-chunk truncate", async () => {
     const firstChunk = deferred<undefined>();
     let chunks = 0;
-    const events = new InMemoryEntityEventHistory({
+    const events = new MemoryEntityEventHistory({
       idKey: (id: string) => id,
       maintenance: {
         batchSize: 1,

@@ -5,9 +5,7 @@
  * token to independently constructed factories only when they must share rows.
  */
 export class InMemoryStorageBackend {
-  constructor() {
-    /* Opaque backend identity token. */
-  }
+  readonly [Symbol.toStringTag] = "InMemoryStorageBackend";
 }
 
 interface BoundScope {
@@ -18,7 +16,7 @@ interface BoundScope {
 const scopesByBackend = new WeakMap<InMemoryStorageBackend, Map<string, BoundScope>>();
 
 /** Bind one canonical scope to one compatible backend-owned value. */
-export function bindInMemoryBackendScope<T>(
+export function bindMemoryBackendScope<T>(
   backend: InMemoryStorageBackend,
   scope: string,
   fingerprint: string,

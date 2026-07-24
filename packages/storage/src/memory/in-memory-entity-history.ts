@@ -14,10 +14,10 @@ import type {
 import type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
 import { canonicalStorageScope } from "../storage/canonical-scope.js";
-import { bindInMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 
 /** Shared in-memory entity-storage factory for adapter conformance. */
-export class InMemoryEntityStorageFactory {
+export class MemoryEntityStorageFactory {
   readonly #backend: InMemoryStorageBackend;
 
   /** Create a factory with a fresh backend, or deliberately share `backend`. */
@@ -28,7 +28,7 @@ export class InMemoryEntityStorageFactory {
   create<I, S extends Message>(input: EntityStorageInput<I, S>): InMemoryEntityStorage<I, S> {
     const scope = canonicalStorageScope(input.context, input.storageKey);
     const fingerprint = entityFingerprint(input);
-    const backend = bindInMemoryBackendScope(
+    const backend = bindMemoryBackendScope(
       this.#backend,
       scope,
       fingerprint,
@@ -46,18 +46,18 @@ export class InMemoryEntityStorageFactory {
 
 /** One scoped in-memory current/state/event storage handle. */
 export class InMemoryEntityStorage<I, S extends Message> {
-  readonly current: InMemoryEntityRecordStorage<I, S>;
-  readonly events: InMemoryEntityEventHistory<I>;
+  readonly current: MemoryEntityRecordStorage<I, S>;
+  readonly events: MemoryEntityEventHistory<I>;
   readonly states: InMemoryEntityHistory<I, S>;
 
   constructor(input: EntityStorageInput<I, S>, backend: EntityBackend) {
-    this.current = new InMemoryEntityRecordStorage({
+    this.current = new MemoryEntityRecordStorage({
       idKey: input.id.key,
       idClone: input.id.clone,
       stateSchema: input.stateSchema,
       records: backend.current as unknown as Map<string, EntityRecord<I, S>>,
     });
-    this.events = new InMemoryEntityEventHistory({
+    this.events = new MemoryEntityEventHistory({
       idKey: input.id.key,
       idClone: input.id.clone,
       records: backend.events as unknown as Map<string, EntityEventHistoryRecord<I>>,
@@ -107,10 +107,7 @@ function entityFingerprint<I, S extends Message>(input: EntityStorageInput<I, S>
 }
 
 /** In-memory latest-state storage used by all entity families. */
-export class InMemoryEntityRecordStorage<I, S extends Message> implements EntityRecordStorage<
-  I,
-  S
-> {
+export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRecordStorage<I, S> {
   readonly #idKey: (id: I) => string;
   readonly #idClone: (id: I) => I;
   readonly #records: Map<string, EntityRecord<I, S>>;
@@ -148,7 +145,7 @@ export class InMemoryEntityRecordStorage<I, S extends Message> implements Entity
 }
 
 /** In-memory immutable diagnostic event-history adapter. */
-export class InMemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
+export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
   readonly #idKey: (id: I) => string;
   readonly #idClone: (id: I) => I;
   readonly #maintenance: InMemoryMaintenance | undefined;
