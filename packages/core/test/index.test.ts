@@ -15,6 +15,7 @@ import {
   EventIdSchema,
   EventSchema,
   FieldPathSchema,
+  type ProtoModule,
   TemplateStringSchema,
   TenantIdSchema,
   UserIdSchema,
@@ -44,6 +45,7 @@ import {
   packEvent,
   spineCoreRegistry,
   unpackAny,
+  unpackAnyUsing,
   validateTransition,
   validateMessage,
 } from "../src/index.js";
@@ -137,6 +139,32 @@ function fieldPathWithUnknownFields() {
   const unknownField = new Uint8Array([0x98, 0x06, 0x7b]);
 
   return fromBinary(FieldPathSchema, new Uint8Array([...encoded, ...unknownField]));
+}
+
+function module(
+  name: string,
+  schemas: readonly GenMessage<Message>[],
+  dependencies: readonly ProtoModule[] = [],
+): ProtoModule {
+  return Object.freeze({
+    name,
+    schemas: Object.freeze([...schemas]),
+    dependencies: Object.freeze([...dependencies]),
+  });
+}
+
+function cyclicModule(name: string): {
+  name: string;
+  schemas: never[];
+  dependencies: ProtoModule[];
+} {
+  return { name, schemas: [], dependencies: [] };
+}
+
+function freezeModule(module: { schemas: never[]; dependencies: ProtoModule[] }): void {
+  Object.freeze(module.schemas);
+  Object.freeze(module.dependencies);
+  Object.freeze(module);
 }
 
 describe("RejectionThrowable", () => {
@@ -262,6 +290,115 @@ describe("RejectionThrowable", () => {
 });
 
 describe("@spine-event-engine/core type registry", () => {
+  it("accepts equivalent graphs when only one graph reuses a dependency object", () => {
+    const shared = module("example.shared", [FieldPathSchema]);
+    const left = module("example.application", [], [shared, shared]);
+    const right = module(
+      "example.application",
+      [],
+      [module("example.shared", [FieldPathSchema]), module("example.shared", [FieldPathSchema])],
+    );
+
+    expect(TypeRegistry.from(left, right).list()).toHaveLength(1);
+  });
+
+  it("composes a deep acyclic dependency chain without exhausting the call stack", () => {
+    let chain = module("example.chain.0", [FieldPathSchema]);
+
+    for (let index = 1; index <= 20_000; index += 1) {
+      chain = module(`example.chain.${String(index)}`, [], [chain]);
+    }
+
+    expect(TypeRegistry.from(chain).list()[0]?.fullTypeName).toBe("spine.base.FieldPath");
+  });
+
+  it("rejects self and indirect module dependency cycles", () => {
+    const self = cyclicModule("example.self");
+    self.dependencies.push(self);
+    freezeModule(self);
+    const first = cyclicModule("example.first");
+    const second = cyclicModule("example.second");
+    first.dependencies.push(second);
+    second.dependencies.push(first);
+    freezeModule(first);
+    freezeModule(second);
+
+    expect(() => TypeRegistry.from(self)).toThrow(
+      'Proto module dependency cycle at "example.self".',
+    );
+    expect(() => TypeRegistry.from(first)).toThrow(
+      'Proto module dependency cycle at "example.first".',
+    );
+  });
+
+  it("dynamically unpacks types owned by dependencies", () => {
+    const registry = TypeRegistry.from(
+      module("example.application", [], [module("example.dependency", [UserIdSchema])]),
+    );
+    const packed = packAny(UserIdSchema, create(UserIdSchema, { value: "dependency-user" }));
+
+    expect(unpackAnyUsing(registry, packed)).toEqual(
+      create(UserIdSchema, { value: "dependency-user" }),
+    );
+  });
+
+  it("names the nested module that has conflicting content", () => {
+    const left = module(
+      "example.application",
+      [],
+      [module("example.shared", [], [module("example.nested", [FieldPathSchema])])],
+    );
+    const right = module(
+      "example.application",
+      [],
+      [module("example.shared", [], [module("example.nested", [UserIdSchema])])],
+    );
+
+    expect(() => TypeRegistry.from(left, right)).toThrow(
+      'Proto module conflict for "example.nested".',
+    );
+  });
+
+  it("composes modules dependency-first and deduplicates equivalent definitions", () => {
+    const shared = module("example.shared", [FieldPathSchema]);
+    const equivalentShared = module("example.shared", [FieldPathSchema]);
+    const application = module("example.application", [UserIdSchema], [shared, equivalentShared]);
+
+    const registry = TypeRegistry.from(application, shared);
+
+    expect(registry.list().map((metadata) => metadata.fullTypeName)).toEqual([
+      "spine.base.FieldPath",
+      "spine.core.UserId",
+    ]);
+  });
+
+  it("rejects modules that use one name for different definitions", () => {
+    const first = module("example.conflict", [FieldPathSchema]);
+    const conflicting = module("example.conflict", [UserIdSchema]);
+
+    expect(() => TypeRegistry.from(first, conflicting)).toThrow(
+      'Proto module conflict for "example.conflict".',
+    );
+  });
+
+  it("dynamically unpacks only exact registered type URLs", () => {
+    const registry = TypeRegistry.from(module("example.application", [UserIdSchema]));
+    const message = create(UserIdSchema, { value: "user-1" });
+    const packed = packAny(UserIdSchema, message);
+    const unknown = create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.UserId.extra",
+      value: packed.value,
+    });
+    const malformed = create(AnySchema, {
+      typeUrl: packed.typeUrl,
+      value: new Uint8Array([0xff]),
+    });
+
+    expect(unpackAnyUsing(registry, packed)).toEqual(message);
+    expect(unpackAnyUsing(registry, unknown)).toBeUndefined();
+    expect(unpackAnyUsing(registry, malformed)).toBeUndefined();
+  });
+
   it("derives type URLs from Spine file type_url_prefix options", () => {
     expect(deriveTypeUrl(FieldPathSchema)).toBe("type.spine.io/spine.base.FieldPath");
     expect(deriveTypeUrl(ValidationErrorSchema)).toBe(
