@@ -1,12 +1,14 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Waves 1 and 2 complete
+Status: Initial release and post-release JVM parity Waves 1 and 2 complete;
+Wave 3 active
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: Wave 3 Q&A and planning require human initiation
+Active implementation frontier: T-0073 Proto model modules and external
+generation tooling
 
 ## Purpose
 
@@ -59,8 +61,9 @@ implemented, reviewed, integrated, post-merge verified, and remotely
 synchronized at their closure boundaries. The Wave 2 Q&A and T-0068 planning
 are complete. The human started autonomous execution on 2026-07-24; T-0069
 through T-0072 are implemented, reviewed, integrated, post-merge verified, and
-remotely synchronized. Wave 2 is durably closed. Wave 3 remains intentionally
-unstarted pending its separate human Q&A and approved plan.
+remotely synchronized. Wave 2 is durably closed. The human completed Wave 3
+Q&A and started autonomous implementation on 2026-07-26. The approved execution
+plan is `build-protocol/planning/WAVE_3_PROTO_MODEL_MODULES_PLAN.md`.
 
 T-0072 generic Entity query/codegen and durable current-record implementation
 was committed as `608fb80a`, merged as `69d43c0a`, and corrected after
@@ -80,10 +83,20 @@ passes with 130 files / 2,466 tests and 90.02% branch coverage, and
   the double-dispatch guard; and generic Entity columns and Query parity. The
   approved execution plan is
   `build-protocol/planning/WAVE_2_JVM_PARITY_PLAN.md`.
-- **Wave 3:** packaging/deployment and live bidirectional TS/JVM delivery-server
-  compatibility tests. A separate Q&A and approved plan are required.
-- **Wave 4:** human-facing delivery administration, including the unresolved
-  browser-versus-TUI direction. A separate Q&A and approved plan are required.
+- **Wave 3:** independently published Proto model modules, generation,
+  dependency linking, explicit registry composition, dynamic `Any` decoding,
+  example migration, and fresh packed-tarball acceptance.
+- **Wave 4:** browser access and TS/JVM service interoperability through
+  universal gRPC-Web with optional Connect optimization, authentication
+  integration points, and the Chat example. Cluster-complete subscription
+  requirements need the already requested Q&A.
+- **Wave 5:** storage-neutral application packaging/deployment contracts,
+  containers, deterministic Compose, and minimal Kubernetes references.
+- **Wave 6:** horizontal subscription propagation with cluster-complete
+  behavior while connected.
+
+Each Wave 4-6 plan requires a separate human Q&A. Do not publish packages to
+npm until all waves are complete and publication is revisited with the human.
 
 Wave 1 uses frozen `core-java` commit
 `a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` and frozen `delivery-server`

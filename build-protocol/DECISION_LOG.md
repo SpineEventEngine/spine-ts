@@ -4714,3 +4714,63 @@ Consequences:
 - Verification must mechanically reject remaining live `@spine-ts/`
   references while allowing historical build-protocol evidence to remain
   unchanged where rewriting it would falsify repository history.
+
+## D-0102: Make Protobuf Model Packages Independently Composable
+
+Status: Accepted
+
+Date: 2026-07-26
+
+Task: Wave 3 planning
+
+Decision:
+
+- Model each Bounded Context in an independently publishable npm package by
+  default; small applications may combine models without changing the
+  contract.
+- A model package owns canonical `.proto` sources and ships those sources,
+  generated ESM/declarations, a versioned `spine-proto-manifest.json`, and a
+  generated `ProtoModule`. Canonical Proto imports use Proto file paths, never
+  npm package names.
+- Add `@spine-event-engine/proto-tools` with the `spine-proto` executable.
+  Keep runtime schema/module types with `@spine-event-engine/proto`; keep
+  registry composition and `Any` decoding with `@spine-event-engine/core`.
+- Resolve explicitly declared model dependencies from installed manifests and
+  shipped Proto sources, generate only owned messages, and link generated
+  dependency imports to manifest-declared npm export subpaths.
+- Each `ProtoModule` lists its own schemas and direct dependencies.
+  `TypeRegistry.from(...modules)` traverses dependencies, deduplicates module
+  identity, and rejects conflicting type names, type URLs, or module
+  definitions.
+- Applications list top-level model packages in one explicit
+  `spine-proto.json`. `spine-proto compose` generates the application registry;
+  there is no runtime package scanning or mutable global registration.
+- Keep schema-directed `packAny()` and `unpackAny()`. Add
+  `unpackAnyUsing(registry, packed)` for dynamic decoding; unknown type URLs
+  and malformed bytes return `undefined`.
+- Reject duplicate Proto paths/type names/type URLs, undeclared or incompatible
+  dependencies, cycles, path/symlink escapes, and missing import ownership
+  before replacing generated output.
+- Do not publish to npm in Wave 3. Acceptance uses registry-equivalent tarballs
+  and fresh repositories to prove cross-model imports, transitive dynamic
+  decoding, and the absence of hidden `workspace:`/`file:` dependencies.
+
+Reasoning:
+
+- Package-local ownership mirrors JVM model JARs with ordinary npm dependency
+  semantics. Explicit manifests supply the missing Proto-import ownership map
+  without requiring this monorepo or a hosted Buf registry.
+- A build-time tooling package avoids adding compiler/linker dependencies to
+  runtime applications. Explicit structural module values keep composition
+  deterministic and easy to inspect.
+
+Consequences:
+
+- Replace hard-coded example generation and dependency duplication with the
+  shared workflow.
+- Spine-native Proto sources and generated exports must satisfy the same
+  manifest/module contract used by external model packages.
+- Every maintained example migrates. The new Chat example proves two
+  app-owned model packages and a cross-package Proto import.
+- Browser interoperability, deployment packaging, and cluster-complete
+  subscriptions remain Waves 4, 5, and 6.
