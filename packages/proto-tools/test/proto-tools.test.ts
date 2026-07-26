@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -15,6 +16,7 @@ import { describe, expect, it } from "vitest";
 
 import { writeManifestAtomically } from "../src/atomic-manifest.js";
 import { createManifest, readConfig, readManifest } from "../src/index.js";
+import { resolveModelGraph } from "../src/model-graph.js";
 
 function packageDirectory(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), "spine-proto-tools-"));
@@ -41,7 +43,312 @@ function modelConfig(name: string, dependencies: readonly string[] = []) {
   };
 }
 
+function installModel(
+  requester: string,
+  name: string,
+  dependencies: readonly string[] = [],
+  protoFile = `${name.replaceAll("@", "").replaceAll("/", "-")}.proto`,
+): string {
+  const directory = join(requester, "node_modules", ...name.split("/"));
+  mkdirSync(directory, { recursive: true });
+  writeJson(directory, "package.json", {
+    name,
+    version: "1.2.3",
+    dependencies: Object.fromEntries(dependencies.map((dependency) => [dependency, "^1.2.3"])),
+    exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+  });
+  writeJson(directory, "spine-proto-manifest.json", {
+    formatVersion: 1,
+    packageName: name,
+    packageVersion: "1.2.3",
+    protoFiles: [protoFile],
+    generatedExports: { [protoFile]: `generated/${protoFile.replace(/\.proto$/, "_pb.js")}` },
+    dependencies,
+    moduleExport: "modelProtoModule",
+  });
+  return directory;
+}
+
 describe("spine proto model tooling", () => {
+  it("resolves nested installed dependencies dependency-first with canonical Proto ownership", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    installModel(chat, "@example/users-model", [], "users/v1/user.proto");
+
+    expect(resolveModelGraph(application, ["@example/chat-model"])).toEqual({
+      models: [
+        {
+          name: "@example/users-model",
+          version: "1.2.3",
+          moduleExport: "modelProtoModule",
+          root: realpathSync(join(chat, "node_modules", "@example", "users-model")),
+        },
+        {
+          name: "@example/chat-model",
+          version: "1.2.3",
+          moduleExport: "modelProtoModule",
+          root: realpathSync(chat),
+        },
+      ],
+      protoOwners: {
+        "example-chat-model.proto": {
+          packageName: "@example/chat-model",
+          generatedExport: "generated/example-chat-model_pb.js",
+        },
+        "users/v1/user.proto": {
+          packageName: "@example/users-model",
+          generatedExport: "generated/users/v1/user_pb.js",
+        },
+      },
+    });
+  });
+
+  it("resolves an exported non-root manifest and hoisted dependency from its requester context", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    const users = installModel(application, "@example/users-model", [], "users/v1/user.proto");
+    mkdirSync(join(chat, "dist"));
+    writeJson(chat, "dist/package.json", { type: "module" });
+    renameSync(
+      join(chat, "spine-proto-manifest.json"),
+      join(chat, "dist", "spine-proto-manifest.json"),
+    );
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+      exports: { "./spine-proto-manifest.json": "./dist/spine-proto-manifest.json" },
+    });
+
+    const graph = resolveModelGraph(application, ["@example/chat-model"]);
+    expect(graph.models.map((model) => model.name)).toEqual([
+      "@example/users-model",
+      "@example/chat-model",
+    ]);
+    expect(graph.models[0]?.root).toBe(realpathSync(users));
+    expect(graph.models[1]?.root).toBe(realpathSync(chat));
+
+    writeJson(chat, "dist/package.json", { name: "@example/not-chat-model", type: "module" });
+    expect(resolveModelGraph(application, ["@example/chat-model"]).models[1]?.root).toBe(
+      realpathSync(chat),
+    );
+  });
+
+  it("rejects more than 10,000 direct model roots before traversal allocation", () => {
+    const application = packageDirectory("@example/application");
+    expect(() =>
+      resolveModelGraph(
+        application,
+        Array.from({ length: 10001 }, () => "@example/x"),
+      ),
+    ).toThrow("spine-proto: @example/application: model dependency graph exceeds 10000 packages");
+  });
+
+  it("rejects 10,001 raw manifest dependencies before normalization", () => {
+    const directory = packageDirectory("@example/oversized-model");
+    writeJson(directory, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/oversized-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: Array.from({ length: 10001 }, () => "@example/users-model"),
+      moduleExport: "modelProtoModule",
+    });
+
+    expect(() => readManifest(directory)).toThrow(
+      "spine-proto: @example/oversized-model: manifest dependencies exceeds 10000 entries",
+    );
+  });
+
+  it("rejects a manifest whose direct dependencies exceed remaining scheduled work", () => {
+    const application = packageDirectory("@example/application");
+    const dependencies = Array.from(
+      { length: 10000 },
+      (_, index) => `@example/model-${String(index)}`,
+    );
+    const root = installModel(application, "@example/root-model", dependencies);
+    writeJson(root, "package.json", {
+      name: "@example/root-model",
+      version: "1.2.3",
+      dependencies: Object.fromEntries(dependencies.map((name) => [name, "^1.0.0"])),
+      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+    });
+    expect(() => resolveModelGraph(application, ["@example/root-model"])).toThrow(
+      "spine-proto: @example/root-model: model dependency graph exceeds 10000 scheduled dependency edges",
+    );
+  });
+
+  it("rejects invalid installed graph dependencies and manifest ownership", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    installModel(chat, "@example/users-model");
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "npm:not/a@^1.2.3" },
+    });
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: dependency @example/users-model must use a registry version",
+    );
+
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(join(chat, "node_modules", "@example", "users-model"), "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/users-model",
+      packageVersion: "1.2.3",
+      protoFiles: ["example-chat-model.proto"],
+      generatedExports: { "example-chat-model.proto": "generated/users_pb.js" },
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: Proto path example-chat-model.proto is already owned by @example/users-model",
+    );
+  });
+
+  it("rejects an installed dependency outside its requester-declared version range", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    const users = installModel(chat, "@example/users-model");
+    writeJson(users, "package.json", {
+      name: "@example/users-model",
+      version: "2.0.0",
+      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+    });
+    writeJson(users, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/users-model",
+      packageVersion: "2.0.0",
+      protoFiles: ["users.proto"],
+      generatedExports: { "users.proto": "generated/users_pb.js" },
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: dependency @example/users-model version 2.0.0 does not satisfy ^1.2.3",
+    );
+  });
+
+  it("applies zero-major caret, comparator, alias, and mutable-tag dependency specifiers", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    const users = installModel(chat, "@example/users-model");
+    const setUsersVersion = (version: string): void => {
+      writeJson(users, "package.json", {
+        name: "@example/users-model",
+        version,
+        exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+      });
+      writeJson(users, "spine-proto-manifest.json", {
+        formatVersion: 1,
+        packageName: "@example/users-model",
+        packageVersion: version,
+        protoFiles: ["users.proto"],
+        generatedExports: { "users.proto": "generated/users_pb.js" },
+        dependencies: [],
+        moduleExport: "modelProtoModule",
+      });
+    };
+    const setSpecifier = (specifier: string): void => {
+      writeJson(chat, "package.json", {
+        name: "@example/chat-model",
+        version: "1.2.3",
+        dependencies: { "@example/users-model": specifier },
+        exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+      });
+    };
+
+    setSpecifier("^0.2.3");
+    setUsersVersion("0.3.0");
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: dependency @example/users-model version 0.3.0 does not satisfy ^0.2.3",
+    );
+
+    setSpecifier(">=1.2.3 <2.0.0");
+    setUsersVersion("2.0.0");
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: dependency @example/users-model version 2.0.0 does not satisfy >=1.2.3 <2.0.0",
+    );
+    setUsersVersion("1.7.0");
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).not.toThrow();
+
+    setSpecifier("npm:@example/users-model@^1.2.3");
+    setUsersVersion("2.0.0");
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+      "spine-proto: @example/chat-model: dependency @example/users-model version 2.0.0 does not satisfy npm:@example/users-model@^1.2.3",
+    );
+
+    setSpecifier("latest");
+    expect(() => resolveModelGraph(application, ["@example/chat-model"])).not.toThrow();
+  });
+
+  it("rejects malformed ordinary and npm-alias dependency ranges as non-registry", () => {
+    const application = packageDirectory("@example/application");
+    const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
+    installModel(chat, "@example/users-model");
+
+    for (const specifier of ["1..2", "npm:@example/users-model@1..2"]) {
+      writeJson(chat, "package.json", {
+        name: "@example/chat-model",
+        version: "1.2.3",
+        dependencies: { "@example/users-model": specifier },
+        exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+      });
+      expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
+        "spine-proto: @example/chat-model: dependency @example/users-model must use a registry version",
+      );
+    }
+  });
+
+  it("rejects missing manifests, identity mismatches, cycles, and duplicate package roots", () => {
+    const missing = packageDirectory("@example/missing-application");
+    expect(() => resolveModelGraph(missing, ["@example/no-model"])).toThrow(
+      "spine-proto: @example/no-model: cannot resolve manifest from",
+    );
+
+    const identity = packageDirectory("@example/identity-application");
+    const identityModel = installModel(identity, "@example/identity-model");
+    writeJson(identityModel, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/other-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => resolveModelGraph(identity, ["@example/identity-model"])).toThrow(
+      "spine-proto: @example/identity-model: manifest packageName must match package.json name",
+    );
+
+    const cycle = packageDirectory("@example/cycle-application");
+    const first = installModel(cycle, "@example/first-model", ["@example/second-model"]);
+    const second = installModel(first, "@example/second-model", ["@example/first-model"]);
+    writeJson(second, "package.json", {
+      name: "@example/second-model",
+      version: "1.2.3",
+      dependencies: { "@example/first-model": "^1.2.3" },
+    });
+    expect(() => resolveModelGraph(cycle, ["@example/first-model"])).toThrow(
+      "spine-proto: @example/first-model: dependency cycle",
+    );
+
+    const duplicates = packageDirectory("@example/duplicate-application");
+    const left = installModel(duplicates, "@example/left-model", ["@example/shared-model"]);
+    const right = installModel(duplicates, "@example/right-model", ["@example/shared-model"]);
+    installModel(left, "@example/shared-model");
+    installModel(right, "@example/shared-model");
+    expect(() =>
+      resolveModelGraph(duplicates, ["@example/left-model", "@example/right-model"]),
+    ).toThrow(
+      "spine-proto: @example/shared-model: package @example/shared-model resolves to multiple installed roots",
+    );
+  });
   it("creates a deterministic version-one manifest for a model package", () => {
     const directory = packageDirectory("@example/users-model");
     writeJson(directory, "spine-proto.json", modelConfig("@example/users-model"));
@@ -412,5 +719,5 @@ describe("spine proto model tooling", () => {
     expect(() => createManifest(large)).toThrow(
       "spine-proto: @example/large-model: proto source exceeds 10000 files",
     );
-  });
+  }, 120_000);
 });

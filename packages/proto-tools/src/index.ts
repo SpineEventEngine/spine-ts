@@ -1,6 +1,8 @@
 import { type Dirent, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
+import { isRegistryDependencySpecifier } from "./registry-dependency.js";
+
 /** Version shared by the configuration and published manifest JSON documents. */
 export const manifestFormatVersion = 1;
 
@@ -133,12 +135,13 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
 }
 
 /** Validates the deterministic manifest shipped by a model package. */
-export function readManifest(packageRoot: string): ProtoManifest {
+export function readManifest(packageRoot: string): ProtoManifest;
+export function readManifest(
+  packageRoot: string,
+  manifestPath: string = join(packageRoot, "spine-proto-manifest.json"),
+): ProtoManifest {
   const packageJson = readPackage(packageRoot);
-  const manifest = manifestFromValue(
-    readJson(join(packageRoot, "spine-proto-manifest.json"), packageJson.name),
-    packageJson.name,
-  );
+  const manifest = manifestFromValue(readJson(manifestPath, packageJson.name), packageJson.name);
   if (manifest.packageName !== packageJson.name)
     fail(packageJson.name, "manifest packageName must match package.json name");
   if (manifest.packageVersion !== packageJson.version)
@@ -201,6 +204,8 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
   );
   if (manifest.formatVersion !== manifestFormatVersion)
     fail(requester, "manifest formatVersion must be 1");
+  if (Array.isArray(manifest.dependencies) && manifest.dependencies.length > 10000)
+    fail(requester, "manifest dependencies exceeds 10000 entries");
   const protoFiles = stringList(requester, manifest.protoFiles, "manifest protoFiles")
     .map((file) => manifestPath(requester, file, "manifest protoFiles"))
     .sort();
@@ -322,33 +327,6 @@ function validateRegistryDependencies(
       fail(packageJson.name, `${label} ${name} must use a registry version`);
     }
   }
-}
-
-function isRegistryDependencySpecifier(specifier: string): boolean {
-  if (specifier.startsWith("npm:")) return isNpmAlias(specifier.slice("npm:".length));
-  if (specifier.includes(":") || specifier.includes("/")) return false;
-  return isRegistryRangeOrTag(specifier);
-}
-
-function isNpmAlias(alias: string): boolean {
-  const versionIndex = alias.lastIndexOf("@");
-  if (versionIndex <= 0) return false;
-  const packageName = alias.slice(0, versionIndex);
-  const version = alias.slice(versionIndex + 1);
-  return isPackageName(packageName) && isRegistryRangeOrTag(version);
-}
-
-function isPackageName(value: string): boolean {
-  return /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(value);
-}
-
-function isRegistryRangeOrTag(value: string): boolean {
-  return (
-    /^[a-z][a-z0-9._-]*$/i.test(value) ||
-    /^(?:[~^<>=v*]|\d|x|X|\.|-)+(?:\s+(?:[~^<>=v*]|\d|x|X|\.|-)+)*(?:\s*\|\|\s*(?:[~^<>=v*]|\d|x|X|\.|-)+(?:\s+(?:[~^<>=v*]|\d|x|X|\.|-)+)*)*$/.test(
-      value,
-    )
-  );
 }
 
 function readPackage(packageRoot: string): PackageJson {
