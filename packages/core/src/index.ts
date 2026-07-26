@@ -41,6 +41,7 @@ import {
   ZonedDateTimeSchema,
   type_url_prefix,
   type ConstraintViolation,
+  type ProtoModule,
   type ValidationError,
 } from "@spine-event-engine/proto";
 
@@ -407,6 +408,21 @@ export function unpackAny<Schema extends MessageSchema>(
   }
 }
 
+/** Dynamically unpack an `Any` only when its exact type URL is registered. */
+export function unpackAnyUsing(registry: TypeRegistryLookup, packed: Any): Message | undefined {
+  const metadata = registry.findByTypeUrl(packed.typeUrl);
+
+  if (metadata === undefined) {
+    return undefined;
+  }
+
+  try {
+    return fromBinary(metadata.schema, packed.value);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Create a generated Spine `Command` envelope from a caller-supplied payload, ID, and context. */
 export function packCommand<Schema extends MessageSchema>(
   input: PackCommandInput<Schema>,
@@ -464,6 +480,20 @@ export class TypeRegistry {
     for (const schema of schemas) {
       this.register(schema);
     }
+  }
+
+  /** Compose modules in deterministic dependency-first order. */
+  static from(...modules: readonly ProtoModule[]): TypeRegistry {
+    const definitions = new Map<string, ProtoModule>();
+    const visiting = new Set<string>();
+    const verified = new WeakSet<ProtoModule>();
+    const schemas: MessageSchema[] = [];
+
+    for (const module of modules) {
+      composeModule(module, definitions, visiting, verified, schemas);
+    }
+
+    return new TypeRegistry(schemas);
   }
 
   /** Register one schema and return its immutable metadata. */
@@ -578,6 +608,87 @@ export class TypeRegistry {
   list(): readonly TypeMetadata[] {
     return [...this.#byFullName.values()];
   }
+}
+
+function composeModule(
+  root: ProtoModule,
+  definitions: Map<string, ProtoModule>,
+  visiting: Set<string>,
+  verified: WeakSet<ProtoModule>,
+  schemas: MessageSchema[],
+): void {
+  const frames: ModuleFrame[] = [{ module: root, appendSchemas: false }];
+
+  while (frames.length > 0) {
+    const frame = frames.pop();
+
+    if (frame === undefined) {
+      continue;
+    }
+
+    const { module } = frame;
+    if (frame.appendSchemas) {
+      visiting.delete(module.name);
+      verified.add(module);
+      if (definitions.get(module.name) === module) {
+        schemas.push(...module.schemas);
+      }
+      continue;
+    }
+
+    if (visiting.has(module.name)) {
+      throw new Error(`Proto module dependency cycle at "${module.name}".`);
+    }
+
+    const existing = definitions.get(module.name);
+    if (existing !== undefined && !sameModuleContent(existing, module)) {
+      throw new Error(`Proto module conflict for "${module.name}".`);
+    }
+
+    if (existing !== undefined && verified.has(module)) {
+      continue;
+    }
+
+    if (existing === undefined) {
+      definitions.set(module.name, module);
+    }
+
+    visiting.add(module.name);
+    frames.push({ module, appendSchemas: true });
+
+    for (let index = module.dependencies.length - 1; index >= 0; index -= 1) {
+      const dependency = module.dependencies[index];
+      if (dependency !== undefined) {
+        frames.push({ module: dependency, appendSchemas: false });
+      }
+    }
+  }
+}
+
+interface ModuleFrame {
+  readonly module: ProtoModule;
+  readonly appendSchemas: boolean;
+}
+
+function sameModuleContent(left: ProtoModule, right: ProtoModule): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (
+    left.name !== right.name ||
+    left.schemas.length !== right.schemas.length ||
+    left.dependencies.length !== right.dependencies.length
+  ) {
+    return false;
+  }
+
+  return (
+    left.schemas.every((schema, index) => schema === right.schemas[index]) &&
+    left.dependencies.every(
+      (dependency, index) => dependency.name === right.dependencies[index]?.name,
+    )
+  );
 }
 
 /** Build a registry containing the currently curated Spine schemas. */

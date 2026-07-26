@@ -106,6 +106,16 @@ const expectedProtoExports = [
   "ValidationErrorSchema",
   "ConstraintViolationSchema",
 ];
+const expectedProtoToolsExports = [
+  "manifestFormatVersion",
+  "ModelConfig",
+  "ApplicationConfig",
+  "SpineProtoConfig",
+  "ProtoManifest",
+  "readConfig",
+  "readManifest",
+  "createManifest",
+];
 const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
@@ -524,6 +534,7 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const clientIndexPath = join("packages", "client", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
@@ -874,6 +885,7 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
@@ -883,6 +895,12 @@ const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingDeclaredProtoToolsExports = expectedProtoToolsExports.filter(
+  (name) => !declaredProtoToolsExports.includes(name),
+);
+const unexpectedProtoToolsExports = declaredProtoToolsExports.filter(
+  (name) => !expectedProtoToolsExports.includes(name),
+);
 const missingClientExports = expectedClientExports.filter((name) => !clientModuleNames.has(name));
 const missingDeclaredClientExports = expectedClientExports.filter(
   (name) => !declaredClientExports.includes(name),
@@ -973,6 +991,14 @@ const unexpectedZeroMqExports = declaredZeroMqExports.filter(
 if (missingExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/proto exports: ${missingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredProtoToolsExports.length > 0 || unexpectedProtoToolsExports.length > 0) {
+  console.error(
+    "@spine-event-engine/proto-tools exports changed without updating docs expectations: " +
+      [...missingDeclaredProtoToolsExports, ...unexpectedProtoToolsExports].join(", "),
   );
   process.exit(1);
 }
@@ -1281,6 +1307,15 @@ function collectNamedExports(indexPath) {
 
     if (hasExportModifier(statement) && statement.name?.kind === SyntaxKind.Identifier) {
       names.add(statement.name.text);
+      continue;
+    }
+
+    if (hasExportModifier(statement) && statement.kind === SyntaxKind.VariableStatement) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (declaration.name.kind === SyntaxKind.Identifier) {
+          names.add(declaration.name.text);
+        }
+      }
     }
   }
 

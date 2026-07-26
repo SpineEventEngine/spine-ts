@@ -31,7 +31,7 @@ describe("package metadata", () => {
     expect(generatedVerify).not.toContain("pnpm proto:generate");
   });
 
-  it("exports exactly the curated Proto contract entrypoints", () => {
+  it("exports the packaged Proto sources, compiled generated modules, and manifest", () => {
     const protoPackage = readJson("packages/proto/package.json");
 
     expect(protoPackage.exports).toEqual({
@@ -51,6 +51,15 @@ describe("package metadata", () => {
         types: "./dist/src/delivery-server/index.d.ts",
         default: "./dist/src/delivery-server/index.js",
       },
+      "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+      "./proto/*": "./proto/*",
+      "./generated/*.js": {
+        types: "./dist/generated/*.d.ts",
+        default: "./dist/generated/*.js",
+      },
     });
+    expect(protoPackage.files).toEqual(
+      expect.arrayContaining(["proto", "spine-proto.json", "spine-proto-manifest.json"]),
+    );
   });
 });

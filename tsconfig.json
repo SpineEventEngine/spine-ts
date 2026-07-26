@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/proto-tools" },
     { "path": "./packages/proto" },
     { "path": "./packages/client" },
     { "path": "./packages/delivery-client" },
@@ -14,6 +15,9 @@
     { "path": "./packages/testing" },
     { "path": "./examples/todo" },
     { "path": "./examples/project-management" },
-    { "path": "./examples/datastore-orders" }
+    { "path": "./examples/datastore-orders" },
+    { "path": "./examples/users-model" },
+    { "path": "./examples/chat-model" },
+    { "path": "./examples/chat" }
   ]
 }

@@ -16,11 +16,58 @@ The package root exposes a curated core Spine proto intake set:
 - Minimal transitive support contracts from `spine.time`, `spine.net`, and
   `spine.ui` required by the core context messages.
 
-The only supported public imports are `@spine-event-engine/proto`,
+The public package-root imports are `@spine-event-engine/proto`,
 `@spine-event-engine/proto/client`, `@spine-event-engine/proto/delivery`, and
-`@spine-event-engine/proto/delivery-server`. Arbitrary generated paths and generated
-runtime helper APIs are deliberately private. The latter prevents a wire intake
-task from claiming the unavailable delivery runtime behavior.
+`@spine-event-engine/proto/delivery-server`. Model tooling also consumes the
+published `./spine-proto-manifest.json`, canonical `./proto/*` source files,
+and compiled `./generated/*.js` schema subpaths. The generated paths are for
+schema imports such as:
+
+```ts
+import { CommandIdSchema, spineProtoModule } from "@spine-event-engine/proto";
+import { EntityOptionSchema } from "@spine-event-engine/proto/generated/spine/options_pb.js";
+
+void CommandIdSchema;
+void EntityOptionSchema;
+void spineProtoModule;
+```
+
+The generated runtime helper internals remain private; only the documented
+package exports are supported. In particular, this package supplies wire
+contracts, not an implicit delivery runtime.
+
+## Using Spine Proto as a model dependency
+
+Every application-owned model lists `@spine-event-engine/proto` in its
+`spine-proto.json` `dependencies` and in `package.json` dependencies. The
+model generator reads this package's manifest and canonical source exports to
+resolve imports such as `spine/options.proto`, then writes ordinary package
+imports into the generated TypeScript. A model module includes
+`spineProtoModule` as a dependency, so its application registry receives the
+Spine schema graph transitively.
+
+```json
+{
+  "formatVersion": 1,
+  "mode": "model",
+  "packageName": "@acme/tasks-model",
+  "protoRoot": "proto",
+  "generatedRoot": "generated",
+  "exportRoot": "generated",
+  "dependencies": ["@spine-event-engine/proto"],
+  "moduleExport": "tasksProtoModule"
+}
+```
+
+The manifest is deterministic and records the package name/version, canonical
+Proto files, compiled generated exports, direct dependencies, and module-export
+name. It is generated rather than edited. Bad manifests, missing exported
+sources, unsafe paths, and incompatible package/config identities fail before
+new model output replaces the previous generation.
+
+Spine TS packages have not been published to npm yet. The repository's local
+tarball acceptance test simulates a clean registry consumer; publication is
+revisited after all planned waves.
 
 The copied source manifest and `proto/frozen-descriptor-set.sha256` together
 pin the complete FileDescriptorSet compiled by Buf from the frozen source

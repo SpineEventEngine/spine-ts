@@ -48,6 +48,53 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@8.1.0(@types/node@24.13.2)(yaml@2.9.0))
 
+  examples/chat:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/chat-model':
+        specifier: 0.0.0
+        version: link:../chat-model
+      '@spine-event-engine/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@spine-event-engine/core':
+        specifier: 0.0.0
+        version: link:../../packages/core
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
+      '@spine-event-engine/server':
+        specifier: 0.0.0
+        version: link:../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      '@spine-event-engine/users-model':
+        specifier: 0.0.0
+        version: link:../users-model
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
+
+  examples/chat-model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
+      '@spine-event-engine/users-model':
+        specifier: 0.0.0
+        version: link:../users-model
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
+
   examples/datastore-orders:
     dependencies:
       '@bufbuild/protobuf':
@@ -66,7 +113,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
@@ -77,6 +124,10 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../../packages/storage-datastore
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   examples/project-management:
     dependencies:
@@ -96,11 +147,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   examples/todo:
     dependencies:
@@ -120,18 +175,34 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
       '@spine-event-engine/testing':
         specifier: workspace:*
         version: link:../../packages/testing
       '@spine-event-engine/transport':
         specifier: workspace:*
         version: link:../../packages/transport
+
+  examples/users-model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   packages/client:
     dependencies:
@@ -209,6 +280,28 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
 
+  packages/proto-tools:
+    dependencies:
+      '@bufbuild/buf':
+        specifier: 1.71.0
+        version: 1.71.0
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@bufbuild/protoc-gen-es':
+        specifier: 2.12.1
+        version: 2.12.1(@bufbuild/protobuf@2.12.1)
+      '@spine-event-engine/server':
+        specifier: 0.0.0
+        version: link:../server
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@types/semver':
+        specifier: 7.7.1
+        version: 7.7.1
+
   packages/server:
     dependencies:
       '@bufbuild/protobuf':
@@ -232,6 +325,9 @@ importers:
       '@spine-event-engine/transport':
         specifier: workspace:*
         version: link:../transport
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/storage:
     dependencies:
@@ -685,6 +781,9 @@ packages:
 
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -2144,6 +2243,8 @@ snapshots:
   '@types/node@24.13.2':
     dependencies:
       undici-types: 7.18.2
+
+  '@types/semver@7.7.1': {}
 
   '@types/unist@3.0.3': {}
 

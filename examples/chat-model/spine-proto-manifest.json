@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "packageName": "@spine-event-engine/chat-model",
+  "packageVersion": "0.0.0",
+  "protoFiles": [
+    "spine/example/chat/v1/chat.proto",
+    "spine/example/chat/v1/commands.proto",
+    "spine/example/chat/v1/events.proto"
+  ],
+  "generatedExports": {
+    "spine/example/chat/v1/chat.proto": "generated/spine/example/chat/v1/chat_pb.js",
+    "spine/example/chat/v1/commands.proto": "generated/spine/example/chat/v1/commands_pb.js",
+    "spine/example/chat/v1/events.proto": "generated/spine/example/chat/v1/events_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto",
+    "@spine-event-engine/users-model"
+  ],
+  "moduleExport": "chatProtoModule"
+}

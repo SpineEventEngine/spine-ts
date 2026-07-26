@@ -1276,6 +1276,10 @@ function validateFilters(filters: TargetFilters, route: StateRoute): ContractErr
   if (idEntries?.some((id) => id === undefined) === true) {
     return invalidQueryError("QueryService.Read id_filter entries are required.");
   }
+  const idError = validateQueryIds(idEntries, route);
+  if (idError !== undefined) {
+    return idError;
+  }
   if (filters.filter.length > MAX_QUERY_COMPOSITE_FILTERS) {
     return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
   }
@@ -1342,6 +1346,22 @@ function validateCompositeFilters(
     for (const child of filter.compositeFilter) {
       pending.push({ filter: child, depth: current.depth + 1 });
     }
+  }
+
+  return undefined;
+}
+
+function validateQueryIds(
+  ids: readonly (Any | undefined)[] | undefined,
+  route: StateRoute,
+): ContractError | undefined {
+  const schema = route.idField.message;
+  if (schema === undefined || ids === undefined) {
+    return undefined;
+  }
+
+  if (ids.some((id) => id === undefined || unpackAny(id, schema) === undefined)) {
+    return invalidQueryError(`QueryService.Read id_filter values must pack ${schema.typeName}.`);
   }
 
   return undefined;
@@ -1510,13 +1530,21 @@ function normalizedFilters(
 ): NormalizedQueryPredicate<unknown> {
   const predicates: NormalizedQueryPredicate<unknown>[] = [];
   if (filters.idFilter !== undefined) {
-    predicates.push({ kind: "ids", ids: filters.idFilter.id.map((id) => decodeAnyValue(id)) });
+    predicates.push({
+      kind: "ids",
+      ids: filters.idFilter.id.map((id) => decodeQueryIdValue(id, route)),
+    });
   }
   predicates.push(...filters.filter.map((filter) => normalizedComposite(filter, route)));
   const onlyPredicate = predicates[0];
   return predicates.length === 1 && onlyPredicate !== undefined
     ? onlyPredicate
     : { kind: "all", predicates };
+}
+
+function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
+  const schema = route.idField.message;
+  return schema === undefined ? decodeAnyValue(value) : unpackAny(value, schema);
 }
 
 function normalizedComposite(

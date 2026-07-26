@@ -20,11 +20,20 @@
     "./delivery-server": {
       "types": "./dist/src/delivery-server/index.d.ts",
       "default": "./dist/src/delivery-server/index.js"
+    },
+    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+    "./proto/*": "./proto/*",
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "proto",
+    "spine-proto.json",
+    "spine-proto-manifest.json"
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1"

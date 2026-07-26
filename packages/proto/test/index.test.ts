@@ -61,7 +61,7 @@ interface ProtoSourceManifest {
 describe("@spine-event-engine/proto", () => {
   it("verifies the copied Spine proto source manifest checksums", () => {
     const manifest = JSON.parse(
-      readFileSync(resolve("proto/spine-sources.json"), "utf8"),
+      readFileSync(resolve("packages/proto/proto/spine-sources.json"), "utf8"),
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
@@ -191,6 +191,7 @@ describe("@spine-event-engine/proto", () => {
         "ResponseSchema",
         "set_once",
         "SPI_type",
+        "spineProtoModule",
         "StatusSchema",
         "TemplateStringSchema",
         "TenantIdSchema",

@@ -26,7 +26,7 @@ function isSupportedFormatPath(path) {
     return /\.(?:json|md|ts)$/u.test(path);
   }
 
-  if (path.startsWith("proto/")) {
+  if (path.startsWith("packages/proto/proto/")) {
     return path.endsWith(".md");
   }
 

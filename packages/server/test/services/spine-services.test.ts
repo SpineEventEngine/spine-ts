@@ -549,6 +549,30 @@ describe("SpineServices", () => {
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
 
+  it("reads message-typed IDs and rejects incompatible ID payloads through QueryService", async () => {
+    const repository = new Repository({
+      entityType: MessageIdTaskAggregate,
+      schema: TaskSchema,
+    });
+    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const taskId = create(TaskIdSchema, { value: "task-message-id" });
+    const task = create(TaskSchema, { id: taskId, title: "Message ID" });
+    await context.stand().update(TaskSchema, task);
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createMessageIdQuery(taskId));
+    const incompatible = await handlers.read(
+      createMessageIdQuery(create(TaskIdSchema, { value: "unused" }), packStringId("wrong")),
+    );
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(1);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(task);
+    expect(responseErrorMessage(incompatible)).toBe(
+      "QueryService.Read id_filter values must pack spine.example.todo.v1.TaskId.",
+    );
+  });
+
   it("keeps QueryService reads isolated by tenant", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -6332,6 +6356,22 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
       },
     }),
     context: createActorContext(tenantId),
+  });
+}
+
+function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof packAny>) {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "q-message-id" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: { id: [incompatibleId ?? packAny(TaskIdSchema, id)] },
+        }),
+      },
+    }),
+    context: createActorContext(),
   });
 }
 

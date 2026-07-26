@@ -1,0 +1,128 @@
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { spineProtoModule as packageModule, type ProtoModule } from "@spine-event-engine/proto";
+
+import * as clientSchemas from "../src/client/index.js";
+import * as deliverySchemas from "../src/delivery/index.js";
+import * as deliveryServerSchemas from "../src/delivery-server/index.js";
+import * as errorSchemas from "../generated/spine/base/error_pb.js";
+import * as fieldPathSchemas from "../generated/spine/base/field_path_pb.js";
+import * as ackSchemas from "../generated/spine/core/ack_pb.js";
+import * as actorContextSchemas from "../generated/spine/core/actor_context_pb.js";
+import * as commandSchemas from "../generated/spine/core/command_pb.js";
+import * as diagnosticsSchemas from "../generated/spine/core/diagnostics_pb.js";
+import * as enrichmentSchemas from "../generated/spine/core/enrichment_pb.js";
+import * as eventSchemas from "../generated/spine/core/event_pb.js";
+import * as responseSchemas from "../generated/spine/core/response_pb.js";
+import * as tenantSchemas from "../generated/spine/core/tenant_id_pb.js";
+import * as userSchemas from "../generated/spine/core/user_id_pb.js";
+import * as versionSchemas from "../generated/spine/core/version_pb.js";
+import * as emailSchemas from "../generated/spine/net/email_address_pb.js";
+import * as domainSchemas from "../generated/spine/net/internet_domain_pb.js";
+import * as optionSchemas from "../generated/spine/options_pb.js";
+import * as stringSchemas from "../generated/spine/string/template_string_pb.js";
+import * as timeSchemas from "../generated/spine/time/time_pb.js";
+import * as timeOptionSchemas from "../generated/spine/time_options_pb.js";
+import * as languageSchemas from "../generated/spine/ui/language_pb.js";
+import * as validationSchemas from "../generated/spine/validation/validation_error_pb.js";
+import * as catchUpSchemas from "../generated/spine/server/catchup/catch_up_pb.js";
+import * as environmentSchemas from "../generated/spine/server/server_environment_pb.js";
+import { spineProtoModule } from "../generated/proto-module.js";
+
+interface SpineManifest {
+  readonly formatVersion: number;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly protoFiles: readonly string[];
+  readonly generatedExports: Readonly<Record<string, string>>;
+  readonly dependencies: readonly string[];
+  readonly moduleExport: string;
+}
+
+function schemaNames(exports: object): string[] {
+  return Object.values(exports)
+    .filter(
+      (value): value is GenMessage<Message> =>
+        typeof value === "object" &&
+        value !== null &&
+        (value as { kind?: unknown }).kind === "message",
+    )
+    .map((schema) => schema.typeName)
+    .sort();
+}
+
+describe("spineProtoModule", () => {
+  it("retains the public descriptor documentation in generated source", () => {
+    expect(
+      readFileSync(new URL("../generated/proto-module.ts", import.meta.url), "utf8"),
+    ).toContain("/** All Spine schemas shipped by `@spine-event-engine/proto`. */");
+  });
+
+  it("publishes a deterministic manifest for every owned canonical source", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../spine-proto-manifest.json", import.meta.url), "utf8"),
+    ) as unknown as SpineManifest;
+
+    expect(manifest).toMatchObject({
+      formatVersion: 1,
+      packageName: "@spine-event-engine/proto",
+      packageVersion: "0.0.0",
+      dependencies: [],
+      moduleExport: "spineProtoModule",
+    });
+    expect(manifest.protoFiles).toHaveLength(39);
+    expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
+    expect(Object.values(manifest.generatedExports)).toEqual(
+      manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),
+    );
+    expect(JSON.stringify(manifest)).not.toMatch(/(?:file:|workspace:|\/Users\/|\\\\)/u);
+  });
+
+  it("is available with its declaration from the package root", () => {
+    const module: ProtoModule = packageModule;
+
+    expect(module.name).toBe(spineProtoModule.name);
+    expect(module.schemas.map((schema) => schema.typeName)).toEqual(
+      spineProtoModule.schemas.map((schema) => schema.typeName),
+    );
+  });
+
+  it("freezes its descriptor and every shipped Spine message schema inventory", () => {
+    const shippedSchemas = [
+      ...schemaNames(errorSchemas),
+      ...schemaNames(fieldPathSchemas),
+      ...schemaNames(ackSchemas),
+      ...schemaNames(actorContextSchemas),
+      ...schemaNames(commandSchemas),
+      ...schemaNames(diagnosticsSchemas),
+      ...schemaNames(enrichmentSchemas),
+      ...schemaNames(eventSchemas),
+      ...schemaNames(responseSchemas),
+      ...schemaNames(tenantSchemas),
+      ...schemaNames(userSchemas),
+      ...schemaNames(versionSchemas),
+      ...schemaNames(emailSchemas),
+      ...schemaNames(domainSchemas),
+      ...schemaNames(optionSchemas),
+      ...schemaNames(stringSchemas),
+      ...schemaNames(timeSchemas),
+      ...schemaNames(timeOptionSchemas),
+      ...schemaNames(languageSchemas),
+      ...schemaNames(validationSchemas),
+      ...schemaNames(clientSchemas),
+      ...schemaNames(deliverySchemas),
+      ...schemaNames(deliveryServerSchemas),
+      ...schemaNames(catchUpSchemas),
+      ...schemaNames(environmentSchemas),
+    ].sort();
+
+    expect(spineProtoModule.name).toBe("@spine-event-engine/proto");
+    expect(spineProtoModule.schemas.map((schema) => schema.typeName)).toEqual(shippedSchemas);
+    expect(spineProtoModule.dependencies).toEqual([]);
+    expect(Object.isFrozen(spineProtoModule)).toBe(true);
+    expect(Object.isFrozen(spineProtoModule.schemas)).toBe(true);
+    expect(Object.isFrozen(spineProtoModule.dependencies)).toBe(true);
+  });
+});

@@ -10,6 +10,8 @@ import {
   type RunningServer,
 } from "@spine-event-engine/server";
 
+export { projectManagementProtoModule } from "../generated/proto-module.js";
+
 import {
   type CreateProject,
   type CreateTask,

@@ -1,0 +1,4 @@
+syntax = "proto3";
+package spine.example.users.v1;
+
+message UserId { string value = 1; }

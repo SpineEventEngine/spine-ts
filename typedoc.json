@@ -1,6 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": [
+    "packages/proto-tools/src/index.ts",
     "packages/proto/src/index.ts",
     "packages/client/src/index.ts",
     "packages/delivery-client/src/index.ts",

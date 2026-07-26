@@ -93,6 +93,10 @@ function matchingWildcardPaths(packageRoot, target) {
   return paths.sort();
 }
 
+function isJavaScriptTarget(target) {
+  return /\.(?:c|m)?js$/u.test(target);
+}
+
 export function collectRuntimeExportSpecifiers(repoRoot = defaultRepoRoot) {
   const specifiers = [];
 
@@ -104,6 +108,10 @@ export function collectRuntimeExportSpecifiers(repoRoot = defaultRepoRoot) {
       const target = runtimeTarget(exportTarget);
 
       if (target === undefined) {
+        continue;
+      }
+
+      if (!isJavaScriptTarget(target)) {
         continue;
       }
 
@@ -128,6 +136,42 @@ export function collectRuntimeExportSpecifiers(repoRoot = defaultRepoRoot) {
     (left, right) =>
       left.packageDirectory.localeCompare(right.packageDirectory) ||
       left.specifier.localeCompare(right.specifier),
+  );
+}
+
+export function collectAssetExportTargets(repoRoot = defaultRepoRoot) {
+  const targets = [];
+
+  for (const packageRoot of packageDirectories(repoRoot)) {
+    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+    const packageDirectory = relative(repoRoot, packageRoot).replaceAll("\\", "/");
+
+    for (const [subpath, exportTarget] of Object.entries(manifest.exports ?? {})) {
+      const target = runtimeTarget(exportTarget);
+
+      if (target === undefined || isJavaScriptTarget(target)) {
+        continue;
+      }
+
+      if (!target.includes("*")) {
+        targets.push({ packageDirectory, subpath, target });
+        continue;
+      }
+
+      for (const wildcardPath of matchingWildcardPaths(packageRoot, target)) {
+        targets.push({
+          packageDirectory,
+          subpath: subpath.replace("*", wildcardPath),
+          target: target.replace("*", wildcardPath),
+        });
+      }
+    }
+  }
+
+  return targets.sort(
+    (left, right) =>
+      left.packageDirectory.localeCompare(right.packageDirectory) ||
+      left.subpath.localeCompare(right.subpath),
   );
 }
 
@@ -299,6 +343,20 @@ function validateImports(repoRoot, specifiers, importTimeoutMs) {
   return failures;
 }
 
+function validateAssetExports(repoRoot, assets) {
+  const failures = [];
+
+  for (const { packageDirectory, subpath, target } of assets) {
+    const resolvedTarget = resolve(repoRoot, packageDirectory, target);
+
+    if (!existsSync(resolvedTarget)) {
+      failures.push(`Broken package asset export: ${packageDirectory}: ${subpath} -> ${target}`);
+    }
+  }
+
+  return failures;
+}
+
 function validateLinks(repoRoot, links) {
   const failures = [];
 
@@ -330,17 +388,20 @@ export function runReleaseReadiness(
   }
 
   const exports = collectRuntimeExportSpecifiers(repoRoot);
+  const assets = collectAssetExportTargets(repoRoot);
   const links = collectMarkdownRelativeLinks(repoRoot);
   const failures = [
     ...collectLegacyNamespaceReferences(repoRoot).map(
       (reference) => `Legacy package namespace: ${reference}`,
     ),
     ...validateImports(repoRoot, exports, importTimeoutMs),
+    ...validateAssetExports(repoRoot, assets),
     ...validateLinks(repoRoot, links),
   ];
 
   console.log(
-    `Release readiness: ${exports.length} package imports; ${links.length} relative Markdown links.`,
+    `Release readiness: ${exports.length} package imports; ${assets.length} package assets; ` +
+      `${links.length} relative Markdown links.`,
   );
 
   if (failures.length > 0) {

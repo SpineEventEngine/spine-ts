@@ -21,4 +21,4 @@ plugins:
       - target=ts
       - import_extension=js
 inputs:
-  - directory: proto
+  - directory: packages/proto/proto

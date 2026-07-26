@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -12,13 +12,21 @@ function resolveEntrypoint(specifier: string) {
 }
 
 describe("@spine-event-engine/proto package entrypoints", () => {
-  it("exposes only the curated root and Wave 1 contract groups", () => {
+  it("exposes the root groups plus canonical sources, compiled generated modules, and manifest", () => {
     const packageJson = JSON.parse(
       readFileSync(resolve("packages/proto/package.json"), "utf8"),
     ) as { exports: Record<string, unknown> };
 
     expect(Object.keys(packageJson.exports).sort()).toEqual(
-      [".", "./client", "./delivery", "./delivery-server"].sort(),
+      [
+        ".",
+        "./client",
+        "./delivery",
+        "./delivery-server",
+        "./spine-proto-manifest.json",
+        "./proto/*",
+        "./generated/*.js",
+      ].sort(),
     );
   });
 
@@ -28,17 +36,40 @@ describe("@spine-event-engine/proto package entrypoints", () => {
       "@spine-event-engine/proto/client",
       "@spine-event-engine/proto/delivery",
       "@spine-event-engine/proto/delivery-server",
+      "@spine-event-engine/proto/generated/proto-module.js",
     ]) {
       expect(resolveEntrypoint(supported).status, supported).toBe(0);
     }
 
-    for (const privatePath of [
-      "@spine-event-engine/proto/generated/spine/core/command_pb.js",
-      "@spine-event-engine/proto/runtime",
-    ]) {
+    for (const privatePath of ["@spine-event-engine/proto/runtime"]) {
       const result = resolveEntrypoint(privatePath);
       expect(result.status, privatePath).toBe(1);
       expect(result.stderr).toContain("ERR_PACKAGE_PATH_NOT_EXPORTED");
+    }
+  });
+
+  it("resolves manifest-derived schema and module specifiers without appending a second suffix", () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve("packages/proto/spine-proto-manifest.json"), "utf8"),
+    ) as { generatedExports: Record<string, string> };
+
+    const generatedExports = [
+      manifest.generatedExports["spine/core/ack.proto"],
+      "generated/proto-module.js",
+    ].filter((generatedExport): generatedExport is string => generatedExport !== undefined);
+    expect(generatedExports).toHaveLength(2);
+
+    for (const generatedExport of generatedExports) {
+      const specifier = `@spine-event-engine/proto/${generatedExport}`;
+      expect(resolveEntrypoint(specifier).status, specifier).toBe(0);
+      expect(
+        existsSync(
+          resolve(
+            "packages/proto/dist/generated",
+            `${generatedExport.slice("generated/".length, -3)}.d.ts`,
+          ),
+        ),
+      ).toBe(true);
     }
   });
 

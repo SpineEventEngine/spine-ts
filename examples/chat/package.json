@@ -1,0 +1,34 @@
+{
+  "name": "@spine-event-engine/example-chat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "proto:compose": "spine-proto compose",
+    "handlers:generate": "spine-proto handlers",
+    "prepack": "pnpm handlers:generate && tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "spine-proto.json"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/chat-model": "0.0.0",
+    "@spine-event-engine/client": "workspace:*",
+    "@spine-event-engine/core": "0.0.0",
+    "@spine-event-engine/proto": "0.0.0",
+    "@spine-event-engine/server": "0.0.0",
+    "@spine-event-engine/storage": "workspace:*",
+    "@spine-event-engine/users-model": "0.0.0"
+  },
+  "devDependencies": {
+    "@spine-event-engine/proto-tools": "0.0.0"
+  }
+}

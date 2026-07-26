@@ -1469,6 +1469,75 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("keeps aggregate persistence committed when a Stand subscriber throws", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    let attempts = 0;
+    context.stand().subscribe(AggregateStateSchema, () => {
+      attempts += 1;
+      throw new Error("subscriber failure");
+    });
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("command-subscriber", "subscriber-id")),
+      ).resolves.toBeUndefined();
+      expect(attempts).toBe(1);
+      await expect(storage.readCurrent("subscriber-id")).resolves.toMatchObject({
+        version: 1n,
+        state: { id: "subscriber-id", name: "Task (applied)", archived: true },
+      });
+      await expect(storage.readStates("subscriber-id")).resolves.toMatchObject([{ version: 1n }]);
+      await expect(storage.readEvents("subscriber-id")).resolves.toMatchObject([
+        { id: { value: "event-Task" } },
+      ]);
+      await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { event: { id: { value: "event-Task" } }, error: { message: "subscriber failure" } },
+      ]);
+    } finally {
+      eventStore.close();
+      await context.close();
+    }
+  });
+
+  it("delivers deferred aggregate updates only to subscribers present at the current write", async () => {
+    const factory = new GatedAggregateEventStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    let original = 0;
+    let late = 0;
+    context.stand().subscribe(AggregateStateSchema, () => {
+      original += 1;
+    });
+    const command = context.commandBus().post(createAggregateCommand("command-late", "late-id"));
+    await factory.reached;
+    context.stand().subscribe(AggregateStateSchema, () => {
+      late += 1;
+    });
+    factory.release();
+    try {
+      await command;
+      expect(original).toBe(1);
+      expect(late).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("retains state history while enabled and preserves existing rows after disablement", async () => {
     const aggregateFactory = new InMemoryStorageFactory();
     const aggregateRepository = createExecutingRepository();
@@ -7454,6 +7523,44 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
           if (probed) this.closedProbes++;
         }
         storage.close();
+      },
+    };
+  }
+}
+
+class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
+  #release!: () => void;
+  #reached!: () => void;
+  readonly reached = new Promise<void>((resolve) => {
+    this.#reached = resolve;
+  });
+  readonly #gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  release(): void {
+    this.#release();
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: unknown;
+      readonly states: unknown;
+      readonly events: { append(record: unknown): Promise<void>; backward: unknown };
+      close(): void;
+    };
+    return {
+      ...storage,
+      close: () => {
+        storage.close();
+      },
+      events: {
+        ...storage.events,
+        append: async (record: unknown) => {
+          this.#reached();
+          await this.#gate;
+          await storage.events.append(record);
+        },
       },
     };
   }

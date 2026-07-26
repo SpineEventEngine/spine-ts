@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = resolve(dirname(scriptPath), "..");
 const outputPath = join(repoRoot, "packages/server/test-fixtures/entity-metadata-fixtures.ts");
-const copiedSpineOptionsPath = join(repoRoot, "proto/spine/options.proto");
+const copiedSpineOptionsPath = join(repoRoot, "packages/proto/proto/spine/options.proto");
 const bufExecutable = join(
   repoRoot,
   "node_modules/.bin",
