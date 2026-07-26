@@ -1,0 +1,19 @@
+{
+  "name": "@spine-event-engine/proto-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Safe deterministic manifest tooling for Spine Proto model packages.",
+  "bin": {
+    "spine-proto": "./dist/src/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}

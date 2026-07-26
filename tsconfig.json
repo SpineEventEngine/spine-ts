@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/proto-tools" },
     { "path": "./packages/proto" },
     { "path": "./packages/client" },
     { "path": "./packages/delivery-client" },

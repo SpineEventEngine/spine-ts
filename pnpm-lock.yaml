@@ -209,6 +209,8 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
 
+  packages/proto-tools: {}
+
   packages/server:
     dependencies:
       '@bufbuild/protobuf':
